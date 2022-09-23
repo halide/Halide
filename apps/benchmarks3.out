@@ -1,0 +1,476 @@
+Testing add...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g add_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/add_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g add_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/add.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/add_rake.generator -g add -f add_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/add.generator -g add -f add_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/add.generator -g add -f add_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/add.generator -g add -f add_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/add.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/add_rake.a bin/host/add_pitchfork.a bin/host/add_halide.a bin/host/add_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+bin/host/filter ../images/gray.png ../images/gray.png bin/host/out.png 100
+LLVM time: 1.2811ms
+Halide time: 0.504663ms
+Pitchfork time: 0.430821ms
+Rake time: 0.430883ms
+Success!
+rm bin/host/runtime.a bin/host/add_halide.a bin/host/add_llvm.a bin/host/add_rake.a bin/host/add_pitchfork.a
+Testing average_pool...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g average_pool_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/average_pool_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g average_pool_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/average_pool.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/average_pool_rake.generator -g average_pool -f average_pool_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/average_pool.generator -g average_pool -f average_pool_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/average_pool.generator -g average_pool -f average_pool_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/average_pool.generator -g average_pool -f average_pool_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/average_pool.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/average_pool_rake.a bin/host/average_pool_halide.a bin/host/average_pool_pitchfork.a bin/host/average_pool_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+bin/host/filter 4 256 256 4 10
+LLVM time: 64.5552ms
+Halide time: 64.6309ms
+Pitchfork time: 64.5934ms
+Rake time: 64.6133ms
+Success!
+rm bin/host/average_pool_halide.a bin/host/average_pool_llvm.a bin/host/average_pool_rake.a bin/host/runtime.a bin/host/average_pool_pitchfork.a
+Testing blur3x3...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g blur3x3_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/blur3x3_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g blur3x3_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/blur3x3.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/blur3x3_rake.generator -g blur3x3 -f blur3x3_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/blur3x3.generator -g blur3x3 -f blur3x3_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/blur3x3.generator -g blur3x3 -f blur3x3_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/blur3x3.generator -g blur3x3 -f blur3x3_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/blur3x3.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/blur3x3_rake.a bin/host/blur3x3_halide.a bin/host/blur3x3_pitchfork.a bin/host/blur3x3_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+HL_NUM_THREADS=1 bin/host/filter ../images/gray.png 100 bin/host/out.png
+LLVM time: 0.767367ms
+Halide time: 0.704963ms
+Pitchfork time: 0.704667ms
+Rake time: 0.703446ms
+Success!
+rm bin/host/blur3x3_llvm.a bin/host/blur3x3_rake.a bin/host/runtime.a bin/host/blur3x3_pitchfork.a bin/host/blur3x3_halide.a
+Testing camera_pipe_test...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g camera_pipe_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/camera_pipe_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g camera_pipe_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/camera_pipe.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/camera_pipe_rake.generator -g camera_pipe -f camera_pipe_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/camera_pipe.generator -g camera_pipe -f camera_pipe_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/camera_pipe.generator -g camera_pipe -f camera_pipe_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/camera_pipe.generator -g camera_pipe -f camera_pipe_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/camera_pipe.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/camera_pipe_rake.a bin/host/camera_pipe_halide.a bin/host/camera_pipe_pitchfork.a bin/host/camera_pipe_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+HL_NUM_THREADS=1 bin/host/filter ../images/bayer_raw.png 3700 2.0 50 1.0 100 bin/host/out.png
+LLVM time: 17.2634ms
+Halide time: 10.8488ms
+Pitchfork time: 10.8732ms
+Rake time: 10.8721ms
+Success!
+rm bin/host/camera_pipe_pitchfork.a bin/host/runtime.a bin/host/camera_pipe_halide.a bin/host/camera_pipe_llvm.a bin/host/camera_pipe_rake.a
+Testing fully_connected...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g fully_connected_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/fully_connected_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g fully_connected_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/fully_connected.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/fully_connected_rake.generator -g fully_connected -f fully_connected_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/fully_connected.generator -g fully_connected -f fully_connected_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/fully_connected.generator -g fully_connected -f fully_connected_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/fully_connected.generator -g fully_connected -f fully_connected_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/fully_connected.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/fully_connected_rake.a bin/host/fully_connected_halide.a bin/host/fully_connected_pitchfork.a bin/host/fully_connected_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+HL_NUM_THREADS=1 bin/host/filter 256 256 256 100
+LLVM time: 1.79662ms
+Halide time: 0.362079ms
+Pitchfork time: 0.362183ms
+Rake time: 0.362538ms
+Success!
+rm bin/host/fully_connected_halide.a bin/host/fully_connected_llvm.a bin/host/fully_connected_rake.a bin/host/runtime.a bin/host/fully_connected_pitchfork.a
+Testing gaussian3x3...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g gaussian3x3_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/gaussian3x3_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g gaussian3x3_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/gaussian3x3.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/gaussian3x3_rake.generator -g gaussian3x3 -f gaussian3x3_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/gaussian3x3.generator -g gaussian3x3 -f gaussian3x3_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/gaussian3x3.generator -g gaussian3x3 -f gaussian3x3_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/gaussian3x3.generator -g gaussian3x3 -f gaussian3x3_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/gaussian3x3.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/gaussian3x3_rake.a bin/host/gaussian3x3_halide.a bin/host/gaussian3x3_pitchfork.a bin/host/gaussian3x3_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+bin/host/filter ../images/gray.png 100 bin/host/out.png
+LLVM time: 0.655438ms
+Halide time: 0.694013ms
+Pitchfork time: 0.565646ms
+Rake time: 0.565692ms
+Success!
+rm bin/host/gaussian3x3_pitchfork.a bin/host/runtime.a bin/host/gaussian3x3_halide.a bin/host/gaussian3x3_llvm.a bin/host/gaussian3x3_rake.a
+Testing gaussian5x5...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g gaussian5x5_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/gaussian5x5_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g gaussian5x5_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/gaussian5x5.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/gaussian5x5_rake.generator -g gaussian5x5 -f gaussian5x5_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/gaussian5x5.generator -g gaussian5x5 -f gaussian5x5_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/gaussian5x5.generator -g gaussian5x5 -f gaussian5x5_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/gaussian5x5.generator -g gaussian5x5 -f gaussian5x5_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/gaussian5x5.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/gaussian5x5_rake.a bin/host/gaussian5x5_halide.a bin/host/gaussian5x5_pitchfork.a bin/host/gaussian5x5_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+bin/host/filter ../images/gray.png 100 bin/host/out.png
+LLVM time: 0.888387ms
+Halide time: 0.886712ms
+Pitchfork time: 0.862446ms
+Rake time: 0.838904ms
+Success!
+rm bin/host/gaussian5x5_halide.a bin/host/gaussian5x5_llvm.a bin/host/runtime.a bin/host/gaussian5x5_rake.a bin/host/gaussian5x5_pitchfork.a
+Testing gaussian7x7...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g gaussian7x7_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/gaussian7x7_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g gaussian7x7_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/gaussian7x7.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/gaussian7x7_rake.generator -g gaussian7x7 -f gaussian7x7_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/gaussian7x7.generator -g gaussian7x7 -f gaussian7x7_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/gaussian7x7.generator -g gaussian7x7 -f gaussian7x7_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/gaussian7x7.generator -g gaussian7x7 -f gaussian7x7_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/gaussian7x7.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/gaussian7x7_rake.a bin/host/gaussian7x7_halide.a bin/host/gaussian7x7_pitchfork.a bin/host/gaussian7x7_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+bin/host/filter ../images/gray.png 100 bin/host/out.png
+LLVM time: 1.8286ms
+Halide time: 1.43867ms
+Pitchfork time: 1.3825ms
+Rake time: 1.26624ms
+Success!
+rm bin/host/gaussian7x7_pitchfork.a bin/host/gaussian7x7_halide.a bin/host/runtime.a bin/host/gaussian7x7_llvm.a bin/host/gaussian7x7_rake.a
+Testing l2norm...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g l2norm_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/l2norm_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g l2norm_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/l2norm.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/l2norm_rake.generator -g l2norm -f l2norm_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/l2norm.generator -g l2norm -f l2norm_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/l2norm.generator -g l2norm -f l2norm_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/l2norm.generator -g l2norm -f l2norm_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/l2norm.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/l2norm_rake.a bin/host/l2norm_halide.a bin/host/l2norm_pitchfork.a bin/host/l2norm_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+bin/host/filter ../images/gray.png 100 bin/host/out.png
+LLVM time: 1.28293ms
+Halide time: 0.660283ms
+Pitchfork time: 0.658683ms
+Rake time: 0.657825ms
+Success!
+rm bin/host/l2norm_llvm.a bin/host/l2norm_rake.a bin/host/runtime.a bin/host/l2norm_pitchfork.a bin/host/l2norm_halide.a
+Testing matmul...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g matmul_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/matmul_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g matmul_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/matmul.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/matmul_rake.generator -g matmul -f matmul_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/matmul.generator -g matmul -f matmul_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/matmul.generator -g matmul -f matmul_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/matmul.generator -g matmul -f matmul_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/matmul.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/matmul_rake.a bin/host/matmul_halide.a bin/host/matmul_pitchfork.a bin/host/matmul_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+HL_NUM_THREADS=1 bin/host/filter 256 256 256 100
+LLVM time: 0.609846ms
+Halide time: 0.563583ms
+Pitchfork time: 0.352838ms
+Rake time: 0.352871ms
+Success!
+rm bin/host/matmul_halide.a bin/host/matmul_pitchfork.a bin/host/runtime.a bin/host/matmul_llvm.a bin/host/matmul_rake.a
+Testing median3x3...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g median3x3_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/median3x3_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g median3x3_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/median3x3.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/median3x3_rake.generator -g median3x3 -f median3x3_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/median3x3.generator -g median3x3 -f median3x3_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/median3x3.generator -g median3x3 -f median3x3_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/median3x3.generator -g median3x3 -f median3x3_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/median3x3.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/median3x3_rake.a bin/host/median3x3_halide.a bin/host/median3x3_pitchfork.a bin/host/median3x3_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+bin/host/filter ../images/gray.png 100 bin/host/out.png
+LLVM time: 0.866604ms
+Halide time: 0.8667ms
+Pitchfork time: 0.866308ms
+Rake time: 0.866125ms
+Success!
+rm bin/host/median3x3_halide.a bin/host/median3x3_llvm.a bin/host/median3x3_rake.a bin/host/runtime.a bin/host/median3x3_pitchfork.a
+Testing mul...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g mul_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/mul_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g mul_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/mul.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/mul_rake.generator -g mul -f mul_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/mul.generator -g mul -f mul_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/mul.generator -g mul -f mul_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/mul.generator -g mul -f mul_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/mul.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/mul_rake.a bin/host/mul_halide.a bin/host/mul_pitchfork.a bin/host/mul_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+bin/host/filter ../images/gray.png ../images/gray.png bin/host/out.png 100
+LLVM time: 3.95108ms
+Halide time: 0.579017ms
+Pitchfork time: 0.511925ms
+Rake time: 0.502871ms
+Success!
+rm bin/host/mul_rake.a bin/host/mul_pitchfork.a bin/host/runtime.a bin/host/mul_halide.a bin/host/mul_llvm.a
+Testing softmax...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g softmax_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/softmax_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g softmax_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/softmax.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/softmax_rake.generator -g softmax -f softmax_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/softmax.generator -g softmax -f softmax_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/softmax.generator -g softmax -f softmax_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/softmax.generator -g softmax -f softmax_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/softmax.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/softmax_rake.a bin/host/softmax_halide.a bin/host/softmax_pitchfork.a bin/host/softmax_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+bin/host/filter ../images/gray.png 100 bin/host/out.png
+LLVM time: 17.733ms
+Halide time: 2.13027ms
+Pitchfork time: 2.0468ms
+Rake time: 2.04753ms
+Success!
+rm bin/host/softmax_pitchfork.a bin/host/runtime.a bin/host/softmax_halide.a bin/host/softmax_llvm.a bin/host/softmax_rake.a
+Testing sobel3x3...
+rm -rf bin
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g sobel3x3_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/sobel3x3_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g sobel3x3_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/sobel3x3.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/sobel3x3_rake.generator -g sobel3x3 -f sobel3x3_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/sobel3x3.generator -g sobel3x3 -f sobel3x3_halide -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/sobel3x3.generator -g sobel3x3 -f sobel3x3_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/sobel3x3.generator -g sobel3x3 -f sobel3x3_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/sobel3x3.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/sobel3x3_rake.a bin/host/sobel3x3_halide.a bin/host/sobel3x3_pitchfork.a bin/host/sobel3x3_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+bin/host/filter ../images/gray.png 100 bin/host/out.png
+LLVM time: 0.723829ms
+Halide time: 0.694108ms
+Pitchfork time: 0.582946ms
+Rake time: 0.578258ms
+Success!
+rm bin/host/sobel3x3_pitchfork.a bin/host/runtime.a bin/host/sobel3x3_halide.a bin/host/sobel3x3_llvm.a bin/host/sobel3x3_rake.a

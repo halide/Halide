@@ -561,6 +561,12 @@ inline Type type_of() {
 /** Halide type to a C++ type */
 std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true);
 
+uint64_t max_uint(int bits);
+
+int64_t max_int(int bits);
+
+int64_t min_int(int bits);
+
 }  // namespace Halide
 
 #endif

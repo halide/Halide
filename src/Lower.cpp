@@ -407,7 +407,7 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Finding intrinsics...\n";
     // Must be run after the last simplification, because it turns
     // divisions into shifts, which the simplifier reverses.
-    s = find_intrinsics(s);
+    s = find_intrinsics(s, func_bounds);
     log("Lowering after finding intrinsics:", s);
 
     debug(1) << "Hoisting prefetches...\n";

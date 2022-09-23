@@ -526,6 +526,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
     {"rvv", Target::RVV},
     {"armv81a", Target::ARMv81a},
+    {"armv86a", Target::ARMv86a},
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
     {"spirv", Target::SPIRV},
@@ -1178,9 +1179,10 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 14> intersection_features = {{
+    const std::array<Feature, 15> intersection_features = {{
         ARMv7s,
         ARMv81a,
+        ARMv86a,
         AVX,
         AVX2,
         AVX512,

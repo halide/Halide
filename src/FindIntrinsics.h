@@ -6,6 +6,7 @@
  */
 
 #include "IR.h"
+#include "Bounds.h" // FuncValueBounds
 
 namespace Halide {
 namespace Internal {
@@ -40,6 +41,8 @@ Expr lower_intrinsic(const Call *op);
 /** Replace common arithmetic patterns with intrinsics. */
 Stmt find_intrinsics(const Stmt &s);
 Expr find_intrinsics(const Expr &e);
+
+Stmt find_intrinsics(const Stmt &s, const FuncValueBounds &fvb);
 
 /** The reverse of find_intrinsics. */
 Expr lower_intrinsics(const Expr &e);

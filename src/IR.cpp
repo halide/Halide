@@ -39,7 +39,7 @@ Expr Reinterpret::make(Type t, Expr v) {
 Expr Add::make(Expr a, Expr b) {
     internal_assert(a.defined()) << "Add of undefined\n";
     internal_assert(b.defined()) << "Add of undefined\n";
-    internal_assert(a.type() == b.type()) << "Add of mismatched types\n";
+    internal_assert(a.type() == b.type()) << "Add of mismatched types\n" << a << "\n and\n " << b << "\n";
 
     Add *node = new Add;
     node->type = a.type();

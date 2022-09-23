@@ -1,0 +1,84 @@
+Testing add...
+LLVM time: 1.2811ms
+Halide time: 0.504663ms
+Pitchfork time: 0.430821ms
+Rake time: 0.430883ms
+Success!
+Testing average_pool...
+LLVM time: 64.5552ms
+Halide time: 64.6309ms
+Pitchfork time: 64.5934ms
+Rake time: 64.6133ms
+Success!
+Testing blur3x3...
+LLVM time: 0.767367ms
+Halide time: 0.704963ms
+Pitchfork time: 0.704667ms
+Rake time: 0.703446ms
+Success!
+Testing camera_pipe_test...
+LLVM time: 17.2634ms
+Halide time: 10.8488ms
+Pitchfork time: 10.8732ms
+Rake time: 10.8721ms
+Success!
+Testing fully_connected...
+LLVM time: 1.79662ms
+Halide time: 0.362079ms
+Pitchfork time: 0.362183ms
+Rake time: 0.362538ms
+Success!
+Testing gaussian3x3...
+LLVM time: 0.655438ms
+Halide time: 0.694013ms
+Pitchfork time: 0.565646ms
+Rake time: 0.565692ms
+Success!
+Testing gaussian5x5...
+LLVM time: 0.888387ms
+Halide time: 0.886712ms
+Pitchfork time: 0.862446ms
+Rake time: 0.838904ms
+Success!
+Testing gaussian7x7...
+LLVM time: 1.8286ms
+Halide time: 1.43867ms
+Pitchfork time: 1.3825ms
+Rake time: 1.26624ms
+Success!
+Testing l2norm...
+LLVM time: 1.28293ms
+Halide time: 0.660283ms
+Pitchfork time: 0.658683ms
+Rake time: 0.657825ms
+Success!
+Testing matmul...
+LLVM time: 0.609846ms
+Halide time: 0.563583ms
+Pitchfork time: 0.352838ms
+Rake time: 0.352871ms
+Success!
+Testing median3x3...
+LLVM time: 0.866604ms
+Halide time: 0.8667ms
+Pitchfork time: 0.866308ms
+Rake time: 0.866125ms
+Success!
+Testing mul...
+LLVM time: 3.95108ms
+Halide time: 0.579017ms
+Pitchfork time: 0.511925ms
+Rake time: 0.502871ms
+Success!
+Testing softmax...
+LLVM time: 17.733ms
+Halide time: 2.13027ms
+Pitchfork time: 2.0468ms
+Rake time: 2.04753ms
+Success!
+Testing sobel3x3...
+LLVM time: 0.723829ms
+Halide time: 0.694108ms
+Pitchfork time: 0.582946ms
+Rake time: 0.578258ms
+Success!

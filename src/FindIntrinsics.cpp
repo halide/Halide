@@ -200,8 +200,13 @@ protected:
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
+    IRMatcher::Wild<3> w;
     IRMatcher::WildConst<0> c0;
     IRMatcher::WildConst<1> c1;
+
+    static bool enable_synthesized_rules() {
+        return get_env_variable("HL_ENABLE_RAKE_RULES") == "1";
+    }
 
     Expr visit(const Add *op) override {
         if (!find_intrinsics_for_type(op->type)) {
@@ -273,6 +278,54 @@ protected:
         // TODO: there can be widen_right_add + widen_right_add simplification rules.
         // i.e. widen_right_add(a, b) + widen_right_add(c, d) = (a + c) + widening_add(b, d)
 
+        auto rewrite = IRMatcher::rewriter<decltype(IRMatcher::add(a, b)), false>(IRMatcher::add(a, b), op->type);
+
+        const int bits = op->type.bits();
+
+        // std::cout << "rewriting Add: " << a << " + " << b << "\n";
+
+        // std::cout << rewrite(cast(op->type, widening_shift_left(x, c0)) + (cast(op->type, widening_shift_left(y, c0)) + z),
+        //              z + cast(op->type, shift_left(widening_add(x, y), c0)),
+        //              // If the cast is simply a reinterpret.
+        //              (is_int(x, bits / 2) && is_int(y, bits / 2)) ||
+        //              (is_uint(x, bits / 2) && is_uint(y, bits / 2))) << "\n";
+
+        // // std::cout << rewrite(cast(op->type, widening_shift_left(x, c0)) + (cast(op->type, widening_shift_left(y, c0)) + z),
+        // //              z + cast(op->type, shift_left(widening_add(x, y), c0))) << "\n";
+
+        // synthesized rules.
+        if (enable_synthesized_rules() &&
+            (rewrite(widen_right_add(x, y) + widen_right_add(z, w), widening_add(y, w) + x + z) ||
+             // TODO: should be a simplifier rule.
+             rewrite(reinterpret(op->type, x) + reinterpret(op->type, y), reinterpret(op->type, x + y)) || // TODO: need x and y same type.
+             rewrite(widening_shift_left(x, c0) + widening_shift_left(y, c0), shift_left(widening_add(x, y), c0)) ||
+             rewrite(widening_shift_left(x, c0) + (widening_shift_left(y, c0) + z), z + shift_left(widening_add(x, y), c0)) ||
+             rewrite(cast(op->type, widening_shift_left(x, c0)) + cast(op->type, widening_shift_left(y, c0)),
+                     cast(op->type, shift_left(widening_add(x, y), c0)),
+                     // If the cast is simply a reinterpret.
+                     (is_int(x, bits / 2) && is_int(y, bits / 2)) ||
+                     (is_int(x, bits / 2) && is_uint(y, bits / 2))) ||
+             rewrite(cast(op->type, widening_shift_left(x, c0)) + (cast(op->type, widening_shift_left(y, c0)) + z),
+                     z + cast(op->type, shift_left(widening_add(x, y), c0)),
+                     // If the cast is simply a reinterpret.
+                     (is_int(x, bits / 2) && is_int(y, bits / 2)) ||
+                     (is_uint(x, bits / 2) && is_uint(y, bits / 2))) ||
+             // mul is more expensive than add.
+             rewrite(widening_mul(x, y) + widening_mul(z, y),
+                     y * widening_add(x, z),
+                     // TODO: could be a better notation for this.
+                     types_match(x, y)) ||
+            
+             rewrite(reinterpret(op->type, x) + reinterpret(op->type, y),
+                     reinterpret(op->type, x + y),
+                     types_match(x, y)) ||
+
+             // TODO: what are the others?
+             false)) {
+            // std::cout << "matched!\n" << rewrite.result << "\n";
+            return mutate(rewrite.result);
+        }
+
         if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
@@ -340,6 +393,21 @@ protected:
             }
         }
 
+
+        auto rewrite = IRMatcher::rewriter<decltype(IRMatcher::sub(a, b)), false>(IRMatcher::sub(a, b), op->type);
+
+        // synthesized rules.
+        if (enable_synthesized_rules() &&
+            (
+             rewrite(reinterpret(op->type, x) - reinterpret(op->type, y),
+                     reinterpret(op->type, x - y),
+                     types_match(x, y)) ||
+
+             // TODO: what are the others?
+             false)) {
+            return mutate(rewrite.result);
+        }
+
         if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
@@ -385,7 +453,16 @@ protected:
         if (narrow_a.defined() && narrow_b.defined() &&
             (narrow_a.type().is_int_or_uint() == narrow_b.type().is_int_or_uint() ||
              narrow_a.type().is_float() == narrow_b.type().is_float())) {
-            Expr result = widening_mul(narrow_a, narrow_b);
+            
+            Expr result;
+            // Enforce a normalization of widening_mul
+            // widening_mul(u8, i8)
+            if (narrow_a.type().is_int() && narrow_b.type().is_uint()) {
+                result = widening_mul(narrow_b, narrow_a);
+            } else {
+                result = widening_mul(narrow_a, narrow_b);
+            }
+
             if (result.type() != op->type) {
                 result = Cast::make(op->type, result);
             }
@@ -433,6 +510,20 @@ protected:
                     return mutate(result);
                 }
             }
+        }
+
+        auto rewrite = IRMatcher::rewriter<decltype(IRMatcher::sub(a, b)), false>(IRMatcher::sub(a, b), op->type);
+
+        // synthesized rules.
+        if (enable_synthesized_rules() &&
+            (
+             rewrite(reinterpret(op->type, x) * reinterpret(op->type, y),
+                     reinterpret(op->type, x * y),
+                     types_match(x, y)) ||
+
+             // TODO: what are the others?
+             false)) {
+            return mutate(rewrite.result);
         }
 
         if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -502,6 +593,11 @@ protected:
         }
 
         Expr value = mutate(op->value);
+
+        // Normalize to reinterpret here, for some patterns.
+        if (op->type.is_int_or_uint() && op->type.bits() == value.type().bits()) {
+            return mutate(reinterpret(op->type, value));
+        }
 
         // This mutator can generate redundant casts. We can't use the simplifier because it
         // undoes some of the intrinsic lowering here, and it causes some problems due to
@@ -736,6 +832,20 @@ protected:
         Type opposite_type = op->type.is_int() ? op->type.with_code(halide_type_uint) : op->type.with_code(halide_type_int);
         const auto is_x_wider_opposite_int = (op->type.is_int() && is_uint(x, 2 * bits)) || (op->type.is_uint() && is_int(x, 2 * bits));
 
+        // Should only be used if bits > 8.
+        const Type unsigned_narrow_type = (bits > 8) ? unsigned_type.narrow() : unsigned_type;
+        const Type narrow_type = (bits > 8) ? op->type.narrow() : op->type;
+
+        const auto x_is_small_narrow_reinterpret = (bits > 8) &&
+                   // Checks that the MSB is 0, so widening is irrelevant.
+                  ((op->type.is_int() && is_uint(x) && upper_bounded(x, max_uint(bits / 2) / 2, this)) ||
+                   (op->type.is_uint() && is_int(x) && lower_bounded(x, (int64_t)0, this)));
+
+        const auto y_is_small_narrow_reinterpret = (bits > 8) &&
+                   // Checks that the MSB is 0, so widening is irrelevant.
+                  ((op->type.is_int() && is_uint(y) && upper_bounded(y, max_uint(bits / 2) / 2, this)) ||
+                   (op->type.is_uint() && is_int(y) && lower_bounded(y, (int64_t)0, this)));
+
         if (
             // Simplify extending patterns.
             // (x + widen(y)) + widen(z) = x + widening_add(y, z).
@@ -804,6 +914,40 @@ protected:
                        saturating_cast(op->type, x),
                        is_x_wider_opposite_int) ||
                false))) ||
+            
+
+            // Synthesized rules.
+            (enable_synthesized_rules() &&
+             (rewrite(
+                widening_mul(x, c0),
+                reinterpret(op->type,
+                 typed(op->type.with_code(halide_type_uint),
+                  widening_mul(x, cast(unsigned_narrow_type, c0)))),
+                (c0 > 0) && (is_uint(x) && is_int(c0))) ||
+              rewrite(
+                widening_add(
+                    reinterpret(narrow_type, x),
+                    reinterpret(narrow_type, y)),
+                reinterpret(op->type, widening_add(x, y)),
+                types_match(x, y) &&
+                // Need bounds! what are the appropriate bounds?
+                x_is_small_narrow_reinterpret && y_is_small_narrow_reinterpret) ||
+
+                /*
+                widening_add(reinterpret(x), widen_z(y))
+                -> reinterpret(widening_add(x, widen_z(y)))
+                if x can be reinterpreted to unsigned safely and is_uint(y) and types_match(x, widen_z(y))
+                */
+
+              (op->type.is_int() &&
+               rewrite(
+                widening_add(reinterpret(narrow_type, x), cast(narrow_type, y)),
+                reinterpret(op->type, widening_add(x, cast(unsigned_narrow_type, y))),
+                // y must be double-widened
+                is_uint(y, bits / 4) && x_is_small_narrow_reinterpret)) ||
+
+             false)) ||
+
             false) {
             return mutate(rewrite.result);
         }
@@ -868,6 +1012,21 @@ protected:
                 return mutate(result);
             }
 
+            if (enable_synthesized_rules() && op->type.is_int() && bits >= 16) {
+                Type uint_type = op->type.narrow().with_code(halide_type_uint);
+                Expr a_narrow = lossless_cast(uint_type, op->args[0]);
+                Expr b_narrow = lossless_cast(uint_type, op->args[1]);
+                // std::cout << "trying widening_op: " << Expr(op) << "\n";
+                // std::cout << "narrowed operands: " << a_narrow << " << " << b_narrow << "\n";
+                if (a_narrow.defined() && b_narrow.defined()) {
+                    Expr result = op->is_intrinsic(Call::shift_left) ? widening_shift_left(a_narrow, b_narrow) : widening_shift_right(a_narrow, b_narrow);
+                    if (result.type() != op->type) {
+                        result = Cast::make(op->type, result);
+                    }
+                    return mutate(result);
+                }
+            }
+
             // Try to turn this into a rounding shift.
             Expr rounding_shift = to_rounding_shift(op);
             if (rounding_shift.defined()) {
@@ -897,6 +1056,90 @@ protected:
         }
         return op;
     }
+
+    Expr visit(const Reinterpret *op) override {
+        // Fold reinterprets here too, because `simplify`
+        // is typically not called after find_intrinsics.
+        Expr a = mutate(op->value);
+        // std::cout << "visiting reinterpret(" << a << ")\n";
+        // std::cout << a.as<Reinterpret>() << "\n";
+        if (op->type == a.type()) {
+            return a;
+        } else if (const Reinterpret *as_r = a.as<Reinterpret>()) {
+            // Fold double-reinterprets.
+            // std::cout << "folding double-reinterpret!\n";
+            return mutate(reinterpret(op->type, as_r->value));
+        } else {
+            // auto rewrite = IRMatcher::rewriter(IRMatcher::reinterpret(op->type, a), op->type);
+            // if (rewrite(TODO) ||
+            //     false) {
+            //     return mutate(rewrite.result);
+            // }
+
+            if (a.same_as(op->value)) {
+                return op;
+            } else {
+                return reinterpret(op->type, a);
+            }
+        }
+    }
+
+    Expr visit(const Let *op) override {
+        if (op->type.is_vector() && op->type.is_int_or_uint()) {
+            // Query bounds and insert into scope.
+            // TODO: should we always query here?
+            Interval i = bounds_of_expr_in_scope(op->value, scope, fvb, false);
+            ScopedBinding<Interval>(scope, op->name, i);
+            return IRMutator::visit(op);
+        }
+
+        return IRMutator::visit(op);
+    }
+
+public:
+    // Very expensive bounds queries. Cached for performance.
+    // Used in IRMatch.h predicate wrappers.
+    template<typename T>
+    bool is_upper_bounded(const Expr &expr, const T bound) {
+        internal_assert(expr.type().element_of().can_represent(bound))
+            << "Type of expr cannot represent upper bound:\n " << expr << "\n " << bound << "\n";
+
+        Expr e = make_const(expr.type().element_of(), bound);
+        Interval i = cached_get_interval(expr);
+        // TODO: see above - we could get rid of can_prove if we use constant bounds queries instead.
+        return can_prove(i.max <= e);
+    }
+
+    template<typename T>
+    bool is_lower_bounded(const Expr &expr, const T bound) {
+        internal_assert(expr.type().element_of().can_represent(bound))
+            << "Type of expr cannot represent lower bound:\n " << expr << "\n " << bound << "\n";
+
+        Expr e = make_const(expr.type().element_of(), bound);
+        Interval i = cached_get_interval(expr);
+        // TODO: see above - we could get rid of can_prove if we use constant bounds queries instead.
+        return can_prove(i.min >= e);
+    }
+
+private:
+    Interval cached_get_interval(const Expr &expr) {
+        const auto [iter, success] = bounds_cache.insert({expr, Interval::everything()});
+
+        if (success) {
+            // If we did insert, then actually store a real interval.
+            // TODO: do we only want to store constant bounds? would be cheaper than using can_prove.
+            iter->second = bounds_of_expr_in_scope(expr, scope, fvb, false);
+        }
+
+        return iter->second;
+    }
+
+    const FuncValueBounds &fvb;
+    Scope<Interval> scope;
+    std::map<Expr, Interval, IRDeepCompare> bounds_cache;
+
+public:
+    FindIntrinsics(const FuncValueBounds &_fvb = empty_func_value_bounds()) : fvb(_fvb) {}
 };
 
 // Substitute in let values than have an output vector
@@ -1043,17 +1286,60 @@ class SubstituteInWideningLets : public IRMutator {
     }
 };
 
+
+class LowerDivMod : public IRGraphMutator {
+protected:
+    using IRGraphMutator::visit;
+    Expr visit(const Div *op) override{
+        if (op->type.is_vector() && op->type.is_int_or_uint()) {
+            // Lower division here in order to do pattern-matching on intrinsics.
+            return mutate(lower_int_uint_div(op->a, op->b));
+        }
+        return IRGraphMutator::visit(op);
+    }
+
+    Expr visit(const Mod *op) override {
+        if (op->type.is_vector() && op->type.is_int_or_uint()) {
+            // Lower mod here in order to do pattern-matching on intrinsics.
+            return mutate(lower_int_uint_mod(op->a, op->b));
+        }
+        return IRGraphMutator::visit(op);
+    }
+};
+
 }  // namespace
 
 Stmt find_intrinsics(const Stmt &s) {
+    if (get_env_variable("HL_DISABLE_INTRINISICS") == "1") {
+        // If we are disabling lifting, we should lower div/mod here.
+        return lower_intrinsics(LowerDivMod().mutate(s));
+    }
     Stmt stmt = SubstituteInWideningLets().mutate(s);
     stmt = FindIntrinsics().mutate(stmt);
+    // std::cout << stmt << "\n";
+    // In case we want to hoist widening ops back out
+    stmt = common_subexpression_elimination(stmt);
+    return stmt;
+}
+
+Stmt find_intrinsics(const Stmt &s, const FuncValueBounds &fvb) {
+    if (get_env_variable("HL_DISABLE_INTRINISICS") == "1") {
+        // If we are disabling lifting, we should lower div/mod here.
+        return lower_intrinsics(LowerDivMod().mutate(s));
+    }
+    Stmt stmt = SubstituteInWideningLets().mutate(s);
+    stmt = FindIntrinsics(fvb).mutate(stmt);
+    // std::cout << stmt << "\n";
     // In case we want to hoist widening ops back out
     stmt = common_subexpression_elimination(stmt);
     return stmt;
 }
 
 Expr find_intrinsics(const Expr &e) {
+    if (get_env_variable("HL_DISABLE_INTRINISICS") == "1") {
+        // If we are disabling lifting, we should lower div/mod here.
+        return lower_intrinsics(LowerDivMod().mutate(e));
+    }
     Expr expr = SubstituteInWideningLets().mutate(e);
     expr = FindIntrinsics().mutate(expr);
     expr = common_subexpression_elimination(expr);

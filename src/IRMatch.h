@@ -71,7 +71,7 @@ void expr_match_test();
  */
 namespace IRMatcher {
 
-constexpr int max_wild = 6;
+constexpr int max_wild = 10;
 
 static const halide_type_t i64_type = {halide_type_int, 64, 1};
 
@@ -3017,6 +3017,201 @@ std::ostream &operator<<(std::ostream &s, const IsMinValue<A> &op) {
 }
 
 template<typename A>
+struct IsIntrin {
+    struct pattern_tag {};
+    Call::IntrinsicOp intrin;
+    A a;
+
+    static constexpr uint32_t binds = bindings<A>::mask;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = A::canonical;
+
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Expr e = a.make(state, {});
+
+        if (const Call *as_call = e.as<Call>()) {
+            val.u.u64 = as_call->is_intrinsic(intrin);
+        } else {
+            val.u.u64 = false;
+        }
+
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = 1;
+    }
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto is_intrin(A &&a, Call::IntrinsicOp intrin) noexcept -> IsIntrin<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {intrin, pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsIntrin<A> &op) {
+    s << "is_intrin(" << op.a << ", " << op.intrin << ")";
+    return s;
+}
+
+template<typename A, typename B>
+struct TypesMatch {
+    struct pattern_tag {};
+    A a;
+    B b;
+
+    static constexpr uint32_t binds = bindings<A>::mask & bindings<B>::mask;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = A::canonical && B::canonical;
+
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Expr ea = a.make(state, {});
+        Expr eb = b.make(state, {});
+
+        val.u.u64 = (ea.type() == eb.type());
+
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = 1;
+    }
+};
+
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto types_match(A &&a, B &&b) noexcept -> TypesMatch<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {pattern_arg(a), pattern_arg(b)};
+}
+
+template<typename A, typename B>
+std::ostream &operator<<(std::ostream &s, const TypesMatch<A, B> &op) {
+    s << "types_match(" << op.a << ", " << op.b << ")";
+    return s;
+}
+
+template<typename... Args>
+struct InterleaveOp {
+    struct pattern_tag {};
+    // TODO: can we generalize to further shuffle nodes?
+    std::tuple<Args...> args;
+
+    static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Shuffle;
+    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static bool canonical = and_reduce((Args::canonical)...);
+
+    template<int i,
+             uint32_t bound,
+             typename = typename std::enable_if<(i < sizeof...(Args))>::type>
+    HALIDE_ALWAYS_INLINE bool match_args(int, const Shuffle &v, MatcherState &state) const noexcept {
+        using T = decltype(std::get<i>(args));
+        return (std::get<i>(args).template match<bound>(*v.vectors[i].get(), state) &&
+                match_args<i + 1, bound | bindings<T>::mask>(0, v, state));
+    }
+
+    template<int i, uint32_t binds>
+    HALIDE_ALWAYS_INLINE bool match_args(double, const Shuffle &v, MatcherState &state) const noexcept {
+        return true;
+    }
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+        if (e.node_type != IRNodeType::Shuffle) {
+            return false;
+        }
+        const Shuffle &v = (const Shuffle &)e;
+        return (v.is_interleave() && (sizeof...(Args) == v.vectors.size()) && match_args<0, bound>(0, v, state));
+    }
+
+    template<int i,
+             typename = typename std::enable_if<(i < sizeof...(Args))>::type>
+    HALIDE_ALWAYS_INLINE void print_args(int, std::ostream &s) const {
+        s << std::get<i>(args);
+        if (i + 1 < sizeof...(Args)) {
+            s << ", ";
+        }
+        print_args<i + 1>(0, s);
+    }
+
+    template<int i>
+    HALIDE_ALWAYS_INLINE void print_args(double, std::ostream &s) const {
+    }
+
+    HALIDE_ALWAYS_INLINE
+    void print_args(std::ostream &s) const {
+        print_args<0>(0, s);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
+        std::vector<Expr> r_args(sizeof...(Args));
+        // TODO(rootjalex): How do we do type hints for the args?
+        // TODO(rootjalex): Is there a way to do basically an unrolled
+        // loop of the below? this is ugly.
+        // Supposedly C++20 will have constexpr std::transform, perhaps
+        // we can use that when Halide upgrades.
+
+        r_args[0] = std::get<0>(args).make(state, {});
+        if constexpr (sizeof...(Args) > 1) {
+            r_args[1] = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, {});
+        }
+        if constexpr (sizeof...(Args) > 2) {
+            r_args[2] = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, {});
+        }
+        if constexpr (sizeof...(Args) > 3) {
+            r_args[3] = std::get<const_min(3, sizeof...(Args) - 1)>(args).make(state, {});
+        }
+        if constexpr (sizeof...(Args) > 4) {
+            r_args[4] = std::get<const_min(4, sizeof...(Args) - 1)>(args).make(state, {});
+        }
+
+        // for (int i = 0; i < sizeof...(Args); i++) {
+        //     // TODO(rootjalex): how do we do type-hints here?
+        //     args[i] = std::get<i>(args).make(state, {});
+        // }
+        return Shuffle::make_interleave(r_args);
+    }
+
+    constexpr static bool foldable = false;
+
+    HALIDE_ALWAYS_INLINE
+    InterleaveOp(Args... args) noexcept
+        : args(args...) {
+        static_assert(sizeof...(Args) > 0 && sizeof...(Args) <= 5,
+                      "InterleaveOp must have non-zero arguments, and update make() if more than 5 arguments.");
+    }
+};
+
+
+template<typename... Args>
+std::ostream &operator<<(std::ostream &s, const InterleaveOp<Args...> &op) {
+    s << "interleave(";
+    op.print_args(s);
+    s << ")";
+    return s;
+}
+
+template<typename... Args>
+HALIDE_ALWAYS_INLINE auto interleave(Args... args) noexcept -> InterleaveOp<decltype(pattern_arg(args))...> {
+    return {pattern_arg(args)...};
+}
+
+
+template<typename A>
 struct HasEvenLanes {
     struct pattern_tag {};
     A a;
@@ -3216,7 +3411,7 @@ HALIDE_ALWAYS_INLINE bool evaluate_predicate(Pattern p, MatcherState &state) {
 // correctness_simplify with this on.
 #define HALIDE_FUZZ_TEST_RULES 0
 
-template<typename Instance>
+template<typename Instance, bool check_canonical=false>
 struct Rewriter {
     Instance instance;
     Expr result;
@@ -3240,8 +3435,8 @@ struct Rewriter {
              typename = typename enable_if_pattern<After>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, After after) {
         static_assert((Before::binds & After::binds) == After::binds, "Rule result uses unbound values");
-        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
-        static_assert(After::canonical, "RHS of rewrite rule should be in canonical form");
+        static_assert(!check_canonical || Before::canonical, "LHS of rewrite rule should be in canonical form");
+        static_assert(!check_canonical || After::canonical, "RHS of rewrite rule should be in canonical form");
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, after, true, wildcard_type, output_type);
 #endif
@@ -3262,7 +3457,7 @@ struct Rewriter {
     template<typename Before,
              typename = typename enable_if_pattern<Before>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after) noexcept {
-        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
+        static_assert(!check_canonical || Before::canonical, "LHS of rewrite rule should be in canonical form");
         if (before.template match<0>(unwrap(instance), state)) {
             result = after;
 #if HALIDE_DEBUG_MATCHED_RULES
@@ -3280,7 +3475,7 @@ struct Rewriter {
     template<typename Before,
              typename = typename enable_if_pattern<Before>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, int64_t after) noexcept {
-        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
+        static_assert(!check_canonical || Before::canonical, "LHS of rewrite rule should be in canonical form");
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, IntLiteral(after), true, wildcard_type, output_type);
 #endif
@@ -3308,8 +3503,8 @@ struct Rewriter {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
         static_assert((Before::binds & After::binds) == After::binds, "Rule result uses unbound values");
         static_assert((Before::binds & Predicate::binds) == Predicate::binds, "Rule predicate uses unbound values");
-        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
-        static_assert(After::canonical, "RHS of rewrite rule should be in canonical form");
+        static_assert(!check_canonical || Before::canonical, "LHS of rewrite rule should be in canonical form");
+        static_assert(!check_canonical || After::canonical, "RHS of rewrite rule should be in canonical form");
 
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, after, pred, wildcard_type, output_type);
@@ -3335,7 +3530,7 @@ struct Rewriter {
              typename = typename enable_if_pattern<Predicate>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, const Expr &after, Predicate pred) {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
-        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
+        static_assert(!check_canonical || Before::canonical, "LHS of rewrite rule should be in canonical form");
 
         if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
@@ -3358,7 +3553,7 @@ struct Rewriter {
              typename = typename enable_if_pattern<Predicate>::type>
     HALIDE_ALWAYS_INLINE bool operator()(Before before, int64_t after, Predicate pred) {
         static_assert(Predicate::foldable, "Predicates must consist only of operations that can constant-fold");
-        static_assert(Before::canonical, "LHS of rewrite rule should be in canonical form");
+        static_assert(!check_canonical || Before::canonical, "LHS of rewrite rule should be in canonical form");
 #if HALIDE_FUZZ_TEST_RULES
         fuzz_test_rule(before, IntLiteral(after), pred, wildcard_type, output_type);
 #endif
@@ -3396,14 +3591,16 @@ struct Rewriter {
  */
 // @{
 template<typename Instance,
+         bool check_canonical = false,
          typename = typename enable_if_pattern<Instance>::type>
-HALIDE_ALWAYS_INLINE auto rewriter(Instance instance, halide_type_t output_type, halide_type_t wildcard_type) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
+HALIDE_ALWAYS_INLINE auto rewriter(Instance instance, halide_type_t output_type, halide_type_t wildcard_type) noexcept -> Rewriter<decltype(pattern_arg(instance)), check_canonical> {
     return {pattern_arg(instance), output_type, wildcard_type};
 }
 
 template<typename Instance,
+         bool check_canonical = false,
          typename = typename enable_if_pattern<Instance>::type>
-HALIDE_ALWAYS_INLINE auto rewriter(Instance instance, halide_type_t output_type) noexcept -> Rewriter<decltype(pattern_arg(instance))> {
+HALIDE_ALWAYS_INLINE auto rewriter(Instance instance, halide_type_t output_type) noexcept -> Rewriter<decltype(pattern_arg(instance)), check_canonical> {
     return {pattern_arg(instance), output_type, output_type};
 }
 

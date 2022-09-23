@@ -450,6 +450,11 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "sdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle},
     {nullptr, "udot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
     {nullptr, "udot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
+    // TODO: USDOT
+    {nullptr, "usdot.v2i32.v8i8", Int(32, 2), "dot_product", {Int(32, 2), UInt(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle},
+    {nullptr, "usdot.v2i32.v8i8", UInt(32, 2), "dot_product", {UInt(32, 2), UInt(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle},
+    {nullptr, "usdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle},
+    {nullptr, "usdot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle},
 
     // ABDL - Widening absolute difference
     // The ARM backend folds both signed and unsigned widening casts of absd to a widening_absd, so we need to handle both signed and
@@ -1110,6 +1115,11 @@ string CodeGen_ARM::mattrs() const {
 
         if (target.has_feature(Target::ARMv81a)) {
             arch_flags += separator + "+v8.1a";
+            separator = ",";
+        }
+
+        if (target.has_feature(Target::ARMv86a)) {
+            arch_flags += separator + "+v8.6a";
             separator = ",";
         }
 

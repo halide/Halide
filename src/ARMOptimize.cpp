@@ -8,6 +8,7 @@
 #include "IROperator.h"
 #include "InstructionSelector.h"
 #include "Simplify.h"
+#include "CodeGen_Internal.h"
 
 namespace Halide {
 namespace Internal {
@@ -45,6 +46,10 @@ protected:
         // FIXME: should we only optimize vectors that are multiples of the native vector width?
         //        when we do, we fail simd_op_check tests on weird vector sizes.
         return type.is_vector() && !neon_intrinsics_disabled() && ((type.lanes() % 2) == 0);
+    }
+
+    static bool enable_synthesized_rules() {
+        return get_env_variable("HL_ENABLE_RAKE_RULES") == "1";
     }
 
     using InstructionSelector::visit;
@@ -143,7 +148,166 @@ protected:
                     v_instr(VectorInstruction::dot_product, x, y, u8_1),
                     is_uint(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
 
+
                 false)) {
+            return mutate(rewrite.result);
+        }
+
+        const int bits = op->type.bits();
+        Type narrow_type = op->type.narrow();
+        Type flipped_type = op->type.is_int() ? op->type.with_code(halide_type_uint) : op->type.with_code(halide_type_int);
+        Type flipped_narrow_type = flipped_type.narrow();
+        Expr narrow_one = (bits > 8) ? make_one(narrow_type) : make_one(op->type);
+        Expr flipped_narrow_one = (bits > 8) ? make_one(flipped_narrow_type) : make_one(op->type);
+
+        const auto are_ywpr_uint8 = is_uint(y, 8) && is_uint(w, 8) && is_uint(p, 8) && is_uint(r, 8);
+        const auto are_zuqs_uint8 = is_uint(z, 8) && is_uint(u, 8) && is_uint(q, 8) && is_uint(s, 8);
+        const auto are_ywpr_int8 = is_int(y, 8) && is_int(w, 8) && is_int(p, 8) && is_int(r, 8);
+        const auto are_zuqs_int8 = is_int(z, 8) && is_int(u, 8) && is_int(q, 8) && is_int(s, 8);
+
+        const auto can_use_usdot = target.has_feature(Target::ARMv86a) && (are_ywpr_uint8 && are_zuqs_int8);
+
+        // std::cerr << "ArmOptimize Add: " << Expr(op) << "\n";
+
+        if (enable_synthesized_rules() && (
+
+                // TODO: non-accumulating patterns.
+
+                // New UDOT patterns.
+                // rewrite(
+                //     (widening_add(widening_mul(y, c0), widening_mul(z, c1))
+                //      + widening_add(widening_mul(w, c2), widening_mul(u, c3)))
+                //       + x,
+                //     v_instr(VectorInstruction::dot_product, x, interleave(y, z, w, u), interleave(c0, c1, c2, c3)),
+                //     // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
+                //     (is_uint(x, 32) || is_int(x, 32)) &&
+                //     is_uint(y, 8) && is_uint(c0, 8) && is_uint(z, 8) && is_uint(c1, 8) &&
+                //     is_uint(w, 8) && is_uint(c2, 8) && is_uint(u, 8) && is_uint(c3, 8)
+                // ) ||
+
+                // rewrite(
+                //     widening_add(widening_mul(y, c0), widening_mul(z, c1))
+                //      + (widening_add(widening_mul(w, c2), widening_mul(u, c3))
+                //       + x),
+                //     v_instr(VectorInstruction::dot_product, x, interleave(y, z, w, u), interleave(c0, c1, c2, c3)),
+                //     // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
+                //     (is_uint(x, 32) || is_int(x, 32)) &&
+                //     is_uint(y, 8) && is_uint(c0, 8) && is_uint(z, 8) && is_uint(c1, 8) &&
+                //     is_uint(w, 8) && is_uint(c2, 8) && is_uint(u, 8) && is_uint(c3, 8)
+                // ) ||
+
+                // rewrite(
+                //     widening_add(widening_mul(y, c0), widening_mul(z, c1))
+                //      + (x + widening_add(widening_mul(w, c2), widening_mul(u, c3))),
+                //     v_instr(VectorInstruction::dot_product, x, interleave(y, z, w, u), interleave(c0, c1, c2, c3)),
+                //     // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
+                //     (is_uint(x, 32) || is_int(x, 32)) &&
+                //     is_uint(y, 8) && is_uint(c0, 8) && is_uint(z, 8) && is_uint(c1, 8) &&
+                //     is_uint(w, 8) && is_uint(c2, 8) && is_uint(u, 8) && is_uint(c3, 8)
+                // ) ||
+
+                // (a + b) + c
+                rewrite(
+                    (widening_add(widening_mul(y, z), widening_mul(w, u))
+                     + widening_add(widening_mul(p, q), widening_mul(r, s)))
+                     + x,
+                    v_instr(VectorInstruction::dot_product, x, interleave(y, w, p, r), interleave(z, u, q, s)),
+                    // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
+                    (is_uint(x, 32) || is_int(x, 32)) &&
+                    // UDOT
+                    (are_ywpr_uint8 && are_zuqs_uint8) ||
+                    // SDOT
+                    (are_ywpr_int8 && are_zuqs_int8) ||
+                    // USDOT
+                    can_use_usdot) ||
+
+                // a + (b + c)
+                rewrite(
+                    widening_add(widening_mul(y, z), widening_mul(w, u))
+                     + (widening_add(widening_mul(p, q), widening_mul(r, s))
+                     + x),
+                    v_instr(VectorInstruction::dot_product, x, interleave(y, w, p, r), interleave(z, u, q, s)),
+                    // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
+                    (is_uint(x, 32) || is_int(x, 32)) &&
+                    // UDOT
+                    (are_ywpr_uint8 && are_zuqs_uint8) ||
+                    // SDOT
+                    (are_ywpr_int8 && are_zuqs_int8) ||
+                    // USDOT
+                    // TODO: need to handle other possibility
+                    can_use_usdot) ||
+
+                // a + (c + b)
+                rewrite(
+                    widening_add(widening_mul(y, z), widening_mul(w, u))
+                     + (x + widening_add(widening_mul(p, q), widening_mul(r, s))),
+                    v_instr(VectorInstruction::dot_product, x, interleave(y, w, p, r), interleave(z, u, q, s)),
+                    // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
+                    (is_uint(x, 32) || is_int(x, 32)) &&
+                    // UDOT
+                    (are_ywpr_uint8 && are_zuqs_uint8) ||
+                    // SDOT
+                    (are_ywpr_int8 && are_zuqs_int8) ||
+                    // USDOT
+                    // TODO: need to handle other possibility
+                    can_use_usdot) ||
+
+                // (a + c) + b
+                rewrite(
+                    (widening_add(widening_mul(y, z), widening_mul(w, u)) + x)
+                     + widening_add(widening_mul(p, q), widening_mul(r, s)),
+                    v_instr(VectorInstruction::dot_product, x, interleave(y, w, p, r), interleave(z, u, q, s)),
+                    // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
+                    (is_uint(x, 32) || is_int(x, 32)) &&
+                    // UDOT
+                    (are_ywpr_uint8 && are_zuqs_uint8) ||
+                    // SDOT
+                    (are_ywpr_int8 && are_zuqs_int8) ||
+                    // USDOT
+                    // TODO: need to handle other possibility
+                    can_use_usdot) ||
+
+                // (c + a) + b
+                rewrite(
+                    (x + widening_add(widening_mul(y, z), widening_mul(w, u)))
+                     + widening_add(widening_mul(p, q), widening_mul(r, s)),
+                    v_instr(VectorInstruction::dot_product, x, interleave(y, w, p, r), interleave(z, u, q, s)),
+                    // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
+                    (is_uint(x, 32) || is_int(x, 32)) &&
+                    // UDOT
+                    (are_ywpr_uint8 && are_zuqs_uint8) ||
+                    // SDOT
+                    (are_ywpr_int8 && are_zuqs_int8) ||
+                    // USDOT
+                    // TODO: need to handle other possibility
+                    can_use_usdot) ||
+                
+
+                // TODO: do 0-version of dot products.
+
+                // umlal / smlal
+                rewrite(x + widening_shift_left(y, c0),
+                        x + widening_mul(y, shift_left(narrow_one, c0))) ||
+                rewrite(widening_shift_left(y, c0) + x,
+                        x + widening_mul(y, shift_left(narrow_one, c0))) ||
+
+                rewrite(cast(op->type, widening_shift_left(y, c0)) + x,
+                        x + cast(op->type, typed(flipped_type, widening_mul(y, shift_left(flipped_narrow_one, c0)))),
+                        // valid if the cast is not bit-changing (i.e. a reinterpret)
+                        is_int(y, bits / 2) || is_uint(y, bits / 2)) ||
+
+                rewrite(reinterpret(op->type, widening_shift_left(y, c0)) + x,
+                        x + reinterpret(op->type, typed(flipped_type, widening_mul(y, shift_left(flipped_narrow_one, c0)))),
+                        // valid if the cast is not bit-changing (i.e. a reinterpret)
+                        is_int(y, bits / 2, lanes) || is_uint(y, bits / 2, lanes)) ||
+
+                // TODO: is this safe? what if we have two widening_muls?
+                rewrite(widening_mul(y, z) + x,
+                        x + widening_mul(y, z),
+                        !is_intrin(x, Call::widening_mul)) ||
+
+        false)) {
+            // std::cerr << "matched! " << rewrite.result << "\n";
             return mutate(rewrite.result);
         }
 
@@ -361,6 +525,10 @@ protected:
         const Type int16x_t = Int(16, lanes);
         const Type int32x_t = Int(32, lanes);
 
+        const Type unsigned_type = op->type.with_code(halide_type_uint);
+        // Should only be used if bits > 8.
+        const Type unsigned_narrow_type = (bits > 8) ? unsigned_type.narrow() : unsigned_type;
+
         if (
             rewrite(
                 sorted_avg(x, y),
@@ -436,6 +604,17 @@ protected:
                 x_is_small_int_or_uint && y_is_small_int_or_uint &&
                     // Args must match sign.
                     (is_int(x) == is_int(y))) ||
+
+            // Look for mixed-arg widening_muls with constants.
+            (enable_synthesized_rules() &&
+             rewrite(
+                widening_mul(x, c0),
+                reinterpret(op->type,
+                 typed(op->type.with_code(halide_type_uint),
+                  v_instr(VectorInstruction::widening_mul, x, cast(unsigned_narrow_type, c0)))),
+                x_is_small_int_or_uint && (c0 > 0) &&
+                    // Args must match sign.
+                    (is_uint(x) && is_int(c0)))) ||
 
             // SQADD, UQADD - Saturating add
             rewrite(
@@ -998,12 +1177,26 @@ private:
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
+    IRMatcher::Wild<3> w;
+    IRMatcher::Wild<4> u;
+    IRMatcher::Wild<5> p;
+    IRMatcher::Wild<6> q;
+    IRMatcher::Wild<7> r;
+    IRMatcher::Wild<8> s;
+    // IRMatcher::Wild<9> t;
     IRMatcher::WildConst<0> c0;
+    // IRMatcher::WildConst<1> c1;
+    // IRMatcher::WildConst<2> c2;
+    // IRMatcher::WildConst<3> c3;
 };
 
 }  // namespace
 
 Stmt optimize_arm_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb) {
+    if (get_env_variable("HL_DISABLE_ARM_LOWERING") == "1") {
+        return s;
+    }
+
     Stmt stmt = Optimize_ARM(target, codegen, fvb).mutate(s);
 
     if (!stmt.same_as(s)) {

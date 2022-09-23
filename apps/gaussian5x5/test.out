@@ -1,0 +1,314 @@
+export HL_ENABLE_RAKE=1 && \
+	c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g gaussian5x5_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/gaussian5x5_rake.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -g gaussian5x5_generator.cpp /Users/aroot/projects/Halide-trs/distrib/tools/GenGen.cpp -o bin/host/gaussian5x5.generator -Wl,-rpath,/Users/aroot/projects/Halide-trs/distrib/lib/ -L /Users/aroot/projects/Halide-trs/distrib/lib/ -lHalide  -ldl -lpthread -lz -Wl,-force_load /Users/aroot/projects/Halide-trs/distrib/lib/libautoschedule_mullapudi2016.so
+export HL_ENABLE_RAKE=1 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/gaussian5x5_rake.generator -g gaussian5x5 -f gaussian5x5_rake -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+rewriting Add: max(min(ramp((bounded_input.s0.x.x*16) + -2, 1, 16), x16(input.extent.0 + -1)), x16(0)) + x16(t85)
+0
+rewriting Add: max(min(ramp(-2, 1, 16), x16(input.extent.0 + -1)), x16(0)) + x16(((bounded_input.s0.y.prologue.s + bounded_input.s0.y.rebased) + -2)*input.stride.1)
+0
+rewriting Add: max(min(ramp(((bounded_input.s0.x.x.rebased + t92)*16) + -2, 1, 16), x16(input.extent.0 + -1)), x16(0)) + x16(t95)
+0
+rewriting Add: max(min(ramp((bounded_input.s0.x.x*16) + -2, 1, 16), x16(input.extent.0 + -1)), x16(0)) + x16(t101)
+0
+rewriting Add: (uint16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)], x16((uint8)6)) + (uint16x16)widening_add((uint8x16)bounded_input[ramp(rows.s0.x.x*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t104)*16, 1, 16) aligned(16, 0)])
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t105)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t106)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)) + ((uint16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)], x16((uint8)6)) + (uint16x16)widening_add((uint8x16)bounded_input[ramp(rows.s0.x.x*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t104)*16, 1, 16) aligned(16, 0)]))
+0
+rewriting Add: (uint16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t106)*16, 1, 16) aligned(16, 0)], x16((uint8)6)) + (uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t105)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t107)*16, 1, 16) aligned(16, 0)])
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t104)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)) + ((uint16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t106)*16, 1, 16) aligned(16, 0)], x16((uint8)6)) + (uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t105)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t107)*16, 1, 16) aligned(16, 0)]))
+0
+rewriting Add: (uint16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t104)*16, 1, 16) aligned(16, 0)], x16((uint8)6)) + (uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t109)*16, 1, 16) aligned(16, 0)])
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t106)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t107)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)) + ((uint16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t104)*16, 1, 16) aligned(16, 0)], x16((uint8)6)) + (uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t109)*16, 1, 16) aligned(16, 0)]))
+0
+rewriting Add: (uint16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t107)*16, 1, 16) aligned(16, 0)], x16((uint8)6)) + (uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t106)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t111)*16, 1, 16) aligned(16, 0)])
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t104)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t109)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)) + ((uint16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t107)*16, 1, 16) aligned(16, 0)], x16((uint8)6)) + (uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t106)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t111)*16, 1, 16) aligned(16, 0)]))
+0
+rewriting Add: (uint16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (uint16x16)widen_right_mul((uint16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (uint16x16)rows[ramp(output.s0.x.x*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)rows[ramp((output.s0.x.x*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((uint16x16)rows[ramp(output.s0.x.x*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+rewriting Add: (uint16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (uint16x16)widen_right_mul((uint16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (uint16x16)rows[ramp(output.s0.x.x*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)rows[ramp((output.s0.x.x*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((uint16x16)rows[ramp(output.s0.x.x*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+rewriting Add: (uint16x16)rows[ramp((t62*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t62*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (uint16x16)widen_right_mul((uint16x16)rows[ramp((t62*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t62*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t62*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (uint16x16)rows[ramp(t62*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t62*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t62*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t62*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)rows[ramp((t62*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((uint16x16)rows[ramp(t62*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t62*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t62*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t62*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+rewriting Add: (uint16x16)rows[ramp((t62*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t62*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (uint16x16)widen_right_mul((uint16x16)rows[ramp((t62*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t62*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t62*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (uint16x16)rows[ramp(t62*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t62*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t62*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t62*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)rows[ramp((t62*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((uint16x16)rows[ramp(t62*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t62*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t62*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t62*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+rewriting Add: (uint16x16)rows[ramp((t63*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t63*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (uint16x16)widen_right_mul((uint16x16)rows[ramp((t63*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t63*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t63*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (uint16x16)rows[ramp(t63*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t63*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t63*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t63*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)rows[ramp((t63*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((uint16x16)rows[ramp(t63*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t63*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t63*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t63*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+rewriting Add: (uint16x16)rows[ramp((t63*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t63*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (uint16x16)widen_right_mul((uint16x16)rows[ramp((t63*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t63*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t63*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (uint16x16)rows[ramp(t63*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t63*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t63*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t63*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)rows[ramp((t63*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((uint16x16)rows[ramp(t63*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t63*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t63*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t63*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+rewriting Add: (uint16x16)rows[ramp((t64*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t64*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (uint16x16)widen_right_mul((uint16x16)rows[ramp((t64*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t64*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t64*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (uint16x16)rows[ramp(t64*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t64*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t64*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t64*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)rows[ramp((t64*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((uint16x16)rows[ramp(t64*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t64*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t64*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t64*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+rewriting Add: (uint16x16)rows[ramp((t64*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t64*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (uint16x16)widen_right_mul((uint16x16)rows[ramp((t64*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t64*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t64*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (uint16x16)rows[ramp(t64*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t64*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t64*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t64*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (uint16x16)shift_left((uint16x16)rows[ramp((t64*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((uint16x16)rows[ramp(t64*16, 1, 16) aligned(16, 0)] + ((uint16x16)widen_right_mul((uint16x16)rows[ramp((t64*16) + 2, 1, 16) aligned(16, 2)], x16((uint8)6)) + ((uint16x16)rows[ramp((t64*16) + 4, 1, 16) aligned(16, 4)] + (uint16x16)shift_left((uint16x16)rows[ramp((t64*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_ARM_LOWERING=0 && \
+	bin/host/gaussian5x5.generator -g gaussian5x5 -f gaussian5x5_pitchfork -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+rewriting Add: max(min(ramp((bounded_input.s0.x.x*16) + -2, 1, 16), x16(input.extent.0 + -1)), x16(0)) + x16(t79)
+0
+rewriting Add: max(min(ramp(-2, 1, 16), x16(input.extent.0 + -1)), x16(0)) + x16(((bounded_input.s0.y.prologue.s + bounded_input.s0.y.rebased) + -2)*input.stride.1)
+0
+rewriting Add: max(min(ramp(((bounded_input.s0.x.x.rebased + t86)*16) + -2, 1, 16), x16(input.extent.0 + -1)), x16(0)) + x16(t89)
+0
+rewriting Add: max(min(ramp((bounded_input.s0.x.x*16) + -2, 1, 16), x16(input.extent.0 + -1)), x16(0)) + x16(t95)
+0
+trying widening_op: (int16x16)shift_left(int16x16((uint8x16)bounded_input[ramp((rows.s0.x.x + t99)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))
+narrowed operands: (uint8x16)bounded_input[ramp((rows.s0.x.x + t99)*16, 1, 16) aligned(16, 0)] << x16((uint8)2)
+trying widening_op: (int16x16)shift_left(int16x16((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))
+narrowed operands: (uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)] << x16((uint8)2)
+rewriting Add: int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], x16((int8)6))
+0
+rewriting Add: int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t99)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], x16((int8)6)))
+1
+matched!
+((int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t99)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))))
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t99)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t99)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t99)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t99)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t99)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: reinterpret<uint16x16>(((int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t99)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))))) + (uint16x16)widening_add((uint8x16)bounded_input[ramp(rows.s0.x.x*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)])
+0
+trying widening_op: (int16x16)shift_left(int16x16((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))
+narrowed operands: (uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)] << x16((uint8)2)
+trying widening_op: (int16x16)shift_left(int16x16((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))
+narrowed operands: (uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)] << x16((uint8)2)
+rewriting Add: int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((int8)6))
+0
+rewriting Add: int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((int8)6)))
+1
+matched!
+((int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))))
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: reinterpret<uint16x16>(((int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))))) + (uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t99)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)])
+0
+trying widening_op: (int16x16)shift_left(int16x16((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))
+narrowed operands: (uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)] << x16((uint8)2)
+trying widening_op: (int16x16)shift_left(int16x16((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))
+narrowed operands: (uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)] << x16((uint8)2)
+rewriting Add: int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((int8)6))
+0
+rewriting Add: int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((int8)6)))
+1
+matched!
+((int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))))
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: reinterpret<uint16x16>(((int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))))) + (uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t98)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)])
+0
+trying widening_op: (int16x16)shift_left(int16x16((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))
+narrowed operands: (uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)] << x16((uint8)2)
+trying widening_op: (int16x16)shift_left(int16x16((uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))
+narrowed operands: (uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)] << x16((uint8)2)
+rewriting Add: int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)], x16((int8)6))
+0
+rewriting Add: int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16((uint16x16)widening_shift_left((uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)], x16((uint8)2))) + (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)], x16((int8)6)))
+1
+matched!
+((int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))))
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: (int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)]), x16((uint16)2)))
+0
+rewriting Add: reinterpret<uint16x16>(((int16x16)widening_mul((uint8x16)bounded_input[ramp((rows.s0.x.x + t101)*16, 1, 16) aligned(16, 0)], x16((int8)6)) + int16x16((uint16x16)shift_left((uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t100)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t103)*16, 1, 16) aligned(16, 0)]), x16((uint16)2))))) + (uint16x16)widening_add((uint8x16)bounded_input[ramp((rows.s0.x.x + t97)*16, 1, 16) aligned(16, 0)], (uint8x16)bounded_input[ramp((rows.s0.x.x + t105)*16, 1, 16) aligned(16, 0)])
+0
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+rewriting Add: (int16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (int16x16)widen_right_mul((int16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (int16x16)rows[ramp(output.s0.x.x*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(output.s0.x.x*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+rewriting Add: (int16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (int16x16)widen_right_mul((int16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (int16x16)rows[ramp(output.s0.x.x*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(output.s0.x.x*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+trying widening_op: (int16x16)shift_right((int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(output.s0.x.x*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((output.s0.x.x*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((output.s0.x.x*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((output.s0.x.x*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))), x16((uint16)8))
+narrowed operands: (undefined) << x16((uint8)8)
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+rewriting Add: (int16x16)rows[ramp((t56*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (int16x16)widen_right_mul((int16x16)rows[ramp((t56*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t56*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (int16x16)rows[ramp(t56*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t56*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t56*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(t56*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t56*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t56*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+rewriting Add: (int16x16)rows[ramp((t56*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (int16x16)widen_right_mul((int16x16)rows[ramp((t56*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t56*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (int16x16)rows[ramp(t56*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t56*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t56*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(t56*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t56*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t56*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+trying widening_op: (int16x16)shift_right((int16x16)shift_left((int16x16)rows[ramp((t56*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(t56*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t56*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t56*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t56*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))), x16((uint16)8))
+narrowed operands: (undefined) << x16((uint8)8)
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+rewriting Add: (int16x16)rows[ramp((t57*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (int16x16)widen_right_mul((int16x16)rows[ramp((t57*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t57*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (int16x16)rows[ramp(t57*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t57*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t57*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(t57*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t57*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t57*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+rewriting Add: (int16x16)rows[ramp((t57*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (int16x16)widen_right_mul((int16x16)rows[ramp((t57*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t57*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (int16x16)rows[ramp(t57*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t57*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t57*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(t57*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t57*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t57*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+trying widening_op: (int16x16)shift_right((int16x16)shift_left((int16x16)rows[ramp((t57*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(t57*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t57*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t57*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t57*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))), x16((uint16)8))
+narrowed operands: (undefined) << x16((uint8)8)
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+rewriting Add: (int16x16)rows[ramp((t58*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (int16x16)widen_right_mul((int16x16)rows[ramp((t58*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t58*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (int16x16)rows[ramp(t58*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t58*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t58*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(t58*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t58*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t58*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+trying widening_op: (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+narrowed operands: (undefined) << x16((uint8)2)
+rewriting Add: (int16x16)rows[ramp((t58*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))
+0
+rewriting Add: (int16x16)widen_right_mul((int16x16)rows[ramp((t58*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t58*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))
+0
+rewriting Add: (int16x16)rows[ramp(t58*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t58*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t58*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))
+0
+rewriting Add: (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(t58*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t58*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t58*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2)))))
+0
+trying widening_op: (int16x16)shift_right((int16x16)shift_left((int16x16)rows[ramp((t58*16) + 1, 1, 16) aligned(16, 1)], x16((uint16)2)) + ((int16x16)rows[ramp(t58*16, 1, 16) aligned(16, 0)] + ((int16x16)widen_right_mul((int16x16)rows[ramp((t58*16) + 2, 1, 16) aligned(16, 2)], x16((int8)6)) + ((int16x16)rows[ramp((t58*16) + 4, 1, 16) aligned(16, 4)] + (int16x16)shift_left((int16x16)rows[ramp((t58*16) + 3, 1, 16) aligned(16, 3)], x16((uint16)2))))), x16((uint16)8))
+narrowed operands: (undefined) << x16((uint8)8)
+export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=0 && \
+	export HL_DISABLE_INTRINISICS=1 && \
+	export HL_DISABLE_ARM_LOWERING=1 && \
+	bin/host/gaussian5x5.generator -g gaussian5x5 -f gaussian5x5_llvm -e stmt,assembly,static_library,c_header -o bin/host target=host-no_runtime-arm_dot_prod
+bin/host/gaussian5x5.generator -r runtime -o bin/host target=host
+c++ -O3 -std=c++17 -I /Users/aroot/projects/Halide-trs/distrib/include/ -I /Users/aroot/projects/Halide-trs/distrib/tools/  -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi  -fvisibility=hidden -Ibin/host -Wall -O3 filter.cpp bin/host/gaussian5x5_rake.a bin/host/gaussian5x5_pitchfork.a bin/host/gaussian5x5_llvm.a bin/host/runtime.a -o bin/host/filter  -ldl -lpthread -lz -L/opt/homebrew/Cellar/libpng/1.6.37/lib -lpng16 -L/opt/homebrew/lib -ljpeg -I/opt/homebrew/Cellar/libpng/1.6.37/include/libpng16 -I/opt/homebrew/include  
+bin/host/filter ../images/gray.png 100 bin/host/out.png
+LLVM time: 0.885579ms
+Pitchfork time: 0.838654ms
+Rake time: 0.838713ms
+Success!
+rm bin/host/gaussian5x5_llvm.a bin/host/runtime.a bin/host/gaussian5x5_rake.a bin/host/gaussian5x5_pitchfork.a

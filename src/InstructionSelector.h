@@ -31,6 +31,7 @@ protected:
     Expr visit(const Div *) override;
     Expr visit(const Mod *) override;
     Expr visit(const VectorReduce *) override;
+    Expr visit(const Let *) override;
 
 public:
     InstructionSelector(const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb);

@@ -31,6 +31,18 @@ Expr InstructionSelector::visit(const VectorReduce *op) {
     return mutate(codegen->split_vector_reduce(op, Expr()));
 }
 
+Expr InstructionSelector::visit(const Let *op) {
+    if (op->type.is_vector() && op->type.is_int_or_uint()) {
+        // Query bounds and insert into scope.
+        // TODO: should we always query here?
+        Interval i = bounds_of_expr_in_scope(op->value, scope, func_value_bounds, false);
+        ScopedBinding<Interval>(scope, op->name, i);
+        return IRGraphMutator::visit(op);
+    }
+
+    return IRGraphMutator::visit(op);
+}
+
 Interval InstructionSelector::cached_get_interval(const Expr &expr) {
     const auto [iter, success] = cache.insert({expr, Interval::everything()});
 

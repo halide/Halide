@@ -159,6 +159,7 @@ struct Target {
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         RVV = halide_target_feature_rvv,
         ARMv81a = halide_target_feature_armv81a,
+        ARMv86a = halide_target_feature_armv86a,
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
         SPIRV = halide_target_feature_spirv,

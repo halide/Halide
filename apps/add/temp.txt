@@ -1,0 +1,4 @@
+LLVM time: 0.801592ms
+Halide time: 0.507413ms
+Pitchfork time: 0.425296ms
+Rake time: 0.432675ms

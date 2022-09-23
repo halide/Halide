@@ -1,0 +1,56 @@
+24,26c24,26
+< LLVM time: 0.796929ms
+< Pitchfork time: 0.4361ms
+< Rake time: 0.428312ms
+---
+> LLVM time: 0.796783ms
+> Pitchfork time: 0.511358ms
+> Rake time: 0.501742ms
+52,54c52,54
+< LLVM time: 0.889467ms
+< Pitchfork time: 0.851429ms
+< Rake time: 0.840542ms
+---
+> LLVM time: 0.891354ms
+> Pitchfork time: 0.840558ms
+> Rake time: 0.841021ms
+80,82c80,82
+< LLVM time: 1.82762ms
+< Pitchfork time: 1.37949ms
+< Rake time: 1.26429ms
+---
+> LLVM time: 1.83601ms
+> Pitchfork time: 1.38265ms
+> Rake time: 1.27372ms
+108,110c108,110
+< LLVM time: 0.973412ms
+< Pitchfork time: 0.658004ms
+< Rake time: 0.658171ms
+---
+> LLVM time: 0.974375ms
+> Pitchfork time: 0.657908ms
+> Rake time: 0.657767ms
+136,138c136,138
+< LLVM time: 0.609812ms
+< Pitchfork time: 0.352883ms
+< Rake time: 0.352963ms
+---
+> LLVM time: 0.609804ms
+> Pitchfork time: 0.353ms
+> Rake time: 0.352958ms
+164,166c164,166
+< LLVM time: 2.79472ms
+< Pitchfork time: 0.513592ms
+< Rake time: 0.514087ms
+---
+> LLVM time: 2.7837ms
+> Pitchfork time: 0.58225ms
+> Rake time: 0.589521ms
+192,194c192,194
+< LLVM time: 0.708767ms
+< Pitchfork time: 0.565054ms
+< Rake time: 0.559004ms
+---
+> LLVM time: 0.709042ms
+> Pitchfork time: 0.563758ms
+> Rake time: 0.560083ms

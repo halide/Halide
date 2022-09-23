@@ -6,7 +6,6 @@ namespace Halide {
 
 using std::ostringstream;
 
-namespace {
 uint64_t max_uint(int bits) {
     uint64_t max_val = 0xffffffffffffffffULL;
     return max_val >> (64 - bits);
@@ -21,7 +20,6 @@ int64_t min_int(int bits) {
     return -max_int(bits) - 1;
 }
 
-}  // namespace
 
 /** Return an expression which is the maximum value of this type */
 Halide::Expr Type::max() const {
