@@ -1169,10 +1169,6 @@ private:
             // call in two different places might produce different
             // results (e.g. during the update step of a reduction), so we
             // can't move around call nodes.
-            //
-            // Note: Only evaluate new_args if we know the call is a candidate;
-            // otherwise we can get n^2 evaluation time for deeply-nested
-            // Expr trees.
 
             std::vector<Expr> new_args(op->args.size());
             bool const_args = true;
