@@ -385,6 +385,36 @@ def test_typed_funcs():
         assert False, 'Did not see expected exception!'
 
 
+def test_requirements():
+    delta = hl.Param(hl.Int(32), 'delta')
+    x = hl.Var('x')
+    f = hl.Func('f_requirements')
+    f[x] = x + delta
+
+    # Add a requirement
+    p = hl.Pipeline([f])
+    p.add_requirement(delta != 0)  # error_args omitted
+    p.add_requirement(delta > 0, "negative values are bad", delta)
+
+    delta.set(1)
+    p.realize([10])
+
+    try:
+        delta.set(0)
+        p.realize([10])
+    except hl.HalideError as e:
+        assert 'Requirement Failed: (false)' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
+        delta.set(-1)
+        p.realize([10])
+    except hl.HalideError as e:
+        assert 'Requirement Failed: (false) negative values are bad -1' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
@@ -402,3 +432,4 @@ if __name__ == "__main__":
     test_basics5()
     test_scalar_funcs()
     test_bool_conversion()
+    test_requirements()
