@@ -3639,13 +3639,13 @@ private:
     std::unique_ptr<GeneratorParamInfo> param_info_ptr;
 
     std::string generator_registered_name, generator_stub_name;
-    Pipeline pipeline_;
+    Pipeline pipeline;
 
     struct Requirement {
         Expr condition;
         std::vector<Expr> error_args;
     };
-    std::vector<Requirement> requirements_;
+    std::vector<Requirement> requirements;
 
     // Return our GeneratorParamInfo.
     GeneratorParamInfo &param_info();

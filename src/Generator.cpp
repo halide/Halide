@@ -1555,13 +1555,13 @@ void GeneratorBase::post_schedule() {
 }
 
 void GeneratorBase::add_requirement(const Expr &condition, const std::vector<Expr> &error_args) {
-    internal_assert(!pipeline_.defined());
-    requirements_.push_back({condition, error_args});
+    internal_assert(!pipeline.defined());
+    requirements.push_back({condition, error_args});
 }
 
 Pipeline GeneratorBase::get_pipeline() {
     check_min_phase(GenerateCalled);
-    if (!pipeline_.defined()) {
+    if (!pipeline.defined()) {
         GeneratorParamInfo &pi = param_info();
         user_assert(!pi.outputs().empty()) << "Must use get_pipeline<> with Output<>.";
         std::vector<Func> funcs;
@@ -1588,12 +1588,12 @@ Pipeline GeneratorBase::get_pipeline() {
                 funcs.push_back(f);
             }
         }
-        pipeline_ = Pipeline(funcs);
-        for (const auto &r : requirements_) {
-            pipeline_.add_requirement(r.condition, r.error_args);
+        pipeline = Pipeline(funcs);
+        for (const auto &r : requirements) {
+            pipeline.add_requirement(r.condition, r.error_args);
         }
     }
-    return pipeline_;
+    return pipeline;
 }
 
 void GeneratorBase::check_scheduled(const char *m) const {
