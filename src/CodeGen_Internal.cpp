@@ -549,7 +549,7 @@ Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
     // If it was a tie, and the result is odd, we should have rounded in the
     // other direction.
     Expr correction = reinterpret(x.type(), odd & tie & one);
-    return common_subexpression_elimination(simplify(a - correction));
+    return common_subexpression_elimination(a - correction);
 }
 
 bool get_md_bool(llvm::Metadata *value, bool &result) {
