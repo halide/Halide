@@ -1554,6 +1554,11 @@ void GeneratorBase::pre_schedule() {
 void GeneratorBase::post_schedule() {
 }
 
+void GeneratorBase::add_requirement(const Expr &condition, const std::vector<Expr> &error_args) {
+    internal_assert(!pipeline.defined());
+    requirements.push_back({condition, error_args});
+}
+
 Pipeline GeneratorBase::get_pipeline() {
     check_min_phase(GenerateCalled);
     if (!pipeline.defined()) {
@@ -1584,6 +1589,9 @@ Pipeline GeneratorBase::get_pipeline() {
             }
         }
         pipeline = Pipeline(funcs);
+        for (const auto &r : requirements) {
+            pipeline.add_requirement(r.condition, r.error_args);
+        }
     }
     return pipeline;
 }

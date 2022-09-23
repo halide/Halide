@@ -52,6 +52,9 @@ class AddConstantGenerator:
 
     def generate(self):
         g = self
+        g.add_requirement(g.scalar_int32 != 0)  # error_args omitted for this case
+        g.add_requirement(g.scalar_int32 > 0, "negative values are bad", g.scalar_int32)
+
         g.output_uint8[x] = g.input_uint8[x] + g.scalar_uint8
         g.output_uint16[x] = g.input_uint16[x] + g.scalar_uint16
         g.output_uint32[x] = g.input_uint32[x] + g.scalar_uint32

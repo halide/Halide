@@ -322,6 +322,15 @@ Stmt remove_promises(const Stmt &s);
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);
 
+template<typename T>
+struct is_printable_arg {
+    static constexpr bool value = std::is_convertible<T, const char *>::value ||
+                                  std::is_convertible<T, Halide::Expr>::value;
+};
+
+template<typename... Args>
+struct all_are_printable_args : meta_and<is_printable_arg<Args>...> {};
+
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
 }

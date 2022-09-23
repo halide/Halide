@@ -3444,9 +3444,14 @@ public:
         return p;
     }
 
-    template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE void add_requirement(Expr condition, Args &&...args) {
-        get_pipeline().add_requirement(condition, std::forward<Args>(args)...);
+    void add_requirement(const Expr &condition, const std::vector<Expr> &error_args);
+
+    template<typename... Args,
+             typename = typename std::enable_if<Internal::all_are_printable_args<Args...>::value>::type>
+    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
+        std::vector<Expr> collected_args;
+        Internal::collect_print_args(collected_args, std::forward<Args>(error_args)...);
+        add_requirement(condition, collected_args);
     }
 
     void trace_pipeline() {
@@ -3635,6 +3640,12 @@ private:
 
     std::string generator_registered_name, generator_stub_name;
     Pipeline pipeline;
+
+    struct Requirement {
+        Expr condition;
+        std::vector<Expr> error_args;
+    };
+    std::vector<Requirement> requirements;
 
     // Return our GeneratorParamInfo.
     GeneratorParamInfo &param_info();
