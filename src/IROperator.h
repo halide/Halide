@@ -1036,10 +1036,12 @@ Expr floor(Expr x);
 Expr ceil(Expr x);
 
 /** Return the whole number closest to a floating-point expression. If the
- * argument is not floating-point, it is cast to Float(32). The return value
- * is still in floating point, despite being a whole number. On ties, we
- * follow IEEE754 conventions and round to the nearest even number. Vectorizes
- * cleanly. */
+ * argument is not floating-point, it is cast to Float(32). The return value is
+ * still in floating point, despite being a whole number. On ties, we round
+ * towards the nearest even integer. Note that this is not the same as
+ * std::round in C, which rounds away from zero. On platforms without a native
+ * instruction for this, it is emulated, and may be more expensive than
+ * cast<int>(x + 0.5f) or similar. */
 Expr round(Expr x);
 
 /** Return the integer part of a floating-point expression. If the argument is

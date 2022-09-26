@@ -763,7 +763,6 @@ void CodeGen_Metal_Dev::init_module() {
                << "#define abs_f32 fabs\n"
                << "#define floor_f32 floor\n"
                << "#define ceil_f32 ceil\n"
-               << "#define round_f32 round\n"
                << "#define trunc_f32 trunc\n"
                << "#define pow_f32 pow\n"
                << "#define asin_f32 asin\n"

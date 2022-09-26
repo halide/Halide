@@ -2764,6 +2764,8 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             value = phi;
         }
+    } else if (op->is_intrinsic(Call::round)) {
+        value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
     } else if (op->is_intrinsic(Call::require)) {
         internal_assert(op->args.size() == 3);
         Expr cond = op->args[0];
