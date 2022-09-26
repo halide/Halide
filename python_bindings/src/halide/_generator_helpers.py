@@ -186,10 +186,10 @@ class GeneratorParam:
         GeneratorParam._parse_value(r._name, type(self._value), self._value)
 
         if value is not None:
-            # parse replacement value for validity, and also for type match with default
-            self._value = GeneratorParam._parse_value(r._name, type(self._value), value)
-
-        return self._value
+            # parse replacement value for validity, and also for type match with default.
+            return GeneratorParam._parse_value(r._name, type(self._value), value)
+        else:
+            return self._value
 
     def _get_types_and_dimensions(self) -> (list[Type], int):
         # Use dummy type-and-dimensions here so that the ctor won't fail due to undefined status
@@ -394,10 +394,6 @@ class Generator(ABC):
     def natural_vector_size(self, type: Type) -> int:
         return self.target().natural_vector_size(type)
 
-    def add_requirement(self, condition: Expr, *args) -> None:
-        assert self._stage < _Stage.pipeline_built
-        self._pipeline_requirements.append((condition, [*args]))
-
     @classmethod
     def call(cls, *args, **kwargs):
         generator = cls()
@@ -479,7 +475,6 @@ class Generator(ABC):
         self._requirements = {}
         self._replacements = {}
         self._in_configure = 0
-        self._pipeline_requirements = []
 
         self._advance_to_gp_created()
         if generator_params:
@@ -664,7 +659,8 @@ class Generator(ABC):
             assert isinstance(gp, GeneratorParam)
             old_value = gp._value
             new_value = GeneratorParam._parse_value(name, type(old_value), value)
-            gp._value = new_value
+            # Do not mutate the existing GP in place; it could be shared across multiple Generators.
+            self._gp_dict[name] = GeneratorParam(new_value)
         elif name == "autoscheduler":
             _check(not self.autoscheduler().name, "The GeneratorParam %s cannot be set more than once" % name)
             self.autoscheduler().name = value
@@ -704,8 +700,6 @@ class Generator(ABC):
             funcs.append(f)
 
         self._pipeline = Pipeline(funcs)
-        for condition, error_args in self._pipeline_requirements:
-            self._pipeline.add_requirement(condition, *error_args)
         self._stage = _Stage.pipeline_built
         return self._pipeline
 
