@@ -394,6 +394,10 @@ class Generator(ABC):
     def natural_vector_size(self, type: Type) -> int:
         return self.target().natural_vector_size(type)
 
+    def add_requirement(self, condition: Expr, *args) -> None:
+        assert self._stage < _Stage.pipeline_built
+        self._pipeline_requirements.append((condition, [*args]))
+
     @classmethod
     def call(cls, *args, **kwargs):
         generator = cls()
