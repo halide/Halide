@@ -479,6 +479,7 @@ class Generator(ABC):
         self._requirements = {}
         self._replacements = {}
         self._in_configure = 0
+        self._pipeline_requirements = []
 
         self._advance_to_gp_created()
         if generator_params:
@@ -704,6 +705,8 @@ class Generator(ABC):
             funcs.append(f)
 
         self._pipeline = Pipeline(funcs)
+        for condition, error_args in self._pipeline_requirements:
+            self._pipeline.add_requirement(condition, *error_args)
         self._stage = _Stage.pipeline_built
         return self._pipeline
 
