@@ -75,6 +75,7 @@
 #include "UnsafePromises.h"
 #include "VectorizeLoops.h"
 #include "WrapCalls.h"
+#include "X86Optimize.h"
 
 namespace Halide {
 namespace Internal {

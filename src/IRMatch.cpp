@@ -296,6 +296,22 @@ public:
         }
     }
 
+    void visit(const VectorInstruction *op) override {
+        const VectorInstruction *e = expr.as<VectorInstruction>();
+        if (result && e &&
+            types_match(op->type, e->type) &&
+            e->op == op->op &&
+            e->args.size() == op->args.size()) {
+            for (size_t i = 0; result && (i < e->args.size()); i++) {
+                // FIXME: should we early-out? Here and in Call*
+                expr = e->args[i];
+                op->args[i].accept(this);
+            }
+        } else {
+            result = false;
+        }
+    }
+
     void visit(const VectorReduce *op) override {
         const VectorReduce *e = expr.as<VectorReduce>();
         if (result && e && op->op == e->op && types_match(op->type, e->type)) {
@@ -515,6 +531,9 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::Shuffle:
         return (equal_helper(((const Shuffle &)a).vectors, ((const Shuffle &)b).vectors) &&
                 equal_helper(((const Shuffle &)a).indices, ((const Shuffle &)b).indices));
+    case IRNodeType::VectorInstruction:
+        return (((const VectorInstruction &)a).op == ((const VectorInstruction &)b).op &&
+                equal_helper(((const VectorInstruction &)a).args, ((const VectorInstruction &)b).args));
     case IRNodeType::VectorReduce:
         // As with Cast above, we use equal instead of equal_helper
         // here, because while we know a.type == b.type, we don't know

@@ -48,6 +48,8 @@ struct ExternSignature;
 
 namespace Internal {
 
+class InstructionSelector;
+
 /** A code generator abstract base class. Actual code generators
  * (e.g. CodeGen_X86) inherit from this. This class is responsible
  * for taking a Halide Stmt and producing llvm bitcode, machine
@@ -361,6 +363,7 @@ protected:
     void visit(const IfThenElse *) override;
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
+    void visit(const VectorInstruction *) override;
     void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
@@ -514,6 +517,11 @@ protected:
      * across backends. */
     virtual void codegen_vector_reduce(const VectorReduce *op, const Expr &init);
 
+    /** Split up a VectorReduce node if possible, or generate LLVM
+        intrinsics for full reductions. This is used in
+        `codegen_vector_reduce`. **/
+    virtual Expr split_vector_reduce(const VectorReduce *op, const Expr &init) const;
+
     /** Are we inside an atomic node that uses mutex locks?
         This is used for detecting deadlocks from nested atomics & illegal vectorization. */
     bool inside_atomic_mutex_node;
@@ -621,6 +629,12 @@ private:
      * represents a unique struct type created by a closure or similar.
      */
     std::map<llvm::Value *, llvm::Type *> struct_type_recovery;
+
+    /** Instruction selection uses `split_vector_reduce` and
+     *  `upgrade_type_for_arithmetic`, so needs access to those
+     *  methods.
+     */
+    friend class InstructionSelector;
 };
 
 }  // namespace Internal

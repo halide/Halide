@@ -82,6 +82,7 @@ set(HEADER_FILES
     InjectHostDevBufferCopies.h
     Inline.h
     InlineReductions.h
+    InstructionSelector.h
     IntegerDivisionTable.h
     Interval.h
     Introspection.h
@@ -166,6 +167,7 @@ set(HEADER_FILES
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
+    X86Optimize.h
     )
 
 set(SOURCE_FILES
@@ -245,6 +247,7 @@ set(SOURCE_FILES
     InjectHostDevBufferCopies.cpp
     Inline.cpp
     InlineReductions.cpp
+    InstructionSelector.cpp
     IntegerDivisionTable.cpp
     Interval.cpp
     Introspection.cpp
@@ -344,6 +347,7 @@ set(SOURCE_FILES
     VectorizeLoops.cpp
     WasmExecutor.cpp
     WrapCalls.cpp
+    X86Optimize.cpp
     )
 
 ##

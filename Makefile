@@ -481,6 +481,7 @@ SOURCE_FILES = \
   InjectHostDevBufferCopies.cpp \
   Inline.cpp \
   InlineReductions.cpp \
+  InstructionSelector.cpp \
   IntegerDivisionTable.cpp \
   Interval.cpp \
   Introspection.cpp \
@@ -579,7 +580,8 @@ SOURCE_FILES = \
   Var.cpp \
   VectorizeLoops.cpp \
   WasmExecutor.cpp \
-  WrapCalls.cpp
+  WrapCalls.cpp \
+  X86Optimize.cpp
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
@@ -662,6 +664,7 @@ HEADER_FILES = \
   InjectHostDevBufferCopies.h \
   Inline.h \
   InlineReductions.h \
+  InstructionSelector.h \
   IntegerDivisionTable.h \
   Interval.h \
   Introspection.h \
@@ -745,7 +748,8 @@ HEADER_FILES = \
   Util.h \
   Var.h \
   VectorizeLoops.h \
-  WrapCalls.h
+  WrapCalls.h \
+  X86Optimize.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)

@@ -4028,11 +4028,16 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
     }
 }
 
+void CodeGen_LLVM::visit(const VectorInstruction *op) {
+    internal_error << "CodeGen_LLVM received VectorInstruction node, should be handled by architecture-specific CodeGen class:\n"
+                   << Expr(op) << "\n";
+}
+
 void CodeGen_LLVM::visit(const VectorReduce *op) {
     codegen_vector_reduce(op, Expr());
 }
 
-void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
+Expr CodeGen_LLVM::split_vector_reduce(const VectorReduce *op, const Expr &init) const {
     Expr val = op->value;
     const int output_lanes = op->type.lanes();
     const int native_lanes = native_vector_bits() / op->type.bits();
@@ -4072,8 +4077,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             equiv = max(equiv, init);
         }
         equiv = cast(op->type, equiv);
-        equiv.accept(this);
-        return;
+        return equiv;
     }
 
     if (op->type.is_bool() && op->op == VectorReduce::And) {
@@ -4084,8 +4088,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         if (init.defined()) {
             equiv = min(equiv, init);
         }
-        equiv.accept(this);
-        return;
+        return equiv;
     }
 
     if (elt == Float(16) && upgrade_type_for_arithmetic(elt) != elt) {
@@ -4095,8 +4098,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             equiv = binop(equiv, init);
         }
         equiv = cast(op->type, equiv);
-        equiv.accept(this);
-        return;
+        return equiv;
     }
 
     if (output_lanes == 1) {
@@ -4195,8 +4197,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             if (initial_value.defined()) {
                 equiv = binop(initial_value, equiv);
             }
-            equiv.accept(this);
-            return;
+            return equiv;
         }
     }
 
@@ -4219,8 +4220,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             equiv = binop(equiv, init);
         }
         equiv = common_subexpression_elimination(equiv);
-        equiv.accept(this);
-        return;
+        return equiv;
     }
 
     if (factor > 2 && ((factor & 1) == 0)) {
@@ -4252,8 +4252,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             equiv = binop(equiv, init);
         }
         equiv = common_subexpression_elimination(equiv);
-        codegen(equiv);
-        return;
+        return equiv;
     }
 
     // Extract each slice and combine
@@ -4267,8 +4266,13 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         }
     }
     equiv = common_subexpression_elimination(equiv);
-    codegen(equiv);
-}  // namespace Internal
+    return equiv;
+}
+
+void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
+    Expr equiv = split_vector_reduce(op, init);
+    equiv.accept(this);
+}
 
 void CodeGen_LLVM::visit(const Atomic *op) {
     if (!op->mutex_name.empty()) {

@@ -211,6 +211,8 @@ struct SpecificExpr {
     constexpr static IRNodeType max_node_type = StrongestExprNodeType;
     constexpr static bool canonical = true;
 
+    // Having SpecificExpr hold an Expr instead of a BaseExprNode reference
+    // is catastrophic for performance and stack space usage.
     const BaseExprNode &expr;
 
     template<uint32_t bound>
@@ -585,8 +587,13 @@ IntLiteral pattern_arg(int64_t x) {
 }
 
 template<typename T>
-HALIDE_ALWAYS_INLINE void assert_is_lvalue_if_expr() {
-    static_assert(!std::is_same<typename std::decay<T>::type, Expr>::value || std::is_lvalue_reference<T>::value,
+static constexpr bool is_lvalue_if_expr() {
+    return !std::is_same<typename std::decay<T>::type, Expr>::value || std::is_lvalue_reference<T>::value;
+}
+
+template<typename T>
+HALIDE_ALWAYS_INLINE static constexpr void assert_is_lvalue_if_expr() {
+    static_assert(is_lvalue_if_expr<T>(),
                   "Exprs are captured by reference by IRMatcher objects and so must be lvalues");
 }
 
@@ -1459,6 +1466,12 @@ struct Intrin {
             return rounding_shift_left(arg0, arg1);
         } else if (intrin == Call::rounding_shift_right) {
             return rounding_shift_right(arg0, arg1);
+        } else if (intrin == Call::bitwise_xor) {
+            return arg0 ^ arg1;
+        } else if (intrin == Call::bitwise_and) {
+            return arg0 & arg1;
+        } else if (intrin == Call::bitwise_or) {
+            return arg0 | arg1;
         }
 
         Expr arg2 = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
@@ -1535,6 +1548,17 @@ HALIDE_ALWAYS_INLINE auto intrin(Call::IntrinsicOp intrinsic_op, Args... args) n
     return {intrinsic_op, pattern_arg(args)...};
 }
 
+template<typename A>
+auto abs(A &&a) noexcept -> Intrin<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {Call::abs, pattern_arg(a)};
+}
+template<typename A, typename B>
+auto absd(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {Call::absd, pattern_arg(a), pattern_arg(b)};
+}
 template<typename A, typename B>
 auto widen_right_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     return {Call::widen_right_add, pattern_arg(a), pattern_arg(b)};
@@ -1550,64 +1574,131 @@ auto widen_right_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), 
 
 template<typename A, typename B>
 auto widening_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::widening_add, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto widening_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::widening_sub, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto widening_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::widening_mul, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto saturating_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::saturating_add, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto saturating_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::saturating_sub, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A>
 auto saturating_cast(const Type &t, A &&a) noexcept -> Intrin<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
     Intrin<decltype(pattern_arg(a))> p = {Call::saturating_cast, pattern_arg(a)};
     p.optional_type_hint = t;
     return p;
 }
 template<typename A, typename B>
 auto halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::halving_add, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto halving_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::halving_sub, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto rounding_halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::rounding_halving_add, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::shift_left, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::shift_right, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto rounding_shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::rounding_shift_left, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto rounding_shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::rounding_shift_right, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto bitwise_xor(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {Call::bitwise_xor, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto operator^(A &&a, B &&b) noexcept -> auto{
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return bitwise_xor(a, b);
+}
+template<typename A, typename B>
+auto bitwise_and(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {Call::bitwise_and, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto operator&(A &&a, B &&b) noexcept -> auto{
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return bitwise_and(a, b);
+}
+template<typename A, typename B>
+auto bitwise_or(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return {Call::bitwise_or, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto operator|(A &&a, B &&b) noexcept -> auto{
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    return bitwise_or(a, b);
 }
 template<typename A, typename B, typename C>
 auto mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    assert_is_lvalue_if_expr<C>();
     return {Call::mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
 }
 template<typename A, typename B, typename C>
 auto rounding_mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    assert_is_lvalue_if_expr<C>();
     return {Call::rounding_mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
 }
 
@@ -1803,6 +1894,7 @@ inline std::ostream &operator<<(std::ostream &s, const BroadcastOp<A, B> &op) {
 template<typename A, typename B>
 HALIDE_ALWAYS_INLINE auto broadcast(A &&a, B lanes) noexcept -> BroadcastOp<decltype(pattern_arg(a)), decltype(pattern_arg(lanes))> {
     assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {pattern_arg(a), pattern_arg(lanes)};
 }
 
@@ -1872,6 +1964,110 @@ HALIDE_ALWAYS_INLINE auto ramp(A &&a, B &&b, C &&c) noexcept -> RampOp<decltype(
     return {pattern_arg(a), pattern_arg(b), pattern_arg(c)};
 }
 
+template<typename... Args>
+struct VectorInstructionOp {
+    struct pattern_tag {};
+    const VectorInstruction::InstructionOp op;
+    std::tuple<Args...> args;
+
+    static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
+
+    constexpr static IRNodeType min_node_type = IRNodeType::VectorInstruction;
+    constexpr static IRNodeType max_node_type = IRNodeType::VectorInstruction;
+    constexpr static bool canonical = and_reduce((Args::canonical)...);
+
+    template<int i,
+             uint32_t bound,
+             typename = typename std::enable_if<(i < sizeof...(Args))>::type>
+    HALIDE_ALWAYS_INLINE bool match_args(int, const VectorInstruction &v, MatcherState &state) const noexcept {
+        using T = decltype(std::get<i>(args));
+        return (std::get<i>(args).template match<bound>(*v.args[i].get(), state) &&
+                match_args<i + 1, bound | bindings<T>::mask>(0, v, state));
+    }
+
+    template<int i, uint32_t binds>
+    HALIDE_ALWAYS_INLINE bool match_args(double, const VectorInstruction &v, MatcherState &state) const noexcept {
+        return true;
+    }
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+        if (e.node_type != IRNodeType::VectorInstruction) {
+            return false;
+        }
+        const VectorInstruction &v = (const VectorInstruction &)e;
+        return (v.op == op && match_args<0, bound>(0, v, state));
+    }
+
+    template<int i,
+             typename = typename std::enable_if<(i < sizeof...(Args))>::type>
+    HALIDE_ALWAYS_INLINE void print_args(int, std::ostream &s) const {
+        s << std::get<i>(args);
+        if (i + 1 < sizeof...(Args)) {
+            s << ", ";
+        }
+        print_args<i + 1>(0, s);
+    }
+
+    template<int i>
+    HALIDE_ALWAYS_INLINE void print_args(double, std::ostream &s) const {
+    }
+
+    HALIDE_ALWAYS_INLINE
+    void print_args(std::ostream &s) const {
+        print_args<0>(0, s);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
+        std::vector<Expr> r_args(sizeof...(Args));
+        // TODO(rootjalex): How do we do type hints for the args?
+        // TODO(rootjalex): Is there a way to do basically an unrolled
+        // loop of the below? this is ugly.
+        // Supposedly C++20 will have constexpr std::transform, perhaps
+        // we can use that when Halide upgrades.
+
+        r_args[0] = std::get<0>(args).make(state, {});
+        if constexpr (sizeof...(Args) > 1) {
+            r_args[1] = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, {});
+        }
+        if constexpr (sizeof...(Args) > 2) {
+            r_args[2] = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, {});
+        }
+
+        // for (int i = 0; i < sizeof...(Args); i++) {
+        //     // TODO(rootjalex): how do we do type-hints here?
+        //     args[i] = std::get<i>(args).make(state, {});
+        // }
+        return VectorInstruction::make(type_hint, op, r_args);
+    }
+
+    constexpr static bool foldable = false;
+
+    HALIDE_ALWAYS_INLINE
+    VectorInstructionOp(const VectorInstruction::InstructionOp _op, Args... args) noexcept
+        : op(_op), args(args...) {
+        static_assert(sizeof...(Args) > 0 && sizeof...(Args) <= 3,
+                      "VectorInstructionOp must have non-zero arguments, and update make() if more than 3 arguments.");
+    }
+};
+
+template<typename... Args>
+std::ostream &operator<<(std::ostream &s, const VectorInstructionOp<Args...> &op) {
+    // TODO(rootjalex): Should we print the type?
+    s << "vector_instr(\"";
+    s << op.op << "\", ";
+    op.print_args(s);
+    s << ")";
+    return s;
+}
+
+template<typename... Args>
+HALIDE_ALWAYS_INLINE auto v_instr(const VectorInstruction::InstructionOp op, Args &&...args) noexcept -> VectorInstructionOp<decltype(pattern_arg(args))...> {
+    static_assert(and_reduce((is_lvalue_if_expr<Args>())...), "All parameters to a VectorInstructionOp must be lvalues if Exprs");
+    return {op, pattern_arg(args)...};
+}
+
 template<typename A, typename B, VectorReduce::Operator reduce_op>
 struct VectorReduceOp {
     struct pattern_tag {};
@@ -1924,6 +2120,12 @@ inline std::ostream &operator<<(std::ostream &s, const VectorReduceOp<A, B, redu
 
 template<typename A, typename B>
 HALIDE_ALWAYS_INLINE auto h_add(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), decltype(pattern_arg(lanes)), VectorReduce::Add> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), pattern_arg(lanes)};
+}
+
+template<typename A, typename B>
+HALIDE_ALWAYS_INLINE auto h_satadd(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), decltype(pattern_arg(lanes)), VectorReduce::SaturatingAdd> {
     assert_is_lvalue_if_expr<A>();
     return {pattern_arg(a), pattern_arg(lanes)};
 }
@@ -2076,6 +2278,39 @@ std::ostream &operator<<(std::ostream &s, const CastOp<A> &op) {
 
 template<typename A>
 HALIDE_ALWAYS_INLINE auto cast(halide_type_t t, A &&a) noexcept -> CastOp<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {t, pattern_arg(a)};
+}
+
+// A node for expressing type hints, when rules are ambiguously typed.
+template<typename A>
+struct TypeHint {
+    struct pattern_tag {};
+    Type type;
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Cast;
+    constexpr static IRNodeType max_node_type = IRNodeType::Cast;
+    constexpr static bool canonical = A::canonical;
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
+        return a.make(state, type);
+    }
+
+    constexpr static bool foldable = false;
+};
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const TypeHint<A> &op) {
+    s << "typed(" << op.type << ", " << op.a << ")";
+    return s;
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto typed(halide_type_t t, A &&a) noexcept -> TypeHint<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
     return {t, pattern_arg(a)};
 }
@@ -2306,6 +2541,8 @@ template<typename A>
 struct IsFloat {
     struct pattern_tag {};
     A a;
+    int bits;
+    int lanes;
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
@@ -2320,7 +2557,7 @@ struct IsFloat {
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Type t = a.make(state, {}).type();
-        val.u.u64 = t.is_float();
+        val.u.u64 = t.is_float() && (bits == 0 || t.bits() == bits) && (lanes == 0 || t.lanes() == lanes);
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
@@ -2328,14 +2565,67 @@ struct IsFloat {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_float(A &&a) noexcept -> IsFloat<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_float(A &&a, int bits = 0, int lanes = 0) noexcept -> IsFloat<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(a), bits, lanes};
 }
 
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
-    s << "is_float(" << op.a << ")";
+    s << "is_float(" << op.a;
+    if (op.bits > 0) {
+        s << ", " << op.bits;
+    }
+    if (op.lanes > 0) {
+        s << ", " << op.lanes;
+    }
+    s << ")";
+    return s;
+}
+
+template<typename A>
+struct IsBFloat {
+    struct pattern_tag {};
+    A a;
+    int bits;
+    int lanes;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = t.is_bfloat() && (bits == 0 || t.bits() == bits) && (lanes == 0 || t.lanes() == lanes);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    }
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto is_bfloat(A &&a, int bits = 0, int lanes = 0) noexcept -> IsBFloat<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), bits, lanes};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsBFloat<A> &op) {
+    s << "is_bfloat(" << op.a;
+    if (op.bits > 0) {
+        s << ", " << op.bits;
+    }
+    if (op.lanes > 0) {
+        s << ", " << op.lanes;
+    }
+    s << ")";
     return s;
 }
 
@@ -2343,7 +2633,8 @@ template<typename A>
 struct IsInt {
     struct pattern_tag {};
     A a;
-    int bits, lanes;
+    int bits;
+    int lanes;
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
@@ -2388,7 +2679,8 @@ template<typename A>
 struct IsUInt {
     struct pattern_tag {};
     A a;
-    int bits, lanes;
+    int bits;
+    int lanes;
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
