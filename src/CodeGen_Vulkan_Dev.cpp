@@ -14,8 +14,8 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Scope.h"
-#include "Target.h"
 #include "SpirvIR.h"
+#include "Target.h"
 
 // Temporary:
 #include <fstream>
@@ -121,13 +121,13 @@ protected:
 
         // The SPIRV-IR builder
         SpvBuilder builder;
-        
+
         // Top-level function for adding kernels
         void add_kernel(const Stmt &s, const std::string &name, const std::vector<DeviceArgument> &args);
         void init_module();
-        void compile(std::vector<char>& binary);
+        void compile(std::vector<char> &binary);
 
-        // Scalarize expressions 
+        // Scalarize expressions
         void scalarize(const Expr &e);
         SpvId map_type_to_pair(const Type &t);
 
@@ -149,7 +149,6 @@ protected:
     std::string current_kernel_name;
 };
 
-
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(const Expr &e) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(): " << (Expr)e << "\n";
     internal_assert(e.type().is_vector()) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize must be called with an expression of vector type.\n";
@@ -170,7 +169,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(const Expr &e) {
 SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::map_type_to_pair(const Type &t) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::map_type_to_pair(): " << t << "\n";
     SpvId base_type_id = builder.declare_type(t);
-    const std::string& type_name = type_to_c_type(t, false, false) + std::string("_pair"); 
+    const std::string &type_name = type_to_c_type(t, false, false) + std::string("_pair");
     SpvBuilder::StructMemberTypes member_type_ids = {base_type_id, base_type_id};
     SpvId struct_type_id = builder.declare_struct(type_name, member_type_ids);
     return struct_type_id;
@@ -184,46 +183,46 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Variable *var) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const IntImm *imm) {
-    if(imm->type.bits() == 8) {
+    if (imm->type.bits() == 8) {
         const int8_t value = (int8_t)(imm->value);
         SpvId constant_id = builder.declare_constant(imm->type, &value);
         builder.update_id(constant_id);
-    } else if(imm->type.bits() == 16) {
+    } else if (imm->type.bits() == 16) {
         const int16_t value = (int16_t)(imm->value);
         SpvId constant_id = builder.declare_constant(imm->type, &value);
         builder.update_id(constant_id);
-    } else if(imm->type.bits() == 32) {
+    } else if (imm->type.bits() == 32) {
         const int32_t value = (int32_t)(imm->value);
         SpvId constant_id = builder.declare_constant(imm->type, &value);
         builder.update_id(constant_id);
-    } else if(imm->type.bits() == 64) {
+    } else if (imm->type.bits() == 64) {
         const int64_t value = (int64_t)(imm->value);
         SpvId constant_id = builder.declare_constant(imm->type, &value);
         builder.update_id(constant_id);
     } else {
-        internal_error << "Vulkan backend currently only supports 8-bit, 16-bit, 32-bit or 64-bit signed integers!\n";           
+        internal_error << "Vulkan backend currently only supports 8-bit, 16-bit, 32-bit or 64-bit signed integers!\n";
     }
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const UIntImm *imm) {
-    if(imm->type.bits() == 8) {
+    if (imm->type.bits() == 8) {
         const uint8_t value = (uint8_t)(imm->value);
         SpvId constant_id = builder.declare_constant(imm->type, &value);
         builder.update_id(constant_id);
-    } else if(imm->type.bits() == 16) {
+    } else if (imm->type.bits() == 16) {
         const uint16_t value = (uint16_t)(imm->value);
         SpvId constant_id = builder.declare_constant(imm->type, &value);
         builder.update_id(constant_id);
-    } else if(imm->type.bits() == 32) {
+    } else if (imm->type.bits() == 32) {
         const uint32_t value = (uint32_t)(imm->value);
         SpvId constant_id = builder.declare_constant(imm->type, &value);
         builder.update_id(constant_id);
-    } else if(imm->type.bits() == 64) {
+    } else if (imm->type.bits() == 64) {
         const uint64_t value = (uint64_t)(imm->value);
         SpvId constant_id = builder.declare_constant(imm->type, &value);
         builder.update_id(constant_id);
     } else {
-        internal_error << "Vulkan backend currently only supports 8-bit, 16-bit, 32-bit or 64-bit unsigned integers!\n";           
+        internal_error << "Vulkan backend currently only supports 8-bit, 16-bit, 32-bit or 64-bit unsigned integers!\n";
     }
 }
 
@@ -233,16 +232,16 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const StringImm *imm) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const FloatImm *imm) {
-    if(imm->type.bits() == 32) {
+    if (imm->type.bits() == 32) {
         const float value = (float)(imm->value);
         SpvId constant_id = builder.declare_constant(imm->type, &value);
         builder.update_id(constant_id);
-    } else if(imm->type.bits() == 64) {
+    } else if (imm->type.bits() == 64) {
         const double value = (double)(imm->value);
         SpvId constant_id = builder.declare_constant(imm->type, &value);
         builder.update_id(constant_id);
     } else {
-        internal_error << "Vulkan backend currently only supports 32-bit or 64-bit floats\n";           
+        internal_error << "Vulkan backend currently only supports 32-bit or 64-bit floats\n";
     }
 }
 
@@ -293,22 +292,22 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Cast *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Add *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Add): " << op->type << " ((" << op->a <<  ") + (" << op->b << "))\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Add): " << op->type << " ((" << op->a << ") + (" << op->b << "))\n";
     visit_binop(op->type, op->a, op->b, op->type.is_float() ? SpvOpFAdd : SpvOpIAdd);
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Sub *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Sub): " << op->type << " ((" << op->a <<  ") - (" << op->b << "))\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Sub): " << op->type << " ((" << op->a << ") - (" << op->b << "))\n";
     visit_binop(op->type, op->a, op->b, op->type.is_float() ? SpvOpFSub : SpvOpISub);
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mul *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mul): " << op->type << " ((" << op->a <<  ") * (" << op->b << "))\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mul): " << op->type << " ((" << op->a << ") * (" << op->b << "))\n";
     visit_binop(op->type, op->a, op->b, op->type.is_float() ? SpvOpFMul : SpvOpIMul);
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Div): " << op->type << " ((" << op->a <<  ") / (" << op->b << "))\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Div): " << op->type << " ((" << op->a << ") / (" << op->b << "))\n";
     user_assert(!is_const_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
     if (op->type.is_float()) {
@@ -320,7 +319,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mod): " << op->type << " ((" << op->a <<  ") % (" << op->b << "))\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mod): " << op->type << " ((" << op->a << ") % (" << op->b << "))\n";
     if (op->type.is_float()) {
         // Takes sign of result from op->b
         visit_binop(op->type, op->a, op->b, SpvOpFMod);
@@ -331,7 +330,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Max *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Max): " << op->type << " Max((" << op->a <<  "), (" << op->b << "))\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Max): " << op->type << " Max((" << op->a << "), (" << op->b << "))\n";
 
     std::string a_name = unique_name('a');
     std::string b_name = unique_name('b');
@@ -343,7 +342,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Max *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Min *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Min): " << op->type << " Min((" << op->a <<  "), (" << op->b << "))\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Min): " << op->type << " Min((" << op->a << "), (" << op->b << "))\n";
     std::string a_name = unique_name('a');
     std::string b_name = unique_name('b');
     Expr a = Variable::make(op->a.type(), a_name);
@@ -354,17 +353,17 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Min *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const EQ *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(EQ): " << op->type << " (" << op->a <<  ") == (" << op->b << ")\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(EQ): " << op->type << " (" << op->a << ") == (" << op->b << ")\n";
     visit_binop(op->type, op->a, op->b, op->type.is_float() ? SpvOpFOrdEqual : SpvOpIEqual);
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const NE *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(NE): " << op->type << " (" << op->a <<  ") != (" << op->b << ")\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(NE): " << op->type << " (" << op->a << ") != (" << op->b << ")\n";
     visit_binop(op->type, op->a, op->b, op->type.is_float() ? SpvOpFOrdNotEqual : SpvOpINotEqual);
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LT *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(LT): " << op->type << " (" << op->a <<  ") < (" << op->b << ")\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(LT): " << op->type << " (" << op->a << ") < (" << op->b << ")\n";
     SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
         op_code = SpvOpFOrdLessThan;
@@ -379,7 +378,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LT *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(LE): " << op->type << " (" << op->a <<  ") <= (" << op->b << ")\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(LE): " << op->type << " (" << op->a << ") <= (" << op->b << ")\n";
     SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
         op_code = SpvOpFOrdLessThanEqual;
@@ -394,7 +393,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GT *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(GT): " << op->type << " (" << op->a <<  ") > (" << op->b << ")\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(GT): " << op->type << " (" << op->a << ") > (" << op->b << ")\n";
     SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
         op_code = SpvOpFOrdGreaterThan;
@@ -409,7 +408,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GT *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GE *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(GE): " << op->type << " (" << op->a <<  ") >= (" << op->b << ")\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(GE): " << op->type << " (" << op->a << ") >= (" << op->b << ")\n";
     SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
         op_code = SpvOpFOrdGreaterThanEqual;
@@ -424,17 +423,17 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GE *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const And *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(And): " << op->type << " (" << op->a <<  ") && (" << op->b << ")\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(And): " << op->type << " (" << op->a << ") && (" << op->b << ")\n";
     visit_binop(op->type, op->a, op->b, SpvOpLogicalAnd);
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Or *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Or): " << op->type << " (" << op->a <<  ") || (" << op->b << ")\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Or): " << op->type << " (" << op->a << ") || (" << op->b << ")\n";
     visit_binop(op->type, op->a, op->b, SpvOpLogicalOr);
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Not *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Not): " << op->type << " !(" << op->a <<  ")\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Not): " << op->type << " !(" << op->a << ")\n";
 
     SpvId type_id = builder.declare_type(op->type);
     op->a.accept(this);
@@ -452,7 +451,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         // right memory barrier. Might be able to use
         // SpvMemorySemanticsMaskNone instead.
         SpvId current_function_id = builder.current_function().id();
-        builder.append(SpvFactory::control_barrier(current_function_id, current_function_id, 
+        builder.append(SpvFactory::control_barrier(current_function_id, current_function_id,
                                                    SpvMemorySemanticsAcquireReleaseMask));
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
@@ -532,7 +531,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             // TODO: This code depends on compilation happening on a little-endian host.
             SpvId shift_amount_id = builder.declare_constant(shift->type, &shift->value);
             result_id = builder.reserve_id(SpvResultId);
-            if(op->type.is_uint()) {
+            if (op->type.is_uint()) {
                 builder.append(SpvFactory::shift_right_logical(type_id, result_id, high_item_id, shift_amount_id));
             } else {
                 builder.append(SpvFactory::shift_right_arithmetic(type_id, result_id, high_item_id, shift_amount_id));
@@ -549,7 +548,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Select *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Select): " << op->type << " (" << op->condition <<  ") ? (" << op->true_value << ") : (" << op->false_value << ")\n";
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Select): " << op->type << " (" << op->condition << ") ? (" << op->true_value << ") : (" << op->false_value << ")\n";
     SpvId type_id = builder.declare_type(op->type);
     op->condition.accept(this);
     SpvId cond_id = builder.current_id();
@@ -722,7 +721,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         SpvId unsigned_gpu_var_id = builder.reserve_id(SpvResultId);
         SpvId signed_type_id = builder.declare_type(Int(32));
         SpvId signed_gpu_var_id = builder.reserve_id(SpvResultId);
-        SpvFactory::Indices indices = { intrinsic.second };
+        SpvFactory::Indices indices = {intrinsic.second};
         builder.append(SpvFactory::composite_extract(unsigned_type_id, unsigned_gpu_var_id, intrinsic_id, indices));
         builder.append(SpvFactory::bitcast(signed_type_id, signed_gpu_var_id, unsigned_gpu_var_id));
         {
@@ -804,10 +803,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Ramp *op) {
     SpvFactory::Components constituents = {base_id};
     for (int i = 1; i < op->lanes; i++) {
         SpvId this_id = builder.reserve_id(SpvResultId);
-        if(op->base.type().is_float()) {
+        if (op->base.type().is_float()) {
             builder.append(SpvFactory::float_add(base_type_id, this_id, prev_id, stride_id));
-        }
-        else {
+        } else {
             builder.append(SpvFactory::integer_add(base_type_id, this_id, prev_id, stride_id));
         }
         constituents.push_back(this_id);
@@ -849,7 +847,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Realize *) {
 template<typename StmtOrExpr>
 SpvFactory::BlockVariables
 CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
-                                                    StmtOrExpr then_case, StmtOrExpr else_case) {
+                                                     StmtOrExpr then_case, StmtOrExpr else_case) {
     condition.accept(this);
     SpvId cond_id = builder.current_id();
     SpvId then_label_id = builder.reserve_id(SpvLabelId);
@@ -860,22 +858,21 @@ CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
     builder.append(SpvFactory::selection_merge(merge_label_id, SpvSelectionControlMaskNone));
     builder.append(SpvFactory::conditional_branch(cond_id, then_label_id, else_label_id));
 
-    // Then block    
+    // Then block
     builder.append(SpvFactory::label(then_label_id));
     then_case.accept(this);
     SpvId then_id = builder.current_id();
     builder.append(SpvFactory::branch(merge_label_id));
 
     SpvFactory::BlockVariables block_vars = {
-        { then_id, then_label_id }
-    };
+        {then_id, then_label_id}};
 
     // Else block (optional)
     builder.append(SpvFactory::label(else_label_id));
-    if(else_case.defined()) {
+    if (else_case.defined()) {
         else_case.accept(this);
         SpvId else_id = builder.current_id();
-        block_vars.push_back({ else_id, else_label_id });
+        block_vars.push_back({else_id, else_label_id});
     }
     builder.append(SpvFactory::branch(merge_label_id));
 
@@ -928,7 +925,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_binop(Type t, const Expr &a, const
     SpvId src_a_id = builder.current_id();
     b.accept(this);
     SpvId src_b_id = builder.current_id();
-    
+
     SpvId result_id = builder.reserve_id(SpvResultId);
     builder.append(SpvFactory::binary_op(op_code, type_id, result_id, src_a_id, src_b_id));
     builder.update_id(result_id);
@@ -939,13 +936,13 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::init_module() {
     builder.reset();
 
     // NOTE: Source language is irrelevant. We encode the binary directly
-    builder.set_source_language(SpvSourceLanguageUnknown);   
+    builder.set_source_language(SpvSourceLanguageUnknown);
 
     // TODO: Should we autodetect and/or force 32bit or 64bit?
-    builder.set_addressing_model(SpvAddressingModelLogical); 
-    
+    builder.set_addressing_model(SpvAddressingModelLogical);
+
     // TODO: Is there a better memory model to use?
-    builder.set_memory_model(SpvMemoryModelGLSL450);         
+    builder.set_memory_model(SpvMemoryModelGLSL450);
 
     // Capabilities
     builder.require_capability(SpvCapabilityShader);
@@ -959,13 +956,12 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::compile(std::vector<char> &module) {
     builder.finalize();
     builder.encode(spirv_binary);
     module.reserve(spirv_binary.size() * sizeof(uint32_t));
-    module.insert(module.end(), (const char*)spirv_binary.data(), (const char*)(spirv_binary.data() + spirv_binary.size()));
+    module.insert(module.end(), (const char *)spirv_binary.data(), (const char *)(spirv_binary.data() + spirv_binary.size()));
 }
 
-
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
-                                                  const std::string &name,
-                                                  const std::vector<DeviceArgument> &args) {
+                                                   const std::string &name,
+                                                   const std::vector<DeviceArgument> &args) {
     debug(2) << "Adding Vulkan kernel " << name << "\n";
 
     // Add function definition
@@ -976,31 +972,31 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     workgroup_size[1] = 0;
     workgroup_size[2] = 0;
 
-    // Declare the kernel function 
+    // Declare the kernel function
     SpvId void_type_id = builder.declare_void_type();
     SpvId kernel_func_id = builder.add_function(name, void_type_id);
     SpvFunction kernel_func = builder.lookup_function(kernel_func_id);
     builder.enter_function(kernel_func);
     builder.enter_block(kernel_func.entry_block());
-//    SpvId start_label_id = kernel_func.entry_block().id();
+    //    SpvId start_label_id = kernel_func.entry_block().id();
 
     // TODO: only add the SIMT intrinsics used
     SpvFactory::Variables entry_point_variables;
     auto intrinsics = {"WorkgroupId", "LocalInvocationId"};
-    for (const std::string& intrinsic_name : intrinsics) {
+    for (const std::string &intrinsic_name : intrinsics) {
 
         // The builtins are pointers to vec3
         SpvId intrinsic_type_id = builder.declare_type(Type(Type::UInt, 32, 3));
         SpvId intrinsic_ptr_type_id = builder.declare_pointer_type(intrinsic_type_id, SpvStorageClassInput);
         SpvId intrinsic_id = builder.declare_global_variable(intrinsic_name, intrinsic_ptr_type_id, SpvStorageClassInput);
         SpvId intrinsic_loaded_id = builder.reserve_id();
-        builder.append( SpvFactory::load(intrinsic_type_id, intrinsic_loaded_id, intrinsic_id) );
+        builder.append(SpvFactory::load(intrinsic_type_id, intrinsic_loaded_id, intrinsic_id));
         symbol_table.push(intrinsic_name, {intrinsic_loaded_id, SpvStorageClassInput});
 
         // Annotate that this is the specific builtin
         SpvBuiltIn built_in_kind = starts_with(intrinsic_name, "Workgroup") ? SpvBuiltInWorkgroupId : SpvBuiltInLocalInvocationId;
-        SpvBuilder::Literals annotation_literals = { (uint32_t)built_in_kind };
-        builder.add_annotation( intrinsic_id, SpvDecorationBuiltIn, annotation_literals  );
+        SpvBuilder::Literals annotation_literals = {(uint32_t)built_in_kind};
+        builder.add_annotation(intrinsic_id, SpvDecorationBuiltIn, annotation_literals);
 
         // Add the builtin to the interface
         entry_point_variables.push_back(intrinsic_id);
@@ -1019,22 +1015,22 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
             param_struct_members.push_back(arg_type_id);
         }
     }
-    SpvId param_struct_type_id = builder.declare_struct( unique_name("param_struct"), param_struct_members);
+    SpvId param_struct_type_id = builder.declare_struct(unique_name("param_struct"), param_struct_members);
 
     // Add a decoration describing the offset for each parameter struct member
     uint32_t param_member_index = 0;
     uint32_t param_member_offset = 0;
     for (const auto &arg : args) {
         if (!arg.is_buffer) {
-            SpvBuilder::Literals param_offset_literals = { param_member_offset };
-            builder.add_struct_annotation( param_struct_type_id, param_member_index, SpvDecorationOffset, param_offset_literals );
+            SpvBuilder::Literals param_offset_literals = {param_member_offset};
+            builder.add_struct_annotation(param_struct_type_id, param_member_index, SpvDecorationOffset, param_offset_literals);
             param_member_offset += arg.type.bytes();
             param_member_index++;
         }
     }
 
     // Add a Block decoration for the parameter pack itself
-    builder.add_annotation( param_struct_type_id, SpvDecorationBlock );
+    builder.add_annotation(param_struct_type_id, SpvDecorationBlock);
 
     // Add a variable for the parameter pack
     SpvId param_pack_ptr_type_id = builder.declare_pointer_type(param_struct_type_id, SpvStorageClassUniform);
@@ -1042,8 +1038,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
 
     // We always pass in the parameter pack as the first binding
     SpvBuilder::Literals zero_literal = {0};
-    builder.add_annotation( param_pack_var_id, SpvDecorationDescriptorSet, zero_literal );
-    builder.add_annotation( param_pack_var_id, SpvDecorationBinding, zero_literal );
+    builder.add_annotation(param_pack_var_id, SpvDecorationDescriptorSet, zero_literal);
+    builder.add_annotation(param_pack_var_id, SpvDecorationBinding, zero_literal);
 
     uint32_t binding_counter = 1;
     uint32_t scalar_index = 0;
@@ -1051,24 +1047,24 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
         if (arg.is_buffer) {
             SpvId element_type_id = builder.declare_type(arg.type);
             SpvId runtime_arr_type_id = builder.add_runtime_array(element_type_id);
-            SpvBuilder::StructMemberTypes struct_member_types = { runtime_arr_type_id };
-            SpvId struct_type_id = builder.declare_struct( unique_name("param_buffer_" + std::to_string(binding_counter)), struct_member_types );
+            SpvBuilder::StructMemberTypes struct_member_types = {runtime_arr_type_id};
+            SpvId struct_type_id = builder.declare_struct(unique_name("param_buffer_" + std::to_string(binding_counter)), struct_member_types);
             SpvId ptr_struct_type_id = builder.declare_pointer_type(struct_type_id, SpvStorageClassUniform);
-            SpvId param_id = builder.declare_global_variable( unique_name("param_" + arg.name), ptr_struct_type_id, SpvStorageClassUniform);
+            SpvId param_id = builder.declare_global_variable(unique_name("param_" + arg.name), ptr_struct_type_id, SpvStorageClassUniform);
 
             // Annotate the struct to indicate it's passed in a GLSL-style buffer block
             builder.add_annotation(struct_type_id, SpvDecorationBufferBlock);
 
             // Annotate the array with its stride
-            SpvBuilder::Literals array_stride = { (uint32_t)(arg.type.bytes()) };
+            SpvBuilder::Literals array_stride = {(uint32_t)(arg.type.bytes())};
             builder.add_annotation(runtime_arr_type_id, SpvDecorationArrayStride, array_stride);
 
             // Annotate the offset for the array
-            SpvBuilder::Literals zero_literal = { uint32_t(0) };
+            SpvBuilder::Literals zero_literal = {uint32_t(0)};
             builder.add_struct_annotation(struct_type_id, 0, SpvDecorationOffset, zero_literal);
 
             // Set DescriptorSet and Binding
-            SpvBuilder::Literals binding_index = { uint32_t(binding_counter++) };
+            SpvBuilder::Literals binding_index = {uint32_t(binding_counter++)};
             builder.add_annotation(param_id, SpvDecorationDescriptorSet, zero_literal);
             builder.add_annotation(param_id, SpvDecorationBinding, binding_index);
             symbol_table.push(arg.name, {param_id, SpvStorageClassUniform});
@@ -1090,15 +1086,15 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     s.accept(this);
 
     // Insert return statement end delimiter
-    kernel_func.entry_block().add_instruction( SpvFactory::return_stmt() );
+    kernel_func.entry_block().add_instruction(SpvFactory::return_stmt());
 
     workgroup_size[0] = std::max(workgroup_size[0], (uint32_t)1);
     workgroup_size[1] = std::max(workgroup_size[1], (uint32_t)1);
     workgroup_size[2] = std::max(workgroup_size[2], (uint32_t)1);
 
     // Add workgroup size to execution mode
-    SpvInstruction exec_mode_inst = SpvFactory::exec_mode_local_size( kernel_func_id, workgroup_size[0], workgroup_size[1], workgroup_size[2] );
-    builder.current_module().add_execution_mode( exec_mode_inst );
+    SpvInstruction exec_mode_inst = SpvFactory::exec_mode_local_size(kernel_func_id, workgroup_size[0], workgroup_size[1], workgroup_size[2]);
+    builder.current_module().add_execution_mode(exec_mode_inst);
 
     // Pop scope
     for (const auto &arg : args) {
@@ -1132,7 +1128,7 @@ void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
     emitter.add_kernel(stmt, name, args);
 
     // dump the SPIRV file if requested
-    if(getenv("HL_SPIRV_DUMP_FILE")) {
+    if (getenv("HL_SPIRV_DUMP_FILE")) {
         dump();
     }
 }
@@ -1170,7 +1166,7 @@ std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_Vulkan_Dev(const Target &target) {
 }  // namespace Internal
 }  // namespace Halide
 
-#else // WITH_SPIRV
+#else  // WITH_SPIRV
 
 namespace Halide {
 namespace Internal {
@@ -1182,4 +1178,4 @@ std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_Vulkan_Dev(const Target &target) {
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // WITH_SPIRV
+#endif  // WITH_SPIRV
