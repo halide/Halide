@@ -2,7 +2,8 @@
 #define HALIDE_CODEGEN_VULKAN_DEV_H
 
 /** \file
- * Defines the code-generator for producing Vulkan SPIR-V kernel code
+ * Defines the code-generator for producing SPIR-V binary modules for
+ * use with the Vulkan runtime
  */
 
 #include <memory>

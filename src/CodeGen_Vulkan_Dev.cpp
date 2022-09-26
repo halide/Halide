@@ -1,6 +1,11 @@
 #include <algorithm>
 #include <sstream>
 
+// XXX
+#ifndef WITH_SPIRV
+#define WITH_SPIRV
+#endif
+
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Vulkan_Dev.h"
@@ -10,11 +15,12 @@
 #include "IRPrinter.h"
 #include "Scope.h"
 #include "Target.h"
-
-#include <spirv/1.0/spirv.h>
+#include "SpirvIR.h"
 
 // Temporary:
 #include <fstream>
+
+#ifdef WITH_SPIRV
 
 namespace Halide {
 namespace Internal {
@@ -22,6 +28,8 @@ namespace Internal {
 class CodeGen_LLVM;
 
 namespace {  // anonymous
+
+// --
 
 template<typename CodeGenT, typename ValueT>
 ValueT lower_int_uint_div(CodeGenT *cg, Expr a, Expr b);
@@ -58,10 +66,10 @@ public:
     }
 
 protected:
-    class SPIRVEmitter : public IRVisitor {
+    class SPIRV_Emitter : public IRVisitor {
 
     public:
-        SPIRVEmitter() = default;
+        SPIRV_Emitter() = default;
 
         using IRVisitor::visit;
 
@@ -109,314 +117,198 @@ protected:
         void visit(const Fork *) override;
         void visit(const Acquire *) override;
 
-        void visit_binop(Type t, const Expr &a, const Expr &b, uint32_t opcode);
+        void visit_binop(Type t, const Expr &a, const Expr &b, SpvOp op_code);
 
-        // ID of last generated Expr.
-        uint32_t id;
-        // IDs are allocated in numerical order of use.
-        uint32_t next_id{0};
-
-        // The void type does not map to a Halide type, but must be unique
-        uint32_t void_id;
-
-        // SPIR-V instructions in a module must be in a specific
-        // order. This order doesn't correspond to the order in which they
-        // are created. Hence we generate into a set of blocks, each of
-        // which is added to at its end. In compile_to_src, these are
-        // concatenated to form a complete SPIR-V module.  We also
-        // represent the temporaries as vectors of uint32_t rather than
-        // char for ease of adding words to them.
-        std::vector<uint32_t> spir_v_header;
-        std::vector<uint32_t> spir_v_entrypoints;
-        std::vector<uint32_t> spir_v_execution_modes;
-        std::vector<uint32_t> spir_v_annotations;
-        std::vector<uint32_t> spir_v_types;
-        std::vector<uint32_t> spir_v_kernels;
-        // The next one is cleared in between kernels, and tracks the allocations
-        std::vector<uint32_t> spir_v_kernel_allocations;
-
-        // Id of entry point for kernel currently being compiled.
-        uint32_t current_function_id;
-
+        // The SPIRV-IR builder
+        SpvBuilder builder;
+        
         // Top-level function for adding kernels
         void add_kernel(const Stmt &s, const std::string &name, const std::vector<DeviceArgument> &args);
+        void init_module();
+        void compile(std::vector<char>& binary);
 
-        // Function for allocating variables in function scope, with optional initializer.
-        // These will appear at the beginning of the function, as required by SPIR-V
-        void add_allocation(uint32_t result_type_id, uint32_t result_id, uint32_t storage_class, uint32_t initializer = 0);
-
-        std::map<Type, uint32_t> type_map;
-        std::map<std::pair<Type, uint32_t>, uint32_t> pointer_type_map;
-        std::map<Type, uint32_t> pair_type_map;
-        std::map<std::string, uint32_t> constant_map;
-
-        void add_instruction(std::vector<uint32_t> &region, uint32_t opcode,
-                             std::initializer_list<uint32_t> words);
-        void add_instruction(uint32_t opcode, std::initializer_list<uint32_t> words);
-        void add_instruction(std::vector<uint32_t> &region, uint32_t opcode,
-                             std::vector<uint32_t> words);
-        void add_instruction(uint32_t opcode, std::vector<uint32_t> words);
-        uint32_t map_type(const Type &type);
-        uint32_t map_pointer_type(const Type &type, uint32_t storage_class);
-        uint32_t map_type_to_pair(const Type &t);
-        uint32_t emit_constant(const Type &t, const void *data);
+        // Scalarize expressions 
         void scalarize(const Expr &e);
+        SpvId map_type_to_pair(const Type &t);
 
-        // The scope contains both the symbol and its storage class
-        Scope<std::pair<uint32_t, uint32_t>> symbol_table;
+        // The scope contains both the symbol id and its storage class
+        using SymbolIdStorageClassPair = std::pair<SpvId, SpvStorageClass>;
+        using SymbolScope = Scope<SymbolIdStorageClassPair>;
+        using ScopedSymbolBinding = ScopedBinding<SymbolIdStorageClassPair>;
+        SymbolScope symbol_table;
 
         // The workgroup size.  Must be the same for all kernels.
         uint32_t workgroup_size[3];
 
-        struct PhiNodeInputs {
-            uint32_t ids[4];
-        };
         // Returns Phi node inputs.
         template<typename StmtOrExpr>
-        PhiNodeInputs emit_if_then_else(const Expr &condition, StmtOrExpr then_case, StmtOrExpr else_case);
+        SpvFactory::BlockVariables emit_if_then_else(const Expr &condition, StmtOrExpr then_case, StmtOrExpr else_case);
+
     } emitter;
 
     std::string current_kernel_name;
 };
 
-// --
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::add_instruction(std::vector<uint32_t> &region, uint32_t opcode,
-                                                       std::initializer_list<uint32_t> words) {
-    region.push_back(((1 + words.size()) << 16) | opcode);
-    region.insert(region.end(), words.begin(), words.end());
-}
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(const Expr &e) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(): " << (Expr)e << "\n";
+    internal_assert(e.type().is_vector()) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize must be called with an expression of vector type.\n";
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::add_instruction(uint32_t opcode, std::initializer_list<uint32_t> words) {
-    spir_v_kernels.push_back(((1 + words.size()) << 16) | opcode);
-    spir_v_kernels.insert(spir_v_kernels.end(), words.begin(), words.end());
-}
-void CodeGen_Vulkan_Dev::SPIRVEmitter::add_instruction(std::vector<uint32_t> &region, uint32_t opcode,
-                                                       std::vector<uint32_t> words) {
-    region.push_back(((1 + words.size()) << 16) | opcode);
-    region.insert(region.end(), words.begin(), words.end());
-}
-
-void CodeGen_Vulkan_Dev::SPIRVEmitter::add_instruction(uint32_t opcode, std::vector<uint32_t> words) {
-    spir_v_kernels.push_back(((1 + words.size()) << 16) | opcode);
-    spir_v_kernels.insert(spir_v_kernels.end(), words.begin(), words.end());
-}
-
-uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::emit_constant(const Type &t, const void *data) {
-    // TODO: this needs to emit OpConstantComposite for constants with lane > 1
-    std::string key(t.bytes() + 4, ' ');
-    key[0] = t.code();
-    key[1] = t.bits();
-    key[2] = t.lanes() & 0xff;
-    key[3] = (t.lanes() >> 8) & 0xff;
-    const char *data_char = (const char *)data;
-    for (int i = 0; i < t.bytes(); i++) {
-        key[i + 4] = data_char[i];
-    }
-
-    debug(3) << "emit_constant for type " << t << "\n";
-    auto item = constant_map.find(key);
-    if (item == constant_map.end()) {
-        uint32_t type_id = map_type(t);
-        uint32_t extra_words = (t.bytes() + 3) / 4;
-        uint32_t constant_id = next_id++;
-        spir_v_types.push_back(((3 + extra_words) << 16) | SpvOpConstant);
-        spir_v_types.push_back(type_id);
-        spir_v_types.push_back(constant_id);
-
-        const uint8_t *data_temp = (const uint8_t *)data;
-        size_t bytes_copied = 0;
-        for (uint32_t i = 0; i < extra_words; i++) {
-            uint32_t word;
-            size_t to_copy = std::min(t.bytes() - bytes_copied, (size_t)4);
-            memcpy(&word, data_temp, to_copy);
-            bytes_copied += to_copy;
-            spir_v_types.push_back(word);
-            data_temp++;
-        }
-        return constant_id;
-    } else {
-        return item->second;
-    }
-}
-
-void CodeGen_Vulkan_Dev::SPIRVEmitter::scalarize(const Expr &e) {
-    internal_assert(e.type().is_vector()) << "CodeGen_Vulkan_Dev::SPIRVEmitter::scalarize must be called with an expression of vector type.\n";
-    uint32_t type_id = map_type(e.type());
-
-    uint32_t result_id = next_id++;
-    add_instruction(SpvOpConstantNull, {type_id, result_id});
-
+    SpvId type_id = builder.declare_type(e.type());
+    SpvId value_id = builder.declare_null_constant(e.type());
+    SpvId result_id = value_id;
     for (int i = 0; i < e.type().lanes(); i++) {
         extract_lane(e, i).accept(this);
-        uint32_t composite_vec = next_id++;
-        add_instruction(SpvOpVectorInsertDynamic, {type_id, composite_vec, (uint32_t)i, result_id, id});
-        result_id = composite_vec;
+        SpvId vector_id = builder.current_id();
+        SpvId composite_vector_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::vector_insert_dynamic(type_id, composite_vector_id, vector_id, value_id, i));
+        result_id = composite_vector_id;
     }
-    id = result_id;
+    builder.update_id(result_id);
 }
 
-uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_type(const Type &t) {
-    auto key_typecode = t.code();
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::map_type_to_pair(const Type &t) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::map_type_to_pair(): " << t << "\n";
+    SpvId base_type_id = builder.declare_type(t);
+    const std::string& type_name = type_to_c_type(t, false, false) + std::string("_pair"); 
+    SpvBuilder::StructMemberTypes member_type_ids = {base_type_id, base_type_id};
+    SpvId struct_type_id = builder.declare_struct(type_name, member_type_ids);
+    return struct_type_id;
+}
 
-    Type t_key(key_typecode, t.bits(), t.lanes());
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Variable *var) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Variable): " << var->type << " " << var->name << "\n";
+    SpvId variable_id = symbol_table.get(var->name).first;
+    user_assert(variable_id != SpvInvalidId) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Variable): Invalid symbol name!\n";
+    builder.update_id(variable_id);
+}
 
-    auto item = type_map.find(t_key);
-    if (item == type_map.end()) {
-        // TODO, handle arrays, pointers, halide_buffer_t
-        uint32_t type_id = 0;
-        if (t.lanes() != 1) {
-            uint32_t base_id = map_type(t.with_lanes(1));
-            type_id = next_id++;
-            add_instruction(spir_v_types, SpvOpTypeVector, {type_id, base_id, (uint32_t)t.lanes()});
-        } else {
-            if (t.is_float()) {
-                type_id = next_id++;
-                add_instruction(spir_v_types, SpvOpTypeFloat, {type_id, (uint32_t)t.bits()});
-            } else if (t.is_bool()) {
-                type_id = next_id++;
-                add_instruction(spir_v_types, SpvOpTypeBool, {type_id});
-            } else if (t.is_int_or_uint()) {
-                type_id = next_id++;
-                uint32_t signedness = t.is_uint() ? 0 : 1;
-                add_instruction(spir_v_types, SpvOpTypeInt, {type_id, (uint32_t)t.bits(), signedness});
-            } else {
-                internal_error << "Unsupported type in Vulkan backend " << t << "\n";
-            }
-        }
-        type_map[t_key] = type_id;
-        return type_id;
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const IntImm *imm) {
+    if(imm->type.bits() == 8) {
+        const int8_t value = (int8_t)(imm->value);
+        SpvId constant_id = builder.declare_constant(imm->type, &value);
+        builder.update_id(constant_id);
+    } else if(imm->type.bits() == 16) {
+        const int16_t value = (int16_t)(imm->value);
+        SpvId constant_id = builder.declare_constant(imm->type, &value);
+        builder.update_id(constant_id);
+    } else if(imm->type.bits() == 32) {
+        const int32_t value = (int32_t)(imm->value);
+        SpvId constant_id = builder.declare_constant(imm->type, &value);
+        builder.update_id(constant_id);
+    } else if(imm->type.bits() == 64) {
+        const int64_t value = (int64_t)(imm->value);
+        SpvId constant_id = builder.declare_constant(imm->type, &value);
+        builder.update_id(constant_id);
     } else {
-        return item->second;
+        internal_error << "Vulkan backend currently only supports 8-bit, 16-bit, 32-bit or 64-bit signed integers!\n";           
     }
 }
 
-uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_type_to_pair(const Type &t) {
-    uint32_t &ref = pair_type_map[t];
-
-    if (ref == 0) {
-        uint32_t base_type = map_type(t);
-
-        uint32_t type_id = next_id++;
-
-        add_instruction(spir_v_types, SpvOpTypeStruct, {type_id, base_type, base_type});
-        ref = type_id;
-    }
-    return ref;
-}
-
-uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type(const Type &type, uint32_t storage_class) {
-    auto key = std::make_pair(type, storage_class);
-    uint32_t &ref = pointer_type_map[key];
-    if (ref == 0) {
-        uint32_t base_type_id = map_type(type);
-        ref = next_id++;
-        add_instruction(spir_v_types, SpvOpTypePointer, {ref, storage_class, base_type_id});
-        pointer_type_map[key] = ref;
-    }
-
-    return ref;
-}
-
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Variable *var) {
-    id = symbol_table.get(var->name).first;
-}
-
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const IntImm *imm) {
-    id = emit_constant(imm->type, &imm->value);
-}
-
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const UIntImm *imm) {
-    id = emit_constant(imm->type, &imm->value);
-}
-
-namespace {
-void encode_string(std::vector<uint32_t> &section, uint32_t words,
-                   const size_t str_size, const char *str) {
-    size_t bytes_copied = 0;
-    for (uint32_t i = 0; i < words; i++) {
-        uint32_t word;
-        size_t to_copy = std::min(str_size + 1 - bytes_copied, (size_t)4);
-        memcpy(&word, str, to_copy);
-        bytes_copied += to_copy;
-        section.push_back(word);
-        str += 4;
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const UIntImm *imm) {
+    if(imm->type.bits() == 8) {
+        const uint8_t value = (uint8_t)(imm->value);
+        SpvId constant_id = builder.declare_constant(imm->type, &value);
+        builder.update_id(constant_id);
+    } else if(imm->type.bits() == 16) {
+        const uint16_t value = (uint16_t)(imm->value);
+        SpvId constant_id = builder.declare_constant(imm->type, &value);
+        builder.update_id(constant_id);
+    } else if(imm->type.bits() == 32) {
+        const uint32_t value = (uint32_t)(imm->value);
+        SpvId constant_id = builder.declare_constant(imm->type, &value);
+        builder.update_id(constant_id);
+    } else if(imm->type.bits() == 64) {
+        const uint64_t value = (uint64_t)(imm->value);
+        SpvId constant_id = builder.declare_constant(imm->type, &value);
+        builder.update_id(constant_id);
+    } else {
+        internal_error << "Vulkan backend currently only supports 8-bit, 16-bit, 32-bit or 64-bit unsigned integers!\n";           
     }
 }
-}  // namespace
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const StringImm *imm) {
-    uint32_t extra_words = (imm->value.size() + 1 + 3) / 4;
-    id = next_id++;
-    spir_v_kernels.push_back(((2 + extra_words) << 16) | SpvOpString);
-    spir_v_kernels.push_back(id);
 
-    const char *data_temp = (const char *)imm->value.c_str();
-    const size_t data_size = imm->value.size();
-    encode_string(spir_v_kernels, extra_words, data_size, data_temp);
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const StringImm *imm) {
+    SpvId constant_id = builder.declare_string_constant(imm->value);
+    builder.update_id(constant_id);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const FloatImm *imm) {
-    user_assert(imm->type.bits() == 32) << "Vulkan backend currently only supports 32-bit floats\n";
-    float float_val = (float)(imm->value);
-    id = emit_constant(imm->type, &float_val);
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const FloatImm *imm) {
+    if(imm->type.bits() == 32) {
+        const float value = (float)(imm->value);
+        SpvId constant_id = builder.declare_constant(imm->type, &value);
+        builder.update_id(constant_id);
+    } else if(imm->type.bits() == 64) {
+        const double value = (double)(imm->value);
+        SpvId constant_id = builder.declare_constant(imm->type, &value);
+        builder.update_id(constant_id);
+    } else {
+        internal_error << "Vulkan backend currently only supports 32-bit or 64-bit floats\n";           
+    }
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Cast *op) {
-    uint32_t opcode = 0;
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Cast *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast): " << op->value.type() << " to " << op->type << "\n";
+
+    SpvOp op_code = SpvOpNop;
     if (op->value.type().is_float()) {
         if (op->type.is_float()) {
-            opcode = SpvOpFConvert;
+            op_code = SpvOpFConvert;
         } else if (op->type.is_uint()) {
-            opcode = SpvOpConvertFToU;
+            op_code = SpvOpConvertFToU;
         } else if (op->type.is_int()) {
-            opcode = SpvOpConvertFToS;
+            op_code = SpvOpConvertFToS;
         } else {
-            internal_error << "Vulkan cast unhandled case " << op->value.type() << " to " << op->type << "\n";
+            internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast):  unhandled case " << op->value.type() << " to " << op->type << "\n";
         }
     } else if (op->value.type().is_uint()) {
         if (op->type.is_float()) {
-            opcode = SpvOpConvertUToF;
+            op_code = SpvOpConvertUToF;
         } else if (op->type.is_uint()) {
-            opcode = SpvOpUConvert;
+            op_code = SpvOpUConvert;
         } else if (op->type.is_int()) {
-            opcode = SpvOpSatConvertUToS;
+            op_code = SpvOpSatConvertUToS;
         } else {
-            internal_error << "Vulkan cast unhandled case " << op->value.type() << " to " << op->type << "\n";
+            internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast):  unhandled case " << op->value.type() << " to " << op->type << "\n";
         }
     } else if (op->value.type().is_int()) {
         if (op->type.is_float()) {
-            opcode = SpvOpConvertSToF;
+            op_code = SpvOpConvertSToF;
         } else if (op->type.is_uint()) {
-            opcode = SpvOpSatConvertSToU;
+            op_code = SpvOpSatConvertSToU;
         } else if (op->type.is_int()) {
-            opcode = SpvOpSConvert;
+            op_code = SpvOpSConvert;
         } else {
-            internal_error << "Vulkan cast unhandled case " << op->value.type() << " to " << op->type << "\n";
+            internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast):  unhandled case " << op->value.type() << " to " << op->type << "\n";
         }
     } else {
-        internal_error << "Vulkan cast unhandled case " << op->value.type() << " to " << op->type << "\n";
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast):  unhandled case " << op->value.type() << " to " << op->type << "\n";
     }
 
-    uint32_t type_id = map_type(op->type);
+    SpvId type_id = builder.declare_type(op->type);
     op->value.accept(this);
-    uint32_t src_id = id;
-    id = next_id++;
-    add_instruction(opcode, {type_id, id, src_id});
+    SpvId src_id = builder.current_id();
+    SpvId result_id = builder.reserve_id(SpvResultId);
+    builder.append(SpvFactory::convert(op_code, type_id, result_id, src_id));
+    builder.update_id(result_id);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Add *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Add *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Add): " << op->type << " ((" << op->a <<  ") + (" << op->b << "))\n";
     visit_binop(op->type, op->a, op->b, op->type.is_float() ? SpvOpFAdd : SpvOpIAdd);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Sub *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Sub *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Sub): " << op->type << " ((" << op->a <<  ") - (" << op->b << "))\n";
     visit_binop(op->type, op->a, op->b, op->type.is_float() ? SpvOpFSub : SpvOpISub);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Mul *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mul *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mul): " << op->type << " ((" << op->a <<  ") * (" << op->b << "))\n";
     visit_binop(op->type, op->a, op->b, op->type.is_float() ? SpvOpFMul : SpvOpIMul);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Div *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Div): " << op->type << " ((" << op->a <<  ") / (" << op->b << "))\n";
     user_assert(!is_const_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
     if (op->type.is_float()) {
@@ -427,7 +319,8 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Div *op) {
     }
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Mod *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mod): " << op->type << " ((" << op->a <<  ") % (" << op->b << "))\n";
     if (op->type.is_float()) {
         // Takes sign of result from op->b
         visit_binop(op->type, op->a, op->b, SpvOpFMod);
@@ -437,7 +330,9 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Mod *op) {
     }
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Max *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Max *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Max): " << op->type << " Max((" << op->a <<  "), (" << op->b << "))\n";
+
     std::string a_name = unique_name('a');
     std::string b_name = unique_name('b');
     Expr a = Variable::make(op->a.type(), a_name);
@@ -447,7 +342,8 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Max *op) {
     temp.accept(this);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Min *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Min *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Min): " << op->type << " Min((" << op->a <<  "), (" << op->b << "))\n";
     std::string a_name = unique_name('a');
     std::string b_name = unique_name('b');
     Expr a = Variable::make(op->a.type(), a_name);
@@ -457,93 +353,107 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Min *op) {
     temp.accept(this);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const EQ *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const EQ *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(EQ): " << op->type << " (" << op->a <<  ") == (" << op->b << ")\n";
     visit_binop(op->type, op->a, op->b, op->type.is_float() ? SpvOpFOrdEqual : SpvOpIEqual);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const NE *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const NE *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(NE): " << op->type << " (" << op->a <<  ") != (" << op->b << ")\n";
     visit_binop(op->type, op->a, op->b, op->type.is_float() ? SpvOpFOrdNotEqual : SpvOpINotEqual);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const LT *op) {
-    uint32_t opcode = 0;
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LT *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(LT): " << op->type << " (" << op->a <<  ") < (" << op->b << ")\n";
+    SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
-        opcode = SpvOpFOrdLessThan;
+        op_code = SpvOpFOrdLessThan;
     } else if (op->a.type().is_int()) {
-        opcode = SpvOpSLessThan;
+        op_code = SpvOpSLessThan;
     } else if (op->a.type().is_uint()) {
-        opcode = SpvOpULessThan;
+        op_code = SpvOpULessThan;
     } else {
-        internal_error << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const LT *op): unhandled type: " << op->a.type() << "\n";
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LT *op): unhandled type: " << op->a.type() << "\n";
     }
-    visit_binop(op->type, op->a, op->b, opcode);
+    visit_binop(op->type, op->a, op->b, op_code);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const LE *op) {
-    uint32_t opcode = 0;
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(LE): " << op->type << " (" << op->a <<  ") <= (" << op->b << ")\n";
+    SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
-        opcode = SpvOpFOrdLessThanEqual;
+        op_code = SpvOpFOrdLessThanEqual;
     } else if (op->a.type().is_int()) {
-        opcode = SpvOpSLessThanEqual;
+        op_code = SpvOpSLessThanEqual;
     } else if (op->a.type().is_uint()) {
-        opcode = SpvOpULessThanEqual;
+        op_code = SpvOpULessThanEqual;
     } else {
-        internal_error << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const LE *op): unhandled type: " << op->a.type() << "\n";
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op): unhandled type: " << op->a.type() << "\n";
     }
-    visit_binop(op->type, op->a, op->b, opcode);
+    visit_binop(op->type, op->a, op->b, op_code);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const GT *op) {
-    uint32_t opcode = 0;
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GT *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(GT): " << op->type << " (" << op->a <<  ") > (" << op->b << ")\n";
+    SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
-        opcode = SpvOpFOrdGreaterThan;
+        op_code = SpvOpFOrdGreaterThan;
     } else if (op->a.type().is_int()) {
-        opcode = SpvOpSGreaterThan;
+        op_code = SpvOpSGreaterThan;
     } else if (op->a.type().is_uint()) {
-        opcode = SpvOpUGreaterThan;
+        op_code = SpvOpUGreaterThan;
     } else {
-        internal_error << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const GT *op): unhandled type: " << op->a.type() << "\n";
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GT *op): unhandled type: " << op->a.type() << "\n";
     }
-    visit_binop(op->type, op->a, op->b, opcode);
+    visit_binop(op->type, op->a, op->b, op_code);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const GE *op) {
-    uint32_t opcode = 0;
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GE *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(GE): " << op->type << " (" << op->a <<  ") >= (" << op->b << ")\n";
+    SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
-        opcode = SpvOpFOrdGreaterThanEqual;
+        op_code = SpvOpFOrdGreaterThanEqual;
     } else if (op->a.type().is_int()) {
-        opcode = SpvOpSGreaterThanEqual;
+        op_code = SpvOpSGreaterThanEqual;
     } else if (op->a.type().is_uint()) {
-        opcode = SpvOpUGreaterThanEqual;
+        op_code = SpvOpUGreaterThanEqual;
     } else {
-        internal_error << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const GE *op): unhandled type: " << op->a.type() << "\n";
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GE *op): unhandled type: " << op->a.type() << "\n";
     }
-    visit_binop(op->type, op->a, op->b, opcode);
+    visit_binop(op->type, op->a, op->b, op_code);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const And *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const And *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(And): " << op->type << " (" << op->a <<  ") && (" << op->b << ")\n";
     visit_binop(op->type, op->a, op->b, SpvOpLogicalAnd);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Or *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Or *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Or): " << op->type << " (" << op->a <<  ") || (" << op->b << ")\n";
     visit_binop(op->type, op->a, op->b, SpvOpLogicalOr);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Not *op) {
-    uint32_t type_id = map_type(op->type);
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Not *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Not): " << op->type << " !(" << op->a <<  ")\n";
+
+    SpvId type_id = builder.declare_type(op->type);
     op->a.accept(this);
-    uint32_t a_id = id;
-    id = next_id++;
-    add_instruction(SpvOpLogicalNot, {type_id, id, a_id});
+    SpvId src_id = builder.current_id();
+    SpvId result_id = builder.reserve_id(SpvResultId);
+    builder.append(SpvFactory::logical_not(type_id, result_id, src_id));
+    builder.update_id(result_id);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Call): " << op->type << " " << op->name << " args=" << (uint32_t)op->args.size() << "\n";
+
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         // TODO: Check the scopes here and figure out if this is the
         // right memory barrier. Might be able to use
         // SpvMemorySemanticsMaskNone instead.
-        add_instruction(SpvOpControlBarrier, {current_function_id, current_function_id,
-                                              SpvMemorySemanticsAcquireReleaseMask});
+        SpvId current_function_id = builder.current_function().id();
+        builder.append(SpvFactory::control_barrier(current_function_id, current_function_id, 
+                                                   SpvMemorySemanticsAcquireReleaseMask));
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
         visit_binop(op->type, op->args[0], op->args[1], SpvOpBitwiseAnd);
@@ -555,91 +465,80 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
         visit_binop(op->type, op->args[0], op->args[1], SpvOpBitwiseOr);
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         internal_assert(op->args.size() == 1);
-        uint32_t type_id = map_type(op->type);
+        SpvId type_id = builder.declare_type(op->type);
         op->args[0]->accept(this);
-        uint32_t arg_id = id;
-        id = next_id++;
-        add_instruction(SpvOpNot, {type_id, id, arg_id});
+        SpvId arg_id = builder.current_id();
+        SpvId result_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::logical_not(type_id, result_id, arg_id));
+        builder.update_id(result_id);
     } else if (op->is_intrinsic(Call::if_then_else)) {
         if (op->type.is_vector()) {
             scalarize(op);
         } else {
-            internal_assert(op->args.size() == 3);
-            auto phi_inputs = emit_if_then_else(op->args[0], op->args[1], op->args[2]);
             // Generate Phi node if used as an expression.
-
-            uint32_t type_id = map_type(op->type);
-            id = next_id++;
-            spir_v_kernels.push_back((7 << 16) | SpvOpPhi);
-            spir_v_kernels.push_back(type_id);
-            spir_v_kernels.push_back(id);
-            spir_v_kernels.insert(spir_v_kernels.end(), phi_inputs.ids, phi_inputs.ids + 4);
+            internal_assert(op->args.size() == 3);
+            SpvFactory::BlockVariables block_vars = emit_if_then_else(op->args[0], op->args[1], op->args[2]);
+            SpvId type_id = builder.declare_type(op->type);
+            SpvId result_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::phi(type_id, result_id, block_vars));
+            builder.update_id(result_id);
         }
     } else if (op->is_intrinsic(Call::IntrinsicOp::div_round_to_zero)) {
         internal_assert(op->args.size() == 2);
-        uint32_t opcode = 0;
+        SpvOp op_code = SpvOpNop;
         if (op->type.is_int()) {
-            opcode = SpvOpSDiv;
+            op_code = SpvOpSDiv;
         } else if (op->type.is_uint()) {
-            opcode = SpvOpUDiv;
+            op_code = SpvOpUDiv;
         } else {
             internal_error << "div_round_to_zero of non-integer type.\n";
         }
-        visit_binop(op->type, op->args[0], op->args[1], opcode);
+        visit_binop(op->type, op->args[0], op->args[1], op_code);
     } else if (op->is_intrinsic(Call::IntrinsicOp::mod_round_to_zero)) {
         internal_assert(op->args.size() == 2);
-        uint32_t opcode = 0;
+        SpvOp op_code = SpvOpNop;
         if (op->type.is_int()) {
-            opcode = SpvOpSMod;
+            op_code = SpvOpSMod;
         } else if (op->type.is_uint()) {
-            opcode = SpvOpUMod;
+            op_code = SpvOpUMod;
         } else {
             internal_error << "mod_round_to_zero of non-integer type.\n";
         }
-        visit_binop(op->type, op->args[0], op->args[1], opcode);
+        visit_binop(op->type, op->args[0], op->args[1], op_code);
     } else if (op->is_intrinsic(Call::IntrinsicOp::mul_shift_right)) {
         internal_assert(op->args.size() == 3);
-        uint32_t type_id = map_type(op->type);
+        uint32_t type_id = builder.declare_type(op->type);
 
         op->args[0].accept(this);
-        uint32_t a_id = id;
+        SpvId src_a_id = builder.current_id();
         op->args[1].accept(this);
-        uint32_t b_id = id;
+        SpvId src_b_id = builder.current_id();
 
-        uint32_t pair_type_id = map_type_to_pair(op->type);
+        SpvId pair_type_id = map_type_to_pair(op->type);
 
         // Double width multiply
-        uint32_t product_pair = next_id++;
-        spir_v_kernels.push_back((5 << 16) | (op->type.is_uint() ? SpvOpUMulExtended : SpvOpSMulExtended));
-        spir_v_kernels.push_back(pair_type_id);
-        spir_v_kernels.push_back(a_id);
-        spir_v_kernels.push_back(b_id);
+        SpvId product_pair_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::multiply_extended(pair_type_id, product_pair_id, src_a_id, src_b_id, op->type.is_uint() ? false : true));
 
-        uint32_t high_item_id = next_id++;
-        spir_v_kernels.push_back((5 << 16) | SpvOpCompositeExtract);
-        spir_v_kernels.push_back(type_id);
-        spir_v_kernels.push_back(high_item_id);
-        spir_v_kernels.push_back(product_pair);
-        spir_v_kernels.push_back(1);
+        SpvFactory::Indices indices = {1};
+        uint32_t high_item_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::composite_extract(type_id, high_item_id, product_pair_id, indices));
 
         const UIntImm *shift = op->args[2].as<UIntImm>();
         internal_assert(shift != nullptr) << "Third argument to mul_shift_right intrinsic must be an unsigned integer immediate.\n";
 
-        uint32_t result_id;
+        SpvId result_id = high_item_id;
         if (shift->value != 0) {
             // TODO: This code depends on compilation happening on a little-endian host.
-            uint32_t shr_id = emit_constant(shift->type, &shift->value);
-            result_id = next_id++;
-            spir_v_kernels.push_back((5 << 16) | (op->type.is_uint() ? SpvOpShiftRightLogical : SpvOpShiftRightArithmetic));
-            spir_v_kernels.push_back(type_id);
-            spir_v_kernels.push_back(result_id);
-            spir_v_kernels.push_back(high_item_id);
-            spir_v_kernels.push_back(shr_id);
-        } else {
-            result_id = high_item_id;
+            SpvId shift_amount_id = builder.declare_constant(shift->type, &shift->value);
+            result_id = builder.reserve_id(SpvResultId);
+            if(op->type.is_uint()) {
+                builder.append(SpvFactory::shift_right_logical(type_id, result_id, high_item_id, shift_amount_id));
+            } else {
+                builder.append(SpvFactory::shift_right_arithmetic(type_id, result_id, high_item_id, shift_amount_id));
+            }
         }
-
-        id = result_id;
+        builder.update_id(result_id);
     } else if (op->is_intrinsic(Call::IntrinsicOp::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         // b > a, so the following works without widening:
@@ -649,21 +548,23 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
     }
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Select *op) {
-    uint32_t type_id = map_type(op->type);
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Select *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Select): " << op->type << " (" << op->condition <<  ") ? (" << op->true_value << ") : (" << op->false_value << ")\n";
+    SpvId type_id = builder.declare_type(op->type);
     op->condition.accept(this);
-    uint32_t cond_id = id;
+    SpvId cond_id = builder.current_id();
     op->true_value.accept(this);
-    uint32_t true_id = id;
+    SpvId true_id = builder.current_id();
     op->false_value.accept(this);
-    uint32_t false_id = id;
-    id = next_id++;
-    add_instruction(SpvOpSelect, {type_id, id, cond_id, true_id, false_id});
+    SpvId false_id = builder.current_id();
+    SpvId result_id = builder.reserve_id(SpvResultId);
+    builder.append(SpvFactory::select(type_id, result_id, cond_id, true_id, false_id));
+    builder.update_id(result_id);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
-    debug(2) << "Vulkan codegen: Load: " << (Expr)op << "\n";
-    user_assert(is_const_one(op->predicate)) << "Predicated loads not supported by the Vulkan backend\n";
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Load *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Load): " << (Expr)op << "\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated loads not supported by SPIR-V codegen\n";
 
     // TODO: implement vector loads
     // TODO: correct casting to the appropriate memory space
@@ -672,27 +573,33 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
     internal_assert(op->param.defined() && op->param.is_buffer());
 
     // Construct the pointer to read from
-    auto id_and_storage_class = symbol_table.get(op->name);
-    uint32_t base_id = id_and_storage_class.first;
-    uint32_t storage_class = id_and_storage_class.second;
+    internal_assert(symbol_table.contains(op->name));
+    SymbolIdStorageClassPair id_and_storage_class = symbol_table.get(op->name);
+    SpvId base_id = id_and_storage_class.first;
+    SpvStorageClass storage_class = id_and_storage_class.second;
+    internal_assert(base_id != SpvInvalidId);
+    internal_assert(storage_class != SpvInvalidId);
 
     op->index.accept(this);
-    uint32_t index_id = id;
-    uint32_t ptr_type_id = map_pointer_type(op->type, storage_class);
-    uint32_t access_chain_id = next_id++;
-    auto zero = 0;
-    add_instruction(SpvOpInBoundsAccessChain, {ptr_type_id, access_chain_id, base_id,
-                                               emit_constant(UInt(32), &zero), index_id});
+    SpvId index_id = builder.current_id();
 
-    id = next_id++;
-    uint32_t result_type_id = map_type(op->type);
-    add_instruction(SpvOpLoad, {result_type_id, id, access_chain_id});
+    uint32_t zero = 0;
+    SpvId type_id = builder.declare_type(op->type);
+    SpvId zero_id = builder.declare_constant(UInt(32), &zero);
+    SpvId ptr_type_id = builder.declare_pointer_type(type_id, storage_class);
+    SpvId access_chain_id = builder.reserve_id(SpvResultId);
+    SpvFactory::Indices indices = {index_id};
+    builder.append(SpvFactory::in_bounds_access_chain(ptr_type_id, access_chain_id, base_id, zero_id, indices));
+
+    SpvId result_id = builder.reserve_id(SpvResultId);
+    SpvId result_type_id = builder.declare_type(op->type);
+    builder.append(SpvFactory::load(result_type_id, result_id, access_chain_id));
+    builder.update_id(result_id);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
-    debug(2) << "Vulkan codegen: Store: " << (Stmt)op << "\n";
-
-    user_assert(is_const_one(op->predicate)) << "Predicated stores not supported by the Vulkan backend\n";
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Store *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Store): " << op->name << "[" << op->index << "] = (" << op->value << ")\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated stores not supported by SPIR-V codegen!\n";
 
     // TODO: implement vector writes
     // TODO: correct casting to the appropriate memory space
@@ -701,56 +608,54 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
     internal_assert(op->param.defined() && op->param.is_buffer());
 
     op->value.accept(this);
-    uint32_t value_id = id;
+    SpvId value_id = builder.current_id();
 
     // Construct the pointer to write to
-    auto id_and_storage_class = symbol_table.get(op->name);
-    uint32_t base_id = id_and_storage_class.first;
-    uint32_t storage_class = id_and_storage_class.second;
+    internal_assert(symbol_table.contains(op->name));
+    SymbolIdStorageClassPair id_and_storage_class = symbol_table.get(op->name);
+    SpvId base_id = id_and_storage_class.first;
+    SpvStorageClass storage_class = id_and_storage_class.second;
+    internal_assert(base_id != SpvInvalidId);
+    internal_assert(storage_class != SpvInvalidId);
 
     op->index.accept(this);
-    uint32_t index_id = id;
-    uint32_t ptr_type_id = map_pointer_type(op->value.type(), storage_class);
-    uint32_t access_chain_id = next_id++;
-    auto zero = 0;
-    add_instruction(SpvOpInBoundsAccessChain, {ptr_type_id, access_chain_id, base_id,
-                                               emit_constant(UInt(32), &zero), index_id});
+    SpvId index_id = builder.current_id();
+    SpvId type_id = builder.declare_type(op->value.type());
+    SpvId ptr_type_id = builder.declare_pointer_type(type_id, storage_class);
+    SpvId access_chain_id = builder.reserve_id(SpvResultId);
 
-    add_instruction(SpvOpStore, {access_chain_id, value_id});
+    SpvId zero = 0;
+    SpvId zero_id = builder.declare_constant(UInt(32), &zero);
+    SpvFactory::Indices indices = {index_id};
+    builder.append(SpvFactory::in_bounds_access_chain(ptr_type_id, access_chain_id, base_id, zero_id, indices));
+    builder.append(SpvFactory::store(access_chain_id, value_id));
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Let *let) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Let *let) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Let): " << (Expr)let << "\n";
     let->value.accept(this);
-    ScopedBinding<std::pair<uint32_t, uint32_t>> binding(symbol_table, let->name, {id, SpvStorageClassFunction});
+    SpvId current_id = builder.current_id();
+    ScopedSymbolBinding binding(symbol_table, let->name, {current_id, SpvStorageClassFunction});
     let->body.accept(this);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const LetStmt *let) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LetStmt *let) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(LetStmt): " << let->name << "\n";
     let->value.accept(this);
-    ScopedBinding<std::pair<uint32_t, uint32_t>> binding(symbol_table, let->name, {id, SpvStorageClassFunction});
+    SpvId current_id = builder.current_id();
+    ScopedSymbolBinding binding(symbol_table, let->name, {current_id, SpvStorageClassFunction});
     let->body.accept(this);
+
     // TODO: Figure out undef here?
-    id = 0xffffffff;
+    builder.update_id(SpvInvalidId);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const AssertStmt *) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const AssertStmt *) {
     // TODO: Fill this in.
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const ProducerConsumer *) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const ProducerConsumer *) {
     // I believe these nodes are solely for annotation purposes.
-#if 0
-    string name;
-    if (op->is_producer) {
-        name = std::string("produce ") + op->name;
-    } else {
-        name = std::string("consume ") + op->name;
-    }
-    BasicBlock *produce = BasicBlock::Create(*context, name, function);
-    builder->CreateBr(produce);
-    builder->SetInsertPoint(produce);
-    codegen(op->body);
-#endif
 }
 
 namespace {
@@ -778,15 +683,14 @@ int thread_loop_workgroup_index(const std::string &name) {
                          ".__thread_id_y",
                          ".__thread_id_z"};
     for (size_t i = 0; i < sizeof(ids) / sizeof(std::string); i++) {
-        if (ends_with(name, ids[i])) {
-            return i;
-        }
+        if (ends_with(name, ids[i])) { return i; }
     }
     return -1;
 }
 }  // anonymous namespace
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(For): " << op->name << "\n";
 
     if (is_gpu_var(op->name)) {
         internal_assert((op->for_type == ForType::GPUBlock) ||
@@ -811,226 +715,255 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
 
         // Intrinsics are inserted when adding the kernel
         internal_assert(symbol_table.contains(intrinsic.first));
+        SpvId intrinsic_id = symbol_table.get(intrinsic.first).first;
 
-        uint32_t intrinsic_id = symbol_table.get(intrinsic.first).first;
-        uint32_t gpu_var_id = next_id++;
-        uint32_t unsigned_gpu_var_id = next_id++;
-        add_instruction(SpvOpCompositeExtract, {map_type(UInt(32)), unsigned_gpu_var_id, intrinsic_id, intrinsic.second});
-        // cast to int, which is what's expected by Halide's for loops
-        add_instruction(SpvOpBitcast, {map_type(Int(32)), gpu_var_id, unsigned_gpu_var_id});
-
+        // extract and cast to int (which is what's expected by Halide's for loops)
+        SpvId unsigned_type_id = builder.declare_type(UInt(32));
+        SpvId unsigned_gpu_var_id = builder.reserve_id(SpvResultId);
+        SpvId signed_type_id = builder.declare_type(Int(32));
+        SpvId signed_gpu_var_id = builder.reserve_id(SpvResultId);
+        SpvFactory::Indices indices = { intrinsic.second };
+        builder.append(SpvFactory::composite_extract(unsigned_type_id, unsigned_gpu_var_id, intrinsic_id, indices));
+        builder.append(SpvFactory::bitcast(signed_type_id, signed_gpu_var_id, unsigned_gpu_var_id));
         {
-            ScopedBinding<std::pair<uint32_t, uint32_t>> binding(symbol_table, op->name, {gpu_var_id, SpvStorageClassUniform});
+            ScopedSymbolBinding binding(symbol_table, op->name, {signed_gpu_var_id, SpvStorageClassUniform});
             op->body.accept(this);
         }
 
     } else {
 
-        internal_assert(op->for_type == ForType::Serial) << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit unhandled For type: " << op->for_type << "\n";
+        internal_assert(op->for_type == ForType::Serial) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit unhandled For type: " << op->for_type << "\n";
 
         // TODO: Loop vars are alway int32_t right?
-        uint32_t index_type_id = map_type(Int(32));
-        uint32_t index_var_type_id = map_pointer_type(Int(32), SpvStorageClassFunction);
+        SpvId index_type_id = builder.declare_type(Int(32));
+        SpvId index_var_type_id = builder.declare_pointer_type(index_type_id, SpvStorageClassFunction);
 
         op->min.accept(this);
-        uint32_t min_id = id;
+        SpvId min_id = builder.current_id();
         op->extent.accept(this);
-        uint32_t extent_id = id;
+        SpvId extent_id = builder.current_id();
 
         // Compute max.
-        uint32_t max_id = next_id++;
-        add_instruction(SpvOpIAdd, {index_type_id, max_id, min_id, extent_id});
+        SpvId max_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::integer_add(index_type_id, max_id, min_id, extent_id));
 
         // Declare loop var
-        // TODO: Can we use the phi node for this?
-        uint32_t loop_var_id = next_id++;
-        add_allocation(index_var_type_id, loop_var_id, SpvStorageClassFunction, min_id);
+        SpvId loop_var_id = builder.declare_variable(unique_name("loop_index"), index_var_type_id, SpvStorageClassFunction, min_id);
 
-        uint32_t header_label_id = next_id++;
-        uint32_t loop_top_label_id = next_id++;
-        uint32_t body_label_id = next_id++;
-        uint32_t continue_label_id = next_id++;
-        uint32_t merge_label_id = next_id++;
-        add_instruction(SpvOpLabel, {header_label_id});
-        add_instruction(SpvOpLoopMerge, {merge_label_id, continue_label_id, SpvLoopControlMaskNone});
-        add_instruction(SpvOpBranch, {loop_top_label_id});
-        add_instruction(SpvOpLabel, {loop_top_label_id});
+        SpvId header_label_id = builder.reserve_id(SpvLabelId);
+        SpvId loop_top_label_id = builder.reserve_id(SpvLabelId);
+        SpvId body_label_id = builder.reserve_id(SpvLabelId);
+        SpvId continue_label_id = builder.reserve_id(SpvLabelId);
+        SpvId merge_label_id = builder.reserve_id(SpvLabelId);
+
+        builder.append(SpvFactory::label(header_label_id));
+        builder.append(SpvFactory::loop_merge(merge_label_id, continue_label_id, SpvLoopControlMaskNone));
+        builder.append(SpvFactory::branch(loop_top_label_id));
+        builder.append(SpvFactory::label(loop_top_label_id));
 
         // loop test.
-        uint32_t cur_index_id = next_id++;
-        add_instruction(SpvOpLoad, {index_type_id, cur_index_id, loop_var_id});
+        SpvId cur_index_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::load(index_type_id, cur_index_id, loop_var_id));
 
-        uint32_t loop_test_id = next_id++;
-        add_instruction(SpvOpSLessThanEqual, {loop_test_id, cur_index_id, max_id});
-        add_instruction(SpvOpBranchConditional, {loop_test_id, body_label_id, merge_label_id});
-
-        add_instruction(SpvOpLabel, {body_label_id});
+        SpvId loop_test_type_id = builder.declare_type(Bool());
+        SpvId loop_test_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::less_than_equal(loop_test_type_id, loop_test_id, cur_index_id, max_id, true));
+        builder.append(SpvFactory::conditional_branch(loop_test_id, body_label_id, merge_label_id));
+        builder.append(SpvFactory::label(body_label_id));
 
         {
-            ScopedBinding<std::pair<uint32_t, uint32_t>> binding(symbol_table, op->name, {cur_index_id, SpvStorageClassFunction});
-
+            ScopedSymbolBinding binding(symbol_table, op->name, {cur_index_id, SpvStorageClassFunction});
             op->body.accept(this);
         }
+        builder.append(SpvFactory::branch(continue_label_id));
+        builder.append(SpvFactory::label(continue_label_id));
 
-        add_instruction(SpvOpBranch, {continue_label_id});
-        add_instruction(SpvOpLabel, {continue_label_id});
-
-        // Loop var update?
-        uint32_t next_index_id = next_id++;
+        // Update loop variable
         int32_t one = 1;
-        uint32_t constant_one_id = emit_constant(Int(32), &one);
-        add_instruction(SpvOpIAdd, {index_type_id, next_index_id, cur_index_id, constant_one_id});
-        add_instruction(SpvOpStore, {index_type_id, next_index_id, loop_var_id});
-        add_instruction(SpvOpBranch, {header_label_id});
-        add_instruction(SpvOpLabel, {merge_label_id});
+        SpvId next_index_id = builder.reserve_id(SpvResultId);
+        SpvId constant_one_id = builder.declare_constant(Int(32), &one);
+        builder.append(SpvFactory::integer_add(index_type_id, next_index_id, cur_index_id, constant_one_id));
+        builder.append(SpvFactory::store(loop_var_id, next_index_id));
+
+        builder.append(SpvFactory::branch(header_label_id));
+        builder.append(SpvFactory::label(merge_label_id));
     }
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Ramp *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Ramp *op) {
     // TODO: Is there a way to do this that doesn't require duplicating lane values?
-    uint32_t base_type_id = map_type(op->base.type());
-    uint32_t type_id = map_type(op->type);
+    SpvId base_type_id = builder.declare_type(op->base.type());
+    SpvId type_id = builder.declare_type(op->type);
     op->base.accept(this);
-    uint32_t base_id = id;
+    SpvId base_id = builder.current_id();
     op->stride.accept(this);
-    uint32_t stride_id = id;
-    uint32_t add_opcode = op->base.type().is_float() ? SpvOpFAdd : SpvOpIAdd;
+    SpvId stride_id = builder.current_id();
+
     // Generate adds to make the elements of the ramp.
-    uint32_t prev_id = base_id;
-    uint32_t first_id = next_id;
+    SpvId prev_id = base_id;
+    SpvFactory::Components constituents = {base_id};
     for (int i = 1; i < op->lanes; i++) {
-        uint32_t this_id = next_id++;
-        add_instruction(add_opcode, {base_type_id, this_id, prev_id, stride_id});
+        SpvId this_id = builder.reserve_id(SpvResultId);
+        if(op->base.type().is_float()) {
+            builder.append(SpvFactory::float_add(base_type_id, this_id, prev_id, stride_id));
+        }
+        else {
+            builder.append(SpvFactory::integer_add(base_type_id, this_id, prev_id, stride_id));
+        }
+        constituents.push_back(this_id);
         prev_id = this_id;
     }
 
-    id = next_id++;
-    spir_v_kernels.push_back(((op->lanes + 3) << 16) | SpvOpCompositeConstruct);
-    spir_v_kernels.push_back(type_id);
-    spir_v_kernels.push_back(id);
-    spir_v_kernels.push_back(base_id);
-    for (int i = 1; i < op->lanes; i++) {
-        spir_v_kernels.push_back(first_id++);
-    }
+    SpvId result_id = builder.reserve_id(SpvResultId);
+    builder.append(SpvFactory::composite_construct(type_id, result_id, constituents));
+    builder.update_id(result_id);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Broadcast *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Broadcast *op) {
     // TODO: Is there a way to do this that doesn't require duplicating lane values?
-    uint32_t type_id = map_type(op->type);
+    SpvId type_id = builder.declare_type(op->type);
     op->value.accept(this);
-    uint32_t value_id = id;
-    id = next_id++;
-    spir_v_kernels.push_back(((op->lanes + 3) << 16) | SpvOpCompositeConstruct);
-    spir_v_kernels.push_back(type_id);
-    spir_v_kernels.push_back(id);
-    spir_v_kernels.insert(spir_v_kernels.end(), op->lanes, value_id);
+    SpvId value_id = builder.current_id();
+    SpvId result_id = builder.reserve_id(SpvResultId);
+
+    SpvFactory::Components constituents;
+    constituents.insert(constituents.end(), op->lanes, value_id);
+    builder.append(SpvFactory::composite_construct(type_id, result_id, constituents));
+    builder.update_id(result_id);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Provide *) {
-    internal_error << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Provide *): Provide encountered during codegen\n";
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Provide *) {
+    internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Provide *): Provide encountered during codegen\n";
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Allocate *) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *) {
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Free *) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Free *) {
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Realize *) {
-    internal_error << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Realize *): Realize encountered during codegen\n";
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Realize *) {
+    internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Realize *): Realize encountered during codegen\n";
 }
 
 template<typename StmtOrExpr>
-CodeGen_Vulkan_Dev::SPIRVEmitter::PhiNodeInputs
-CodeGen_Vulkan_Dev::SPIRVEmitter::emit_if_then_else(const Expr &condition,
+SpvFactory::BlockVariables
+CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
                                                     StmtOrExpr then_case, StmtOrExpr else_case) {
     condition.accept(this);
-    uint32_t cond_id = id;
-    uint32_t then_label_id = next_id++;
-    uint32_t else_label_id = next_id++;
-    uint32_t merge_label_id = next_id++;
+    SpvId cond_id = builder.current_id();
+    SpvId then_label_id = builder.reserve_id(SpvLabelId);
+    SpvId else_label_id = builder.reserve_id(SpvLabelId);
+    SpvId merge_label_id = builder.reserve_id(SpvLabelId);
 
-    add_instruction(SpvOpSelectionMerge, {merge_label_id, SpvSelectionControlMaskNone});
-    add_instruction(SpvOpBranchConditional, {cond_id, then_label_id, else_label_id});
-    add_instruction(SpvOpLabel, {then_label_id});
+    // If Conditional
+    builder.append(SpvFactory::selection_merge(merge_label_id, SpvSelectionControlMaskNone));
+    builder.append(SpvFactory::conditional_branch(cond_id, then_label_id, else_label_id));
 
+    // Then block    
+    builder.append(SpvFactory::label(then_label_id));
     then_case.accept(this);
-    uint32_t then_id = id;
+    SpvId then_id = builder.current_id();
+    builder.append(SpvFactory::branch(merge_label_id));
 
-    add_instruction(SpvOpBranch, {merge_label_id});
-    add_instruction(SpvOpLabel, {else_label_id});
+    SpvFactory::BlockVariables block_vars = {
+        { then_id, then_label_id }
+    };
 
-    else_case.accept(this);
-    uint32_t else_id = id;
+    // Else block (optional)
+    builder.append(SpvFactory::label(else_label_id));
+    if(else_case.defined()) {
+        else_case.accept(this);
+        SpvId else_id = builder.current_id();
+        block_vars.push_back({ else_id, else_label_id });
+    }
+    builder.append(SpvFactory::branch(merge_label_id));
 
-    // Every basic block must end with a branch instruction
-    add_instruction(SpvOpBranch, {merge_label_id});
+    // Merge label
+    builder.append(SpvFactory::label(merge_label_id));
 
-    add_instruction(SpvOpLabel, {merge_label_id});
-
-    return {{then_id, then_label_id, else_id, else_label_id}};
+    return block_vars;
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const IfThenElse *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const IfThenElse *op) {
     emit_if_then_else(op->condition, op->then_case, op->else_case);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Evaluate *op) {
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Evaluate *op) {
     op->value.accept(this);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Shuffle *op) {
-    internal_assert(op->vectors.size() == 2) << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Shuffle *op): SPIR-V codegen currently only supports shuffles of vector pairs.\n";
-    uint32_t type_id = map_type(op->type);
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
+    internal_assert(op->vectors.size() == 2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op): SPIR-V codegen currently only supports shuffles of vector pairs.\n";
+    SpvId type_id = builder.declare_type(op->type);
     op->vectors[0].accept(this);
-    uint32_t vector0_id = id;
+    SpvId vector0_id = builder.current_id();
     op->vectors[1].accept(this);
-    uint32_t vector1_id = id;
+    SpvId vector1_id = builder.current_id();
 
-    id = next_id++;
-    spir_v_kernels.push_back(((5 + op->indices.size()) << 16) | SpvOpPhi);
-    spir_v_kernels.push_back(type_id);
-    spir_v_kernels.push_back(id);
-    spir_v_kernels.push_back(vector0_id);
-    spir_v_kernels.push_back(vector1_id);
-    spir_v_kernels.insert(spir_v_kernels.end(), op->indices.begin(), op->indices.end());
+    SpvFactory::Indices indices;
+    indices.insert(indices.end(), op->indices.begin(), op->indices.end());
+
+    SpvId result_id = builder.reserve_id(SpvResultId);
+    builder.append(SpvFactory::vector_shuffle(type_id, result_id, vector0_id, vector1_id, indices));
+    builder.update_id(result_id);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Prefetch *) {
-    internal_error << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Prefetch *): Prefetch encountered during codegen\n";
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Prefetch *) {
+    internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Prefetch *): Prefetch encountered during codegen\n";
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Fork *) {
-    internal_error << "void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Fork *) not supported yet.";
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Fork *) {
+    internal_error << "void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Fork *) not supported yet.";
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Acquire *) {
-    internal_error << "void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Acquire *) not supported yet.";
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Acquire *) {
+    internal_error << "void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Acquire *) not supported yet.";
 }
 
 // TODO: fast math decorations.
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit_binop(Type t, const Expr &a, const Expr &b, uint32_t opcode) {
-    uint32_t type_id = map_type(t);
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_binop(Type t, const Expr &a, const Expr &b, SpvOp op_code) {
+    SpvId type_id = builder.declare_type(t);
     a.accept(this);
-    uint32_t a_id = id;
+    SpvId src_a_id = builder.current_id();
     b.accept(this);
-    uint32_t b_id = id;
-    id = next_id++;
-    add_instruction(opcode, {type_id, id, a_id, b_id});
+    SpvId src_b_id = builder.current_id();
+    
+    SpvId result_id = builder.reserve_id(SpvResultId);
+    builder.append(SpvFactory::binary_op(op_code, type_id, result_id, src_a_id, src_b_id));
+    builder.update_id(result_id);
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::add_allocation(uint32_t result_type_id,
-                                                      uint32_t result_id,
-                                                      uint32_t storage_class,
-                                                      uint32_t initializer) {
-    if (initializer) {
-        add_instruction(spir_v_kernel_allocations, SpvOpVariable, {result_type_id, result_id, storage_class, initializer});
-    } else {
-        add_instruction(spir_v_kernel_allocations, SpvOpVariable, {result_type_id, result_id, storage_class});
-    }
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::init_module() {
+
+    builder.reset();
+
+    // NOTE: Source language is irrelevant. We encode the binary directly
+    builder.set_source_language(SpvSourceLanguageUnknown);   
+
+    // TODO: Should we autodetect and/or force 32bit or 64bit?
+    builder.set_addressing_model(SpvAddressingModelLogical); 
+    
+    // TODO: Is there a better memory model to use?
+    builder.set_memory_model(SpvMemoryModelGLSL450);         
+
+    // Capabilities
+    builder.require_capability(SpvCapabilityShader);
+
+    // NOTE: Extensions are handled in finalize
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(const Stmt &s,
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::compile(std::vector<char> &module) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::compile\n";
+    SpvBinary spirv_binary;
+    builder.finalize();
+    builder.encode(spirv_binary);
+    module.reserve(spirv_binary.size() * sizeof(uint32_t));
+    module.insert(module.end(), (const char*)spirv_binary.data(), (const char*)(spirv_binary.data() + spirv_binary.size()));
+}
+
+
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
                                                   const std::string &name,
                                                   const std::vector<DeviceArgument> &args) {
     debug(2) << "Adding Vulkan kernel " << name << "\n";
@@ -1043,238 +976,172 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(const Stmt &s,
     workgroup_size[1] = 0;
     workgroup_size[2] = 0;
 
-    // Declare the function type.  TODO: should this be unique?
-    uint32_t function_type_id = next_id++;
-
-    add_instruction(spir_v_types, SpvOpTypeFunction, {function_type_id, void_id});
-
-    // Add definition and parameters
-    current_function_id = next_id++;
-    add_instruction(SpvOpFunction, {void_id, current_function_id, SpvFunctionControlMaskNone, function_type_id});
-
-    // Insert the starting label
-    add_instruction(SpvOpLabel, {next_id++});
-
-    // TODO: what about variables that need the SIMT intrinsics for their initializer?
-    // Save the location where we'll insert OpVariable instructions
-    size_t index = spir_v_kernels.size();
-
-    std::vector<uint32_t> entry_point_interface;
-    entry_point_interface.push_back(SpvExecutionModelGLCompute);
-    entry_point_interface.push_back(current_function_id);
-    // Add the string name of the function
-    encode_string(entry_point_interface, (name.size() + 1 + 3) / 4, name.size(), name.c_str());
+    // Declare the kernel function 
+    SpvId void_type_id = builder.declare_void_type();
+    SpvId kernel_func_id = builder.add_function(name, void_type_id);
+    SpvFunction kernel_func = builder.lookup_function(kernel_func_id);
+    builder.enter_function(kernel_func);
+    builder.enter_block(kernel_func.entry_block());
+//    SpvId start_label_id = kernel_func.entry_block().id();
 
     // TODO: only add the SIMT intrinsics used
+    SpvFactory::Variables entry_point_variables;
     auto intrinsics = {"WorkgroupId", "LocalInvocationId"};
-    for (const std::string &intrinsic : intrinsics) {
-        uint32_t intrinsic_id = next_id++;
-        uint32_t intrinsic_loaded_id = next_id++;
-        // The builtins are pointers to vec3
-        uint32_t intrinsic_type_id = map_pointer_type(Type(Type::UInt, 32, 3), SpvStorageClassInput);
+    for (const std::string& intrinsic_name : intrinsics) {
 
-        add_instruction(spir_v_types, SpvOpVariable, {intrinsic_type_id, intrinsic_id, SpvStorageClassInput});
-        add_instruction(SpvOpLoad, {map_type(Type(Type::UInt, 32, 3)), intrinsic_loaded_id, intrinsic_id});
-        symbol_table.push(intrinsic, {intrinsic_loaded_id, SpvStorageClassInput});
+        // The builtins are pointers to vec3
+        SpvId intrinsic_type_id = builder.declare_type(Type(Type::UInt, 32, 3));
+        SpvId intrinsic_ptr_type_id = builder.declare_pointer_type(intrinsic_type_id, SpvStorageClassInput);
+        SpvId intrinsic_id = builder.declare_global_variable(intrinsic_name, intrinsic_ptr_type_id, SpvStorageClassInput);
+        SpvId intrinsic_loaded_id = builder.reserve_id();
+        builder.append( SpvFactory::load(intrinsic_type_id, intrinsic_loaded_id, intrinsic_id) );
+        symbol_table.push(intrinsic_name, {intrinsic_loaded_id, SpvStorageClassInput});
 
         // Annotate that this is the specific builtin
-        auto built_in_kind = starts_with(intrinsic, "Workgroup") ? SpvBuiltInWorkgroupId : SpvBuiltInLocalInvocationId;
-        add_instruction(spir_v_annotations, SpvOpDecorate, {intrinsic_id, SpvDecorationBuiltIn, built_in_kind});
+        SpvBuiltIn built_in_kind = starts_with(intrinsic_name, "Workgroup") ? SpvBuiltInWorkgroupId : SpvBuiltInLocalInvocationId;
+        SpvBuilder::Literals annotation_literals = { (uint32_t)built_in_kind };
+        builder.add_annotation( intrinsic_id, SpvDecorationBuiltIn, annotation_literals  );
 
         // Add the builtin to the interface
-        entry_point_interface.push_back(intrinsic_id);
+        entry_point_variables.push_back(intrinsic_id);
     }
 
     // Add the entry point and exection mode
-    add_instruction(spir_v_entrypoints,
-                    SpvOpEntryPoint, entry_point_interface);
+    builder.add_entry_point(kernel_func_id, SpvExecutionModelGLCompute, entry_point_variables);
 
     // GLSL-style: each input buffer is a runtime array in a buffer struct
     // All other params get passed in as a single uniform block
     // First, need to count scalar parameters to construct the uniform struct
-    std::vector<uint32_t> scalar_types;
-    uint32_t offset = 0;
-    uint32_t param_pack_type_id = next_id++;
-    uint32_t param_pack_ptr_type_id = next_id++;
-    uint32_t param_pack_id = next_id++;
-    scalar_types.push_back(param_pack_type_id);
-    for (const DeviceArgument &arg : args) {
+    SpvBuilder::StructMemberTypes param_struct_members;
+    for (const auto &arg : args) {
         if (!arg.is_buffer) {
-            // record the type for later constructing the params struct type
-            scalar_types.push_back(map_type(arg.type));
+            SpvId arg_type_id = builder.declare_type(arg.type);
+            param_struct_members.push_back(arg_type_id);
+        }
+    }
+    SpvId param_struct_type_id = builder.declare_struct( unique_name("param_struct"), param_struct_members);
 
-            // Add a decoration describing the offset
-            add_instruction(spir_v_annotations, SpvOpMemberDecorate, {param_pack_type_id, (uint32_t)(scalar_types.size() - 2), SpvDecorationOffset, offset});
-            offset += arg.type.bytes();
+    // Add a decoration describing the offset for each parameter struct member
+    uint32_t param_member_index = 0;
+    uint32_t param_member_offset = 0;
+    for (const auto &arg : args) {
+        if (!arg.is_buffer) {
+            SpvBuilder::Literals param_offset_literals = { param_member_offset };
+            builder.add_struct_annotation( param_struct_type_id, param_member_index, SpvDecorationOffset, param_offset_literals );
+            param_member_offset += arg.type.bytes();
+            param_member_index++;
         }
     }
 
     // Add a Block decoration for the parameter pack itself
-    add_instruction(spir_v_annotations, SpvOpDecorate, {param_pack_type_id, SpvDecorationBlock});
-    // We always pass in the parameter pack as the first binding
-    add_instruction(spir_v_annotations, SpvOpDecorate, {param_pack_id, SpvDecorationDescriptorSet, 0});
-    add_instruction(spir_v_annotations, SpvOpDecorate, {param_pack_id, SpvDecorationBinding, 0});
+    builder.add_annotation( param_struct_type_id, SpvDecorationBlock );
 
-    // Add a struct type for the parameter pack and a pointer to it
-    add_instruction(spir_v_types, SpvOpTypeStruct, scalar_types);
-    add_instruction(spir_v_types, SpvOpTypePointer, {param_pack_ptr_type_id, SpvStorageClassUniform, param_pack_type_id});
     // Add a variable for the parameter pack
-    add_instruction(spir_v_types, SpvOpVariable, {param_pack_ptr_type_id, param_pack_id, SpvStorageClassUniform});
+    SpvId param_pack_ptr_type_id = builder.declare_pointer_type(param_struct_type_id, SpvStorageClassUniform);
+    SpvId param_pack_var_id = builder.declare_global_variable(unique_name("kernel_params"), param_pack_ptr_type_id, SpvStorageClassUniform);
+
+    // We always pass in the parameter pack as the first binding
+    SpvBuilder::Literals zero_literal = {0};
+    builder.add_annotation( param_pack_var_id, SpvDecorationDescriptorSet, zero_literal );
+    builder.add_annotation( param_pack_var_id, SpvDecorationBinding, zero_literal );
 
     uint32_t binding_counter = 1;
     uint32_t scalar_index = 0;
-    for (const DeviceArgument &arg : args) {
-        uint32_t param_id = next_id++;
+    for (const auto &arg : args) {
         if (arg.is_buffer) {
-            uint32_t element_type = map_type(arg.type);
-            uint32_t runtime_arr_type = next_id++;
-            uint32_t struct_type = next_id++;
-            uint32_t ptr_struct_type = next_id++;
-            add_instruction(spir_v_types, SpvOpTypeRuntimeArray, {runtime_arr_type, element_type});
-            add_instruction(spir_v_types, SpvOpTypeStruct, {struct_type, runtime_arr_type});
-            add_instruction(spir_v_types, SpvOpTypePointer, {ptr_struct_type, SpvStorageClassUniform, struct_type});
+            SpvId element_type_id = builder.declare_type(arg.type);
+            SpvId runtime_arr_type_id = builder.add_runtime_array(element_type_id);
+            SpvBuilder::StructMemberTypes struct_member_types = { runtime_arr_type_id };
+            SpvId struct_type_id = builder.declare_struct( unique_name("param_buffer_" + std::to_string(binding_counter)), struct_member_types );
+            SpvId ptr_struct_type_id = builder.declare_pointer_type(struct_type_id, SpvStorageClassUniform);
+            SpvId param_id = builder.declare_global_variable( unique_name("param_" + arg.name), ptr_struct_type_id, SpvStorageClassUniform);
+
             // Annotate the struct to indicate it's passed in a GLSL-style buffer block
-            add_instruction(spir_v_annotations, SpvOpDecorate, {struct_type, SpvDecorationBufferBlock});
+            builder.add_annotation(struct_type_id, SpvDecorationBufferBlock);
+
             // Annotate the array with its stride
-            add_instruction(spir_v_annotations, SpvOpDecorate, {runtime_arr_type, SpvDecorationArrayStride, (uint32_t)(arg.type.bytes())});
+            SpvBuilder::Literals array_stride = { (uint32_t)(arg.type.bytes()) };
+            builder.add_annotation(runtime_arr_type_id, SpvDecorationArrayStride, array_stride);
+
             // Annotate the offset for the array
-            add_instruction(spir_v_annotations, SpvOpMemberDecorate, {struct_type, 0, SpvDecorationOffset, (uint32_t)0});
+            SpvBuilder::Literals zero_literal = { uint32_t(0) };
+            builder.add_struct_annotation(struct_type_id, 0, SpvDecorationOffset, zero_literal);
 
             // Set DescriptorSet and Binding
-            add_instruction(spir_v_annotations, SpvOpDecorate, {param_id, SpvDecorationDescriptorSet, 0});
-            add_instruction(spir_v_annotations, SpvOpDecorate, {param_id, SpvDecorationBinding, binding_counter++});
+            SpvBuilder::Literals binding_index = { uint32_t(binding_counter++) };
+            builder.add_annotation(param_id, SpvDecorationDescriptorSet, zero_literal);
+            builder.add_annotation(param_id, SpvDecorationBinding, binding_index);
+            symbol_table.push(arg.name, {param_id, SpvStorageClassUniform});
 
-            add_instruction(spir_v_types, SpvOpVariable, {ptr_struct_type, param_id, SpvStorageClassUniform});
         } else {
-            uint32_t access_chain_id = next_id++;
-            add_instruction(SpvOpInBoundsAccessChain, {map_pointer_type(arg.type, SpvStorageClassUniform),
-                                                       access_chain_id,
-                                                       param_pack_id,
-                                                       emit_constant(UInt(32), &scalar_index)});
+
+            SpvId arg_type_id = builder.declare_type(arg.type);
+            SpvId access_index_id = builder.declare_constant(UInt(32), &scalar_index);
+            SpvId pointer_type_id = builder.declare_pointer_type(arg_type_id, SpvStorageClassUniform);
+            SpvId access_chain_id = builder.declare_access_chain(pointer_type_id, param_pack_var_id, access_index_id, {});
             scalar_index++;
-            add_instruction(SpvOpLoad, {map_type(arg.type), param_id, access_chain_id});
+
+            SpvId param_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::load(arg_type_id, param_id, access_chain_id));
+            symbol_table.push(arg.name, {param_id, SpvStorageClassUniform});
         }
-        symbol_table.push(arg.name, {param_id, SpvStorageClassUniform});
     }
 
     s.accept(this);
 
-    // Insert return and  function end delimiter
-    add_instruction(SpvOpReturn, {});
-    add_instruction(SpvOpFunctionEnd, {});
-
-    // Insert the allocations in the right place
-    auto it = spir_v_kernels.begin() + index;
-    spir_v_kernels.insert(it, spir_v_kernel_allocations.begin(), spir_v_kernel_allocations.end());
-    spir_v_kernel_allocations.clear();
+    // Insert return statement end delimiter
+    kernel_func.entry_block().add_instruction( SpvFactory::return_stmt() );
 
     workgroup_size[0] = std::max(workgroup_size[0], (uint32_t)1);
     workgroup_size[1] = std::max(workgroup_size[1], (uint32_t)1);
     workgroup_size[2] = std::max(workgroup_size[2], (uint32_t)1);
+
     // Add workgroup size to execution mode
-    add_instruction(spir_v_execution_modes, SpvOpExecutionMode,
-                    {current_function_id, SpvExecutionModeLocalSize,
-                     workgroup_size[0], workgroup_size[1], workgroup_size[2]});
+    SpvInstruction exec_mode_inst = SpvFactory::exec_mode_local_size( kernel_func_id, workgroup_size[0], workgroup_size[1], workgroup_size[2] );
+    builder.current_module().add_execution_mode( exec_mode_inst );
 
     // Pop scope
-    for (const DeviceArgument &arg : args) {
+    for (const auto &arg : args) {
         symbol_table.pop(arg.name);
     }
-
-    // Reset to an invalid value for safety.
-    current_function_id = 0;
+    builder.leave_block();
+    builder.leave_function();
 }
 
 CodeGen_Vulkan_Dev::CodeGen_Vulkan_Dev(Target t) {
 }
 
-namespace {
-void add_extension(const std::string &extension_name, std::vector<uint32_t> &section) {
-    uint32_t extra_words = (extension_name.size() + 1 + 3) / 4;
-    section.push_back(((1 + extra_words) << 16) | SpvOpExtension);
-
-    const char *data_temp = (const char *)extension_name.c_str();
-    const size_t data_size = extension_name.size();
-    encode_string(section, extra_words, data_size, data_temp);
-}
-}  // namespace
 void CodeGen_Vulkan_Dev::init_module() {
-    debug(2) << "Vulkan device codegen init_module\n";
-
-    // Header.
-    emitter.spir_v_header.push_back(SpvMagicNumber);
-    emitter.spir_v_header.push_back(SpvVersion);
-    emitter.spir_v_header.push_back(SpvSourceLanguageUnknown);
-    emitter.spir_v_header.push_back(0);  // Bound placeholder
-    emitter.spir_v_header.push_back(0);  // Reserved for schema.
-
-    // the unique void type
-    emitter.next_id++;  // 0 is not a valid id
-    emitter.void_id = emitter.next_id++;
-    emitter.add_instruction(emitter.spir_v_types, SpvOpTypeVoid, {emitter.void_id});
-
-    // Capabilities
-    // TODO: only add those required by the generated code
-    emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityShader});
-    // emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityInt8});
-    // emitter.add_instruction(emitter.spir_v_header, SpvOpCapability, {SpvCapabilityUniformAndStorageBuffer8BitAccess});
-
-    // Extensions
-    // TODO: only add those required by the generated code
-    add_extension(std::string("SPV_KHR_8bit_storage"), emitter.spir_v_header);
-
-    // Memory model
-    // TODO: 32-bit or 64-bit?
-    // TODO: Which memory model?
-    emitter.add_instruction(emitter.spir_v_header, SpvOpMemoryModel,
-                            {SpvAddressingModelLogical, SpvMemoryModelGLSL450});
-
-    // OpCapability instructions
-    //    Enumerate type maps and add subwidth integer types if used
-    // OpExtensions instructions
-    // OpExtImport instructions
-    // One OpMemoryModelInstruction
-    // OpEntryPoint instructions -- tricky as we don't know them until the kernels are added. May need to insert as we go.
-    // OpExecutionMode or OpExecutionModeId -- are these also added at add_kernel time?
-    // debug -- empty?
-    // annotation
-    //     I believe alignment info for load/store/etc. is done with annotations.
-    //     Also need various annotations for SIMT intrinsics, struct layouts, etc
-    // OpType instructions. Contained in spir_v_types member.
-    // Function declarations. Are there any?
-    // Function bodies -- one per add_kernel
+    debug(2) << "CodeGen_Vulkan_Dev::init_module\n";
+    emitter.init_module();
 }
 
 void CodeGen_Vulkan_Dev::add_kernel(Stmt stmt,
                                     const std::string &name,
                                     const std::vector<DeviceArgument> &args) {
+
+    debug(2) << "CodeGen_Vulkan_Dev::add_kernel " << name << "\n";
+
+    // We need to scalarize/de-predicate any loads/stores, since Vulkan does not support predication.
+    stmt = scalarize_predicated_loads_stores(stmt);
+
+    debug(2) << "CodeGen_Vulkan_Dev: after removing predication: \n"
+             << stmt;
+
     current_kernel_name = name;
     emitter.add_kernel(stmt, name, args);
-    // dump();
+
+    // dump the SPIRV file if requested
+    if(getenv("HL_SPIRV_DUMP_FILE")) {
+        dump();
+    }
 }
 
 std::vector<char> CodeGen_Vulkan_Dev::compile_to_src() {
-    //#ifdef WITH_VULKAN
-
-    emitter.spir_v_header[3] = emitter.next_id;
-
-    std::vector<char> final_module;
-    size_t total_size = (emitter.spir_v_header.size() + emitter.spir_v_entrypoints.size() + emitter.spir_v_execution_modes.size() + emitter.spir_v_annotations.size() + emitter.spir_v_types.size() + emitter.spir_v_kernels.size()) * sizeof(uint32_t);
-    final_module.reserve(total_size);
-    final_module.insert(final_module.end(), (const char *)emitter.spir_v_header.data(), (const char *)(emitter.spir_v_header.data() + emitter.spir_v_header.size()));
-    final_module.insert(final_module.end(), (const char *)emitter.spir_v_entrypoints.data(), (const char *)(emitter.spir_v_entrypoints.data() + emitter.spir_v_entrypoints.size()));
-    final_module.insert(final_module.end(), (const char *)emitter.spir_v_execution_modes.data(), (const char *)(emitter.spir_v_execution_modes.data() + emitter.spir_v_execution_modes.size()));
-    final_module.insert(final_module.end(), (const char *)emitter.spir_v_annotations.data(), (const char *)(emitter.spir_v_annotations.data() + emitter.spir_v_annotations.size()));
-    final_module.insert(final_module.end(), (const char *)emitter.spir_v_types.data(), (const char *)(emitter.spir_v_types.data() + emitter.spir_v_types.size()));
-    final_module.insert(final_module.end(), (const char *)emitter.spir_v_kernels.data(), (const char *)(emitter.spir_v_kernels.data() + emitter.spir_v_kernels.size()));
-    assert(final_module.size() == total_size);
-    std::ofstream f("/home/skamil/out.spv", std::ios::out | std::ios::binary);
-    f.write((char *)(final_module.data()), final_module.size());
-    f.close();
-
-    return final_module;
-
-    //#endif
+    debug(2) << "CodeGen_Vulkan_Dev::compile_to_src\n";
+    std::vector<char> module;
+    emitter.compile(module);
+    return module;
 }
 
 std::string CodeGen_Vulkan_Dev::get_current_kernel_name() {
@@ -1286,10 +1153,10 @@ std::string CodeGen_Vulkan_Dev::print_gpu_name(const std::string &name) {
 }
 
 void CodeGen_Vulkan_Dev::dump() {
-    // TODO: Figure out what goes here.
-    // For now: dump to file so source can be consumed by validator
-    auto module = compile_to_src();
-    std::ofstream f("out.spv", std::ios::out | std::ios::binary);
+    std::vector<char> module = compile_to_src();
+    const char *filename = getenv("HL_SPIRV_DUMP_FILE") ? getenv("HL_SPIRV_DUMP_FILE") : "out.spv";
+    debug(1) << "Vulkan: Dumping SPIRV module to file: '" << filename << "'\n";
+    std::ofstream f(filename, std::ios::out | std::ios::binary);
     f.write((char *)(module.data()), module.size());
     f.close();
 }
@@ -1302,3 +1169,17 @@ std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_Vulkan_Dev(const Target &target) {
 
 }  // namespace Internal
 }  // namespace Halide
+
+#else // WITH_SPIRV
+
+namespace Halide {
+namespace Internal {
+
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_Vulkan_Dev(const Target &target) {
+    return nullptr;
+}
+
+}  // namespace Internal
+}  // namespace Halide
+
+#endif // WITH_SPIRV
