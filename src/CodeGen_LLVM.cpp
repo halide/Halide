@@ -1881,7 +1881,13 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module.get());
     if (d.getPointerSize() == 8) {
-        index = builder->CreateIntCast(index, i64_t, true);
+        llvm::Type *index_type = index->getType();
+        llvm::Type *desired_index_type = i64_t;
+        if (isa<VectorType>(index_type)) {
+            desired_index_type = VectorType::get(desired_index_type,
+                                                 dyn_cast<VectorType>(index_type)->getElementCount());
+        }
+        index = builder->CreateIntCast(index, desired_index_type, true);
     }
 
     return CreateInBoundsGEP(builder, load_type, base_address, index);
