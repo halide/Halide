@@ -1,11 +1,6 @@
 #include <algorithm>
 #include <sstream>
 
-// XXX
-#ifndef WITH_SPIRV
-#define WITH_SPIRV
-#endif
-
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Vulkan_Dev.h"
