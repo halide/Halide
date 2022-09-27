@@ -189,6 +189,7 @@ public:
     SpvFunction(SpvFunction &&) = default;
     SpvFunction &operator=(SpvFunction &&) = default;
 
+    SpvBlock create_block(SpvId block_id);
     void add_block(const SpvBlock &block);
     void add_parameter(const SpvInstruction &param);
     void set_module(SpvModule module);
@@ -197,6 +198,7 @@ public:
     bool is_defined() const;
 
     SpvBlock entry_block() const;
+    SpvBlock last_block() const;
     SpvPrecision return_precision() const;
     SpvPrecision parameter_precision(uint32_t index) const;
     uint32_t parameter_count() const;
@@ -348,6 +350,7 @@ public:
     bool is_capability_required(SpvCapability) const;
 
     void enter_block(const SpvBlock &block);
+    SpvBlock create_block(SpvId block_id);
     SpvBlock current_block() const;
     SpvBlock leave_block();
 
@@ -387,13 +390,9 @@ protected:
     using ScopeMap = std::unordered_map<SpvId, SpvId>;
     using IdSymbolMap = std::unordered_map<SpvId, std::string>;
     using SymbolIdMap = std::unordered_map<std::string, SpvId>;
-    using InstructionMap = std::unordered_map<SpvId, SpvInstruction>;
     using FunctionTypeKey = uint64_t;
     using FunctionTypeMap = std::unordered_map<FunctionTypeKey, SpvId>;
     using FunctionMap = std::unordered_map<SpvId, SpvFunction>;
-    using FunctionStack = std::stack<SpvFunction>;
-    using BlockStack = std::stack<SpvBlock>;
-    using IdStack = std::stack<SpvId>;
 
     SpvId make_id(SpvKind kind);
 
@@ -418,18 +417,15 @@ protected:
     ConstantKey make_null_constant_key(const Type &type) const;
     SpvId lookup_null_constant(const Type &type) const;
 
-    SpvId map_instruction(const SpvInstruction &inst);
-    SpvInstruction lookup_instruction(SpvId result_id) const;
-    bool has_instruction(SpvId inst) const;
-
     SpvId lookup_variable(const std::string &name, SpvId type_id, SpvStorageClass storage_class, SpvId scope_id) const;
     bool has_variable(const std::string &name, SpvId type_id, SpvStorageClass storage_class, SpvId scope_id) const;
 
     FunctionTypeKey make_function_type_key(SpvId return_type_id, const ParamTypes &param_type_ids) const;
     SpvId lookup_function_type(SpvId return_type_id, const ParamTypes &param_type_ids) const;
 
-    SpvId scope_id = SpvInvalidId;
     SpvId active_id = SpvInvalidId;
+    SpvFunction active_function;
+    SpvBlock active_block;
     SpvModule module;
     KindMap kind_map;
     TypeMap type_map;
@@ -440,13 +436,10 @@ protected:
     FunctionMap function_map;
     IdSymbolMap id_symbol_map;
     SymbolIdMap symbol_id_map;
-    InstructionMap instruction_map;
     StorageClassMap storage_class_map;
     PointerTypeMap pointer_type_map;
     VariableTypeMap variable_type_map;
     FunctionTypeMap function_type_map;
-    FunctionStack function_stack;
-    BlockStack block_stack;
 };
 
 /** Factory interface for constructing specific SPIR-V instructions */

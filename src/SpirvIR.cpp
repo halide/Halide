@@ -284,8 +284,27 @@ bool SpvFunction::is_defined() const {
     return contents.defined();
 }
 
+SpvBlock SpvFunction::create_block(SpvId block_id) {
+    check_defined();
+    if(contents->blocks.size()) {
+        SpvBlock tail_block = last_block();
+        if(!tail_block.is_terminated()) {
+            tail_block.add_instruction(SpvFactory::branch(block_id));
+        }
+    }
+    SpvBlock block = SpvBlock::make(*this, block_id);
+    contents->blocks.push_back(block);
+    return block;
+}
+
 void SpvFunction::add_block(const SpvBlock &block) {
     check_defined();
+    if(contents->blocks.size()) {
+        SpvBlock tail_block = last_block();
+        if(!tail_block.is_terminated()) {
+            tail_block.add_instruction(SpvFactory::branch(block.id()));
+        }
+    }
     contents->blocks.push_back(block);
 }
 
@@ -302,6 +321,11 @@ uint32_t SpvFunction::parameter_count() const {
 SpvBlock SpvFunction::entry_block() const {
     check_defined();
     return contents->blocks.front();
+}
+
+SpvBlock SpvFunction::last_block() const {
+    check_defined();
+    return contents->blocks.back();
 }
 
 SpvPrecision SpvFunction::return_precision() const {
@@ -653,20 +677,15 @@ void SpvBuilder::reset() {
     function_map.clear();
     id_symbol_map.clear();
     symbol_id_map.clear();
-    instruction_map.clear();
     storage_class_map.clear();
     pointer_type_map.clear();
     variable_type_map.clear();
     function_type_map.clear();
 
-    FunctionStack empty_fs;
-    function_stack.swap(empty_fs);
-
-    BlockStack empty_bs;
-    block_stack.swap(empty_bs);
-
-    scope_id = SpvInvalidId;
     active_id = SpvInvalidId;
+    active_block = SpvBlock();
+    active_function = SpvFunction();
+    
     SpvId module_id = make_id(SpvModuleId);
     module = SpvModule::make(module_id);
 }
@@ -951,7 +970,6 @@ SpvId SpvBuilder::add_function(const std::string &name, SpvId return_type_id, co
         SpvId param_id = make_id(SpvParameterId);
         SpvInstruction param_inst = SpvFactory::function_parameter(param_type_id, param_id);
         func.add_parameter(param_inst);
-        map_instruction(param_inst);
     }
     SpvId block_id = make_id(SpvBlockId);
     SpvBlock entry_block = SpvBlock::make(func, block_id);
@@ -959,7 +977,6 @@ SpvId SpvBuilder::add_function(const std::string &name, SpvId return_type_id, co
     module.add_function(func);
     function_map[func_id] = func;
     declare_symbol(name, func_id, module.id());
-    map_instruction(func.declaration());
     return func_id;
 }
 
@@ -995,24 +1012,21 @@ void SpvBuilder::add_execution_mode_local_size(SpvId func_id,
 }
 
 void SpvBuilder::enter_block(const SpvBlock &block) {
-    block_stack.push(block);
+    active_block = block;
 }
 
 SpvBlock SpvBuilder::current_block() const {
-    SpvBlock block;
-    if (!block_stack.empty()) {
-        block = block_stack.top();
-    }
-    return block;
+    return active_block;
+}
+
+SpvBlock SpvBuilder::create_block(SpvId block_id) {
+    return current_function().create_block(block_id);
 }
 
 SpvBlock SpvBuilder::leave_block() {
-    SpvBlock block;
-    if (!block_stack.empty()) {
-        block = block_stack.top();
-        block_stack.pop();
-    }
-    return block;
+    SpvBlock prev_block = active_block;
+    active_block = SpvBlock();
+    return prev_block;
 }
 
 SpvFunction SpvBuilder::lookup_function(SpvId func_id) const {
@@ -1060,26 +1074,18 @@ SpvId SpvBuilder::lookup_scope(SpvId id) const {
 }
 
 void SpvBuilder::enter_function(const SpvFunction &func) {
-    function_stack.push(func);
-    enter_block(func.entry_block());
+    active_function = func;
+    enter_block(active_function.entry_block());
 }
 
 SpvFunction SpvBuilder::current_function() const {
-    SpvFunction func;
-    if (!function_stack.empty()) {
-        func = function_stack.top();
-    }
-    return func;
+    return active_function;
 }
 
 SpvFunction SpvBuilder::leave_function() {
-    SpvFunction func;
-    leave_block();
-    if (!function_stack.empty()) {
-        func = function_stack.top();
-        function_stack.pop();
-    }
-    return func;
+    SpvFunction prev_func = active_function;
+    active_function = SpvFunction();
+    return prev_func;
 }
 
 SpvId SpvBuilder::current_id() const {
@@ -1550,24 +1556,6 @@ SpvId SpvBuilder::declare_access_chain(SpvId ptr_type_id, SpvId base_id, SpvId e
     return access_chain_id;
 }
 
-SpvId SpvBuilder::map_instruction(const SpvInstruction &inst) {
-    const SpvId key = inst.result_id();
-    if (instruction_map.find(key) == instruction_map.end()) {
-        instruction_map.insert({key, inst});
-    } else {
-        instruction_map[key] = inst;
-    }
-    return key;
-}
-
-SpvInstruction SpvBuilder::lookup_instruction(SpvId result_id) const {
-    InstructionMap::const_iterator it = instruction_map.find(result_id);
-    if (it == instruction_map.end()) {
-        return SpvInstruction();
-    }
-    return it->second;
-}
-
 SpvBuilder::FunctionTypeKey SpvBuilder::make_function_type_key(SpvId return_type_id, const ParamTypes &param_type_ids) const {
     TypeKey key = hash_splitmix64(return_type_id);
     for (SpvId type_id : param_type_ids) {
@@ -1612,8 +1600,8 @@ SpvId SpvBuilder::add_runtime_array(SpvId base_type_id) {
 }
 
 void SpvBuilder::append(SpvInstruction inst) {
-    if (!block_stack.empty()) {
-        current_block().add_instruction(std::move(inst));
+    if (active_block.is_defined()) {
+        active_block.add_instruction(std::move(inst));
     } else {
         internal_error << "SPIRV: Current block undefined! Unable to append!\n";
     }

@@ -746,43 +746,56 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         // Declare loop var
         SpvId loop_var_id = builder.declare_variable(unique_name("loop_index"), index_var_type_id, SpvStorageClassFunction, min_id);
 
-        SpvId header_label_id = builder.reserve_id(SpvLabelId);
-        SpvId loop_top_label_id = builder.reserve_id(SpvLabelId);
-        SpvId body_label_id = builder.reserve_id(SpvLabelId);
-        SpvId continue_label_id = builder.reserve_id(SpvLabelId);
-        SpvId merge_label_id = builder.reserve_id(SpvLabelId);
+        SpvId header_block_id = builder.reserve_id(SpvBlockId);
+        SpvId top_block_id = builder.reserve_id(SpvBlockId);
+        SpvId body_block_id = builder.reserve_id(SpvBlockId);
+        SpvId continue_block_id = builder.reserve_id(SpvBlockId);
+        SpvId merge_block_id = builder.reserve_id(SpvBlockId);
 
-        builder.append(SpvFactory::label(header_label_id));
-        builder.append(SpvFactory::loop_merge(merge_label_id, continue_label_id, SpvLoopControlMaskNone));
-        builder.append(SpvFactory::branch(loop_top_label_id));
-        builder.append(SpvFactory::label(loop_top_label_id));
-
-        // loop test.
-        SpvId cur_index_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::load(index_type_id, cur_index_id, loop_var_id));
-
-        SpvId loop_test_type_id = builder.declare_type(Bool());
-        SpvId loop_test_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::less_than_equal(loop_test_type_id, loop_test_id, cur_index_id, max_id, true));
-        builder.append(SpvFactory::conditional_branch(loop_test_id, body_label_id, merge_label_id));
-        builder.append(SpvFactory::label(body_label_id));
-
+        SpvBlock header_block = builder.create_block(header_block_id);
+        builder.enter_block(header_block);
         {
-            ScopedSymbolBinding binding(symbol_table, op->name, {cur_index_id, SpvStorageClassFunction});
-            op->body.accept(this);
+            builder.append(SpvFactory::loop_merge(merge_block_id, continue_block_id, SpvLoopControlMaskNone));
+            builder.append(SpvFactory::branch(top_block_id));
         }
-        builder.append(SpvFactory::branch(continue_label_id));
-        builder.append(SpvFactory::label(continue_label_id));
+        builder.leave_block();
 
-        // Update loop variable
-        int32_t one = 1;
-        SpvId next_index_id = builder.reserve_id(SpvResultId);
-        SpvId constant_one_id = builder.declare_constant(Int(32), &one);
-        builder.append(SpvFactory::integer_add(index_type_id, next_index_id, cur_index_id, constant_one_id));
-        builder.append(SpvFactory::store(loop_var_id, next_index_id));
+        SpvId current_index_id = builder.reserve_id(SpvResultId);
+        SpvBlock top_block = builder.create_block(top_block_id);
+        builder.enter_block(top_block);
+        {
+            SpvId loop_test_type_id = builder.declare_type(Bool());
+            SpvId loop_test_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::load(index_type_id, current_index_id, loop_var_id));
+            builder.append(SpvFactory::less_than_equal(loop_test_type_id, loop_test_id, current_index_id, max_id, true));
+            builder.append(SpvFactory::conditional_branch(loop_test_id, body_block_id, merge_block_id));
+        }
+        builder.leave_block();
 
-        builder.append(SpvFactory::branch(header_label_id));
-        builder.append(SpvFactory::label(merge_label_id));
+        SpvBlock body_block = builder.create_block(body_block_id);
+        builder.enter_block(body_block);
+        {
+            ScopedSymbolBinding binding(symbol_table, op->name, {current_index_id, SpvStorageClassFunction});
+            op->body.accept(this);
+            builder.append(SpvFactory::branch(continue_block_id));
+        }
+        builder.leave_block();
+
+        SpvBlock continue_block = builder.create_block(continue_block_id);
+        builder.enter_block(continue_block);
+        {
+            // Update loop variable
+            int32_t one = 1;
+            SpvId next_index_id = builder.reserve_id(SpvResultId);
+            SpvId constant_one_id = builder.declare_constant(Int(32), &one);
+            builder.append(SpvFactory::integer_add(index_type_id, next_index_id, current_index_id, constant_one_id));
+            builder.append(SpvFactory::store(loop_var_id, next_index_id));
+            builder.append(SpvFactory::branch(header_block_id));
+        }
+        builder.leave_block();
+
+        SpvBlock merge_block = builder.create_block(merge_block_id);
+        builder.enter_block(merge_block);
     }
 }
 
@@ -847,37 +860,52 @@ CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
                                                      StmtOrExpr then_case, StmtOrExpr else_case) {
     condition.accept(this);
     SpvId cond_id = builder.current_id();
-    SpvId then_label_id = builder.reserve_id(SpvLabelId);
-    SpvId else_label_id = builder.reserve_id(SpvLabelId);
-    SpvId merge_label_id = builder.reserve_id(SpvLabelId);
+    SpvId merge_block_id = builder.reserve_id(SpvBlockId);
+//    SpvId if_block_id = builder.reserve_id(SpvBlockId);
+    SpvId then_block_id = builder.reserve_id(SpvBlockId);
+    SpvId else_block_id = else_case.defined() ? builder.reserve_id(SpvBlockId) : merge_block_id;
+ 
+    SpvFactory::BlockVariables block_vars;
 
     // If Conditional
-    builder.append(SpvFactory::selection_merge(merge_label_id, SpvSelectionControlMaskNone));
-    builder.append(SpvFactory::conditional_branch(cond_id, then_label_id, else_label_id));
+//    SpvBlock if_block = builder.create_block(if_block_id);
+//    builder.enter_block(if_block);
+//    {
+        builder.append(SpvFactory::selection_merge(merge_block_id, SpvSelectionControlMaskNone));
+        builder.append(SpvFactory::conditional_branch(cond_id, then_block_id, else_block_id));
+//    }
+//    builder.leave_block();
 
     // Then block
-    builder.append(SpvFactory::label(then_label_id));
-    then_case.accept(this);
-    SpvId then_id = builder.current_id();
-    builder.append(SpvFactory::branch(merge_label_id));
-
-    SpvFactory::BlockVariables block_vars = {
-        {then_id, then_label_id}};
+    SpvBlock then_block = builder.create_block(then_block_id);
+    builder.enter_block(then_block);
+    {
+        then_case.accept(this);
+        SpvId then_id = builder.current_id();
+        builder.append(SpvFactory::branch(merge_block_id));
+        block_vars.push_back({then_id, then_block_id});
+    }
+    builder.leave_block();
 
     // Else block (optional)
-    builder.append(SpvFactory::label(else_label_id));
     if (else_case.defined()) {
-        else_case.accept(this);
-        SpvId else_id = builder.current_id();
-        block_vars.push_back({else_id, else_label_id});
+        SpvBlock else_block = builder.create_block(else_block_id);
+        builder.enter_block(else_block);
+        {
+            else_case.accept(this);
+            SpvId else_id = builder.current_id();
+            builder.append(SpvFactory::branch(merge_block_id));
+            block_vars.push_back({else_id, else_block_id});
+        }
+        builder.leave_block();
     }
-    builder.append(SpvFactory::branch(merge_label_id));
 
-    // Merge label
-    builder.append(SpvFactory::label(merge_label_id));
-
+    // Merge block
+    SpvBlock merge_block = builder.create_block(merge_block_id);
+    builder.enter_block(merge_block);
     return block_vars;
 }
+
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const IfThenElse *op) {
     emit_if_then_else(op->condition, op->then_case, op->else_case);
@@ -974,8 +1002,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     SpvId kernel_func_id = builder.add_function(name, void_type_id);
     SpvFunction kernel_func = builder.lookup_function(kernel_func_id);
     builder.enter_function(kernel_func);
-    builder.enter_block(kernel_func.entry_block());
-    //    SpvId start_label_id = kernel_func.entry_block().id();
 
     // TODO: only add the SIMT intrinsics used
     SpvFactory::Variables entry_point_variables;
@@ -1083,7 +1109,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     s.accept(this);
 
     // Insert return statement end delimiter
-    kernel_func.entry_block().add_instruction(SpvFactory::return_stmt());
+    kernel_func.last_block().add_instruction(SpvFactory::return_stmt());
 
     workgroup_size[0] = std::max(workgroup_size[0], (uint32_t)1);
     workgroup_size[1] = std::max(workgroup_size[1], (uint32_t)1);
