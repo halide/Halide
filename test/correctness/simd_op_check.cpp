@@ -616,6 +616,7 @@ public:
     void check_neon_all() {
         Expr f64_1 = in_f64(x), f64_2 = in_f64(x + 16), f64_3 = in_f64(x + 32);
         Expr f32_1 = in_f32(x), f32_2 = in_f32(x + 16), f32_3 = in_f32(x + 32);
+        Expr f16_1 = in_f16(x), f16_2 = in_f16(x + 16), f16_3 = in_f16(x + 32);
         Expr i8_1 = in_i8(x), i8_2 = in_i8(x + 16), i8_3 = in_i8(x + 32);
         Expr u8_1 = in_u8(x), u8_2 = in_u8(x + 16), u8_3 = in_u8(x + 32);
         Expr i16_1 = in_i16(x), i16_2 = in_i16(x + 16), i16_3 = in_i16(x + 32);
@@ -1411,6 +1412,14 @@ public:
 
             // VRSQRTS  F       -       Reciprocal Square Root Step
             check(arm32 ? "vrsqrts.f32" : "frsqrts", 4 * w, fast_inverse_sqrt(f32_1));
+
+            // VFRINTN
+            if (target.bits == 64) {
+                // LLVM doesn't want to emit vfrintn on arm-32
+                check(arm32 ? "vfrintn.f16" : "frintn", 8 * w, round(f16_1));
+                check(arm32 ? "vfrintn.f32" : "frintn", 4 * w, round(f32_1));
+                check(arm32 ? "vfrintn.f64" : "frintn", 2 * w, round(f64_1));
+            }
 
             // VRSRA    I       -       Rounding Shift Right and Accumulate
             check(arm32 ? "vrsra.s8" : "srsra", 16 * w, i8_2 + i8((i16(i8_1) + 4) >> 3));
