@@ -861,20 +861,20 @@ CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
     condition.accept(this);
     SpvId cond_id = builder.current_id();
     SpvId merge_block_id = builder.reserve_id(SpvBlockId);
-//    SpvId if_block_id = builder.reserve_id(SpvBlockId);
+    //    SpvId if_block_id = builder.reserve_id(SpvBlockId);
     SpvId then_block_id = builder.reserve_id(SpvBlockId);
     SpvId else_block_id = else_case.defined() ? builder.reserve_id(SpvBlockId) : merge_block_id;
- 
+
     SpvFactory::BlockVariables block_vars;
 
     // If Conditional
-//    SpvBlock if_block = builder.create_block(if_block_id);
-//    builder.enter_block(if_block);
-//    {
-        builder.append(SpvFactory::selection_merge(merge_block_id, SpvSelectionControlMaskNone));
-        builder.append(SpvFactory::conditional_branch(cond_id, then_block_id, else_block_id));
-//    }
-//    builder.leave_block();
+    //    SpvBlock if_block = builder.create_block(if_block_id);
+    //    builder.enter_block(if_block);
+    //    {
+    builder.append(SpvFactory::selection_merge(merge_block_id, SpvSelectionControlMaskNone));
+    builder.append(SpvFactory::conditional_branch(cond_id, then_block_id, else_block_id));
+    //    }
+    //    builder.leave_block();
 
     // Then block
     SpvBlock then_block = builder.create_block(then_block_id);
@@ -905,7 +905,6 @@ CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
     builder.enter_block(merge_block);
     return block_vars;
 }
-
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const IfThenElse *op) {
     emit_if_then_else(op->condition, op->then_case, op->else_case);
@@ -1109,7 +1108,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     s.accept(this);
 
     // Insert return statement end delimiter
-    kernel_func.last_block().add_instruction(SpvFactory::return_stmt());
+    kernel_func.tail_block().add_instruction(SpvFactory::return_stmt());
 
     workgroup_size[0] = std::max(workgroup_size[0], (uint32_t)1);
     workgroup_size[1] = std::max(workgroup_size[1], (uint32_t)1);

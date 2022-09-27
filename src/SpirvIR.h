@@ -198,7 +198,7 @@ public:
     bool is_defined() const;
 
     SpvBlock entry_block() const;
-    SpvBlock last_block() const;
+    SpvBlock tail_block() const;
     SpvPrecision return_precision() const;
     SpvPrecision parameter_precision(uint32_t index) const;
     uint32_t parameter_count() const;

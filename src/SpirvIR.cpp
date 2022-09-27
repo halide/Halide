@@ -286,10 +286,10 @@ bool SpvFunction::is_defined() const {
 
 SpvBlock SpvFunction::create_block(SpvId block_id) {
     check_defined();
-    if(contents->blocks.size()) {
-        SpvBlock tail_block = last_block();
-        if(!tail_block.is_terminated()) {
-            tail_block.add_instruction(SpvFactory::branch(block_id));
+    if (!contents->blocks.empty()) {
+        SpvBlock last_block = tail_block();
+        if (!last_block.is_terminated()) {
+            last_block.add_instruction(SpvFactory::branch(block_id));
         }
     }
     SpvBlock block = SpvBlock::make(*this, block_id);
@@ -299,10 +299,10 @@ SpvBlock SpvFunction::create_block(SpvId block_id) {
 
 void SpvFunction::add_block(const SpvBlock &block) {
     check_defined();
-    if(contents->blocks.size()) {
-        SpvBlock tail_block = last_block();
-        if(!tail_block.is_terminated()) {
-            tail_block.add_instruction(SpvFactory::branch(block.id()));
+    if (!contents->blocks.empty()) {
+        SpvBlock last_block = tail_block();
+        if (!last_block.is_terminated()) {
+            last_block.add_instruction(SpvFactory::branch(block.id()));
         }
     }
     contents->blocks.push_back(block);
@@ -323,7 +323,7 @@ SpvBlock SpvFunction::entry_block() const {
     return contents->blocks.front();
 }
 
-SpvBlock SpvFunction::last_block() const {
+SpvBlock SpvFunction::tail_block() const {
     check_defined();
     return contents->blocks.back();
 }
@@ -685,7 +685,7 @@ void SpvBuilder::reset() {
     active_id = SpvInvalidId;
     active_block = SpvBlock();
     active_function = SpvFunction();
-    
+
     SpvId module_id = make_id(SpvModuleId);
     module = SpvModule::make(module_id);
 }
