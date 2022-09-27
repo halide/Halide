@@ -186,10 +186,10 @@ class GeneratorParam:
         GeneratorParam._parse_value(r._name, type(self._value), self._value)
 
         if value is not None:
-            # parse replacement value for validity, and also for type match with default
-            self._value = GeneratorParam._parse_value(r._name, type(self._value), value)
-
-        return self._value
+            # parse replacement value for validity, and also for type match with default.
+            return GeneratorParam._parse_value(r._name, type(self._value), value)
+        else:
+            return self._value
 
     def _get_types_and_dimensions(self) -> (list[Type], int):
         # Use dummy type-and-dimensions here so that the ctor won't fail due to undefined status
@@ -664,7 +664,8 @@ class Generator(ABC):
             assert isinstance(gp, GeneratorParam)
             old_value = gp._value
             new_value = GeneratorParam._parse_value(name, type(old_value), value)
-            gp._value = new_value
+            # Do not mutate the existing GP in place; it could be shared across multiple Generators.
+            self._gp_dict[name] = GeneratorParam(new_value)
         elif name == "autoscheduler":
             _check(not self.autoscheduler().name, "The GeneratorParam %s cannot be set more than once" % name)
             self.autoscheduler().name = value
