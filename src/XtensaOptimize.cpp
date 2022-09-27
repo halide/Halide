@@ -918,25 +918,9 @@ private:
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
 
-            {"halide_xtensa_sat_narrow_with_rounding_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_u16))},
-            {"halide_xtensa_sat_narrow_with_rounding_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_u16))},
-            {"halide_xtensa_sat_narrow_with_rounding_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_u32))},
-            {"halide_xtensa_sat_narrow_with_rounding_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_u64))},
-
-            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_i16))},
-            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_i16))},
-            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_i32))},
-            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_i64))},
-
             {"halide_xtensa_narrow_with_rounding_shift_i8", i8(rounding_shift_right(wild_i16x, bc(wild_u16)))},
             {"halide_xtensa_narrow_with_rounding_shift_u8", u8(rounding_shift_right(wild_i16x, bc(wild_u16)))},
             {"halide_xtensa_narrow_with_rounding_shift_i16", i16(rounding_shift_right(wild_i32x, bc(wild_u32)))},
-
-            {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_i16x))},
-            {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_u16x))},
-
-            {"halide_xtensa_sat_left_shift_i32", i32_sat(widening_shift_left(wild_i32x, wild_i32x))},
-            {"halide_xtensa_sat_left_shift_i32", i32_sat(widening_shift_left(wild_i32x, wild_u32x))},
 
             // Looks like there is no such instruction.
             // {"halide_xtensa_sat_narrow_with_rounding_shift_u16", u16_sat(rounding_shift_right(wild_i32x, wild_u32))},
@@ -950,25 +934,10 @@ private:
             {"halide_xtensa_narrow_high_i32", i32(wild_i64x >> 32)},
             {"halide_xtensa_narrow_high_i32", i32(wild_i64x / IntImm::make(Int(64), 4294967296ll))},
 
-            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x >> bc(wild_i64))},
-            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x / bc(wild_i64)), Pattern::ExactLog2Op1},
-            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x >> bc(wild_u64))},
-            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x / bc(wild_u64)), Pattern::ExactLog2Op1},
-
             {"halide_xtensa_narrow_shift_i32", i32(wild_i64x >> bc(wild_i64))},
             {"halide_xtensa_narrow_shift_i32", i32(wild_i64x / bc(wild_i64)), Pattern::ExactLog2Op1},
             {"halide_xtensa_narrow_shift_i32", i32(wild_i64x >> bc(wild_u64))},
             {"halide_xtensa_narrow_shift_i32", i32(wild_i64x / bc(wild_u64)), Pattern::ExactLog2Op1},
-
-            {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) >> bc(wild_i16))},
-            {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) / bc(wild_i16)), Pattern::ExactLog2Op1},
-
-            {"halide_xtensa_sat_narrow_i8", i8_sat(wild_i16x)},
-            {"halide_xtensa_sat_narrow_u8", u8_sat(wild_i16x)},
-            {"halide_xtensa_sat_narrow_i16", i16_sat(wild_i32x)},
-            // TODO(vksnk): looks like there is no such instruction for unsigned types, but need to
-            // double-check.
-            // {"halide_xtensa_sat_narrow_u16", u16_sat(wild_i32x)},
 
             // Concat and cast.
             {"halide_xtensa_convert_concat_i16_to_i8", i8(halide_xtensa_concat_from_native_i16(wild_i16x, wild_i16x))},
@@ -1128,6 +1097,37 @@ private:
             // {"halide_xtensa_rounding_mul_shift_right_i8", rounding_mul_shift_right(wild_i8x, wild_i8x, bc(wild_u8))},
             // {"halide_xtensa_rounding_mul_shift_right_i16", rounding_mul_shift_right(wild_i16x, wild_i16x, bc(wild_u16))},
             // {"halide_xtensa_rounding_mul_shift_right_i32", rounding_mul_shift_right(wild_i32x, wild_i32x, bc(wild_u32))},
+
+            {"halide_xtensa_sat_narrow_with_rounding_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_u16))},
+            {"halide_xtensa_sat_narrow_with_rounding_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_u16))},
+            {"halide_xtensa_sat_narrow_with_rounding_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_u32))},
+            {"halide_xtensa_sat_narrow_with_rounding_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_u64))},
+
+            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_i16))},
+            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_i16))},
+            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_i32))},
+            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_i64))},
+
+            {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_i16x))},
+            {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_u16x))},
+
+            {"halide_xtensa_sat_left_shift_i32", i32_sat(widening_shift_left(wild_i32x, wild_i32x))},
+            {"halide_xtensa_sat_left_shift_i32", i32_sat(widening_shift_left(wild_i32x, wild_u32x))},
+
+            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x >> bc(wild_i64))},
+            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x / bc(wild_i64)), Pattern::ExactLog2Op1},
+            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x >> bc(wild_u64))},
+            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x / bc(wild_u64)), Pattern::ExactLog2Op1},
+
+            {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) >> bc(wild_i16))},
+            {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) / bc(wild_i16)), Pattern::ExactLog2Op1},
+
+            {"halide_xtensa_sat_narrow_i8", i8_sat(wild_i16x)},
+            {"halide_xtensa_sat_narrow_u8", u8_sat(wild_i16x)},
+            {"halide_xtensa_sat_narrow_i16", i16_sat(wild_i32x)},
+            // TODO(vksnk): looks like there is no such instruction for unsigned types, but need to
+            // double-check.
+            // {"halide_xtensa_sat_narrow_u16", u16_sat(wild_i32x)},
 
             {"halide_xtensa_rounding_shift_right_i8", rounding_shift_right(wild_i8x, bc(wild_u8))},
             // {"halide_xtensa_rounding_shift_right_u8", rounding_shift_right(wild_u8x, bc(wild_u8))},
