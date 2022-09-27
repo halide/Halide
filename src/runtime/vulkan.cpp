@@ -39,17 +39,17 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
                                        uint32_t *queue_family_index,
                                        bool create) {
 
-    halide_abort_if_false(user_context, instance != nullptr);
-    halide_abort_if_false(user_context, device != nullptr);
-    halide_abort_if_false(user_context, queue != nullptr);
-    halide_abort_if_false(user_context, &thread_lock != nullptr);
+    halide_debug_assert(user_context, instance != nullptr);
+    halide_debug_assert(user_context, device != nullptr);
+    halide_debug_assert(user_context, queue != nullptr);
+    halide_debug_assert(user_context, &thread_lock != nullptr);
     while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {}
 
     // If the context has not been initialized, initialize it now.
-    halide_abort_if_false(user_context, &cached_instance != nullptr);
-    halide_abort_if_false(user_context, &cached_device != nullptr);
-    halide_abort_if_false(user_context, &cached_queue != nullptr);
-    halide_abort_if_false(user_context, &cached_physical_device != nullptr);
+    halide_debug_assert(user_context, &cached_instance != nullptr);
+    halide_debug_assert(user_context, &cached_device != nullptr);
+    halide_debug_assert(user_context, &cached_queue != nullptr);
+    halide_debug_assert(user_context, &cached_physical_device != nullptr);
     if ((cached_instance == nullptr) && create) {
         int result = vk_create_context(user_context,
                                        reinterpret_cast<VulkanMemoryAllocator **>(&cached_allocator),

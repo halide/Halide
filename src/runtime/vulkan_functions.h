@@ -1,4 +1,4 @@
-// VULKAN_FN(vkCreateInstance)
+// NOTE: vkCreateInstance is already defined in the mini_vulkan header
 VULKAN_FN(vkDestroyInstance)
 VULKAN_FN(vkCreateDevice)
 VULKAN_FN(vkDestroyDevice)
