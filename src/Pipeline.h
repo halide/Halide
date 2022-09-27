@@ -547,17 +547,20 @@ public:
      * with the remaining arguments, and return
      * halide_error_code_requirement_failed. Requirements are checked
      * in the order added. */
-    void add_requirement(const Expr &condition, std::vector<Expr> &error);
+    // @{
+    void add_requirement(const Expr &condition, const std::vector<Expr> &error_args);
+
+    template<typename... Args,
+             typename = typename std::enable_if<Internal::all_are_printable_args<Args...>::value>::type>
+    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
+        std::vector<Expr> collected_args;
+        Internal::collect_print_args(collected_args, std::forward<Args>(error_args)...);
+        add_requirement(condition, collected_args);
+    }
+    // @}
 
     /** Generate begin_pipeline and end_pipeline tracing calls for this pipeline. */
     void trace_pipeline();
-
-    template<typename... Args>
-    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...args) {
-        std::vector<Expr> collected_args;
-        Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
-        add_requirement(condition, collected_args);
-    }
 
 private:
     std::string generate_function_name() const;

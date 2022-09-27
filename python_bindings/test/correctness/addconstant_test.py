@@ -23,7 +23,7 @@ def test(addconstant_impl_func, offset):
     scalar_u64 = 5724968371
     scalar_i8 = -7
     scalar_i16 = -30712
-    scalar_i32 = -98901
+    scalar_i32 = 98901
     scalar_i64 = -8163465847
     scalar_float = 3.14159
     scalar_double = 1.61803
@@ -92,6 +92,48 @@ def test(addconstant_impl_func, offset):
         for y in range(input_3d.shape[1]):
             for z in range(input_3d.shape[2]):
                 assert output_3d[x, y, z] == input_3d[x, y, z] + scalar_i8 + offset
+
+    try:
+        # Expected requirement failure #1
+        scalar_i32 = 0
+        addconstant_impl_func(
+            scalar_u1,
+            scalar_u8, scalar_u16, scalar_u32, scalar_u64,
+            scalar_i8, scalar_i16, scalar_i32, scalar_i64,
+            scalar_float, scalar_double,
+            input_u8, input_u16, input_u32, input_u64,
+            input_i8, input_i16, input_i32, input_i64,
+            input_float, input_double, input_2d, input_3d,
+            output_u8, output_u16, output_u32, output_u64,
+            output_i8, output_i16, output_i32, output_i64,
+            output_float, output_double, output_2d, output_3d,
+        )
+    except RuntimeError as e:
+        assert str(e) == "Halide Runtime Error: -27", e
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
+        # Expected requirement failure #2 -- note that for AOT-compiled
+        # code in Python, the error message is stricly numeric (the text
+        # of the error isn't currently propagated int he exception).
+        scalar_i32 = -1
+        addconstant_impl_func(
+            scalar_u1,
+            scalar_u8, scalar_u16, scalar_u32, scalar_u64,
+            scalar_i8, scalar_i16, scalar_i32, scalar_i64,
+            scalar_float, scalar_double,
+            input_u8, input_u16, input_u32, input_u64,
+            input_i8, input_i16, input_i32, input_i64,
+            input_float, input_double, input_2d, input_3d,
+            output_u8, output_u16, output_u32, output_u64,
+            output_i8, output_i16, output_i32, output_i64,
+            output_float, output_double, output_2d, output_3d,
+        )
+    except RuntimeError as e:
+        assert str(e) == "Halide Runtime Error: -27", e
+    else:
+        assert False, 'Did not see expected exception!'
 
 
 if __name__ == "__main__":

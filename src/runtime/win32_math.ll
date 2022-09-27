@@ -124,16 +124,16 @@ define weak_odr float @ceil_f32(float %x) nounwind uwtable readnone alwaysinline
        ret float %y
 }
 
-declare float @llvm.nearbyint.f32(float) nounwind readnone
-declare double @llvm.nearbyint.f64(double) nounwind readnone
+declare float @llvm.roundeven.f32(float) nounwind readnone
+declare double @llvm.roundeven.f64(double) nounwind readnone
 
 define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @llvm.nearbyint.f32(float %x) nounwind readnone
+       %y = tail call float @llvm.roundeven.f32(float %x) nounwind readnone
        ret float %y
 }
 
 define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call double @llvm.nearbyint.f64(double %x) nounwind readnone
+       %y = tail call double @llvm.roundeven.f64(double %x) nounwind readnone
        ret double %y
 }
 
