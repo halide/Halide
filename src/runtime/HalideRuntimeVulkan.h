@@ -44,15 +44,22 @@ extern void halide_vulkan_finalize_kernels(void *user_context, void *state_ptr);
 // Overriding implementations of acquire/release must implement the
 // following behavior:
 
-//  - halide_acquire_vulkan_context should always store a valid
+// - halide_acquire_vulkan_context should always store a valid
 //   instance/device/queue in the corresponding out parameters,
 //   or return an error code.
 // - A call to halide_acquire_vulkan_context is followed by a matching
 //   call to halide_release_vulkan_context. halide_acquire_vulkan_context
 //   should block while a previous call (if any) has not yet been
 //   released via halide_release_vulkan_context.
-// TODO: describe memory type index
-// TODO: describe queue family index
+// - Parameters:
+//      allocator: an internal halide type handle used for allocating resources
+//      instance: the vulkan instance handle
+//      device: the vulkan device handle
+//      physical_device: the vulkan physical device handle
+//      command_pool: the vulkan command pool handle (strangely doesn't have a VkCommandPool_T typedef)
+//      queue: the vulkan queue handle
+//      queue_family_index: the index corresponding to the device queue properties for the device (as described by vkGetPhysicalDeviceQueueFamilyProperties)
+//      create: if set to true, attempt to create a new vulkan context, otherwise acquire the current one
 struct halide_vulkan_memory_allocator;
 extern int halide_vulkan_acquire_context(void *user_context,
                                          struct halide_vulkan_memory_allocator **allocator,
