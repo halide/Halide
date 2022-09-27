@@ -1,0 +1,742 @@
+// TODO: go through enums and decide if the types give enough bits for expansion.
+// TODO: should likely figure out how to break this up into multiple files
+
+namespace Halide.IR;
+
+// This corresponds to the version.
+file_identifier "HLD0";
+
+// File extension of any written files.
+file_extension "hir";
+
+enum TypeCode: ubyte {
+    Int,
+    UInt,
+    Float,
+    Handle,
+    BFloat,
+}
+
+struct RuntimeType {
+   code: TypeCode;
+   bits: uint8;
+   lanes: uint16;
+}
+
+// TODO: Fill in. Tricky as will require reconnecting to
+// type info at runtime, thus adding a reverse lookup.
+table CPPHandleType {
+    placeholder: string;
+}
+
+table IRType {
+    runtime_type: RuntimeType;
+    cpp_handle_type: CPPHandleType;
+}
+    
+table Symbol {
+    name: string;
+    parent: Symbol;
+}
+
+union ExprNode {
+    IntImm,
+    UIntImm,
+    FloatImm,
+    StringImm,
+    Broadcast,
+    Cast,
+    Reinterpret,
+    Variable,
+    Add,
+    Sub,
+    Mod,
+    Mul,
+    Div,
+    Min,
+    Max,
+    EQ,
+    NE,
+    LT,
+    LE,
+    GT,
+    GE,
+    And,
+    Or,
+    Not,
+    Select,
+    Load,
+    Ramp,
+    Call,
+    Let,
+    Shuffle,
+    VectorReduce,
+}
+
+table IntImm {
+    value: int64;
+}
+    
+table UIntImm {
+    value: uint64;
+}
+
+table FloatImm {
+    value: double;
+}
+
+table StringImm {
+    value: string;
+}
+
+table Broadcast {
+    value: Expr;
+    lanes: int32;
+}
+
+table Cast {
+    value: Expr;
+}
+
+table Reinterpret {
+    value: Expr;
+}
+
+table Variable {
+    name: Symbol;
+}
+
+table Add {
+    a: Expr;
+    b: Expr;
+}
+
+table Sub {
+    a: Expr;
+    b: Expr;
+}
+
+table Mod {
+    a: Expr;
+    b: Expr;
+}
+
+table Mul {
+    a: Expr;
+    b: Expr;
+}
+
+table Div {
+    a: Expr;
+    b: Expr;
+}
+
+table Min {
+    a: Expr;
+    b: Expr;
+}
+
+table Max {
+    a: Expr;
+    b: Expr;
+}
+
+table EQ {
+    a: Expr;
+    b: Expr;
+}
+
+table NE {
+    a: Expr;
+    b: Expr;
+}
+
+table LT {
+    a: Expr;
+    b: Expr;
+}
+
+table LE {
+    a: Expr;
+    b: Expr;
+}
+
+table GT {
+    a: Expr;
+    b: Expr;
+}
+
+table GE {
+    a: Expr;
+    b: Expr;
+}
+
+table And {
+    a: Expr;
+    b: Expr;
+}
+
+table Or {
+    a: Expr;
+    b: Expr;
+}
+
+table Not {
+    a: Expr;
+}
+
+table Select {
+    condition: Expr;
+    true_value: Expr;
+    false_value: Expr;
+}
+
+table Dimension {
+    min: int64;
+    extent: int64;
+    stride: int64;
+}
+
+// TODO: Considered this as a useful base, e.g. for BufferConstraint. Probably remove.
+// The idea of types that have concrete parameters and the same infor in a different
+// type but as Expr not e.g. int is possibly worth keeping in mind.
+//table RuntimeDimension {
+//    min: Expr;
+//    extent: Expr;
+//    stride: Expr;
+//}
+
+table BufferShape {
+    type: IRType;
+    arity: int32;
+    dims: [Dimension];
+}
+
+// TODO: Naming?
+table BufferDescriptor {
+    name: Symbol;
+    shape: BufferShape;
+}
+
+table BufferConstant {
+    name: Symbol;
+    shape: BufferShape;
+    data: [ubyte];
+}
+
+table ScalarParameter {
+    name: Symbol;
+    type: IRType;
+    scalar_default: Expr;
+    scalar_min: Expr;
+    scalar_max: Expr;
+    scalar_estimate: Expr;
+}
+
+table BufferConstraint {
+    min: Expr;
+    extent: Expr;
+    stride: Expr;
+    min_estimate: Expr;
+    extent_estimate: Expr;
+}
+
+enum MemoryKind: ubyte {
+    Auto,
+    Heap,
+    Stack,
+    Register,
+    GPUShared,
+    GPUTexture,
+    LockedCache,
+    VTCM,
+    AMXTile,
+}
+
+table BufferParameter {
+    buffer: BufferDescriptor;
+    name: Symbol;
+    memory_kind: MemoryKind;
+    host_alignment: uint32;
+    buffer_constraints: [BufferConstraint];
+}
+
+union LoadReferent { BufferDescriptor, BufferConstant, ScalarParameter, BufferParameter }
+union StoreReferent { BufferDescriptor, BufferParameter }
+
+struct ModulusRemainder {
+    modulus: int64;
+    remainder: int64;
+}
+    
+table ModulusRemainderRuntime {
+    modulus: Expr;
+    remainder: Expr;
+}
+    
+table Load {
+    name: Symbol;
+    predicate: Expr;
+    index: Expr;
+    alignment: ModulusRemainder;
+    referent: LoadReferent;
+}
+
+table Ramp {
+    base: Expr;
+    stride: Expr;
+    lanes: int32;
+}
+
+// TODO: Probably remove. Decided to use a union instead.
+//enum CallType: ubyte {
+//    Image, // the call referent is a BufferDescriptor or BufferParameter
+//    Extern, 
+//    ExternCPlusPlus,
+//    PureExtern,
+//    Halide, // the call referent is a FuncCall
+//    Intrinsic,
+//    PureIntrinsic,
+//}
+
+table FuncCall {
+    func: Func;
+    value_index: uint32;
+}
+
+enum DirectCallKind: ubyte {
+    Extern,          // Standard calling convention, no mangling
+    ExternCPlusPlus, // Same but with C++ name mangling
+    Intrinsic,       // Name known to the Halide compiler
+}
+
+// TODO: naming?
+table DirectCall {
+    // TODO: Should there be a different name here?
+    kind: DirectCallKind;
+    pure: bool;
+}
+
+union CallReferent { FuncCall, BufferDescriptor, BufferParameter }
+
+table Call {
+    name: Symbol;
+    args: [Expr];
+    referent: CallReferent;
+}
+
+union Stmt {
+    LetStmt,
+    AssertStmt,
+    ProducerConsumer,
+    For,
+    Acquire,
+    Store,
+    Provide,
+    Allocate,
+    Free,
+    Realize,
+    Block,
+    Fork,
+    IfThenElse,
+    Evaluate,
+    Prefetch,
+    Atomic
+}
+
+table Let {
+    name: Symbol;
+    value: Expr;
+    body: Stmt;
+}
+
+table Shuffle {
+    vectors: [Expr];
+    indices: [Expr];
+}
+
+// TODO: Consider using a union here instead?
+enum VectorReduceOperator: ubyte {
+    Add,
+    SaturatingAdd,
+    Mul,
+    Min,
+    Max,
+    And,
+    Or,
+}
+
+table VectorReduce {
+    value: Expr;
+    operator: VectorReduceOperator;
+}
+
+table Expr {
+    type: IRType;
+    node: ExprNode;
+}
+
+table LetStmt {
+    name: Symbol;
+    value: Expr;
+    body: Stmt;
+}
+
+table AssertStmt {
+    condition: Expr;
+    message: Expr;
+}
+
+table ProducerConsumer {
+    name: Symbol;
+    is_producer: bool;
+    body: Stmt;
+}
+
+enum DeviceAPI: ubyte {
+    None,
+    Host,
+    Default_GPU,
+    CUDA,
+    OpenCL,
+    OpenGLCompute,
+    Metal,
+    Hexagon,
+    HexagonDma,
+    D3D12Compute,
+}
+
+enum ForKind: ubyte {
+    Serial,
+    Parallel,
+    Vectorized,
+    Unrolled,
+    Extern,
+    GPUBlock,
+    GPUThread,
+    GPULane,
+}
+
+table For {
+    name: Symbol;
+    min: Expr;
+    extent: Symbol;
+    for_kind: ForKind;
+    device_api: DeviceAPI;
+    body: Stmt;
+}
+
+table Acquire {
+    semaphore: Expr;
+    count: Expr;
+    body: Stmt;
+}
+
+table Store {
+    name: Symbol;
+    predicate: Expr;
+    value: Expr;
+    index: Expr;
+    // TODO(zalman): naming and design here.
+    output_parameter: StoreReferent;
+    alignment: ModulusRemainder;
+}
+
+table Provide {
+    name: Symbol;
+    values: [Expr];
+    args: [Expr];
+    predicate: Expr;
+}
+
+table Allocate {
+    name: Symbol;
+    type: IRType;
+    memory_kind: MemoryKind;
+    extents: [Expr];
+    condition: Expr;
+    new_expr: Expr;
+    free_function: string;
+    body: Stmt;
+}
+
+table Free {
+    name: Symbol;
+}
+
+table Range {
+    min: Expr;
+    extent: Expr;
+}
+
+table Realize {
+    name: Symbol;
+    types: [IRType];
+    memory_kind: MemoryKind;
+    bounds: [Range];
+    condition: Expr;
+    body: Stmt;
+}
+
+table Block {
+    first: Stmt;
+    rest: Stmt;
+}
+
+table Fork {
+    first: Stmt;
+    rest: Stmt;
+}
+
+table IfThenElse {
+    condition: Expr;
+    then_case: Stmt;
+    else_case: Stmt;
+}
+
+table Evaluate {
+    value: Expr;
+}
+
+enum PrefetchBoundStrategy: ubyte {
+    Clamp,
+    GuardWithIf,
+    NonFaulting
+}
+
+table PrefetchDirective {
+    name: Symbol;
+    at: Symbol;
+    from: Symbol;
+    offset: Expr;
+    strategy: PrefetchBoundStrategy;
+    parameter: LoadReferent;  // TODO: figure out what this should be.
+}
+
+table Prefetch {
+    name: Symbol;
+    types: [IRType];
+    bounds: [Range];
+    prefetch: PrefetchDirective;
+    condition: Expr;
+    body: Stmt;
+}
+
+table Atomic {
+    producer_name: Symbol;
+    mutex_name: Symbol;
+    body: Stmt;
+}
+
+table Specialization {
+    condition: Expr;
+    definition: Definition ;
+    failure_message: string;
+}
+
+table Definition {
+    predicate: Expr;
+    values: [Expr];
+    // TODO: is this redundant with the field in Func?
+    arguments: [Variable];
+    stage_schedule: StageSchedule;
+    specializations: [Specialization]; // TODO: Why isn't this in the schedule?
+     // TODO: This should probably be more general debug information and appear elsewhere.
+    source_location: string;
+}
+
+enum TailStrategy: ubyte {
+    RoundUp,
+    GuardWithIf,
+    Predicate,
+    PredicateLoads,
+    PredicateStores,
+    ShiftInwards,
+    Auto
+}
+
+enum LoopAlignStrategy: ubyte {
+    AlignStart,
+    AlignEnd,
+    NoAlign,
+    Auto,
+}
+
+// TODO: formalize root representation. Maybe rethink this entirely.
+table LoopLevel {
+    // TODO: Can this just be a Func ref in the serialization?
+    func_name: Symbol;
+    // TODO C++ struct has -1 meaning the entire function. Field could be left out ti indicate that.
+    stage: int32;
+    variable: Variable;
+    is_rvar: bool;    
+}
+
+table LoopFusionAlignStrategy {
+    dimension: Variable;
+    align_strategy: LoopAlignStrategy;
+}
+
+table FuseLoopLevel {
+    loop_level: LoopLevel;
+    align_strategies: [LoopFusionAlignStrategy];    
+}
+
+enum SplitKind: ubyte {
+    SplitVar,
+    RenameVar,
+    FuseVars,
+    PurifyRVar,
+}
+
+table Split {
+    variable_to_split: Variable;
+    variable_outside: Variable;
+    variable_over_inside: Variable;
+    inside_size: Expr;
+    exact: bool;
+    tail_strategy: TailStrategy;
+    split_kind: SplitKind;    
+}
+
+enum DimensionKind: ubyte {
+    PureVar,
+    PureRVar,
+    ImpureRVar,
+}
+
+table DimensionSchedule {
+    variable: Variable;
+    for_kind: ForKind;
+    device_api: DeviceAPI;
+    dimension_kind: DimensionKind;
+}
+
+table DimensionBound {
+    variable: Variable;
+    min: Expr;
+    extent: Expr;
+    modulus_remainder: ModulusRemainder;
+}
+
+table StorageDim {
+    variable: Variable;
+    alignment: Expr;
+    bound: Expr;
+    fold_factor: Expr;
+    fold_forward: bool;
+}
+
+table ComputeFused {
+    func_1: Func;
+    func_2: Func;
+    stage_1: uint32;
+    stage_2: uint32;
+    variable: Variable;
+}
+
+table ReductionVariable {
+    name: Symbol;
+    min: Expr;
+    extent: Expr;
+}
+
+table StageSchedule {
+    rvars: [ReductionVariable];
+    splits: [Split];
+    dimensions: [Dimension];
+    prefetches: [PrefetchDirective];
+    fuse_level: FuseLoopLevel;
+    fused_pairs: [ComputeFused];
+    // TODO: is touched needed?
+    allow_race_conditions: bool;
+    atomic: bool;
+    override_atomic_associativity_test: bool;
+}
+
+table Stage {
+    pure_vars: [Variable];
+    definition: Definition;
+}
+
+table WrapperRef {
+    name: Symbol;
+    func: Func;
+}
+
+// TODO fill in
+table Schedule {
+    store_level: LoopLevel;
+    compute_level: LoopLevel;
+    bounds: [DimensionBound];
+    estimates: [DimensionBound];
+    wrappers: [WrapperRef];
+    memory_kind: MemoryKind = Auto;
+    memoize: bool;
+    async: bool;
+    memoize_eviction_key: Expr;
+}
+
+enum TraceKinds: ushort {
+    Loads,
+    Stores,
+    Realizations,
+}
+
+table Tracing {
+    enabled_kinds: [TraceKinds];
+    trace_tags: [string];
+}
+
+enum NameMangling: ubyte {
+    Default,
+    C,
+    CPlusPlus,
+}
+
+enum ExternArgumentKind: ubyte {
+    UndefinedArg,
+    FuncArg,
+    BufferArg,
+    ExprArg,
+    ImageParamArg,
+}
+
+union ExternFuncArgumentFormal { Expr, Func, BufferDescriptor, BufferParameter, ScalarParameter }
+
+table ExternFuncArgument {
+    arg_kind: ExternArgumentKind = UndefinedArg;
+    func: Func;
+    formal: ExternFuncArgumentFormal;    
+}
+
+table Func {
+    name: Symbol;
+    wrapper_parent: Func; // TODO: Thinking this is what Function::origin_name is. Hopefully not needed
+    output_types: [IRType];
+    arguments: [Variable];
+    stages: [Stage];
+    schedule: Schedule;
+    pure_definition: Definition;
+    updates: [Definition];
+    debug_file: string; // TODO: to support debug_to_file on the top level? Need a better way to do this.
+
+    output_buffers: [BufferParameter];
+    extern_arguments: [ExternFuncArgument];
+    extern_function_name: string;
+
+    extern_mangling: NameMangling = Default;
+    extern_function_device_api: DeviceAPI = Host;
+    extern_proxy_expr: Expr;
+
+    tracing_specification: Tracing;
+    source_location: string; // TODO: This should probably be more general debug information and appear elsewhere.
+}
+
+table Pipeline {
+}
+
+table Module {
+}
+
+root_type Module;
