@@ -572,7 +572,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Load *op) {
     SpvId base_id = id_and_storage_class.first;
     SpvStorageClass storage_class = id_and_storage_class.second;
     internal_assert(base_id != SpvInvalidId);
-    internal_assert(storage_class != SpvInvalidId);
+    internal_assert(((uint32_t)storage_class) < ((uint32_t)SpvStorageClassMax));
 
     op->index.accept(this);
     SpvId index_id = builder.current_id();
@@ -610,7 +610,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Store *op) {
     SpvId base_id = id_and_storage_class.first;
     SpvStorageClass storage_class = id_and_storage_class.second;
     internal_assert(base_id != SpvInvalidId);
-    internal_assert(storage_class != SpvInvalidId);
+    internal_assert(((uint32_t)storage_class) < ((uint32_t)SpvStorageClassMax));
 
     op->index.accept(this);
     SpvId index_id = builder.current_id();
