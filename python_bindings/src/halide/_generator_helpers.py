@@ -759,13 +759,30 @@ def active_generator_context() -> GeneratorContext:
     return context
 
 
+def _is_interactive_mode() -> bool:
+    return hasattr(sys, 'ps1')
+
+
+def _check_generator_name_in_use(n:str):
+    if _is_interactive_mode():
+        # In interactive mode, it's OK to redefine generators... in fact, it's really
+        # annoying not to allow this (e.g. in Colab)
+        #
+        # (Want to debug? Include this:)
+        # if n in _python_generators:
+        #     builtins.print("REDEFINING ", n)
+        return
+
+    _check(n not in _python_generators, "The Generator name %s is already in use." % n)
+
+
 def alias(**kwargs):
 
     def alias_impl(cls):
         for k, v in kwargs.items():
             _check_valid_name(k)
             _check(hasattr(cls, "_halide_registered_name"), "@alias can only be used in conjunction with @generator.")
-            _check(k not in _python_generators, "The Generator name %s is already in use." % k)
+            _check_generator_name_in_use(k)
             _check(type(v) is dict, "The Generator alias %s specifies something other than a dict." % k)
             new_cls = type(k, (cls,), {"_halide_registered_name": k, "_halide_alias_generator_params": v})
             _python_generators[k] = new_cls
@@ -779,7 +796,7 @@ def generator(name:str=""):
     _check(sys.version_info >= (3, 7), "Halide Generators require Python 3.7 or later.")
     def generator_impl(cls):
         n = name if name else _fqname(cls)
-        _check(n not in _python_generators, "The Generator name %s is already in use." % n)
+        _check_generator_name_in_use(n)
         _check(isclass(cls), "@generator can only be used on classes.")
         # Allow (but don't require) explicit inheritance from hl.Generator;
         # static type checkers (e.g. pytype) can complain that the decorated class
