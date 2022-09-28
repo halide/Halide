@@ -21,6 +21,9 @@ Expr Cast::make(Type t, Expr v) {
 }
 
 Expr Reinterpret::make(Type t, Expr v) {
+    if (t == v.type()) {
+        return v;
+    }
     user_assert(v.defined()) << "reinterpret of undefined Expr\n";
     int from_bits = v.type().bits() * v.type().lanes();
     int to_bits = t.bits() * t.lanes();

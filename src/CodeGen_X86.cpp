@@ -171,6 +171,8 @@ const x86Intrinsic intrinsic_defs[] = {
     {"packuswbx16", UInt(8, 16), "saturating_narrow", {Int(16, 16)}},
 
     // Widening multiplies that use (v)pmaddwd
+    // {"wmul_pmaddub_avx2", Int(16, 16), "widening_mul", {UInt(8, 16), Int(8, 16)}, Target::AVX2},
+    // {"wmul_pmaddub_sse41", Int(16, 8), "widening_mul", {UInt(8, 8), Int(8, 8)}, Target::SSE41},
     {"wmul_pmaddwd_avx2", Int(32, 8), "widening_mul", {Int(16, 8), Int(16, 8)}, Target::AVX2},
     {"wmul_pmaddwd_sse2", Int(32, 4), "widening_mul", {Int(16, 4), Int(16, 4)}},
 

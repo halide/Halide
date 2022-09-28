@@ -215,11 +215,11 @@ protected:
                     // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
                     (is_uint(x, 32) || is_int(x, 32)) &&
                     // UDOT
-                    (are_ywpr_uint8 && are_zuqs_uint8) ||
+                    ((are_ywpr_uint8 && are_zuqs_uint8) ||
                     // SDOT
                     (are_ywpr_int8 && are_zuqs_int8) ||
                     // USDOT
-                    can_use_usdot) ||
+                    can_use_usdot)) ||
 
                 // a + (b + c)
                 rewrite(
@@ -230,12 +230,12 @@ protected:
                     // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
                     (is_uint(x, 32) || is_int(x, 32)) &&
                     // UDOT
-                    (are_ywpr_uint8 && are_zuqs_uint8) ||
+                    ((are_ywpr_uint8 && are_zuqs_uint8) ||
                     // SDOT
                     (are_ywpr_int8 && are_zuqs_int8) ||
                     // USDOT
                     // TODO: need to handle other possibility
-                    can_use_usdot) ||
+                    can_use_usdot)) ||
 
                 // a + (c + b)
                 rewrite(
@@ -245,12 +245,12 @@ protected:
                     // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
                     (is_uint(x, 32) || is_int(x, 32)) &&
                     // UDOT
-                    (are_ywpr_uint8 && are_zuqs_uint8) ||
+                    ((are_ywpr_uint8 && are_zuqs_uint8) ||
                     // SDOT
                     (are_ywpr_int8 && are_zuqs_int8) ||
                     // USDOT
                     // TODO: need to handle other possibility
-                    can_use_usdot) ||
+                    can_use_usdot)) ||
 
                 // (a + c) + b
                 rewrite(
@@ -260,12 +260,12 @@ protected:
                     // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
                     (is_uint(x, 32) || is_int(x, 32)) &&
                     // UDOT
-                    (are_ywpr_uint8 && are_zuqs_uint8) ||
+                    ((are_ywpr_uint8 && are_zuqs_uint8) ||
                     // SDOT
                     (are_ywpr_int8 && are_zuqs_int8) ||
                     // USDOT
                     // TODO: need to handle other possibility
-                    can_use_usdot) ||
+                    can_use_usdot)) ||
 
                 // (c + a) + b
                 rewrite(
@@ -275,12 +275,12 @@ protected:
                     // v_instr(VectorInstruction::dot_product, x, interleave(y, z), interleave(c0, c1)),
                     (is_uint(x, 32) || is_int(x, 32)) &&
                     // UDOT
-                    (are_ywpr_uint8 && are_zuqs_uint8) ||
+                    ((are_ywpr_uint8 && are_zuqs_uint8) ||
                     // SDOT
                     (are_ywpr_int8 && are_zuqs_int8) ||
                     // USDOT
                     // TODO: need to handle other possibility
-                    can_use_usdot) ||
+                    can_use_usdot)) ||
                 
 
                 // TODO: do 0-version of dot products.
@@ -1193,7 +1193,7 @@ private:
 }  // namespace
 
 Stmt optimize_arm_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb) {
-    if (get_env_variable("HL_DISABLE_ARM_LOWERING") == "1") {
+    if (get_env_variable("HL_DISABLE_HALIDE_LOWERING") == "1") {
         return s;
     }
 

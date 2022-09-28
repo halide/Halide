@@ -210,6 +210,42 @@ protected:
                  cast(BFloat(16, lanes), x),
                  v_instr(VectorInstruction::f32_to_bf16, x),
                  is_float(x, 32))) ||
+            
+            // TODO: check for cases of using saturating cast safely.
+
+            // saturating_narrow is always supported (via SSE2) for:
+            //   int32 -> int16, int16 -> int8, int16 -> uint8
+            rewrite(
+                cast(Int(16, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, x),
+                is_int(x, 32) &&
+                upper_bounded(x, (int64_t)std::numeric_limits<int16_t>::max(), this) &&
+                lower_bounded(x, (int64_t)std::numeric_limits<int16_t>::min(), this)) ||
+            
+            rewrite(
+                cast(Int(8, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, x),
+                is_int(x, 16) &&
+                upper_bounded(x, (int64_t)std::numeric_limits<int8_t>::max(), this) &&
+                lower_bounded(x, (int64_t)std::numeric_limits<int8_t>::min(), this)) ||
+
+            rewrite(
+                cast(UInt(8, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, x),
+                is_int(x, 16) &&
+                upper_bounded(x, (int64_t)std::numeric_limits<uint8_t>::max(), this) &&
+                lower_bounded(x, (int64_t)std::numeric_limits<uint8_t>::min(), this)) ||
+
+            // i32 -> u16 is supported via SSE41
+            (target.has_feature(Target::SSE41) &&
+             (rewrite(
+                cast(UInt(16, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, x),
+                is_int(x, 32) &&
+                upper_bounded(x, (int64_t)std::numeric_limits<uint16_t>::max(), this) &&
+                lower_bounded(x, (int64_t)std::numeric_limits<uint16_t>::min(), this)) ||
+
+            false)) ||
 
             false) {
             return mutate(rewrite.result);
@@ -257,8 +293,16 @@ protected:
         using IRMatcher::typed;
 
         Type unsigned_type = op->type.with_code(halide_type_uint);
+        // Type signed_type = op->type.with_code(halide_type_int);
+        // Type unsigned_narrow_type = (bits > 8) ? unsigned_type.narrow() : unsigned_type;
+        // Type signed_narrow_type = (bits > 8) ? signed_type.narrow() : signed_type;
         auto x_uint = cast(unsigned_type, x);
         auto y_uint = cast(unsigned_type, y);
+
+        // auto x_zext_u8 = reinterpret(unsigned_narrow_type.with_lanes(lanes * 2), cast(unsigned_type, x));
+        // auto y_zext_i8 = reinterpret(signed_narrow_type.with_lanes(lanes * 2), cast(unsigned_type, reinterpret(unsigned_narrow_type, y)));
+        // auto c0_wide_i8 = reinterpret(signed_narrow_type.with_lanes(lanes * 2), fold(IRMatcher::broadcast(IRMatcher::as_scalar(c0), lanes * 2)));
+        // auto c0_i8 = cast(Int(8).with_lanes(lanes), c0);
 
         if (
             // saturating_narrow is always supported (via SSE2) for:
@@ -299,10 +343,28 @@ protected:
             // TODO: is it worth doing u32 -> u16 this way?
             // i32 -> u16 is supported via SSE41
             (target.has_feature(Target::SSE41) &&
-             rewrite(
+             (rewrite(
                  saturating_cast(UInt(16, lanes), x),
                  v_instr(VectorInstruction::saturating_narrow, x),
-                 is_int(x, 32))) ||
+                 is_int(x, 32)) ||
+
+            //   // Can also do faster widening_mul(u8, i8) on x86 via 2 pmovzxbw and pmaddubsw
+            //   rewrite(widening_mul(x, y),
+            //           v_instr(VectorInstruction::widening_mul, x, y),
+            //         //   v_instr(VectorInstruction::saturating_dot_product, x_zext_u8, y_zext_i8),
+            //           is_uint(x, 8) && is_int(y, 8)) ||
+            
+            //   rewrite(widening_mul(x, c0),
+            //           reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::widening_mul, x, c0_i8))),
+            //         //   reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::saturating_dot_product, x_zext_u8, c0_wide_i8))),
+            //           is_uint(x, 8) && is_uint(c0, 8) && c0 <= 127) ||
+            
+            //   rewrite(widening_mul(c0, x),
+            //           reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::widening_mul, x, c0_i8))),
+            //         //   reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::saturating_dot_product, x_zext_u8, c0_wide_i8))),
+            //           is_uint(x, 8) && is_uint(c0, 8) && c0 <= 127) ||
+                 
+            false)) ||
 
             // Rewrite double saturating casts for supported types.
             // int32 -> uint8 and int32 -> int8 are always possible.
@@ -420,6 +482,7 @@ protected:
               false)) ||
 
             false) {
+                // std::cerr << Expr(op) << " -> " << rewrite.result << "\n";
             return mutate(rewrite.result);
         }
 
@@ -627,11 +690,16 @@ private:
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
+    IRMatcher::WildConst<0> c0;
 };
 
 }  // namespace
 
 Stmt optimize_x86_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb) {
+    if (get_env_variable("HL_DISABLE_HALIDE_LOWERING") == "1") {
+        return s;
+    }
+
     Stmt stmt = Optimize_X86(target, codegen, fvb).mutate(s);
 
     // Some of the rules above can introduce repeated sub-terms, so run CSE again.
