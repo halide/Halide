@@ -6,10 +6,10 @@
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
 
-#include "conv3x3_a32_llvm.h"
-#include "conv3x3_a32_halide.h"
-#include "conv3x3_a32_pitchfork.h"
-#include "conv3x3_a32_rake.h"
+#include "dilate3x3_llvm.h"
+#include "dilate3x3_halide.h"
+#include "dilate3x3_pitchfork.h"
+#include "dilate3x3_rake.h"
 
 #include "halide_benchmark.h"
 #include "halide_image_io.h"
@@ -18,56 +18,52 @@ using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
     if (argc != 4) {
-        printf("Usage: ./run N M timing_iterations\n");
-        return -1;
+        printf("Usage: ./run input.png timing_iterations output.png\n");
+        return 0;
     }
 
-    const int N = atoi(argv[1]);
-    const int M = atoi(argv[2]);
-    const int timing_iterations = atoi(argv[3]);
+    Halide::Runtime::Buffer<uint8_t> input = load_and_convert_image(argv[1]);
+    Halide::Runtime::Buffer<uint8_t> output_llvm(input.width(), input.height());
+    Halide::Runtime::Buffer<uint8_t> output_halide(input.width(), input.height());
+    Halide::Runtime::Buffer<uint8_t> output_pitchfork(input.width(), input.height());
+    Halide::Runtime::Buffer<uint8_t> output_rake(input.width(), input.height());
 
-    Halide::Runtime::Buffer<uint8_t> input(N, M);
-    Halide::Runtime::Buffer<int8_t> mask(3, 3);
+    int timing_iterations = atoi(argv[2]);
 
-    Halide::Runtime::Buffer<uint8_t> output_llvm(N, M);
-    Halide::Runtime::Buffer<uint8_t> output_halide(N, M);
-    Halide::Runtime::Buffer<uint8_t> output_pitchfork(N, M);
-    Halide::Runtime::Buffer<uint8_t> output_rake(N, M);
-
-    conv3x3_a32_llvm(input, mask, output_llvm);
+    dilate3x3_llvm(input, output_llvm);
 
     double min_t_manual = benchmark(timing_iterations, 10, [&]() {
-         conv3x3_a32_llvm(input, mask, output_llvm);
+        dilate3x3_llvm(input, output_llvm);
         output_llvm.device_sync();
     });
     printf("LLVM time: %gms\n", min_t_manual * 1e3);
 
-    conv3x3_a32_halide(input, mask, output_halide);
+    dilate3x3_halide(input, output_halide);
 
     min_t_manual = benchmark(timing_iterations, 10, [&]() {
-        conv3x3_a32_halide(input, mask, output_halide);
+        dilate3x3_halide(input, output_halide);
         output_halide.device_sync();
     });
     printf("Halide time: %gms\n", min_t_manual * 1e3);
 
-    conv3x3_a32_pitchfork(input, mask, output_pitchfork);
+    dilate3x3_pitchfork(input, output_pitchfork);
 
     min_t_manual = benchmark(timing_iterations, 10, [&]() {
-        conv3x3_a32_pitchfork(input, mask, output_pitchfork);
+        dilate3x3_pitchfork(input, output_pitchfork);
         output_pitchfork.device_sync();
     });
     printf("Pitchfork time: %gms\n", min_t_manual * 1e3);
 
-    conv3x3_a32_rake(input, mask, output_rake);
+    dilate3x3_rake(input, output_rake);
 
     min_t_manual = benchmark(timing_iterations, 10, [&]() {
-        conv3x3_a32_rake(input, mask, output_rake);
+        dilate3x3_rake(input, output_rake);
         output_rake.device_sync();
     });
     printf("Rake time: %gms\n", min_t_manual * 1e3);
 
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < M; j++) {
+    for (int i = 0; i < input.width(); i++) {
+        for (int j = 0; j < input.height(); j++) {
             if (output_llvm(i, j) != output_halide(i, j)) {
                 std::cerr << "Halide failure at pixel i=" << i << ", j=" << j << ": "
                           << (int)output_llvm(i, j) << " != " << (int)output_halide(i, j) << "\n";
@@ -87,6 +83,8 @@ int main(int argc, char **argv) {
             }
         }
     }
+
+    convert_and_save_image(output_pitchfork, argv[3]);
 
     printf("Success!\n");
     return 0;

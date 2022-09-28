@@ -6,10 +6,10 @@
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
 
-#include "conv3x3_a32_llvm.h"
-#include "conv3x3_a32_halide.h"
-#include "conv3x3_a32_pitchfork.h"
-#include "conv3x3_a32_rake.h"
+#include "conv3x3_a16_llvm.h"
+#include "conv3x3_a16_halide.h"
+#include "conv3x3_a16_pitchfork.h"
+#include "conv3x3_a16_rake.h"
 
 #include "halide_benchmark.h"
 #include "halide_image_io.h"
@@ -34,34 +34,34 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint8_t> output_pitchfork(N, M);
     Halide::Runtime::Buffer<uint8_t> output_rake(N, M);
 
-    conv3x3_a32_llvm(input, mask, output_llvm);
+    conv3x3_a16_llvm(input, mask, output_llvm);
 
     double min_t_manual = benchmark(timing_iterations, 10, [&]() {
-         conv3x3_a32_llvm(input, mask, output_llvm);
+         conv3x3_a16_llvm(input, mask, output_llvm);
         output_llvm.device_sync();
     });
     printf("LLVM time: %gms\n", min_t_manual * 1e3);
 
-    conv3x3_a32_halide(input, mask, output_halide);
+    conv3x3_a16_halide(input, mask, output_halide);
 
     min_t_manual = benchmark(timing_iterations, 10, [&]() {
-        conv3x3_a32_halide(input, mask, output_halide);
+        conv3x3_a16_halide(input, mask, output_halide);
         output_halide.device_sync();
     });
     printf("Halide time: %gms\n", min_t_manual * 1e3);
 
-    conv3x3_a32_pitchfork(input, mask, output_pitchfork);
+    conv3x3_a16_pitchfork(input, mask, output_pitchfork);
 
     min_t_manual = benchmark(timing_iterations, 10, [&]() {
-        conv3x3_a32_pitchfork(input, mask, output_pitchfork);
+        conv3x3_a16_pitchfork(input, mask, output_pitchfork);
         output_pitchfork.device_sync();
     });
     printf("Pitchfork time: %gms\n", min_t_manual * 1e3);
 
-    conv3x3_a32_rake(input, mask, output_rake);
+    conv3x3_a16_rake(input, mask, output_rake);
 
     min_t_manual = benchmark(timing_iterations, 10, [&]() {
-        conv3x3_a32_rake(input, mask, output_rake);
+        conv3x3_a16_rake(input, mask, output_rake);
         output_rake.device_sync();
     });
     printf("Rake time: %gms\n", min_t_manual * 1e3);
