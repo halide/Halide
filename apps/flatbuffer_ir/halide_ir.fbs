@@ -734,9 +734,70 @@ table Func {
 }
 
 table Pipeline {
+    outputs: [Func];
+    requirements: [Stmt];
+    trace_pipeline: bool;
+}
+
+table ScalarLoweredArgument {
+    modulus_remainder: ModulusRemainder;
+}
+    
+table InputBufferArgument {
+    // TODO: Is full shape needed here?
+    dimensions: int32;
+}
+
+table OutputBufferArgument {
+    // TODO: Is full shape needed here?
+    dimensions: int32;
+}
+
+// TODO: naming?
+union LoweredArgumentDetail { ScalarLoweredArgument, InputBufferArgument, OutputBufferArgument }
+
+table LoweredArgument {
+    name: Symbol;
+    type: IRType;
+    detail: LoweredArgumentDetail;
+}
+
+enum LinkageType: ubyte {
+    External,
+    ExternalPlusMetadata,
+    ExternalPlusArgv,
+    Internal,
+}
+
+table LoweredFunc {
+    name: Symbol;
+    arguments: [LoweredArgument];
+    body: Stmt;
+    linkage: LinkageType;
+    name_mangling: NameMangling = Default;
+}
+
+table StringMapping {
+    name: string;
+    value: string;
 }
 
 table Module {
+    name: Symbol;
+
+    // Not yet lowered pipelines.
+    pipelines: [Pipeline];
+
+    // Lowered functions.
+    // TODO: Do we want Target's interior structure in the schema?
+    target: string;
+    buffers: [BufferConstant];
+    functions: [LoweredFunc];
+    submodules: [Module];
+    // TODO: Potentially will need external code mechanism.
+    metadata_name_map: [StringMapping];
+    // TODO: Autoscheduler Results
+
 }
 
 root_type Module;
