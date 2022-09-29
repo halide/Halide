@@ -628,102 +628,103 @@ string GetStmtHierarchy::generate_stmt_hierarchy_js() {
     return stmt_hierarchy_js.str();
 }
 
-const string GetStmtHierarchy::stmt_hierarchy_css = "\n \
-/* StmtHierarchy CSS */\n \
-.arrow { border: solid rgb(125,125,125); border-width: 0 2px 2px 0; display:  \n \
-inline-block; padding: 3px; } \n \
-.down { transform: rotate(45deg); -webkit-transform: rotate(45deg); }  \n \
-.up { transform: rotate(-135deg); -webkit-transform: rotate(-135deg); }  \n \
-.stmtHierarchyButton {padding: 3px;} \n \
-.tf-custom-stmtHierarchy .tf-nc { border-radius: 5px; border: 1px solid; font-size: 12px; border-color: rgb(200, 200, 200);} \n \
-.tf-custom-stmtHierarchy .end-node { border-style: dashed; font-size: 12px; } \n \
-.tf-custom-stmtHierarchy .tf-nc:before, .tf-custom-stmtHierarchy .tf-nc:after { border-left-width: 1px; border-color: rgb(200, 200, 200);} \n \
-.tf-custom-stmtHierarchy li li:before { border-top-width: 1px; border-color: rgb(200, 200, 200);}\n \
-.tf-custom-stmtHierarchy { font-size: 12px; } \n \
-div.nodeContent { display: flex; } \n \
-div.nodeName { padding-left: 5px; } \n \
-";
+const char* GetStmtHierarchy::stmt_hierarchy_css =
+R"(
+/* StmtHierarchy CSS */
+.arrow { border: solid rgb(125,125,125); border-width: 0 2px 2px 0; display:
+inline-block; padding: 3px; }
+.down { transform: rotate(45deg); -webkit-transform: rotate(45deg); }
+.up { transform: rotate(-135deg); -webkit-transform: rotate(-135deg); }
+.stmtHierarchyButton {padding: 3px;}
+.tf-custom-stmtHierarchy .tf-nc { border-radius: 5px; border: 1px solid; font-size: 12px; border-color: rgb(200, 200, 200);}
+.tf-custom-stmtHierarchy .end-node { border-style: dashed; font-size: 12px; }
+.tf-custom-stmtHierarchy .tf-nc:before, .tf-custom-stmtHierarchy .tf-nc:after { border-left-width: 1px; border-color: rgb(200, 200, 200);}
+.tf-custom-stmtHierarchy li li:before { border-top-width: 1px; border-color: rgb(200, 200, 200);}
+.tf-custom-stmtHierarchy { font-size: 12px; }
+div.nodeContent { display: flex; }
+div.nodeName { padding-left: 5px; }
+)";
 
-const string GetStmtHierarchy::stmt_hierarchy_collapse_expand_JS = "\n \
-// collapse/expand js (stmt hierarchy) \n \
-var nodeExpanded = new Map(); \n \
-function collapseAllNodes(startNode, endNode) { \n \
-    for (let i = startNode; i <= endNode; i++) { \n \
-        collapseNodeChildren(i); \n \
-        nodeExpanded.set(i, false); \n \
-        if (document.getElementById('stmtHierarchyButton' + i) != null) { \n \
-            document.getElementById('stmtHierarchyButton' + i).className = 'arrow down'; \n \
-        } \n \
-    } \n \
-} \n \
-function expandNodesUpToDepth(depth, vizNum) { \n \
-    for (let i = 0; i < depth; i++) { \n \
-        const depthChildren = document.getElementsByClassName('viz' + vizNum + ' depth' + i); \n \
-        for (const child of depthChildren) { \n \
-            child.style.display = ''; \n \
-            if (child.className.includes('start')) { \n \
-                continue; \n \
-            } \n \
-            let parentNodeID = child.className.split()[0]; \n \
-            parentNodeID = parentNodeID.split('node')[1]; \n \
-            parentNodeID = parentNodeID.split('child')[0]; \n \
-            const parentNode = parseInt(parentNodeID); \n \
-            nodeExpanded.set(parentNode, true); \n \
-            if (document.getElementById('stmtHierarchyButton' + parentNodeID) != null) { \n \
-                document.getElementById('stmtHierarchyButton' + parentNodeID).className = 'arrow up'; \n \
-            } \n \
-            const dotdotdot = document.getElementById('node' + parentNodeID + 'dotdotdot'); \n \
-            if (dotdotdot != null) { \n \
-                dotdotdot.remove(); \n \
-            } \n \
-        } \n \
-    } \n \
-} \n \
-function handleClick(nodeNum) { \n \
-    if (nodeExpanded.get(nodeNum)) { \n \
-        collapseNodeChildren(nodeNum); \n \
-        nodeExpanded.set(nodeNum, false); \n \
-    } else { \n \
-        expandNodeChildren(nodeNum); \n \
-        nodeExpanded.set(nodeNum, true); \n \
-    } \n \
-} \n \
-function collapseNodeChildren(nodeNum) { \n \
-    const children = document.getElementsByClassName('node' + nodeNum + 'child'); \n \
-    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) { \n \
-        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow down'; \n \
-    } \n \
-    for (const child of children) { \n \
-        child.style.display = 'none'; \n \
-    } \n \
-    const list = document.getElementById('list' + nodeNum); \n \
-    const parentNode = document.getElementById('node' + nodeNum); \n \
-    if (list != null && parentNode != null) { \n \
-        const span = parentNode.children[0]; \n \
-        list.appendChild(addDotDotDotChild(nodeNum)); \n \
-    } \n \
-} \n \
-function expandNodeChildren(nodeNum) { \n \
-    const children = document.getElementsByClassName('node' + nodeNum + 'child'); \n \
-    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) { \n \
-        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow up'; \n \
-    } \n \
-    for (const child of children) { \n \
-        child.style.display = ''; \n \
-    } \n \
-     const dotdotdot = document.getElementById('node' + nodeNum + 'dotdotdot'); \n \
-     if (dotdotdot != null) { \n \
-         dotdotdot.remove(); \n \
-     } \n \
-} \n \
-function addDotDotDotChild(nodeNum, colorCost) { \n \
-    var liDotDotDot = document.createElement('li'); \n \
-    liDotDotDot.id = 'node' + nodeNum + 'dotdotdot'; \n \
-    const span =\"<span class='tf-nc end-node'>...</span> \"; \n \
-    liDotDotDot.innerHTML = span; \n \
-    return liDotDotDot; \n \
-} \n \
-";
+const char* GetStmtHierarchy::stmt_hierarchy_collapse_expand_JS = R"(
+// collapse/expand js (stmt hierarchy)
+var nodeExpanded = new Map();
+function collapseAllNodes(startNode, endNode) {
+    for (let i = startNode; i <= endNode; i++) {
+        collapseNodeChildren(i);
+        nodeExpanded.set(i, false);
+        if (document.getElementById('stmtHierarchyButton' + i) != null) {
+            document.getElementById('stmtHierarchyButton' + i).className = 'arrow down';
+        }
+    }
+}
+function expandNodesUpToDepth(depth, vizNum) {
+    for (let i = 0; i < depth; i++) {
+        const depthChildren = document.getElementsByClassName('viz' + vizNum + ' depth' + i);
+        for (const child of depthChildren) {
+            child.style.display = '';
+            if (child.className.includes('start')) {
+                continue;
+            }
+            let parentNodeID = child.className.split()[0];
+            parentNodeID = parentNodeID.split('node')[1];
+            parentNodeID = parentNodeID.split('child')[0];
+            const parentNode = parseInt(parentNodeID);
+            nodeExpanded.set(parentNode, true);
+            if (document.getElementById('stmtHierarchyButton' + parentNodeID) != null) {
+                document.getElementById('stmtHierarchyButton' + parentNodeID).className = 'arrow up';
+            }
+            const dotdotdot = document.getElementById('node' + parentNodeID + 'dotdotdot');
+            if (dotdotdot != null) {
+                dotdotdot.remove();
+            }
+        }
+    }
+}
+function handleClick(nodeNum) {
+    if (nodeExpanded.get(nodeNum)) {
+        collapseNodeChildren(nodeNum);
+        nodeExpanded.set(nodeNum, false);
+    } else {
+        expandNodeChildren(nodeNum);
+        nodeExpanded.set(nodeNum, true);
+    }
+}
+function collapseNodeChildren(nodeNum) {
+    const children = document.getElementsByClassName('node' + nodeNum + 'child');
+    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {
+        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow down';
+    }
+    for (const child of children) {
+        child.style.display = 'none';
+    }
+    const list = document.getElementById('list' + nodeNum);
+    const parentNode = document.getElementById('node' + nodeNum);
+    if (list != null && parentNode != null) {
+        const span = parentNode.children[0];
+        list.appendChild(addDotDotDotChild(nodeNum));
+    }
+}
+function expandNodeChildren(nodeNum) {
+    const children = document.getElementsByClassName('node' + nodeNum + 'child');
+    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {
+        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow up';
+    }
+    for (const child of children) {
+        child.style.display = '';
+    }
+     const dotdotdot = document.getElementById('node' + nodeNum + 'dotdotdot');
+     if (dotdotdot != null) {
+         dotdotdot.remove();
+     }
+}
+function addDotDotDotChild(nodeNum, colorCost) {
+    var liDotDotDot = document.createElement('li');
+    liDotDotDot.id = 'node' + nodeNum + 'dotdotdot';
+    const span =\"<span class='tf-nc end-node'>...</span> \";
+    liDotDotDot.innerHTML = span;
+    return liDotDotDot;
+}
+)";
 
 }  // namespace Internal
 }  // namespace Halide

@@ -1,4 +1,5 @@
 #include "StmtToViz.h"
+#include "Debug.h"
 #include "Error.h"
 #include "FindStmtCost.h"
 #include "GetAssemblyInfoViz.h"
@@ -175,7 +176,7 @@ private:
     }
     string open_cost_span_else_case(Stmt else_case) {
         Stmt new_node =
-            IfThenElse::make(Variable::make(Int(32), "canIgnoreVariableName"), else_case, nullptr);
+            IfThenElse::make(Variable::make(Int(32), StmtToViz_canIgnoreVariableName_string), else_case, nullptr);
 
         StmtHierarchyInfo stmt_hierarchy_info = get_stmt_hierarchy.get_else_hierarchy_html();
         string popup = generate_stmt_hierarchy_popup(stmt_hierarchy_info.html);
@@ -480,7 +481,7 @@ private:
                     stream << "n";
                     break;
                 default:
-                    string hex_digits = "0123456789ABCDEF";
+                    const char* hex_digits = "0123456789ABCDEF";
                     stream << "x" << hex_digits[c >> 4] << hex_digits[c & 0xf];
                 }
             }
@@ -2377,7 +2378,7 @@ void print_to_viz(const string& filename, const Module& m) {
     StmtToViz sth(filename, m);
 
     sth.generate_html(filename, m);
-    std::cout << "Done generating HTML IR Visualization - printed to: " << filename << std::endl;
+    debug(1) << "Done generating HTML IR Visualization - printed to: " << filename << "\n";
 }
 
 }  // namespace Internal

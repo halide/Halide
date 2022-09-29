@@ -19,7 +19,8 @@ struct StmtHierarchyInfo {
 class GetStmtHierarchy : public IRVisitor {
 
 public:
-    static const std::string stmt_hierarchy_css, stmt_hierarchy_collapse_expand_JS;
+    static const char* stmt_hierarchy_css;
+    static const char* stmt_hierarchy_collapse_expand_JS;
 
     GetStmtHierarchy(FindStmtCost find_stmt_cost_populated)
         : find_stmt_cost(find_stmt_cost_populated), ir_viz(find_stmt_cost_populated),
