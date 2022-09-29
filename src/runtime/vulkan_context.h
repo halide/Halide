@@ -229,7 +229,7 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     }
 
     // enable all available optional extensions
-    debug(user_context) << "Vulkan: Found " << (uint32_t)optional_device_extensions.size() << " optional extensions for device!\n";
+    debug(user_context) << "Vulkan: Checking for " << (uint32_t)optional_device_extensions.size() << " optional extensions for device ...\n";
     for (int n = 0; n < (int)optional_device_extensions.size(); ++n) {
         if (supported_device_extensions.contains(optional_device_extensions[n])) {
             debug(user_context) << "    optional extension: " << optional_device_extensions[n] << "\n";
@@ -247,6 +247,11 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         &queue_priority,
     };
 
+    // Get the device features so that all supported features are enabled when device is created
+    //
+    VkPhysicalDeviceFeatures device_features;
+    vkGetPhysicalDeviceFeatures(*physical_device, &device_features);
+
     VkDeviceCreateInfo device_create_info = {
         VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         nullptr,  // Next
@@ -255,7 +260,7 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         &device_queue_create_info,
         (uint32_t)requested_layers.size(), requested_layers.data(),                      // Layers
         (uint32_t)required_device_extensions.size(), required_device_extensions.data(),  // Enabled extensions
-        nullptr,                                                                         // VkPhysicalDeviceFeatures
+        &device_features,                                                                // Requested device features
     };
 
     VkResult result = vkCreateDevice(*physical_device, &device_create_info, alloc_callbacks, device);

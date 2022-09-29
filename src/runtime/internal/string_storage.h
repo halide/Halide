@@ -68,7 +68,7 @@ struct StringUtils {
         return size_t(ptr - str);
     }
 
-    static size_t copy_upto(char* dst, const char* src, size_t max_chars) {
+    static size_t copy_upto(char *dst, const char *src, size_t max_chars) {
         size_t length = count_length(src, max_chars);
         memcpy(dst, src, length);
         dst[length] = '\0';

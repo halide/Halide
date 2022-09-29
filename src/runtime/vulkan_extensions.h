@@ -169,8 +169,12 @@ uint32_t vk_get_required_device_extensions(void *user_context, StringTable &ext_
 }
 
 uint32_t vk_get_optional_device_extensions(void *user_context, StringTable &ext_table) {
-    const uint32_t optional_ext_count = 1;
-    const char *optional_ext_table[] = {"VK_KHR_portability_subset"};
+    const char *optional_ext_table[] = {
+        "VK_KHR_portability_subset",  //< necessary for running under Molten (aka Vulkan on Mac)
+        "VK_KHR_16bit_storage",
+        "VK_KHR_shader_float16_int8",
+        "VK_KHR_shader_float_controls"};
+    const uint32_t optional_ext_count = sizeof(optional_ext_table) / sizeof(optional_ext_table[0]);
 
     ext_table.resize(user_context, optional_ext_count);
     for (uint32_t n = 0; n < optional_ext_count; ++n) {
