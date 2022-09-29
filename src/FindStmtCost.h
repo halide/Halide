@@ -82,7 +82,7 @@ private:
                                         bool inclusive) const;
 
     // sets inclusive/exclusive costs
-    void set_costs(bool inclusive, const IRNode *node, std::vector<const IRNode *> children,
+    void set_costs(bool inclusive, const IRNode *node, const std::vector<const IRNode *>& children,
                    std::function<int(int)> calculate_cc, std::function<int(int)> calculate_dmc);
 
     // sets max computation cost and max data movement cost (inclusive and exclusive)

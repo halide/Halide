@@ -239,7 +239,7 @@ vector<int> FindStmtCost::get_costs_children(const IRNode *parent, vector<const 
 }
 
 void FindStmtCost::set_costs(
-    bool inclusive, const IRNode *node, vector<const IRNode *> children,
+    bool inclusive, const IRNode *node, const vector<const IRNode *>& children,
     std::function<int(int)> calculate_cc = [](int x) { return NORMAL_NODE_CC + x; },
     std::function<int(int)> calculate_dmc = [](int x) { return NORMAL_NODE_DMC + x; }) {
 
