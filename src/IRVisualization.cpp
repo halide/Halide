@@ -8,7 +8,7 @@ namespace Internal {
 using std::pair;
 using std::string;
 using std::vector;
-using std::stringstream;
+using std::ostringstream;
 
 constexpr int NUMBER_COST_COLORS = 20;
 
@@ -242,7 +242,7 @@ void IRVisualization::start_module_traversal(const Module &m) {
 }
 
 string IRVisualization::open_box_div(string class_name, const IRNode *op) {
-    stringstream ss;
+    ostringstream ss;
 
     ss << "<div class='box center " << class_name << "'";
     ss << ">";
@@ -256,7 +256,7 @@ string IRVisualization::open_box_div(string class_name, const IRNode *op) {
     return ss.str();
 }
 string IRVisualization::close_box_div() const {
-    stringstream ss;
+    ostringstream ss;
     ss << close_div();  // body div (opened at end of each open_header_...() instance)
     ss << close_div();  // content div
     ss << close_div();  // main box div
@@ -266,7 +266,7 @@ string IRVisualization::open_function_box_div() const {
     return "<div class='center FunctionBox'> <div class='functionContent'>";
 }
 string IRVisualization::close_function_box_div() const {
-    stringstream ss;
+    ostringstream ss;
     ss << close_div();  // content div
     ss << close_div();  // main box div
     return ss.str();
@@ -284,7 +284,7 @@ string IRVisualization::open_store_div() const {
     return "<div class='store'>";
 }
 string IRVisualization::open_body_div() const {
-    stringstream ss;
+    ostringstream ss;
     ss << "<div id='irViz" << num_of_nodes << "' class='boxBody'>";
     return ss.str();
 }
@@ -294,7 +294,7 @@ string IRVisualization::close_div() const {
 
 string IRVisualization::open_header(const string &header, string anchor_name,
                                     vector<pair<string, string>> info_tooltip_table) {
-    stringstream ss;
+    ostringstream ss;
     ss << open_header_div();
 
     num_of_nodes++;
@@ -341,7 +341,7 @@ string IRVisualization::close_header() const {
 }
 string IRVisualization::div_header(const string &header, StmtSize *size, string anchor_name,
                                    vector<pair<string, string>> info_tooltip_table = {}) {
-    stringstream ss;
+    ostringstream ss;
 
     ss << open_header(header, anchor_name, info_tooltip_table);
     ss << close_header();
@@ -359,7 +359,7 @@ string IRVisualization::div_header(const string &header, StmtSize *size, string 
     return ss.str();
 }
 string IRVisualization::function_div_header(const string &function_name, string anchor_name) const {
-    stringstream ss;
+    ostringstream ss;
 
     ss << "<div class='functionHeader'>";
 
@@ -383,12 +383,12 @@ string IRVisualization::function_div_header(const string &function_name, string 
 vector<string> IRVisualization::get_allocation_sizes(const Allocate *op) const {
     vector<string> sizes;
 
-    stringstream type;
+    ostringstream type;
     type << "<span class='stringType'>" << op->type << "</span>";
     sizes.push_back(type.str());
 
     for (const auto &extent : op->extents) {
-        stringstream ss;
+        ostringstream ss;
         if (extent.as<IntImm>()) {
             ss << "<span class='intType'>" << extent << "</span>";
         } else {
@@ -405,7 +405,7 @@ vector<string> IRVisualization::get_allocation_sizes(const Allocate *op) const {
 string IRVisualization::allocate_div_header(const Allocate *op, const string &header,
                                             string anchor_name,
                                             vector<pair<string, string>> &info_tooltip_table) {
-    stringstream ss;
+    ostringstream ss;
 
     ss << open_header(header, anchor_name, info_tooltip_table);
     ss << close_header();
@@ -422,7 +422,7 @@ string IRVisualization::allocate_div_header(const Allocate *op, const string &he
 }
 string IRVisualization::for_loop_div_header(const For *op, const string &header,
                                             string anchor_name) {
-    stringstream ss;
+    ostringstream ss;
 
     ss << open_header(header, anchor_name, {});
     ss << close_header();
@@ -439,7 +439,7 @@ string IRVisualization::for_loop_div_header(const For *op, const string &header,
 }
 
 string IRVisualization::if_tree(const IRNode *op, const string &header, string anchor_name) {
-    stringstream ss;
+    ostringstream ss;
 
     ss << "<li>";
     ss << "<span class='tf-nc if-node'>";
@@ -450,7 +450,7 @@ string IRVisualization::if_tree(const IRNode *op, const string &header, string a
     return ss.str();
 }
 string IRVisualization::close_if_tree() const {
-    stringstream ss;
+    ostringstream ss;
     ss << close_box_div();
     ss << "</span>";
     ss << "</li>";
@@ -458,7 +458,7 @@ string IRVisualization::close_if_tree() const {
 }
 
 string IRVisualization::read_write_table(StmtSize &size) const {
-    stringstream read_write_table_ss;
+    ostringstream read_write_table_ss;
 
     // open table
     read_write_table_ss << "<table class='costTable'>";
@@ -553,14 +553,14 @@ string IRVisualization::read_write_table(StmtSize &size) const {
     return read_write_table_ss.str();
 }
 string IRVisualization::allocate_table(vector<string> &allocation_sizes) const {
-    stringstream allocate_table_ss;
+    ostringstream allocate_table_ss;
 
     // open table
     allocate_table_ss << "<table class='costTable'>";
 
     // open header and data rows
-    stringstream header;
-    stringstream data;
+    ostringstream header;
+    ostringstream data;
 
     header << "<tr>";
     data << "<tr>";
@@ -605,7 +605,7 @@ string IRVisualization::allocate_table(vector<string> &allocation_sizes) const {
     return allocate_table_ss.str();
 }
 string IRVisualization::for_loop_table(string loop_size) const {
-    stringstream for_loop_table_ss;
+    ostringstream for_loop_table_ss;
 
     // open table
     for_loop_table_ss << "<table class='costTable'>";
@@ -635,7 +635,7 @@ string IRVisualization::for_loop_table(string loop_size) const {
 }
 
 string IRVisualization::see_code_button_div(string anchor_name, bool put_div) const {
-    stringstream ss;
+    ostringstream ss;
     if (put_div) ss << "<div>";
     ss << "<button class='iconButton dottedIconButton' style='display: block;' ";
     ss << "onclick='scrollToFunctionVizToCode(\"" << anchor_name << "\")'>";
@@ -647,7 +647,7 @@ string IRVisualization::see_code_button_div(string anchor_name, bool put_div) co
 
 string IRVisualization::info_button_with_tooltip(string tooltip_text, string button_class_name,
                                                  string tooltip_class_name) {
-    stringstream ss;
+    ostringstream ss;
 
     // infoButton
     ir_viz_tooltip_count++;
@@ -677,7 +677,7 @@ string IRVisualization::info_button_with_tooltip(string tooltip_text, string but
 }
 
 string IRVisualization::generate_computation_cost_div(const IRNode *op) {
-    stringstream ss;
+    ostringstream ss;
 
     // skip if it's a store
     if (op->node_type == IRNodeType::Store) return "";
@@ -703,7 +703,7 @@ string IRVisualization::generate_computation_cost_div(const IRNode *op) {
     return ss.str();
 }
 string IRVisualization::generate_memory_cost_div(const IRNode *op) {
-    stringstream ss;
+    ostringstream ss;
 
     // skip if it's a store
     if (op->node_type == IRNodeType::Store) return "";
@@ -745,7 +745,7 @@ int IRVisualization::get_cost_percentage(const IRNode *node, bool inclusive,
 }
 
 string IRVisualization::tooltip_table(vector<pair<string, string>> &table, string extra_note) {
-    stringstream s;
+    ostringstream s;
     s << "<table class='tooltipTable'>";
     for (auto &row : table) {
         s << "<tr>";
@@ -762,7 +762,7 @@ string IRVisualization::tooltip_table(vector<pair<string, string>> &table, strin
 }
 
 string IRVisualization::IRVisualization::color_button(int color_range) {
-    stringstream ss;
+    ostringstream ss;
 
     ir_viz_tooltip_count++;
     ss << "<button id='irVizButton" << ir_viz_tooltip_count << "' ";
@@ -777,7 +777,7 @@ string IRVisualization::computation_div(const IRNode *op) {
     // want exclusive cost (so that the colors match up with exclusive costs)
     int computation_range = get_color_range(op, false, true);
 
-    stringstream ss;
+    ostringstream ss;
     ss << color_button(computation_range);
 
     string tooltip_text = generate_computation_cost_tooltip(op, "");
@@ -794,7 +794,7 @@ string IRVisualization::data_movement_div(const IRNode *op) {
     // want exclusive cost (so that the colors match up with exclusive costs)
     int data_movement_range = get_color_range(op, false, false);
 
-    stringstream ss;
+    ostringstream ss;
     ss << color_button(data_movement_range);
 
     string tooltip_text = generate_data_movement_cost_tooltip(op, "");
@@ -808,7 +808,7 @@ string IRVisualization::data_movement_div(const IRNode *op) {
     return ss.str();
 }
 string IRVisualization::cost_colors(const IRNode *op) {
-    stringstream ss;
+    ostringstream ss;
     ss << computation_div(op);
     ss << data_movement_div(op);
     return ss.str();
@@ -868,7 +868,7 @@ void IRVisualization::visit(const ProducerConsumer *op) {
 }
 string IRVisualization::get_loop_iterator_binary(const IRNodeType &type, const Expr &a,
                                                  const Expr &b) const {
-    stringstream extent_name;
+    ostringstream extent_name;
     extent_name << "(";
 
     // deal with a
@@ -893,7 +893,7 @@ string IRVisualization::get_loop_iterator_binary(const IRNodeType &type, const E
     } else if (type == IRNodeType::Mod) {
         extent_name << " % ";
     } else {
-        internal_error << "Unknown IRNodeType: \n";
+        internal_assert(false) << "Unknown IRNodeType: \n";
     }
 
     // deal with b
@@ -995,7 +995,7 @@ string IRVisualization::get_loop_iterator(const For *op) const {
 
         // extent is something else
         else {
-            stringstream loop_it;
+            ostringstream loop_it;
             if (min_value == 0) {
                 loop_it << op->extent;
             } else {
@@ -1007,7 +1007,7 @@ string IRVisualization::get_loop_iterator(const For *op) const {
 
     // min is not an IntImm
     else {
-        stringstream loop_it;
+        ostringstream loop_it;
         loop_it << "(" << op->extent << ") - (" << op->min << ")";
         loop_iterator = loop_it.str();
     }
@@ -1045,7 +1045,7 @@ void IRVisualization::visit(const IfThenElse *op) {
     string anchor_name = "if" + std::to_string(if_count);
 
     while (true) {
-        stringstream condition;
+        ostringstream condition;
         condition << op->condition;
 
         string condition_string = condition.str();
@@ -1143,7 +1143,7 @@ void IRVisualization::visit(const Load *op) {
             const Ramp *ramp = op->index.as<Ramp>();
 
             table_rows.push_back({"Ramp lanes", std::to_string(ramp->lanes)});
-            stringstream ramp_stride;
+            ostringstream ramp_stride;
             ramp_stride << ramp->stride;
             table_rows.push_back({"Ramp stride", ramp_stride.str()});
 
@@ -1220,18 +1220,18 @@ void IRVisualization::visit(const Allocate *op) {
     table_rows.push_back({"Memory Type", get_memory_type(op->memory_type)});
 
     if (!is_const_one(op->condition)) {
-        stringstream condition_string;
+        ostringstream condition_string;
         condition_string << op->condition;
         table_rows.push_back({"Condition", condition_string.str()});
     }
     if (op->new_expr.defined()) {
-        stringstream new_expr_string;
+        ostringstream new_expr_string;
         new_expr_string << op->new_expr;
         table_rows.push_back({"New Expr", new_expr_string.str()});
     }
     if (!op->free_function.empty()) {
 
-        stringstream free_func_string;
+        ostringstream free_func_string;
         free_func_string << op->free_function;
         table_rows.push_back({"Free Function", free_func_string.str()});
     }
@@ -1247,9 +1247,9 @@ void IRVisualization::visit(const Allocate *op) {
 }
 
 string IRVisualization::generate_ir_visualization_js() {
-    stringstream irVizJS;
+    ostringstream ir_viz_js;
 
-    irVizJS << "\n// irViz JS\n"
+    ir_viz_js << "\n// irViz JS\n"
             << "for (let i = 1; i <= " << ir_viz_tooltip_count << "; i++) { \n"
             << "    const button = document.getElementById('irVizButton' + i); \n"
             << "    const tooltip = document.getElementById('irVizTooltip' + i); \n"
@@ -1286,14 +1286,14 @@ string IRVisualization::generate_ir_visualization_js() {
             << "    }\n"
             << "}\n ";
 
-    return irVizJS.str();
+    return ir_viz_js.str();
 }
 
 /*
  * PRINT NODE
  */
 string GetReadWrite::print_node(const IRNode *node) const {
-    stringstream ss;
+    ostringstream ss;
     ss << "Node in question has type: ";
     IRNodeType type = node->node_type;
     if (type == IRNodeType::IntImm) {

@@ -47,7 +47,7 @@ private:
     using IRVisitor::visit;
 
     // main html content
-    std::stringstream assembly_HTML;
+    std::ostringstream assembly_HTML;
 
     // stores mapping of node to line number
     std::unordered_map<const IRNode *, int> node_to_line_number_prod_cons;

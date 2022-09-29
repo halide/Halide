@@ -37,7 +37,7 @@ public:
     std::string generate_stmt_hierarchy_js();
 
 private:
-    std::stringstream html;       // html string
+    std::ostringstream html;      // html string
     FindStmtCost find_stmt_cost;  // used as input to IRVisualization
     IRVisualization ir_viz;       // used to generate the tooltip information and cost colors
 

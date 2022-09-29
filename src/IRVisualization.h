@@ -92,7 +92,7 @@ public:
 private:
     using IRVisitor::visit;
 
-    std::stringstream html;            // main html string
+    std::ostringstream html;      // main html string
     GetReadWrite get_read_write;  // generates the read/write sizes
     FindStmtCost find_stmt_cost;  // used to determine the color of each statement
     int num_of_nodes;             // keeps track of the number of nodes in the visualization

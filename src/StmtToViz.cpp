@@ -21,7 +21,7 @@ namespace Halide {
 namespace Internal {
 
 using std::string;
-using std::stringstream;
+using std::ostringstream;
 
 class StmtToViz : public IRVisitor {
 
@@ -71,7 +71,7 @@ private:
     std::vector<int> context_stack;
     std::vector<string> context_stack_tags;
     string open_tag(const string &tag, const string &cls, int id = -1) {
-        stringstream s;
+        ostringstream s;
         s << "<" << tag << " class='" << cls << "' id='";
         if (id == -1) {
             s << context_stack.back() << "-";
@@ -85,7 +85,7 @@ private:
         return s.str();
     }
     string tag(const string &tag, const string &cls, const string &body, int id = -1) {
-        stringstream s;
+        ostringstream s;
         s << open_tag(tag, cls, id);
         s << body;
         s << close_tag(tag);
@@ -116,7 +116,7 @@ private:
     }
 
     string generate_stmt_hierarchy_popup(string hierarchy_HTML) {
-        stringstream popup;
+        ostringstream popup;
 
         popup_count++;
         popup << "<div class='modal fade' id='stmtHierarchyModal" << popup_count;
@@ -144,7 +144,7 @@ private:
     string open_cost_span(const Stmt &stmt_op) {
         StmtHierarchyInfo stmt_hierarchy_info = get_stmt_hierarchy_html(stmt_op);
 
-        stringstream s;
+        ostringstream s;
 
         s << cost_colors(stmt_op.get(), stmt_hierarchy_info);
 
@@ -157,7 +157,7 @@ private:
     string open_cost_span(const Expr &stmt_op) {
         StmtHierarchyInfo stmt_hierarchy_info = get_stmt_hierarchy_html(stmt_op);
 
-        stringstream s;
+        ostringstream s;
 
         s << cost_colors(stmt_op.get(), stmt_hierarchy_info);
 
@@ -181,7 +181,7 @@ private:
         // popup window - will put them all at the end
         popups += popup + "\n";
 
-        stringstream s;
+        ostringstream s;
 
         curr_line_num += 1;
 
@@ -226,7 +226,7 @@ private:
         }
         tooltip_count++;
 
-        stringstream s;
+        ostringstream s;
         s << "<button ";
 
         // tooltip information
@@ -261,7 +261,7 @@ private:
     }
 
     string computation_button(const IRNode *op, const StmtHierarchyInfo &stmt_hierarchy_info) {
-        stringstream s;
+        ostringstream s;
         s << color_button(op, true, stmt_hierarchy_info);
 
         string tooltip_text =
@@ -276,7 +276,7 @@ private:
         return s.str();
     }
     string data_movement_button(const IRNode *op, const StmtHierarchyInfo &stmt_hierarchy_info) {
-        stringstream s;
+        ostringstream s;
         s << color_button(op, false, stmt_hierarchy_info);
 
         string tooltip_text = ir_visualization.generate_data_movement_cost_tooltip(
@@ -293,7 +293,7 @@ private:
     string cost_colors(const IRNode *op, const StmtHierarchyInfo &stmt_hierarchy_info) {
         curr_line_num += 1;
 
-        stringstream s;
+        ostringstream s;
 
         if (op->node_type == IRNodeType::Allocate || op->node_type == IRNodeType::Evaluate ||
             op->node_type == IRNodeType::IfThenElse || op->node_type == IRNodeType::For ||
@@ -326,7 +326,7 @@ private:
     }
 
     string see_viz_button(const string &anchor_name) {
-        stringstream s;
+        ostringstream s;
 
         s << "<button class='iconButton dottedIconButton' ";
         s << "style='padding: 0px;' ";
@@ -339,7 +339,7 @@ private:
 
     string see_assembly_button(const int &assembly_line_num_start,
                                const int &assembly_line_num_end = -1) {
-        stringstream s;
+        ostringstream s;
 
         tooltip_count++;
         s << "<button class='iconButton assemblyIcon' ";
@@ -397,7 +397,7 @@ private:
             scope.push(x, id);
         }
 
-        stringstream s;
+        ostringstream s;
         s << "<b class='Variable Matched' id='" << id << "-" << unique_id() << "'>";
         s << x;
         s << "</b>";
@@ -419,7 +419,7 @@ private:
     }
 
     string open_expand_button(int id) {
-        stringstream button;
+        ostringstream button;
         button << "<a class=ExpandButton onclick='return toggle(" << id << ", " << tooltip_count
                << ");'>"
                << "<div style='position:relative; width:0; height:0;'>"
@@ -1583,7 +1583,7 @@ public:
 
     string information_popup() {
 
-        stringstream popup;
+        ostringstream popup;
 
         popup_count++;
         popup << "<div class='modal fade' id='stmtHierarchyModal" << popup_count
@@ -1722,7 +1722,7 @@ public:
     string information_bar(const Module &m) {
         popups += information_popup();
 
-        stringstream info_bar_ss;
+        ostringstream info_bar_ss;
 
         info_bar_ss << "<div class='informationBar'>\n"
                     << "<div class='title'>\n"
@@ -1741,7 +1741,7 @@ public:
     }
 
     string resize_bar() {
-        stringstream resize_bar_ss;
+        ostringstream resize_bar_ss;
 
         resize_bar_ss << "<div class='ResizeBar' id='ResizeBar'>\n"
                       << "<div class='collapseButtons'>\n"
@@ -1760,7 +1760,7 @@ public:
     }
 
     string resize_bar_assembly() {
-        stringstream resize_bar_ss;
+        ostringstream resize_bar_ss;
 
         resize_bar_ss << "<div class='ResizeBar' id='ResizeBarAssembly'>\n"
                       << "<div class='collapseButtons'>\n"
@@ -1826,7 +1826,7 @@ public:
     }
 
     string generate_tooltip_JS(int &tooltip_count) {
-        stringstream tooltip_JS;
+        ostringstream tooltip_JS;
         tooltip_JS << "\n// Tooltip JS\n"
                    << "function update(buttonElement, tooltipElement) { \n"
                    << "    window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, { \n"

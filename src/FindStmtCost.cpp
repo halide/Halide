@@ -8,7 +8,7 @@ namespace Internal {
 
 using std::string;
 using std::vector;
-using std::stringstream;
+using std::ostringstream;
 
 /*
  * FindStmtCost class
@@ -604,7 +604,7 @@ void FindStmtCost::visit(const For *op) {
 }
 
 void FindStmtCost::visit(const Acquire *op) {
-    stringstream name;
+    ostringstream name;
     name << op->semaphore;
 
     op->semaphore.accept(this);
@@ -812,7 +812,7 @@ void FindStmtCost::visit(const Evaluate *op) {
 void FindStmtCost::visit(const Atomic *op) {
     op->body.accept(this);
 
-    stringstream name;
+    ostringstream name;
     name << op->producer_name;
 
     set_costs(true, op, {op->body.get()});
@@ -820,7 +820,7 @@ void FindStmtCost::visit(const Atomic *op) {
 }
 
 string FindStmtCost::print_node(const IRNode *node) const {
-    stringstream s;
+    ostringstream s;
     s << "Node in question has type: ";
     IRNodeType type = node->node_type;
     if (type == IRNodeType::IntImm) {

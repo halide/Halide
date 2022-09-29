@@ -4,7 +4,7 @@ namespace Halide {
 namespace Internal {
 
 using std::string;
-using std::stringstream;
+using std::ostringstream;
 
 StmtHierarchyInfo GetStmtHierarchy::get_hierarchy_html(const Expr &node) {
     reset_variables();
@@ -65,7 +65,7 @@ void GetStmtHierarchy::update_num_nodes() {
 }
 
 string GetStmtHierarchy::get_node_class_name() {
-    stringstream class_name;
+    ostringstream class_name;
     if (curr_node_ID == start_node_id) {
         class_name << "viz" << viz_counter << " startNode depth" << node_depth;
     } else {
@@ -86,14 +86,14 @@ void GetStmtHierarchy::reset_variables() {
 }
 
 string GetStmtHierarchy::start_tree() const {
-    stringstream ss;
+    ostringstream ss;
     ss << "<div class='treeDiv'>";
     ss << "<div class='tf-tree tf-gap-sm tf-custom-stmtHierarchy'>";
     ss << "<ul>";
     return ss.str();
 }
 string GetStmtHierarchy::end_tree() const {
-    stringstream ss;
+    ostringstream ss;
     ss << "</ul>";
     ss << "</div>";
     ss << "</div>";
@@ -103,7 +103,7 @@ string GetStmtHierarchy::end_tree() const {
 string GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     stmt_hierarchy_tooltip_count++;
 
-    stringstream ss;
+    ostringstream ss;
     string tooltip_text = ir_viz.generate_computation_cost_tooltip(op, "");
 
     // tooltip span
@@ -125,7 +125,7 @@ string GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
 string GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
     stmt_hierarchy_tooltip_count++;
 
-    stringstream ss;
+    ostringstream ss;
     string tooltip_text = ir_viz.generate_data_movement_cost_tooltip(op, "");
 
     // tooltip span
@@ -146,7 +146,7 @@ string GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
 }
 
 string GetStmtHierarchy::node_without_children(const IRNode *op, string name) {
-    stringstream ss;
+    ostringstream ss;
 
     string class_name = get_node_class_name();
     ss << "<li class='" << class_name << "'>"
@@ -164,7 +164,7 @@ string GetStmtHierarchy::node_without_children(const IRNode *op, string name) {
     return ss.str();
 }
 string GetStmtHierarchy::open_node(const IRNode *op, string name) {
-    stringstream ss;
+    ostringstream ss;
     string class_name = get_node_class_name() + " children-node";
 
     update_num_nodes();
@@ -192,7 +192,7 @@ string GetStmtHierarchy::open_node(const IRNode *op, string name) {
 }
 string GetStmtHierarchy::close_node() {
     node_depth--;
-    stringstream ss;
+    ostringstream ss;
     ss << "</ul>";
     ss << "</li>";
     return ss.str();
@@ -211,14 +211,14 @@ void GetStmtHierarchy::visit(const StringImm *op) {
     html << node_without_children(op, op->value);
 }
 void GetStmtHierarchy::visit(const Cast *op) {
-    stringstream name;
+    ostringstream name;
     name << op->type;
     html << open_node(op, name.str());
     op->value.accept(this);
     html << close_node();
 }
 void GetStmtHierarchy::visit(const Reinterpret *op) {
-    stringstream name;
+    ostringstream name;
     name << "reinterpret ";
     name << op->type;
     html << open_node(op, name.str());
@@ -308,7 +308,7 @@ void GetStmtHierarchy::visit(const Select *op) {
     html << close_node();
 }
 void GetStmtHierarchy::visit(const Load *op) {
-    stringstream index;
+    ostringstream index;
     index << op->index;
     html << node_without_children(op, op->name + "[" + index.str() + "]");
 }
@@ -408,7 +408,7 @@ void GetStmtHierarchy::visit(const For *op) {
 void GetStmtHierarchy::visit(const Store *op) {
     html << open_node(op, "Store");
 
-    stringstream index;
+    ostringstream index;
     index << op->index;
     html << node_without_children(op->index.get(), op->name + "[" + index.str() + "]");
 
@@ -436,7 +436,7 @@ void GetStmtHierarchy::visit(const Provide *op) {
 void GetStmtHierarchy::visit(const Allocate *op) {
     html << open_node(op, "allocate");
 
-    stringstream index;
+    ostringstream index;
     index << op->type;
 
     for (const auto &extent : op->extents) {
@@ -446,7 +446,7 @@ void GetStmtHierarchy::visit(const Allocate *op) {
 
     html << node_without_children(op, op->name + "[" + index.str() + "]");
 
-    stringstream name;
+    ostringstream name;
     if (!is_const_one(op->condition)) {
         name << " if " << op->condition;
     }
@@ -562,7 +562,7 @@ void GetStmtHierarchy::visit(const VectorReduce *op) {
     html << open_node(op, "vector_reduce");
 
     int curr_node = curr_node_ID;
-    stringstream op_op;
+    ostringstream op_op;
     op_op << op->op;
     html << node_without_children(nullptr, op_op.str());
 
@@ -601,7 +601,7 @@ void GetStmtHierarchy::visit(const Atomic *op) {
 }
 
 string GetStmtHierarchy::generate_stmt_hierarchy_js() {
-    stringstream stmt_hierarchy_js;
+    ostringstream stmt_hierarchy_js;
 
     stmt_hierarchy_js
         << "\n// stmtHierarchy JS\n"
