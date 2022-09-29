@@ -34,10 +34,9 @@ namespace {
 void vk_set_layer_names_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(layer_names) / sizeof(layer_names[0]);
-        strncpy(layer_names, n, buffer_size);
-        layer_names[buffer_size - 1] = '\0';
+        StringUtils::copy_upto(layer_names, n, buffer_size);
     } else {
-        layer_names[0] = '\0';
+        layer_names[0] = 0;
     }
     layer_names_initialized = true;
 }
@@ -56,8 +55,7 @@ const char *vk_get_layer_names_internal(void *user_context) {
 void vk_set_extension_names_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(extension_names) / sizeof(extension_names[0]);
-        strncpy(extension_names, n, buffer_size);
-        extension_names[buffer_size - 1] = 0;
+        StringUtils::copy_upto(extension_names, n, buffer_size);
     } else {
         extension_names[0] = 0;
     }
@@ -75,8 +73,7 @@ const char *vk_get_extension_names_internal(void *user_context) {
 void vk_set_device_type_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(device_type) / sizeof(device_type[0]);
-        strncpy(device_type, n, buffer_size);
-        device_type[buffer_size - 1] = 0;
+        StringUtils::copy_upto(device_type, n, buffer_size);
     } else {
         device_type[0] = 0;
     }
@@ -94,8 +91,7 @@ const char *vk_get_device_type_internal(void *user_context) {
 void vk_set_build_options_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(build_options) / sizeof(build_options[0]);
-        strncpy(build_options, n, buffer_size);
-        build_options[buffer_size - 1] = 0;
+        StringUtils::copy_upto(build_options, n, buffer_size);
     } else {
         build_options[0] = 0;
     }
