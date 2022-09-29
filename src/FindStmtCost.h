@@ -1,5 +1,5 @@
-#ifndef FINDSTMTCOST_H
-#define FINDSTMTCOST_H
+#ifndef HALIDE_FIND_STMT_COST_H
+#define HALIDE_FIND_STMT_COST_H
 
 #include "Error.h"
 #include "ExternFuncArgument.h"
@@ -7,7 +7,6 @@
 #include "IRVisitor.h"
 #include "Module.h"
 
-#include <stdexcept>
 #include <unordered_map>
 
 namespace Halide {

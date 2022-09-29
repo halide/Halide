@@ -1,10 +1,9 @@
-#ifndef IRVISUALIZATION_H
-#define IRVISUALIZATION_H
+#ifndef HALIDE_IR_VISUALIZATION_H
+#define HALIDE_IR_VISUALIZATION_H
 
 #include "FindStmtCost.h"
 #include "IRVisitor.h"
 
-#include <set>
 #include <unordered_map>
 
 namespace Halide {

@@ -1,10 +1,8 @@
-#ifndef GETASSEMBLYINFOVIZ_H
-#define GETASSEMBLYINFOVIZ_H
+#ifndef HALIDE_GET_ASSEMBLY_INFO_VIZ_H
+#define HALIDE_GET_ASSEMBLY_INFO_VIZ_H
 
-#include <fstream>
-#include <map>
-#include <regex>
 #include <unordered_map>
+#include <regex>
 
 #include "IROperator.h"
 #include "IRVisitor.h"

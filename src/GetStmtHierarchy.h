@@ -1,7 +1,5 @@
-#ifndef GETSTMTHIERARCHY_H
-#define GETSTMTHIERARCHY_H
-
-#include <set>
+#ifndef HALIDE_GET_STMT_HIERARCHY_H
+#define HALIDE_GET_STMT_HIERARCHY_H
 
 #include "FindStmtCost.h"
 #include "IROperator.h"

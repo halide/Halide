@@ -1,4 +1,6 @@
+#include "GetAssemblyInfoViz.h"
 
+#include <fstream>
 
 namespace Halide {
 namespace Internal {
