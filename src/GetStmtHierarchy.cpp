@@ -1,8 +1,10 @@
 #include "GetStmtHierarchy.h"
 
-using namespace std;
-using namespace Halide;
-using namespace Internal;
+namespace Halide {
+namespace Internal {
+
+using std::string;
+using std::stringstream;
 
 StmtHierarchyInfo GetStmtHierarchy::get_hierarchy_html(const Expr &node) {
     reset_variables();
@@ -722,3 +724,6 @@ function addDotDotDotChild(nodeNum, colorCost) { \n \
     return liDotDotDot; \n \
 } \n \
 ";
+
+}  // namespace Internal
+}  // namespace Halide

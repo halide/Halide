@@ -10,9 +10,11 @@
 #include "IRVisitor.h"
 #include "Module.h"
 
-using namespace std;
-using namespace Halide;
-using namespace Internal;
+namespace Halide {
+
+class Module;
+
+namespace Internal {
 
 struct AssemblyInfoForLoop {
     std::regex regex_start;  // regex to match the starting marker with
@@ -34,10 +36,10 @@ class GetAssemblyInfoViz : public IRVisitor {
 
 public:
     // generates the assembly info for the module
-    void generate_assembly_information(const Module &m, const string &assembly_filename);
+    void generate_assembly_information(const Module &m, const std::string &assembly_filename);
 
     // returns html content that contains the assembly code
-    string get_assembly_html();
+    std::string get_assembly_html();
 
     // gets line numbers for producers/consumers + for loops
     int get_line_number_prod_cons(const IRNode *op);
@@ -47,15 +49,15 @@ private:
     using IRVisitor::visit;
 
     // main html content
-    stringstream assembly_HTML;
+    std::stringstream assembly_HTML;
 
     // stores mapping of node to line number
-    unordered_map<const IRNode *, int> node_to_line_number_prod_cons;
-    unordered_map<const IRNode *, ForLoopLineNumber> node_to_line_numbers_for_loops;
+    std::unordered_map<const IRNode *, int> node_to_line_number_prod_cons;
+    std::unordered_map<const IRNode *, ForLoopLineNumber> node_to_line_numbers_for_loops;
 
     // stores the markers
-    vector<AssemblyInfoForLoop> for_loop_markers;
-    vector<AssemblyInfoProdCons> producer_consumer_markers;
+    std::vector<AssemblyInfoForLoop> for_loop_markers;
+    std::vector<AssemblyInfoProdCons> producer_consumer_markers;
 
     // for maping each node to unique marker in assembly
     int for_loop_count = 0;
@@ -66,23 +68,26 @@ private:
 
     // generates the assembly html and line numbers from the loaded assembly file
     // and generated markers
-    void generate_assembly_html_and_line_numbers(const string &filename);
+    void generate_assembly_html_and_line_numbers(const std::string &filename);
 
     // gets assembly file from stmt.viz.html file
-    string get_assembly_filename(const string &filename);
+    std::string get_assembly_filename(const std::string &filename);
 
     // checks if there is a marker that matches the assembly line, and if so, adds the line
     // number and node to map, signifying a match
-    void add_line_number(string &assembly_line, int line_number);
-    void add_line_number_for_loop(string &assembly_line, AssemblyInfoForLoop &marker,
+    void add_line_number(std::string &assembly_line, int line_number);
+    void add_line_number_for_loop(std::string &assembly_line, AssemblyInfoForLoop &marker,
                                   int line_number);
-    void add_line_number_prod_cons(string &assembly_line, AssemblyInfoProdCons &marker,
+    void add_line_number_prod_cons(std::string &assembly_line, AssemblyInfoProdCons &marker,
                                    int line_number);
 
     void visit(const ProducerConsumer *op) override;
     void visit(const For *op) override;
 
-    string print_node(const IRNode *node) const;
+    std::string print_node(const IRNode *node) const;
 };
+
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

@@ -20,13 +20,8 @@
 namespace Halide {
 namespace Internal {
 
-namespace {
-template<typename T>
-string to_string(T value) {
-    std::ostringstream os;
-    os << value;
-    return os.str();
-}
+using std::string;
+using std::stringstream;
 
 class StmtToViz : public IRVisitor {
 
@@ -239,7 +234,7 @@ private:
         s << "aria-describedby='tooltip" << tooltip_count << "' ";
 
         // cost colors
-        s << "class='colorButton CostColor" + to_string(color_range_exclusive) + "' role='button' ";
+        s << "class='colorButton CostColor" + std::to_string(color_range_exclusive) + "' role='button' ";
 
         // showing StmtHierarchy popup
         s << "data-bs-toggle='modal' data-bs-target='#stmtHierarchyModal" << popup_count << "' ";
@@ -2365,24 +2360,22 @@ populateCodeMirror(1, 1); \n \
 collapseAssembly(); \n \
 ";
 
-}  // namespace
-
-void print_to_viz(const string &filename, const Stmt &s) {
+void print_to_viz(const string& filename, const Stmt& s) {
     internal_error << "\n"
-                   << "\n"
-                   << "Exiting early: print_to_viz cannot be called from a Stmt node - it must be "
-                      "called from a Module node.\n"
-                   << "\n"
-                   << "\n"
-                   << "\n";
+        << "\n"
+        << "Exiting early: print_to_viz cannot be called from a Stmt node - it must be "
+        "called from a Module node.\n"
+        << "\n"
+        << "\n"
+        << "\n";
 }
 
-void print_to_viz(const string &filename, const Module &m) {
+void print_to_viz(const string& filename, const Module& m) {
 
     StmtToViz sth(filename, m);
 
     sth.generate_html(filename, m);
-    cout << "Done generating HTML IR Visualization - printed to: " << filename << endl;
+    std::cout << "Done generating HTML IR Visualization - printed to: " << filename << std::endl;
 }
 
 }  // namespace Internal

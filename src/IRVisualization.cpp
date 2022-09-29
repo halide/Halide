@@ -2,9 +2,15 @@
 #include "IROperator.h"
 #include "Module.h"
 
-using namespace std;
-using namespace Halide;
-using namespace Internal;
+namespace Halide {
+namespace Internal {
+
+using std::pair;
+using std::string;
+using std::vector;
+using std::stringstream;
+
+constexpr int NUMBER_COST_COLORS = 20;
 
 /*
  * GetReadWrite class
@@ -1044,7 +1050,8 @@ void IRVisualization::visit(const IfThenElse *op) {
 
         string condition_string = condition.str();
         // make condition smaller if it's too big
-        if (condition_string.size() > MAX_CONDITION_LENGTH) {
+        constexpr size_t max_condition_legth = 25;
+        if (condition_string.size() > max_condition_legth) {
             condition.str("");
             condition << "(...";
             condition << info_button_with_tooltip("condition: <br>" + condition_string, "",
@@ -1583,3 +1590,6 @@ div.boxHeaderTitle { \n \
     background-color: #f7fafa; \n \
 } \n \
 ";
+
+}  // namespace Internal
+}  // namespace Halide

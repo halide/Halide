@@ -8,12 +8,11 @@
 #include "IRVisitor.h"
 #include "IRVisualization.h"
 
-using namespace std;
-using namespace Halide;
-using namespace Internal;
+namespace Halide {
+namespace Internal {
 
 struct StmtHierarchyInfo {
-    string html;     // html code for the node
+    std::string html;     // html code for the node
     int viz_num;     // id for that visualization
     int start_node;  // start node for the visualization
     int end_node;    // end node for the visualization
@@ -22,7 +21,7 @@ struct StmtHierarchyInfo {
 class GetStmtHierarchy : public IRVisitor {
 
 public:
-    static const string stmt_hierarchy_css, stmt_hierarchy_collapse_expand_JS;
+    static const std::string stmt_hierarchy_css, stmt_hierarchy_collapse_expand_JS;
 
     GetStmtHierarchy(FindStmtCost find_stmt_cost_populated)
         : find_stmt_cost(find_stmt_cost_populated), ir_viz(find_stmt_cost_populated),
@@ -37,10 +36,10 @@ public:
     StmtHierarchyInfo get_else_hierarchy_html();
 
     // generates the JS that is needed to add the tooltips
-    string generate_stmt_hierarchy_js();
+    std::string generate_stmt_hierarchy_js();
 
 private:
-    stringstream html;            // html string
+    std::stringstream html;       // html string
     FindStmtCost find_stmt_cost;  // used as input to IRVisualization
     IRVisualization ir_viz;       // used to generate the tooltip information and cost colors
 
@@ -57,25 +56,25 @@ private:
     void update_num_nodes();
 
     // returns the class name in format "node[parentID]child depth[depth]"
-    string get_node_class_name();
+    std::string get_node_class_name();
 
     // resets all the variables to start a new tree
     void reset_variables();
 
     // starts and ends a tree within the html file
-    string start_tree() const;
-    string end_tree() const;
+    std::string start_tree() const;
+    std::string end_tree() const;
 
     // creating color divs with tooltips
-    string generate_computation_cost_div(const IRNode *op);
-    string generate_memory_cost_div(const IRNode *op);
+    std::string generate_computation_cost_div(const IRNode *op);
+    std::string generate_memory_cost_div(const IRNode *op);
 
     // opens and closes nodes, depending on number of children
-    string node_without_children(const IRNode *op, string name);
-    string open_node(const IRNode *op, string name);
-    string close_node();
+    std::string node_without_children(const IRNode *op, std::string name);
+    std::string open_node(const IRNode *op, std::string name);
+    std::string close_node();
 
-    void visit_binary_op(const IRNode *op, const Expr &a, const Expr &b, const string &name);
+    void visit_binary_op(const IRNode *op, const Expr &a, const Expr &b, const std::string &name);
 
     void visit(const IntImm *op) override;
     void visit(const UIntImm *op) override;
@@ -125,5 +124,8 @@ private:
     void visit(const Evaluate *op) override;
     void visit(const Atomic *op) override;
 };
+
+}  // namespace Internal
+}  // namespace Halide
 
 #endif

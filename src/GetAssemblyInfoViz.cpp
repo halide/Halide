@@ -1,10 +1,9 @@
 
 
-#include "GetAssemblyInfoViz.h"
+namespace Halide {
+namespace Internal {
 
-using namespace std;
-using namespace Halide;
-using namespace Internal;
+using std::string;
 
 void GetAssemblyInfoViz::generate_assembly_information(const Module &m,
                                                        const string &assembly_filename) {
@@ -48,9 +47,9 @@ void GetAssemblyInfoViz::generate_assembly_html_and_line_numbers(const string &f
     assembly_HTML << "<div id='assemblyContent' style='display: none;'>\n";
     assembly_HTML << "<pre>\n";
 
-    ifstream assembly_file;
+    std::ifstream assembly_file;
     string assembly_filename = get_assembly_filename(filename);
-    assembly_file.open(assembly_filename, ios::in);
+    assembly_file.open(assembly_filename, std::ios::in);
 
     if (assembly_file.is_open()) {
         string assembly_line;
@@ -125,7 +124,7 @@ void GetAssemblyInfoViz::visit(const ProducerConsumer *op) {
     producer_consumer_count++;
 
     string assembly_marker = "%\"";
-    assembly_marker += to_string(producer_consumer_count);
+    assembly_marker += std::to_string(producer_consumer_count);
     assembly_marker += op->is_producer ? "_produce " : "_consume ";
     assembly_marker += op->name;
 
@@ -178,7 +177,7 @@ void GetAssemblyInfoViz::visit(const For *op) {
 }
 
 string GetAssemblyInfoViz::print_node(const IRNode *node) const {
-    stringstream s;
+    std::stringstream s;
     IRNodeType type = node->node_type;
     if (type == IRNodeType::ProducerConsumer) {
         s << "ProducerConsumer";
@@ -194,3 +193,6 @@ string GetAssemblyInfoViz::print_node(const IRNode *node) const {
 
     return s.str();
 }
+
+}  // namespace Internal
+}  // namespace Halide

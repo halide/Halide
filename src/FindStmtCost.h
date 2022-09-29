@@ -10,14 +10,13 @@
 #include <stdexcept>
 #include <unordered_map>
 
-using namespace Halide;
-using namespace Internal;
-using namespace std;
+namespace Halide {
+namespace Internal {
 
-#define NORMAL_NODE_CC 1
-#define NORMAL_NODE_DMC 0
-#define LOAD_DM_COST 2
-#define STORE_DM_COST 3
+constexpr int NORMAL_NODE_CC = 1;
+constexpr int NORMAL_NODE_DMC = 0;
+constexpr int LOAD_DM_COST = 2;
+constexpr int STORE_DM_COST = 3;
 
 /*
  * StmtCost struct
@@ -56,10 +55,10 @@ public:
     int get_max_cost(bool inclusive, bool is_computation) const;
 
     // prints node type
-    string print_node(const IRNode *node) const;
+    std::string print_node(const IRNode *node) const;
 
 private:
-    unordered_map<const IRNode *, StmtCost> stmt_cost;  // key: node, value: cost
+    std::unordered_map<const IRNode *, StmtCost> stmt_cost;  // key: node, value: cost
     int current_loop_depth;                             // stores current loop depth level
 
     // these are used for determining the range of the cost
@@ -80,11 +79,11 @@ private:
     int get_if_node_cost(const IRNode *op, bool inclusive, bool is_computation) const;
 
     // gets costs from `stmt_cost` map of children nodes and sum them up accordingly
-    vector<int> get_costs_children(const IRNode *parent, vector<const IRNode *> children,
-                                   bool inclusive) const;
+    std::vector<int> get_costs_children(const IRNode *parent, std::vector<const IRNode *> children,
+                                        bool inclusive) const;
 
     // sets inclusive/exclusive costs
-    void set_costs(bool inclusive, const IRNode *node, vector<const IRNode *> children,
+    void set_costs(bool inclusive, const IRNode *node, std::vector<const IRNode *> children,
                    std::function<int(int)> calculate_cc, std::function<int(int)> calculate_dmc);
 
     // sets max computation cost and max data movement cost (inclusive and exclusive)
@@ -143,5 +142,8 @@ private:
     void visit(const Evaluate *op) override;
     void visit(const Atomic *op) override;
 };
+
+}  // namespace Internal
+}  // namespace Halide
 
 #endif  // FINDSTMTCOST_H

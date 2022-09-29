@@ -3,6 +3,13 @@
 using namespace Halide;
 using namespace Internal;
 
+namespace Halide {
+namespace Internal {
+
+using std::string;
+using std::vector;
+using std::stringstream;
+
 /*
  * FindStmtCost class
  */
@@ -928,3 +935,6 @@ string FindStmtCost::print_node(const IRNode *node) const {
 
     return s.str();
 }
+
+}  // namespace Internal
+}  // namespace Halide
