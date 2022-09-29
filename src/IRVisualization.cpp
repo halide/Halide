@@ -24,13 +24,10 @@ StmtSize GetReadWrite::get_size(const IRNode *node) const {
     auto it = stmt_sizes.find(node);
 
     // errors if node is not found
-    if (it == stmt_sizes.end()) {
-        internal_error << "\n\nGetReadWrite::get_size - Node not found in stmt_sizes: "
-                       << print_node(node) << "\n\n";
-        return StmtSize();
-    }
+    internal_assert(it != stmt_sizes.end()) << "\n\nGetReadWrite::get_size - Node not found in stmt_sizes: "
+                                            << print_node(node) << "\n\n";
 
-    return it->second;
+    return (it != stmt_sizes.end()) ? it->second : StmtSize();
 }
 
 string GetReadWrite::string_span(string var_name) const {
@@ -64,9 +61,9 @@ string GetReadWrite::get_simplified_string(string a, string b, string op) {
     }
 
     else {
-        internal_error << "\n"
-                       << "GetReadWrite::get_simplified_string - Unsupported operator: " << op
-                       << "\n";
+        internal_assert(false) << "\n"
+                               << "GetReadWrite::get_simplified_string - Unsupported operator: " << op
+                               << "\n";
         return "";
     }
 }
@@ -477,14 +474,12 @@ string IRVisualization::read_write_table(StmtSize &size) const {
     read_write_table_ss << "</tr>";
 
     // produces and consumes are empty
-    if (size.empty()) {
-        internal_error << "\n\n"
-                       << "IRVisualization::read_write_table - size is empty"
-                       << "\n";
-    }
+    internal_assert(!size.empty()) << "\n\n"
+                                   << "IRVisualization::read_write_table - size is empty"
+                                   << "\n";
 
     // produces and consumes aren't empty
-    else {
+    if (!size.empty()) {
         vector<string> rows;
 
         // fill in producer variables
@@ -830,6 +825,8 @@ void IRVisualization::visit_function(const LoweredFunc &func) {
 }
 void IRVisualization::visit(const Variable *op) {
     // if op->name starts with "::", remove "::"
+    if (op->name.size() < 2)
+        return;
     string var_name = op->name;
     if (var_name[0] == ':' && var_name[1] == ':') {
         var_name = var_name.substr(2);
@@ -1163,7 +1160,7 @@ void IRVisualization::visit(const Load *op) {
     }
 
     else {
-        internal_error << "\n\nUnsupported type for Load: " << op->type << "\n\n";
+        internal_assert(false) << "\n\nUnsupported type for Load: " << op->type << "\n\n";
     }
 
     header += "Load <i>" + op->name + "</i>";
@@ -1202,9 +1199,9 @@ string IRVisualization::get_memory_type(MemoryType mem_type) const {
     } else if (mem_type == MemoryType::AMXTile) {
         return "AMXTile";
     } else {
-        internal_error << "\n\n"
-                       << "Unknown memory type"
-                       << "\n";
+        internal_assert(false) << "\n\n"
+                               << "Unknown memory type"
+                               << "\n";
         return "Unknown Memory Type";
     }
 }

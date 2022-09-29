@@ -452,9 +452,9 @@ void GetStmtHierarchy::visit(const Allocate *op) {
     }
 
     if (op->new_expr.defined()) {
-        internal_error << "\n"
-                       << "GetStmtHierarchy: Allocate " << op->name
-                       << " `op->new_expr.defined()` is not supported yet.\n\n";
+        internal_assert(false) << "\n"
+                               << "GetStmtHierarchy: Allocate " << op->name
+                               << " `op->new_expr.defined()` is not supported yet.\n\n";
     }
     if (!op->free_function.empty()) {
         name << "custom_delete {" << op->free_function << "}";
@@ -469,13 +469,12 @@ void GetStmtHierarchy::visit(const Free *op) {
     html << close_node();
 }
 void GetStmtHierarchy::visit(const Realize *op) {
-    internal_error << "\n"
-                   << "GetStmtHierarchy: Realize is not supported yet \n\n";
+    internal_assert(false) << "\n"
+                           << "GetStmtHierarchy: Realize is not supported yet \n\n";
 }
 void GetStmtHierarchy::visit(const Block *op) {
-    internal_error
-        << "\n"
-        << "GetStmtHierarchy: Block is not supported and should never be visualized. \n\n";
+    internal_assert(false) << "\n"
+                           << "GetStmtHierarchy: Block is not supported and should never be visualized. \n\n";
 }
 void GetStmtHierarchy::visit(const IfThenElse *op) {
     html << open_node(op, "If");
@@ -572,12 +571,12 @@ void GetStmtHierarchy::visit(const VectorReduce *op) {
     html << close_node();
 }
 void GetStmtHierarchy::visit(const Prefetch *op) {
-    internal_error << "\n"
-                   << "GetStmtHierarchy: Prefetch is not supported yet. \n\n";
+    internal_assert(false) << "\n"
+                           << "GetStmtHierarchy: Prefetch is not supported yet. \n\n";
 }
 void GetStmtHierarchy::visit(const Fork *op) {
-    internal_error << "\n"
-                   << "GetStmtHierarchy: Fork is not supported yet. \n\n";
+    internal_assert(false) << "\n"
+                           << "GetStmtHierarchy: Fork is not supported yet. \n\n";
 }
 void GetStmtHierarchy::visit(const Acquire *op) {
     html << open_node(op, "acquire");

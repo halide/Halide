@@ -459,7 +459,7 @@ private:
     void visit(const StringImm *op) override {
         stream << open_span("StringImm");
         stream << "\"";
-        for (unsigned char c : op->value) {
+        for (auto c : op->value) {
             if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
                 stream << c;
             } else {
@@ -746,8 +746,8 @@ private:
         } else if (op->for_type == ForType::GPULane) {
             stream << keyword("gpu_lane");
         } else {
-            internal_error << "\n"
-                           << "Unknown for type: " << ((int)op->for_type) << "\n\n";
+            internal_assert(false) << "\n"
+                                   << "Unknown for type: " << ((int)op->for_type) << "\n\n";
         }
         stream << " (";
         stream << close_span();
@@ -1421,8 +1421,8 @@ public:
             stream << close_div();
 
             stream << " ";
-            internal_error << "\n\n\nvoid print(const Buffer<> &op): look at this line!!! make "
-                              "sure the closing brace is correct! \n\n\n";
+            internal_assert(false) << "\n\n\nvoid print(const Buffer<> &op): look at this line!!! make "
+                                      "sure the closing brace is correct! \n\n\n";
             stream << open_div("ClosingBrace");
             stream << matched("}");
             stream << close_div();
@@ -1436,7 +1436,7 @@ public:
         // doesn't currently support submodules - could comment out error, no guarantee it'll work
         // as expected
         for (const auto &s : m.submodules()) {
-            internal_error << "\n\nStmtToViz does not support submodules yet\n\n";
+            internal_assert(false) << "\n\nStmtToViz does not support submodules yet\n\n";
             print(s);
         }
 
@@ -2364,13 +2364,10 @@ collapseAssembly(); \n \
 ";
 
 void print_to_viz(const string& filename, const Stmt& s) {
-    internal_error << "\n"
-        << "\n"
-        << "Exiting early: print_to_viz cannot be called from a Stmt node - it must be "
-        "called from a Module node.\n"
-        << "\n"
-        << "\n"
-        << "\n";
+    internal_assert(false) << "\n\n"
+                           << "Exiting early: print_to_viz cannot be called from a Stmt node - it must be "
+                              "called from a Module node.\n"
+                           << "\n\n\n";
 }
 
 void print_to_viz(const string& filename, const Module& m) {

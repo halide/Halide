@@ -30,11 +30,9 @@ int FindStmtCost::get_cost(const IRNode *node, bool inclusive, bool is_computati
 }
 
 int FindStmtCost::get_depth(const IRNode *node) const {
-    if (node == nullptr) {
-        internal_error << "\n"
-                       << "FindStmtCost::get_depth: node is nullptr"
-                       << "\n\n";
-    }
+    internal_assert(node != nullptr) << "\n"
+                                     << "FindStmtCost::get_depth: node is nullptr"
+                                     << "\n\n";
 
     auto it = stmt_cost.find(node);
     if (it == stmt_cost.end()) {
@@ -54,10 +52,10 @@ int FindStmtCost::get_depth(const IRNode *node) const {
         }
 
         else {
-            internal_error << "\n"
-                           << "FindStmtCost::get_depth: " << print_node(node)
-                           << "node not found in stmt_cost map"
-                           << "\n\n";
+            internal_assert(false) << "\n"
+                                   << "FindStmtCost::get_depth: " << print_node(node)
+                                   << "node not found in stmt_cost map"
+                                   << "\n\n";
             return 0;
         }
     }
@@ -92,11 +90,9 @@ void FindStmtCost::traverse(const Module &m) {
 }
 
 int FindStmtCost::get_computation_cost(const IRNode *node, bool inclusive) const {
-    if (node == nullptr) {
-        internal_error << "\n"
-                       << "FindStmtCost::get_computation_cost: node is nullptr"
-                       << "\n\n";
-    }
+    internal_assert(node != nullptr) << "\n"
+                                     << "FindStmtCost::get_computation_cost: node is nullptr"
+                                     << "\n\n";
 
     auto it = stmt_cost.find(node);
     IRNodeType type = node->node_type;
@@ -118,35 +114,32 @@ int FindStmtCost::get_computation_cost(const IRNode *node, bool inclusive) const
             }
         }
 
-        // else, error
         else {
-            internal_error << "\n"
-                           << "FindStmtCost::get_computation_cost: " << print_node(node)
-                           << "node not found in stmt_cost map"
-                           << "\n\n";
+            internal_assert(false) << "\n"
+                                   << "FindStmtCost::get_computation_cost: " << print_node(node)
+                                   << "node not found in stmt_cost map"
+                                   << "\n\n";
             return 0;
         }
     } else {
-        if (inclusive) cost = it->second.computation_cost_inclusive;
-        else
+        if (inclusive) {
+            cost = it->second.computation_cost_inclusive;
+        } else {
             cost = it->second.computation_cost_exclusive;
+        }
     }
 
-    if (cost < 0) {
-        internal_error << "\n"
-                       << "FindStmtCost::get_computation_cost: " << print_node(node)
-                       << "computation_cost_exclusive not set (cost is: " << cost << ")"
-                       << "\n\n";
-    }
+    internal_assert(cost >= 0) << "\n"
+                               << "FindStmtCost::get_computation_cost: " << print_node(node)
+                               << "computation_cost_exclusive not set (cost is: " << cost << ")"
+                               << "\n\n";
 
     return cost;
 }
 int FindStmtCost::get_data_movement_cost(const IRNode *node, bool inclusive) const {
-    if (node == nullptr) {
-        internal_error << "\n"
-                       << "FindStmtCost::get_data_movement_cost: node is nullptr"
-                       << "\n\n";
-    }
+    internal_assert(node != nullptr) << "\n"
+                                     << "FindStmtCost::get_data_movement_cost: node is nullptr"
+                                     << "\n\n";
 
     auto it = stmt_cost.find(node);
     IRNodeType type = node->node_type;
@@ -167,13 +160,11 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node, bool inclusive) con
                 cost = NORMAL_NODE_DMC;
             }
         }
-
-        // else, error
         else {
-            internal_error << "\n"
-                           << "FindStmtCost::get_data_movement_cost: " << print_node(node)
-                           << "node not found in stmt_cost map"
-                           << "\n\n";
+            internal_assert(false) << "\n"
+                                   << "FindStmtCost::get_data_movement_cost: " << print_node(node)
+                                   << "node not found in stmt_cost map"
+                                   << "\n\n";
             return 0;
         }
     } else {
@@ -182,23 +173,19 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node, bool inclusive) con
             cost = it->second.data_movement_cost_exclusive;
     }
 
-    if (cost < 0) {
-        internal_error << "\n"
-                       << "FindStmtCost::get_data_movement_cost: " << print_node(node)
-                       << "data_movement_cost_exclusive not set (cost is: " << cost << ")"
-                       << "\n\n";
-    }
+    internal_assert(cost >= 0) << "\n"
+                               << "FindStmtCost::get_data_movement_cost: " << print_node(node)
+                               << "data_movement_cost_exclusive not set (cost is: " << cost << ")"
+                               << "\n\n";
 
     return cost;
 }
 
 int FindStmtCost::get_if_node_cost(const IRNode *op, bool inclusive, bool is_computation) const {
-    if (op->node_type != IRNodeType::IfThenElse) {
-        internal_error << "\n"
-                       << "FindStmtCost::get_if_node_cost: " << print_node(op)
-                       << "node is not IfThenElse"
-                       << "\n\n";
-    }
+    internal_assert(op->node_type == IRNodeType::IfThenElse) << "\n"
+                                                             << "FindStmtCost::get_if_node_cost: " << print_node(op)
+                                                             << "node is not IfThenElse"
+                                                             << "\n\n";
 
     int cost;
     const IfThenElse *if_then_else = dynamic_cast<const IfThenElse *>(op);
@@ -588,19 +575,19 @@ void FindStmtCost::visit(const For *op) {
 
     // TODO: complete implementation of different loop types
     if (op->for_type == ForType::Parallel) {
-        internal_error << "\n"
-                       << "FindStmtCost::visit: Parallel for loops are not supported yet"
-                       << "\n\n";
+        internal_assert(false) << "\n"
+                               << "FindStmtCost::visit: Parallel for loops are not supported yet"
+                               << "\n\n";
     }
     if (op->for_type == ForType::Unrolled) {
-        internal_error << "\n"
-                       << "FindStmtCost::visit: Unrolled for loops are not supported yet"
-                       << "\n\n";
+        internal_assert(false) << "\n"
+                               << "FindStmtCost::visit: Unrolled for loops are not supported yet"
+                               << "\n\n";
     }
     if (op->for_type == ForType::Vectorized) {
-        internal_error << "\n"
-                       << "FindStmtCost::visit: Vectorized for loops are not supported yet"
-                       << "\n\n";
+        internal_assert(false) << "\n"
+                               << "FindStmtCost::visit: Vectorized for loops are not supported yet"
+                               << "\n\n";
     }
 }
 
