@@ -42,7 +42,7 @@ private:
     using IRVisitor::visit;
 
     std::unordered_map<const IRNode *, StmtSize> stmt_sizes;  // stores the sizes
-    std::map<std::string, int> curr_load_values;                   // used when calculating store reads
+    std::map<std::string, int> curr_load_values;              // used when calculating store reads
 
     // starts traversal of the module
     void traverse(const Module &m);
@@ -123,14 +123,14 @@ private:
 
     // header functions
     std::string open_header(const std::string &header, std::string anchor_name,
-        std::vector<std::pair<std::string, std::string>> info_tooltip_table);
+                            std::vector<std::pair<std::string, std::string>> info_tooltip_table);
     std::string close_header() const;
     std::string div_header(const std::string &header, StmtSize *size, std::string anchor_name,
-        std::vector<std::pair<std::string, std::string>> info_tooltip_table);
+                           std::vector<std::pair<std::string, std::string>> info_tooltip_table);
     std::string function_div_header(const std::string &function_name, std::string anchor_name) const;
     std::vector<std::string> get_allocation_sizes(const Allocate *op) const;
     std::string allocate_div_header(const Allocate *op, const std::string &header, std::string anchor_name,
-        std::vector<std::pair<std::string, std::string>> &info_tooltip_table);
+                                    std::vector<std::pair<std::string, std::string>> &info_tooltip_table);
     std::string for_loop_div_header(const For *op, const std::string &header, std::string anchor_name);
 
     // opens and closes an if-tree
@@ -147,7 +147,7 @@ private:
 
     // info button with tooltip
     std::string info_button_with_tooltip(std::string tooltip_text, std::string button_class_name,
-        std::string tooltip_class_name = "");
+                                         std::string tooltip_class_name = "");
 
     // for cost colors - side bars of boxes
     std::string generate_computation_cost_div(const IRNode *op);

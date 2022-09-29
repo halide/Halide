@@ -5,10 +5,10 @@
 namespace Halide {
 namespace Internal {
 
+using std::ostringstream;
 using std::pair;
 using std::string;
 using std::vector;
-using std::ostringstream;
 
 constexpr int NUMBER_COST_COLORS = 20;
 
@@ -1247,41 +1247,41 @@ string IRVisualization::generate_ir_visualization_js() {
     ostringstream ir_viz_js;
 
     ir_viz_js << "\n// irViz JS\n"
-            << "for (let i = 1; i <= " << ir_viz_tooltip_count << "; i++) { \n"
-            << "    const button = document.getElementById('irVizButton' + i); \n"
-            << "    const tooltip = document.getElementById('irVizTooltip' + i); \n"
-            << "    button.addEventListener('mouseenter', () => { \n"
-            << "        showTooltip(button, tooltip); \n"
-            << "    }); \n"
-            << "    button.addEventListener('mouseleave', () => { \n"
-            << "        hideTooltip(tooltip); \n"
-            << "    } \n"
-            << "    ); \n"
-            << "    tooltip.addEventListener('focus', () => { \n"
-            << "        showTooltip(button, tooltip); \n"
-            << "    } \n"
-            << "    ); \n"
-            << "    tooltip.addEventListener('blur', () => { \n"
-            << "        hideTooltip(tooltip); \n"
-            << "    } \n"
-            << "    ); \n"
-            << "} \n"
-            << "function toggleCollapse(id) {\n "
-            << "    var buttonShow = document.getElementById('irViz' + id + '-show');\n"
-            << "    var buttonHide = document.getElementById('irViz' + id + '-hide');\n"
-            << "    var body = document.getElementById('irViz' + id);\n"
-            << "    if (body.style.visibility != 'hidden') {\n"
-            << "        body.style.visibility = 'hidden';\n"
-            << "        body.style.height = '0px';\n"
-            << "        body.style.width = '0px';\n"
-            << "        buttonShow.style.display = 'block';\n"
-            << "        buttonHide.style.display = 'none';\n"
-            << "    } else {\n"
-            << "        body.style = '';\n"
-            << "        buttonShow.style.display = 'none';\n"
-            << "        buttonHide.style.display = 'block';\n"
-            << "    }\n"
-            << "}\n ";
+              << "for (let i = 1; i <= " << ir_viz_tooltip_count << "; i++) { \n"
+              << "    const button = document.getElementById('irVizButton' + i); \n"
+              << "    const tooltip = document.getElementById('irVizTooltip' + i); \n"
+              << "    button.addEventListener('mouseenter', () => { \n"
+              << "        showTooltip(button, tooltip); \n"
+              << "    }); \n"
+              << "    button.addEventListener('mouseleave', () => { \n"
+              << "        hideTooltip(tooltip); \n"
+              << "    } \n"
+              << "    ); \n"
+              << "    tooltip.addEventListener('focus', () => { \n"
+              << "        showTooltip(button, tooltip); \n"
+              << "    } \n"
+              << "    ); \n"
+              << "    tooltip.addEventListener('blur', () => { \n"
+              << "        hideTooltip(tooltip); \n"
+              << "    } \n"
+              << "    ); \n"
+              << "} \n"
+              << "function toggleCollapse(id) {\n "
+              << "    var buttonShow = document.getElementById('irViz' + id + '-show');\n"
+              << "    var buttonHide = document.getElementById('irViz' + id + '-hide');\n"
+              << "    var body = document.getElementById('irViz' + id);\n"
+              << "    if (body.style.visibility != 'hidden') {\n"
+              << "        body.style.visibility = 'hidden';\n"
+              << "        body.style.height = '0px';\n"
+              << "        body.style.width = '0px';\n"
+              << "        buttonShow.style.display = 'block';\n"
+              << "        buttonHide.style.display = 'none';\n"
+              << "    } else {\n"
+              << "        body.style = '';\n"
+              << "        buttonShow.style.display = 'none';\n"
+              << "        buttonHide.style.display = 'block';\n"
+              << "    }\n"
+              << "}\n ";
 
     return ir_viz_js.str();
 }
@@ -1315,22 +1315,26 @@ string GetReadWrite::print_node(const IRNode *node) const {
         ss << "a: " << print_node(node1->a.get()) << "\n";
         ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Sub) {
-        ss << "Sub type" << "\n";
+        ss << "Sub type"
+           << "\n";
         auto node1 = dynamic_cast<const Sub *>(node);
         ss << "a: " << print_node(node1->a.get()) << "\n";
         ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Mod) {
-        ss << "Mod type" << "\n";
+        ss << "Mod type"
+           << "\n";
         auto node1 = dynamic_cast<const Mod *>(node);
         ss << "a: " << print_node(node1->a.get()) << "\n";
         ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Mul) {
-        ss << "Mul type" << "\n";
+        ss << "Mul type"
+           << "\n";
         auto node1 = dynamic_cast<const Mul *>(node);
         ss << "a: " << print_node(node1->a.get()) << "\n";
         ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Div) {
-        ss << "Div type" << "\n";
+        ss << "Div type"
+           << "\n";
         auto node1 = dynamic_cast<const Div *>(node);
         ss << "a: " << print_node(node1->a.get()) << "\n";
         ss << "b: " << print_node(node1->b.get()) << "\n";

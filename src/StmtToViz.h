@@ -23,7 +23,7 @@ void print_to_viz(const std::string &filename, const Stmt &s);
 /** Dump an HTML-formatted visualization of a Module to filename. */
 void print_to_viz(const std::string &filename, const Module &m);
 
-extern const char* StmtToViz_canIgnoreVariableName_string;
+extern const char *StmtToViz_canIgnoreVariableName_string;
 
 }  // namespace Internal
 }  // namespace Halide

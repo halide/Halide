@@ -21,10 +21,10 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::ostringstream;
+using std::string;
 
-const char* StmtToViz_canIgnoreVariableName_string = "canIgnoreVariableName";
+const char *StmtToViz_canIgnoreVariableName_string = "canIgnoreVariableName";
 
 class StmtToViz : public IRVisitor {
 
@@ -481,7 +481,7 @@ private:
                     stream << "n";
                     break;
                 default:
-                    const char* hex_digits = "0123456789ABCDEF";
+                    const char *hex_digits = "0123456789ABCDEF";
                     stream << "x" << hex_digits[c >> 4] << hex_digits[c & 0xf];
                 }
             }
@@ -2363,14 +2363,14 @@ populateCodeMirror(1, 1); \n \
 collapseAssembly(); \n \
 ";
 
-void print_to_viz(const string& filename, const Stmt& s) {
+void print_to_viz(const string &filename, const Stmt &s) {
     internal_assert(false) << "\n\n"
                            << "Exiting early: print_to_viz cannot be called from a Stmt node - it must be "
                               "called from a Module node.\n"
                            << "\n\n\n";
 }
 
-void print_to_viz(const string& filename, const Module& m) {
+void print_to_viz(const string &filename, const Module &m) {
 
     StmtToViz sth(filename, m);
 

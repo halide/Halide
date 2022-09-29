@@ -3,8 +3,8 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
 using std::ostringstream;
+using std::string;
 
 StmtHierarchyInfo GetStmtHierarchy::get_hierarchy_html(const Expr &node) {
     reset_variables();
@@ -627,8 +627,8 @@ string GetStmtHierarchy::generate_stmt_hierarchy_js() {
     return stmt_hierarchy_js.str();
 }
 
-const char* GetStmtHierarchy::stmt_hierarchy_css =
-R"(
+const char *GetStmtHierarchy::stmt_hierarchy_css =
+    R"(
 /* StmtHierarchy CSS */
 .arrow { border: solid rgb(125,125,125); border-width: 0 2px 2px 0; display:
 inline-block; padding: 3px; }
@@ -644,7 +644,7 @@ div.nodeContent { display: flex; }
 div.nodeName { padding-left: 5px; }
 )";
 
-const char* GetStmtHierarchy::stmt_hierarchy_collapse_expand_JS = R"(
+const char *GetStmtHierarchy::stmt_hierarchy_collapse_expand_JS = R"(
 // collapse/expand js (stmt hierarchy)
 var nodeExpanded = new Map();
 function collapseAllNodes(startNode, endNode) {

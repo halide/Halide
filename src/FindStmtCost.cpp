@@ -7,9 +7,9 @@ using namespace Internal;
 namespace Halide {
 namespace Internal {
 
+using std::ostringstream;
 using std::string;
 using std::vector;
-using std::ostringstream;
 
 /*
  * FindStmtCost class
@@ -159,8 +159,7 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node, bool inclusive) con
             if (var->name == StmtToViz_canIgnoreVariableName_string) {
                 cost = NORMAL_NODE_DMC;
             }
-        }
-        else {
+        } else {
             internal_assert(false) << "\n"
                                    << "FindStmtCost::get_data_movement_cost: " << print_node(node)
                                    << "node not found in stmt_cost map"
@@ -227,7 +226,7 @@ vector<int> FindStmtCost::get_costs_children(const IRNode *parent, vector<const 
 }
 
 void FindStmtCost::set_costs(
-    bool inclusive, const IRNode *node, const vector<const IRNode *>& children,
+    bool inclusive, const IRNode *node, const vector<const IRNode *> &children,
     std::function<int(int)> calculate_cc = [](int x) { return NORMAL_NODE_CC + x; },
     std::function<int(int)> calculate_dmc = [](int x) { return NORMAL_NODE_DMC + x; }) {
 

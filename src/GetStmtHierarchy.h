@@ -10,17 +10,17 @@ namespace Halide {
 namespace Internal {
 
 struct StmtHierarchyInfo {
-    std::string html;     // html code for the node
-    int viz_num;     // id for that visualization
-    int start_node;  // start node for the visualization
-    int end_node;    // end node for the visualization
+    std::string html;  // html code for the node
+    int viz_num;       // id for that visualization
+    int start_node;    // start node for the visualization
+    int end_node;      // end node for the visualization
 };
 
 class GetStmtHierarchy : public IRVisitor {
 
 public:
-    static const char* stmt_hierarchy_css;
-    static const char* stmt_hierarchy_collapse_expand_JS;
+    static const char *stmt_hierarchy_css;
+    static const char *stmt_hierarchy_collapse_expand_JS;
 
     GetStmtHierarchy(FindStmtCost find_stmt_cost_populated)
         : find_stmt_cost(find_stmt_cost_populated), ir_viz(find_stmt_cost_populated),
@@ -43,11 +43,11 @@ private:
     IRVisualization ir_viz;       // used to generate the tooltip information and cost colors
 
     // for expanding/collapsing nodes
-    int curr_node_ID;   // ID of the current node in traversal
-    int num_nodes;      // total number of nodes (across all generated trees in the IR)
-    int start_node_id;  // ID of the start node of the current tree
-    int node_depth;     // depth of the current node in the tree
-    int viz_counter;    // counter for the number of visualizations
+    int curr_node_ID;                  // ID of the current node in traversal
+    int num_nodes;                     // total number of nodes (across all generated trees in the IR)
+    int start_node_id;                 // ID of the start node of the current tree
+    int node_depth;                    // depth of the current node in the tree
+    int viz_counter;                   // counter for the number of visualizations
     int stmt_hierarchy_tooltip_count;  // tooltip count
 
     // updates the curr_node_ID to be the next available node ID (num_nodes)

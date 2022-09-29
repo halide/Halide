@@ -58,7 +58,7 @@ public:
 
 private:
     std::unordered_map<const IRNode *, StmtCost> stmt_cost;  // key: node, value: cost
-    int current_loop_depth;                             // stores current loop depth level
+    int current_loop_depth;                                  // stores current loop depth level
 
     // these are used for determining the range of the cost
     int max_computation_cost_inclusive;
@@ -82,7 +82,7 @@ private:
                                         bool inclusive) const;
 
     // sets inclusive/exclusive costs
-    void set_costs(bool inclusive, const IRNode *node, const std::vector<const IRNode *>& children,
+    void set_costs(bool inclusive, const IRNode *node, const std::vector<const IRNode *> &children,
                    std::function<int(int)> calculate_cc, std::function<int(int)> calculate_dmc);
 
     // sets max computation cost and max data movement cost (inclusive and exclusive)
