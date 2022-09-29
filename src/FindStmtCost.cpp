@@ -824,115 +824,116 @@ string FindStmtCost::print_node(const IRNode *node) const {
     s << "Node in question has type: ";
     IRNodeType type = node->node_type;
     if (type == IRNodeType::IntImm) {
-        s << "IntImm type" << endl;
+        s << "IntImm type";
         auto node1 = dynamic_cast<const IntImm *>(node);
-        s << "value: " << node1->value << endl;
+        s << "value: " << node1->value;
     } else if (type == IRNodeType::UIntImm) {
-        s << "UIntImm type" << endl;
+        s << "UIntImm type";
     } else if (type == IRNodeType::FloatImm) {
-        s << "FloatImm type" << endl;
+        s << "FloatImm type";
     } else if (type == IRNodeType::StringImm) {
-        s << "StringImm type" << endl;
+        s << "StringImm type";
     } else if (type == IRNodeType::Broadcast) {
-        s << "Broadcast type" << endl;
+        s << "Broadcast type";
     } else if (type == IRNodeType::Cast) {
-        s << "Cast type" << endl;
+        s << "Cast type";
     } else if (type == IRNodeType::Variable) {
         auto node1 = dynamic_cast<const Variable *>(node);
-        s << "Variable type - " << node1->name << endl;
+        s << "Variable type - " << node1->name;
     } else if (type == IRNodeType::Add) {
-        s << "Add type" << endl;
+        s << "Add type";
     } else if (type == IRNodeType::Sub) {
-        s << "Sub type" << endl;
+        s << "Sub type";
     } else if (type == IRNodeType::Mod) {
-        s << "Mod type" << endl;
+        s << "Mod type";
     } else if (type == IRNodeType::Mul) {
-        s << "Mul type" << endl;
+        s << "Mul type";
     } else if (type == IRNodeType::Div) {
-        s << "Div type" << endl;
+        s << "Div type";
     } else if (type == IRNodeType::Min) {
-        s << "Min type" << endl;
+        s << "Min type";
     } else if (type == IRNodeType::Max) {
-        s << "Max type" << endl;
+        s << "Max type";
     } else if (type == IRNodeType::EQ) {
-        s << "EQ type" << endl;
+        s << "EQ type";
     } else if (type == IRNodeType::NE) {
-        s << "NE type" << endl;
+        s << "NE type";
     } else if (type == IRNodeType::LT) {
-        s << "LT type" << endl;
+        s << "LT type";
     } else if (type == IRNodeType::LE) {
-        s << "LE type" << endl;
+        s << "LE type";
     } else if (type == IRNodeType::GT) {
-        s << "GT type" << endl;
+        s << "GT type";
     } else if (type == IRNodeType::GE) {
-        s << "GE type" << endl;
+        s << "GE type";
     } else if (type == IRNodeType::And) {
-        s << "And type" << endl;
+        s << "And type";
     } else if (type == IRNodeType::Or) {
-        s << "Or type" << endl;
+        s << "Or type";
     } else if (type == IRNodeType::Not) {
-        s << "Not type" << endl;
+        s << "Not type";
     } else if (type == IRNodeType::Select) {
-        s << "Select type" << endl;
+        s << "Select type";
     } else if (type == IRNodeType::Load) {
         s << "Load type: ";
         auto node1 = dynamic_cast<const Load *>(node);
-        s << node1->name << ", index: " << node1->index << endl;
+        s << node1->name << ", index: " << node1->index;
     } else if (type == IRNodeType::Ramp) {
-        s << "Ramp type" << endl;
+        s << "Ramp type";
     } else if (type == IRNodeType::Call) {
-        s << "Call type" << endl;
+        s << "Call type";
     } else if (type == IRNodeType::Let) {
-        s << "Let type" << endl;
+        s << "Let type";
     } else if (type == IRNodeType::Shuffle) {
-        s << "Shuffle type" << endl;
+        s << "Shuffle type";
     } else if (type == IRNodeType::VectorReduce) {
-        s << "VectorReduce type" << endl;
+        s << "VectorReduce type";
     } else if (type == IRNodeType::LetStmt) {
         s << "LetStmt type";
         auto node1 = dynamic_cast<const LetStmt *>(node);
         s << "name: " << node1->name;
-        s << ", value: " << node1->value << endl;
+        s << ", value: " << node1->value;
     } else if (type == IRNodeType::AssertStmt) {
-        s << "AssertStmt type" << endl;
+        s << "AssertStmt type";
     } else if (type == IRNodeType::ProducerConsumer) {
-        s << "ProducerConsumer type" << endl;
+        s << "ProducerConsumer type";
     } else if (type == IRNodeType::For) {
-        s << "For type" << endl;
+        s << "For type";
     } else if (type == IRNodeType::Acquire) {
-        s << "Acquire type" << endl;
+        s << "Acquire type";
     } else if (type == IRNodeType::Store) {
         s << "Store type: ";
         auto node1 = dynamic_cast<const Store *>(node);
         s << node1->name << ", index: " << node1->index;
-        s << ", value: " << node1->value << endl;
+        s << ", value: " << node1->value;
     } else if (type == IRNodeType::Provide) {
-        s << "Provide type" << endl;
+        s << "Provide type";
     } else if (type == IRNodeType::Allocate) {
-        s << "Allocate type" << endl;
+        s << "Allocate type";
     } else if (type == IRNodeType::Free) {
-        s << "Free type" << endl;
+        s << "Free type";
     } else if (type == IRNodeType::Realize) {
-        s << "Realize type" << endl;
+        s << "Realize type";
     } else if (type == IRNodeType::Block) {
-        s << "Block type" << endl;
+        s << "Block type";
     } else if (type == IRNodeType::Fork) {
-        s << "Fork type" << endl;
+        s << "Fork type";
     } else if (type == IRNodeType::IfThenElse) {
         auto node1 = dynamic_cast<const IfThenElse *>(node);
-        s << "IfThenElse type - cond: " << node1->condition << endl;
+        s << "IfThenElse type - cond: " << node1->condition;
     } else if (type == IRNodeType::Evaluate) {
-        s << "Evaluate type" << endl;
+        s << "Evaluate type";
     } else if (type == IRNodeType::Prefetch) {
-        s << "Prefetch type" << endl;
+        s << "Prefetch type";
     } else if (type == IRNodeType::Atomic) {
-        s << "Atomic type" << endl;
+        s << "Atomic type";
     } else if (type == IRNodeType::Reinterpret) {
-        s << "Reinterpret type" << endl;
+        s << "Reinterpret type";
     } else {
-        s << "Unknown type" << endl;
+        s << "Unknown type";
     }
 
+    s << "\n";
     return s.str();
 }
 

@@ -1315,28 +1315,28 @@ string GetReadWrite::print_node(const IRNode *node) const {
     } else if (type == IRNodeType::Add) {
         ss << "Add type";
         auto node1 = dynamic_cast<const Add *>(node);
-        ss << "a: " << print_node(node1->a.get()) << endl;
-        ss << "b: " << print_node(node1->b.get()) << endl;
+        ss << "a: " << print_node(node1->a.get()) << "\n";
+        ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Sub) {
-        ss << "Sub type" << endl;
+        ss << "Sub type" << "\n";
         auto node1 = dynamic_cast<const Sub *>(node);
-        ss << "a: " << print_node(node1->a.get()) << endl;
-        ss << "b: " << print_node(node1->b.get()) << endl;
+        ss << "a: " << print_node(node1->a.get()) << "\n";
+        ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Mod) {
-        ss << "Mod type" << endl;
+        ss << "Mod type" << "\n";
         auto node1 = dynamic_cast<const Mod *>(node);
-        ss << "a: " << print_node(node1->a.get()) << endl;
-        ss << "b: " << print_node(node1->b.get()) << endl;
+        ss << "a: " << print_node(node1->a.get()) << "\n";
+        ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Mul) {
-        ss << "Mul type" << endl;
+        ss << "Mul type" << "\n";
         auto node1 = dynamic_cast<const Mul *>(node);
-        ss << "a: " << print_node(node1->a.get()) << endl;
-        ss << "b: " << print_node(node1->b.get()) << endl;
+        ss << "a: " << print_node(node1->a.get()) << "\n";
+        ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Div) {
-        ss << "Div type" << endl;
+        ss << "Div type" << "\n";
         auto node1 = dynamic_cast<const Div *>(node);
-        ss << "a: " << print_node(node1->a.get()) << endl;
-        ss << "b: " << print_node(node1->b.get()) << endl;
+        ss << "a: " << print_node(node1->a.get()) << "\n";
+        ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Min) {
         ss << "Min type";
     } else if (type == IRNodeType::Max) {
