@@ -23,6 +23,7 @@ namespace Vulkan {
 
 // Declarations
 class VulkanMemoryAllocator;
+struct VulkanCompilationCacheEntry;
 
 // --------------------------------------------------------------------------
 
@@ -107,6 +108,13 @@ MemoryRegion *vk_create_scalar_uniform_buffer(void *user_context,
                                               void *args[],
                                               int8_t arg_is_buffer[]);
 
+VkResult vk_update_scalar_uniform_buffer(void *user_context,
+                                         VulkanMemoryAllocator *allocator,
+                                         MemoryRegion *region,
+                                         size_t arg_sizes[],
+                                         void *args[],
+                                         int8_t arg_is_buffer[]);
+
 void vk_destroy_scalar_uniform_buffer(void *user_context, VulkanMemoryAllocator *allocator,
                                       MemoryRegion *scalar_args_region);
 // -- Descriptor Pool
@@ -174,8 +182,8 @@ VkResult vk_destroy_compute_pipeline(void *user_context,
                                      VkPipeline compute_pipeline);
 
 // -- Shader Module
-VkShaderModule *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
-                                         const char *src, int size);
+VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
+                                                      const char *src, int size);
 
 int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocator);
 

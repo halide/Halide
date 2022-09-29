@@ -12,7 +12,19 @@ namespace Internal {
 namespace Vulkan {
 
 // Compilation cache for compiled shader modules
-WEAK Halide::Internal::GPUCompilationCache<VkDevice, VkShaderModule *> compilation_cache;
+struct VulkanCompilationCacheEntry {
+    VkShaderModule shader_module = {0};
+    VkDescriptorPool descriptor_pool = {0};
+    VkDescriptorSet descriptor_set = {0};
+    VkDescriptorSetLayout descriptor_set_layout = {0};
+    VkPipelineLayout pipeline_layout = {0};
+    VkPipeline compute_pipeline = {0};
+    MemoryRegion *args_region = nullptr;
+    uint32_t bindings_count = 0;
+    uint32_t buffer_count = 0;
+};
+
+WEAK Halide::Internal::GPUCompilationCache<VkDevice, VulkanCompilationCacheEntry *> compilation_cache;
 
 // --------------------------------------------------------------------------
 
@@ -154,14 +166,14 @@ uint32_t vk_count_bindings_for_descriptor_set(void *user_context,
                                               void *args[],
                                               int8_t arg_is_buffer[]) {
     int i = 0;
-    uint32_t num_bindings = 1;  // first binding is for passing scalar parameters in a buffer
+    uint32_t bindings_count = 1;  // first binding is for passing scalar parameters in a buffer
     while (arg_sizes[i] > 0) {
         if (arg_is_buffer[i]) {
-            num_bindings++;
+            bindings_count++;
         }
         i++;
     }
-    return num_bindings;
+    return bindings_count;
 }
 
 // --
@@ -177,25 +189,22 @@ VkResult vk_create_descriptor_pool(void *user_context,
         << "device: " << (void *)allocator->current_device() << ", "
         << "storage_buffer_count: " << (uint32_t)storage_buffer_count << ")\n";
 #endif
-    static const uint32_t uniform_buffer_count = 1;  // all scalar args are packed into one uniform buffer
-
     VkDescriptorPoolSize descriptor_pool_sizes[2] = {
         {
             VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // descriptor type
-            uniform_buffer_count                // how many
+            1                                   // all kernel args are packed into one uniform buffer
         },
         {
             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // descriptor type
-            storage_buffer_count                // how many
+            storage_buffer_count                // all halide buffers are passed as storage buffers
         }};
 
-    uint32_t descriptor_set_count = (uniform_buffer_count + storage_buffer_count);
     VkDescriptorPoolCreateInfo descriptor_pool_info =
         {
             VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,  // struct type
             nullptr,                                        // point to struct extending this
             0,                                              // flags
-            descriptor_set_count,                           // max number of sets that can be allocated TODO:should this be 1?
+            1,                                              // this pool will only be used for creating one descriptor set!
             2,                                              // pool size count
             descriptor_pool_sizes                           // ptr to descriptr pool sizes
         };
@@ -478,27 +487,47 @@ MemoryRegion *vk_create_scalar_uniform_buffer(void *user_context,
         return nullptr;
     }
 
+    // return the allocated region for the uniform buffer
+    return region;
+}
+
+VkResult vk_update_scalar_uniform_buffer(void *user_context,
+                                         VulkanMemoryAllocator *allocator,
+                                         MemoryRegion *region,
+                                         size_t arg_sizes[],
+                                         void *args[],
+                                         int8_t arg_is_buffer[]) {
+
+#ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << "Vulkan: vk_update_scalar_uniform_buffer (user_context: " << user_context << ", "
+        << "region: " << (void *)region << ")\n";
+#endif
+
+    if ((region == nullptr) || (region->handle == nullptr)) {
+        error(user_context) << "Vulkan: Invalid memory region used for updating scalar uniform buffer!\n";
+        return VK_INCOMPLETE;
+    }
+
     // map the region to a host ptr
-    uint8_t *scalar_buffer_host_ptr = (uint8_t *)allocator->map(user_context, region);
-    if (scalar_buffer_host_ptr == nullptr) {
+    uint8_t *host_ptr = (uint8_t *)allocator->map(user_context, region);
+    if (host_ptr == nullptr) {
         error(user_context) << "Vulkan: Failed to map host pointer to device memory!\n";
-        return nullptr;
+        return VK_INCOMPLETE;
     }
 
     // copy to the (host-visible/coherent) scalar uniform buffer
-    size_t scalar_arg_offset = 0;
+    size_t arg_offset = 0;
     for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
-            memcpy(scalar_buffer_host_ptr + scalar_arg_offset, args[i], arg_sizes[i]);
-            scalar_arg_offset += arg_sizes[i];
+            memcpy(host_ptr + arg_offset, args[i], arg_sizes[i]);
+            arg_offset += arg_sizes[i];
         }
     }
 
     // unmap the pointer to the buffer for the region
     allocator->unmap(user_context, region);
-
-    // return the allocated region for the uniform buffer
-    return region;
+    return VK_SUCCESS;
 }
 
 void vk_destroy_scalar_uniform_buffer(void *user_context, VulkanMemoryAllocator *allocator,
@@ -631,8 +660,8 @@ VkResult vk_destroy_compute_pipeline(void *user_context,
 
 // --------------------------------------------------------------------------
 
-VkShaderModule *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
-                                         const char *src, int size) {
+VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
+                                                      const char *src, int size) {
 #ifdef DEBUG_RUNTIME
     debug(user_context)
         << "Vulkan: vk_compile_shader_module (user_context: " << user_context << ", "
@@ -653,16 +682,17 @@ VkShaderModule *vk_compile_shader_module(void *user_context, VulkanMemoryAllocat
     };
 
     VkSystemAllocationScope alloc_scope = VkSystemAllocationScope::VK_SYSTEM_ALLOCATION_SCOPE_OBJECT;
-    VkShaderModule *shader_module = (VkShaderModule *)vk_host_malloc(user_context, sizeof(VkShaderModule), 0, alloc_scope, allocator->callbacks());
-    if (shader_module == nullptr) {
-        error(user_context) << "Vulkan: Failed to allocatoe shader module! Out of memory!\n";
+    VulkanCompilationCacheEntry *cache_entry = (VulkanCompilationCacheEntry *)vk_host_malloc(user_context, sizeof(VulkanCompilationCacheEntry), 0, alloc_scope, allocator->callbacks());
+    if (cache_entry == nullptr) {
+        error(user_context) << "Vulkan: Failed to allocate compilation cache entry! Out of memory!\n";
         return nullptr;
     }
+    memset(cache_entry, 0, sizeof(VulkanCompilationCacheEntry));
 
-    VkResult result = vkCreateShaderModule(allocator->current_device(), &shader_info, allocator->callbacks(), shader_module);
-    if ((result != VK_SUCCESS) || (shader_module == nullptr)) {
+    VkResult result = vkCreateShaderModule(allocator->current_device(), &shader_info, allocator->callbacks(), &cache_entry->shader_module);
+    if ((result != VK_SUCCESS)) {  // } || (cache_entry->shader_module == nullptr)) {
         error(user_context) << "Vulkan: vkCreateShaderModule Failed! Error returned: " << vk_get_error_name(result) << "\n";
-        vk_host_free(user_context, shader_module, allocator->callbacks());
+        vk_host_free(user_context, cache_entry, allocator->callbacks());
         return nullptr;
     }
 
@@ -671,7 +701,7 @@ VkShaderModule *vk_compile_shader_module(void *user_context, VulkanMemoryAllocat
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
 
-    return shader_module;
+    return cache_entry;
 }
 
 int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocator) {
@@ -688,22 +718,44 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
     // Functor to match compilation cache destruction call with scoped params
     struct DestroyShaderModule {
         void *user_context = nullptr;
-        VkDevice device = nullptr;
-        const VkAllocationCallbacks *allocation_callbacks = nullptr;
+        VulkanMemoryAllocator *allocator = nullptr;
 
-        DestroyShaderModule(void *ctx, VkDevice dev, const VkAllocationCallbacks *callbacks)
-            : user_context(ctx), device(dev), allocation_callbacks(callbacks) {
+        DestroyShaderModule(void *ctx, VulkanMemoryAllocator *allocator)
+            : user_context(ctx), allocator(allocator) {
         }
 
-        void operator()(VkShaderModule *shader_module) {
-            if (shader_module != nullptr) {
-                vkDestroyShaderModule(device, *shader_module, allocation_callbacks);
-                vk_host_free(user_context, shader_module, allocation_callbacks);
+        void operator()(VulkanCompilationCacheEntry *cache_entry) {
+            if (cache_entry != nullptr) {
+                if (cache_entry->shader_module) {
+                    vkDestroyShaderModule(allocator->current_device(), cache_entry->shader_module, allocator->callbacks());
+                    cache_entry->shader_module = {0};
+                }
+                if (cache_entry->args_region) {
+                    vk_destroy_scalar_uniform_buffer(user_context, allocator, cache_entry->args_region);
+                    cache_entry->args_region = nullptr;
+                }
+                if (cache_entry->descriptor_set_layout) {
+                    vk_destroy_descriptor_set_layout(user_context, allocator, cache_entry->descriptor_set_layout);
+                    cache_entry->descriptor_set_layout = {0};
+                }
+                if (cache_entry->descriptor_pool) {
+                    vk_destroy_descriptor_pool(user_context, allocator, cache_entry->descriptor_pool);
+                    cache_entry->descriptor_pool = {0};
+                }
+                if (cache_entry->pipeline_layout) {
+                    vk_destroy_pipeline_layout(user_context, allocator, cache_entry->pipeline_layout);
+                    cache_entry->pipeline_layout = {0};
+                }
+                if (cache_entry->compute_pipeline) {
+                    vk_destroy_compute_pipeline(user_context, allocator, cache_entry->compute_pipeline);
+                    cache_entry->compute_pipeline = {0};
+                }
+                vk_host_free(user_context, cache_entry, allocator->callbacks());
             }
         }
     };
 
-    DestroyShaderModule module_destructor(user_context, allocator->current_device(), allocator->callbacks());
+    DestroyShaderModule module_destructor(user_context, allocator);
     compilation_cache.delete_context(user_context, allocator->current_device(), module_destructor);
 
 #ifdef DEBUG_RUNTIME

@@ -59,9 +59,9 @@ public:
         int result = halide_vulkan_acquire_context(user_context,
                                                    reinterpret_cast<halide_vulkan_memory_allocator **>(&allocator),
                                                    &instance, &device, &physical_device, &command_pool, &queue, &queue_family_index);
-        if(result != halide_error_code_success) {
+        if (result != halide_error_code_success) {
             halide_error_no_device_interface(user_context);
-        }                                               
+        }
         halide_debug_assert(user_context, allocator != nullptr);
         halide_debug_assert(user_context, instance != nullptr);
         halide_debug_assert(user_context, device != nullptr);
