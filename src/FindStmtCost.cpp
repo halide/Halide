@@ -1,4 +1,5 @@
 #include "FindStmtCost.h"
+#include "StmtToViz.h"
 
 using namespace Halide;
 using namespace Internal;
@@ -112,7 +113,7 @@ int FindStmtCost::get_computation_cost(const IRNode *node, bool inclusive) const
         // this happens when visualizing cost of else_case in StmtToViz.cpp
         else if (type == IRNodeType::Variable) {
             const Variable *var = (const Variable *)node;
-            if (var->name == "canIgnoreVariableName") {
+            if (var->name == StmtToViz_canIgnoreVariableName_string) {
                 cost = NORMAL_NODE_CC;
             }
         }
@@ -162,7 +163,7 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node, bool inclusive) con
         // this happens when visualizing cost of else_case in StmtToViz.cpp
         else if (type == IRNodeType::Variable) {
             const Variable *var = (const Variable *)node;
-            if (var->name == "canIgnoreVariableName") {
+            if (var->name == StmtToViz_canIgnoreVariableName_string) {
                 cost = NORMAL_NODE_DMC;
             }
         }

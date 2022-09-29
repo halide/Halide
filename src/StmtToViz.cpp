@@ -23,6 +23,8 @@ namespace Internal {
 using std::string;
 using std::ostringstream;
 
+const char* StmtToViz_canIgnoreVariableName_string = "canIgnoreVariableName";
+
 class StmtToViz : public IRVisitor {
 
     // CSS strings
