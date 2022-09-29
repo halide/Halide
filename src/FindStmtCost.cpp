@@ -810,114 +810,211 @@ string FindStmtCost::print_node(const IRNode *node) const {
     ostringstream s;
     s << "Node in question has type: ";
     IRNodeType type = node->node_type;
-    if (type == IRNodeType::IntImm) {
+    switch (type) {
+    case IRNodeType::IntImm: {
         s << "IntImm type";
         auto node1 = dynamic_cast<const IntImm *>(node);
         s << "value: " << node1->value;
-    } else if (type == IRNodeType::UIntImm) {
+        break;
+    }
+    case IRNodeType::UIntImm: {
         s << "UIntImm type";
-    } else if (type == IRNodeType::FloatImm) {
+        break;
+    }
+    case IRNodeType::FloatImm: {
         s << "FloatImm type";
-    } else if (type == IRNodeType::StringImm) {
+        break;
+    }
+    case IRNodeType::StringImm: {
         s << "StringImm type";
-    } else if (type == IRNodeType::Broadcast) {
+        break;
+    }
+    case IRNodeType::Broadcast: {
         s << "Broadcast type";
-    } else if (type == IRNodeType::Cast) {
+        break;
+    }
+    case IRNodeType::Cast: {
         s << "Cast type";
-    } else if (type == IRNodeType::Variable) {
+        break;
+    }
+    case IRNodeType::Variable: {
         auto node1 = dynamic_cast<const Variable *>(node);
         s << "Variable type - " << node1->name;
-    } else if (type == IRNodeType::Add) {
+        break;
+    }
+    case IRNodeType::Add: {
         s << "Add type";
-    } else if (type == IRNodeType::Sub) {
+        break;
+    }
+    case IRNodeType::Sub: {
         s << "Sub type";
-    } else if (type == IRNodeType::Mod) {
+        break;
+    }
+    case IRNodeType::Mod: {
         s << "Mod type";
-    } else if (type == IRNodeType::Mul) {
+        break;
+    }
+    case IRNodeType::Mul: {
         s << "Mul type";
-    } else if (type == IRNodeType::Div) {
+        break;
+    }
+    case IRNodeType::Div: {
         s << "Div type";
-    } else if (type == IRNodeType::Min) {
+        break;
+    }
+    case IRNodeType::Min: {
         s << "Min type";
-    } else if (type == IRNodeType::Max) {
+        break;
+    }
+    case IRNodeType::Max: {
         s << "Max type";
-    } else if (type == IRNodeType::EQ) {
+        break;
+    }
+    case IRNodeType::EQ: {
         s << "EQ type";
-    } else if (type == IRNodeType::NE) {
+        break;
+    }
+    case IRNodeType::NE: {
         s << "NE type";
-    } else if (type == IRNodeType::LT) {
+        break;
+    }
+    case IRNodeType::LT: {
         s << "LT type";
-    } else if (type == IRNodeType::LE) {
+        break;
+    }
+    case IRNodeType::LE: {
         s << "LE type";
-    } else if (type == IRNodeType::GT) {
+        break;
+    }
+    case IRNodeType::GT: {
         s << "GT type";
-    } else if (type == IRNodeType::GE) {
+        break;
+    }
+    case IRNodeType::GE: {
         s << "GE type";
-    } else if (type == IRNodeType::And) {
+        break;
+    }
+    case IRNodeType::And: {
         s << "And type";
-    } else if (type == IRNodeType::Or) {
+        break;
+    }
+    case IRNodeType::Or: {
         s << "Or type";
-    } else if (type == IRNodeType::Not) {
+        break;
+    }
+    case IRNodeType::Not: {
         s << "Not type";
-    } else if (type == IRNodeType::Select) {
+        break;
+    }
+    case IRNodeType::Select: {
         s << "Select type";
-    } else if (type == IRNodeType::Load) {
+        break;
+    }
+    case IRNodeType::Load: {
         s << "Load type: ";
         auto node1 = dynamic_cast<const Load *>(node);
         s << node1->name << ", index: " << node1->index;
-    } else if (type == IRNodeType::Ramp) {
+        break;
+    }
+    case IRNodeType::Ramp: {
         s << "Ramp type";
-    } else if (type == IRNodeType::Call) {
+        break;
+    }
+    case IRNodeType::Call: {
         s << "Call type";
-    } else if (type == IRNodeType::Let) {
+        break;
+    }
+    case IRNodeType::Let: {
         s << "Let type";
-    } else if (type == IRNodeType::Shuffle) {
+        break;
+    }
+    case IRNodeType::Shuffle: {
         s << "Shuffle type";
-    } else if (type == IRNodeType::VectorReduce) {
+        break;
+    }
+    case IRNodeType::VectorReduce: {
         s << "VectorReduce type";
-    } else if (type == IRNodeType::LetStmt) {
+        break;
+    }
+    case IRNodeType::LetStmt: {
         s << "LetStmt type";
         auto node1 = dynamic_cast<const LetStmt *>(node);
         s << "name: " << node1->name;
         s << ", value: " << node1->value;
-    } else if (type == IRNodeType::AssertStmt) {
+        break;
+    }
+    case IRNodeType::AssertStmt: {
         s << "AssertStmt type";
-    } else if (type == IRNodeType::ProducerConsumer) {
+        break;
+    }
+    case IRNodeType::ProducerConsumer: {
         s << "ProducerConsumer type";
-    } else if (type == IRNodeType::For) {
+        break;
+    }
+    case IRNodeType::For: {
         s << "For type";
-    } else if (type == IRNodeType::Acquire) {
+        break;
+    }
+    case IRNodeType::Acquire: {
         s << "Acquire type";
-    } else if (type == IRNodeType::Store) {
+        break;
+    }
+    case IRNodeType::Store: {
         s << "Store type: ";
         auto node1 = dynamic_cast<const Store *>(node);
         s << node1->name << ", index: " << node1->index;
         s << ", value: " << node1->value;
-    } else if (type == IRNodeType::Provide) {
+        break;
+    }
+    case IRNodeType::Provide: {
         s << "Provide type";
-    } else if (type == IRNodeType::Allocate) {
+        break;
+    }
+    case IRNodeType::Allocate: {
         s << "Allocate type";
-    } else if (type == IRNodeType::Free) {
+        break;
+    }
+    case IRNodeType::Free: {
         s << "Free type";
-    } else if (type == IRNodeType::Realize) {
+        break;
+    }
+    case IRNodeType::Realize: {
         s << "Realize type";
-    } else if (type == IRNodeType::Block) {
+        break;
+    }
+    case IRNodeType::Block: {
         s << "Block type";
-    } else if (type == IRNodeType::Fork) {
+        break;
+    }
+    case IRNodeType::Fork: {
         s << "Fork type";
-    } else if (type == IRNodeType::IfThenElse) {
+        break;
+    }
+    case IRNodeType::IfThenElse: {
         auto node1 = dynamic_cast<const IfThenElse *>(node);
         s << "IfThenElse type - cond: " << node1->condition;
-    } else if (type == IRNodeType::Evaluate) {
+        break;
+    }
+    case IRNodeType::Evaluate: {
         s << "Evaluate type";
-    } else if (type == IRNodeType::Prefetch) {
+        break;
+    }
+    case IRNodeType::Prefetch: {
         s << "Prefetch type";
-    } else if (type == IRNodeType::Atomic) {
+        break;
+    }
+    case IRNodeType::Atomic: {
         s << "Atomic type";
-    } else if (type == IRNodeType::Reinterpret) {
+        break;
+    }
+    case IRNodeType::Reinterpret: {
         s << "Reinterpret type";
-    } else {
+        break;
+    }
+    default: {
         s << "Unknown type";
+        break;
+    }
     }
 
     s << "\n";
