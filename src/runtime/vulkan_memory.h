@@ -337,7 +337,7 @@ void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *bloc
     }
 
     uint32_t usage_flags = instance->select_memory_usage(user_context, block->properties);
-    
+
     VkBufferCreateInfo create_info = {
         VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,  // struct type
         nullptr,                               // struct extending this
@@ -706,22 +706,22 @@ VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context,
 
     VulkanMemoryConfig config = memory_allocator_config;
 
-    const char* min_block_size_env = getenv("HL_VK_MIN_BLOCK_SIZE");
-    const char* max_block_size_env = getenv("HL_VK_MAX_BLOCK_SIZE");
-    const char* max_block_count_env = getenv("HL_VK_MAX_BLOCK_COUNT");
+    const char *min_block_size_env = getenv("HL_VK_MIN_BLOCK_SIZE");
+    const char *max_block_size_env = getenv("HL_VK_MAX_BLOCK_SIZE");
+    const char *max_block_count_env = getenv("HL_VK_MAX_BLOCK_COUNT");
 
-    if(!StringUtils::is_empty(min_block_size_env)) {
-        config.minimum_block_size = atoi(min_block_size_env) * 1024 * 1024; 
+    if (!StringUtils::is_empty(min_block_size_env)) {
+        config.minimum_block_size = atoi(min_block_size_env) * 1024 * 1024;
         debug(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.minimum_block_size << " for minimum block size (in bytes)\n";
     }
 
-    if(!StringUtils::is_empty(max_block_size_env)) {
-        config.maximum_block_size = atoi(max_block_size_env) * 1024 * 1024; 
+    if (!StringUtils::is_empty(max_block_size_env)) {
+        config.maximum_block_size = atoi(max_block_size_env) * 1024 * 1024;
         debug(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.maximum_block_size << " for maximum block size (in bytes)\n";
     }
 
-    if(!StringUtils::is_empty(max_block_count_env)) {
-        config.maximum_block_count = atoi(max_block_count_env) ;
+    if (!StringUtils::is_empty(max_block_count_env)) {
+        config.maximum_block_count = atoi(max_block_count_env);
         debug(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.maximum_block_count << " for maximum block count\n";
     }
 

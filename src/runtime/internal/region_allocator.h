@@ -273,10 +273,12 @@ bool RegionAllocator::can_split(BlockRegion *block_region, size_t size) {
 BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion *block_region, size_t size, size_t alignment) {
     alignment = conform_alignment(alignment, block->memory.properties.alignment);
 
-    debug(nullptr) << "RegionAllocator: Conforming alignment (" 
+#ifdef DEBUG_INTERNAL
+    debug(user_context) << "RegionAllocator: Conforming alignment ("
                         << "requested=" << (uint32_t)alignment << " "
                         << "required=" << (uint32_t)block->memory.properties.alignment << " "
                         << "actual=" << (uint32_t)alignment << ")\n";
+#endif
 
     size_t adjusted_size = aligned_size(block_region->memory.offset, size, alignment);
     size_t adjusted_offset = aligned_offset(block_region->memory.offset + size, alignment);

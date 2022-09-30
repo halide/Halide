@@ -55,7 +55,7 @@ struct MemoryProperties {
     MemoryVisibility visibility = MemoryVisibility::InvalidVisibility;
     MemoryUsage usage = MemoryUsage::InvalidUsage;
     MemoryCaching caching = MemoryCaching::InvalidCaching;
-    size_t alignment = 0;         //< required alignment of allocations (zero for no constraint)
+    size_t alignment = 0;  //< required alignment of allocations (zero for no constraint)
 };
 
 // Client-facing struct for exchanging memory block allocation requests
