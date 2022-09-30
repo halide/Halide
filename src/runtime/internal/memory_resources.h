@@ -55,6 +55,7 @@ struct MemoryProperties {
     MemoryVisibility visibility = MemoryVisibility::InvalidVisibility;
     MemoryUsage usage = MemoryUsage::InvalidUsage;
     MemoryCaching caching = MemoryCaching::InvalidCaching;
+    size_t alignment = 0;         //< required alignment of allocations (zero for no constraint)
 };
 
 // Client-facing struct for exchanging memory block allocation requests
@@ -109,6 +110,13 @@ struct BlockRegion {
 // -- Alignment must be power of two!
 ALWAYS_INLINE size_t aligned_offset(size_t offset, size_t alignment) {
     return (offset + (alignment - 1)) & ~(alignment - 1);
+}
+
+// Returns a suitable alignment such that requested alignment is a suitable
+// integer multiple of the required alignment
+ALWAYS_INLINE size_t conform_alignment(size_t requested, size_t required) {
+    size_t alignment = max(requested, required);
+    return (alignment > required) ? (required * ((alignment / required) + 1)) : alignment;
 }
 
 // Returns a padded size to accomodate an adjusted offset due to alignment constraints

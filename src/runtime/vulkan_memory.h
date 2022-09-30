@@ -336,6 +336,35 @@ void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *bloc
         return;
     }
 
+    uint32_t usage_flags = instance->select_memory_usage(user_context, block->properties);
+    
+    VkBufferCreateInfo create_info = {
+        VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,  // struct type
+        nullptr,                               // struct extending this
+        0,                                     // create flags
+        block->size,                           // buffer size (in bytes)
+        usage_flags,                           // buffer usage flags
+        VK_SHARING_MODE_EXCLUSIVE,             // sharing mode
+        0, nullptr};
+
+    // Create a buffer to determine alignment requirements
+    VkBuffer buffer = {0};
+    result = vkCreateBuffer(instance->device, &create_info, instance->alloc_callbacks, &buffer);
+    if (result != VK_SUCCESS) {
+        error(nullptr) << "VulkanMemoryAllocator: Failed to create buffer!\n\t"
+                       << "vkCreateBuffer returned: " << vk_get_error_name(result) << "\n";
+        return;
+    }
+
+    VkMemoryRequirements memory_requirements = {0};
+    vkGetBufferMemoryRequirements(instance->device, buffer, &memory_requirements);
+    vkDestroyBuffer(instance->device, buffer, instance->alloc_callbacks);
+    debug(nullptr) << "VulkanMemoryAllocator: Block allocated ("
+                   << "size=" << (uint32_t)block->size << ", "
+                   << "alignment=" << (uint32_t)memory_requirements.alignment << ", "
+                   << "dedicated=" << (block->dedicated ? "true" : "false") << ")\n";
+
+    block->properties.alignment = memory_requirements.alignment;
     block->handle = (void *)device_memory;
     instance->block_byte_count += block->size;
     instance->block_count++;
@@ -675,8 +704,29 @@ VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context,
 
     SystemMemoryAllocatorFns system_allocator = {vk_system_malloc, vk_system_free};
 
+    VulkanMemoryConfig config = memory_allocator_config;
+
+    const char* min_block_size_env = getenv("HL_VK_MIN_BLOCK_SIZE");
+    const char* max_block_size_env = getenv("HL_VK_MAX_BLOCK_SIZE");
+    const char* max_block_count_env = getenv("HL_VK_MAX_BLOCK_COUNT");
+
+    if(!StringUtils::is_empty(min_block_size_env)) {
+        config.minimum_block_size = atoi(min_block_size_env) * 1024 * 1024; 
+        debug(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.minimum_block_size << " for minimum block size (in bytes)\n";
+    }
+
+    if(!StringUtils::is_empty(max_block_size_env)) {
+        config.maximum_block_size = atoi(max_block_size_env) * 1024 * 1024; 
+        debug(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.maximum_block_size << " for maximum block size (in bytes)\n";
+    }
+
+    if(!StringUtils::is_empty(max_block_count_env)) {
+        config.maximum_block_count = atoi(max_block_count_env) ;
+        debug(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.maximum_block_count << " for maximum block count\n";
+    }
+
     return VulkanMemoryAllocator::create(user_context,
-                                         memory_allocator_config, device, physical_device,
+                                         config, device, physical_device,
                                          system_allocator, alloc_callbacks);
 }
 

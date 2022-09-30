@@ -197,7 +197,8 @@ BlockRegion *RegionAllocator::find_block_region(void *user_context, const Memory
             continue;
         }
 
-        size_t actual_size = aligned_size(block_region->memory.offset, request.size, request.alignment);
+        size_t actual_alignment = conform_alignment(request.alignment, block->memory.properties.alignment);
+        size_t actual_size = aligned_size(block_region->memory.offset, request.size, actual_alignment);
 
         // is the adjusted size larger than the current region?
         if (actual_size > block_region->memory.size) {
@@ -270,10 +271,15 @@ bool RegionAllocator::can_split(BlockRegion *block_region, size_t size) {
 }
 
 BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion *block_region, size_t size, size_t alignment) {
-    size_t adjusted_size = aligned_size(block_region->memory.offset, size, alignment);
-    size_t adjusted_offset = aligned_offset(block_region->memory.offset, alignment);
+    alignment = conform_alignment(alignment, block->memory.properties.alignment);
 
-    size_t empty_offset = adjusted_offset + size;
+    debug(nullptr) << "RegionAllocator: Conforming alignment (" 
+                        << "requested=" << (uint32_t)alignment << " "
+                        << "required=" << (uint32_t)block->memory.properties.alignment << " "
+                        << "actual=" << (uint32_t)alignment << ")\n";
+
+    size_t adjusted_size = aligned_size(block_region->memory.offset, size, alignment);
+    size_t adjusted_offset = aligned_offset(block_region->memory.offset + size, alignment);
     size_t empty_size = block_region->memory.size - adjusted_size;
 
 #ifdef DEBUG_INTERNAL
@@ -285,7 +291,7 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
     BlockRegion *next_region = block_region->next_ptr;
     BlockRegion *empty_region = create_block_region(user_context,
                                                     block_region->memory.properties,
-                                                    empty_offset, empty_size,
+                                                    adjusted_offset, empty_size,
                                                     block_region->memory.dedicated);
     halide_abort_if_false(user_context, empty_region != nullptr);
 
@@ -304,6 +310,7 @@ BlockRegion *RegionAllocator::create_block_region(void *user_context, const Memo
                         << "user_context=" << (void *)(user_context) << " "
                         << "offset=" << (uint32_t)offset << " "
                         << "size=" << (uint32_t)size << " "
+                        << "alignment=" << (uint32_t)properties.alignment << " "
                         << "dedicated=" << (dedicated ? "true" : "false") << " "
                         << "usage=" << halide_memory_usage_name(properties.usage) << " "
                         << "caching=" << halide_memory_caching_name(properties.caching) << " "
