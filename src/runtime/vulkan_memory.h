@@ -13,7 +13,7 @@ namespace Vulkan {
 
 // Enable external client to override Vulkan allocation callbacks (if they so desire)
 WEAK ScopedSpinLock::AtomicFlag custom_allocation_callbacks_lock = 0;
-static const VkAllocationCallbacks *custom_allocation_callbacks = nullptr;  // nullptr => use Vulkan runtime implementation
+WEAK const VkAllocationCallbacks *custom_allocation_callbacks = nullptr;  // nullptr => use Vulkan runtime implementation
 
 // --------------------------------------------------------------------------
 
@@ -86,8 +86,8 @@ public:
     size_t regions_allocated() const;
 
 private:
-    static const uint32_t invalid_usage_flags = uint32_t(-1);
-    static const uint32_t invalid_memory_type = uint32_t(VK_MAX_MEMORY_TYPES);
+    static constexpr uint32_t invalid_usage_flags = uint32_t(-1);
+    static constexpr uint32_t invalid_memory_type = uint32_t(VK_MAX_MEMORY_TYPES);
 
     // Initializes a new instance
     void initialize(void *user_context, const VulkanMemoryConfig &config,
