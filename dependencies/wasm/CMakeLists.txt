@@ -16,7 +16,7 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    set(WABT_VER 1.0.29)
+    set(WABT_VER 1.0.30)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
@@ -47,9 +47,8 @@ if (WITH_WABT)
     target_include_directories(Halide_wabt
                                SYSTEM # Use -isystem instead of -I; this is a trick so that clang-tidy won't analyze these includes
                                INTERFACE
-                               $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>
-                               $<BUILD_INTERFACE:${wabt_BINARY_DIR}>
-                               $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps>)
+                               $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>/include
+                               $<BUILD_INTERFACE:${wabt_BINARY_DIR}>/include)
     set_target_properties(Halide_wabt PROPERTIES EXPORT_NAME wabt)
 endif ()
 
