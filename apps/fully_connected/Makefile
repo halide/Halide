@@ -18,7 +18,7 @@ $(BIN)/%/fully_connected_llvm.a: $(GENERATOR_BIN)/fully_connected.generator
 	export HL_ENABLE_RAKE=0 && \
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=1 && \
-	export HL_DISABLE_ARM_LOWERING=1 && \
+	export HL_DISABLE_HALIDE_LOWERING=1 && \
 	$< -g fully_connected -f fully_connected_llvm -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/fully_connected_halide.a: $(GENERATOR_BIN)/fully_connected.generator
@@ -26,7 +26,7 @@ $(BIN)/%/fully_connected_halide.a: $(GENERATOR_BIN)/fully_connected.generator
 	export HL_ENABLE_RAKE=0 && \
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=0 && \
-	export HL_DISABLE_ARM_LOWERING=0 && \
+	export HL_DISABLE_HALIDE_LOWERING=0 && \
 	$< -g fully_connected -f fully_connected_halide -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/fully_connected_pitchfork.a: $(GENERATOR_BIN)/fully_connected.generator
@@ -34,7 +34,7 @@ $(BIN)/%/fully_connected_pitchfork.a: $(GENERATOR_BIN)/fully_connected.generator
 	export HL_ENABLE_RAKE=0 && \
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
-	export HL_DISABLE_ARM_LOWERING=0 && \
+	export HL_DISABLE_HALIDE_LOWERING=0 && \
 	$< -g fully_connected -f fully_connected_pitchfork -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/fully_connected_rake.a: $(GENERATOR_BIN)/fully_connected_rake.generator
@@ -42,7 +42,7 @@ $(BIN)/%/fully_connected_rake.a: $(GENERATOR_BIN)/fully_connected_rake.generator
 	export HL_ENABLE_RAKE=1 && \
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
-	export HL_DISABLE_ARM_LOWERING=0 && \
+	export HL_DISABLE_HALIDE_LOWERING=0 && \
 	$< -g fully_connected -f fully_connected_rake -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/fully_connected.generator

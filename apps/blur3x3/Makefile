@@ -18,7 +18,7 @@ $(BIN)/%/blur3x3_llvm.a: $(GENERATOR_BIN)/blur3x3.generator
 	export HL_ENABLE_RAKE=0 && \
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=1 && \
-	export HL_DISABLE_ARM_LOWERING=1 && \
+	export HL_DISABLE_HALIDE_LOWERING=1 && \
 	$< -g blur3x3 -f blur3x3_llvm -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/blur3x3_halide.a: $(GENERATOR_BIN)/blur3x3.generator
@@ -26,7 +26,7 @@ $(BIN)/%/blur3x3_halide.a: $(GENERATOR_BIN)/blur3x3.generator
 	export HL_ENABLE_RAKE=0 && \
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=0 && \
-	export HL_DISABLE_ARM_LOWERING=0 && \
+	export HL_DISABLE_HALIDE_LOWERING=0 && \
 	$< -g blur3x3 -f blur3x3_halide -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/blur3x3_pitchfork.a: $(GENERATOR_BIN)/blur3x3.generator
@@ -34,7 +34,7 @@ $(BIN)/%/blur3x3_pitchfork.a: $(GENERATOR_BIN)/blur3x3.generator
 	export HL_ENABLE_RAKE=0 && \
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
-	export HL_DISABLE_ARM_LOWERING=0 && \
+	export HL_DISABLE_HALIDE_LOWERING=0 && \
 	$< -g blur3x3 -f blur3x3_pitchfork -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/blur3x3_rake.a: $(GENERATOR_BIN)/blur3x3_rake.generator
@@ -42,7 +42,7 @@ $(BIN)/%/blur3x3_rake.a: $(GENERATOR_BIN)/blur3x3_rake.generator
 	export HL_ENABLE_RAKE=1 && \
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
-	export HL_DISABLE_ARM_LOWERING=0 && \
+	export HL_DISABLE_HALIDE_LOWERING=0 && \
 	$< -g blur3x3 -f blur3x3_rake -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/blur3x3.generator
