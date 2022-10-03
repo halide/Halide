@@ -48,6 +48,9 @@ public:
     Var x, y, z;
 
     void generate() {
+        add_requirement(scalar_int32 != 0);  // error_args omitted for this case
+        add_requirement(scalar_int32 > 0, "negative values are bad", scalar_int32);
+
         output_uint8(x) = input_uint8(x) + scalar_uint8;
         output_uint16(x) = input_uint16(x) + scalar_uint16;
         output_uint32(x) = input_uint32(x) + scalar_uint32;
