@@ -22,7 +22,6 @@ For example, on Linux & OSX:
 % cmake --build build
 ```
 
-
 # Vulkan Runtime Environment:
 
 Halide has no direct dependency on Vulkan for code-generation, but the runtime
