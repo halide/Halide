@@ -761,7 +761,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::string machine_params = r ? r->machine_params_string : "(None)";
 #else
         std::string scheduler = r ? r->autoscheduler_params.name : "(None)";
-        std::string machine_params = "(None)";
+        std::string machine_params = r ? r->autoscheduler_params.to_string() : "(None)";
 #endif
         std::string body = r && !r->python_schedule_source.empty() ? r->python_schedule_source : "# No autoscheduler has been run for this Generator.\n";
         emit_python_schedule_file(name(), {target()}, scheduler, machine_params, body, file);
