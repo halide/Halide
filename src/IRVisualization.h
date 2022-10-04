@@ -135,7 +135,7 @@ private:
     std::string for_loop_div_header(const For *op, const std::string &header, const std::string &anchor_name);
 
     // opens and closes an if-tree
-    std::string if_tree(const IRNode *op, const std::string &header, std::string anchor_name);
+    std::string if_tree(const IRNode *op, const std::string &header, const std::string &anchor_name);
     std::string close_if_tree() const;
 
     // different cost tables

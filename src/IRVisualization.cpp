@@ -433,14 +433,14 @@ string IRVisualization::for_loop_div_header(const For *op, const string &header,
     return ss.str();
 }
 
-string IRVisualization::if_tree(const IRNode *op, const string &header, string anchor_name) {
+string IRVisualization::if_tree(const IRNode *op, const string &header, const string &anchor_name) {
     ostringstream ss;
 
     ss << "<li>";
     ss << "<span class='tf-nc if-node'>";
 
     ss << open_box_div("IfBox", op);
-    ss << div_header(header, nullptr, std::move(anchor_name));
+    ss << div_header(header, nullptr, anchor_name);
 
     return ss.str();
 }
