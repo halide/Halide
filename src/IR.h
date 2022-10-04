@@ -562,6 +562,10 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
+
+        // Round a floating point value to nearest integer, with ties going to even
+        round,
+
         rounding_halving_add,
         rounding_mul_shift_right,
         rounding_shift_left,

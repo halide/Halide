@@ -1881,7 +1881,13 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module.get());
     if (d.getPointerSize() == 8) {
-        index = builder->CreateIntCast(index, i64_t, true);
+        llvm::Type *index_type = index->getType();
+        llvm::Type *desired_index_type = i64_t;
+        if (isa<VectorType>(index_type)) {
+            desired_index_type = VectorType::get(desired_index_type,
+                                                 dyn_cast<VectorType>(index_type)->getElementCount());
+        }
+        index = builder->CreateIntCast(index, desired_index_type, true);
     }
 
     return CreateInBoundsGEP(builder, load_type, base_address, index);
@@ -2758,6 +2764,8 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             value = phi;
         }
+    } else if (op->is_intrinsic(Call::round)) {
+        value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
     } else if (op->is_intrinsic(Call::require)) {
         internal_assert(op->args.size() == 3);
         Expr cond = op->args[0];
@@ -4534,7 +4542,9 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
                                  llvm::Function *intrin, vector<Value *> arg_values) {
     internal_assert(intrin);
     int arg_lanes = 1;
-    if (result_type->isVectorTy()) {
+    if (result_type->isVoidTy()) {
+        arg_lanes = intrin_lanes;
+    } else if (result_type->isVectorTy()) {
         arg_lanes = get_vector_num_elements(result_type);
     }
 
@@ -4918,6 +4928,10 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
 llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
                                           VectorTypeConstraint type_constraint) const {
     bool scalable;
+
+    if (t->isVoidTy()) {
+        return t;
+    }
 
     switch (type_constraint) {
     case VectorTypeConstraint::None:

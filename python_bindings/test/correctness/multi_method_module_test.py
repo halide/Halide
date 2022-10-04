@@ -33,7 +33,7 @@ def test_aot_call_failure_throws_exception():
     try:
         multi_method_module.simplecpp(buffer_input, float_arg, simple_output)
     except RuntimeError as e:
-        assert 'Halide Runtime Error: -3 (Input buffer buffer_input has type uint8 but type of the buffer passed in is float32)' in str(e), str(e)
+        assert 'Halide Runtime Error: -3' in str(e), str(e)
     else:
         assert False, 'Did not see expected exception, saw: ' + str(e)
 

@@ -790,7 +790,7 @@ Realization Pipeline::realize(JITUserContext *context,
     return r;
 }
 
-void Pipeline::add_requirement(const Expr &condition, std::vector<Expr> &error_args) {
+void Pipeline::add_requirement(const Expr &condition, const std::vector<Expr> &error_args) {
     user_assert(defined()) << "Pipeline is undefined\n";
 
     // It is an error for a requirement to reference a Func or a Var

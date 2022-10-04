@@ -229,7 +229,7 @@ class ExprCost : public IRVisitor {
                 call->is_intrinsic(Call::bitwise_or) || call->is_intrinsic(Call::shift_left) ||
                 call->is_intrinsic(Call::shift_right) || call->is_intrinsic(Call::div_round_to_zero) ||
                 call->is_intrinsic(Call::mod_round_to_zero) || call->is_intrinsic(Call::undef) ||
-                call->is_intrinsic(Call::mux)) {
+                call->is_intrinsic(Call::mux) || call->is_intrinsic(Call::round)) {
                 arith += 1;
             } else if (call->is_intrinsic(Call::abs) || call->is_intrinsic(Call::absd) ||
                        call->is_intrinsic(Call::lerp) || call->is_intrinsic(Call::random) ||

@@ -32,6 +32,7 @@ std::vector<T> args_to_vector(const py::args &args, size_t start_offset = 0, siz
     return v;
 }
 
+std::vector<Expr> collect_print_args(const py::args &args);
 Expr double_to_expr_check(double v);
 
 }  // namespace PythonBindings
