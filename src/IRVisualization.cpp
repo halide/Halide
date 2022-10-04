@@ -128,7 +128,7 @@ string IRVisualization::generate_ir_visualization_html(const Module &m) {
     return html.str();
 }
 
-string IRVisualization::generate_computation_cost_tooltip(const IRNode *op, string extra_note) {
+string IRVisualization::generate_computation_cost_tooltip(const IRNode *op, const string &extra_note) {
     int depth, computation_cost_exclusive, computation_cost_inclusive;
 
     if (op == nullptr) {
@@ -152,9 +152,9 @@ string IRVisualization::generate_computation_cost_tooltip(const IRNode *op, stri
         table_rows.emplace_back("Computation Cost (Inclusive)", std::to_string(computation_cost_inclusive) + "%");
     }
 
-    return tooltip_table(table_rows, std::move(extra_note));
+    return tooltip_table(table_rows, extra_note);
 }
-string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, string extra_note) {
+string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, const string &extra_note) {
     int depth, data_movement_cost_exclusive, data_movement_cost_inclusive;
 
     if (op == nullptr) {
@@ -177,7 +177,7 @@ string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, st
         table_rows.emplace_back("Data Movement Cost (Inclusive)", std::to_string(data_movement_cost_inclusive) + "%");
     }
 
-    return tooltip_table(table_rows, std::move(extra_note));
+    return tooltip_table(table_rows, extra_note);
 }
 
 int IRVisualization::get_color_range(const IRNode *op, bool inclusive, bool is_computation) const {
@@ -334,11 +334,11 @@ string IRVisualization::open_header(const string &header, const string &anchor_n
 string IRVisualization::close_header() const {
     return close_div();
 }
-string IRVisualization::div_header(const string &header, StmtSize *size, string anchor_name,
+string IRVisualization::div_header(const string &header, StmtSize *size, const string &anchor_name,
                                    vector<pair<string, string>> info_tooltip_table = {}) {
     ostringstream ss;
 
-    ss << open_header(header, std::move(anchor_name), std::move(info_tooltip_table));
+    ss << open_header(header, anchor_name, std::move(info_tooltip_table));
     ss << close_header();
 
     // add producer consumer size if size is provided
@@ -398,11 +398,11 @@ vector<string> IRVisualization::get_allocation_sizes(const Allocate *op) const {
     return sizes;
 }
 string IRVisualization::allocate_div_header(const Allocate *op, const string &header,
-                                            string anchor_name,
+                                            const string &anchor_name,
                                             vector<pair<string, string>> &info_tooltip_table) {
     ostringstream ss;
 
-    ss << open_header(header, std::move(anchor_name), info_tooltip_table);
+    ss << open_header(header, anchor_name, info_tooltip_table);
     ss << close_header();
 
     vector<string> allocation_sizes = get_allocation_sizes(op);
@@ -416,10 +416,10 @@ string IRVisualization::allocate_div_header(const Allocate *op, const string &he
     return ss.str();
 }
 string IRVisualization::for_loop_div_header(const For *op, const string &header,
-                                            string anchor_name) {
+                                            const string &anchor_name) {
     ostringstream ss;
 
-    ss << open_header(header, std::move(anchor_name), {});
+    ss << open_header(header, anchor_name, {});
     ss << close_header();
 
     string loopSize = get_loop_iterator(op);

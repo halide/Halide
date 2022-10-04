@@ -81,8 +81,8 @@ public:
     std::string generate_ir_visualization_js();
 
     // generates tooltip tables based on given node
-    std::string generate_computation_cost_tooltip(const IRNode *op, std::string extraNote);
-    std::string generate_data_movement_cost_tooltip(const IRNode *op, std::string extraNote);
+    std::string generate_computation_cost_tooltip(const IRNode *op, const std::string &extraNote);
+    std::string generate_data_movement_cost_tooltip(const IRNode *op, const std::string &extraNote);
 
     // returns the range of the node's cost based on the other nodes' costs
     int get_color_range(const IRNode *op, bool inclusive, bool is_computation) const;
@@ -126,13 +126,13 @@ private:
     std::string open_header(const std::string &header, const std::string &anchor_name,
                             std::vector<std::pair<std::string, std::string>> info_tooltip_table);
     std::string close_header() const;
-    std::string div_header(const std::string &header, StmtSize *size, std::string anchor_name,
+    std::string div_header(const std::string &header, StmtSize *size, const std::string &anchor_name,
                            std::vector<std::pair<std::string, std::string>> info_tooltip_table);
     std::string function_div_header(const std::string &function_name, const std::string &anchor_name) const;
     std::vector<std::string> get_allocation_sizes(const Allocate *op) const;
-    std::string allocate_div_header(const Allocate *op, const std::string &header, std::string anchor_name,
+    std::string allocate_div_header(const Allocate *op, const std::string &header, const std::string &anchor_name,
                                     std::vector<std::pair<std::string, std::string>> &info_tooltip_table);
-    std::string for_loop_div_header(const For *op, const std::string &header, std::string anchor_name);
+    std::string for_loop_div_header(const For *op, const std::string &header, const std::string &anchor_name);
 
     // opens and closes an if-tree
     std::string if_tree(const IRNode *op, const std::string &header, std::string anchor_name);
