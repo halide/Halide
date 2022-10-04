@@ -82,7 +82,7 @@ py::object realization_to_object(const Realization &r) {
 
 }  // namespace
 
-void define_func(py::module &m) {
+void define_func(py::module_ &m) {
     define_func_ref(m);
     define_var_or_rvar(m);
     define_loop_level(m);
@@ -112,11 +112,14 @@ void define_func(py::module &m) {
             .def(py::init<Type, int, std::string>(), py::arg("required_type"), py::arg("required_dimensions"), py::arg("name"))
             .def(py::init<std::vector<Type>, int, std::string>(), py::arg("required_types"), py::arg("required_dimensions"), py::arg("name"))
             .def(py::init<Expr>())
+#if HALIDE_USE_NANOBIND
+            // .def(py::init([](Buffer<> &b) -> Func { return Func(b); }))  // TODO
+            .def(py::init_implicit<ImageParam>())
+#else
             .def(py::init([](Buffer<> &b) -> Func { return Func(b); }))
-
             // for implicitly_convertible
             .def(py::init([](const ImageParam &im) -> Func { return im; }))
-
+#endif
             .def(
                 "realize",
                 [](Func &f, Buffer<> buffer, const Target &target) -> void {
@@ -280,7 +283,7 @@ void define_func(py::module &m) {
                 "infer_input_bounds", [](Func &f, const py::object &dst, const Target &target) -> void {
                     // dst could be Buffer<>, vector<Buffer>, or vector<int>
                     try {
-                        Buffer<> b = dst.cast<Buffer<>>();
+                        Buffer<> b = HL_CAST(Buffer<>, dst);
                         f.infer_input_bounds(b, target);
                         return;
                     } catch (...) {
@@ -288,7 +291,7 @@ void define_func(py::module &m) {
                     }
 
                     try {
-                        std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
+                        std::vector<Buffer<>> v = HL_CAST(std::vector<Buffer<>>, dst);
                         f.infer_input_bounds(Realization(std::move(v)), target);
                         return;
                     } catch (...) {
@@ -296,7 +299,7 @@ void define_func(py::module &m) {
                     }
 
                     try {
-                        std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
+                        std::vector<int32_t> v = HL_CAST(std::vector<int32_t>, dst);
                         f.infer_input_bounds(v, target);
                         return;
                     } catch (...) {
@@ -336,8 +339,9 @@ void define_func(py::module &m) {
                 o << "<halide.Func '" << func.name() << "'>";
                 return o.str();
             });
-
+#if !HALIDE_USE_NANOBIND
     py::implicitly_convertible<ImageParam, Func>();
+#endif
 
     // Note that overloads of FuncRef must come *before* Expr;
     // otherwise PyBind's automatic STL conversion machinery
@@ -377,7 +381,10 @@ void define_func(py::module &m) {
     define_set<Expr, Expr>(func_class);
     define_set<Expr, Tuple>(func_class);
 
+#if !HALIDE_USE_NANOBIND
+    // TODO
     add_schedule_methods(func_class);
+#endif
 
     define_stage(m);
 }

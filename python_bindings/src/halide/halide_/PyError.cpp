@@ -11,7 +11,11 @@ void halide_python_error(JITUserContext *, const char *msg) {
 
 void halide_python_print(JITUserContext *, const char *msg) {
     py::gil_scoped_acquire acquire;
+#if HALIDE_USE_NANOBIND
+    py::print(msg);
+#else
     py::print(msg, py::arg("end") = "");
+#endif
 }
 
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
@@ -28,7 +32,7 @@ public:
 
 }  // namespace
 
-void define_error(py::module &m) {
+void define_error(py::module_ &m) {
     static HalidePythonCompileTimeErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
@@ -37,6 +41,10 @@ void define_error(py::module &m) {
     handlers.custom_print = halide_python_print;
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
 
+#if HALIDE_USE_NANOBIND
+    // TODO
+    abort();
+#else
     static py::exception<Error> halide_error(m, "HalideError");
     py::register_exception_translator([](std::exception_ptr p) {  // NOLINT
         try {
@@ -47,6 +55,7 @@ void define_error(py::module &m) {
             halide_error(e.what());
         }
     });
+#endif
 }
 
 }  // namespace PythonBindings

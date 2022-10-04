@@ -3,7 +3,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_concise_casts(py::module &m) {
+void define_concise_casts(py::module_ &m) {
     // explicit cast should be tried before
     //  the pybind11::implicitly_convertible<T, Expr> conversion
     m.def("f64", [](double v) -> Expr {

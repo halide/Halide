@@ -6,7 +6,8 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_buffer(py::module &m);
+#if !HALIDE_USE_NANOBIND
+void define_buffer(py::module_ &m);
 
 Type format_descriptor_to_type(const std::string &fd);
 
@@ -32,6 +33,7 @@ template<typename T = void,
 Halide::Runtime::Buffer<T, Dims, InClassDimStorage> pybuffer_to_halidebuffer(const py::buffer &pyb, bool writable) {
     return pybufferinfo_to_halidebuffer(pyb.request(writable));
 }
+#endif
 
 }  // namespace PythonBindings
 }  // namespace Halide

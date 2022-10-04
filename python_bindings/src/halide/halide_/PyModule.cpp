@@ -7,7 +7,7 @@ namespace {
 
 }  // namespace
 
-void define_module(py::module &m) {
+void define_module(py::module_ &m) {
 
     auto auto_scheduler_results_class =
         py::class_<AutoSchedulerResults>(m, "AutoSchedulerResults")

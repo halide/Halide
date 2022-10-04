@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_inline_reductions(py::module &m);
+void define_inline_reductions(py::module_ &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

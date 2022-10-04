@@ -21,7 +21,7 @@ py::object realization_to_object(const Realization &r) {
 
 }  // namespace
 
-void define_pipeline(py::module &m) {
+void define_pipeline(py::module_ &m) {
 
     // Deliberately not supported, because they don't seem to make sense for Python:
     // - set_custom_allocator()
@@ -47,19 +47,23 @@ void define_pipeline(py::module &m) {
     py::class_<AutoschedulerParams>(m, "AutoschedulerParams")
         .def(py::init<>())
         .def(py::init<std::string>(), py::arg("name"))
+#if HALIDE_USE_NANOBIND
+        // TODO
+#else
         .def(py::init([](const std::string &name, const py::dict &extra) -> AutoschedulerParams {
                  // Manually convert the dict:
                  // we want to allow Python to pass in dicts that have non-string values for some keys;
                  // PyBind will reject these as a type failure. We'll stringify them here explicitly.
                  AutoschedulerParams asp(name);
                  for (auto item : extra) {
-                     const std::string name = py::str(item.first).cast<std::string>();
-                     const std::string value = py::str(item.second).cast<std::string>();
+                     const std::string name = HL_CAST(std::string, py::str(item.first));
+                     const std::string value = HL_CAST(std::string, py::str(item.second));
                      asp.extra[name] = value;
                  }
                  return asp;
              }),
              py::arg("target"), py::arg("autoscheduler_params"))
+#endif
         .def_readwrite("name", &AutoschedulerParams::name)
         .def_readwrite("extra", &AutoschedulerParams::extra)
         .def("__repr__", [](const AutoSchedulerResults &o) -> std::string {
@@ -162,7 +166,7 @@ void define_pipeline(py::module &m) {
                 "infer_input_bounds", [](Pipeline &p, const py::object &dst, const Target &target) -> void {
                     // dst could be Buffer<>, vector<Buffer>, or vector<int>
                     try {
-                        Buffer<> b = dst.cast<Buffer<>>();
+                        Buffer<> b = HL_CAST(Buffer<>, dst);
                         p.infer_input_bounds(b, target);
                         return;
                     } catch (...) {
@@ -170,7 +174,7 @@ void define_pipeline(py::module &m) {
                     }
 
                     try {
-                        std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
+                        std::vector<Buffer<>> v = HL_CAST(std::vector<Buffer<>>, dst);
                         p.infer_input_bounds(Realization(std::move(v)), target);
                         return;
                     } catch (...) {
@@ -178,7 +182,7 @@ void define_pipeline(py::module &m) {
                     }
 
                     try {
-                        std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
+                        std::vector<int32_t> v = HL_CAST(std::vector<int32_t>, dst);
                         p.infer_input_bounds(v, target);
                         return;
                     } catch (...) {
@@ -201,7 +205,12 @@ void define_pipeline(py::module &m) {
                     auto v = collect_print_args(error_args);
                     p.add_requirement(condition, v);
                 },
-                py::arg("condition"))
+#if HALIDE_USE_NANOBIND
+                py::arg("condition"), py::arg("args")
+#else
+                py::arg("condition")
+#endif
+            )
 
             .def("__repr__", [](const Pipeline &p) -> std::string {
                 std::ostringstream o;

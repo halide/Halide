@@ -8,7 +8,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_expr(py::module &m) {
+void define_expr(py::module_ &m) {
     auto to_bool = [](const Expr &e) -> bool {
         std::ostringstream o;
         o << e;
@@ -23,6 +23,18 @@ void define_expr(py::module &m) {
     auto expr_class =
         py::class_<Expr>(m, "Expr")
             .def(py::init<>())
+#if HALIDE_USE_NANOBIND
+            .def(py::init_implicit<bool>())
+            .def(py::init_implicit<int>())
+            .def(py::init_implicit<float>())
+            .def(py::init_implicit<double>())
+            .def(py::init_implicit<FuncRef>())
+            .def(py::init_implicit<FuncTupleElementRef>())
+            .def(py::init_implicit<Param<>>())
+            .def(py::init_implicit<RDom>())
+            .def(py::init_implicit<RVar>())
+            .def(py::init_implicit<Var>())
+#else
             .def(py::init([](bool b) {
                 return Internal::make_bool(b);
             }))
@@ -43,6 +55,7 @@ void define_expr(py::module &m) {
             .def(py::init([](const RDom &r) -> Expr { return r; }))
             .def(py::init([](const RVar &r) -> Expr { return r; }))
             .def(py::init([](const Var &v) -> Expr { return v; }))
+#endif
 
             .def("__bool__", to_bool)
             .def("__nonzero__", to_bool)
@@ -59,8 +72,12 @@ void define_expr(py::module &m) {
                 return o.str();
             });
 
+#if !HALIDE_USE_NANOBIND
+    // TODO
     add_binary_operators(expr_class);
+#endif
 
+#if !HALIDE_USE_NANOBIND
     // implicitly_convertible declaration order matters,
     // int should be tried before float conversion
     py::implicitly_convertible<bool, Expr>();
@@ -75,10 +92,15 @@ void define_expr(py::module &m) {
     py::implicitly_convertible<RDom, Expr>();
     py::implicitly_convertible<RVar, Expr>();
     py::implicitly_convertible<Var, Expr>();
+#endif
 
     auto range_class =
         py::class_<Range>(m, "Range")
             .def(py::init<>())
+#if HALIDE_USE_NANOBIND
+            .def(py::init<Expr, Expr>())
+            // .def(py::init_implicit<py::tuple>())  // TODO
+#else
             .def(py::init([](const Expr &min, const Expr &extent) -> Range {
                 return Range(min, extent);
             }))
@@ -91,12 +113,15 @@ void define_expr(py::module &m) {
                 Expr extent = t[1].cast<Expr>();
                 return Range(min, extent);
             }))
+#endif
             .def_readwrite("min", &Range::min)
             .def_readwrite("extent", &Range::extent);
 
+#if !HALIDE_USE_NANOBIND
     // Allow implicit tuple->Range conversion, so that things like
     // [(0, W), (0, H)] work for BoundaryConditions and Estimates
     py::implicitly_convertible<py::tuple, Range>();
+#endif
 }
 
 }  // namespace PythonBindings

@@ -1,6 +1,14 @@
 #include "PyGenerator.h"
 
+#if !HALIDE_USE_NANOBIND
 #include <pybind11/embed.h>
+#endif
+
+#if HALIDE_USE_NANOBIND
+#define IMPORT_MODULE(x) py::module_::import_(x)
+#else
+#define IMPORT_MODULE(x) py::module_::import(x)
+#endif
 
 namespace Halide {
 namespace PythonBindings {
@@ -23,7 +31,7 @@ std::map<std::string, T> dict_to_map(const py::dict &dict) {
     _halide_user_assert(!dict.is(py::none()));
     std::map<std::string, T> m;
     for (auto it : dict) {
-        m[it.first.cast<std::string>()] = it.second.cast<T>();
+        m[HL_CAST(std::string, it.first)] = HL_CAST(T, it.second);
     }
     return m;
 }
@@ -40,7 +48,7 @@ public:
     // by calling is_valid() later.
     explicit PyGeneratorBase(const GeneratorContext &context, const std::string &name)
         : name_(name),
-          generator_(py::module_::import("halide").attr("_create_python_generator")(name, context)) {  // could be None!
+          generator_(IMPORT_MODULE("halide").attr("_create_python_generator")(name, context)) {  // could be None!
     }
 
     bool is_valid() const {
@@ -55,7 +63,7 @@ public:
     }
 
     GeneratorContext context() const override {
-        return generator_.attr("context")().cast<GeneratorContext>();
+        return HL_CAST(GeneratorContext, generator_.attr("context")());
     }
 
     std::vector<ArgInfo> arginfos() override {
@@ -71,15 +79,15 @@ public:
     }
 
     Pipeline build_pipeline() override {
-        return generator_.attr("_build_pipeline")().cast<Pipeline>();
+        return HL_CAST(Pipeline, generator_.attr("_build_pipeline")());
     }
 
     std::vector<Parameter> input_parameter(const std::string &name) override {
-        return {generator_.attr("_get_input_parameter")(name).cast<Parameter>()};
+        return {HL_CAST(Parameter, generator_.attr("_get_input_parameter")(name))};
     }
 
     std::vector<Func> output_func(const std::string &name) override {
-        return {generator_.attr("_get_output_func")(name).cast<Func>()};
+        return {HL_CAST(Func, generator_.attr("_get_output_func")(name))};
     }
 
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
@@ -114,7 +122,7 @@ public:
     PyGeneratorFactoryProvider() = default;
 
     std::vector<std::string> enumerate() const override {
-        py::object f = py::module_::import("halide").attr("_get_python_generator_names");
+        py::object f = IMPORT_MODULE("halide").attr("_get_python_generator_names");
         return args_to_vector<std::string>(f());
     }
     AbstractGeneratorPtr create(const std::string &name,
@@ -129,14 +137,18 @@ public:
 
 }  // namespace
 
-void define_generator(py::module &m) {
+void define_generator(py::module_ &m) {
     auto arginfo_class =
         py::class_<ArgInfo>(m, "ArgInfo")
             .def(py::init<>())
+#if HALIDE_USE_NANOBIND
+            .def(py::init<std::string, ArgInfoDirection, ArgInfoKind, std::vector<Type>, int>())
+#else
             .def(py::init([](const std::string &name, ArgInfoDirection dir, ArgInfoKind kind, std::vector<Type> types, int dimensions) -> ArgInfo {
                      return ArgInfo{name, dir, kind, std::move(types), dimensions};
                  }),
                  py::arg("name"), py::arg("dir"), py::arg("kind"), py::arg("types"), py::arg("dimensions"))
+#endif
             .def_readonly("name", &ArgInfo::name)
             .def_readonly("dir", &ArgInfo::dir)
             .def_readonly("kind", &ArgInfo::kind)
@@ -160,11 +172,11 @@ void define_generator(py::module &m) {
             .def("autoscheduler_params", &GeneratorContext::autoscheduler_params)
 #endif
             .def("__enter__", [](const GeneratorContext &context) -> py::object {
-                auto _generatorcontext_enter = py::module_::import("halide").attr("_generatorcontext_enter");
+                auto _generatorcontext_enter = IMPORT_MODULE("halide").attr("_generatorcontext_enter");
                 return _generatorcontext_enter(context);
             })
             .def("__exit__", [](const GeneratorContext &context, const py::object &exc_type, const py::object &exc_value, const py::object &exc_traceback) -> bool {
-                auto _generatorcontext_exit = py::module_::import("halide").attr("_generatorcontext_exit");
+                auto _generatorcontext_exit = IMPORT_MODULE("halide").attr("_generatorcontext_exit");
                 _generatorcontext_exit(context);
                 return false;
             })
@@ -175,7 +187,7 @@ void define_generator(py::module &m) {
             });
 
     m.def("main", []() -> void {
-        py::object argv_object = py::module_::import("sys").attr("argv");
+        py::object argv_object = IMPORT_MODULE("sys").attr("argv");
         std::vector<std::string> argv_vector = args_to_vector<std::string>(argv_object);
         std::vector<char *> argv;
         argv.reserve(argv_vector.size());

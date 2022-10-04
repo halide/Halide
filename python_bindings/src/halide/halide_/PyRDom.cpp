@@ -5,12 +5,16 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_rvar(py::module &m) {
+void define_rvar(py::module_ &m) {
     auto rvar_class =
         py::class_<RVar>(m, "RVar")
             .def(py::init<>())
             .def(py::init<std::string>(), py::arg("name"))
+#if HALIDE_USE_NANOBIND
+            .def(py::init_implicit<RDom>())
+#else
             .def(py::init([](const RDom &r) -> RVar { return r; }))
+#endif
             .def("min", &RVar::min)
             .def("extent", &RVar::extent)
             .def("name", &RVar::name)
@@ -20,12 +24,17 @@ void define_rvar(py::module &m) {
                 return o.str();
             });
 
+#if !HALIDE_USE_NANOBIND
     py::implicitly_convertible<RDom, RVar>();
+#endif
 
+#if !HALIDE_USE_NANOBIND
+    // TODO
     add_binary_operators(rvar_class);
+#endif
 }
 
-void define_rdom(py::module &m) {
+void define_rdom(py::module_ &m) {
     define_rvar(m);
 
     auto rdom_class =
@@ -42,7 +51,7 @@ void define_rdom(py::module &m) {
             .def("where", &RDom::where, py::arg("predicate"))
             .def("__getitem__", [](RDom &r, const int i) -> RVar {
                 if (i < 0 || i >= r.dimensions()) {
-                    throw pybind11::key_error();
+                    throw py::key_error();
                 }
                 return r[i];
             })
@@ -56,7 +65,10 @@ void define_rdom(py::module &m) {
                 return o.str();
             });
 
+#if !HALIDE_USE_NANOBIND
+    // TODO
     add_binary_operators(rdom_class);
+#endif
 }
 
 }  // namespace PythonBindings

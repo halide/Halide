@@ -3,7 +3,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_tuple(py::module &m) {
+void define_tuple(py::module_ &m) {
     // Halide::Tuple isn't surfaced to the user in Python;
     // we define it here to allow PyBind to do some automatic
     // conversion from Python's built-in tuple type.
@@ -13,12 +13,22 @@ void define_tuple(py::module &m) {
     // do this (typically via a C++ lambda that calls to_python_tuple()).
     auto tuple_class =
         py::class_<Tuple>(m, "Tuple")
+#if HALIDE_USE_NANOBIND
+            // TODO
+            // .def(py::init_implicit<py::tuple>())
+
+            // If we autoconvert from vector<Expr>, we must also special-case FuncRef, alas
+            //.def(py::init_implicit<FuncRef>())
+            // We want to allow vector<Expr>->Tuple implicitly, so that
+            // custom classes that are tuple-like will autoconvert (see tutorial/lesson_13).
+            .def(py::init_implicit<std::vector<Expr>>())
+#else
             // for implicitly_convertible
             .def(py::init([](const py::tuple &t) -> Tuple {
                 std::vector<Expr> v;
                 v.reserve(t.size());
                 for (const auto o : t) {
-                    v.push_back(o.cast<Expr>());
+                    v.push_back(HL_CAST(Expr, o));
                 }
                 return Tuple(v);
             }))
@@ -37,11 +47,13 @@ void define_tuple(py::module &m) {
             .def(py::init([](const std::vector<Expr> &v) -> Tuple {
                 return Tuple(v);
             }))
+#endif
             .def("__repr__", [](const Tuple &t) -> std::string {
                 std::ostringstream o;
                 o << "<halide.Tuple of size " << t.size() << ">";
                 return o.str();
             });
+#if !HALIDE_USE_NANOBIND
     py::implicitly_convertible<py::tuple, Tuple>();
 
     // If we autoconvert from vector<Expr>, we must also special-case FuncRef, alas
@@ -50,6 +62,7 @@ void define_tuple(py::module &m) {
     // We want to allow vector<Expr>->Tuple implicitly, so that
     // custom classes that are tuple-like will autoconvert (see tutorial/lesson_13).
     py::implicitly_convertible<std::vector<Expr>, Tuple>();
+#endif
 }
 
 }  // namespace PythonBindings

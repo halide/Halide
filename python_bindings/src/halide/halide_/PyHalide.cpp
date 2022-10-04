@@ -28,8 +28,12 @@
 #include "PyType.h"
 #include "PyVar.h"
 
+#if HALIDE_USE_NANOBIND
+// TODO
+#else
 static_assert(PYBIND11_VERSION_MAJOR == 2 && PYBIND11_VERSION_MINOR >= 6,
               "Halide requires PyBind 2.6+");
+#endif
 
 static_assert(PY_VERSION_HEX >= 0x03000000,
               "We appear to be compiling against Python 2.x rather than 3.x, which is not supported.");
@@ -38,7 +42,12 @@ static_assert(PY_VERSION_HEX >= 0x03000000,
 #define HALIDE_PYBIND_MODULE_NAME halide_
 #endif
 
-PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
+#if HALIDE_USE_NANOBIND
+NB_MODULE(HALIDE_PYBIND_MODULE_NAME, m)
+#else
+PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m)
+#endif
+{
     using namespace Halide::PythonBindings;
 
     // Order of definitions matters somewhat:
@@ -50,7 +59,9 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_tuple(m);
     define_argument(m);
     define_boundary_conditions(m);
+#if !HALIDE_USE_NANOBIND
     define_buffer(m);
+#endif
     define_concise_casts(m);
     define_error(m);
     define_extern_func_argument(m);
@@ -109,9 +120,9 @@ std::vector<Expr> collect_print_args(const py::args &args) {
         // and fail. Normally we don't want string to be convertible
         // to Expr, but in this unusual case we do.
         try {
-            v.emplace_back(args[i].cast<std::string>());
+            v.emplace_back(HL_CAST(std::string, args[i]));
         } catch (...) {
-            v.push_back(args[i].cast<Expr>());
+            v.push_back(HL_CAST(Expr, args[i]));
         }
     }
     return v;

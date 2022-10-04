@@ -51,7 +51,7 @@ std::string halide_type_to_string(const Type &type) {
     return stream.str();
 }
 
-void define_type(py::module &m) {
+void define_type(py::module_ &m) {
     py::class_<Type>(m, "Type")
         .def(py::init<>())
         .def(py::init<halide_type_code_t, int, int>(), py::arg("code"), py::arg("bits"), py::arg("lanes"))

@@ -15,7 +15,7 @@ std::string var_repr(const Var &var) {
 
 }  // namespace
 
-void define_var(py::module &m) {
+void define_var(py::module_ &m) {
     auto var_class =
         py::class_<Var>(m, "Var")
             .def(py::init<>())
@@ -30,7 +30,10 @@ void define_var(py::module &m) {
             .def("__repr__", &var_repr)
             .def("__str__", &Var::name);
 
+#if !HALIDE_USE_NANOBIND
+    // TODO
     add_binary_operators(var_class);
+#endif
 
     m.attr("_") = Halide::Var(Halide::_);
     m.attr("_0") = Halide::Var(Halide::_0);

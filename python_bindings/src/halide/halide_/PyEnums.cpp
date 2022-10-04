@@ -3,7 +3,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_enums(py::module &m) {
+void define_enums(py::module_ &m) {
     py::enum_<Argument::Kind>(m, "ArgumentKind")
         .value("InputScalar", Argument::Kind::InputScalar)
         .value("InputBuffer", Argument::Kind::InputBuffer)

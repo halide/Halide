@@ -1,5 +1,20 @@
+#if 0
+
+// TODO
+
+#if HALIDE_USE_NANOBIND
+#include <nanobind/nanobind.h>
+#include <nanobind/operators.h>
+#include <nanobind/stl/function.h>
+#include <nanobind/stl/pair.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/tuple.h>
+#include <nanobind/stl/vector.h>
+#include <nanobind/tensor.h>
+#else
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#endif
 
 #include <string>
 #include <utility>
@@ -14,7 +29,12 @@ static_assert(PYBIND11_VERSION_MAJOR == 2 && PYBIND11_VERSION_MINOR >= 6,
 static_assert(PY_VERSION_HEX >= 0x03000000,
               "We appear to be compiling against Python 2.x rather than 3.x, which is not supported.");
 
+#if HALIDE_USE_NANOBIND
+namespace py = nanobind;
+#error check me
+#else
 namespace py = pybind11;
+#endif
 
 namespace Halide {
 namespace PythonBindings {
@@ -53,7 +73,7 @@ public:
     }
 };
 
-void install_error_handlers(py::module &m) {
+void install_error_handlers(py::module_ &m) {
     static HalidePythonCompileTimeErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
@@ -306,3 +326,6 @@ extern "C" PyObject *_halide_pystub_impl(const char *module_name, const Halide::
         return nullptr;
     }
 }
+
+#endif
+

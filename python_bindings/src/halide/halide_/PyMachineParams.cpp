@@ -4,7 +4,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_machine_params(py::module &m) {
+void define_machine_params(py::module_ &m) {
     auto machine_params_class =
         py::class_<MachineParams>(m, "MachineParams")
             .def(py::init<int32_t, int32_t, int32_t>(),

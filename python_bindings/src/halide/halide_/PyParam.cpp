@@ -13,6 +13,9 @@ namespace {
 template<typename TYPE>
 void add_param_methods(py::class_<Param<>> &param_class) {
     param_class
+#if HALIDE_USE_NANOBIND
+        // TODO
+#else
         .def(py::init([](const Type &type, TYPE value) {
                  Param<> param(type);
                  param.set<TYPE>(value);
@@ -25,6 +28,7 @@ void add_param_methods(py::class_<Param<>> &param_class) {
                  return param;
              }),
              py::arg("type"), py::arg("name"), py::arg("value"))
+#endif
         .def(
             "set", [](Param<> &param, TYPE value) -> void {
                 param.set<TYPE>(value);
@@ -39,7 +43,7 @@ void add_param_methods(py::class_<Param<>> &param_class) {
 
 }  // namespace
 
-void define_param(py::module &m) {
+void define_param(py::module_ &m) {
     // This is a "just-enough" wrapper around Parameter to let us pass it back
     // and forth between Py and C++. It deliberately exposes very few methods,
     // and we should keep it that way.
@@ -100,7 +104,10 @@ void define_param(py::module &m) {
     add_param_methods<float>(param_class);
     add_param_methods<double>(param_class);
 
+#if !HALIDE_USE_NANOBIND
+    // TODO
     add_binary_operators(param_class);
+#endif
 
     m.def("user_context_value", &user_context_value);
 }

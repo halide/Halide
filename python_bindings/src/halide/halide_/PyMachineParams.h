@@ -7,7 +7,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_machine_params(py::module &m);
+void define_machine_params(py::module_ &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

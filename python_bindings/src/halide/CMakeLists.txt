@@ -42,7 +42,12 @@ set(python_sources
 # do this, they should use the CMAKE_PROJECT_Halide_Python_INCLUDE_BEFORE variable to override it
 # just for this project, rather than globally, and they should ensure that the last path component
 # is `halide`. Otherwise, the tests will break.
-pybind11_add_module(Halide_Python MODULE ${native_sources})
+if (USE_NANOBIND)
+    nanobind_add_module(Halide_Python MODULE ${native_sources})
+    target_compile_definitions(Halide_Python PRIVATE HALIDE_USE_NANOBIND)
+else()
+    pybind11_add_module(Halide_Python MODULE ${native_sources})
+endif()
 add_library(Halide::Python ALIAS Halide_Python)
 set_target_properties(
     Halide_Python

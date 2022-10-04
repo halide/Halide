@@ -41,7 +41,7 @@ T cast_to(const py::handle &h) {
     // We want to ensure that the error thrown is one that will be translated
     // to `hl.HalideError` in Python.
     try {
-        return h.cast<T>();
+        return HL_CAST(T, h);
     } catch (const std::exception &e) {
         throw Halide::Error(e.what());
     }
@@ -92,7 +92,12 @@ public:
                     argv[slot] = b.raw_buffer();
                 } else {
                     const bool writable = c_arg.is_output();
+#if HALIDE_USE_NANOBIND
+                    // TODO
+                    abort();
+#else
                     buffers.buffers[slot] = pybuffer_to_halidebuffer<void, AnyDims, MaxFastDimensions>(cast_to<py::buffer>(value), writable);
+#endif
                     argv[slot] = buffers.buffers[slot].raw_buffer();
                 }
                 cci[slot] = Callable::make_buffer_qcci();
@@ -136,7 +141,11 @@ public:
             define_one_arg(c_arg, args[i], slot);
         }
 
+#if HALIDE_USE_NANOBIND
+        if (kwargs.size() == 0) {
+#else
         if (!kwargs.empty()) {
+#endif
             std::string trimmed_name;
 
             // Also process kwargs.
@@ -189,7 +198,7 @@ public:
 #undef TYPED_ALLOCA
 };
 
-void define_callable(py::module &m) {
+void define_callable(py::module_ &m) {
     // Not supported yet, because we want to think about how to expose runtime
     // overrides in Python (https://github.com/halide/Halide/issues/2790):
     // - JITUserContext

@@ -5,7 +5,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_inline_reductions(py::module &m) {
+void define_inline_reductions(py::module_ &m) {
     m.def("sum", (Expr(*)(Expr, const std::string &s)) & Halide::sum,
           py::arg("expr"), py::arg("name") = "sum");
     m.def("sum", (Expr(*)(const RDom &, Expr, const std::string &s)) & Halide::sum,

@@ -6,7 +6,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_concise_casts(py::module &m);
+void define_concise_casts(py::module_ &m);
 
 }  // namespace PythonBindings
 }  // namespace Halide

@@ -11,10 +11,10 @@ inline Func to_func(const Buffer<> &b) {
 
 }  // namespace
 
-void define_boundary_conditions(py::module &m) {
+void define_boundary_conditions(py::module_ &m) {
     using namespace BoundaryConditions;
 
-    py::module bc = m.def_submodule("BoundaryConditions");
+    py::module_ bc = m.def_submodule("BoundaryConditions");
 
     // This code could be made less redundant with some templating,
     // but because of the templated nature of BoundaryConditions itself,
@@ -36,12 +36,12 @@ void define_boundary_conditions(py::module &m) {
     bc.def(
         "constant_exterior", [](const py::object &target, const Expr &exterior, const Region &bounds) -> Func {
             try {
-                return constant_exterior(target.cast<Func>(), exterior, bounds);
+                return constant_exterior(HL_CAST(Func, target), exterior, bounds);
             } catch (...) {
                 // fall thru
             }
             try {
-                return constant_exterior(to_func(target.cast<Buffer<>>()), exterior, bounds);
+                return constant_exterior(to_func(HL_CAST(Buffer<>, target)), exterior, bounds);
             } catch (...) {
                 // fall thru
             }
@@ -64,12 +64,12 @@ void define_boundary_conditions(py::module &m) {
     bc.def(
         "repeat_edge", [](const py::object &target, const Region &bounds) -> Func {
             try {
-                return repeat_edge(target.cast<Func>(), bounds);
+                return repeat_edge(HL_CAST(Func, target), bounds);
             } catch (...) {
                 // fall thru
             }
             try {
-                return repeat_edge(to_func(target.cast<Buffer<>>()), bounds);
+                return repeat_edge(to_func(HL_CAST(Buffer<>, target)), bounds);
             } catch (...) {
                 // fall thru
             }
@@ -92,12 +92,12 @@ void define_boundary_conditions(py::module &m) {
     bc.def(
         "repeat_image", [](const py::object &target, const Region &bounds) -> Func {
             try {
-                return repeat_image(target.cast<Func>(), bounds);
+                return repeat_image(HL_CAST(Func, target), bounds);
             } catch (...) {
                 // fall thru
             }
             try {
-                return repeat_image(to_func(target.cast<Buffer<>>()), bounds);
+                return repeat_image(to_func(HL_CAST(Buffer<>, target)), bounds);
             } catch (...) {
                 // fall thru
             }
@@ -120,12 +120,12 @@ void define_boundary_conditions(py::module &m) {
     bc.def(
         "mirror_image", [](const py::object &target, const Region &bounds) -> Func {
             try {
-                return mirror_image(target.cast<Func>(), bounds);
+                return mirror_image(HL_CAST(Func, target), bounds);
             } catch (...) {
                 // fall thru
             }
             try {
-                return mirror_image(to_func(target.cast<Buffer<>>()), bounds);
+                return mirror_image(to_func(HL_CAST(Buffer<>, target)), bounds);
             } catch (...) {
                 // fall thru
             }
@@ -148,12 +148,12 @@ void define_boundary_conditions(py::module &m) {
     bc.def(
         "mirror_interior", [](const py::object &target, const Region &bounds) -> Func {
             try {
-                return mirror_interior(target.cast<Func>(), bounds);
+                return mirror_interior(HL_CAST(Func, target), bounds);
             } catch (...) {
                 // fall thru
             }
             try {
-                return mirror_interior(to_func(target.cast<Buffer<>>()), bounds);
+                return mirror_interior(to_func(HL_CAST(Buffer<>, target)), bounds);
             } catch (...) {
                 // fall thru
             }

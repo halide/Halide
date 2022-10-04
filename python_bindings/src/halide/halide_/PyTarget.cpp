@@ -13,7 +13,7 @@ std::string target_repr(const Target &t) {
 
 }  // namespace
 
-void define_target(py::module &m) {
+void define_target(py::module_ &m) {
     // Disambiguate some ambigious methods
     int (Target::*natural_vector_size_method)(const Type &t) const = &Target::natural_vector_size;
     bool (Target::*supports_type1_method)(const Type &t) const = &Target::supports_type;

@@ -8,6 +8,8 @@
 namespace Halide {
 namespace PythonBindings {
 
+#if !HALIDE_USE_NANOBIND
+
 namespace {
 
 // Standard stream output for halide_dimension_t
@@ -49,18 +51,18 @@ std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
 // enough special-case wrapping to support it.
 template<typename T>
 inline T value_cast(const py::object &value) {
-    return value.cast<T>();
+    return HL_CAST(T, value);
 }
 
 template<>
 inline float16_t value_cast<float16_t>(const py::object &value) {
-    return float16_t(value.cast<double>());
+    return float16_t(HL_CAST(double, value));
 }
 
 // TODO: https://github.com/halide/Halide/issues/6849
 // template<>
 // inline bfloat16_t value_cast<bfloat16_t>(const py::object &value) {
-//     return bfloat16_t(value.cast<double>());
+//     return bfloat16_t(HL_CAST(double, value));
 // }
 
 template<typename T>
@@ -259,12 +261,12 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, c
 }
 
 // Use an alias class so that if we are created via a py::buffer, we can
-// keep the py::buffer_info class alive for the life of the Buffer<>,
+// keep the py_buffer_info class alive for the life of the Buffer<>,
 // ensuring the data isn't collected out from under us.
 class PyBuffer : public Buffer<> {
-    py::buffer_info info;
+    py_buffer_info info;
 
-    PyBuffer(py::buffer_info &&info, const std::string &name)
+    PyBuffer(py_buffer_info &&info, const std::string &name)
         : Buffer<>(pybufferinfo_to_halidebuffer(info), name),
           info(std::move(info)) {
     }
@@ -301,7 +303,7 @@ public:
 
 }  // namespace
 
-void define_buffer(py::module &m) {
+void define_buffer(py::module_ &m) {
     using BufferDimension = Halide::Runtime::Buffer<>::Dimension;
 
     auto buffer_dimension_class =
@@ -316,7 +318,7 @@ void define_buffer(py::module &m) {
 
             // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
             // most notably, we can convert to an ndarray by calling numpy.array()
-            .def_buffer([](Buffer<> &b) -> py::buffer_info {
+            .def_buffer([](Buffer<> &b) -> py_buffer_info {
                 if (b.data() == nullptr) {
                     throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
                 }
@@ -329,7 +331,7 @@ void define_buffer(py::module &m) {
                     strides.push_back((Py_ssize_t)(b.raw_buffer()->dim[i].stride * bytes));
                 }
 
-                return py::buffer_info(
+                return py_buffer_info(
                     b.data(),                             // Pointer to buffer
                     bytes,                                // Size of one scalar
                     type_to_format_descriptor(b.type()),  // Python struct-style format descriptor
@@ -634,6 +636,8 @@ void define_buffer(py::module &m) {
                 return o.str();
             });
 }
+#endif
+
 
 }  // namespace PythonBindings
 }  // namespace Halide

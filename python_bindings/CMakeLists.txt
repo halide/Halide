@@ -22,9 +22,15 @@ cmake_dependent_option(
     WITH_TESTS OFF
 )
 
+option(USE_NANOBIND "Use Nanobind instead of PyBind11" ON)
+
 # Set the expected (downloaded) version of pybind11
 option(PYBIND11_USE_FETCHCONTENT "Enable to download pybind11 via FetchContent" ON)
 set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
+
+# Set the expected (downloaded) version of nanobind
+option(NANOBIND_USE_FETCHCONTENT "Enable to download nanobind via FetchContent" ON)
+set(NANOBIND_VER master CACHE STRING "The nanobind version to use (or download)")
 
 ##
 # Dependencies
@@ -36,16 +42,33 @@ set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
 # available, as is the case in the manylinux Docker images.
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 
-if (PYBIND11_USE_FETCHCONTENT)
-    include(FetchContent)
-    FetchContent_Declare(
-        pybind11
-        GIT_REPOSITORY https://github.com/pybind/pybind11.git
-        GIT_TAG v${PYBIND11_VER}
-    )
-    FetchContent_MakeAvailable(pybind11)
-else ()
-    find_package(pybind11 ${PYBIND11_VER} REQUIRED)
+if (USE_NANOBIND)
+    # Nanobind includes all of Development, and won't be able to find Module if we don't do this
+    find_package(Python 3.8 COMPONENTS Interpreter Development.Module REQUIRED)
+    if (NANOBIND_USE_FETCHCONTENT)
+        include(FetchContent)
+        FetchContent_Declare(
+            nanobind
+            GIT_REPOSITORY https://github.com/wjakob/nanobind.git
+            GIT_TAG ${NANOBIND_VER}
+        )
+        FetchContent_MakeAvailable(nanobind)
+    else ()
+        find_package(nanobind ${NANOBIND_VER} REQUIRED)
+    endif ()
+    # message(FATAL_ERROR "nanobind ${nanobind_SOURCE_DIR} ${nanobind_BINARY_DIR}")
+else()
+    if (PYBIND11_USE_FETCHCONTENT)
+        include(FetchContent)
+        FetchContent_Declare(
+            pybind11
+            GIT_REPOSITORY https://github.com/pybind/pybind11.git
+            GIT_TAG v${PYBIND11_VER}
+        )
+        FetchContent_MakeAvailable(pybind11)
+    else ()
+        find_package(pybind11 ${PYBIND11_VER} REQUIRED)
+    endif ()
 endif ()
 
 find_package(Halide REQUIRED Halide)

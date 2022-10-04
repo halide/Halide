@@ -7,15 +7,15 @@
 namespace Halide {
 namespace PythonBindings {
 
-void define_operators(py::module &m) {
+void define_operators(py::module_ &m) {
     m.def("max", [](const py::args &args) -> Expr {
         if (args.size() < 2) {
             throw py::value_error("max() must have at least 2 arguments");
         }
         int pos = (int)args.size() - 1;
-        Expr value = args[pos--].cast<Expr>();
+        Expr value = HL_CAST(Expr, args[pos--]);
         while (pos >= 0) {
-            value = max(args[pos--].cast<Expr>(), value);
+            value = max(HL_CAST(Expr, args[pos--]), value);
         }
         return value;
     });
@@ -25,9 +25,9 @@ void define_operators(py::module &m) {
             throw py::value_error("min() must have at least 2 arguments");
         }
         int pos = (int)args.size() - 1;
-        Expr value = args[pos--].cast<Expr>();
+        Expr value = HL_CAST(Expr, args[pos--]);
         while (pos >= 0) {
-            value = min(args[pos--].cast<Expr>(), value);
+            value = min(HL_CAST(Expr, args[pos--]), value);
         }
         return value;
     });
@@ -44,10 +44,10 @@ void define_operators(py::module &m) {
             throw py::value_error("select() must have an odd number of arguments");
         }
         int pos = (int)args.size() - 1;
-        Expr false_value = args[pos--].cast<Expr>();
+        Expr false_value = HL_CAST(Expr, args[pos--]);
         while (pos > 0) {
-            Expr true_value = args[pos--].cast<Expr>();
-            Expr condition = args[pos--].cast<Expr>();
+            Expr true_value = HL_CAST(Expr, args[pos--]);
+            Expr condition = HL_CAST(Expr, args[pos--]);
             false_value = select(condition, true_value, false_value);
         }
         return false_value;
@@ -60,20 +60,20 @@ void define_operators(py::module &m) {
             << "tuple_select() must have an odd number of arguments";
 
         int pos = (int)args.size() - 1;
-        Tuple false_value = args[pos--].cast<Tuple>();
+        Tuple false_value = HL_CAST(Tuple, args[pos--]);
         bool has_tuple_cond = false, has_expr_cond = false;
         while (pos > 0) {
-            Tuple true_value = args[pos--].cast<Tuple>();
+            Tuple true_value = HL_CAST(Tuple, args[pos--]);
             ;
             // Note that 'condition' can be either Expr or Tuple, but must be consistent across all
             py::object py_cond = args[pos--];
             Expr expr_cond;
             Tuple tuple_cond(expr_cond);
             try {
-                tuple_cond = py_cond.cast<Tuple>();
+                tuple_cond = HL_CAST(Tuple, py_cond);
                 has_tuple_cond = true;
             } catch (...) {
-                expr_cond = py_cond.cast<Expr>();
+                expr_cond = HL_CAST(Expr, py_cond);
                 has_expr_cond = true;
             }
 
@@ -131,14 +131,24 @@ void define_operators(py::module &m) {
         "print_when", [](const Expr &condition, const py::args &args) -> Expr {
             return print_when(condition, collect_print_args(args));
         },
-        py::arg("condition"));
+#if HALIDE_USE_NANOBIND
+        py::arg("condition"), py::arg("args")
+#else
+        py::arg("condition")
+#endif
+    );
     m.def(
         "require", [](const Expr &condition, const Expr &value, const py::args &args) -> Expr {
             auto v = args_to_vector<Expr>(args);
             v.insert(v.begin(), value);
             return require(condition, v);
         },
-        py::arg("condition"), py::arg("value"));
+#if HALIDE_USE_NANOBIND
+        py::arg("condition"), py::arg("value"), py::arg("args")
+#else
+        py::arg("condition"), py::arg("value")
+#endif
+    );
     m.def("lerp", &lerp);
     m.def("popcount", &popcount);
     m.def("count_leading_zeros", &count_leading_zeros);
@@ -156,7 +166,12 @@ void define_operators(py::module &m) {
         "memoize_tag", [](const Expr &result, const py::args &cache_key_values) -> Expr {
             return Internal::memoize_tag_helper(result, args_to_vector<Expr>(cache_key_values));
         },
-        py::arg("result"));
+#if HALIDE_USE_NANOBIND
+        py::arg("result"), py::arg("cache_key_values")
+#else
+        py::arg("result")
+#endif
+    );
     m.def("likely", &likely);
     m.def("likely_if_innermost", &likely_if_innermost);
     m.def("saturating_cast", (Expr(*)(Type, Expr)) & saturating_cast);
