@@ -78,12 +78,12 @@ private:
     int get_if_node_cost(const IRNode *op, bool inclusive, bool is_computation) const;
 
     // gets costs from `stmt_cost` map of children nodes and sum them up accordingly
-    std::vector<int> get_costs_children(const IRNode *parent, std::vector<const IRNode *> children,
+    std::vector<int> get_costs_children(const IRNode *parent, const std::vector<const IRNode *> &children,
                                         bool inclusive) const;
 
     // sets inclusive/exclusive costs
     void set_costs(bool inclusive, const IRNode *node, const std::vector<const IRNode *> &children,
-                   std::function<int(int)> calculate_cc, std::function<int(int)> calculate_dmc);
+                   const std::function<int(int)> &calculate_cc, const std::function<int(int)> &calculate_dmc);
 
     // sets max computation cost and max data movement cost (inclusive and exclusive)
     void set_max_costs(const Module &m);

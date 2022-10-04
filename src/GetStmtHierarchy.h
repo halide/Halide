@@ -22,7 +22,7 @@ public:
     static const char *stmt_hierarchy_css;
     static const char *stmt_hierarchy_collapse_expand_JS;
 
-    GetStmtHierarchy(FindStmtCost find_stmt_cost_populated)
+    GetStmtHierarchy(const FindStmtCost &find_stmt_cost_populated)
         : find_stmt_cost(find_stmt_cost_populated), ir_viz(find_stmt_cost_populated),
           curr_node_ID(0), num_nodes(0), viz_counter(0), stmt_hierarchy_tooltip_count(0) {
     }
@@ -69,8 +69,8 @@ private:
     std::string generate_memory_cost_div(const IRNode *op);
 
     // opens and closes nodes, depending on number of children
-    std::string node_without_children(const IRNode *op, std::string name);
-    std::string open_node(const IRNode *op, std::string name);
+    std::string node_without_children(const IRNode *op, const std::string &name);
+    std::string open_node(const IRNode *op, const std::string &name);
     std::string close_node();
 
     void visit_binary_op(const IRNode *op, const Expr &a, const Expr &b, const std::string &name);

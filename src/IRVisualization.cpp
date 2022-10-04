@@ -1,6 +1,8 @@
 #include "IRVisualization.h"
+
 #include "IROperator.h"
 #include "Module.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -30,7 +32,7 @@ StmtSize GetReadWrite::get_size(const IRNode *node) const {
     return (it != stmt_sizes.end()) ? it->second : StmtSize();
 }
 
-string GetReadWrite::string_span(string var_name) const {
+string GetReadWrite::string_span(const string &var_name) const {
     return "<span class='stringType'>" + var_name + "</span>";
 }
 string GetReadWrite::int_span(int64_t int_val) const {
@@ -46,14 +48,14 @@ void GetReadWrite::traverse(const Module &m) {
     }
 }
 
-string GetReadWrite::get_simplified_string(string a, string b, string op) {
+string GetReadWrite::get_simplified_string(const string &a, const string &b, const string &op) {
     if (op == "+") {
         return a + " + " + b;
     }
 
     else if (op == "*") {
         // check if b contains "+"
-        if (b.find("+") != string::npos) {
+        if (b.find('+') != string::npos) {
             return a + "*(" + b + ")";
         } else {
             return a + "*" + b;
@@ -68,19 +70,19 @@ string GetReadWrite::get_simplified_string(string a, string b, string op) {
     }
 }
 
-void GetReadWrite::set_write_size(const IRNode *node, string write_var, string write_size) {
+void GetReadWrite::set_write_size(const IRNode *node, const string &write_var, string write_size) {
     auto it = stmt_sizes.find(node);
     if (it == stmt_sizes.end()) {
         stmt_sizes[node] = StmtSize();
     }
-    stmt_sizes[node].writes[write_var] = write_size;
+    stmt_sizes[node].writes[write_var] = std::move(write_size);
 }
-void GetReadWrite::set_read_size(const IRNode *node, string read_var, string read_size) {
+void GetReadWrite::set_read_size(const IRNode *node, const string &read_var, string read_size) {
     auto it = stmt_sizes.find(node);
     if (it == stmt_sizes.end()) {
         stmt_sizes[node] = StmtSize();
     }
-    stmt_sizes[node].reads[read_var] = read_size;
+    stmt_sizes[node].reads[read_var] = std::move(read_size);
 }
 
 void GetReadWrite::visit(const Store *op) {
@@ -141,19 +143,16 @@ string IRVisualization::generate_computation_cost_tooltip(const IRNode *op, stri
 
     // build up values of the table that will be displayed
     vector<pair<string, string>> table_rows;
-    table_rows.push_back({"Loop Depth", std::to_string(depth)});
+    table_rows.emplace_back("Loop Depth", std::to_string(depth));
 
     if (computation_cost_exclusive == computation_cost_inclusive) {
-        table_rows.push_back(
-            {"Computation Cost", std::to_string(computation_cost_exclusive) + "%"});
+        table_rows.emplace_back("Computation Cost", std::to_string(computation_cost_exclusive) + "%");
     } else {
-        table_rows.push_back(
-            {"Computation Cost (Exclusive)", std::to_string(computation_cost_exclusive) + "%"});
-        table_rows.push_back(
-            {"Computation Cost (Inclusive)", std::to_string(computation_cost_inclusive) + "%"});
+        table_rows.emplace_back("Computation Cost (Exclusive)", std::to_string(computation_cost_exclusive) + "%");
+        table_rows.emplace_back("Computation Cost (Inclusive)", std::to_string(computation_cost_inclusive) + "%");
     }
 
-    return tooltip_table(table_rows, extra_note);
+    return tooltip_table(table_rows, std::move(extra_note));
 }
 string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, string extra_note) {
     int depth, data_movement_cost_exclusive, data_movement_cost_inclusive;
@@ -169,19 +168,16 @@ string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, st
 
     // build up values of the table that will be displayed
     vector<pair<string, string>> table_rows;
-    table_rows.push_back({"Loop Depth", std::to_string(depth)});
+    table_rows.emplace_back("Loop Depth", std::to_string(depth));
 
     if (data_movement_cost_exclusive == data_movement_cost_inclusive) {
-        table_rows.push_back(
-            {"Data Movement Cost", std::to_string(data_movement_cost_exclusive) + "%"});
+        table_rows.emplace_back("Data Movement Cost", std::to_string(data_movement_cost_exclusive) + "%");
     } else {
-        table_rows.push_back(
-            {"Data Movement Cost (Exclusive)", std::to_string(data_movement_cost_exclusive) + "%"});
-        table_rows.push_back(
-            {"Data Movement Cost (Inclusive)", std::to_string(data_movement_cost_inclusive) + "%"});
+        table_rows.emplace_back("Data Movement Cost (Exclusive)", std::to_string(data_movement_cost_exclusive) + "%");
+        table_rows.emplace_back("Data Movement Cost (Inclusive)", std::to_string(data_movement_cost_inclusive) + "%");
     }
 
-    return tooltip_table(table_rows, extra_note);
+    return tooltip_table(table_rows, std::move(extra_note));
 }
 
 int IRVisualization::get_color_range(const IRNode *op, bool inclusive, bool is_computation) const {
@@ -216,7 +212,9 @@ int IRVisualization::get_combined_color_range(const IRNode *op, bool is_computat
     int cost = find_stmt_cost.get_cost(op, true, is_computation);
     int range = cost / range_size;
 
-    if (range >= NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
+    if (range >= NUMBER_COST_COLORS) {
+        range = NUMBER_COST_COLORS - 1;
+    }
 
     return range;
 }
@@ -238,7 +236,7 @@ void IRVisualization::start_module_traversal(const Module &m) {
     }
 }
 
-string IRVisualization::open_box_div(string class_name, const IRNode *op) {
+string IRVisualization::open_box_div(const string &class_name, const IRNode *op) {
     ostringstream ss;
 
     ss << "<div class='box center " << class_name << "'";
@@ -289,7 +287,7 @@ string IRVisualization::close_div() const {
     return "</div>";
 }
 
-string IRVisualization::open_header(const string &header, string anchor_name,
+string IRVisualization::open_header(const string &header, const string &anchor_name,
                                     vector<pair<string, string>> info_tooltip_table) {
     ostringstream ss;
     ss << open_header_div();
@@ -314,7 +312,7 @@ string IRVisualization::open_header(const string &header, string anchor_name,
     ss << see_code_button_div(anchor_name);
 
     // info button
-    if (info_tooltip_table.size() > 0) {
+    if (!info_tooltip_table.empty()) {
         ss << "<div>";
         ss << info_button_with_tooltip(tooltip_table(info_tooltip_table),
                                        "iconButton dottedIconButton");
@@ -340,7 +338,7 @@ string IRVisualization::div_header(const string &header, StmtSize *size, string 
                                    vector<pair<string, string>> info_tooltip_table = {}) {
     ostringstream ss;
 
-    ss << open_header(header, anchor_name, info_tooltip_table);
+    ss << open_header(header, std::move(anchor_name), std::move(info_tooltip_table));
     ss << close_header();
 
     // add producer consumer size if size is provided
@@ -355,7 +353,7 @@ string IRVisualization::div_header(const string &header, StmtSize *size, string 
 
     return ss.str();
 }
-string IRVisualization::function_div_header(const string &function_name, string anchor_name) const {
+string IRVisualization::function_div_header(const string &function_name, const string &anchor_name) const {
     ostringstream ss;
 
     ss << "<div class='functionHeader'>";
@@ -404,7 +402,7 @@ string IRVisualization::allocate_div_header(const Allocate *op, const string &he
                                             vector<pair<string, string>> &info_tooltip_table) {
     ostringstream ss;
 
-    ss << open_header(header, anchor_name, info_tooltip_table);
+    ss << open_header(header, std::move(anchor_name), info_tooltip_table);
     ss << close_header();
 
     vector<string> allocation_sizes = get_allocation_sizes(op);
@@ -421,7 +419,7 @@ string IRVisualization::for_loop_div_header(const For *op, const string &header,
                                             string anchor_name) {
     ostringstream ss;
 
-    ss << open_header(header, anchor_name, {});
+    ss << open_header(header, std::move(anchor_name), {});
     ss << close_header();
 
     string loopSize = get_loop_iterator(op);
@@ -442,7 +440,7 @@ string IRVisualization::if_tree(const IRNode *op, const string &header, string a
     ss << "<span class='tf-nc if-node'>";
 
     ss << open_box_div("IfBox", op);
-    ss << div_header(header, nullptr, anchor_name);
+    ss << div_header(header, nullptr, std::move(anchor_name));
 
     return ss.str();
 }
@@ -599,7 +597,7 @@ string IRVisualization::allocate_table(vector<string> &allocation_sizes) const {
 
     return allocate_table_ss.str();
 }
-string IRVisualization::for_loop_table(string loop_size) const {
+string IRVisualization::for_loop_table(const string &loop_size) const {
     ostringstream for_loop_table_ss;
 
     // open table
@@ -629,19 +627,23 @@ string IRVisualization::for_loop_table(string loop_size) const {
     return for_loop_table_ss.str();
 }
 
-string IRVisualization::see_code_button_div(string anchor_name, bool put_div) const {
+string IRVisualization::see_code_button_div(const string &anchor_name, bool put_div) const {
     ostringstream ss;
-    if (put_div) ss << "<div>";
+    if (put_div) {
+        ss << "<div>";
+    }
     ss << "<button class='iconButton dottedIconButton' style='display: block;' ";
     ss << "onclick='scrollToFunctionVizToCode(\"" << anchor_name << "\")'>";
     ss << "<i class='bi bi-arrow-left-short'></i>";
     ss << "</button>";
-    if (put_div) ss << "</div>";
+    if (put_div) {
+        ss << "</div>";
+    }
     return ss.str();
 }
 
-string IRVisualization::info_button_with_tooltip(string tooltip_text, string button_class_name,
-                                                 string tooltip_class_name) {
+string IRVisualization::info_button_with_tooltip(const string &tooltip_text, const string &button_class_name,
+                                                 const string &tooltip_class_name) {
     ostringstream ss;
 
     // infoButton
@@ -649,7 +651,7 @@ string IRVisualization::info_button_with_tooltip(string tooltip_text, string but
     ss << "<button id='irVizButton" << ir_viz_tooltip_count << "' ";
     ss << "aria-describedby='irVizTooltip" << ir_viz_tooltip_count << "' ";
     ss << "class='infoButton";
-    if (button_class_name != "") {
+    if (!button_class_name.empty()) {
         ss << " " + button_class_name;
     }
     ss << "' role='button' ";
@@ -660,7 +662,7 @@ string IRVisualization::info_button_with_tooltip(string tooltip_text, string but
     // tooltip span
     ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' ";
     ss << "class='tooltip";
-    if (tooltip_class_name != "") {
+    if (!tooltip_class_name.empty()) {
         ss << " " + tooltip_class_name;
     }
     ss << "'";
@@ -675,7 +677,9 @@ string IRVisualization::generate_computation_cost_div(const IRNode *op) {
     ostringstream ss;
 
     // skip if it's a store
-    if (op->node_type == IRNodeType::Store) return "";
+    if (op->node_type == IRNodeType::Store) {
+        return "";
+    }
 
     ir_viz_tooltip_count++;
 
@@ -701,7 +705,9 @@ string IRVisualization::generate_memory_cost_div(const IRNode *op) {
     ostringstream ss;
 
     // skip if it's a store
-    if (op->node_type == IRNodeType::Store) return "";
+    if (op->node_type == IRNodeType::Store) {
+        return "";
+    }
 
     ir_viz_tooltip_count++;
 
@@ -739,7 +745,7 @@ int IRVisualization::get_cost_percentage(const IRNode *node, bool inclusive,
     return (int)((float)cost / (float)total_cost * 100);
 }
 
-string IRVisualization::tooltip_table(vector<pair<string, string>> &table, string extra_note) {
+string IRVisualization::tooltip_table(vector<pair<string, string>> &table, const string &extra_note) {
     ostringstream s;
     s << "<table class='tooltipTable'>";
     for (auto &row : table) {
@@ -750,7 +756,7 @@ string IRVisualization::tooltip_table(vector<pair<string, string>> &table, strin
     }
     s << "</table>";
 
-    if (extra_note != "") {
+    if (!extra_note.empty()) {
         s << "<span class='tooltipHelperText'><i>" << extra_note << "</i></span>";
     }
     return s.str();
@@ -825,8 +831,9 @@ void IRVisualization::visit_function(const LoweredFunc &func) {
 }
 void IRVisualization::visit(const Variable *op) {
     // if op->name starts with "::", remove "::"
-    if (op->name.size() < 2)
+    if (op->name.size() < 2) {
         return;
+    }
     string var_name = op->name;
     if (var_name[0] == ':' && var_name[1] == ':') {
         var_name = var_name.substr(2);
@@ -1116,8 +1123,8 @@ void IRVisualization::visit(const Store *op) {
     string header = "Store " + op->name;
 
     vector<pair<string, string>> table_rows;
-    table_rows.push_back({"Vector Size", std::to_string(op->index.type().lanes())});
-    table_rows.push_back({"Bit Size", std::to_string(op->index.type().bits())});
+    table_rows.emplace_back("Vector Size", std::to_string(op->index.type().lanes()));
+    table_rows.emplace_back("Bit Size", std::to_string(op->index.type().bits()));
 
     html << open_box_div("StoreBox", op);
 
@@ -1139,10 +1146,10 @@ void IRVisualization::visit(const Load *op) {
         if (op->index.node_type() == IRNodeType::Ramp) {
             const Ramp *ramp = op->index.as<Ramp>();
 
-            table_rows.push_back({"Ramp lanes", std::to_string(ramp->lanes)});
+            table_rows.emplace_back("Ramp lanes", std::to_string(ramp->lanes));
             ostringstream ramp_stride;
             ramp_stride << ramp->stride;
-            table_rows.push_back({"Ramp stride", ramp_stride.str()});
+            table_rows.emplace_back("Ramp stride", ramp_stride.str());
 
             if (ramp->stride.node_type() == IRNodeType::IntImm) {
                 int64_t stride = ramp->stride.as<IntImm>()->value;
@@ -1165,11 +1172,11 @@ void IRVisualization::visit(const Load *op) {
 
     header += "Load <i>" + op->name + "</i>";
 
-    table_rows.push_back({"Bit Size", std::to_string(op->index.type().bits())});
-    table_rows.push_back({"Vector Size", std::to_string(op->index.type().lanes())});
+    table_rows.emplace_back("Bit Size", std::to_string(op->index.type().bits()));
+    table_rows.emplace_back("Vector Size", std::to_string(op->index.type().lanes()));
 
     if (op->param.defined()) {
-        table_rows.push_back({"Parameter", op->param.name()});
+        table_rows.emplace_back("Parameter", op->param.name());
     }
 
     header += info_button_with_tooltip(tooltip_table(table_rows), "");
@@ -1214,27 +1221,27 @@ void IRVisualization::visit(const Allocate *op) {
     string header = "Allocate " + op->name;
 
     vector<pair<string, string>> table_rows;
-    table_rows.push_back({"Memory Type", get_memory_type(op->memory_type)});
+    table_rows.emplace_back("Memory Type", get_memory_type(op->memory_type));
 
     if (!is_const_one(op->condition)) {
         ostringstream condition_string;
         condition_string << op->condition;
-        table_rows.push_back({"Condition", condition_string.str()});
+        table_rows.emplace_back("Condition", condition_string.str());
     }
     if (op->new_expr.defined()) {
         ostringstream new_expr_string;
         new_expr_string << op->new_expr;
-        table_rows.push_back({"New Expr", new_expr_string.str()});
+        table_rows.emplace_back("New Expr", new_expr_string.str());
     }
     if (!op->free_function.empty()) {
 
         ostringstream free_func_string;
         free_func_string << op->free_function;
-        table_rows.push_back({"Free Function", free_func_string.str()});
+        table_rows.emplace_back("Free Function", free_func_string.str());
     }
 
-    table_rows.push_back({"Bit Size", std::to_string(op->type.bits())});
-    table_rows.push_back({"Vector Size", std::to_string(op->type.lanes())});
+    table_rows.emplace_back("Bit Size", std::to_string(op->type.bits()));
+    table_rows.emplace_back("Vector Size", std::to_string(op->type.lanes()));
 
     html << allocate_div_header(op, header, anchor_name, table_rows);
 
@@ -1295,7 +1302,7 @@ string GetReadWrite::print_node(const IRNode *node) const {
     IRNodeType type = node->node_type;
     if (type == IRNodeType::IntImm) {
         ss << "IntImm type";
-        auto node1 = dynamic_cast<const IntImm *>(node);
+        const auto *node1 = dynamic_cast<const IntImm *>(node);
         ss << "value: " << node1->value;
     } else if (type == IRNodeType::UIntImm) {
         ss << "UIntImm type";
@@ -1311,31 +1318,31 @@ string GetReadWrite::print_node(const IRNode *node) const {
         ss << "Variable type";
     } else if (type == IRNodeType::Add) {
         ss << "Add type";
-        auto node1 = dynamic_cast<const Add *>(node);
+        const auto *node1 = dynamic_cast<const Add *>(node);
         ss << "a: " << print_node(node1->a.get()) << "\n";
         ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Sub) {
         ss << "Sub type"
            << "\n";
-        auto node1 = dynamic_cast<const Sub *>(node);
+        const auto *node1 = dynamic_cast<const Sub *>(node);
         ss << "a: " << print_node(node1->a.get()) << "\n";
         ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Mod) {
         ss << "Mod type"
            << "\n";
-        auto node1 = dynamic_cast<const Mod *>(node);
+        const auto *node1 = dynamic_cast<const Mod *>(node);
         ss << "a: " << print_node(node1->a.get()) << "\n";
         ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Mul) {
         ss << "Mul type"
            << "\n";
-        auto node1 = dynamic_cast<const Mul *>(node);
+        const auto *node1 = dynamic_cast<const Mul *>(node);
         ss << "a: " << print_node(node1->a.get()) << "\n";
         ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Div) {
         ss << "Div type"
            << "\n";
-        auto node1 = dynamic_cast<const Div *>(node);
+        const auto *node1 = dynamic_cast<const Div *>(node);
         ss << "a: " << print_node(node1->a.get()) << "\n";
         ss << "b: " << print_node(node1->b.get()) << "\n";
     } else if (type == IRNodeType::Min) {

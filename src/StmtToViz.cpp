@@ -17,6 +17,7 @@
 #include <iostream>
 #include <iterator>
 #include <sstream>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -118,7 +119,7 @@ private:
         return stmt_hierarchy_info;
     }
 
-    string generate_stmt_hierarchy_popup(string hierarchy_HTML) {
+    string generate_stmt_hierarchy_popup(const string &hierarchy_HTML) {
         ostringstream popup;
 
         popup_count++;
@@ -176,7 +177,7 @@ private:
     }
     string open_cost_span_else_case(Stmt else_case) {
         Stmt new_node =
-            IfThenElse::make(Variable::make(Int(32), StmtToViz_canIgnoreVariableName_string), else_case, nullptr);
+            IfThenElse::make(Variable::make(Int(32), StmtToViz_canIgnoreVariableName_string), std::move(else_case), nullptr);
 
         StmtHierarchyInfo stmt_hierarchy_info = get_stmt_hierarchy.get_else_hierarchy_html();
         string popup = generate_stmt_hierarchy_popup(stmt_hierarchy_info.html);
@@ -698,7 +699,9 @@ private:
         stream << close_span();
         stream << close_anchor();
         stream << close_cost_span();
-        if (assembly_line_num != -1) stream << see_assembly_button(assembly_line_num);
+        if (assembly_line_num != -1) {
+            stream << see_assembly_button(assembly_line_num);
+        }
         stream << see_viz_button(anchor_name);
 
         stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent",
@@ -759,8 +762,9 @@ private:
         stream << " " << matched("{");
         stream << close_anchor();
         stream << close_cost_span();
-        if (assembly_line_num_start != -1)
+        if (assembly_line_num_start != -1) {
             stream << see_assembly_button(assembly_line_num_start, assembly_line_num_end);
+        }
         stream << see_viz_button(anchor_name);
 
         stream << open_div("ForBody Indent", id);
