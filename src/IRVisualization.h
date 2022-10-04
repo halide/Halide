@@ -5,6 +5,7 @@
 #include "IRVisitor.h"
 
 #include <unordered_map>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -14,7 +15,7 @@ struct StmtSize {
     std::map<std::string, std::string> reads;
 
     bool empty() const {
-        return writes.size() == 0 && reads.size() == 0;
+        return writes.empty() && reads.empty();
     }
 };
 
@@ -32,7 +33,7 @@ public:
     StmtSize get_size(const IRNode *node) const;
 
     // for coloring
-    std::string string_span(std::string var_name) const;
+    std::string string_span(const std::string &var_name) const;
     std::string int_span(int64_t int_val) const;
 
     // prints nodes in error messages
@@ -48,14 +49,14 @@ private:
     void traverse(const Module &m);
 
     // used to simplify expressions with + and *, to not have too many parentheses
-    std::string get_simplified_string(std::string a, std::string b, std::string op);
+    std::string get_simplified_string(const std::string &a, const std::string &b, const std::string &op);
 
     // sets reads/writes for the given node
-    void set_write_size(const IRNode *node, std::string write_var, std::string write_size);
-    void set_read_size(const IRNode *node, std::string read_var, std::string read_size);
+    void set_write_size(const IRNode *node, const std::string &write_var, std::string write_size);
+    void set_read_size(const IRNode *node, const std::string &read_var, std::string read_size);
 
     void visit(const Store *op) override;
-    void add_load_value(const std::string &name, const int lanes);
+    void add_load_value(const std::string &name, int lanes);
     void visit(const Load *op) override;
 };
 
@@ -68,7 +69,7 @@ public:
     static const std::string ir_viz_CSS, scroll_to_function_JS_viz_to_code;
 
     IRVisualization(FindStmtCost find_stmt_cost_populated)
-        : find_stmt_cost(find_stmt_cost_populated), ir_viz_tooltip_count(0), if_count(0),
+        : find_stmt_cost(std::move(find_stmt_cost_populated)), ir_viz_tooltip_count(0), if_count(0),
           producer_consumer_count(0), for_count(0), store_count(0), allocate_count(0),
           function_count(0) {
     }
@@ -110,7 +111,7 @@ private:
     void start_module_traversal(const Module &m);
 
     // opens and closes divs
-    std::string open_box_div(std::string class_name, const IRNode *op);
+    std::string open_box_div(const std::string &class_name, const IRNode *op);
     std::string close_box_div() const;
     std::string open_function_box_div() const;
     std::string close_function_box_div() const;
@@ -122,12 +123,12 @@ private:
     std::string close_div() const;
 
     // header functions
-    std::string open_header(const std::string &header, std::string anchor_name,
+    std::string open_header(const std::string &header, const std::string &anchor_name,
                             std::vector<std::pair<std::string, std::string>> info_tooltip_table);
     std::string close_header() const;
     std::string div_header(const std::string &header, StmtSize *size, std::string anchor_name,
                            std::vector<std::pair<std::string, std::string>> info_tooltip_table);
-    std::string function_div_header(const std::string &function_name, std::string anchor_name) const;
+    std::string function_div_header(const std::string &function_name, const std::string &anchor_name) const;
     std::vector<std::string> get_allocation_sizes(const Allocate *op) const;
     std::string allocate_div_header(const Allocate *op, const std::string &header, std::string anchor_name,
                                     std::vector<std::pair<std::string, std::string>> &info_tooltip_table);
@@ -140,14 +141,14 @@ private:
     // different cost tables
     std::string read_write_table(StmtSize &size) const;
     std::string allocate_table(std::vector<std::string> &allocation_sizes) const;
-    std::string for_loop_table(std::string loop_size) const;
+    std::string for_loop_table(const std::string &loop_size) const;
 
     // generates code for button that will scroll to associated IR code line
-    std::string see_code_button_div(std::string anchor_name, bool put_div = true) const;
+    std::string see_code_button_div(const std::string &anchor_name, bool put_div = true) const;
 
     // info button with tooltip
-    std::string info_button_with_tooltip(std::string tooltip_text, std::string button_class_name,
-                                         std::string tooltip_class_name = "");
+    std::string info_button_with_tooltip(const std::string &tooltip_text, const std::string &button_class_name,
+                                         const std::string &tooltip_class_name = "");
 
     // for cost colors - side bars of boxes
     std::string generate_computation_cost_div(const IRNode *op);
@@ -158,7 +159,7 @@ private:
     int get_cost_percentage(const IRNode *node, bool inclusive, bool is_computation) const;
 
     // builds the tooltip cost table based on given input table
-    std::string tooltip_table(std::vector<std::pair<std::string, std::string>> &table, std::string extra_note = "");
+    std::string tooltip_table(std::vector<std::pair<std::string, std::string>> &table, const std::string &extra_note = "");
 
     // for cost colors - side boxes of Load nodes
     std::string color_button(int color_range);

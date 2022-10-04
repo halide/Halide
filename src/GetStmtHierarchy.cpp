@@ -145,7 +145,7 @@ string GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
     return ss.str();
 }
 
-string GetStmtHierarchy::node_without_children(const IRNode *op, string name) {
+string GetStmtHierarchy::node_without_children(const IRNode *op, const string &name) {
     ostringstream ss;
 
     string class_name = get_node_class_name();
@@ -163,7 +163,7 @@ string GetStmtHierarchy::node_without_children(const IRNode *op, string name) {
 
     return ss.str();
 }
-string GetStmtHierarchy::open_node(const IRNode *op, string name) {
+string GetStmtHierarchy::open_node(const IRNode *op, const string &name) {
     ostringstream ss;
     string class_name = get_node_class_name() + " children-node";
 
@@ -335,7 +335,7 @@ void GetStmtHierarchy::visit(const Call *op) {
     html << open_node(op, op->name);
 
     int curr_node = curr_node_ID;
-    for (auto &arg : op->args) {
+    for (const auto &arg : op->args) {
         curr_node_ID = curr_node;
         arg.accept(this);
     }
@@ -421,13 +421,13 @@ void GetStmtHierarchy::visit(const Provide *op) {
 
     html << open_node(op, op->name);
     int curr_node1 = curr_node_ID;
-    for (auto &arg : op->args) {
+    for (const auto &arg : op->args) {
         curr_node_ID = curr_node1;
         arg.accept(this);
     }
     html << close_node();
 
-    for (auto &val : op->values) {
+    for (const auto &val : op->values) {
         curr_node_ID = curr_node0;
         val.accept(this);
     }
@@ -460,7 +460,9 @@ void GetStmtHierarchy::visit(const Allocate *op) {
         name << "custom_delete {" << op->free_function << "}";
     }
 
-    if (name.str() != "") html << node_without_children(op, name.str());
+    if (!name.str().empty()) {
+        html << node_without_children(op, name.str());
+    }
     html << close_node();
 }
 void GetStmtHierarchy::visit(const Free *op) {
@@ -496,7 +498,7 @@ void GetStmtHierarchy::visit(const Shuffle *op) {
         html << open_node(op, "concat_vectors");
 
         int curr_node = curr_node_ID;
-        for (auto &e : op->vectors) {
+        for (const auto &e : op->vectors) {
             curr_node_ID = curr_node;
             e.accept(this);
         }
@@ -507,7 +509,7 @@ void GetStmtHierarchy::visit(const Shuffle *op) {
         html << open_node(op, "interleave_vectors");
 
         int curr_node = curr_node_ID;
-        for (auto &e : op->vectors) {
+        for (const auto &e : op->vectors) {
             curr_node_ID = curr_node;
             e.accept(this);
         }

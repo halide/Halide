@@ -85,8 +85,6 @@ void FindStmtCost::traverse(const Module &m) {
     for (const auto &f : m.functions()) {
         f.body.accept(this);
     }
-
-    return;
 }
 
 int FindStmtCost::get_computation_cost(const IRNode *node, bool inclusive) const {
@@ -167,9 +165,11 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node, bool inclusive) con
             return 0;
         }
     } else {
-        if (inclusive) cost = it->second.data_movement_cost_inclusive;
-        else
+        if (inclusive) {
+            cost = it->second.data_movement_cost_inclusive;
+        } else {
             cost = it->second.data_movement_cost_exclusive;
+        }
     }
 
     internal_assert(cost >= 0) << "\n"
@@ -210,7 +210,7 @@ int FindStmtCost::get_if_node_cost(const IRNode *op, bool inclusive, bool is_com
     return cost;
 }
 
-vector<int> FindStmtCost::get_costs_children(const IRNode *parent, vector<const IRNode *> children,
+vector<int> FindStmtCost::get_costs_children(const IRNode *parent, const vector<const IRNode *> &children,
                                              bool inclusive) const {
     int children_cc = 0;
     int children_dmc = 0;
@@ -227,8 +227,8 @@ vector<int> FindStmtCost::get_costs_children(const IRNode *parent, vector<const 
 
 void FindStmtCost::set_costs(
     bool inclusive, const IRNode *node, const vector<const IRNode *> &children,
-    std::function<int(int)> calculate_cc = [](int x) { return NORMAL_NODE_CC + x; },
-    std::function<int(int)> calculate_dmc = [](int x) { return NORMAL_NODE_DMC + x; }) {
+    const std::function<int(int)> &calculate_cc = [](int x) { return NORMAL_NODE_CC + x; },
+    const std::function<int(int)> &calculate_dmc = [](int x) { return NORMAL_NODE_DMC + x; }) {
 
     vector<int> costs_children = get_costs_children(node, children, inclusive);
 
@@ -813,7 +813,7 @@ string FindStmtCost::print_node(const IRNode *node) const {
     switch (type) {
     case IRNodeType::IntImm: {
         s << "IntImm type";
-        auto node1 = dynamic_cast<const IntImm *>(node);
+        const auto *node1 = dynamic_cast<const IntImm *>(node);
         s << "value: " << node1->value;
         break;
     }
@@ -838,7 +838,7 @@ string FindStmtCost::print_node(const IRNode *node) const {
         break;
     }
     case IRNodeType::Variable: {
-        auto node1 = dynamic_cast<const Variable *>(node);
+        const auto *node1 = dynamic_cast<const Variable *>(node);
         s << "Variable type - " << node1->name;
         break;
     }
@@ -912,7 +912,7 @@ string FindStmtCost::print_node(const IRNode *node) const {
     }
     case IRNodeType::Load: {
         s << "Load type: ";
-        auto node1 = dynamic_cast<const Load *>(node);
+        const auto *node1 = dynamic_cast<const Load *>(node);
         s << node1->name << ", index: " << node1->index;
         break;
     }
@@ -938,7 +938,7 @@ string FindStmtCost::print_node(const IRNode *node) const {
     }
     case IRNodeType::LetStmt: {
         s << "LetStmt type";
-        auto node1 = dynamic_cast<const LetStmt *>(node);
+        const auto *node1 = dynamic_cast<const LetStmt *>(node);
         s << "name: " << node1->name;
         s << ", value: " << node1->value;
         break;
@@ -961,7 +961,7 @@ string FindStmtCost::print_node(const IRNode *node) const {
     }
     case IRNodeType::Store: {
         s << "Store type: ";
-        auto node1 = dynamic_cast<const Store *>(node);
+        const auto *node1 = dynamic_cast<const Store *>(node);
         s << node1->name << ", index: " << node1->index;
         s << ", value: " << node1->value;
         break;
@@ -991,7 +991,7 @@ string FindStmtCost::print_node(const IRNode *node) const {
         break;
     }
     case IRNodeType::IfThenElse: {
-        auto node1 = dynamic_cast<const IfThenElse *>(node);
+        const auto *node1 = dynamic_cast<const IfThenElse *>(node);
         s << "IfThenElse type - cond: " << node1->condition;
         break;
     }

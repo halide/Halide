@@ -183,11 +183,11 @@ string GetAssemblyInfoViz::print_node(const IRNode *node) const {
     IRNodeType type = node->node_type;
     if (type == IRNodeType::ProducerConsumer) {
         s << "ProducerConsumer";
-        auto node1 = dynamic_cast<const ProducerConsumer *>(node);
+        const auto *node1 = dynamic_cast<const ProducerConsumer *>(node);
         s << " " << node1->name;
     } else if (type == IRNodeType::For) {
         s << "For";
-        auto node1 = dynamic_cast<const For *>(node);
+        const auto *node1 = dynamic_cast<const For *>(node);
         s << " " << node1->name;
     } else {
         s << "Unknown type ";
