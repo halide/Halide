@@ -191,13 +191,13 @@ https://github.com/KhronosGroup/SPIRV-Tools
 
 # Current Status
 
-The following table outlines the state of the correctness tests (as of Sep-30) when 
+The following table outlines the state of the correctness tests (as of Oct-04) when 
 run with `HL_JIT_TARGET=host-vulkan` (NOTE: some tests may need additional 
 modifications to run under Vulkan):
 
 | Totals | *PASS* 🟢 | *FAIL* 🔴 | 
 | --     | --        | --        |
-|        | 300       | 65        |
+|        | 307       | 58        |
 
 
 | Test Name | Status |
@@ -211,7 +211,7 @@ modifications to run under Vulkan):
 | correctness_vector_bounds_inference | *PASS* 🟢 |
 | correctness_inline_reduction | *PASS* 🟢 |
 | correctness_unsafe_promises | *PASS* 🟢 |
-| correctness_reorder_rvars | *FAIL* 🔴 | 
+| correctness_reorder_rvars | *PASS* 🟢 |
 | correctness_lossless_cast | *PASS* 🟢 |
 | correctness_gpu_reuse_shared_memory | *FAIL* 🔴 | 
 | correctness_boundary_conditions | *FAIL* 🔴 | 
@@ -237,12 +237,12 @@ modifications to run under Vulkan):
 | correctness_bool_compute_root_vectorize | *FAIL* 🔴 | 
 | correctness_extract_concat_bits | *PASS* 🟢 |
 | correctness_dead_realization_in_specialization | *PASS* 🟢 |
-| correctness_undef | *FAIL* 🔴 | 
+| correctness_undef | *PASS* 🟢 |
 | correctness_growing_stack | *PASS* 🟢 |
 | correctness_parallel_scatter | *PASS* 🟢 |
 | correctness_multi_splits_with_diff_tail_strategies | *PASS* 🟢 |
 | correctness_gpu_arg_types | *PASS* 🟢 |
-| correctness_cascaded_filters | *FAIL* 🔴 | 
+| correctness_cascaded_filters | *PASS* 🟢 |
 | correctness_trim_no_ops | *FAIL* 🔴 | 
 | correctness_float16_t_comparison | *PASS* 🟢 |
 | correctness_legal_race_condition | *PASS* 🟢 |
@@ -253,10 +253,10 @@ modifications to run under Vulkan):
 | correctness_strict_float | *PASS* 🟢 |
 | correctness_bounds_query | *PASS* 🟢 |
 | correctness_vector_reductions | *PASS* 🟢 |
-| correctness_custom_lowering_| *PASS* 🟢 | | *PASS* 🟢 |
+| correctness_custom_lowering_pass | *PASS* 🟢 |
 | correctness_gpu_assertion_in_kernel | *PASS* 🟢 |
 | correctness_low_bit_depth_noise | *PASS* 🟢 |
-| correctness_fuse | *FAIL* 🔴 | 
+| correctness_fuse | *PASS* 🟢 |
 | correctness_vector_cast | *FAIL* 🔴 | 
 | correctness_concat | *PASS* 🟢 |
 | correctness_mod | *PASS* 🟢 |
@@ -268,14 +268,14 @@ modifications to run under Vulkan):
 | correctness_compute_at_split_rvar | *PASS* 🟢 |
 | correctness_split_fuse_rvar | *PASS* 🟢 |
 | correctness_memoize_cloned | *PASS* 🟢 |
-| correctness_| *FAIL* 🔴 | _unroll | *PASS* 🟢 |
+| correctness_failed_unroll | *PASS* 🟢 |
 | correctness_gpu_vectorized_shared_memory | *PASS* 🟢 |
 | correctness_bounds_inference_complex | *PASS* 🟢 |
 | correctness_widening_reduction | *FAIL* 🔴 | 
 | correctness_extern_partial | *PASS* 🟢 |
 | correctness_multi_output_pipeline_with_bad_sizes | *PASS* 🟢 |
 | correctness_hoist_loop_invariant_if_statements | *PASS* 🟢 |
-| correctness_extern_sort | *FAIL* 🔴 | 
+| correctness_extern_sort | *PASS* 🟢 |
 | correctness_multiple_outputs_extern | *PASS* 🟢 |
 | correctness_tracing_bounds | *PASS* 🟢 |
 | correctness_gpu_object_lifetime_1 | *PASS* 🟢 |
@@ -352,7 +352,7 @@ modifications to run under Vulkan):
 | correctness_vectorized_load_from_vectorized_allocation | *PASS* 🟢 |
 | correctness_load_library | *PASS* 🟢 |
 | correctness_compute_inside_guard | *PASS* 🟢 |
-| correctness_multi_| *PASS* 🟢 |_reduction | *PASS* 🟢 |
+| correctness_multi_pass_reduction | *PASS* 🟢 |
 | correctness_lerp | *PASS* 🟢 |
 | correctness_realize_condition_depends_on_tuple | *PASS* 🟢 |
 | correctness_vectorized_initialization | *PASS* 🟢 |
@@ -392,7 +392,7 @@ modifications to run under Vulkan):
 | correctness_div_round_to_zero | *PASS* 🟢 |
 | correctness_rfactor | *PASS* 🟢 |
 | correctness_custom_jit_context | *PASS* 🟢 |
-| correctness_round | *PASS* 🟢 |
+| correctness_round | *FAIL* 🔴 | 
 | correctness_device_slice | *FAIL* 🔴 | 
 | correctness_iterate_over_circle | *PASS* 🟢 |
 | correctness_vector_print_bug | *PASS* 🟢 |
@@ -437,7 +437,7 @@ modifications to run under Vulkan):
 | correctness_stream_compaction | *PASS* 🟢 |
 | correctness_async | *PASS* 🟢 |
 | correctness_atomics | *PASS* 🟢 |
-| correctness_multi| *PASS* 🟢 |_constraints | *PASS* 🟢 |
+| correctness_multipass_constraints | *PASS* 🟢 |
 | correctness_target | *PASS* 🟢 |
 | correctness_tuple_reduction | *FAIL* 🔴 | 
 | correctness_dilate3x3 | *FAIL* 🔴 | 
@@ -450,7 +450,7 @@ modifications to run under Vulkan):
 | correctness_handle | *PASS* 🟢 |
 | correctness_param | *PASS* 🟢 |
 | correctness_saturating_casts | *PASS* 🟢 |
-| correctness_extern_producer | *FAIL* 🔴 | 
+| correctness_extern_producer | *PASS* 🟢 |
 | correctness_shift_by_unsigned_negated | *PASS* 🟢 |
 | correctness_circular_reference_leak | *PASS* 🟢 |
 | correctness_specialize_to_gpu | *FAIL* 🔴 | 
@@ -493,7 +493,7 @@ modifications to run under Vulkan):
 | correctness_embed_bitcode | *PASS* 🟢 |
 | correctness_gpu_large_alloc | *FAIL* 🔴 | 
 | correctness_pytorch | *PASS* 🟢 |
-| correctness_in_place | *FAIL* 🔴 | 
+| correctness_in_place | *PASS* 🟢 |
 | correctness_exception | *PASS* 🟢 |
 | correctness_python_extension_gen | *PASS* 🟢 |
 | correctness_cross_compilation | *PASS* 🟢 |
@@ -502,7 +502,7 @@ modifications to run under Vulkan):
 | correctness_loop_invariant_extern_calls | *PASS* 🟢 |
 | correctness_skip_stages_external_array_functions | *PASS* 🟢 |
 | correctness_chunk_sharing | *PASS* 🟢 |
-| correctness_multi_way_select | *FAIL* 🔴 | 
+| correctness_multi_way_select | *PASS* 🟢 |
 | correctness_async_copy_chain | *FAIL* 🔴 | 
 | correctness_gpu_give_input_buffers_device_allocations | *FAIL* 🔴 | 
 | correctness_oddly_sized_output | *PASS* 🟢 |
@@ -558,7 +558,7 @@ modifications to run under Vulkan):
 | correctness_debug_to_file_multiple_outputs | *PASS* 🟢 |
 | correctness_gpu_free_sync | *PASS* 🟢 |
 | correctness_out_constraint | *PASS* 🟢 |
-| correctness_gpu_specialize | *PASS* 🟢| 
+| correctness_gpu_specialize | *FAIL* 🔴 | 
 | correctness_register_shuffle | *PASS* 🟢 |
 | correctness_constant_expr | *PASS* 🟢 |
 | correctness_out_of_memory | *PASS* 🟢 |
@@ -567,4 +567,3 @@ modifications to run under Vulkan):
 | correctness_vector_math | *PASS* 🟢 |
 | correctness_require | *PASS* 🟢 |
 | correctness_callable_errors | *PASS* 🟢 |
-

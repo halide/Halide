@@ -104,9 +104,7 @@ size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
 
 MemoryRegion *vk_create_scalar_uniform_buffer(void *user_context,
                                               VulkanMemoryAllocator *allocator,
-                                              size_t arg_sizes[],
-                                              void *args[],
-                                              int8_t arg_is_buffer[]);
+                                              size_t scalar_buffer_size);
 
 VkResult vk_update_scalar_uniform_buffer(void *user_context,
                                          VulkanMemoryAllocator *allocator,
@@ -153,7 +151,7 @@ VkResult vk_create_descriptor_set(void *user_context,
 
 VkResult vk_update_descriptor_set(void *user_context,
                                   VulkanMemoryAllocator *allocator,
-                                  VkBuffer scalar_args_buffer,
+                                  VkBuffer *scalar_args_buffer,
                                   size_t storage_buffer_count,
                                   size_t arg_sizes[],
                                   void *args[],

@@ -642,10 +642,13 @@ WEAK int halide_vulkan_run(void *user_context,
 
     //// 1a. Create a buffer for the scalar parameters
     if (cache_entry->args_region == nullptr) {
-        cache_entry->args_region = vk_create_scalar_uniform_buffer(user_context, ctx.allocator, arg_sizes, args, arg_is_buffer);
-        if (cache_entry->args_region == nullptr) {
-            error(user_context) << "Vulkan: vk_create_scalar_uniform_buffer() failed! Unable to create shader module!\n";
-            return halide_error_code_internal_error;
+        size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context, arg_sizes, args, arg_is_buffer);
+        if (scalar_buffer_size > 0) {
+            cache_entry->args_region = vk_create_scalar_uniform_buffer(user_context, ctx.allocator, scalar_buffer_size);
+            if (cache_entry->args_region == nullptr) {
+                error(user_context) << "Vulkan: vk_create_scalar_uniform_buffer() failed! Unable to create shader module!\n";
+                return halide_error_code_internal_error;
+            }
         }
     }
 
@@ -689,19 +692,22 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     //// 5. Update uniform args and bindings for buffers in the descriptor set
-    VkResult result = vk_update_scalar_uniform_buffer(user_context, ctx.allocator, cache_entry->args_region, arg_sizes, args, arg_is_buffer);
-    if (result != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: vk_update_scalar_uniform_buffer() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
-        return result;
+    VkBuffer *args_buffer = nullptr;
+    if (cache_entry->args_region != nullptr) {
+        VkResult result = vk_update_scalar_uniform_buffer(user_context, ctx.allocator, cache_entry->args_region, arg_sizes, args, arg_is_buffer);
+        if (result != VK_SUCCESS) {
+            debug(user_context) << "Vulkan: vk_update_scalar_uniform_buffer() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
+            return result;
+        }
+
+        args_buffer = reinterpret_cast<VkBuffer *>(cache_entry->args_region->handle);
+        if (args_buffer == nullptr) {
+            error(user_context) << "Vulkan: Failed to retrieve scalar args buffer for device memory!\n";
+            return halide_error_code_internal_error;
+        }
     }
 
-    VkBuffer *args_buffer = reinterpret_cast<VkBuffer *>(cache_entry->args_region->handle);
-    if (args_buffer == nullptr) {
-        error(user_context) << "Vulkan: Failed to retrieve scalar args buffer for device memory!\n";
-        return halide_error_code_internal_error;
-    }
-
-    result = vk_update_descriptor_set(user_context, ctx.allocator, *args_buffer, cache_entry->buffer_count, arg_sizes, args, arg_is_buffer, cache_entry->descriptor_set);
+    VkResult result = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, cache_entry->buffer_count, arg_sizes, args, arg_is_buffer, cache_entry->descriptor_set);
     if (result != VK_SUCCESS) {
         debug(user_context) << "Vulkan: vk_update_descriptor_set() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
         return result;

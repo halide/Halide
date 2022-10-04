@@ -189,25 +189,35 @@ VkResult vk_create_descriptor_pool(void *user_context,
         << "device: " << (void *)allocator->current_device() << ", "
         << "storage_buffer_count: " << (uint32_t)storage_buffer_count << ")\n";
 #endif
-    VkDescriptorPoolSize descriptor_pool_sizes[2] = {
-        {
-            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // descriptor type
-            1                                   // all kernel args are packed into one uniform buffer
-        },
-        {
+
+    BlockStorage::Config pool_config;
+    pool_config.entry_size = sizeof(VkDescriptorPoolSize);
+    pool_config.minimum_capacity = 1 + (storage_buffer_count ? 1 : 0);
+    BlockStorage pool_sizes(user_context, pool_config);
+
+    // First binding is reserved for passing scalar parameters as a uniform buffer
+    VkDescriptorPoolSize uniform_buffer_size = {
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // descriptor type
+        1                                   // all kernel args are packed into one uniform buffer
+    };
+    pool_sizes.append(user_context, &uniform_buffer_size);
+
+    if (storage_buffer_count > 0) {
+        VkDescriptorPoolSize storage_buffer_size = {
             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // descriptor type
             storage_buffer_count                // all halide buffers are passed as storage buffers
-        }};
-
-    VkDescriptorPoolCreateInfo descriptor_pool_info =
-        {
-            VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,  // struct type
-            nullptr,                                        // point to struct extending this
-            0,                                              // flags
-            1,                                              // this pool will only be used for creating one descriptor set!
-            2,                                              // pool size count
-            descriptor_pool_sizes                           // ptr to descriptr pool sizes
         };
+        pool_sizes.append(user_context, &storage_buffer_size);
+    }
+
+    VkDescriptorPoolCreateInfo descriptor_pool_info = {
+        VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,   // struct type
+        nullptr,                                         // point to struct extending this
+        0,                                               // flags
+        1,                                               // this pool will only be used for creating one descriptor set!
+        (uint32_t)pool_sizes.size(),                     // pool size count
+        (const VkDescriptorPoolSize *)pool_sizes.data()  // ptr to descriptr pool sizes
+    };
 
     VkResult result = vkCreateDescriptorPool(allocator->current_device(), &descriptor_pool_info, allocator->callbacks(), descriptor_pool);
     if (result != VK_SUCCESS) {
@@ -347,7 +357,7 @@ VkResult vk_create_descriptor_set(void *user_context,
 
 VkResult vk_update_descriptor_set(void *user_context,
                                   VulkanMemoryAllocator *allocator,
-                                  VkBuffer scalar_args_buffer,
+                                  VkBuffer *scalar_args_buffer,
                                   size_t storage_buffer_count,
                                   size_t arg_sizes[],
                                   void *args[],
@@ -374,28 +384,31 @@ VkResult vk_update_descriptor_set(void *user_context,
     wds_config.entry_size = sizeof(VkWriteDescriptorSet);
     BlockStorage write_descriptor_set(user_context, wds_config);
 
-    // First binding will be the scalar params buffer
-    VkDescriptorBufferInfo scalar_args_descriptor_buffer_info = {
-        scalar_args_buffer,  // the buffer
-        0,                   // offset
-        VK_WHOLE_SIZE        // range
-    };
-    descriptor_buffer_info.append(user_context, &scalar_args_descriptor_buffer_info);
-    VkDescriptorBufferInfo *scalar_args_entry = (VkDescriptorBufferInfo *)descriptor_buffer_info.back();
+    // First binding will be the scalar args buffer (if needed)
+    VkDescriptorBufferInfo *scalar_args_entry = nullptr;
+    if (scalar_args_buffer != nullptr) {
+        VkDescriptorBufferInfo scalar_args_descriptor_buffer_info = {
+            *scalar_args_buffer,  // the buffer
+            0,                    // offset
+            VK_WHOLE_SIZE         // range
+        };
+        descriptor_buffer_info.append(user_context, &scalar_args_descriptor_buffer_info);
+        scalar_args_entry = (VkDescriptorBufferInfo *)descriptor_buffer_info.back();
 
-    VkWriteDescriptorSet scalar_args_write_descriptor_set = {
-        VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,  // struct type
-        nullptr,                                 // pointer to struct extending this
-        descriptor_set,                          // descriptor set to update
-        0,                                       // binding slot
-        0,                                       // array elem
-        1,                                       // num to update
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,       // descriptor type
-        nullptr,                                 // for images
-        scalar_args_entry,                       // info for buffer
-        nullptr                                  // for texel buffers
-    };
-    write_descriptor_set.append(user_context, &scalar_args_write_descriptor_set);
+        VkWriteDescriptorSet scalar_args_write_descriptor_set = {
+            VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,  // struct type
+            nullptr,                                 // pointer to struct extending this
+            descriptor_set,                          // descriptor set to update
+            0,                                       // binding slot
+            0,                                       // array elem
+            1,                                       // num to update
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,       // descriptor type
+            nullptr,                                 // for images
+            scalar_args_entry,                       // info for buffer
+            nullptr                                  // for texel buffers
+        };
+        write_descriptor_set.append(user_context, &scalar_args_write_descriptor_set);
+    }
 
     // Add all the other device buffers
     for (size_t i = 0; arg_sizes[i] > 0; i++) {
@@ -459,12 +472,7 @@ size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
 
 MemoryRegion *vk_create_scalar_uniform_buffer(void *user_context,
                                               VulkanMemoryAllocator *allocator,
-                                              size_t arg_sizes[],
-                                              void *args[],
-                                              int8_t arg_is_buffer[]) {
-
-    size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context,
-                                                                       arg_sizes, args, arg_is_buffer);
+                                              size_t scalar_buffer_size) {
 
 #ifdef DEBUG_RUNTIME
     debug(user_context)
