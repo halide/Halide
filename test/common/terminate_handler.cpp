@@ -12,4 +12,4 @@ struct hl_set_terminate_handler {
     }
 };
 
-hl_set_terminate_handler handler{};
+hl_set_terminate_handler _terminate_handler{};
