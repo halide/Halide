@@ -31,6 +31,12 @@ if (NOT TARGET Halide::ExpectAbort)
     add_library(Halide::ExpectAbort ALIAS Halide_expect_abort)
 endif ()
 
+if (NOT TARGET Halide::TerminateHandler)
+    # Add an OBJECT (not static) library to add a terminate_handler to catch unhandled exceptions.
+    add_library(Halide_terminate_handler OBJECT ${Halide_SOURCE_DIR}/test/common/terminate_handler.cpp)
+    add_library(Halide::TerminateHandler ALIAS Halide_terminate_handler)
+endif ()
+
 ##
 # Convenience methods for defining tests.
 ##
@@ -48,6 +54,9 @@ function(add_halide_test TARGET)
     add_test(NAME ${TARGET}
              COMMAND ${args_COMMAND} ${args_ARGS}
              WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
+
+    # All Halide tests get this added (it's effectively a no-op if exceptions are disabled)
+    target_link_libraries("${TARGET}" PRIVATE Halide::TerminateHandler)
 
     set_tests_properties(${TARGET} PROPERTIES
                          LABELS "${args_GROUPS}"
