@@ -1,8 +1,8 @@
 #include <exception>
 
 namespace Halide::Internal {
+
 extern void unhandled_exception_handler();
-}  // namespace Halide::Internal
 
 struct hl_set_terminate_handler {
     hl_set_terminate_handler() noexcept {
@@ -13,3 +13,5 @@ struct hl_set_terminate_handler {
 };
 
 hl_set_terminate_handler _terminate_handler{};
+
+}  // namespace Halide::Internal
