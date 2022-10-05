@@ -523,6 +523,35 @@ Expr lower_mux(const Call *mux) {
     return equiv;
 }
 
+// An implementation of rounding to nearest integer with ties to even to use for
+// Halide::round. Written to avoid all use of c standard library functions so
+// that it's cleanly vectorizable and a safe fallback on all platforms.
+Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
+    Type bits_type = x.type().with_code(halide_type_uint);
+    Type int_type = x.type().with_code(halide_type_int);
+
+    // Make one half with the same sign as x
+    Expr sign_bit = reinterpret(bits_type, x) & (cast(bits_type, 1) << (x.type().bits() - 1));
+    Expr one_half = reinterpret(bits_type, cast(x.type(), 0.5f)) | sign_bit;
+    Expr just_under_one_half = reinterpret(x.type(), one_half - 1);
+    one_half = reinterpret(x.type(), one_half);
+    // Do the same for the constant one.
+    Expr one = reinterpret(bits_type, cast(x.type(), 1)) | sign_bit;
+    // Round to nearest, with ties going towards zero
+    Expr ix = cast(int_type, x + just_under_one_half);
+    Expr a = cast(x.type(), ix);
+    // Get the residual
+    Expr diff = a - x;
+    // Make a mask of all ones if the result is odd
+    Expr odd = -cast(bits_type, ix & 1);
+    // Make a mask of all ones if the result was a tie
+    Expr tie = select(diff == one_half, cast(bits_type, -1), cast(bits_type, 0));
+    // If it was a tie, and the result is odd, we should have rounded in the
+    // other direction.
+    Expr correction = reinterpret(x.type(), odd & tie & one);
+    return common_subexpression_elimination(a - correction);
+}
+
 bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!value) {
         return false;

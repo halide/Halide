@@ -308,5 +308,3 @@ define weak_odr <4 x i64> @extend_u32x4_to_u64x4(<4 x i32> %x) nounwind alwaysin
   ret <4 x i64> %5
 }
 
-
-

@@ -240,6 +240,13 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"llvm.sqrt", "llvm.sqrt", Float(32, 2), "sqrt_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"llvm.sqrt", "llvm.sqrt", Float(64, 2), "sqrt_f64", {Float(64, 2)}},
 
+    {"llvm.roundeven", "llvm.roundeven", Float(16, 8), "round", {Float(16, 8)}, ArmIntrinsic::RequireFp16},
+    {"llvm.roundeven", "llvm.roundeven", Float(32, 4), "round", {Float(32, 4)}},
+    {"llvm.roundeven", "llvm.roundeven", Float(64, 2), "round", {Float(64, 2)}},
+    {"llvm.roundeven.f16", "llvm.roundeven.f16", Float(16), "round", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
+    {"llvm.roundeven.f32", "llvm.roundeven.f32", Float(32), "round", {Float(32)}, ArmIntrinsic::NoMangle},
+    {"llvm.roundeven.f64", "llvm.roundeven.f64", Float(64), "round", {Float(64)}, ArmIntrinsic::NoMangle},
+
     // SABD, UABD - Absolute difference
     {"vabds", "sabd", UInt(8, 8), "absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
     {"vabdu", "uabd", UInt(8, 8), "absd", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -599,7 +606,6 @@ const std::set<string> float16_native_funcs = {
     "is_finite_f16",
     "is_inf_f16",
     "is_nan_f16",
-    "round_f16",
     "sqrt_f16",
     "trunc_f16",
 };
@@ -1139,6 +1145,20 @@ void CodeGen_ARM::visit(const Call *op) {
         // We want these as left shifts with a negative b instead.
         value = codegen(op->args[0] << simplify(-op->args[1]));
         return;
+    } else if (op->is_intrinsic(Call::round)) {
+        // llvm's roundeven intrinsic reliably lowers to the correct
+        // instructions on aarch64, but despite having the same instruction
+        // available, it doesn't seem to work for arm-32.
+        if (target.bits == 64) {
+            value = call_overloaded_intrin(op->type, "round", op->args);
+            if (value) {
+                return;
+            }
+        } else if (target.os != Target::Linux) {
+            // Furthermore, roundevenf isn't always in the standard library on arm-32
+            value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
+            return;
+        }
     }
 
     if (op->type.is_vector()) {
