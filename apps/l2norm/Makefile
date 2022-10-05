@@ -18,7 +18,7 @@ $(BIN)/%/l2norm_llvm.a: $(GENERATOR_BIN)/l2norm.generator
 	export HL_ENABLE_RAKE=0 && \
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=1 && \
-	export HL_DISABLE_ARM_LOWERING=1 && \
+	export HL_DISABLE_HALIDE_LOWERING=1 && \
 	$< -g l2norm -f l2norm_llvm -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/l2norm_halide.a: $(GENERATOR_BIN)/l2norm.generator
@@ -26,7 +26,7 @@ $(BIN)/%/l2norm_halide.a: $(GENERATOR_BIN)/l2norm.generator
 	export HL_ENABLE_RAKE=0 && \
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=0 && \
-	export HL_DISABLE_ARM_LOWERING=0 && \
+	export HL_DISABLE_HALIDE_LOWERING=0 && \
 	$< -g l2norm -f l2norm_halide -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/l2norm_pitchfork.a: $(GENERATOR_BIN)/l2norm.generator
@@ -34,7 +34,7 @@ $(BIN)/%/l2norm_pitchfork.a: $(GENERATOR_BIN)/l2norm.generator
 	export HL_ENABLE_RAKE=0 && \
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
-	export HL_DISABLE_ARM_LOWERING=0 && \
+	export HL_DISABLE_HALIDE_LOWERING=0 && \
 	$< -g l2norm -f l2norm_pitchfork -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/l2norm_rake.a: $(GENERATOR_BIN)/l2norm_rake.generator
@@ -42,7 +42,7 @@ $(BIN)/%/l2norm_rake.a: $(GENERATOR_BIN)/l2norm_rake.generator
 	export HL_ENABLE_RAKE=1 && \
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
-	export HL_DISABLE_ARM_LOWERING=0 && \
+	export HL_DISABLE_HALIDE_LOWERING=0 && \
 	$< -g l2norm -f l2norm_rake -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/l2norm.generator
