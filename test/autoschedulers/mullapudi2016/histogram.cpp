@@ -112,7 +112,8 @@ double run_test(bool auto_schedule) {
     }
 
     p.compile_to_lowered_stmt("histogram.html", {in}, HTML, target);
-    color.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // color.print_loop_nest();
 
     Buffer<uint8_t> out(in.width(), in.height(), in.channels());
     double t = benchmark(3, 10, [&]() {
@@ -138,13 +139,14 @@ int main(int argc, char **argv) {
     double manual_time = run_test(false);
     double auto_time = run_test(true);
 
-    std::cout << "======================" << std::endl;
-    std::cout << "Manual time: " << manual_time << "ms" << std::endl;
-    std::cout << "Auto time: " << auto_time << "ms" << std::endl;
-    std::cout << "======================" << std::endl;
-
-    if (auto_time > manual_time * 3) {
-        fprintf(stderr, "Warning: Auto-scheduler is much much slower than it should be.\n");
+    const double slowdown_factor = 5.0;
+    if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
+        std::cerr << "Autoscheduler time is slower than expected:\n"
+                  << "======================\n"
+                  << "Manual time: " << manual_time << "ms\n"
+                  << "Auto time: " << auto_time << "ms\n"
+                  << "======================\n";
+        exit(1);
     }
 
     printf("Success!\n");

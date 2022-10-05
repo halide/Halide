@@ -56,8 +56,8 @@ int main(int argc, char **argv) {
     p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
 
-    // Inspect the schedule
-    h.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // h.print_loop_nest();
 
     // Run the schedule
     Buffer<int> out = p.realize({50, 50});

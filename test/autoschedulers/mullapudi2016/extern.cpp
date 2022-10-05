@@ -58,8 +58,8 @@ void test_case_1() {
     p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
 
-    // Inspect the schedule
-    g.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // g.print_loop_nest();
 }
 
 // Test with an extern Func which consumes a trivial Func; autoscheduler
@@ -92,8 +92,8 @@ void test_case_2() {
     p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
 
-    // Inspect the schedule
-    g.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // g.print_loop_nest();
 }
 
 // Test with an extern Func that consumes a non-pure Func.
@@ -128,8 +128,8 @@ void test_case_3() {
     p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
 
-    // Inspect the schedule
-    g.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // g.print_loop_nest();
 }
 
 int main(int argc, char **argv) {

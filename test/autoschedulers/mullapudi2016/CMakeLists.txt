@@ -1,11 +1,11 @@
 if (TARGET Halide::Mullapudi2016)
-    tests(GROUPS auto_schedule
+    tests(GROUPS mullapudi2016 autoschedulers
           SOURCES
           extern.cpp
           param.cpp
           ARGS $<TARGET_FILE:Halide::Mullapudi2016>)
 
-    tests(GROUPS auto_schedule multithreaded
+    tests(GROUPS mullapudi2016 autoschedulers multithreaded
           SOURCES
           cost_function.cpp
           data_dependent.cpp
