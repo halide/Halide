@@ -16,6 +16,7 @@ add_halide_library(li2018_demo_gradient FROM li2018_demo_gradient.generator
 add_executable(li2018_demo_gradient_autoscheduler ${DEMO_REGISTRATION_FILE})
 target_link_libraries(li2018_demo_gradient_autoscheduler PRIVATE li2018_demo_gradient Halide::RunGenMain)
 
+# demo_generator.cpp
 add_halide_test(li2018_demo_gradient_autoscheduler
                 COMMAND li2018_demo_gradient_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all --success
                 GROUPS li2018 autoschedulers multithreaded)
