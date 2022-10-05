@@ -1863,9 +1863,15 @@ void CodeGen_LLVM::visit(const Not *op) {
 
 void CodeGen_LLVM::visit(const Select *op) {
     Value *cmp = codegen(op->condition);
+    if (use_llvm_vp_intrinsics &&
+        op->type.is_vector() &&
+        op->condition.type().is_scalar()) {
+        cmp = create_broadcast(cmp, op->type.lanes());
+    }
+
     Value *a = codegen(op->true_value);
     Value *b = codegen(op->false_value);
-    if (!call_vector_predication_intrinsic("select", op->type, nullptr, a, b, cmp)) {
+    if (!call_vector_predication_intrinsic("select", op->type, nullptr, cmp, a, b)) {
         value = builder->CreateSelect(cmp, a, b);
     }
 }
@@ -2453,8 +2459,13 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
 
         Instruction *load_inst = nullptr;
         if (stride) {
+            if (get_target().bits == 64 && !stride->getType()->isIntegerTy(64)) {
+                stride = builder->CreateIntCast(stride, i64_t, true);
+            }
+            const char *mangle = stride->getType()->isIntegerTy(64) ? ".p0.i64" : ".p0.i32";
+              
             if (call_vector_predication_intrinsic("strided.load", type.with_lanes(slice_lanes), slice_mask,
-                                                  vec_ptr, stride, nullptr, align_bytes, ".i64")) {
+                                                  vec_ptr, stride, nullptr, align_bytes, mangle)) {
                 load_inst = dyn_cast<Instruction>(value);
             } else {
                 internal_error << "Vector predicated strided load should not be requested if not supported.\n";
@@ -3846,8 +3857,12 @@ void CodeGen_LLVM::visit(const Store *op) {
                         annotate_store(store, slice_index);
                     }
                 } else if (ramp != nullptr) {
+                    if (get_target().bits == 64 && !stride_val->getType()->isIntegerTy(64)) {
+                        stride_val = builder->CreateIntCast(stride_val, i64_t, true);
+                    }
+                    const char *mangle = stride_val->getType()->isIntegerTy(64) ? ".p0.i64" : ".p0.i32";
                     bool generated = call_vector_predication_intrinsic("strided.store", value_type.with_lanes(slice_lanes), nullptr, slice_val,
-                                                                       vec_ptr, stride_val, alignment, ".i64", true);
+                                                                       vec_ptr, stride_val, alignment, mangle, true);
                     internal_assert(generated) << "Using vector predicated intrinsics, but code generation was not successful for strided store.\n"; 
                     add_tbaa_metadata(dyn_cast<Instruction>(value), op->name, slice_index);
                 } else {
@@ -5133,9 +5148,12 @@ bool CodeGen_LLVM::call_vector_predication_intrinsic(const std::string &name, co
     llvm::Type *llvm_result_type = llvm_type_of(result_type);
     int32_t length = result_type.lanes();
 
+    // TODO(zvookin): Fix the interface here to not case on names.
+    bool no_mask = name == "select";
     const char *name_base = (starts_with(name, "strided")) ? "llvm.experimental.vp." : "llvm.vp.";
+
     std::string full_name = name_base + name + mangle_llvm_vector_type(llvm_result_type) + overload_suffix;
-    int arg_count = 3 + (b != nullptr) + (c != nullptr);
+    int arg_count = 2 + !no_mask  + (b != nullptr) + (c != nullptr);
     std::vector<llvm::Value *> args(arg_count);
     size_t i = 0;
 
@@ -5156,19 +5174,21 @@ bool CodeGen_LLVM::call_vector_predication_intrinsic(const std::string &name, co
         args[i++] = c;
     }
     bool is_scalable = isa<llvm::ScalableVectorType>(llvm_result_type);
-    if (mask == nullptr) {
-        llvm::ElementCount llvm_vector_ec;
-        if (is_scalable) {
-            const auto *vt = cast<llvm::ScalableVectorType>(llvm_result_type);
-            llvm_vector_ec = vt->getElementCount();
-        } else {
-            const auto *vt = cast<llvm::FixedVectorType>(llvm_result_type);
-            llvm_vector_ec = vt->getElementCount();
-        }
+    if (!no_mask) {
+        if (mask == nullptr) {
+            llvm::ElementCount llvm_vector_ec;
+            if (is_scalable) {
+                const auto *vt = cast<llvm::ScalableVectorType>(llvm_result_type);
+                llvm_vector_ec = vt->getElementCount();
+            } else {
+                const auto *vt = cast<llvm::FixedVectorType>(llvm_result_type);
+                llvm_vector_ec = vt->getElementCount();
+            }
 
-        args[i++] = ConstantVector::getSplat(llvm_vector_ec, ConstantInt::get(i1_t, 1));
-    } else {
-        args[i++] = mask;
+            args[i++] = ConstantVector::getSplat(llvm_vector_ec, ConstantInt::get(i1_t, 1));
+        } else {
+            args[i++] = mask;
+        }
     }
     args[i++] = ConstantInt::get(i32_t, length);
 
