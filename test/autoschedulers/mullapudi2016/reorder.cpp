@@ -168,9 +168,9 @@ int main(int argc, char **argv) {
         double manual_time = run_test_1(false);
         double auto_time = run_test_1(true);
 
-        const double slowdown_factor = 3.0;
+        const double slowdown_factor = 7.0;
         if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
-            std::cerr << "Autoscheduler time is slower than expected:\n"
+            std::cerr << "Autoscheduler time (1) is slower than expected:\n"
                       << "======================\n"
                       << "Manual time: " << manual_time << "ms\n"
                       << "Auto time: " << auto_time << "ms\n"
@@ -185,7 +185,7 @@ int main(int argc, char **argv) {
 
         const double slowdown_factor = 1.0;
         if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
-            std::cerr << "Autoscheduler time is slower than expected:\n"
+            std::cerr << "Autoscheduler time (2) is slower than expected:\n"
                       << "======================\n"
                       << "Manual time: " << manual_time << "ms\n"
                       << "Auto time: " << auto_time << "ms\n"
@@ -200,7 +200,7 @@ int main(int argc, char **argv) {
 
         const double slowdown_factor = 2.0;
         if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
-            std::cerr << "Autoscheduler time is slower than expected:\n"
+            std::cerr << "Autoscheduler time (3) is slower than expected:\n"
                       << "======================\n"
                       << "Manual time: " << manual_time << "ms\n"
                       << "Auto time: " << auto_time << "ms\n"
