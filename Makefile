@@ -1294,7 +1294,7 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=$(BIN_DIR)/runtime_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/$(TARGET)/generator_aot_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
-	$(MULLAPUDI2016_TESTS:$(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp=$(BIN_DIR)/mullapudi2016_%)
+	$(MULLAPUDI2016_TESTS:$(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp=$(BIN_DIR)/mullapudi2016_%) \
 	$(LI2018_TESTS:$(ROOT_DIR)/test/autoschedulers/li2018/%.cpp=$(BIN_DIR)/li2018_%)
 
 clean_generator:
@@ -2384,7 +2384,6 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
 
-.PHONY: autoschedulers
 autoschedulers: \
 $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(PLUGIN_EXT) \
 $(DISTRIB_DIR)/lib/libautoschedule_li2018.$(PLUGIN_EXT) \
