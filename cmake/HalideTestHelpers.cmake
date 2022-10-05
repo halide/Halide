@@ -55,8 +55,12 @@ function(add_halide_test TARGET)
              COMMAND ${args_COMMAND} ${args_ARGS}
              WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
 
-    # All Halide tests get this added (it's effectively a no-op if exceptions are disabled)
-    target_link_libraries("${TARGET}" PRIVATE Halide::TerminateHandler)
+    # We can't add Halide::TerminateHandler here, because it requires Halide::Error
+    # and friends to be present in the final linkage, but some callers of add_halide_test()
+    # are AOT tests, which don't link in libHalide. (It's relatively rare for these
+    # tests to throw exceptions, though, so this isn't the dealbreaker you might think.)
+    #
+    # target_link_libraries("${TARGET}" PRIVATE Halide::TerminateHandler)
 
     set_tests_properties(${TARGET} PROPERTIES
                          LABELS "${args_GROUPS}"
@@ -96,7 +100,7 @@ function(tests)
         list(APPEND TEST_NAMES "${TARGET}")
 
         add_executable("${TARGET}" "${file}")
-        target_link_libraries("${TARGET}" PRIVATE Halide::Test)
+        target_link_libraries("${TARGET}" PRIVATE Halide::Test Halide::TerminateHandler)
         if ("${file}" MATCHES ".cpp$")
             target_precompile_headers("${TARGET}" REUSE_FROM _test_internal)
         endif ()
