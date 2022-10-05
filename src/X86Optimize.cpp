@@ -76,12 +76,12 @@ protected:
         return type.is_vector();
     }
 
-    using IRGraphMutator::visit;
+    using InstructionSelector::visit;
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     Expr visit(const Add *op) override {
         if (!should_peephole_optimize(op->type)) {
-            return IRGraphMutator::visit(op);
+            return InstructionSelector::visit(op);
         }
 
         std::vector<Expr> matches;
@@ -155,12 +155,12 @@ protected:
             return mutate(VectorInstruction::make(op->type, VectorInstruction::dot_product, {ac, bd}));
         }
 
-        return IRGraphMutator::visit(op);
+        return InstructionSelector::visit(op);
     }
 
     Expr visit(const Sub *op) override {
         if (!should_peephole_optimize(op->type)) {
-            return IRGraphMutator::visit(op);
+            return InstructionSelector::visit(op);
         }
 
         std::vector<Expr> matches;
@@ -184,12 +184,12 @@ protected:
             }
         }
 
-        return IRGraphMutator::visit(op);
+        return InstructionSelector::visit(op);
     }
 
     Expr visit(const Cast *op) override {
         if (!should_peephole_optimize(op->type)) {
-            return IRGraphMutator::visit(op);
+            return InstructionSelector::visit(op);
         }
 
         const int lanes = op->type.lanes();
@@ -210,7 +210,15 @@ protected:
                  cast(BFloat(16, lanes), x),
                  v_instr(VectorInstruction::f32_to_bf16, x),
                  is_float(x, 32))) ||
-            
+
+            (target.has_feature(Target::SSE41) &&
+             (rewrite(
+                cast(Int(32, lanes), widening_mul(x, y)),
+                v_instr(VectorInstruction::dot_product, reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), x)),
+                                                        reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), y))),
+                is_uint(x, 8) && is_uint(y, 8)))) ||
+
+
             // TODO: check for cases of using saturating cast safely.
 
             // saturating_narrow is always supported (via SSE2) for:
@@ -252,13 +260,22 @@ protected:
         }
 
         // TODO: should we handle CodeGen_X86's weird 8 -> 16 bit issue here?
+        if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
+            if (op->value.type().bits() < op->type.bits() && op->type.bits() <= 32) {
+                // LLVM/x86 really doesn't like 8 -> 16 bit multiplication. If we're
+                // widening to 32-bits after a widening multiply, LLVM prefers to see a
+                // widening multiply directly to 32-bits. This may result in extra
+                // casts, so simplify to remove them.
+                return mutate(simplify(Mul::make(Cast::make(op->type, mul->args[0]), Cast::make(op->type, mul->args[1]))));
+            }
+        }
 
-        return IRGraphMutator::visit(op);
+        return InstructionSelector::visit(op);
     }
 
     Expr visit(const Call *op) override {
         if (!should_peephole_optimize(op->type)) {
-            return IRGraphMutator::visit(op);
+            return InstructionSelector::visit(op);
         }
 
         // TODO(rootjalex): This optimization is hard to do via a rewrite-rule because of lossless_cast.
@@ -446,10 +463,15 @@ protected:
             // int16 -> int32 widening_mul has a (v)pmaddwd implementation.
             // always supported (via SSE2).
             ((op->type.is_int() && (bits == 32)) &&
-             rewrite(
+             (rewrite(
+                 widening_mul(x, cast(Int(16, lanes), y)),
+                 v_instr(VectorInstruction::dot_product, reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), x)),
+                                                         reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), y))),
+                 is_int(x, 16) && is_uint(y, 8)) ||
+                rewrite(
                  widening_mul(x, y),
                  v_instr(VectorInstruction::widening_mul, x, y),
-                 is_int(x, 16) && is_int(y, 16))) ||
+                 is_int(x, 16) && is_int(y, 16)))) ||
 
             (target.has_feature(Target::AVX512_SapphireRapids) &&
              (op->type.is_int() && (bits == 32)) &&
@@ -509,7 +531,12 @@ protected:
             return mutate(lower_intrinsic(op));
         }
 
-        return IRGraphMutator::visit(op);
+        return InstructionSelector::visit(op);
+    }
+
+    Expr break_up_reduction(const VectorReduce *op, const int32_t factor) {
+        Expr equiv = VectorReduce::make(op->op, op->value, op->value.type().lanes() / factor);
+        return VectorReduce::make(op->op, equiv, op->type.lanes());
     }
 
     Expr visit(const VectorReduce *op) override {
@@ -517,7 +544,7 @@ protected:
         //        CodeGen_LLVM::codegen_vector_reduce does, in order to do all
         //        matching here.
         if ((op->op != VectorReduce::Add && op->op != VectorReduce::SaturatingAdd) ||
-            !should_peephole_optimize(op->type)) {
+            op->type.is_bool()) {
             return InstructionSelector::visit(op);
         }
 
@@ -657,6 +684,22 @@ protected:
                   false))) {
                 return mutate(rewrite.result);
             }
+
+            // If we see a pattern we want but the factor is too large, split it up and mutate.
+            {
+                auto rewrite = IRMatcher::rewriter(value, op->type);
+
+                if ((factor % 2 == 0) &&
+                    (
+                     rewrite(widening_mul(x, y), widening_mul(x, y), is_int(x, 16) && is_int(y, 16)) ||
+                    false)) {
+                    return mutate(break_up_reduction(op, 2));
+                }
+
+            }
+
+
+
             break;
         }
         case VectorReduce::SaturatingAdd: {

@@ -45,8 +45,9 @@ public:
 
         Expr e = make_const(expr.type().element_of(), bound);
         Interval i = cached_get_interval(expr);
+
         // TODO: see above - we could get rid of can_prove if we use constant bounds queries instead.
-        return can_prove(i.max <= e);
+        return i.has_upper_bound() && can_prove(i.max <= e);
     }
 
     template<typename T>
@@ -57,7 +58,7 @@ public:
         Expr e = make_const(expr.type().element_of(), bound);
         Interval i = cached_get_interval(expr);
         // TODO: see above - we could get rid of can_prove if we use constant bounds queries instead.
-        return can_prove(i.min >= e);
+        return i.has_lower_bound() && can_prove(i.min >= e);
     }
 
 private:

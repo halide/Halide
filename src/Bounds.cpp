@@ -1516,7 +1516,18 @@ private:
                                      Call::widening_mul,
                                      Call::widening_shift_left,
                                      Call::widening_shift_right,
-                                     Call::widening_sub})) {
+                                     Call::widening_sub,
+                                     // TODO: the below intrinsics should not use the optimal lowering...
+                                     Call::rounding_halving_add,
+                                     Call::halving_add,
+                                     Call::saturating_add,
+                                     Call::saturating_sub,
+                                     Call::halving_sub,
+                                     Call::rounding_shift_left,
+                                     Call::rounding_shift_right,
+                                     Call::mul_shift_right,
+                                     Call::rounding_mul_shift_right
+                                     })) {
             // Each of these can be cleanly lowered to exact semantic definitions.
             // TODO: which other intrinsics can/should we lower?
             Expr a = lower_intrinsic(op);
