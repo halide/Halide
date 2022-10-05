@@ -64,7 +64,7 @@ $(BIN)/%/test_model.onnx: test_model_proto.txt $(BIN)/%/onnx/onnx.proto
 
 $(BIN)/%/test_model.a: $(GENERATOR_BIN)/onnx_converter.generator $(BIN)/%/test_model.onnx
 	@mkdir -p $(@D)
-	$< -g onnx_model_generator -o $(@D) -f test_model target=$* model_file_path=$(BIN)/$*/test_model.onnx
+	/usr/bin/time  $< -g onnx_model_generator -o $(@D) -f test_model target=$* model_file_path=$(BIN)/$*/test_model.onnx
 
 $(BIN)/%/onnx_converter_generator_test: onnx_converter_generator_test.cc $(BIN)/%/test_model.a
 	@mkdir -p $(@D)

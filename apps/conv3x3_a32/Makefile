@@ -19,7 +19,7 @@ $(BIN)/%/conv3x3_a32_llvm.a: $(GENERATOR_BIN)/conv3x3_a32.generator
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=1 && \
 	export HL_DISABLE_HALIDE_LOWERING=1 && \
-	$< -g conv3x3 -f conv3x3_a32_llvm -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g conv3x3 -f conv3x3_a32_llvm -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/conv3x3_a32_halide.a: $(GENERATOR_BIN)/conv3x3_a32.generator
 	@mkdir -p $(@D)
@@ -27,7 +27,7 @@ $(BIN)/%/conv3x3_a32_halide.a: $(GENERATOR_BIN)/conv3x3_a32.generator
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g conv3x3 -f conv3x3_a32_halide -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g conv3x3 -f conv3x3_a32_halide -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/conv3x3_a32_pitchfork.a: $(GENERATOR_BIN)/conv3x3_a32.generator
 	@mkdir -p $(@D)
@@ -35,7 +35,7 @@ $(BIN)/%/conv3x3_a32_pitchfork.a: $(GENERATOR_BIN)/conv3x3_a32.generator
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g conv3x3 -f conv3x3_a32_pitchfork -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g conv3x3 -f conv3x3_a32_pitchfork -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/conv3x3_a32_rake.a: $(GENERATOR_BIN)/conv3x3_a32_rake.generator
 	@mkdir -p $(@D)
@@ -43,7 +43,7 @@ $(BIN)/%/conv3x3_a32_rake.a: $(GENERATOR_BIN)/conv3x3_a32_rake.generator
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g conv3x3 -f conv3x3_a32_rake -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g conv3x3 -f conv3x3_a32_rake -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/conv3x3_a32.generator
 	@mkdir -p $(@D)

@@ -21,7 +21,7 @@ define GEN_RULE
 $$(BIN)/%/$(1).a: $$(GENERATOR_BIN)/$(1).generator
 	@echo Running Generator $$<
 	@mkdir -p $$(@D)
-	@$$< -g $(1) -o $$(@D) target=$$*-no_runtime
+	@$/usr/bin/time  $< -g $(1) -o $$(@D) target=$$*-no_runtime
 endef
 
 $(foreach V,$(VARIANTS),$(eval $(call GEN_RULE,$(V))))

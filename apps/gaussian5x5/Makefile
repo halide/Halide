@@ -19,7 +19,7 @@ $(BIN)/%/gaussian5x5_llvm.a: $(GENERATOR_BIN)/gaussian5x5.generator
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=1 && \
 	export HL_DISABLE_HALIDE_LOWERING=1 && \
-	$< -g gaussian5x5 -f gaussian5x5_llvm -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g gaussian5x5 -f gaussian5x5_llvm -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/gaussian5x5_halide.a: $(GENERATOR_BIN)/gaussian5x5.generator
 	@mkdir -p $(@D)
@@ -27,7 +27,7 @@ $(BIN)/%/gaussian5x5_halide.a: $(GENERATOR_BIN)/gaussian5x5.generator
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g gaussian5x5 -f gaussian5x5_halide -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g gaussian5x5 -f gaussian5x5_halide -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/gaussian5x5_pitchfork.a: $(GENERATOR_BIN)/gaussian5x5.generator
 	@mkdir -p $(@D)
@@ -35,7 +35,7 @@ $(BIN)/%/gaussian5x5_pitchfork.a: $(GENERATOR_BIN)/gaussian5x5.generator
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g gaussian5x5 -f gaussian5x5_pitchfork -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g gaussian5x5 -f gaussian5x5_pitchfork -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/gaussian5x5_rake.a: $(GENERATOR_BIN)/gaussian5x5_rake.generator
 	@mkdir -p $(@D)
@@ -43,7 +43,7 @@ $(BIN)/%/gaussian5x5_rake.a: $(GENERATOR_BIN)/gaussian5x5_rake.generator
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g gaussian5x5 -f gaussian5x5_rake -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g gaussian5x5 -f gaussian5x5_rake -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/gaussian5x5.generator
 	@mkdir -p $(@D)

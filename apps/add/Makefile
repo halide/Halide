@@ -19,7 +19,7 @@ $(BIN)/%/add_llvm.a: $(GENERATOR_BIN)/add.generator
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=1 && \
 	export HL_DISABLE_HALIDE_LOWERING=1 && \
-	$< -g add -f add_llvm -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g add -f add_llvm -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/add_halide.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -27,7 +27,7 @@ $(BIN)/%/add_halide.a: $(GENERATOR_BIN)/add.generator
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g add -f add_halide -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g add -f add_halide -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/add_pitchfork.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -35,7 +35,7 @@ $(BIN)/%/add_pitchfork.a: $(GENERATOR_BIN)/add.generator
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g add -f add_pitchfork -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g add -f add_pitchfork -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/add_rake.a: $(GENERATOR_BIN)/add_rake.generator
 	@mkdir -p $(@D)
@@ -43,7 +43,7 @@ $(BIN)/%/add_rake.a: $(GENERATOR_BIN)/add_rake.generator
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g add -f add_rake -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g add -f add_rake -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)

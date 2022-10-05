@@ -19,7 +19,7 @@ $(BIN)/%/matmul_llvm.a: $(GENERATOR_BIN)/matmul.generator
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=1 && \
 	export HL_DISABLE_HALIDE_LOWERING=1 && \
-	$< -g matmul -f matmul_llvm -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g matmul -f matmul_llvm -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/matmul_halide.a: $(GENERATOR_BIN)/matmul.generator
 	@mkdir -p $(@D)
@@ -27,7 +27,7 @@ $(BIN)/%/matmul_halide.a: $(GENERATOR_BIN)/matmul.generator
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g matmul -f matmul_halide -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g matmul -f matmul_halide -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/matmul_pitchfork.a: $(GENERATOR_BIN)/matmul.generator
 	@mkdir -p $(@D)
@@ -35,7 +35,7 @@ $(BIN)/%/matmul_pitchfork.a: $(GENERATOR_BIN)/matmul.generator
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g matmul -f matmul_pitchfork -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g matmul -f matmul_pitchfork -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/matmul_rake.a: $(GENERATOR_BIN)/matmul_rake.generator
 	@mkdir -p $(@D)
@@ -43,7 +43,7 @@ $(BIN)/%/matmul_rake.a: $(GENERATOR_BIN)/matmul_rake.generator
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	$< -g matmul -f matmul_rake -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
+	/usr/bin/time  $< -g matmul -f matmul_rake -e stmt,assembly,static_library,c_header -o $(BIN)/$* target=$*-no_runtime-arm_dot_prod
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/matmul.generator
 	@mkdir -p $(@D)

@@ -15,7 +15,7 @@ $(GENERATOR_BIN)/reaction_diffusion_generator: reaction_diffusion_generator.cpp 
 
 $(BIN)/wasm/reaction_diffusion_%.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
-	$< -g reaction_diffusion_$* -e $(GENERATOR_OUTPUTS) -o $(@D) target=wasm-32-wasmrt-no_runtime threads=false
+	/usr/bin/time  $< -g reaction_diffusion_$* -e $(GENERATOR_OUTPUTS) -o $(@D) target=wasm-32-wasmrt-no_runtime threads=false
 
 $(BIN)/wasm/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
@@ -23,7 +23,7 @@ $(BIN)/wasm/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 
 $(BIN)/wasm_simd/reaction_diffusion_%.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
-	$< -g reaction_diffusion_$* -e $(GENERATOR_OUTPUTS) -o $(@D) target=wasm-32-wasmrt-wasm_simd128-no_runtime threads=false
+	/usr/bin/time  $< -g reaction_diffusion_$* -e $(GENERATOR_OUTPUTS) -o $(@D) target=wasm-32-wasmrt-wasm_simd128-no_runtime threads=false
 
 $(BIN)/wasm_simd/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
@@ -31,7 +31,7 @@ $(BIN)/wasm_simd/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 
 $(BIN)/wasm_threads/reaction_diffusion_%.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
-	$< -g reaction_diffusion_$* -o $(@D) target=wasm-32-wasmrt-wasm_threads-no_runtime threads=true
+	/usr/bin/time  $< -g reaction_diffusion_$* -o $(@D) target=wasm-32-wasmrt-wasm_threads-no_runtime threads=true
 
 $(BIN)/wasm_threads/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
@@ -39,7 +39,7 @@ $(BIN)/wasm_threads/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 
 $(BIN)/wasm_simd_threads/reaction_diffusion_%.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
-	$< -g reaction_diffusion_$* -o $(@D) target=wasm-32-wasmrt-wasm_simd128-wasm_threads-no_runtime threads=true
+	/usr/bin/time  $< -g reaction_diffusion_$* -o $(@D) target=wasm-32-wasmrt-wasm_simd128-wasm_threads-no_runtime threads=true
 
 $(BIN)/wasm_simd_threads/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
@@ -47,7 +47,7 @@ $(BIN)/wasm_simd_threads/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generato
 
 $(BIN)/$(HL_TARGET)/reaction_diffusion_%.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
-	$< -g reaction_diffusion_$* -o $(@D) -e registration,static_library target=$(HL_TARGET)-no_runtime threads=true
+	/usr/bin/time  $< -g reaction_diffusion_$* -o $(@D) -e registration,static_library target=$(HL_TARGET)-no_runtime threads=true
 
 $(BIN)/$(HL_TARGET)/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
