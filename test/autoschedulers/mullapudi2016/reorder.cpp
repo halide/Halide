@@ -41,7 +41,8 @@ double run_test_1(bool auto_schedule) {
         // odd have to investigate this further.
     }
 
-    r.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // r.print_loop_nest();
 
     // Run the schedule
     Buffer<int> out(1024, 1024, 3);
@@ -93,7 +94,8 @@ double run_test_2(bool auto_schedule) {
         diff.reorder(c, z).fuse(c, z, t).parallel(t).vectorize(x, 16);
     }
 
-    diff.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // diff.print_loop_nest();
 
     // Run the schedule
     Buffer<uint8_t> out(left_im.width(), left_im.height(), 32, 3);
@@ -137,7 +139,8 @@ double run_test_3(bool auto_schedule) {
         r.fuse(c, y, par).parallel(par).vectorize(x, 4);
     }
 
-    r.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // r.print_loop_nest();
 
     // Run the schedule
     Buffer<int> out(1024, 1024, 3);
@@ -161,51 +164,48 @@ int main(int argc, char **argv) {
 
     load_plugin(argv[1]);
 
-    const double slowdown_factor = 6.0;
-
     {
-        std::cout << "Test 1:\n";
         double manual_time = run_test_1(false);
         double auto_time = run_test_1(true);
 
-        std::cout << "======================\n"
-                  << "Manual time: " << manual_time << "ms\n"
-                  << "Auto time: " << auto_time << "ms\n"
-                  << "======================\n";
-
-        if (auto_time > manual_time * slowdown_factor) {
-            fprintf(stderr, "Warning: Auto-scheduler is much much slower than it should be.\n");
+        const double slowdown_factor = 15.0;  // TODO: whoa
+        if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
+            std::cerr << "Autoscheduler time (1) is slower than expected:\n"
+                      << "======================\n"
+                      << "Manual time: " << manual_time << "ms\n"
+                      << "Auto time: " << auto_time << "ms\n"
+                      << "======================\n";
+            exit(1);
         }
     }
 
     {
-        std::cout << "Test 2:"
-                  << "\n";
         double manual_time = run_test_2(false);
         double auto_time = run_test_2(true);
 
-        std::cout << "======================\n"
-                  << "Manual time: " << manual_time << "ms\n"
-                  << "Auto time: " << auto_time << "ms\n"
-                  << "======================\n";
-
-        if (auto_time > manual_time * slowdown_factor) {
-            fprintf(stderr, "Warning: Auto-scheduler is much much slower than it should be.\n");
+        const double slowdown_factor = 2.0;
+        if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
+            std::cerr << "Autoscheduler time (2) is slower than expected:\n"
+                      << "======================\n"
+                      << "Manual time: " << manual_time << "ms\n"
+                      << "Auto time: " << auto_time << "ms\n"
+                      << "======================\n";
+            exit(1);
         }
     }
 
     {
-        std::cout << "Test 3:\n";
         double manual_time = run_test_3(false);
         double auto_time = run_test_3(true);
 
-        std::cout << "======================\n"
-                  << "Manual time: " << manual_time << "ms\n"
-                  << "Auto time: " << auto_time << "ms\n"
-                  << "======================\n";
-
-        if (auto_time > manual_time * slowdown_factor) {
-            fprintf(stderr, "Warning: Auto-scheduler is much much slower than it should be.\n");
+        const double slowdown_factor = 2.0;
+        if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
+            std::cerr << "Autoscheduler time (3) is slower than expected:\n"
+                      << "======================\n"
+                      << "Manual time: " << manual_time << "ms\n"
+                      << "Auto time: " << auto_time << "ms\n"
+                      << "======================\n";
+            exit(1);
         }
     }
 

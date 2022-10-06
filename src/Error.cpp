@@ -3,6 +3,7 @@
 #include "Util.h"  // for get_env_variable
 
 #include <csignal>
+#include <mutex>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -103,6 +104,36 @@ InternalError::InternalError(const char *msg)
 
 namespace Internal {
 
+void unhandled_exception_handler() {
+    // Note that we use __cpp_exceptions (rather than HALIDE_WITH_EXCEPTIONS)
+    // to maximize the change of dealing with uncaught exceptions in weird
+    // build situations (i.e., exceptions enabled via C++ but HALIDE_WITH_EXCEPTIONS
+    // is somehow not set).
+#ifdef __cpp_exceptions
+    // This is a trick: rethrow the pending (unhandled) exception
+    // so that we can see what it is and log `what` before dying.
+    if (auto ce = std::current_exception()) {
+        try {
+            std::rethrow_exception(ce);
+        } catch (Error &e) {
+            // Halide Errors are presume to be nicely formatted as-is
+            std::cerr << e.what() << std::flush;
+        } catch (std::exception &e) {
+            // Arbitrary C++ exceptions... who knows?
+            std::cerr << "Uncaught exception: " << e.what() << "\n"
+                      << std::flush;
+        } catch (...) {
+            std::cerr << "Uncaught exception: <unknown>\n"
+                      << std::flush;
+        }
+    }
+#else
+    std::cerr << "unhandled_exception_handler() called but Halide was compiled without exceptions enabled; this should not happen.\n"
+              << std::flush;
+#endif
+    abort();
+}
+
 // Force the classes to exist, even if exceptions are off
 namespace {
 CompileError _compile_error("");
@@ -186,7 +217,7 @@ ErrorReport::~ErrorReport() noexcept(false) {
         throw InternalError(msg.str());
     }
 #else
-    std::cerr << msg.str();
+    std::cerr << msg.str() << std::flush;
     abort();
 #endif
 }

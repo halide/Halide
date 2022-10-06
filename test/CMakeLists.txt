@@ -9,9 +9,9 @@ target_precompile_headers(_test_internal PRIVATE <Halide.h>)
 
 add_halide_test(_test_internal GROUPS internal)
 
-option(WITH_TEST_AUTO_SCHEDULE "Build auto_schedule tests" ON)
+option(WITH_TEST_AUTO_SCHEDULE "Build autoscheduler tests" ON)
 if (WITH_TEST_AUTO_SCHEDULE)
-    add_subdirectory(auto_schedule)
+    add_subdirectory(autoschedulers)
 endif ()
 
 option(WITH_TEST_CORRECTNESS "Build correctness tests" ON)
