@@ -69,12 +69,15 @@ target_link_libraries(adams2019_weightsdir_to_weightsfile PRIVATE Halide::Runtim
 # Tests for private/internal functionality of Adams2019 (vs for public functionality,
 # which is handled in tests/autoschedulers/Adams2019)
 
-add_executable(adams2019_test_perfect_hash_map test_perfect_hash_map.cpp)
-add_test(NAME adams2019_test_perfect_hash_map COMMAND adams2019_test_perfect_hash_map)
-set_tests_properties(adams2019_test_perfect_hash_map PROPERTIES LABELS "adams2019;autoschedulers;auto_schedule")
+if (WITH_TESTS)
 
-add_executable(adams2019_test_function_dag test_function_dag.cpp FunctionDAG.cpp)
-target_link_libraries(adams2019_test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
-add_test(NAME adams2019_test_function_dag COMMAND adams2019_test_function_dag)
-set_tests_properties(adams2019_test_function_dag PROPERTIES LABELS "adams2019;autoschedulers;auto_schedule")
+    add_executable(adams2019_test_perfect_hash_map test_perfect_hash_map.cpp)
+    add_test(NAME adams2019_test_perfect_hash_map COMMAND adams2019_test_perfect_hash_map)
+    set_tests_properties(adams2019_test_perfect_hash_map PROPERTIES LABELS "adams2019;autoschedulers;auto_schedule")
 
+    add_executable(adams2019_test_function_dag test_function_dag.cpp FunctionDAG.cpp)
+    target_link_libraries(adams2019_test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+    add_test(NAME adams2019_test_function_dag COMMAND adams2019_test_function_dag)
+    set_tests_properties(adams2019_test_function_dag PROPERTIES LABELS "adams2019;autoschedulers;auto_schedule")
+
+endif()
