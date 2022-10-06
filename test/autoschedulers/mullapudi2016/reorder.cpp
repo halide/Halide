@@ -4,8 +4,6 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-using std::vector;
-
 double run_test_1(bool auto_schedule) {
     Var x("x"), y("y"), dx("dx"), dy("dy"), c("c");
 
