@@ -38,8 +38,9 @@ int main(int argc, char **argv) {
 #else
         AutoSchedulerResults result = Pipeline(f2).apply_autoscheduler(target, params);
 #endif
-        std::cout << "Schedule for 1D pointwise operations:\n"
-                  << result.schedule_source << "\n\n";
+        // Don't dump to stdout (this is only for debugging)
+        // std::cout << "Schedule for 1D pointwise operations:\n"
+        //           << result.schedule_source << "\n\n";
     }
 
     {  // Simple 2D pointwise operations. Should inline.
@@ -60,8 +61,9 @@ int main(int argc, char **argv) {
 #else
         AutoSchedulerResults result = Pipeline(f2).apply_autoscheduler(target, params);
 #endif
-        std::cout << "Schedule for 2D pointwise operations:\n"
-                  << result.schedule_source << "\n\n";
+        // Don't dump to stdout (this is only for debugging)
+        // std::cout << "Schedule for 2D pointwise operations:\n"
+        //           << result.schedule_source << "\n\n";
     }
 
     {  // 1D Convolution.
@@ -78,8 +80,9 @@ int main(int argc, char **argv) {
 #else
         AutoSchedulerResults result = Pipeline(f0).apply_autoscheduler(target, params);
 #endif
-        std::cout << "Schedule for 1D convolution:\n"
-                  << result.schedule_source << "\n\n";
+        // Don't dump to stdout (this is only for debugging)
+        // std::cout << "Schedule for 1D convolution:\n"
+        //           << result.schedule_source << "\n\n";
     }
 
     {  // 2D Convolution.
@@ -97,8 +100,9 @@ int main(int argc, char **argv) {
 #else
         AutoSchedulerResults result = Pipeline(f0).apply_autoscheduler(target, params);
 #endif
-        std::cout << "Schedule for 2D convolution:\n"
-                  << result.schedule_source << "\n\n";
+        // Don't dump to stdout (this is only for debugging)
+        // std::cout << "Schedule for 2D convolution:\n"
+        //           << result.schedule_source << "\n\n";
     }
 
     {  // 1D Histogram.
@@ -116,8 +120,9 @@ int main(int argc, char **argv) {
 #else
         AutoSchedulerResults result = Pipeline(hist).apply_autoscheduler(target, params);
 #endif
-        std::cout << "Schedule for 1D histogram:\n"
-                  << result.schedule_source << "\n\n";
+        // Don't dump to stdout (this is only for debugging)
+        // std::cout << "Schedule for 1D histogram:\n"
+        //           << result.schedule_source << "\n\n";
     }
 
     {  // 2D Histogram.
@@ -135,8 +140,9 @@ int main(int argc, char **argv) {
 #else
         AutoSchedulerResults result = Pipeline(hist).apply_autoscheduler(target, params);
 #endif
-        std::cout << "Schedule for 2D histogram:\n"
-                  << result.schedule_source << "\n\n";
+        // Don't dump to stdout (this is only for debugging)
+        // std::cout << "Schedule for 2D histogram:\n"
+        //           << result.schedule_source << "\n\n";
     }
 
     {  // 2D Histogram, but the domain is much larger.
@@ -154,8 +160,9 @@ int main(int argc, char **argv) {
 #else
         AutoSchedulerResults result = Pipeline(hist).apply_autoscheduler(target, params);
 #endif
-        std::cout << "Schedule for 2D histogram with larger domain:\n"
-                  << result.schedule_source << "\n\n";
+        // Don't dump to stdout (this is only for debugging)
+        // std::cout << "Schedule for 2D histogram with larger domain:\n"
+        //           << result.schedule_source << "\n\n";
     }
 
     {  // Test for conjunction use of bound and estimates.
@@ -178,8 +185,11 @@ int main(int argc, char **argv) {
 #else
         AutoSchedulerResults result = Pipeline(f2).apply_autoscheduler(target, params);
 #endif
-        std::cout << "Schedule for 2D pointwise operations with small x dimension:\n"
-                  << result.schedule_source << "\n\n";
+        // Don't dump to stdout (this is only for debugging)
+        // std::cout << "Schedule for 2D pointwise operations with small x dimension:\n"
+        //           << result.schedule_source << "\n\n";
     }
+
+    printf("Success!\n");
     return 0;
 }

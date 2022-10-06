@@ -1176,6 +1176,7 @@ GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
 GENERATOR_EXTERNAL_TEST_GENERATOR := $(shell ls $(ROOT_DIR)/test/generator/*_generator.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
 MULLAPUDI2016_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/mullapudi2016/*.cpp)
+LI2018_TESTS = $(shell ls $(ROOT_DIR)/test/autoschedulers/li2018/test.cpp)
 
 test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=quiet_correctness_%) $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.c=quiet_correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
@@ -1293,7 +1294,8 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(RUNTIME_TESTS:$(ROOT_DIR)/test/runtime/%.cpp=$(BIN_DIR)/runtime_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/$(TARGET)/generator_aot_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
-	$(MULLAPUDI2016_TESTS:$(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp=$(BIN_DIR)/mullapudi2016_%)
+	$(MULLAPUDI2016_TESTS:$(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp=$(BIN_DIR)/mullapudi2016_%) \
+	$(LI2018_TESTS:$(ROOT_DIR)/test/autoschedulers/li2018/%.cpp=$(BIN_DIR)/li2018_%)
 
 clean_generator:
 	rm -rf $(BIN_DIR)/*.generator
@@ -1370,6 +1372,9 @@ $(BIN_DIR)/runtime_%: $(ROOT_DIR)/test/runtime/%.cpp $(ROOT_DIR)/test/runtime/co
 
 # Auto schedule tests that link against libHalide
 $(BIN_DIR)/mullapudi2016_%: $(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+
+$(BIN_DIR)/li2018_%: $(ROOT_DIR)/test/autoschedulers/li2018/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 # TODO(srj): this doesn't auto-delete, why not?
@@ -2001,20 +2006,21 @@ tutorial_%: $(BIN_DIR)/tutorial_% $(TMP_DIR)/images/rgb.png $(TMP_DIR)/images/gr
 
 test_mullapudi2016: $(MULLAPUDI2016_TESTS:$(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp=mullapudi2016_%)
 
-# These tests were written for the Mullapudi2016 autoscheduler.
-# TODO: either make them work with all autoschedulers or move them under src/autoschedulers/mullapudi2016
 mullapudi2016_%: $(BIN_DIR)/mullapudi2016_% $(BIN_MULLAPUDI2016)
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(BIN_MULLAPUDI2016))
 	@-echo
 
+test_li2018: $(LI2018_TESTS:$(ROOT_DIR)/test/autoschedulers/li2018/%.cpp=li2018_%)
+
+li2018_%: $(BIN_DIR)/li2018_% $(BIN_LI2018)
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(BIN_LI2018))
+	@-echo
+
 # The other autoschedulers contain their own tests
 test_adams2019: distrib
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile test \
-		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
-
-test_li2018: distrib
-	$(MAKE) -f $(SRC_DIR)/autoschedulers/li2018/Makefile test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 
 time_compilation_test_%: $(BIN_DIR)/test_%
@@ -2378,7 +2384,6 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
 
-.PHONY: autoschedulers
 autoschedulers: \
 $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(PLUGIN_EXT) \
 $(DISTRIB_DIR)/lib/libautoschedule_li2018.$(PLUGIN_EXT) \
