@@ -1,3 +1,1 @@
-include(HalideTestHelpers)
-
 add_subdirectory(mullapudi2016)
