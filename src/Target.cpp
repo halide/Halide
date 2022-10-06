@@ -553,6 +553,22 @@ int parse_vector_bits(const std::string &tok) {
     return -1;
 }
 
+void set_sanitizer_bits(Target &t) {
+// Note, we must include Util.h for these to be defined properly (or not)
+#ifdef HALIDE_INTERNAL_USING_ASAN
+    t.set_feature(Target::ASAN);
+#endif
+#ifdef HALIDE_INTERNAL_USING_MSAN
+    t.set_feature(Target::MSAN);
+#endif
+#ifdef HALIDE_INTERNAL_USING_TSAN
+    t.set_feature(Target::TSAN);
+#endif
+#ifdef HALIDE_INTERNAL_USING_COVSAN
+    t.set_feature(Target::SanitizerCoverage);
+#endif
+}
+
 }  // End anonymous namespace
 
 Target get_target_from_environment() {
@@ -567,21 +583,10 @@ Target get_target_from_environment() {
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
-// Note, we must include Util.h for these to be defined properly (or not)
-#ifdef HALIDE_INTERNAL_USING_ASAN
-    host.set_feature(Target::ASAN);
-#endif
-#ifdef HALIDE_INTERNAL_USING_MSAN
-    host.set_feature(Target::MSAN);
-#endif
-#ifdef HALIDE_INTERNAL_USING_TSAN
-    host.set_feature(Target::TSAN);
-#endif
-#ifdef HALIDE_INTERNAL_USING_COVSAN
-    host.set_feature(Target::SanitizerCoverage);
-#endif
+
     string target = Internal::get_env_variable("HL_JIT_TARGET");
     if (target.empty()) {
+        set_sanitizer_bits(host);
         return host;
     } else {
         Target t(target);
@@ -592,6 +597,7 @@ Target get_jit_target_from_environment() {
             << "Host is " << host.to_string() << ".\n";
         user_assert(!t.has_feature(Target::NoBoundsQuery))
             << "The Halide JIT requires the use of bounds query, but HL_JIT_TARGET was specified with no_bounds_query: " << target;
+        set_sanitizer_bits(t);
         return t;
     }
 }
