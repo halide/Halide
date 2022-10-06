@@ -15,8 +15,9 @@ int main(int argc, char **argv) {
 
     load_plugin(argv[1]);
 
-    int W = 1000;
-    int H = 1000;
+    int W = 800;
+    int H = 1200;
+
     Buffer<uint16_t> input(W, H);
 
     for (int y = 0; y < input.height(); y++) {
@@ -25,42 +26,37 @@ int main(int argc, char **argv) {
         }
     }
 
-    Var x("x"), y("y");
+    Var x("x"), y("y"), c("c");
 
+    Func in_b("in_b");
+    in_b = BoundaryConditions::repeat_edge(input);
+
+    int win_size = 15;
+    RDom w(-win_size, win_size, -win_size, win_size);
     Func f("f");
-    f(x, y) = input(x, y) * input(x, y);
+    f(x, y) = sum(in_b(x + w.x, y + w.y), "sum1") / 1024;
 
     Func g("g");
-    g(x, y) = (f(x, y) + f(x + 1, y)) / 2;
-
-    Func h("h");
-    h(x, y) = (f(x, y) + f(x, y + 1)) / 2;
+    g(x, y) = sum(f(x + w.x, y + w.y), "sum2") / 1024;
 
     // Provide estimates on the pipeline output
-    g.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
-    h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
+    g.set_estimate(x, 0, input.width()).set_estimate(y, 0, input.height());
 
-    // Auto-schedule the pipeline
-    std::vector<Func> outs;
-    outs.push_back(h);
-    outs.push_back(g);
-    Pipeline p(outs);
-
+    // Pick a schedule
     Target target = get_jit_target_from_environment();
+    Pipeline p(g);
+
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     p.auto_schedule(target);
 #else
     p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
 
-    // Inspect the schedule
-    h.print_loop_nest();
-    g.print_loop_nest();
-
-    Buffer<uint16_t> out_1(999, 999), out_2(999, 999);
+    // Inspect the schedule (only for debugging))
+    // g.print_loop_nest();
 
     // Run the schedule
-    p.realize({out_1, out_2});
+    Buffer<uint16_t> out = p.realize({input.width(), input.height()});
 
     printf("Success!\n");
     return 0;
