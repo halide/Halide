@@ -136,6 +136,11 @@ protected:
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
 
+    /** Used to decide whether to break a vector up into multiple smaller
+     * operations. This is the largest size the architecture supports. */
+    virtual int maximum_vector_bits() const {
+        return native_vector_bits();
+    }
     /** For architectures that have vscale vectors, return the constant vscale to use.
      * Default of 0 means do not use vscale vectors. Generally will depend on
      * the target flags and vector_bits settings.
@@ -301,6 +306,9 @@ protected:
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
+
+    /** Return an appropriate type string for a type which is of VectorType. */
+    std::string mangle_llvm_vector_type(llvm::Type *type);
 
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
     llvm::Value *make_halide_type_t(const Type &);
@@ -469,9 +477,10 @@ protected:
                              llvm::Function *intrin, std::vector<Expr>);
     llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
                              const std::string &name, std::vector<llvm::Value *>,
-                             bool scalable_vector_result = false);
+                             bool scalable_vector_result = false, bool is_reduction = false);
     llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
-                             llvm::Function *intrin, std::vector<llvm::Value *>);
+                             llvm::Function *intrin, std::vector<llvm::Value *>,
+                             bool is_reduction = false);
     // @}
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs
@@ -557,6 +566,39 @@ protected:
     llvm::Constant *get_splat(int lanes, llvm::Constant *value,
                               VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
 
+    /** Call an "@llvm.vp.*" intrinsic, forming the full overloaded name and argument list.
+     * A key detail here is that the length of the vector operation is taken from the
+     * Halide type while the size of the LLVM vector type used (fixed or scalable) is taken
+     * from the LLVM promotion of the vector type, which should be the same as the types used
+     * in the arguments. These can be different. It may become useful to pass an explict
+     * length as well.
+     *
+     * The method is virtual to allow backends to extend this for architecture specific
+     * intrinsics. (E.g. RISC V LMUL.) Unfortunately, this involves matching the name as
+     * as string to do much. (TODO(zalman): decide if this is the right way to go based
+     * on LMUL experiment. Really LLVM ought to do this automatically for these intrinsics
+     * on larger lengths.)
+     *
+     * The name is the simple name like "add" for "@llvm.vp.add.v16i32".
+     * If mask is nullptr, it is provided as constant true.
+     * If b or c is nullptr, it is assumed to be a unary or binary operator respectively.
+     *
+     * Assigns result of vp intrinsic to value and returns true if it an instuction is generated,
+     * otherwise returns false.
+     */
+    virtual bool call_vector_predication_intrinsic(const std::string &name, const Type &result_type,
+                                                   llvm::Value *mask, llvm::Value *a, llvm::Value *b = nullptr,
+                                                   llvm::Value *c = nullptr, int alignment = 0,
+                                                   const std::string &overload_suffix = "",
+                                                   bool void_return = false, bool is_reduction = false);
+
+    virtual bool call_vector_predication_comparison(const std::string &name, const Type &result_type,
+                                                    llvm::Value *mask,  // Pass nullptr for constrant true.
+                                                    llvm::Value *a, llvm::Value *b, const char *cmp_op);
+
+    /** Controls use of vector predicated intrinsics for vector operations. */
+    bool use_llvm_vp_intrinsics;
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
@@ -598,9 +640,9 @@ private:
     llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name,
                                      bool result_in_argv, std::vector<bool> &arg_is_buffer);
 
-    llvm::Value *codegen_dense_vector_load(const Type &type, const std::string &name, const Expr &base,
-                                           const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
-                                           llvm::Value *vpred = nullptr, bool slice_to_native = true);
+    llvm::Value *codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
+                                     const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
+                                     llvm::Value *vpred = nullptr, bool slice_to_native = true, llvm::Value *stride = nullptr);
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
     virtual void codegen_predicated_load(const Load *op);
