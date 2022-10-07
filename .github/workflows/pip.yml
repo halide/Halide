@@ -82,6 +82,7 @@ jobs:
           ref: llvmorg-15.0.1
           path: llvm-project
 
+      - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@latest
 
       # TODO: find a way to cache this
