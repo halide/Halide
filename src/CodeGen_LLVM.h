@@ -477,9 +477,10 @@ protected:
                              llvm::Function *intrin, std::vector<Expr>);
     llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
                              const std::string &name, std::vector<llvm::Value *>,
-                             bool scalable_vector_result = false);
+                             bool scalable_vector_result = false, bool is_reduction = false);
     llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
-                             llvm::Function *intrin, std::vector<llvm::Value *>);
+                             llvm::Function *intrin, std::vector<llvm::Value *>,
+                             bool is_reduction = false);
     // @}
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs
@@ -589,7 +590,7 @@ protected:
                                                    llvm::Value *mask, llvm::Value *a, llvm::Value *b = nullptr,
                                                    llvm::Value *c = nullptr, int alignment = 0,
                                                    const std::string &overload_suffix = "",
-                                                   bool void_return = false);
+                                                   bool void_return = false, bool is_reduction = false);
 
     virtual bool call_vector_predication_comparison(const std::string &name, const Type &result_type,
                                                     llvm::Value *mask,  // Pass nullptr for constrant true.

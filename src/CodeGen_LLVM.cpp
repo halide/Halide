@@ -4253,45 +4253,53 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
               op->op == VectorReduce::Mul ||
               op->op == VectorReduce::Min ||
               op->op == VectorReduce::Max) &&
-             // Must be a power of two lanes
-             (input_lanes >= 2) &&
-             ((input_lanes & (input_lanes - 1)) == 0) &&
-             // int versions exist up to 1024 bits
-             ((!op->type.is_float() && input_bytes <= 1024) ||
-              // float versions exist up to 16 lanes
-              input_lanes <= 16) &&
-             // As of the release of llvm 10, the 64-bit experimental total
-             // reductions don't seem to be done yet on arm.
-             (val.type().bits() != 64 ||
-              target.arch != Target::ARM));
+             (use_llvm_vp_intrinsics ||
+              // Must be a power of two lanes
+              ((input_lanes >= 2) &&
+               ((input_lanes & (input_lanes - 1)) == 0) &&
+               // int versions exist up to 1024 bits
+               ((!op->type.is_float() && input_bytes <= 1024) ||
+                // float versions exist up to 16 lanes
+                input_lanes <= 16) &&
+               // As of the release of llvm 10, the 64-bit experimental total
+               // reductions don't seem to be done yet on arm.
+               (val.type().bits() != 64 ||
+                target.arch != Target::ARM))));
 
         if (llvm_has_intrinsic) {
-            std::stringstream name;
-            name << "llvm.vector.reduce.";
+            const char *name = "<err>";
             const int bits = op->type.bits();
-            bool takes_initial_value = false;
+            bool takes_initial_value = use_llvm_vp_intrinsics;
             Expr initial_value = init;
             if (op->type.is_float()) {
                 switch (op->op) {
                 case VectorReduce::Add:
-                    name << "fadd";
+                    name = "fadd";
                     takes_initial_value = true;
                     if (!initial_value.defined()) {
                         initial_value = make_zero(op->type);
                     }
                     break;
                 case VectorReduce::Mul:
-                    name << "fmul";
+                    name = "fmul";
                     takes_initial_value = true;
                     if (!initial_value.defined()) {
                         initial_value = make_one(op->type);
                     }
                     break;
                 case VectorReduce::Min:
-                    name << "fmin";
+                    name = "fmin";
+                    // TODO(zvookin): For signed case, whether this is Inf or the max floating-point value depends on strict_float. (Or maybe it is QNaN in strict_float.)
+                    if (takes_initial_value && !initial_value.defined()) {
+                        initial_value = op->type.max();
+                    }
                     break;
                 case VectorReduce::Max:
-                    name << "fmax";
+                    name = "fmax";
+                    // TODO(zvookin): For signed case, whether this is -Inf or the min floating-point value depends on strict_float. (Or maybe it is -QNaN in strict_float.)
+                    if (takes_initial_value && !initial_value.defined()) {
+                        initial_value = op->type.min();
+                    }
                     break;
                 default:
                     break;
@@ -4299,55 +4307,82 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             } else if (op->type.is_int() || op->type.is_uint()) {
                 switch (op->op) {
                 case VectorReduce::Add:
-                    name << "add";
+                    name = "add";
+                    if (takes_initial_value && !initial_value.defined()) {
+                        initial_value = make_zero(op->type);
+                    }
                     break;
                 case VectorReduce::Mul:
-                    name << "mul";
+                    name = "mul";
+                    if (takes_initial_value && !initial_value.defined()) {
+                        initial_value = make_one(op->type);
+                    }
                     break;
                 case VectorReduce::Min:
-                    name << (op->type.is_int() ? 's' : 'u') << "min";
+                    name = op->type.is_int() ? "smin" : "umin";
+                    if (takes_initial_value && !initial_value.defined()) {
+                        initial_value = op->type.max();
+                    }
                     break;
                 case VectorReduce::Max:
-                    name << (op->type.is_int() ? 's' : 'u') << "max";
+                    name = op->type.is_int() ? "smax" : "umax";
+                    if (takes_initial_value && !initial_value.defined()) {
+                        initial_value = op->type.min();
+                    }
                     break;
                 default:
                     break;
                 }
             }
-            name << ".v" << val.type().lanes() << (op->type.is_float() ? 'f' : 'i') << bits;
 
-            string intrin_name = name.str();
+            if (use_llvm_vp_intrinsics) {
+                string vp_name = "reduce.";
+                vp_name += name;
+                codegen(initial_value);
+                llvm::Value *init = value;
+                codegen(op->value);
+                llvm::Value *val = value;
+                bool generated = call_vector_predication_intrinsic(vp_name, op->value.type(), nullptr, init, val, nullptr, 0, "", false, true);
+                internal_assert(generated) << "Vector predication intrinsic generation failed for vector reduction " << name << "\n";
+            } else {
+                std::stringstream build_name;
+                build_name << "llvm.vector.reduce.";
+                build_name << name;
+                build_name << ".v" << val.type().lanes() << (op->type.is_float() ? 'f' : 'i') << bits;
 
-            vector<Expr> args;
-            if (takes_initial_value) {
-                args.push_back(initial_value);
-                initial_value = Expr();
-            }
-            args.push_back(op->value);
+                string intrin_name = build_name.str();
 
-            // Make sure the declaration exists, or the codegen for
-            // call will assume that the args should scalarize.
-            if (!module->getFunction(intrin_name)) {
-                vector<llvm::Type *> arg_types;
-                for (const Expr &e : args) {
-                    arg_types.push_back(llvm_type_of(e.type()));
+                vector<Expr> args;
+                if (takes_initial_value) {
+                    args.push_back(initial_value);
+                    initial_value = Expr();
                 }
-                FunctionType *func_t = FunctionType::get(llvm_type_of(op->type), arg_types, false);
-                llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
-            }
+                args.push_back(op->value);
 
-            Expr equiv = Call::make(op->type, intrin_name, args, Call::PureExtern);
-            if (initial_value.defined()) {
-                equiv = binop(initial_value, equiv);
+                // Make sure the declaration exists, or the codegen for
+                // call will assume that the args should scalarize.
+                if (!module->getFunction(intrin_name)) {
+                    vector<llvm::Type *> arg_types;
+                    for (const Expr &e : args) {
+                        arg_types.push_back(llvm_type_of(e.type()));
+                    }
+                    FunctionType *func_t = FunctionType::get(llvm_type_of(op->type), arg_types, false);
+                    llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
+                }
+
+                Expr equiv = Call::make(op->type, intrin_name, args, Call::PureExtern);
+                if (initial_value.defined()) {
+                    equiv = binop(initial_value, equiv);
+                }
+                equiv.accept(this);
             }
-            equiv.accept(this);
             return;
         }
     }
 
     if (output_lanes == 1 &&
         factor > native_lanes &&
-        factor % native_lanes == 0) {
+        (use_llvm_vp_intrinsics || (factor % native_lanes == 0))) {
         // It's a total reduction of multiple native
         // vectors. Start by adding the vectors together.
         Expr equiv;
@@ -4647,9 +4682,10 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
                        intrin, arg_values);
 }
 
+
 Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes,
                                  const string &name, vector<Value *> arg_values,
-                                 bool scalable_vector_result) {
+                                 bool scalable_vector_result, bool is_reduction) {
     llvm::Function *fn = module->getFunction(name);
     if (!fn) {
         vector<llvm::Type *> arg_types(arg_values.size());
@@ -4658,7 +4694,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
         }
 
         llvm::Type *intrinsic_result_type = result_type->getScalarType();
-        if (intrin_lanes > 1) {
+        if (intrin_lanes > 1 && !is_reduction) {
             if (scalable_vector_result && effective_vscale != 0) {
                 intrinsic_result_type = get_vector_type(result_type->getScalarType(),
                                                         intrin_lanes / effective_vscale, VectorTypeConstraint::VScale);
@@ -4672,11 +4708,12 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
         fn->setCallingConv(CallingConv::C);
     }
 
-    return call_intrin(result_type, intrin_lanes, fn, arg_values);
+    return call_intrin(result_type, intrin_lanes, fn, arg_values, is_reduction);
 }
 
 Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes,
-                                 llvm::Function *intrin, vector<Value *> arg_values) {
+                                 llvm::Function *intrin, vector<Value *> arg_values,
+                                 bool is_reduction) {
     internal_assert(intrin);
     int arg_lanes = 1;
     if (result_type->isVoidTy()) {
@@ -4685,7 +4722,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
         arg_lanes = get_vector_num_elements(result_type);
     }
 
-    if (intrin_lanes != arg_lanes) {
+    if (!is_reduction && intrin_lanes != arg_lanes) {
         // Cut up each arg into appropriately-sized pieces, call the
         // intrinsic on each, then splice together the results.
         vector<Value *> results;
@@ -5139,7 +5176,7 @@ bool CodeGen_LLVM::call_vector_predication_intrinsic(const std::string &name, co
                                                      llvm::Value *mask,  // Pass nullptr for constrant true.
                                                      llvm::Value *a, llvm::Value *b, llvm::Value *c, int alignment,
                                                      const std::string &overload_suffix,
-                                                     bool void_return) {
+                                                     bool void_return, bool is_reduction) {
     if (!use_llvm_vp_intrinsics ||
         result_type.is_scalar()) {
         return false;
@@ -5192,7 +5229,13 @@ bool CodeGen_LLVM::call_vector_predication_intrinsic(const std::string &name, co
     }
     args[i++] = ConstantInt::get(i32_t, length);
 
-    value  = call_intrin(void_return ? void_t : llvm_result_type, get_vector_num_elements(llvm_result_type), full_name, args, is_scalable);
+    llvm::Type *llvm_return_type = llvm_result_type;
+    if (void_return) {
+        llvm_return_type = void_t;
+    } else if (is_reduction) {
+        llvm_return_type = llvm_result_type->getScalarType();
+    }
+    value = call_intrin(llvm_return_type, get_vector_num_elements(llvm_result_type), full_name, args, is_scalable, is_reduction);
     if (alignment != 0 && ptr_index != -1 && isa<CallInst>(value)) {
         llvm::CallInst *call = dyn_cast<llvm::CallInst>(value);
         call->addParamAttr(ptr_index, Attribute::getWithAlignment(*context, llvm::Align(alignment)));
