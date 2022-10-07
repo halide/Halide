@@ -55,12 +55,73 @@ jobs:
 
       - uses: actions/upload-artifact@v3
         with:
+          name: wheels
           path: ./wheelhouse/*.whl
+
+  build-llvm:
+    name: Build LLVM for ${{ runner.os }}
+
+    runs-on: ${{ matrix.runner }}
+
+    env:
+      LLVM_REF: llvmorg-15.0.1
+
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ windows-latest, macos-latest ]
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          repository: llvm/llvm-project
+          ref: ${{ env.LLVM_REF }}
+
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: lukka/get-cmake@latest
+
+      - name: Cache LLVM build folder
+        id: cache-llvm
+        uses: actions/cache@v3
+        with:
+          path: local
+          key: ${{ env.LLVM_REF }}-${{ runner.os }}
+
+      - name: Configure LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: >
+          cmake -G Ninja -S llvm -B build
+          -DCMAKE_BUILD_TYPE=Release
+          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+          "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly"
+          "-DLLVM_ENABLE_PROJECTS=clang;lld"
+          -DLLVM_ENABLE_ASSERTIONS=ON
+          -DLLVM_ENABLE_RTTI=ON
+          -DLLVM_ENABLE_EH=ON
+          -DLLVM_ENABLE_LIBXML2=OFF
+          -DLLVM_ENABLE_TERMINFO=OFF
+          -DLLVM_ENABLE_ZSTD=OFF
+          -DLLVM_ENABLE_ZLIB=OFF
+
+      - name: Build LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: cmake --build build/llvm
+
+      - name: Install LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: cmake --install build/llvm --prefix local
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.LLVM_REF }}-${{ runner.os }}
+          path: local
 
   pip-no-docker:
     name: Package Halide Python bindings
 
     runs-on: ${{ matrix.runner }}
+
+    needs: build-llvm
 
     env:
       CMAKE_PREFIX_PATH: ${{ github.workspace }}/local
@@ -87,35 +148,9 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@latest
 
-      - name: Cache LLVM build folder
-        id: cache-llvm
-        uses: actions/cache@v3
+      - uses: actions/download-artifact@v3
         with:
-          path: build/llvm
-          key: ${{ env.LLVM_REF }}-${{ runner.os }}
-
-      - name: Configure LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: >
-          cmake -G Ninja -S llvm-project/llvm -B build/llvm
-          -DCMAKE_BUILD_TYPE=Release
-          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
-          "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly"
-          "-DLLVM_ENABLE_PROJECTS=clang;lld"
-          -DLLVM_ENABLE_ASSERTIONS=ON
-          -DLLVM_ENABLE_RTTI=ON
-          -DLLVM_ENABLE_EH=ON
-          -DLLVM_ENABLE_LIBXML2=OFF
-          -DLLVM_ENABLE_TERMINFO=OFF
-          -DLLVM_ENABLE_ZSTD=OFF
-          -DLLVM_ENABLE_ZLIB=OFF
-
-      - name: Build LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --build build/llvm
-
-      - name: Install LLVM
-        run: cmake --install build/llvm --prefix "${{ env.CMAKE_PREFIX_PATH }}"
+          name: ${{ env.LLVM_REF }}-${{ runner.os }}
 
       - name: Configure Halide
         run: >
@@ -139,4 +174,5 @@ jobs:
 
       - uses: actions/upload-artifact@v3
         with:
+          name: wheels
           path: ./wheelhouse/*.whl
