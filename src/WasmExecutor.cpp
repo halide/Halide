@@ -23,18 +23,18 @@
 #include "Target.h"
 
 #if WITH_WABT
-#include "wabt-src/src/binary-reader.h"
-#include "wabt-src/src/cast.h"
-#include "wabt-src/src/common.h"
-#include "wabt-src/src/error-formatter.h"
-#include "wabt-src/src/error.h"
-#include "wabt-src/src/feature.h"
-#include "wabt-src/src/interp/binary-reader-interp.h"
-#include "wabt-src/src/interp/interp-util.h"
-#include "wabt-src/src/interp/interp.h"
-#include "wabt-src/src/interp/istream.h"
-#include "wabt-src/src/result.h"
-#include "wabt-src/src/stream.h"
+#include "wabt/binary-reader.h"
+#include "wabt/cast.h"
+#include "wabt/common.h"
+#include "wabt/error-formatter.h"
+#include "wabt/error.h"
+#include "wabt/feature.h"
+#include "wabt/interp/binary-reader-interp.h"
+#include "wabt/interp/interp-util.h"
+#include "wabt/interp/interp.h"
+#include "wabt/interp/istream.h"
+#include "wabt/result.h"
+#include "wabt/stream.h"
 #endif
 
 // clang-format off

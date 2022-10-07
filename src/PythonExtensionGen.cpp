@@ -51,7 +51,7 @@ bool can_convert(const LoweredArgument *arg) {
     if (arg->type.is_vector()) {
         return false;
     }
-    if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64) {
+    if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64 && arg->type.bits() != 16) {
         return false;
     }
     if ((arg->type.is_int() || arg->type.is_uint()) &&
@@ -77,6 +77,8 @@ std::pair<string, string> print_type(const LoweredArgument *arg) {
         return std::make_pair("f", "float");
     } else if (arg->type.is_float() && arg->type.bits() == 64) {
         return std::make_pair("d", "double");
+        // } else if (arg->type.is_float() && arg->type.bits() == 16) {
+        //     TODO: can't pass scalar float16 type
     } else if (arg->type.bits() == 1) {
         // "b" expects an unsigned char, so we assume that bool == uint8.
         return std::make_pair("b", "bool");
@@ -221,8 +223,8 @@ bool unpack_buffer(PyObject *py_obj,
         while (strchr("@<>!=", *p)) {
             p++;  // ignore little/bit endian (and alignment)
         }
-        if (*p == 'f' || *p == 'd') {
-            // 'f' and 'd' are float and double, respectively.
+        if (*p == 'f' || *p == 'd' || *p == 'e') {
+            // 'f', 'd', and 'e' are float, double, and half, respectively.
             halide_buf.type.code = halide_type_float;
         } else if (*p >= 'a' && *p <= 'z') {
             // lowercase is signed int.
@@ -231,7 +233,7 @@ bool unpack_buffer(PyObject *py_obj,
             // uppercase is unsigned int.
             halide_buf.type.code = halide_type_uint;
         }
-        const char *type_codes = "bBhHiIlLqQfd";  // integers and floats
+        const char *type_codes = "bBhHiIlLqQfde";  // integers and floats
         if (*p == '?') {
             // Special-case bool, so that it is a distinct type vs uint8_t
             // (even though the memory layout is identical)
