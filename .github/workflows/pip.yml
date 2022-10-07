@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-halide:
-    name: Build Halide
+  pip-linux:
+    name: Package Halide Python bindings on Linux
 
     runs-on: ubuntu-latest
 
@@ -52,6 +52,72 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release -DWITH_DOCS=NO -DWITH_PYTHON_BINDINGS=NO -DWITH_TESTS=NO
             -DWITH_TUTORIALS=NO -DWITH_UTILS=NO &&
             cmake --build build --target install
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+
+  pip-no-docker:
+    name: Package Halide Python bindings
+
+    runs-on: ${{ matrix.runner }}
+
+    env:
+      CMAKE_PREFIX_PATH: ${{ github.workspace }}/local
+
+    strategy:
+      matrix:
+        runner: [ windows-latest, macos-latest ]
+        include:
+          - runner: windows-latest
+            pytag: win_amd64
+          - runner: macos-latest
+            pytag: macosx_universal2
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+        with:
+          repository: llvm/llvm-project
+          ref: llvmorg-15.0.1
+          path: llvm-project
+
+      # TODO: find a way to cache this
+      - name: Configure LLVM
+        run: >
+          cmake -G Ninja -S llvm-project/llvm -B build/llvm
+          -DCMAKE_BUILD_TYPE=Release
+          "-DLLVM_ENABLE_PROJECTS=clang;lld"
+          "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly"
+          -DLLVM_ENABLE_ASSERTIONS=ON
+          -DLLVM_ENABLE_RTTI=ON
+          -DLLVM_ENABLE_EH=ON
+          -DLLVM_ENABLE_LIBXML2=OFF
+          -DLLVM_ENABLE_TERMINFO=OFF
+          -DLLVM_ENABLE_ZSTD=OFF
+          "-DCMAKE_INSTALL_PREFIX=${{ env.CMAKE_PREFIX_PATH }}"
+
+      - name: Build LLVM
+        run: cmake --build build/llvm --target install
+
+      - name: Configure Halide
+        run: >
+          cmake -G Ninja -S . -B build/Halide
+          -DCMAKE_BUILD_TYPE=Release
+          -DWITH_DOCS=NO
+          -DWITH_PYTHON_BINDINGS=NO
+          -DWITH_TESTS=NO
+          -DWITH_TUTORIALS=NO
+          -DWITH_UTILS=NO
+          "-DCMAKE_INSTALL_PREFIX=${{ env.CMAKE_PREFIX_PATH }}"
+
+      - name: Build Halide
+        run: cmake --build build/Halide --target install
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.10.2
+        env:
+          CIBW_BUILD: "cp38-${{ matrix.pytag }} cp39-${{ matrix.pytag }} cp310-${{ matrix.pytag }}"
 
       - uses: actions/upload-artifact@v3
         with:
