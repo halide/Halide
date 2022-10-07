@@ -105,11 +105,11 @@ jobs:
 
       - name: Build LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --build build/llvm
+        run: cmake --build build
 
       - name: Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --install build/llvm --prefix local
+        run: cmake --install build --prefix local
 
       - uses: actions/upload-artifact@v3
         with:
@@ -154,7 +154,7 @@ jobs:
 
       - name: Configure Halide
         run: >
-          cmake -G Ninja -S . -B build/Halide
+          cmake -G Ninja -S . -B build
           -DCMAKE_BUILD_TYPE=Release
           "-DCMAKE_INSTALL_PREFIX=${{ env.CMAKE_PREFIX_PATH }}"
           "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
@@ -165,7 +165,7 @@ jobs:
           -DWITH_UTILS=NO
 
       - name: Build Halide
-        run: cmake --build build/Halide --target install
+        run: cmake --build build --target install
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.10.2
