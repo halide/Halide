@@ -9,7 +9,7 @@ setup(
     author_email="",
     description="",
     long_description="",
-    python_requires=">=3.6",
+    python_requires=">=3.8",
     packages=find_packages(where="python_bindings/src"),
     package_dir={"": "python_bindings/src"},
     cmake_source_dir="python_bindings",

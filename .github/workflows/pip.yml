@@ -22,7 +22,7 @@ jobs:
 
     strategy:
       matrix:
-        arch: [ x86_64, i686, aarch64 ]
+        arch: [ x86_64, aarch64 ]
 
     steps:
       - uses: actions/checkout@v3
@@ -45,7 +45,7 @@ jobs:
           CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
           CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux*"
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:15.0.1
-          CIBW_MANYLINUX_I686_IMAGE: ghcr.io/halide/manylinux2014_i686-llvm:15.0.1
+          # CIBW_MANYLINUX_I686_IMAGE: ghcr.io/halide/manylinux2014_i686-llvm:15.0.1
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:15.0.1
           CIBW_BEFORE_ALL_LINUX: >
             cmake -G Ninja -S . -B build
@@ -64,8 +64,10 @@ jobs:
 
     env:
       CMAKE_PREFIX_PATH: ${{ github.workspace }}/local
+      LLVM_REF: llvmorg-15.0.1
 
     strategy:
+      fail-fast: false
       matrix:
         runner: [ windows-latest, macos-latest ]
         include:
@@ -79,40 +81,53 @@ jobs:
       - uses: actions/checkout@v3
         with:
           repository: llvm/llvm-project
-          ref: llvmorg-15.0.1
+          ref: ${{ env.LLVM_REF }}
           path: llvm-project
 
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@latest
 
-      # TODO: find a way to cache this
+      - name: Cache LLVM build folder
+        id: cache-llvm
+        uses: actions/cache@v3
+        with:
+          path: build/llvm
+          key: ${{ env.LLVM_REF }}-${{ runner.os }}
+
       - name: Configure LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: >
           cmake -G Ninja -S llvm-project/llvm -B build/llvm
           -DCMAKE_BUILD_TYPE=Release
-          "-DLLVM_ENABLE_PROJECTS=clang;lld"
+          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
           "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly"
+          "-DLLVM_ENABLE_PROJECTS=clang;lld"
           -DLLVM_ENABLE_ASSERTIONS=ON
           -DLLVM_ENABLE_RTTI=ON
           -DLLVM_ENABLE_EH=ON
           -DLLVM_ENABLE_LIBXML2=OFF
           -DLLVM_ENABLE_TERMINFO=OFF
           -DLLVM_ENABLE_ZSTD=OFF
-          "-DCMAKE_INSTALL_PREFIX=${{ env.CMAKE_PREFIX_PATH }}"
+          -DLLVM_ENABLE_ZLIB=OFF
 
       - name: Build LLVM
-        run: cmake --build build/llvm --target install
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: cmake --build build/llvm
+
+      - name: Install LLVM
+        run: cmake --install build/llvm --prefix "${{ env.CMAKE_PREFIX_PATH }}"
 
       - name: Configure Halide
         run: >
           cmake -G Ninja -S . -B build/Halide
           -DCMAKE_BUILD_TYPE=Release
+          "-DCMAKE_INSTALL_PREFIX=${{ env.CMAKE_PREFIX_PATH }}"
+          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
           -DWITH_DOCS=NO
           -DWITH_PYTHON_BINDINGS=NO
           -DWITH_TESTS=NO
           -DWITH_TUTORIALS=NO
           -DWITH_UTILS=NO
-          "-DCMAKE_INSTALL_PREFIX=${{ env.CMAKE_PREFIX_PATH }}"
 
       - name: Build Halide
         run: cmake --build build/Halide --target install
