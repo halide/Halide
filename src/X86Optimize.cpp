@@ -733,7 +733,7 @@ private:
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
-    IRMatcher::WildConst<0> c0;
+    // IRMatcher::WildConst<0> c0;
 };
 
 }  // namespace

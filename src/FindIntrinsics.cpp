@@ -314,7 +314,7 @@ protected:
              rewrite(widening_mul(x, y) + widening_mul(z, y),
                      y * widening_add(x, z),
                      // TODO: could be a better notation for this.
-                     types_match(x, y)) ||
+                     types_match(x, z)) ||
             
              rewrite(reinterpret(op->type, x) + reinterpret(op->type, y),
                      reinterpret(op->type, x + y),
@@ -1498,6 +1498,16 @@ Expr lower_sorted_avg(const Expr &a, const Expr &b) {
     return a + ((b - a) >> 1);
 }
 
+Expr lower_absd(const Expr &a, const Expr &b) {
+    std::string a_name = unique_name('a');
+    std::string b_name = unique_name('b');
+    Expr a_var = Variable::make(a.type(), a_name);
+    Expr b_var = Variable::make(b.type(), b_name);
+    return Let::make(a_name, a,
+                        Let::make(b_name, b,
+                                Select::make(a_var < b_var, b_var - a_var, a_var - b_var)));
+}
+
 Expr lower_mul_shift_right(const Expr &a, const Expr &b, const Expr &q) {
     internal_assert(a.type() == b.type());
     int full_q = a.type().bits();
@@ -1630,6 +1640,9 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         return lower_sorted_avg(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::absd)) {
+        internal_assert(op->args.size() == 2);
+        return lower_absd(op->args[0], op->args[1]);
     } else {
         return Expr();
     }

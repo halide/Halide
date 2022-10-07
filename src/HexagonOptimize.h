@@ -6,6 +6,7 @@
  */
 
 #include "Expr.h"
+#include "Bounds.h"
 
 namespace Halide {
 
@@ -29,7 +30,7 @@ Stmt scatter_gather_generator(Stmt s);
  * rewrites widenings/narrowings to be explicit in the IR, and
  * attempts to simplify away most of the
  * interleaving/deinterleaving. */
-Stmt optimize_hexagon_instructions(Stmt s, const Target &t);
+Stmt optimize_hexagon_instructions(Stmt s, const Target &t, const FuncValueBounds &fvb);
 
 /** Generate deinterleave or interleave operations, operating on
  * groups of vectors at a time. */

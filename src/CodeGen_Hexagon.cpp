@@ -522,7 +522,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     // Optimize the IR for Hexagon.
     debug(1) << "Hexagon: Optimizing Hexagon instructions...\n";
-    body = optimize_hexagon_instructions(body, target);
+    body = optimize_hexagon_instructions(body, target, f.func_value_bounds);
     debug(2) << "Hexagon: Lowering after optimizing Hexagon instructions:\n"
              << body << "\n\n";
 
@@ -1886,10 +1886,13 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
     if (is_native_interleave(op)) {
         internal_assert(
-            op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0);
+            op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0) << (op->type.lanes() % (native_vector_bits() * 2 / op->type.bits())) << "\n";
     }
 
     if (starts_with(op->name, "halide.hexagon.")) {
+        if (get_env_variable("HL_DISABLE_HALIDE_LOWERING") == "1") {
+            internal_error << "Somehow generated halide.hexagon intrinsic: " << Expr(op) << "\n";
+        }
         // Handle all of the intrinsics we generated in
         // hexagon_optimize.  I'm not sure why this is different than
         // letting it fall through to CodeGen_LLVM.
@@ -1901,9 +1904,11 @@ void CodeGen_Hexagon::visit(const Call *op) {
         auto i = functions.find(op->name);
         if (i != functions.end()) {
             string intrin = i->second.first + type_suffix(op->args, i->second.second);
-            value = call_intrin(op->type, intrin, op->args, true /*maybe*/);
-            if (value) {
-                return;
+            if (get_env_variable("HL_DISABLE_HALIDE_LOWERING") != "1") {
+                value = call_intrin(op->type, intrin, op->args, true /*maybe*/);
+                if (value) {
+                    return;
+                }
             }
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right)) {
@@ -1930,10 +1935,12 @@ void CodeGen_Hexagon::visit(const Call *op) {
             Type ty = op->args[0].type();
             if ((ty.is_vector() && ty.is_int())) {
                 if (ty.bits() != 8 || is_hvx_v65_or_later()) {
-                    value = call_intrin(op->type,
-                                        "halide.hexagon.abs" + type_suffix(op->args[0]),
-                                        op->args);
-                    return;
+                    if (get_env_variable("HL_DISABLE_HALIDE_LOWERING") != "1") {
+                        value = call_intrin(op->type,
+                                            "halide.hexagon.abs" + type_suffix(op->args[0]),
+                                            op->args);
+                        return;
+                    }
                 }
             }
         } else if (op->is_intrinsic(Call::cast_mask)) {

@@ -25,6 +25,10 @@ using std::set;
 using std::string;
 using std::vector;
 
+static bool enable_synthesized_rules() {
+    return get_env_variable("HL_ENABLE_RAKE_RULES") == "1";
+}
+
 using namespace Halide::ConciseCasts;
 
 Expr native_interleave(const Expr &x) {
@@ -185,15 +189,21 @@ struct Pattern {
 
         v65orLater = 1 << 10,  // Pattern should be matched only for v65 target or later
         v66orLater = 1 << 11,  // Pattern should be matched only for v66 target or later
+
+        SignedOp0 = 1 << 12, // Cast Op0 to be signed
+        RequireSafeReintepretOp0 = 1 << 13, // Check that you can safely reinterpret Op0, then do so.
+        RequireSafeReintepretOp1 = 1 << 13, // Check that you can safely reinterpret Op0, then do so.
     };
 
     string intrin;  // Name of the intrinsic
     Expr pattern;   // The pattern to match against
-    int flags;
+    int32_t flags;
+
+    Type output_type;
 
     Pattern() = default;
-    Pattern(const string &intrin, Expr p, int flags = 0)
-        : intrin(intrin), pattern(std::move(p)), flags(flags) {
+    Pattern(const string &intrin, Expr p, int flags = 0, Type t = Int(0))
+        : intrin(intrin), pattern(std::move(p)), flags(flags), output_type(t) {
     }
 };
 
@@ -228,6 +238,192 @@ bool check_pattern_target(int flags, const Target &target) {
     return true;
 }
 
+// Replace an expression with the one specified by a pattern.
+Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
+    if (p.output_type.bits() != 0) {
+        Type t = x.type();
+        x = Call::make(p.output_type.with_lanes(x.type().lanes()), p.intrin, matches, Call::PureExtern);
+        x = cast(t, x);
+    } else {
+        x = Call::make(x.type(), p.intrin, matches, Call::PureExtern);
+    }
+    if (p.flags & Pattern::InterleaveResult) {
+        // The pattern wants us to interleave the result.
+        x = native_interleave(x);
+    }
+    return x;
+}
+
+bool is_double_vector(const Expr &x, const Target &target) {
+    int native_vector_lanes = target.natural_vector_size(x.type());
+    return x.type().lanes() % (2 * native_vector_lanes) == 0;
+}
+
+typedef pair<Expr, Expr> MulExpr;
+
+// If ty is scalar or a vector with different lanes count,
+// and x is a vector, try to remove a broadcast or adjust
+// the number of lanes in Broadcast or indices in a Shuffle
+// to match the ty lanes before using lossless_cast on it.
+Expr unbroadcast_lossless_cast(Type ty, Expr x) {
+    if (x.type().is_vector()) {
+        if (const Broadcast *bc = x.as<Broadcast>()) {
+            if (ty.is_scalar()) {
+                x = bc->value;
+            } else {
+                x = Broadcast::make(bc->value, ty.lanes());
+            }
+        }
+        // Check if shuffle can be treated as a broadcast.
+        if (const Shuffle *shuff = x.as<Shuffle>()) {
+            int factor = x.type().lanes() / ty.lanes();
+            if (shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
+                x = Shuffle::make(shuff->vectors, std::vector<int>(shuff->indices.begin(),
+                                                                   shuff->indices.begin() + ty.lanes()));
+            }
+        }
+    }
+    if (ty.lanes() != x.type().lanes()) {
+        return Expr();
+    }
+    return lossless_cast(ty, x);
+}
+
+// Try to extract a list of multiplies of the form a_ty*b_ty added
+// together, such that op is equivalent to the sum of the
+// multiplies in 'mpys', added to 'rest'.
+// Difference in mpys.size() - return indicates the number of
+// expressions where we pretend the op to be multiplied by 1.
+int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
+                 vector<MulExpr> &mpys, Expr &rest) {
+    if ((int)mpys.size() >= max_mpy_count) {
+        rest = rest.defined() ? Add::make(rest, op) : op;
+        return 0;
+    }
+
+    // If the add is also widening, remove the cast.
+    int mpy_bits = std::max(a_ty.bits(), b_ty.bits()) * 2;
+    Expr maybe_mul = op;
+    if (op.type().bits() == mpy_bits * 2) {
+        if (const Cast *cast = op.as<Cast>()) {
+            if (cast->value.type().bits() == mpy_bits) {
+                maybe_mul = cast->value;
+            }
+        }
+    }
+    maybe_mul = as_mul(maybe_mul);
+
+    if (maybe_mul.defined()) {
+        const Mul *mul = maybe_mul.as<Mul>();
+        // internal_assert(mul) << "Expected mul: " << maybe_mul << "\n";
+        if (!mul) {
+            // Must have been mul by 1.
+            Expr a = unbroadcast_lossless_cast(a_ty, maybe_mul);
+            if (a.defined()) {
+                Expr b = make_one(b_ty.element_of());
+                mpys.emplace_back(a, b);
+                return 1;
+            }
+            // try to commute the op
+            Expr b = unbroadcast_lossless_cast(b_ty, maybe_mul);
+            if (b.defined()) {
+                Expr a = make_one(a_ty.element_of());
+                mpys.emplace_back(a, b);
+                return 1;
+            }
+        } else {
+            Expr a = unbroadcast_lossless_cast(a_ty, mul->a);
+            Expr b = unbroadcast_lossless_cast(b_ty, mul->b);
+            if (a.defined() && b.defined()) {
+                mpys.emplace_back(a, b);
+                return 1;
+            } else {
+                // Try to commute the op.
+                a = unbroadcast_lossless_cast(a_ty, mul->b);
+                b = unbroadcast_lossless_cast(b_ty, mul->a);
+                if (a.defined() && b.defined()) {
+                    mpys.emplace_back(a, b);
+                    return 1;
+                }
+            }
+        }
+    } else if (const Add *add = op.as<Add>()) {
+        int mpy_count = 0;
+        mpy_count += find_mpy_ops(add->a, a_ty, b_ty, max_mpy_count, mpys, rest);
+        mpy_count += find_mpy_ops(add->b, a_ty, b_ty, max_mpy_count, mpys, rest);
+        return mpy_count;
+    } else if (const Call *add = Call::as_intrinsic(op, {Call::widening_add})) {
+        int mpy_count = 0;
+        mpy_count += find_mpy_ops(cast(op.type(), add->args[0]), a_ty, b_ty, max_mpy_count, mpys, rest);
+        mpy_count += find_mpy_ops(cast(op.type(), add->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
+        return mpy_count;
+    } else if (const Call *wadd = Call::as_intrinsic(op, {Call::widen_right_add})) {
+        int mpy_count = 0;
+        mpy_count += find_mpy_ops(wadd->args[0], a_ty, b_ty, max_mpy_count, mpys, rest);
+        mpy_count += find_mpy_ops(cast(op.type(), wadd->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
+        return mpy_count;
+    }
+
+    // Attempt to pretend this op is multiplied by 1.
+    Expr as_a = unbroadcast_lossless_cast(a_ty, op);
+    Expr as_b = unbroadcast_lossless_cast(b_ty, op);
+
+    if (as_a.defined()) {
+        mpys.emplace_back(as_a, make_one(b_ty));
+    } else if (as_b.defined()) {
+        mpys.emplace_back(make_one(a_ty), as_b);
+    } else {
+        rest = rest.defined() ? Add::make(rest, op) : op;
+    }
+    return 0;
+}
+
+// Perform peephole optimizations on the IR, adding appropriate
+// interleave and deinterleave calls.
+class OptimizePatterns : public IRMutator {
+    using IRMutator::visit;
+
+    Scope<Interval> bounds;
+    const Target &target;
+    const FuncValueBounds &func_value_bounds;
+    std::map<Expr, Interval, IRDeepCompare> bounds_cache;
+
+    Interval cached_get_interval(const Expr &expr) {
+        const auto [iter, success] = bounds_cache.insert({expr, Interval::everything()});
+
+        if (success) {
+            // If we did insert, then actually store a real interval.
+            // TODO: do we only want to store constant bounds? would be cheaper than using can_prove.
+            iter->second = bounds_of_expr_in_scope(expr, bounds, func_value_bounds, false);
+        }
+
+        return iter->second;
+    }
+
+    bool is_upper_bounded(const Expr &expr, const int64_t &bound) {
+        internal_assert(expr.type().element_of().can_represent(bound))
+            << "Type of expr cannot represent upper bound:\n " << expr << "\n " << bound << "\n";
+
+        Expr e = make_const(expr.type().element_of(), bound);
+        Interval i = cached_get_interval(expr);
+
+        // TODO: see above - we could get rid of can_prove if we use constant bounds queries instead.
+        return i.has_upper_bound() && can_prove(i.max <= e);
+    }
+
+    bool is_lower_bounded(const Expr &expr, const uint64_t &bound) {
+        internal_assert(expr.type().element_of().can_represent(bound))
+            << "Type of expr cannot represent upper bound:\n " << expr << "\n " << bound << "\n";
+
+        Expr e = make_const(expr.type().element_of(), bound);
+        Interval i = cached_get_interval(expr);
+
+        // TODO: see above - we could get rid of can_prove if we use constant bounds queries instead.
+        return i.has_lower_bound() && can_prove(i.min >= e);
+    }
+
+// TODO(aj): I moved these here to add the bounds checking easier
+
 // Check if the matches satisfy the given pattern flags, and mutate the matches
 // as specified by the flags.
 bool process_match_flags(vector<Expr> &matches, int flags) {
@@ -254,22 +450,50 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
         internal_assert(matches.size() >= 3);
         std::swap(matches[1], matches[2]);
     }
-    return true;
-}
-
-// Replace an expression with the one specified by a pattern.
-Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
-    x = Call::make(x.type(), p.intrin, matches, Call::PureExtern);
-    if (p.flags & Pattern::InterleaveResult) {
-        // The pattern wants us to interleave the result.
-        x = native_interleave(x);
+    if (flags & Pattern::SignedOp0) {
+        internal_assert(matches[0].type().is_uint());
+        matches[0] = cast(matches[0].type().with_code(halide_type_int), matches[0]);
     }
-    return x;
-}
-
-bool is_double_vector(const Expr &x, const Target &target) {
-    int native_vector_lanes = target.natural_vector_size(x.type());
-    return x.type().lanes() % (2 * native_vector_lanes) == 0;
+    if (flags & Pattern::RequireSafeReintepretOp0) {
+        // Try to safely reinterpret int to uint or uint to int.
+        const Type t = matches[0].type();
+        internal_assert(t.is_int_or_uint());
+        if (t.is_int()) {
+            if (is_lower_bounded(matches[0], (uint64_t)0)) {
+                matches[0] = cast(t.with_code(halide_type_uint), matches[0]);
+            } else {
+                return false;
+            }
+        } else {
+            // is_uint
+            if (is_upper_bounded(matches[0], max_int(t.bits()))) {
+                matches[0] = cast(t.with_code(halide_type_int), matches[0]);
+            } else {
+                return false;
+            }
+        }
+    }
+    if (flags & Pattern::RequireSafeReintepretOp1) {
+        internal_assert(matches.size() >= 2);
+        // Try to safely reinterpret int to uint or uint to int.
+        const Type t = matches[1].type();
+        internal_assert(t.is_int_or_uint());
+        if (t.is_int()) {
+            if (is_lower_bounded(matches[1], (uint64_t)0)) {
+                matches[1] = cast(t.with_code(halide_type_uint), matches[1]);
+            } else {
+                return false;
+            }
+        } else {
+            // is_uint
+            if (is_upper_bounded(matches[1], max_int(t.bits()))) {
+                matches[1] = cast(t.with_code(halide_type_int), matches[1]);
+            } else {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 // Attempt to apply one of the patterns to x. If a match is
@@ -332,114 +556,6 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
     return op;
 }
 
-typedef pair<Expr, Expr> MulExpr;
-
-// If ty is scalar or a vector with different lanes count,
-// and x is a vector, try to remove a broadcast or adjust
-// the number of lanes in Broadcast or indices in a Shuffle
-// to match the ty lanes before using lossless_cast on it.
-Expr unbroadcast_lossless_cast(Type ty, Expr x) {
-    if (x.type().is_vector()) {
-        if (const Broadcast *bc = x.as<Broadcast>()) {
-            if (ty.is_scalar()) {
-                x = bc->value;
-            } else {
-                x = Broadcast::make(bc->value, ty.lanes());
-            }
-        }
-        // Check if shuffle can be treated as a broadcast.
-        if (const Shuffle *shuff = x.as<Shuffle>()) {
-            int factor = x.type().lanes() / ty.lanes();
-            if (shuff->is_broadcast() && shuff->broadcast_factor() % factor == 0) {
-                x = Shuffle::make(shuff->vectors, std::vector<int>(shuff->indices.begin(),
-                                                                   shuff->indices.begin() + ty.lanes()));
-            }
-        }
-    }
-    if (ty.lanes() != x.type().lanes()) {
-        return Expr();
-    }
-    return lossless_cast(ty, x);
-}
-
-// Try to extract a list of multiplies of the form a_ty*b_ty added
-// together, such that op is equivalent to the sum of the
-// multiplies in 'mpys', added to 'rest'.
-// Difference in mpys.size() - return indicates the number of
-// expressions where we pretend the op to be multiplied by 1.
-int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
-                 vector<MulExpr> &mpys, Expr &rest) {
-    if ((int)mpys.size() >= max_mpy_count) {
-        rest = rest.defined() ? Add::make(rest, op) : op;
-        return 0;
-    }
-
-    // If the add is also widening, remove the cast.
-    int mpy_bits = std::max(a_ty.bits(), b_ty.bits()) * 2;
-    Expr maybe_mul = op;
-    if (op.type().bits() == mpy_bits * 2) {
-        if (const Cast *cast = op.as<Cast>()) {
-            if (cast->value.type().bits() == mpy_bits) {
-                maybe_mul = cast->value;
-            }
-        }
-    }
-    maybe_mul = as_mul(maybe_mul);
-
-    if (maybe_mul.defined()) {
-        const Mul *mul = maybe_mul.as<Mul>();
-        Expr a = unbroadcast_lossless_cast(a_ty, mul->a);
-        Expr b = unbroadcast_lossless_cast(b_ty, mul->b);
-        if (a.defined() && b.defined()) {
-            mpys.emplace_back(a, b);
-            return 1;
-        } else {
-            // Try to commute the op.
-            a = unbroadcast_lossless_cast(a_ty, mul->b);
-            b = unbroadcast_lossless_cast(b_ty, mul->a);
-            if (a.defined() && b.defined()) {
-                mpys.emplace_back(a, b);
-                return 1;
-            }
-        }
-    } else if (const Add *add = op.as<Add>()) {
-        int mpy_count = 0;
-        mpy_count += find_mpy_ops(add->a, a_ty, b_ty, max_mpy_count, mpys, rest);
-        mpy_count += find_mpy_ops(add->b, a_ty, b_ty, max_mpy_count, mpys, rest);
-        return mpy_count;
-    } else if (const Call *add = Call::as_intrinsic(op, {Call::widening_add})) {
-        int mpy_count = 0;
-        mpy_count += find_mpy_ops(cast(op.type(), add->args[0]), a_ty, b_ty, max_mpy_count, mpys, rest);
-        mpy_count += find_mpy_ops(cast(op.type(), add->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
-        return mpy_count;
-    } else if (const Call *wadd = Call::as_intrinsic(op, {Call::widen_right_add})) {
-        int mpy_count = 0;
-        mpy_count += find_mpy_ops(wadd->args[0], a_ty, b_ty, max_mpy_count, mpys, rest);
-        mpy_count += find_mpy_ops(cast(op.type(), wadd->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
-        return mpy_count;
-    }
-
-    // Attempt to pretend this op is multiplied by 1.
-    Expr as_a = unbroadcast_lossless_cast(a_ty, op);
-    Expr as_b = unbroadcast_lossless_cast(b_ty, op);
-
-    if (as_a.defined()) {
-        mpys.emplace_back(as_a, make_one(b_ty));
-    } else if (as_b.defined()) {
-        mpys.emplace_back(make_one(a_ty), as_b);
-    } else {
-        rest = rest.defined() ? Add::make(rest, op) : op;
-    }
-    return 0;
-}
-
-// Perform peephole optimizations on the IR, adding appropriate
-// interleave and deinterleave calls.
-class OptimizePatterns : public IRMutator {
-    using IRMutator::visit;
-
-    Scope<Interval> bounds;
-    const Target &target;
 
     // Interesting muls are handled as widen_right_mul().
 
@@ -652,6 +768,12 @@ class OptimizePatterns : public IRMutator {
         if (mpyadd.defined()) {
             return mpyadd;
         }
+
+        static const vector<Pattern> synthesized_adds = {
+            {"halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_u16x + halide_hexagon_add_2mpy(UInt(16, 0), ".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0, Int(16)},
+            {"halide.hexagon.add_mpy.vuh.vub.ub", wild_i16x + cast(Int(16, 0), widening_mul(wild_u8x, wild_u8)), Pattern::ReinterleaveOp0, Int(16)},
+        };
+
         static const vector<Pattern> adds = {
             // Use accumulating versions of vmpa, vdmpy, vrmpy instructions when possible.
             {"halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0), ".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0},
@@ -712,8 +834,19 @@ class OptimizePatterns : public IRMutator {
         };
 
         if (op->type.is_vector()) {
+            std::cerr << "Optimizing Add: " << Expr(op) << "\n";
+
+            if (enable_synthesized_rules()) {
+                Expr new_expr = apply_commutative_patterns(op, synthesized_adds, target, this);
+                if (!new_expr.same_as(op)) {
+                    std::cerr << "Optimized (synth): " << new_expr << "\n";
+                    return new_expr;
+                }
+            }
+
             Expr new_expr = apply_commutative_patterns(op, adds, target, this);
             if (!new_expr.same_as(op)) {
+                std::cerr << "Optimized (regular): " << new_expr << "\n";
                 return new_expr;
             }
         }
@@ -846,9 +979,17 @@ class OptimizePatterns : public IRMutator {
         }
         // TODO: There can be better instruction selection for these.
         if (op->is_intrinsic(Call::widen_right_add)) {
-            Expr lowered = Add::make(op->args[0], cast(op->type, op->args[1]));
-            return mutate(lowered);
-        } else if (op->is_intrinsic(Call::widen_right_sub)) {
+            if (enable_synthesized_rules() && !is_const(op->args[1])) {
+                // use vmpy-acc
+                Expr lowered = Add::make(op->args[0], widening_mul(op->args[1], make_one(op->args[1].type())));
+                return mutate(lowered);
+            } else {
+                Expr lowered = Add::make(op->args[0], cast(op->type, op->args[1]));
+                return mutate(lowered);
+            }
+            
+        } else
+        if (op->is_intrinsic(Call::widen_right_sub)) {
             Expr lowered = Sub::make(op->args[0], cast(op->type, op->args[1]));
             return mutate(lowered);
         }
@@ -866,6 +1007,17 @@ class OptimizePatterns : public IRMutator {
                 return mutate(lower_intrinsic(op));
             }
         }
+
+        static const vector<Pattern> synthesized_calls = {
+            {"halide.hexagon.pack_satub.vh", u8_sat(wild_u16x), Pattern::RequireSafeReintepretOp0},
+            {"halide.hexagon.pack_satuh.vw", u16_sat(wild_u32x), Pattern::RequireSafeReintepretOp0},
+            {"halide.hexagon.pack_satb.vh", i8_sat(wild_u16x), Pattern::RequireSafeReintepretOp0},
+            {"halide.hexagon.pack_sath.vw", i16_sat(wild_u32x), Pattern::RequireSafeReintepretOp0},
+
+            // types??
+            {"halide.hexagon.mul.vw.v", widen_right_mul(wild_i32x, wild_i16x), Pattern::ReinterleaveOp0 | Pattern::RequireSafeReintepretOp1},
+            {"halide.hexagon.mul.vw.v", widen_right_mul(wild_u32x, wild_u16x), Pattern::ReinterleaveOp0 | Pattern::RequireSafeReintepretOp1},
+        };           
 
         static const vector<Pattern> calls = {
             // Non-widening scalar multiplication.
@@ -967,8 +1119,19 @@ class OptimizePatterns : public IRMutator {
         };
 
         if (op->type.is_vector()) {
+            std::cerr << "Optimizing: " << Expr(op) << "\n";
+
+            if (enable_synthesized_rules()) {
+                Expr new_expr = apply_patterns(op, synthesized_calls, target, this);
+                if (!new_expr.same_as(op)) {
+                    std::cerr << "Optimized (synth): " << new_expr << "\n";
+                    return new_expr;
+                }
+            }
+
             Expr new_expr = apply_patterns(op, calls, target, this);
             if (!new_expr.same_as(op)) {
+                std::cerr << "Optimized (regular): " << new_expr << "\n";
                 return new_expr;
             }
 
@@ -1045,9 +1208,20 @@ class OptimizePatterns : public IRMutator {
         return IRMutator::visit(op);
     }
 
+    Expr visit(const Reinterpret *op) override {
+        if ((op->type.bits() == op->value.type().bits()) &&
+               op->type.is_int_or_uint() &&
+               op->value.type().is_int_or_uint()) {
+            // Normalize to casts for non lane-changing reinterprets.
+            return mutate(cast(op->type, op->value));
+        } else {
+            return IRMutator::visit(op);
+        } 
+    }
+
 public:
-    OptimizePatterns(const Target &t)
-        : target(t) {
+    OptimizePatterns(const Target &t, const FuncValueBounds &fvb)
+        : target(t), func_value_bounds(fvb) {
     }
 };
 
@@ -2177,11 +2351,24 @@ private:
             }
         } else if (op->is_intrinsic(Call::widening_shift_left)) {
             if (const uint64_t *const_b = as_const_uint(op->args[1])) {
+                const uint64_t const_m = 1ull << *const_b;
+                Expr b = make_const(op->type, const_m);
                 Expr a = Cast::make(op->type, op->args[0]);
-                return mutate(distribute(a, make_one(a.type()) << *const_b));
+                return mutate(distribute(a, b));
             }
         }
         return IRMutator::visit(op);
+    }
+
+    Expr visit(const Reinterpret *op) override {
+        if ((op->type.bits() == op->value.type().bits()) &&
+               op->type.is_int_or_uint() &&
+               op->value.type().is_int_or_uint()) {
+            // Normalize to casts for non lane-changing reinterprets.
+            return mutate(cast(op->type, op->value));
+        } else {
+            return IRMutator::visit(op);
+        } 
     }
 };
 
@@ -2453,10 +2640,15 @@ Stmt scatter_gather_generator(Stmt s) {
     return s;
 }
 
-Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
+Stmt optimize_hexagon_instructions(Stmt s, const Target &t, const FuncValueBounds &fvb) {
+    if (get_env_variable("HL_DISABLE_HALIDE_LOWERING") == "1") {
+        return s;
+    }
+    std::cerr << "running HexagonOptimize\n...";
+
     // We need to redo intrinsic matching due to simplification that has
     // happened after the end of target independent lowering.
-    s = find_intrinsics(s);
+    s = find_intrinsics(s, fvb);
 
     // Hexagon prefers widening shifts to be expressed as multiplies to
     // hopefully hit compound widening multiplies.
@@ -2469,7 +2661,7 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
-    s = OptimizePatterns(t).mutate(s);
+    s = OptimizePatterns(t, fvb).mutate(s);
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
     s = EliminateInterleaves(t.natural_vector_size(Int(8))).mutate(s);
