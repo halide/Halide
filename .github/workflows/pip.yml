@@ -59,7 +59,7 @@ jobs:
           path: ./wheelhouse/*.whl
 
   build-llvm:
-    name: Build LLVM for ${{ runner.os }}
+    name: Build LLVM for ${{ matrix.runner }}
 
     runs-on: ${{ matrix.runner }}
 
