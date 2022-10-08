@@ -136,8 +136,15 @@ jobs:
         include:
           - runner: windows-latest
             pytag: win_amd64
+            arch: x86_64
+
           - runner: macos-latest
-            pytag: macosx_universal2
+            pytag: macosx_x86_64
+            arch: x86_64
+
+          - runner: macos-latest
+            pytag: macosx_arm64
+            arch: arm64
 
     steps:
       - uses: actions/checkout@v3
@@ -156,7 +163,7 @@ jobs:
           cmake -G Ninja -S . -B build
           -DCMAKE_BUILD_TYPE=Release
           "-DCMAKE_INSTALL_PREFIX=${{ env.CMAKE_PREFIX_PATH }}"
-          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+          "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
           -DWITH_DOCS=NO
           -DWITH_PYTHON_BINDINGS=NO
           -DWITH_TESTS=NO
