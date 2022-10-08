@@ -192,7 +192,8 @@ struct Pattern {
 
         SignedOp0 = 1 << 12, // Cast Op0 to be signed
         RequireSafeReintepretOp0 = 1 << 13, // Check that you can safely reinterpret Op0, then do so.
-        RequireSafeReintepretOp1 = 1 << 13, // Check that you can safely reinterpret Op0, then do so.
+        RequireSafeReintepretOp1 = 1 << 14, // Check that you can safely reinterpret Op1, then do so.
+        RequireSafeCasting = 1 << 15,    // Check that the unwrapped expr can be safely truncated or saturated equally.
     };
 
     string intrin;  // Name of the intrinsic
@@ -395,12 +396,15 @@ class OptimizePatterns : public IRMutator {
             // If we did insert, then actually store a real interval.
             // TODO: do we only want to store constant bounds? would be cheaper than using can_prove.
             iter->second = bounds_of_expr_in_scope(expr, bounds, func_value_bounds, false);
+            iter->second.min = simplify(iter->second.min);
+            iter->second.max = simplify(iter->second.max);
         }
 
         return iter->second;
     }
 
-    bool is_upper_bounded(const Expr &expr, const int64_t &bound) {
+    template<typename T>
+    bool is_upper_bounded(const Expr &expr, const T &bound) {
         internal_assert(expr.type().element_of().can_represent(bound))
             << "Type of expr cannot represent upper bound:\n " << expr << "\n " << bound << "\n";
 
@@ -411,7 +415,8 @@ class OptimizePatterns : public IRMutator {
         return i.has_upper_bound() && can_prove(i.max <= e);
     }
 
-    bool is_lower_bounded(const Expr &expr, const uint64_t &bound) {
+    template<typename T>
+    bool is_lower_bounded(const Expr &expr, const T &bound) {
         internal_assert(expr.type().element_of().can_represent(bound))
             << "Type of expr cannot represent upper bound:\n " << expr << "\n " << bound << "\n";
 
@@ -426,7 +431,7 @@ class OptimizePatterns : public IRMutator {
 
 // Check if the matches satisfy the given pattern flags, and mutate the matches
 // as specified by the flags.
-bool process_match_flags(vector<Expr> &matches, int flags) {
+bool process_match_flags(vector<Expr> &matches, int flags, const Expr &expr) {
     // The Pattern::Narrow*Op* flags are ordered such that the operand
     // corresponds to the bit (with operand 0 corresponding to the least
     // significant bit), so we can check for them all in a loop.
@@ -493,6 +498,44 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
             }
         }
     }
+    if (flags & Pattern::RequireSafeCasting) {
+        // Truncating and saturating casts must be equivalent.
+        internal_assert(matches.size() == 2);
+
+        const Type output_type = expr.type();
+        const Cast *as_cast = expr.as<Cast>();
+        internal_assert(as_cast) << "Expected cast on rule: " << expr << "\n";
+
+        const Expr &e = as_cast->value;
+        const Type t = e.type();
+        internal_assert(t.is_int_or_uint());
+
+        if (t.is_uint()) {
+            // Need to prove only that e is less than half the max
+            internal_assert(output_type.is_int());
+            const int64_t maximum = max_int(output_type.bits());
+            if (!is_upper_bounded(e, maximum)) {
+                return false;
+            }
+        } else {
+            // is_int
+            // always requires that the value is within the bounds of the narrower type.
+            if (output_type.is_uint()) {
+                const uint64_t minimum = 0;
+                const uint64_t maximum = max_uint(output_type.bits());
+                if (!(is_upper_bounded(e, maximum) && is_lower_bounded(e, minimum))) {
+                    return false;
+                }
+            } else {
+                // int to int
+                const uint64_t minimum = min_int(output_type.bits());
+                const uint64_t maximum = max_int(output_type.bits());
+                if (!(is_upper_bounded(e, maximum) && is_lower_bounded(e, minimum))) {
+                    return false;
+                }
+            }
+        }
+    }
     return true;
 }
 
@@ -516,7 +559,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
                 debug(debug_level) << i << "\n";
             }
 
-            if (!process_match_flags(matches, p.flags)) {
+            if (!process_match_flags(matches, p.flags, x)) {
                 continue;
             }
 
@@ -771,6 +814,8 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
 
         static const vector<Pattern> synthesized_adds = {
             {"halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_u16x + halide_hexagon_add_2mpy(UInt(16, 0), ".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0, Int(16)},
+            {"halide.hexagon.acc_add_2mpy.vh.vub.b", wild_u16x + halide_hexagon_add_2mpy(UInt(16, 0), ".vub.b", wild_u8x, wild_i32), 0, Int(16)},
+            {"halide.hexagon.acc_add_3mpy.vh.vub.b", wild_u16x + native_interleave(halide_hexagon_add_3mpy(UInt(16, 0), ".vub.b", wild_u8x, wild_i32)), Pattern::ReinterleaveOp0, Int(16)},
             {"halide.hexagon.add_mpy.vuh.vub.ub", wild_i16x + cast(Int(16, 0), widening_mul(wild_u8x, wild_u8)), Pattern::ReinterleaveOp0, Int(16)},
         };
 
@@ -834,19 +879,19 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
         };
 
         if (op->type.is_vector()) {
-            std::cerr << "Optimizing Add: " << Expr(op) << "\n";
+            // std::cerr << "Optimizing Add: " << Expr(op) << "\n";
 
             if (enable_synthesized_rules()) {
                 Expr new_expr = apply_commutative_patterns(op, synthesized_adds, target, this);
                 if (!new_expr.same_as(op)) {
-                    std::cerr << "Optimized (synth): " << new_expr << "\n";
+                    // std::cerr << "Optimized Add (synth): " << new_expr << "\n";
                     return new_expr;
                 }
             }
 
             Expr new_expr = apply_commutative_patterns(op, adds, target, this);
             if (!new_expr.same_as(op)) {
-                std::cerr << "Optimized (regular): " << new_expr << "\n";
+                // std::cerr << "Optimized (regular): " << new_expr << "\n";
                 return new_expr;
             }
         }
@@ -886,6 +931,23 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
     }
 
     Expr visit(const Cast *op) override {
+
+        static const vector<Pattern> synthesized_casts = {
+            // Saturating narrowing casts
+            {"halide.hexagon.trunc_satub_shr.vh.uh", u8(wild_i16x >> wild_u16), Pattern::DeinterleaveOp0 | Pattern::RequireSafeCasting},
+            {"halide.hexagon.trunc_satuh_shr.vw.uw", u16(wild_i32x >> wild_u32), Pattern::DeinterleaveOp0 | Pattern::RequireSafeCasting},
+            {"halide.hexagon.trunc_sath_shr.vw.uw", i16(wild_i32x >> wild_u32), Pattern::DeinterleaveOp0 | Pattern::RequireSafeCasting},
+
+            // Saturating narrowing casts with rounding
+            {"halide.hexagon.trunc_satub_shr_rnd.vh", u8(rounding_shift_right(wild_i16x, wild_u16)), Pattern::DeinterleaveOp0 | Pattern::RequireSafeCasting},
+            {"halide.hexagon.trunc_satb_shr_rnd.vh", i8(rounding_shift_right(wild_i16x, wild_u16)), Pattern::DeinterleaveOp0 | Pattern::RequireSafeCasting},
+            {"halide.hexagon.trunc_satub_shr_rnd.vuh", u8(rounding_shift_right(wild_u16x, wild_u16)), Pattern::DeinterleaveOp0 | Pattern::v65orLater | Pattern::RequireSafeCasting},
+            {"halide.hexagon.trunc_satuh_shr_rnd.vw", u16(rounding_shift_right(wild_i32x, wild_u32)), Pattern::DeinterleaveOp0 | Pattern::RequireSafeCasting},
+            {"halide.hexagon.trunc_sath_shr_rnd.vw", i16(rounding_shift_right(wild_i32x, wild_u32)), Pattern::DeinterleaveOp0 | Pattern::RequireSafeCasting},
+            {"halide.hexagon.trunc_satuh_shr_rnd.vuw", u16(rounding_shift_right(wild_u32x, wild_u32)), Pattern::DeinterleaveOp0 | Pattern::RequireSafeCasting},
+
+        };
+
         static const vector<Pattern> casts = {
             // Halving unsigned subtract.
             {"halide.hexagon.navg.vub.vub", i8(widening_sub(wild_u8x, wild_u8x) >> 1)},
@@ -944,6 +1006,16 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
 
         if (op->type.is_vector()) {
             Expr cast = op;
+
+            // std::cerr << "Optimizing Cast: " << cast << "\n";
+
+            if (enable_synthesized_rules()) {
+                Expr new_expr = apply_patterns(cast, synthesized_casts, target, this);
+                if (!new_expr.same_as(op)) {
+                    // std::cerr << "Optimized Cast (synth): " << new_expr << "\n";
+                    return new_expr;
+                }
+            }
 
             Expr new_expr = apply_patterns(cast, casts, target, this);
             if (!new_expr.same_as(cast)) {
@@ -1009,6 +1081,7 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
         }
 
         static const vector<Pattern> synthesized_calls = {
+
             {"halide.hexagon.pack_satub.vh", u8_sat(wild_u16x), Pattern::RequireSafeReintepretOp0},
             {"halide.hexagon.pack_satuh.vw", u16_sat(wild_u32x), Pattern::RequireSafeReintepretOp0},
             {"halide.hexagon.pack_satb.vh", i8_sat(wild_u16x), Pattern::RequireSafeReintepretOp0},
@@ -1119,19 +1192,19 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
         };
 
         if (op->type.is_vector()) {
-            std::cerr << "Optimizing: " << Expr(op) << "\n";
+            // std::cerr << "Optimizing Call: " << Expr(op) << "\n";
 
             if (enable_synthesized_rules()) {
                 Expr new_expr = apply_patterns(op, synthesized_calls, target, this);
                 if (!new_expr.same_as(op)) {
-                    std::cerr << "Optimized (synth): " << new_expr << "\n";
+                    // std::cerr << "Optimized Call (synth): " << new_expr << "\n";
                     return new_expr;
                 }
             }
 
             Expr new_expr = apply_patterns(op, calls, target, this);
             if (!new_expr.same_as(op)) {
-                std::cerr << "Optimized (regular): " << new_expr << "\n";
+                // std::cerr << "Optimized (regular): " << new_expr << "\n";
                 return new_expr;
             }
 
@@ -2644,7 +2717,12 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t, const FuncValueBound
     if (get_env_variable("HL_DISABLE_HALIDE_LOWERING") == "1") {
         return s;
     }
-    std::cerr << "running HexagonOptimize\n...";
+    // std::cerr << "running HexagonOptimize...\n\n";
+    // std::cerr << "{\n";
+    // for (const auto &elem : fvb) {
+    //     std::cerr << elem.first.first << " " << elem.first.second << " -> [" << elem.second.min << ", " << elem.second.max << "]\n";
+    // }
+    // std::cerr << "}\n";
 
     // We need to redo intrinsic matching due to simplification that has
     // happened after the end of target independent lowering.

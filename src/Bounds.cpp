@@ -1530,7 +1530,8 @@ private:
                                      })) {
             // Each of these can be cleanly lowered to exact semantic definitions.
             // TODO: which other intrinsics can/should we lower?
-            Expr a = lower_intrinsic(op);
+            Expr a = lower_intrinsic_semantically(op);
+            internal_assert(a.defined());
             a.accept(this);
             return;
         } else if (op->call_type == Call::Halide) {

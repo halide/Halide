@@ -37,6 +37,7 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
 
 /** Replace one of the above ops with equivalent arithmetic. */
 Expr lower_intrinsic(const Call *op);
+Expr lower_intrinsic_semantically(const Call *op);
 
 /** Replace common arithmetic patterns with intrinsics. */
 Stmt find_intrinsics(const Stmt &s);

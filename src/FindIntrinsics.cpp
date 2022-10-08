@@ -1129,6 +1129,8 @@ private:
             // If we did insert, then actually store a real interval.
             // TODO: do we only want to store constant bounds? would be cheaper than using can_prove.
             iter->second = bounds_of_expr_in_scope(expr, scope, fvb, false);
+            iter->second.min = simplify(iter->second.min);
+            iter->second.max = simplify(iter->second.max);
         }
 
         return iter->second;
@@ -1637,6 +1639,123 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::mul_shift_right)) {
         internal_assert(op->args.size() == 3);
         return lower_mul_shift_right(op->args[0], op->args[1], op->args[2]);
+    } else if (op->is_intrinsic(Call::sorted_avg)) {
+        internal_assert(op->args.size() == 2);
+        return lower_sorted_avg(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::absd)) {
+        internal_assert(op->args.size() == 2);
+        return lower_absd(op->args[0], op->args[1]);
+    } else {
+        return Expr();
+    }
+}
+
+Expr lower_intrinsic_semantically(const Call *op) {
+    if (op->is_intrinsic(Call::widen_right_add)) {
+        internal_assert(op->args.size() == 2);
+        return op->args[0] + widen(op->args[1]);
+    } else if (op->is_intrinsic(Call::widen_right_mul)) {
+        internal_assert(op->args.size() == 2);
+        return op->args[0] * widen(op->args[1]);
+    } else if (op->is_intrinsic(Call::widen_right_sub)) {
+        internal_assert(op->args.size() == 2);
+        return op->args[0] - widen(op->args[1]);
+    } else if (op->is_intrinsic(Call::widening_add)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widening_add(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widening_mul)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widening_mul(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widening_sub)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widening_sub(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::saturating_add)) {
+        if (op->type.bits() > 32) {
+            return lower_intrinsic(op);
+        }
+        internal_assert(op->args.size() == 2);
+        return saturating_narrow(widen(op->args[0]) + widen(op->args[1]));
+    } else if (op->is_intrinsic(Call::saturating_sub)) {
+        if (op->type.bits() > 32) {
+            return lower_intrinsic(op);
+        }
+        internal_assert(op->args.size() == 2);
+        return saturating_narrow(widening_sub(op->args[0], op->args[1]));
+    } else if (op->is_intrinsic(Call::saturating_cast)) {
+        internal_assert(op->args.size() == 1);
+        return lower_saturating_cast(op->type, op->args[0]);
+    } else if (op->is_intrinsic(Call::widening_shift_left)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widening_shift_left(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widening_shift_right)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widening_shift_right(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::rounding_shift_right)) {
+        internal_assert(op->args.size() == 2);
+        if (op->type.bits() > 32) {
+            return lower_intrinsic(op);
+        }
+        const Expr &x = op->args[0];
+        const Expr &y = op->args[1];
+        Expr zero = make_zero(x.type());
+        Expr one = make_one(x.type());
+        Expr round = select(y < zero, one << (y + one), zero);
+        return saturating_narrow(widening_add(x, round) >> y);
+    } else if (op->is_intrinsic(Call::rounding_shift_left)) {
+        internal_assert(op->args.size() == 2);
+        if (op->type.bits() > 32) {
+            return lower_intrinsic(op);
+        }
+        const Expr &x = op->args[0];
+        const Expr &y = op->args[1];
+        Expr zero = make_zero(x.type());
+        Expr one = make_one(x.type());
+        Expr round = select(y < zero, one >> (y + one), zero);
+        return saturating_narrow(widening_add(x, round) << y);
+    } else if (op->is_intrinsic(Call::halving_add)) {
+        internal_assert(op->args.size() == 2);
+        if (op->type.bits() > 32) {
+            return lower_intrinsic(op);
+        }
+        const Expr &x = op->args[0];
+        const Expr &y = op->args[1];
+        return narrow((widen(x) + widen(y)) / 2);
+    } else if (op->is_intrinsic(Call::halving_sub)) {
+        internal_assert(op->args.size() == 2);
+        if (op->type.bits() > 32) {
+            return lower_intrinsic(op);
+        }
+        const Expr &x = op->args[0];
+        const Expr &y = op->args[1];
+        return narrow((widen(x) - widen(y)) / 2);
+    } else if (op->is_intrinsic(Call::rounding_halving_add)) {
+        internal_assert(op->args.size() == 2);
+        if (op->type.bits() > 32) {
+            return lower_intrinsic(op);
+        }
+        const Expr &x = op->args[0];
+        const Expr &y = op->args[1];
+        return narrow((widen(x) + widen(y) + 1) / 2);
+    } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
+        internal_assert(op->args.size() == 3);
+        if (op->type.bits() > 16) {
+            return lower_intrinsic(op);
+        }
+        const Expr &x = op->args[0];
+        const Expr &y = op->args[1];
+        const Expr &z = op->args[2];
+
+        return saturating_narrow(rounding_shift_right(widening_mul(x, y), z));
+    } else if (op->is_intrinsic(Call::mul_shift_right)) {
+        internal_assert(op->args.size() == 3);
+        if (op->type.bits() > 32) {
+            return lower_intrinsic(op);
+        }
+        const Expr &x = op->args[0];
+        const Expr &y = op->args[1];
+        const Expr &z = op->args[2];
+
+        return saturating_narrow(widening_mul(x, y) >> z);
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         return lower_sorted_avg(op->args[0], op->args[1]);

@@ -50,6 +50,8 @@ Interval InstructionSelector::cached_get_interval(const Expr &expr) {
         // If we did insert, then actually store a real interval.
         // TODO: do we only want to store constant bounds? would be cheaper than using can_prove.
         iter->second = bounds_of_expr_in_scope(expr, scope, func_value_bounds, false);
+        iter->second.min = simplify(iter->second.min);
+        iter->second.max = simplify(iter->second.max);
     }
 
     return iter->second;
