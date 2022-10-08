@@ -522,7 +522,11 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     // Optimize the IR for Hexagon.
     debug(1) << "Hexagon: Optimizing Hexagon instructions...\n";
-    body = optimize_hexagon_instructions(body, target, f.func_value_bounds);
+    if (get_env_variable("HL_ENABLE_RAKE") == "1") {
+        body = optimize_hexagon_instructions_synthesis(body, target, f.func_value_bounds);
+    } else {
+        body = optimize_hexagon_instructions(body, target, f.func_value_bounds);
+    }
     debug(2) << "Hexagon: Lowering after optimizing Hexagon instructions:\n"
              << body << "\n\n";
 

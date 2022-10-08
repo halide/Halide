@@ -11,6 +11,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Lerp.h"
+#include "Rosette.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
@@ -2747,6 +2748,27 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t, const FuncValueBound
     // There may be interleaves left over that we can fuse with other
     // operations.
     s = FuseInterleaves().mutate(s);
+    return s;
+}
+
+Stmt optimize_hexagon_instructions_synthesis(Stmt s, const Target &t, const FuncValueBounds &fvb) {
+    // Print the IR before optimization
+    // debug(1) << s << "\n\n";
+    
+    // Mutate IR expressions using Rake
+    std::set<const BaseExprNode *> mutated_exprs;
+    std::map<std::string, Interval> bounds;
+    s = rake_optimize_hvx(fvb, s, mutated_exprs, bounds);
+    
+    // Run the legacy optimizer (to optimize all of the expressions we do not
+    // currently support).
+    s = optimize_hexagon_instructions(s, t, fvb);
+
+    // Do code cleanup: lift CSE, remove dead lets and simplify
+    s = simplify(s);
+    s = common_subexpression_elimination(s);
+    s = simplify(s);
+
     return s;
 }
 

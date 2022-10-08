@@ -531,9 +531,11 @@ SOURCE_FILES = \
   RemoveDeadAllocations.cpp \
   RemoveExternLoops.cpp \
   RemoveUndef.cpp \
+  Rosette.cpp \
   Schedule.cpp \
   ScheduleFunctions.cpp \
   SelectGPUAPI.cpp \
+  SExpParser.cpp \
   Simplify.cpp \
   Simplify_Add.cpp \
   Simplify_And.cpp \
@@ -718,12 +720,14 @@ HEADER_FILES = \
   RemoveDeadAllocations.h \
   RemoveExternLoops.h \
   RemoveUndef.h \
+  Rosette.h \
   runtime/HalideBuffer.h \
   runtime/HalideRuntime.h \
   Schedule.h \
   ScheduleFunctions.h \
   Scope.h \
   SelectGPUAPI.h \
+  SExpParser.h \
   Simplify.h \
   SimplifyCorrelatedDifferences.h \
   SimplifySpecializations.h \

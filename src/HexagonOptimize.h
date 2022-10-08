@@ -31,6 +31,7 @@ Stmt scatter_gather_generator(Stmt s);
  * attempts to simplify away most of the
  * interleaving/deinterleaving. */
 Stmt optimize_hexagon_instructions(Stmt s, const Target &t, const FuncValueBounds &fvb);
+Stmt optimize_hexagon_instructions_synthesis(Stmt s, const Target &t, const FuncValueBounds &fvb);
 
 /** Generate deinterleave or interleave operations, operating on
  * groups of vectors at a time. */

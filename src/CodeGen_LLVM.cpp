@@ -2576,11 +2576,87 @@ void CodeGen_LLVM::visit(const Call *op) {
         return;
     }
 
-    // Some call nodes are actually injected at various stages as a
+        // Some call nodes are actually injected at various stages as a
     // cue for llvm to generate particular ops. In general these are
     // handled in the standard library, but ones with e.g. varying
     // types are handled here.
-    if (op->is_intrinsic(Call::debug_to_file)) {
+    if (op->call_type == Call::CallType::PureExtern && (starts_with(op->name, "llvm.") || starts_with(op->name, "rake."))) {
+        //debug(0) << "Codegen llvm intrinsic: " << Expr(op) << "\n";
+        vector<Value *> args;
+
+        llvm::Function *fn;
+
+        // Enum instr id reference https://docs.hdoc.io/hdoc/llvm-project/e9812764BC1FD580D.html OR
+        // https://codebrowser.bddppq.com/tvm/include/llvm-9/llvm/IR/IntrinsicEnums.inc.html
+        if (op->name == std::string("llvm.hexagon.V6.vshufoeb.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vshufoeb_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vmpabuu.acc.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vmpabus_acc_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.valignbi.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_valignbi_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.valignb.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_valignb_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vaddh.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vaddh_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vdealb.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vdealb_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vdealh.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vdealh_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vaddw.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vaddw_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vsubw.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vsubw_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.lvsplath.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_lvsplath_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.lvsplatb.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_lvsplatb_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.lvsplatw.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_lvsplatw_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vmpyh.acc.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vmpyh_acc_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vmpyhsat.acc.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vmpyhsat_acc_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vaddh.dv.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vaddh_dv_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vshuffb.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vshuffb_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vshuffh.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vshuffh_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vaslh.acc.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vaslh_acc_128B);
+        } else if (op->name == std::string("llvm.hexagon.V6.vaddw.dv.128B")) {
+            fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::hexagon_V6_vaddw_dv_128B);
+        } else {
+            fn = module->getFunction(op->name);
+            if (!fn) {
+                vector<llvm::Type *> arg_types;
+                for (const Expr &e : op->args) {
+                    arg_types.push_back(llvm_type_of(e.type()));
+                }
+                FunctionType *func_t = FunctionType::get(llvm_type_of(op->type), arg_types, false);
+                fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, op->name, module.get());
+            }
+        }
+
+        internal_assert(fn) << "Could not find llvm intrinsic function " << op->name << "\n";
+
+        for (const Expr &arg : op->args) {
+            // Gross hack to ignore the type of buffer pointers
+            if (const Variable *var = arg.as<Variable>()) {
+                args.push_back(sym_get(var->name));
+            } else {
+                args.push_back(codegen(arg));
+            }
+            //args.back()->dump();
+        }
+        for (size_t i = 0; i < args.size(); i++) {
+            args[i] = builder->CreateBitCast(args[i], fn->getFunctionType()->getParamType(i));
+        }
+        //fn->dump();
+        value = builder->CreateCall(fn, args);
+        //value->dump();
+        value = builder->CreateBitCast(value, llvm_type_of(op->type));
+    } else if (op->is_intrinsic(Call::debug_to_file)) {
         internal_assert(op->args.size() == 3);
         const StringImm *filename = op->args[0].as<StringImm>();
         internal_assert(filename) << "Malformed debug_to_file node\n";
