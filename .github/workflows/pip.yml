@@ -139,11 +139,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/checkout@v3
-        with:
-          repository: llvm/llvm-project
-          ref: ${{ env.LLVM_REF }}
-          path: llvm-project
 
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@latest
@@ -151,6 +146,7 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: ${{ env.LLVM_REF }}-${{ runner.os }}
+          path: local
 
       - run: dir
         if: runner.os == 'Windows'
