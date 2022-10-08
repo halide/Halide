@@ -152,6 +152,12 @@ jobs:
         with:
           name: ${{ env.LLVM_REF }}-${{ runner.os }}
 
+      - run: dir
+        if: runner.os == 'Windows'
+
+      - run: ls
+        if: runner.os != 'Windows'
+
       - name: Configure Halide
         run: >
           cmake -G Ninja -S . -B build
