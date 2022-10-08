@@ -111,10 +111,12 @@ jobs:
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: cmake --install build --prefix local
 
+      - run: tar zcvf llvm.tgz local
+
       - uses: actions/upload-artifact@v3
         with:
           name: ${{ env.LLVM_REF }}-${{ runner.os }}
-          path: local
+          path: llvm.tgz
 
   pip-no-docker:
     name: Package Halide Python bindings
@@ -146,13 +148,8 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: ${{ env.LLVM_REF }}-${{ runner.os }}
-          path: local
 
-      - run: dir
-        if: runner.os == 'Windows'
-
-      - run: ls
-        if: runner.os != 'Windows'
+      - run: tar zxvf llvm.tgz
 
       - name: Configure Halide
         run: >
