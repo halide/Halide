@@ -132,11 +132,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ windows-latest, macos-latest ]
         include:
           - runner: windows-latest
             pytag: win_amd64
-            arch: x86_64
+            arch: x64
 
           - runner: macos-latest
             pytag: macosx_x86_64
@@ -159,10 +158,20 @@ jobs:
       - run: tar zxvf llvm.tgz
 
       - name: Configure Halide
+        if: runner.os == 'Windows'
+        run: >
+          cmake -G "Visual Studio 17 2022" -T ClangCL -A "${{ matrix.arch }}" -S . -B build
+          -DWITH_DOCS=NO
+          -DWITH_PYTHON_BINDINGS=NO
+          -DWITH_TESTS=NO
+          -DWITH_TUTORIALS=NO
+          -DWITH_UTILS=NO
+
+      - name: Configure Halide
+        if: runner.os != 'Windows'
         run: >
           cmake -G Ninja -S . -B build
           -DCMAKE_BUILD_TYPE=Release
-          "-DCMAKE_INSTALL_PREFIX=${{ env.CMAKE_PREFIX_PATH }}"
           "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
           -DWITH_DOCS=NO
           -DWITH_PYTHON_BINDINGS=NO
@@ -171,7 +180,10 @@ jobs:
           -DWITH_UTILS=NO
 
       - name: Build Halide
-        run: cmake --build build --target install
+        run: cmake --build build --config Release
+
+      - name: Install Halide
+        run: cmake --install build --config Release --prefix local
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.10.2
