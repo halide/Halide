@@ -185,6 +185,7 @@ jobs:
         uses: pypa/cibuildwheel@v2.10.2
         env:
           CIBW_BUILD: "cp38-${{ matrix.pytag }} cp39-${{ matrix.pytag }} cp310-${{ matrix.pytag }}"
+          CIBW_ARCHS_MACOS: "universal2"
 
       - uses: actions/upload-artifact@v3
         with:
