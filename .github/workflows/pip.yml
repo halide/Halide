@@ -138,12 +138,8 @@ jobs:
             arch: x64
 
           - runner: macos-latest
-            pytag: macosx_x86_64
-            arch: x86_64
-
-          - runner: macos-latest
-            pytag: macosx_arm64
-            arch: arm64
+            pytag: macosx_universal2
+            arch: x86_64;arm64
 
     steps:
       - uses: actions/checkout@v3
