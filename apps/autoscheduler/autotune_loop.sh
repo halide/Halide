@@ -33,6 +33,7 @@ fi
 
 COMPILATION_TIMEOUT=600s
 BENCHMARKING_TIMEOUT=60s
+HOST_CPUS=16
 
 if [ -z ${HL_TARGET} ]; then
 HL_TARGET=x86-64-avx2
@@ -106,7 +107,7 @@ make_sample() {
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
-        HL_MACHINE_PARAMS=32,24000000,40 \
+        HL_MACHINE_PARAMS=${HOST_CPUS},24000000,40 \
         ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
@@ -134,7 +135,7 @@ make_sample() {
 benchmark_sample() {
     sleep 1 # Give CPU clocks a chance to spin back up if we're thermally throttling
     D=${1}
-    HL_NUM_THREADS=32 \
+    HL_NUM_THREADS=${HOST_CPUS} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench \
         --output_extents=estimate \
@@ -211,7 +212,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         echo Retraining model...
         
         find samples | grep sample$ | \
-            HL_NUM_THREADS=32 HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
+            HL_NUM_THREADS=${HOST_CPUS} HL_WEIGHTS_DIR=${WEIGHTS} HL_BEST_SCHEDULE_FILE=${PWD}/samples/best.txt ${AUTOSCHED_BIN}/train_cost_model ${BATCH_SIZE} 0.0001
     done
 
     echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain

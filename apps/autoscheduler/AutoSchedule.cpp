@@ -85,11 +85,11 @@ namespace Autoscheduler {
 // registers.
 const int kUnrollLimit = 12;
 
+using std::map;
+using std::pair;
+using std::set;
 using std::string;
 using std::vector;
-using std::map;
-using std::set;
-using std::pair;
 
 // Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
 uint32_t get_dropout_threshold() {
@@ -150,14 +150,14 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
         // If we're already generated too many tiling configurations
         // for the inner loops, search the outer loops with coarser
         // granularity.
-        while (v.size() > (size_t)factor * 100) {
+        while (v.size() > (size_t) factor * 100) {
             factor *= 2;
         }
 
         for (auto t : v) {
             bool is_full = false, is_one = false;
             // Skip trivial tilings
-            if ((size_t)d == s.size() - 1) {
+            if ((size_t) d == s.size() - 1) {
                 is_one = is_full = true;
                 for (int i = 0; i < d; i++) {
                     is_one &= (t[i] == 1);
@@ -291,7 +291,7 @@ struct LoopNest {
 
     static void hash_combine(uint64_t &h, uint64_t next) {
         // From boost
-        h ^= (next + 0x9e3779b9 + (h<<6) + (h>>2));
+        h ^= (next + 0x9e3779b9 + (h << 6) + (h >> 2));
     }
 
     // Hash the loop structure and sizes up to a fixed depth. This is
@@ -360,12 +360,12 @@ struct LoopNest {
 
     // All of a stage's interesting locations in the loop nest. Used to help compute the featurization of a stage.
     struct Sites {
-        const LoopNest *compute = nullptr, // Its containing compute_at site
-            *store = nullptr,              // Its containing store_at site
-            *produce = nullptr,            // Its own outermost node
-            *innermost = nullptr,          // Its innermost node - usually a SIMD loop
-            *task = nullptr;               // The parallel for loop it belongs to
-        bool inlined = false;              // Is the Func inlined?
+        const LoopNest *compute = nullptr,  // Its containing compute_at site
+            *store = nullptr,  // Its containing store_at site
+                *produce = nullptr,  // Its own outermost node
+                    *innermost = nullptr,  // Its innermost node - usually a SIMD loop
+                        *task = nullptr;  // The parallel for loop it belongs to
+        bool inlined = false;  // Is the Func inlined?
     };
 
     // Compute all the sites of interest for each pipeline stage
@@ -427,7 +427,7 @@ struct LoopNest {
 
         int64_t loop_instances = 1, parallel_tasks = 1;
         bool in_impure = false;
-        for (int idx = (int)size.size() - 1; idx >= 0; idx--) {
+        for (int idx = (int) size.size() - 1; idx >= 0; idx--) {
             size_t i = size[idx];
             loop_instances *= i;
             if (stage->loop[idx].pure && !in_impure) {
@@ -464,7 +464,7 @@ struct LoopNest {
                 feat.points_computed_per_realization = 1;
                 feat.num_scalars = feat.num_vectors = subinstances;
                 bool vectorized = false;
-                for (int i = 0; i < (int)node->stages[s].loop.size(); i++) {
+                for (int i = 0; i < (int) node->stages[s].loop.size(); i++) {
                     const auto &p = bounds->loops(s, i);
                     int64_t extent = p.extent();
                     feat.points_computed_per_realization *= extent;
@@ -557,7 +557,7 @@ struct LoopNest {
                 }
 
                 feat.points_computed_minimum = 1;
-                for (int i = 0; i < (int)stage->loop.size(); i++) {
+                for (int i = 0; i < (int) stage->loop.size(); i++) {
                     const auto &p = root_bounds->loops(stage->index, i);
                     feat.points_computed_minimum *= p.extent();
                 }
@@ -567,7 +567,7 @@ struct LoopNest {
                     for (auto *e : node->outgoing_edges) {
                         points_computed_minimum_if_inlined += features->get(e->consumer).points_computed_minimum * e->calls;
                     }
-                    feat.points_computed_minimum = std::min(feat.points_computed_minimum, (double)points_computed_minimum_if_inlined);
+                    feat.points_computed_minimum = std::min(feat.points_computed_minimum, (double) points_computed_minimum_if_inlined);
                 }
             }
 
@@ -663,9 +663,8 @@ struct LoopNest {
                     const auto &b = get_bounds(e->producer);
                     int64_t bytes = e->producer->bytes_per_point, lines = 1;
                     int64_t max_extent = 1;
-                    int vector_dim = (e->producer->is_input ? 0 :
-                                      site.produce != nullptr ? site.produce->vector_dim :
-                                      -1);
+                    int vector_dim = (e->producer->is_input ? 0 : site.produce != nullptr ? site.produce->vector_dim
+                                                                                          : -1);
                     for (int i = 0; i < e->producer->dimensions; i++) {
                         int64_t extent = b->region_required(i).extent();
                         max_extent = std::max(extent, max_extent);
@@ -772,10 +771,10 @@ struct LoopNest {
         // things like vector gathers.
         int64_t bytes_loaded = 0, lines_loaded = 0, allocation_bytes_loaded = 0;
         double num_dense_loads = 0, num_broadcasts = 0,
-            num_gathers = 0, num_stride_2_loads = 0,
-            num_stride_3_loads = 0, num_stride_4_loads = 0,
-            num_loads = 0;
-        if (innermost || at_production) { // These are the sites at which we compute load footprints
+               num_gathers = 0, num_stride_2_loads = 0,
+               num_stride_3_loads = 0, num_stride_4_loads = 0,
+               num_loads = 0;
+        if (innermost || at_production) {  // These are the sites at which we compute load footprints
             // Pick the site at which we will compute the footprint relationship
             const auto &consumer_site = sites.get(stage);
 
@@ -877,23 +876,28 @@ struct LoopNest {
                             bool stride_3_vector_load = true;
                             bool stride_4_vector_load = true;
                             int producer_innermost_dim =
-                                (e->producer->is_input ? 0 : // Assume default storage layout for inputs
-                                 !producer_has_been_scheduled ? -1 :
-                                 site.produce->vector_dim);
+                                (e->producer->is_input ? 0 :  // Assume default storage layout for inputs
+                                     !producer_has_been_scheduled ? -1
+                                                                  : site.produce->vector_dim);
                             if (vectorized_loop_index >= 0) {
                                 if (!producer_has_been_scheduled) {
                                     // Operate optimistically and just
                                     // see if *any* dimension of the
                                     // producer would make for a good
                                     // load.
-                                    int count[5] = {0, 0, 0, 0, 0};
+                                    int count[5] = { 0, 0, 0, 0, 0 };
                                     for (int i = 0; i < e->producer->dimensions; i++) {
                                         auto stride = jac.first(i, vectorized_loop_index);
-                                        if (stride == 0) count[0]++;
-                                        else if (stride == 1) count[1]++;
-                                        else if (stride == 2) count[2]++;
-                                        else if (stride == 3) count[3]++;
-                                        else if (stride == 4) count[4]++;
+                                        if (stride == 0)
+                                            count[0]++;
+                                        else if (stride == 1)
+                                            count[1]++;
+                                        else if (stride == 2)
+                                            count[2]++;
+                                        else if (stride == 3)
+                                            count[3]++;
+                                        else if (stride == 4)
+                                            count[4]++;
                                     }
                                     vector_broadcast = (count[0] == e->producer->dimensions);
                                     dense_vector_load = (count[0] == e->producer->dimensions - 1 && count[1] == 1);
@@ -1104,7 +1108,7 @@ struct LoopNest {
             inlined_feat.num_scalars += it.value() * feat.num_scalars;
             inlined_feat.native_vector_size = stage->vector_size;
             if (inlined_feat.vector_size > 0) {
-                inlined_feat.vector_size = std::min(inlined_feat.vector_size, (double)stage->vector_size);
+                inlined_feat.vector_size = std::min(inlined_feat.vector_size, (double) stage->vector_size);
             } else {
                 inlined_feat.vector_size = feat.vector_size;
             }
@@ -1186,7 +1190,7 @@ struct LoopNest {
 
         // Finally, figure out what loop nests will be used to compute
         // this region.
-        for (int i = 0; i < (int)f->stages.size(); i++) {
+        for (int i = 0; i < (int) f->stages.size(); i++) {
             f->loop_nest_for_region(i, &(bound->region_computed(0)), &(bound->loops(i, 0)));
         }
 
@@ -1240,7 +1244,7 @@ struct LoopNest {
             debug(0) << prefix << "realize: " << p->func.name() << '\n';
         }
         for (size_t i = children.size(); i > 0; i--) {
-            children[i-1]->dump(prefix, this);
+            children[i - 1]->dump(prefix, this);
         }
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
             debug(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << '\n';
@@ -1295,8 +1299,8 @@ struct LoopNest {
                 if (e->producer->is_input) return true;
             }
 
-            for (int t = 0; t < (int)PipelineFeatures::ScalarType::NumScalarTypes; t++) {
-                if (s->features.op_histogram[(int)PipelineFeatures::OpType::ImageCall][t] > 0) return true;
+            for (int t = 0; t < (int) PipelineFeatures::ScalarType::NumScalarTypes; t++) {
+                if (s->features.op_histogram[(int) PipelineFeatures::OpType::ImageCall][t] > 0) return true;
             }
             return false;
         };
@@ -1330,7 +1334,7 @@ struct LoopNest {
         // Inline it into the children
         for (size_t i = 0; i < children.size(); i++) {
             if (children[i]->calls(f)) {
-                std::unique_ptr<LoopNest> new_child{new LoopNest};
+                std::unique_ptr<LoopNest> new_child{ new LoopNest };
                 new_child->copy_from(*children[i]);
                 new_child->inline_func(f);
                 children[i] = new_child.release();
@@ -1365,7 +1369,7 @@ struct LoopNest {
             this->tileable = false;
         }
 
-        for (int s = (int)f->stages.size() - 1; s >= 0; s--) {
+        for (int s = (int) f->stages.size() - 1; s >= 0; s--) {
             LoopNest *node = new LoopNest;
             node->node = f;
             node->stage = &f->stages[s];
@@ -1397,8 +1401,8 @@ struct LoopNest {
                 if (f->dimensions &&
                     node->size[i] >= 1 &&
                     f->stages[s].loop[i].var == f->func.args()[v]) {
-                    node->vectorized_loop_index = (int)i;
-                    vector_size = (int64_t)(node->stage->vector_size);
+                    node->vectorized_loop_index = (int) i;
+                    vector_size = (int64_t) (node->stage->vector_size);
                     single_point->loops(s, i).set_extent(vector_size);
                     node->size[i] += vector_size - 1;
                     node->size[i] /= vector_size;
@@ -1423,9 +1427,9 @@ struct LoopNest {
                 node->innermost = false;
 
                 LoopNest *one_vector = new LoopNest;
-                one_vector->node      = node->node;
-                one_vector->stage     = node->stage;
-                one_vector->tileable  = false;
+                one_vector->node = node->node;
+                one_vector->stage = node->stage;
+                one_vector->tileable = false;
                 one_vector->vectorized_loop_index = node->vectorized_loop_index;
                 one_vector->vector_dim = v;
                 one_vector->size.resize(loop_dim, 1);
@@ -1449,9 +1453,9 @@ struct LoopNest {
 
         // Split this loop and move factors to the inner loop
         LoopNest *inner = new LoopNest, *outer = new LoopNest;
-        inner->node      = outer->node      = node;
-        inner->stage     = outer->stage     = stage;
-        inner->tileable  = outer->tileable  = tileable && may_subtile();
+        inner->node = outer->node = node;
+        inner->stage = outer->stage = stage;
+        inner->tileable = outer->tileable = tileable && may_subtile();
         inner->vector_dim = outer->vector_dim = vector_dim;
         inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
         outer->size = size;
@@ -1477,7 +1481,7 @@ struct LoopNest {
 
             int64_t outer_extent;
             if (l >= 0) {
-                internal_assert(l < (int)tiling.size()) << l << " " << tiling.size() << "\n";
+                internal_assert(l < (int) tiling.size()) << l << " " << tiling.size() << "\n";
                 outer_extent = tiling[l];
             } else {
                 // RVars are moved inwards
@@ -1541,13 +1545,12 @@ struct LoopNest {
                 total_at_parent *= range_at_parent.extent();
             }
             if (total_here >= total_at_parent) return result;
-
         }
 
         // Figure out which child we can fuse this into
         int child = -1;
         bool called_by_multiple_children = false;
-        for (int i = 0; i < (int)children.size(); i++) {
+        for (int i = 0; i < (int) children.size(); i++) {
             if (children[i]->calls(f)) {
                 if (child != -1) {
                     called_by_multiple_children = true;
@@ -1563,7 +1566,7 @@ struct LoopNest {
              vector_dim == -1 ||
              size[vector_dim] == 1)) {
 
-            std::unique_ptr<LoopNest> r{new LoopNest};
+            std::unique_ptr<LoopNest> r{ new LoopNest };
             r->copy_from(*this);
             r->compute_here(f, true, v);
             if (!in_realization) {
@@ -1581,7 +1584,7 @@ struct LoopNest {
 
         if (tileable) {
             // Generate a list of tile sizes to try
-            auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization);
+            auto tilings = generate_tilings(size, (int) (size.size() - 1), 2, !in_realization);
 
             if (tilings.size() > 10000) {
                 debug(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
@@ -1604,16 +1607,16 @@ struct LoopNest {
                         idx++;
                     }
 
-                    const double tasks_per_core = (double)total / params.parallelism;
+                    const double tasks_per_core = (double) total / params.parallelism;
                     const double idle_cores = std::ceil(tasks_per_core) / tasks_per_core;
                     if (idle_cores > 1.1) continue;
                 }
 
                 // Tile this loop and place the computation at some coarser granularity
                 LoopNest *inner = new LoopNest, *outer = new LoopNest;
-                inner->node      = outer->node      = node;
-                inner->stage     = outer->stage     = stage;
-                inner->tileable  = outer->tileable  = tileable && may_subtile();
+                inner->node = outer->node = node;
+                inner->stage = outer->stage = stage;
+                inner->tileable = outer->tileable = tileable && may_subtile();
                 inner->vector_dim = outer->vector_dim = vector_dim;
                 inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
                 outer->size = size;
@@ -1628,7 +1631,6 @@ struct LoopNest {
                 inner->inlined = inlined;
                 inner->bounds = bounds;
                 inner->store_at = store_at;
-
 
                 {
                     auto b = inner->get_bounds(node)->make_copy();
@@ -1710,7 +1712,7 @@ struct LoopNest {
             // Some pruning:
 
             // Only slide over single-dimensional loops
-            may_slide &= num_ones == ((int)c->size.size() - 1);
+            may_slide &= num_ones == ((int) c->size.size() - 1);
 
             // Don't slide funcs with update stages
             may_slide &= f->stages.size() == 1;
@@ -1725,7 +1727,7 @@ struct LoopNest {
                     // level, so this would constrain parallelism.
                     continue;
                 }
-                if (is_root() && num_ones == (int)c->size.size() && params.parallelism > 1) {
+                if (is_root() && num_ones == (int) c->size.size() && params.parallelism > 1) {
                     // Don't fuse into serial loops, or we could never parallelize this Func.
                     continue;
                 }
@@ -1747,7 +1749,6 @@ struct LoopNest {
 
         return result;
     }
-
 
     // Below here we have methods that apply a schedule to a Halide pipeline.
 
@@ -1786,12 +1787,14 @@ struct LoopNest {
 
             // Some flags.
             bool innermost_pure_dim = false,
-                outermost = false,
-                parallel = false,
-                exists = false,
-                pure = false,
-                constant_extent = false;
-            FuncVar() : orig(Var()), var(Var()) {}
+                 outermost = false,
+                 parallel = false,
+                 exists = false,
+                 pure = false,
+                 constant_extent = false;
+            FuncVar()
+                : orig(Var()), var(Var()) {
+            }
         };
 
         // In order from innermost to outermost. Each group of d is one tiling level.
@@ -1849,7 +1852,7 @@ struct LoopNest {
                 // Bubble the innermost pure dimension to the front of the pure dimensions
                 for (int i = vectorized_loop_index - 1;
                      i >= 0 && state->vars[i].pure; i--) {
-                    std::swap(state->vars[i], state->vars[i+1]);
+                    std::swap(state->vars[i], state->vars[i + 1]);
                 }
                 state_map.emplace(stage, std::unique_ptr<StageScheduleState>(state));
             }
@@ -1901,7 +1904,8 @@ struct LoopNest {
                 if (innermost) {
                     if (vectorized_loop_index >= 0) {
                         size_t i = 0;
-                        while (!state.vars[i].innermost_pure_dim) i++;
+                        while (!state.vars[i].innermost_pure_dim)
+                            i++;
                         auto &v = state.vars[i];
                         internal_assert(v.innermost_pure_dim && v.exists) << v.var.name() << "\n";
                         // Is the result of a split
@@ -1973,7 +1977,7 @@ struct LoopNest {
                                 tail_strategy = TailStrategy::GuardWithIf;
                             }
 
-                            s.split(parent.var, parent.var, inner, (int)factor, tail_strategy);
+                            s.split(parent.var, parent.var, inner, (int) factor, tail_strategy);
                             state.schedule_source
                                 << "\n    .split("
                                 << parent.var.name() << ", "
@@ -2042,7 +2046,6 @@ struct LoopNest {
                 return;
             }
 
-
             for (auto f : store_at) {
                 Func(f->func).store_at(here);
             }
@@ -2081,7 +2084,6 @@ struct LoopNest {
             }
         }
     }
-
 };
 
 struct State {
@@ -2111,8 +2113,8 @@ struct State {
     void compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &p,
                                    const LoopNest *here, int depth) {
         for (const auto &c : here->children) {
-            p.emplace(c.get(), pair<const LoopNest *, int>{here, depth});
-            compute_loop_nest_parents(p, c.get(), depth+1);
+            p.emplace(c.get(), pair<const LoopNest *, int>{ here, depth });
+            compute_loop_nest_parents(p, c.get(), depth + 1);
         }
     }
 
@@ -2239,7 +2241,7 @@ struct State {
                     buf[i + num_schedule_features] = s.features[i];
                 }
 
-                binfile.write((const char *)buf, sizeof(buf));
+                binfile.write((const char *) buf, sizeof(buf));
             }
         }
         binfile.close();
@@ -2265,7 +2267,7 @@ struct State {
 
         // Perform some addition pruning before burdening the cost model with silly states
         for (auto it = features.begin(); it != features.end(); it++) {
-            if (!it.key()->node->is_wrapper) { // It's OK to repeatedly stage data
+            if (!it.key()->node->is_wrapper) {  // It's OK to repeatedly stage data
                 auto &feat = it.value();
                 if (feat.points_computed_total + feat.inlined_calls > 8 * feat.points_computed_minimum) {
                     cost = 1e50;
@@ -2280,7 +2282,7 @@ struct State {
             return false;
         }
 
-        int num_stages = (int)features.size();
+        int num_stages = (int) features.size();
 
         Runtime::Buffer<float> schedule_features;
 
@@ -2345,7 +2347,7 @@ struct State {
                            std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
         internal_assert(root.defined() && root->is_root());
 
-        if (num_decisions_made == 2*(int)dag.nodes.size()) {
+        if (num_decisions_made == 2 * (int) dag.nodes.size()) {
             return;
         }
 
@@ -2539,10 +2541,10 @@ struct State {
                                 min_total = total;
                             }
                             max_total = std::max(max_total, total);
-                            const double tasks_per_core = ((double)total) / params.parallelism;
+                            const double tasks_per_core = ((double) total) / params.parallelism;
                             o.idle_core_wastage = std::max(o.idle_core_wastage,
                                                            std::ceil(tasks_per_core) /
-                                                           tasks_per_core);
+                                                               tasks_per_core);
                         }
                     }
 
@@ -2591,14 +2593,14 @@ struct State {
                                 vector<int64_t> tiling = c->size;
                                 int64_t total = 1;
                                 for (size_t i = c->size.size(); i > 0; i--) {
-                                    if (!c->stage->loop[i-1].pure || total >= params.parallelism) {
-                                        tiling[i-1] = 1;
+                                    if (!c->stage->loop[i - 1].pure || total >= params.parallelism) {
+                                        tiling[i - 1] = 1;
                                     }
-                                    while (tiling[i-1] > 1 &&
-                                           total * tiling[i-1] > params.parallelism * 8) {
-                                        tiling[i-1] /= 2;
+                                    while (tiling[i - 1] > 1 &&
+                                           total * tiling[i - 1] > params.parallelism * 8) {
+                                        tiling[i - 1] /= 2;
                                     }
-                                    total *= tiling[i-1];
+                                    total *= tiling[i - 1];
                                 }
                                 c = c->parallelize_in_tiles(params, tiling, new_root);
                             }
@@ -2614,7 +2616,6 @@ struct State {
             }
         }
 
-
         if (num_children == 0) {
             debug(0) << "Warning: Found no legal way to schedule "
                      << node->func.name() << " in the following State:\n";
@@ -2622,7 +2623,6 @@ struct State {
             // All our children died. Maybe other states have had
             // children. Carry on.
         }
-
     }
 
     void dump() const {
@@ -2643,7 +2643,7 @@ struct State {
         std::ostringstream src;
 
         // Print handles for all the Funcs
-        int i = (int)(dag.nodes.size() - 1);
+        int i = (int) (dag.nodes.size() - 1);
         for (const auto &n : dag.nodes) {
             if (!n.is_input) {
                 src << "Func " << n.func.name() << " = get_pipeline().get_func(" << i << ");\n";
@@ -2734,9 +2734,9 @@ struct State {
                     // Outermost, and next outermost. Preserve the inner
                     // name to not invalidate any compute_ats.
                     p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
-                                              << ", " << parallel_vars[i-1].name()
+                                              << ", " << parallel_vars[i - 1].name()
                                               << ", " << parallel_vars[i].name() << ")";
-                    stage.fuse(parallel_vars[i], parallel_vars[i-1], parallel_vars[i]);
+                    stage.fuse(parallel_vars[i], parallel_vars[i - 1], parallel_vars[i]);
                 }
                 if (!parallel_vars.empty()) {
                     p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
@@ -2753,7 +2753,7 @@ struct State {
             if (p.first->index == 0 && p.second->vector_dim > 0) {
                 vector<Var> storage_vars = Func(p.first->node->func).args();
                 for (int i = p.second->vector_dim; i > 0; i--) {
-                    std::swap(storage_vars[i], storage_vars[i-1]);
+                    std::swap(storage_vars[i], storage_vars[i - 1]);
                 }
                 p.second->schedule_source << "\n    .reorder_storage(";
                 bool first = true;
@@ -2799,10 +2799,11 @@ private:
 
     std::vector<IntrusivePtr<State>> storage;
     size_t sz = 0;
+
 public:
     void emplace(IntrusivePtr<State> &&s) {
         if (sz >= storage.size()) {
-            storage.resize(std::max(sz * 2, (size_t)64));
+            storage.resize(std::max(sz * 2, (size_t) 64));
         }
         internal_assert(sz < storage.size()) << sz << " " << storage.size() << "\n";
         storage[sz] = std::move(s);
@@ -2857,11 +2858,11 @@ void configure_pipeline_features(const FunctionDAG &dag,
     cost_model->reset();
     const int pipeline_feat_size = head1_w * head1_h;
     static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
-                  sizeof(int) * pipeline_feat_size,
+                      sizeof(int) * pipeline_feat_size,
                   "Incorrect size for pipeline features");
     int num_stages = 0;
     for (const auto &n : dag.nodes) {
-        if (!n.is_input) num_stages += (int)n.stages.size();
+        if (!n.is_input) num_stages += (int) n.stages.size();
     }
     Runtime::Buffer<float> pipeline_features(head1_w, head1_h, num_stages);
     int stage = 0;
@@ -2869,11 +2870,11 @@ void configure_pipeline_features(const FunctionDAG &dag,
         if (n.is_input) continue;
         for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
             const auto &s = *it;
-            const int *pipeline_feats = (const int *)(&(s.features)) + 7;
+            const int *pipeline_feats = (const int *) (&(s.features)) + 7;
             // skip the first 7 features
             for (int i = 0; i < pipeline_feat_size; i++) {
-                int x = i/7;
-                int y = i%7;
+                int x = i / 7;
+                int y = i % 7;
                 pipeline_features(x, y, stage) = pipeline_feats[i];
             }
             stage += 1;
@@ -2902,7 +2903,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
     // The initial state, with no decisions made
     {
-        IntrusivePtr<State> initial{new State};
+        IntrusivePtr<State> initial{ new State };
         initial->root = new LoopNest;
         q.emplace(std::move(initial));
     }
@@ -2936,29 +2937,28 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
     std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
         [&](IntrusivePtr<State> &&s) {
+            // debug(0) << "\n** Generated child: ";
+            // s->dump();
+            // s->calculate_cost(dag, params, nullptr, true);
 
-        // debug(0) << "\n** Generated child: ";
-        // s->dump();
-        // s->calculate_cost(dag, params, nullptr, true);
+            // Each child should have one more decision made than its parent state.
+            internal_assert(s->num_decisions_made == s->parent->num_decisions_made + 1);
 
-        // Each child should have one more decision made than its parent state.
-        internal_assert(s->num_decisions_made == s->parent->num_decisions_made + 1);
+            int progress = s->num_decisions_made * beam_size + expanded;
+            size_t max_progress = dag.nodes.size() * beam_size * 2;
 
-        int progress = s->num_decisions_made * beam_size + expanded;
-        size_t max_progress = dag.nodes.size() * beam_size * 2;
+            // Update the progress bar
+            tick(double(progress) / max_progress);
+            s->penalized = false;
 
-        // Update the progress bar
-        tick(double(progress) / max_progress);
-        s->penalized = false;
-
-        // Add the state to the list of states to evaluate
-        q.emplace(std::move(s));
-    };
+            // Add the state to the list of states to evaluate
+            q.emplace(std::move(s));
+        };
 
     string cyos_str = get_env_variable("HL_CYOS");
 
     // This loop is beam search over the sequence of decisions to make.
-    for (int i = 0; ; i++) {
+    for (int i = 0;; i++) {
         std::unordered_map<uint64_t, int> hashes;
         q.swap(pending);
 
@@ -2981,14 +2981,14 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             }
         }
 
-        if ((int)pending.size() > beam_size * 10000) {
+        if ((int) pending.size() > beam_size * 10000) {
             debug(0) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
         }
 
         expanded = 0;
         while (expanded < beam_size && !pending.empty()) {
 
-            IntrusivePtr<State> state {pending.pop()};
+            IntrusivePtr<State> state{ pending.pop() };
 
             if (beam_size > 1 && num_passes > 1) {
                 // We are doing coarse-to-fine beam search using the
@@ -3032,7 +3032,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 continue;
             }
 
-            if (state->num_decisions_made == 2*(int)dag.nodes.size()) {
+            if (state->num_decisions_made == 2 * (int) dag.nodes.size()) {
                 // We've reached the end of the pass. The first state
                 // must be the best, because we're pulling off a
                 // priority queue.
@@ -3080,7 +3080,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             // except for the user-chosen option.
             debug(0) << "\n--------------------\n";
             debug(0) << "Select a schedule:\n";
-            for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
+            for (int choice_label = (int) q.size() - 1; choice_label >= 0; choice_label--) {
                 auto state = q[choice_label];
                 debug(0) << "\n[" << choice_label << "]:\n";
                 state->dump();
@@ -3090,7 +3090,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
             // Select next partial schedule to expand.
             int selection = -1;
-            while (selection < 0 || selection >= (int)q.size()) {
+            while (selection < 0 || selection >= (int) q.size()) {
                 debug(0) << "\nEnter selection: ";
                 std::cin >> selection;
             }
@@ -3161,7 +3161,7 @@ std::string generate_schedule(const std::vector<Function> &outputs,
     // Get the seed for random dropout
     string seed_str = get_env_variable("HL_SEED");
     // Or use the time, if not set.
-    int seed = (int)time(NULL);
+    int seed = (int) time(NULL);
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
@@ -3270,14 +3270,13 @@ struct RegisterAutoscheduler {
     }
 } register_auto_scheduler;
 
-
 // An alternative entrypoint for other uses
-void find_and_apply_schedule(FunctionDAG& dag,
+void find_and_apply_schedule(FunctionDAG &dag,
                              const std::vector<Function> &outputs,
                              const MachineParams &params,
-                             CostModel* cost_model,
+                             CostModel *cost_model,
                              int beam_size,
-                             StageMap<ScheduleFeatures>* schedule_features) {
+                             StageMap<ScheduleFeatures> *schedule_features) {
 
     std::mt19937 rng(12345);
     IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size);
@@ -3290,21 +3289,28 @@ void find_and_apply_schedule(FunctionDAG& dag,
     }
 }
 
-}
-
+}  // namespace Autoscheduler
 
 // Intrusive shared ptr helpers.
 template<>
-RefCount &ref_count<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {return t->ref_count;}
-
-template<>
-void destroy<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {delete t;}
-
-template<>
-RefCount &ref_count<Autoscheduler::State>(const Autoscheduler::State *t) {return t->ref_count;}
-
-template<>
-void destroy<Autoscheduler::State>(const Autoscheduler::State *t) {delete t;}
-
+RefCount &ref_count<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {
+    return t->ref_count;
 }
+
+template<>
+void destroy<Autoscheduler::LoopNest>(const Autoscheduler::LoopNest *t) {
+    delete t;
 }
+
+template<>
+RefCount &ref_count<Autoscheduler::State>(const Autoscheduler::State *t) {
+    return t->ref_count;
+}
+
+template<>
+void destroy<Autoscheduler::State>(const Autoscheduler::State *t) {
+    delete t;
+}
+
+}  // namespace Internal
+}  // namespace Halide

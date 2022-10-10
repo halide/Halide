@@ -54,3 +54,4 @@ $(BIN)/$(ID)/times.txt: $(BIN)/$(ID)/test
 
 build: $(BIN)/$(ID)/test
 bench: $(BIN)/$(ID)/times.txt
+
