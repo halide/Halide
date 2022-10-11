@@ -23,7 +23,8 @@
 #include "IntrusivePtr.h"
 #include "Type.h"
 
-#include <spirv/1.0/spirv.h>  // Use v1.0 spec as the minimal viable version (for maximum compatiblity)
+#include <spirv/1.0/spirv.h>         // Use v1.0 spec as the minimal viable version (for maximum compatiblity)
+#include <spirv/1.0/GLSL.std.450.h>  // GLSL extended instructions for common intrinsics
 
 namespace Halide {
 namespace Internal {
@@ -32,6 +33,15 @@ namespace Internal {
 enum SpvPrecision {
     SpvFullPrecision,
     SpvRelaxedPrecision,
+};
+
+/** Scope qualifiers for Execution & Memory operations */
+enum SpvScope {
+    SpvCrossDeviceScope = 0,
+    SpvDeviceScope = 1,
+    SpvWorkgroupScope = 2,
+    SpvSubgroupScope = 3,
+    SpvInvocationScope = 4
 };
 
 /** Specific types of predefined constants */
@@ -70,6 +80,7 @@ enum SpvKind {
     SpvBlockId,
     SpvLabelId,
     SpvParameterId,
+    SpvImportId,
     SpvModuleId,
     SpvUnknownItem,
 };
@@ -221,6 +232,7 @@ protected:
 /** General interface for representing a SPIR-V code module */
 class SpvModule {
 public:
+    using ImportNames = std::vector<std::string>;
     using EntryPointNames = std::vector<std::string>;
     using Instructions = std::vector<SpvInstruction>;
 
@@ -243,6 +255,7 @@ public:
     void add_instruction(const SpvInstruction &val);
     void add_entry_point(const std::string &name, SpvInstruction entry_point);
 
+    void import_instruction_set(SpvId id, const std::string &instruction_set);
     void require_capability(SpvCapability val);
     void require_extension(const std::string &val);
 
@@ -256,10 +269,14 @@ public:
     SpvMemoryModel memory_model() const;
     SpvInstruction entry_point(const std::string &name) const;
     EntryPointNames entry_point_names() const;
+    ImportNames import_names() const;
+    SpvId lookup_import(const std::string& Instruction_set) const;
+    uint32_t entry_point_count() const;
     const Instructions &execution_modes() const;
-    SpvId binding_count() const;
+    uint32_t binding_count() const;
     SpvModule module() const;
 
+    bool is_imported(const std::string& instruction_set) const;
     bool is_capability_required(SpvCapability val) const;
     bool is_extension_required(const std::string &val) const;
     bool is_defined() const;
@@ -310,7 +327,8 @@ public:
     SpvId declare_string_constant(const std::string &str);
     SpvId declare_scalar_constant(const Type &type, const void *data);
     SpvId declare_vector_constant(const Type &type, const void *data);
-    SpvId declare_access_chain(SpvId ptr_type_id, SpvId base_id, SpvId element_id, const Indices &indices);
+    SpvId declare_access_chain(SpvId ptr_type_id, SpvId base_id, const Indices &indices);
+    SpvId declare_pointer_access_chain(SpvId ptr_type_id, SpvId base_id, SpvId element_id, const Indices &indices);
     SpvId declare_function_type(SpvId return_type, const ParamTypes &param_types = {});
     SpvId declare_function(const std::string &name, SpvId function_type);
     SpvId declare_struct(const std::string &name, const StructMemberTypes &member_types);
@@ -343,9 +361,13 @@ public:
     SpvAddressingModel addressing_model() const;
     SpvMemoryModel memory_model() const;
 
+    SpvId import_glsl_intrinsics();
+    SpvId import_instruction_set(const std::string &instruction_set);
+    
     void require_extension(const std::string &extension);
     void require_capability(SpvCapability);
 
+    bool is_imported(const std::string& instruction_set) const;
     bool is_extension_required(const std::string &extension) const;
     bool is_capability_required(SpvCapability) const;
 
@@ -362,9 +384,19 @@ public:
     SpvId current_id() const;
     void update_id(SpvId id);
 
+    bool is_pointer_type(SpvId id) const;
+    bool is_struct_type(SpvId id) const;
+    bool is_vector_type(SpvId id) const;
+    bool is_scalar_type(SpvId id) const;
+    bool is_array_type(SpvId id) const;
+    bool is_constant(SpvId id) const;
+    
+    SpvId lookup_base_type(SpvId pointer_type) const;
     SpvStorageClass lookup_storage_class(SpvId id) const;
     SpvId lookup_id(const std::string &symbol) const;
     SpvId lookup_scope(SpvId id) const;
+    SpvId lookup_import(const std::string &instruction_set) const;
+    
     std::string lookup_symbol(SpvId id) const;
     SpvId declare_symbol(const std::string &symbol, SpvId id, SpvId scope_id);
     void add_symbol(const std::string &symbol, SpvId id, SpvId scope_id);
@@ -382,6 +414,7 @@ protected:
     using KindMap = std::unordered_map<SpvId, SpvKind>;
     using PointerTypeKey = std::pair<SpvId, SpvStorageClass>;
     using PointerTypeMap = std::map<PointerTypeKey, SpvId>;
+    using BaseTypeMap = std::unordered_map<SpvId, SpvId>;
     using VariableTypeMap = std::unordered_map<SpvId, SpvId>;
     using StorageClassMap = std::unordered_map<SpvId, SpvStorageClass>;
     using ConstantKey = uint64_t;
@@ -436,6 +469,7 @@ protected:
     FunctionMap function_map;
     IdSymbolMap id_symbol_map;
     SymbolIdMap symbol_id_map;
+    BaseTypeMap base_type_map;
     StorageClassMap storage_class_map;
     PointerTypeMap pointer_type_map;
     VariableTypeMap variable_type_map;
@@ -450,6 +484,7 @@ struct SpvFactory {
     using Components = std::vector<SpvId>;
     using ParamTypes = std::vector<SpvId>;
     using MemberTypeIds = std::vector<SpvId>;
+    using Operands = std::vector<SpvId>;
     using Variables = std::vector<SpvId>;
     using VariableBlockIdPair = std::pair<SpvId, SpvId>;  // (Variable Id, Block Id)
     using BlockVariables = std::vector<VariableBlockIdPair>;
@@ -457,7 +492,7 @@ struct SpvFactory {
     static SpvInstruction no_op(SpvId result_id);
     static SpvInstruction capability(const SpvCapability &capability);
     static SpvInstruction extension(const std::string &extension);
-    static SpvInstruction import(const std::string &import);
+    static SpvInstruction import(SpvId instruction_set_id, const std::string &instruction_set_name);
     static SpvInstruction label(SpvId result_id);
     static SpvInstruction debug_line(SpvId string_id, uint32_t line, uint32_t column);
     static SpvInstruction debug_string(SpvId result_id, const std::string &string);
@@ -469,7 +504,7 @@ struct SpvFactory {
     static SpvInstruction integer_type(SpvId int_type_id, uint32_t bits, uint32_t signedness);
     static SpvInstruction float_type(SpvId float_type_id, uint32_t bits);
     static SpvInstruction vector_type(SpvId vector_type_id, SpvId element_type_id, uint32_t vector_size);
-    static SpvInstruction array_type(SpvId array_type_id, SpvId element_type_id, uint32_t array_size);
+    static SpvInstruction array_type(SpvId array_type_id, SpvId element_type_id, SpvId array_size_id);
     static SpvInstruction struct_type(SpvId result_id, const MemberTypeIds &member_type_ids);
     static SpvInstruction runtime_array_type(SpvId result_type_id, SpvId base_type_id);
     static SpvInstruction pointer_type(SpvId pointer_type_id, SpvStorageClass storage_class, SpvId base_type_id);
@@ -487,19 +522,24 @@ struct SpvFactory {
     static SpvInstruction entry_point(SpvId exec_model, SpvId func_id, const std::string &name, const Variables &variables);
     static SpvInstruction memory_model(SpvAddressingModel addressing_model, SpvMemoryModel memory_model);
     static SpvInstruction exec_mode_local_size(SpvId function_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z);
-    static SpvInstruction control_barrier(SpvId execution_scope_id, SpvId memory_scope_id, uint32_t semantics_mask);
+    static SpvInstruction memory_barrier(SpvId memory_scope_id, SpvId semantics_mask_id);
+    static SpvInstruction control_barrier(SpvId execution_scope_id, SpvId memory_scope_id, SpvId semantics_mask_id);
+    static SpvInstruction bitwise_not(SpvId type_id, SpvId result_id, SpvId src_id);
     static SpvInstruction logical_not(SpvId type_id, SpvId result_id, SpvId src_id);
     static SpvInstruction shift_right_logical(SpvId type_id, SpvId result_id, SpvId src_id, SpvId shift_id);
     static SpvInstruction shift_right_arithmetic(SpvId type_id, SpvId result_id, SpvId src_id, SpvId shift_id);
     static SpvInstruction multiply_extended(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed);
     static SpvInstruction select(SpvId type_id, SpvId result_id, SpvId condition_id, SpvId true_id, SpvId false_id);
-    static SpvInstruction in_bounds_access_chain(SpvId type_id, SpvId result_id, SpvId base_id, SpvId element_id, const Indices &indices);
+    static SpvInstruction in_bounds_access_chain(SpvId type_id, SpvId result_id, SpvId base_id, const Indices &indices);
+    static SpvInstruction pointer_access_chain(SpvId type_id, SpvId result_id, SpvId base_id, SpvId element_id, const Indices &indices);
     static SpvInstruction load(SpvId type_id, SpvId result_id, SpvId ptr_id, uint32_t access_mask = 0x0);
     static SpvInstruction store(SpvId ptr_id, SpvId obj_id, uint32_t access_mask = 0x0);
     static SpvInstruction vector_insert_dynamic(SpvId type_id, SpvId result_id, SpvId vector_id, SpvId value_id, uint32_t index);
     static SpvInstruction vector_shuffle(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, const Indices &indices);
     static SpvInstruction composite_extract(SpvId type_id, SpvId result_id, SpvId composite_id, const Indices &indices);
     static SpvInstruction composite_construct(SpvId type_id, SpvId result_id, const Components &constituents);
+    static SpvInstruction is_inf(SpvId type_id, SpvId result_id, SpvId src_id);
+    static SpvInstruction is_nan(SpvId type_id, SpvId result_id, SpvId src_id);
     static SpvInstruction bitcast(SpvId type_id, SpvId result_id, SpvId src_id);
     static SpvInstruction integer_add(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
     static SpvInstruction float_add(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
@@ -517,6 +557,7 @@ struct SpvFactory {
     static SpvInstruction unary_op(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_id);
     static SpvInstruction binary_op(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
     static SpvInstruction convert(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_id);
+    static SpvInstruction extended(SpvId instruction_set_id, SpvId instruction_number, SpvId type_id, SpvId result_id, const SpvFactory::Operands& operands);
 };
 
 /** Contents of a SPIR-V Instruction */
@@ -568,7 +609,7 @@ struct SpvFunctionContents {
 struct SpvModuleContents {
     using Capabilities = std::set<SpvCapability>;
     using Extensions = std::set<std::string>;
-    using Imports = std::set<std::string>;
+    using Imports = std::unordered_map<std::string, SpvId>;
     using Functions = std::vector<SpvFunction>;
     using Instructions = std::vector<SpvInstruction>;
     using EntryPoints = std::unordered_map<std::string, SpvInstruction>;
@@ -593,6 +634,9 @@ struct SpvModuleContents {
     Functions functions;
     Instructions instructions;
 };
+
+bool is_glsl_unary_op(SpvId glsl_op_code);
+bool is_glsl_binary_op(SpvId glsl_op_code);
 
 }  // namespace Internal
 }  // namespace Halide

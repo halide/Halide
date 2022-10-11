@@ -12,16 +12,23 @@ namespace Internal {
 namespace Vulkan {
 
 // Compilation cache for compiled shader modules
-struct VulkanCompilationCacheEntry {
-    VkShaderModule shader_module = {0};
+struct VulkanEntryPointData {
+    const char* entry_point_name = nullptr;
     VkDescriptorPool descriptor_pool = {0};
     VkDescriptorSet descriptor_set = {0};
-    VkDescriptorSetLayout descriptor_set_layout = {0};
-    VkPipelineLayout pipeline_layout = {0};
     VkPipeline compute_pipeline = {0};
-    MemoryRegion *args_region = nullptr;
+    uint32_t uniform_buffer_count = 0;
+    uint32_t storage_buffer_count = 0;
     uint32_t bindings_count = 0;
-    uint32_t buffer_count = 0;
+    MemoryRegion *args_region = nullptr;
+};
+
+struct VulkanCompilationCacheEntry {
+    VkShaderModule shader_module = {0};
+    VkDescriptorSetLayout* descriptor_set_layouts = {0};
+    VkPipelineLayout pipeline_layout = {0};
+    uint32_t entry_point_count = 0;
+    VulkanEntryPointData* entry_point_data = nullptr;
 };
 
 WEAK Halide::Internal::GPUCompilationCache<VkDevice, VulkanCompilationCacheEntry *> compilation_cache;
@@ -91,6 +98,7 @@ VkResult vk_fill_command_buffer_with_dispatch_call(void *user_context,
                                                    VkPipeline compute_pipeline,
                                                    VkPipelineLayout pipeline_layout,
                                                    VkDescriptorSet descriptor_set,
+                                                   uint32_t descriptor_set_index,
                                                    int blocksX, int blocksY, int blocksZ) {
 
 #ifdef DEBUG_RUNTIME
@@ -100,6 +108,7 @@ VkResult vk_fill_command_buffer_with_dispatch_call(void *user_context,
         << "command_buffer: " << (void *)command_buffer << ", "
         << "pipeline_layout: " << (void *)pipeline_layout << ", "
         << "descriptor_set: " << (void *)descriptor_set << ", "
+        << "descriptor_set_index: " << descriptor_set_index << ", "
         << "blocks: " << blocksX << ", " << blocksY << ", " << blocksZ << ")\n";
 #endif
 
@@ -118,7 +127,7 @@ VkResult vk_fill_command_buffer_with_dispatch_call(void *user_context,
 
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
     vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout,
-                            0, 1, &descriptor_set, 0, nullptr);
+                            descriptor_set_index, 1, &descriptor_set, 0, nullptr);
     vkCmdDispatch(command_buffer, blocksX, blocksY, blocksZ);  // TODO: make sure this is right!
 
     result = vkEndCommandBuffer(command_buffer);
@@ -161,12 +170,29 @@ VkResult vk_submit_command_buffer(void *user_context, VkQueue queue, VkCommandBu
 
 // --
 
+bool vk_needs_scalar_uniform_buffer(void *user_context,
+                                    size_t arg_sizes[],
+                                    void *args[],
+                                    int8_t arg_is_buffer[]) {
+    int i = 0;
+    while (arg_sizes[i] > 0) {
+        if (!arg_is_buffer[i]) {
+            return true;
+        }
+        i++;
+    }
+    return false;
+}
+
 uint32_t vk_count_bindings_for_descriptor_set(void *user_context,
                                               size_t arg_sizes[],
                                               void *args[],
                                               int8_t arg_is_buffer[]) {
+
+    // first binding is for passing scalar parameters in a buffer (if necessary)
+    uint32_t bindings_count = vk_needs_scalar_uniform_buffer(user_context, arg_sizes, args, arg_is_buffer);
+
     int i = 0;
-    uint32_t bindings_count = 1;  // first binding is for passing scalar parameters in a buffer
     while (arg_sizes[i] > 0) {
         if (arg_is_buffer[i]) {
             bindings_count++;
@@ -180,6 +206,7 @@ uint32_t vk_count_bindings_for_descriptor_set(void *user_context,
 
 VkResult vk_create_descriptor_pool(void *user_context,
                                    VulkanMemoryAllocator *allocator,
+                                   uint32_t uniform_buffer_count,
                                    uint32_t storage_buffer_count,
                                    VkDescriptorPool *descriptor_pool) {
 #ifdef DEBUG_RUNTIME
@@ -187,20 +214,23 @@ VkResult vk_create_descriptor_pool(void *user_context,
         << "Vulkan: vk_create_descriptor_pool (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
         << "device: " << (void *)allocator->current_device() << ", "
+        << "uniform_buffer_count: " << (uint32_t)uniform_buffer_count << ", "
         << "storage_buffer_count: " << (uint32_t)storage_buffer_count << ")\n";
 #endif
 
     BlockStorage::Config pool_config;
     pool_config.entry_size = sizeof(VkDescriptorPoolSize);
-    pool_config.minimum_capacity = 1 + (storage_buffer_count ? 1 : 0);
+    pool_config.minimum_capacity = (uniform_buffer_count ? 1 : 0) + (storage_buffer_count ? 1 : 0);
     BlockStorage pool_sizes(user_context, pool_config);
 
     // First binding is reserved for passing scalar parameters as a uniform buffer
-    VkDescriptorPoolSize uniform_buffer_size = {
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // descriptor type
-        1                                   // all kernel args are packed into one uniform buffer
-    };
-    pool_sizes.append(user_context, &uniform_buffer_size);
+    if(uniform_buffer_count > 0) {
+        VkDescriptorPoolSize uniform_buffer_size = {
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // descriptor type
+            uniform_buffer_count                // all kernel args are packed into uniform buffers
+        };
+        pool_sizes.append(user_context, &uniform_buffer_size);
+    }
 
     if (storage_buffer_count > 0) {
         VkDescriptorPoolSize storage_buffer_size = {
@@ -245,9 +275,8 @@ VkResult vk_destroy_descriptor_pool(void *user_context,
 
 VkResult vk_create_descriptor_set_layout(void *user_context,
                                          VulkanMemoryAllocator *allocator,
-                                         size_t arg_sizes[],
-                                         void *args[],
-                                         int8_t arg_is_buffer[],
+                                         uint32_t uniform_buffer_count,
+                                         uint32_t storage_buffer_count,
                                          VkDescriptorSetLayout *layout) {
 
 #ifdef DEBUG_RUNTIME
@@ -255,45 +284,53 @@ VkResult vk_create_descriptor_set_layout(void *user_context,
         << "Vulkan: vk_create_descriptor_set_layout (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
         << "device: " << (void *)allocator->current_device() << ", "
+        << "uniform_buffer_count: " << uniform_buffer_count << ", "
+        << "storage_buffer_count: " << storage_buffer_count << ", "
         << "layout: " << (void *)layout << ")\n";
 #endif
 
-    // The first binding is used for scalar parameters
-    uint32_t num_bindings = vk_count_bindings_for_descriptor_set(user_context, arg_sizes, args, arg_is_buffer);
-
     BlockStorage::Config layout_config;
     layout_config.entry_size = sizeof(VkDescriptorSetLayoutBinding);
-    layout_config.minimum_capacity = num_bindings;
-
+    layout_config.minimum_capacity = uniform_buffer_count + storage_buffer_count;
     BlockStorage layout_bindings(user_context, layout_config);
 
-    // First binding is reserved for passing scalar parameters as a uniform buffer
-    VkDescriptorSetLayoutBinding scalar_uniform_layout = {
-        0,                                  // binding index
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // descriptor type
-        1,                                  // descriptor count
-        VK_SHADER_STAGE_COMPUTE_BIT,        // stage flags
-        nullptr                             // immutable samplers
-    };
-    layout_bindings.append(user_context, &scalar_uniform_layout);
+    // add all uniform buffers first
+    for(uint32_t n = 0; n < uniform_buffer_count; ++n) {
+        VkDescriptorSetLayoutBinding uniform_buffer_layout = {
+            (uint32_t)layout_bindings.size(),   // binding index
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // descriptor type
+            1,                                  // descriptor count
+            VK_SHADER_STAGE_COMPUTE_BIT,        // stage flags
+            nullptr                             // immutable samplers
+        };
 
-    // Add all other bindings for buffer data
-    int i = 0;
-    while (arg_sizes[i] > 0) {
-        if (arg_is_buffer[i]) {
-            // TODO: I don't quite understand why STORAGE_BUFFER is valid
-            // here, but examples all across the docs seem to do this
-            VkDescriptorSetLayoutBinding storage_buffer_layout = {
-                (uint32_t)layout_bindings.size(),   // binding index
-                VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // descriptor type
-                1,                                  // descriptor count
-                VK_SHADER_STAGE_COMPUTE_BIT,        // stage flags
-                nullptr                             // immutable samplers
-            };
-            layout_bindings.append(user_context, &storage_buffer_layout);
-        }
-        i++;
+#ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << "        [" <<  (uint32_t)layout_bindings.size() << "] : UNIFORM_BUFFER\n";
+#endif
+
+        layout_bindings.append(user_context, &uniform_buffer_layout);
     }
+
+    // Add all other storage buffers
+    for(uint32_t n = 0; n < storage_buffer_count; ++n) {
+
+        // halide buffers will be passed as STORAGE_BUFFERS
+        VkDescriptorSetLayoutBinding storage_buffer_layout = {
+            (uint32_t)layout_bindings.size(),   // binding index
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // descriptor type
+            1,                                  // descriptor count
+            VK_SHADER_STAGE_COMPUTE_BIT,        // stage flags
+            nullptr                             // immutable samplers
+        };
+#ifdef DEBUG_RUNTIME
+debug(user_context)
+    << "        [" <<  (uint32_t)layout_bindings.size() << "] : STORAGE_BUFFER\n";
+#endif
+
+        layout_bindings.append(user_context, &storage_buffer_layout);
+    }
+
     // Create the LayoutInfo struct
     VkDescriptorSetLayoutCreateInfo layout_info = {
         VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,    // structure type
@@ -358,6 +395,7 @@ VkResult vk_create_descriptor_set(void *user_context,
 VkResult vk_update_descriptor_set(void *user_context,
                                   VulkanMemoryAllocator *allocator,
                                   VkBuffer *scalar_args_buffer,
+                                  size_t uniform_buffer_count,
                                   size_t storage_buffer_count,
                                   size_t arg_sizes[],
                                   void *args[],
@@ -368,11 +406,11 @@ VkResult vk_update_descriptor_set(void *user_context,
         << "Vulkan: vk_update_descriptor_set (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
         << "device: " << (void *)allocator->current_device() << ", "
+        << "scalar_args_buffer: " << (void *)scalar_args_buffer << ", "
+        << "uniform_buffer_count: " << (uint32_t)uniform_buffer_count << ", "
         << "storage_buffer_count: " << (uint32_t)storage_buffer_count << ", "
         << "descriptor_set: " << (void *)descriptor_set << ")\n";
 #endif
-
-    static const int uniform_buffer_count = 1;  // scalar args are always packed into one uniform buffer
 
     BlockStorage::Config dbi_config;
     dbi_config.minimum_capacity = storage_buffer_count + uniform_buffer_count;
@@ -384,7 +422,7 @@ VkResult vk_update_descriptor_set(void *user_context,
     wds_config.entry_size = sizeof(VkWriteDescriptorSet);
     BlockStorage write_descriptor_set(user_context, wds_config);
 
-    // First binding will be the scalar args buffer (if needed)
+    // First binding will be the scalar args buffer (if needed) passed as a UNIFORM BUFFER
     VkDescriptorBufferInfo *scalar_args_entry = nullptr;
     if (scalar_args_buffer != nullptr) {
         VkDescriptorBufferInfo scalar_args_descriptor_buffer_info = {
@@ -395,7 +433,7 @@ VkResult vk_update_descriptor_set(void *user_context,
         descriptor_buffer_info.append(user_context, &scalar_args_descriptor_buffer_info);
         scalar_args_entry = (VkDescriptorBufferInfo *)descriptor_buffer_info.back();
 
-        VkWriteDescriptorSet scalar_args_write_descriptor_set = {
+        VkWriteDescriptorSet uniform_buffer_write_descriptor_set = {
             VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,  // struct type
             nullptr,                                 // pointer to struct extending this
             descriptor_set,                          // descriptor set to update
@@ -407,10 +445,10 @@ VkResult vk_update_descriptor_set(void *user_context,
             scalar_args_entry,                       // info for buffer
             nullptr                                  // for texel buffers
         };
-        write_descriptor_set.append(user_context, &scalar_args_write_descriptor_set);
+        write_descriptor_set.append(user_context, &uniform_buffer_write_descriptor_set);
     }
 
-    // Add all the other device buffers
+    // Add all the other device buffers as STORAGE BUFFERs
     for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (arg_is_buffer[i]) {
 
@@ -432,7 +470,7 @@ VkResult vk_update_descriptor_set(void *user_context,
             descriptor_buffer_info.append(user_context, &device_buffer_info);
             VkDescriptorBufferInfo *device_buffer_entry = (VkDescriptorBufferInfo *)descriptor_buffer_info.back();
 
-            VkWriteDescriptorSet scalar_args_write_descriptor_set = {
+            VkWriteDescriptorSet storage_buffer_write_descriptor_set = {
                 VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,  // struct type
                 nullptr,                                 // pointer to struct extending this
                 descriptor_set,                          // descriptor set to update
@@ -444,7 +482,7 @@ VkResult vk_update_descriptor_set(void *user_context,
                 device_buffer_entry,                     // info for buffer
                 nullptr                                  // for texel buffers
             };
-            write_descriptor_set.append(user_context, &scalar_args_write_descriptor_set);
+            write_descriptor_set.append(user_context, &storage_buffer_write_descriptor_set);
         }
     }
 
@@ -559,7 +597,8 @@ void vk_destroy_scalar_uniform_buffer(void *user_context, VulkanMemoryAllocator 
 
 VkResult vk_create_pipeline_layout(void *user_context,
                                    VulkanMemoryAllocator *allocator,
-                                   VkDescriptorSetLayout *descriptor_set_layout,
+                                   uint32_t descriptor_set_count,
+                                   VkDescriptorSetLayout* descriptor_set_layouts,
                                    VkPipelineLayout *pipeline_layout) {
 
 #ifdef DEBUG_RUNTIME
@@ -567,7 +606,8 @@ VkResult vk_create_pipeline_layout(void *user_context,
         << "Vulkan: vk_create_pipeline_layout (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
         << "device: " << (void *)allocator->current_device() << ", "
-        << "descriptor_set_layout: " << (void *)descriptor_set_layout << ", "
+        << "descriptor_set_count: " << descriptor_set_count << ", "
+        << "descriptor_set_layouts: " << (void *)descriptor_set_layouts << ", "
         << "pipeline_layout: " << (void *)pipeline_layout << ")\n";
 #endif
 
@@ -575,8 +615,8 @@ VkResult vk_create_pipeline_layout(void *user_context,
         VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,  // structure type
         nullptr,                                        // pointer to a structure extending this
         0,                                              // flags
-        1,                                              // number of descriptor sets
-        descriptor_set_layout,                          // pointer to the descriptor sets
+        descriptor_set_count,                           // number of descriptor sets
+        descriptor_set_layouts,                         // pointer to the descriptor sets
         0,                                              // number of push constant ranges
         nullptr                                         // pointer to push constant range structs
     };
@@ -668,25 +708,120 @@ VkResult vk_destroy_compute_pipeline(void *user_context,
 
 // --------------------------------------------------------------------------
 
+VulkanEntryPointData* vk_decode_entry_point_data(void* user_context, VulkanMemoryAllocator *allocator, const uint32_t* module_ptr, uint32_t module_size) {
+#ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << "Vulkan: vk_decode_entry_point_data (user_context: " << user_context << ", "
+        << "allocator: " << (void *)allocator << ", "
+        << "module_ptr: " << (void*)module_ptr << ", "
+        << "module_size: " << module_size << ")\n";
+
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+    halide_debug_assert(user_context, module_ptr != nullptr);
+    halide_debug_assert(user_context, module_size >= (2 * sizeof(uint32_t)));
+
+    // Decode the sidecar for the module that lists the descriptor sets 
+    // corresponding to each entry point contained in the module
+    //
+    // [0] Header word count (total length of header)
+    // [1] Number of descriptor sets
+    // ... For each descriptor set ...
+    // ... [0] Number of uniform buffers for this descriptor set
+    // ... [1] Number of storage buffers for this descriptor set
+    // ... [2] Length of entry point name (padded to nearest word size)
+    // ... [X] Entry point string data 
+    //
+    // NOTE: See CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header() for the encoding
+    //
+    //
+    uint32_t module_entries = module_size / sizeof(uint32_t);
+    uint32_t idx = 1; // skip past the header_word_count
+    uint32_t entry_point_count = module_ptr[idx++];
+    if(entry_point_count < 1) {
+        return nullptr; // no descriptors 
+    }
+
+    // allocate an array of entry point data
+    VkSystemAllocationScope alloc_scope = VkSystemAllocationScope::VK_SYSTEM_ALLOCATION_SCOPE_OBJECT;
+    size_t entry_point_data_size = entry_point_count * sizeof(VulkanEntryPointData);
+    VulkanEntryPointData *entry_point_data = (VulkanEntryPointData *)vk_host_malloc(user_context, entry_point_data_size, 0, alloc_scope, allocator->callbacks());
+    if (entry_point_data == nullptr) {
+        error(user_context) << "Vulkan: Failed to allocate entry_point_data! Out of memory!\n";
+        return nullptr;
+    }
+    memset(entry_point_data, 0, entry_point_data_size);
+
+    // decode and fill in each entry point
+    for(uint32_t n = 0; (n < entry_point_count) && (idx < module_entries); n++) {
+        halide_debug_assert(user_context,(idx + 4) < module_entries);
+        uint32_t uniform_buffer_count = module_ptr[idx++];
+        uint32_t storage_buffer_count = module_ptr[idx++];
+        uint32_t padded_string_length = module_ptr[idx++];
+        const char* entry_point_name = (const char*)(module_ptr + idx);
+
+        debug(user_context) << "    [" << n << "] "
+                 << "uniform_buffer_count=" << uniform_buffer_count << " "
+                 << "storage_buffer_count=" << storage_buffer_count << " "
+                 << "entry_point_name_length=" << padded_string_length << " "                 
+                 << "entry_point_name: " << (const char*)entry_point_name << "\n";
+
+        entry_point_data[n].entry_point_name = entry_point_name; // NOTE: module owns string data
+        entry_point_data[n].uniform_buffer_count = uniform_buffer_count;
+        entry_point_data[n].storage_buffer_count = storage_buffer_count;
+        idx += (padded_string_length / sizeof(uint32_t)); // skip past string data
+    }
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+#endif    
+
+    return entry_point_data;
+}
+
 VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
-                                                      const char *src, int size) {
+                                                      const char *ptr, int size) {
 #ifdef DEBUG_RUNTIME
     debug(user_context)
         << "Vulkan: vk_compile_shader_module (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
         << "device: " << (void *)allocator->current_device() << ", "
-        << "source: " << (void *)src << ", "
+        << "module: " << (void *)ptr << ", "
         << "size: " << size << ")\n";
 
     uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+
+    const uint32_t* module_ptr = (const uint32_t*)ptr;
+    const uint32_t module_size = (const uint32_t)size;
+
+    halide_debug_assert(user_context, module_ptr != nullptr);
+    halide_debug_assert(user_context, module_size >= (2 * sizeof(uint32_t)));
+
+    uint32_t header_word_count = module_ptr[0]; 
+    uint32_t entry_point_count = module_ptr[1];
+    uint32_t header_size = header_word_count * sizeof(uint32_t);
+
+    // skip past the preamble header to the start of the SPIR-V binary
+    const uint32_t* binary_ptr = (module_ptr + header_word_count);
+    size_t binary_size = (size - header_size);
+
+#ifdef DEBUG_RUNTIME
+    debug(user_context) << "Vulkan: Decoding module ("
+                        << "module_ptr: " << (void*)module_ptr << ", "
+                        << "header_word_count: " << header_word_count << ", "
+                        << "header_size: " << header_size << ", "
+                        << "binar_ptr: " << (void*)binary_ptr << ", "
+                        << "binary_size: " << (uint32_t)binary_size << ")\n";
 #endif
 
     VkShaderModuleCreateInfo shader_info = {
         VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         nullptr,               // pointer to structure extending this
         0,                     // flags (curently unused)
-        (size_t)size,          // code size in bytes
-        (const uint32_t *)src  // source
+        (size_t)binary_size,          // code size in bytes
+        (const uint32_t *)binary_ptr  // source
     };
 
     VkSystemAllocationScope alloc_scope = VkSystemAllocationScope::VK_SYSTEM_ALLOCATION_SCOPE_OBJECT;
@@ -697,11 +832,28 @@ VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, Vulkan
     }
     memset(cache_entry, 0, sizeof(VulkanCompilationCacheEntry));
 
+    // decode the entry point data and save it in the cache entry
+    cache_entry->entry_point_data = vk_decode_entry_point_data(user_context, allocator, module_ptr, module_size);
+    if(cache_entry->entry_point_data != nullptr) {
+        cache_entry->entry_point_count = entry_point_count;
+    }    
+    
     VkResult result = vkCreateShaderModule(allocator->current_device(), &shader_info, allocator->callbacks(), &cache_entry->shader_module);
     if ((result != VK_SUCCESS)) {  // } || (cache_entry->shader_module == nullptr)) {
         error(user_context) << "Vulkan: vkCreateShaderModule Failed! Error returned: " << vk_get_error_name(result) << "\n";
+        vk_host_free(user_context, cache_entry->entry_point_data, allocator->callbacks());
         vk_host_free(user_context, cache_entry, allocator->callbacks());
         return nullptr;
+    }
+
+    // allocate an array for storing the descriptor set layouts
+    if(cache_entry->entry_point_count) {
+        cache_entry->descriptor_set_layouts = (VkDescriptorSetLayout *)vk_host_malloc(user_context, cache_entry->entry_point_count * sizeof(VkDescriptorSetLayout), 0, alloc_scope, allocator->callbacks());
+        if (cache_entry->descriptor_set_layouts == nullptr) {
+            error(user_context) << "Vulkan: Failed to allocate descriptor set layouts for cache entry! Out of memory!\n";
+            return nullptr;
+        }
+        memset(cache_entry->descriptor_set_layouts, 0, sizeof(VkDescriptorSetLayout));
     }
 
 #ifdef DEBUG_RUNTIME
@@ -738,26 +890,39 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
                     vkDestroyShaderModule(allocator->current_device(), cache_entry->shader_module, allocator->callbacks());
                     cache_entry->shader_module = {0};
                 }
-                if (cache_entry->args_region) {
-                    vk_destroy_scalar_uniform_buffer(user_context, allocator, cache_entry->args_region);
-                    cache_entry->args_region = nullptr;
+                if(cache_entry->entry_point_data) {
+                    for( uint32_t n = 0; n < cache_entry->entry_point_count; n++) {
+                        if (cache_entry->entry_point_data[n].args_region) {
+                            vk_destroy_scalar_uniform_buffer(user_context, allocator, cache_entry->entry_point_data[n].args_region);
+                            cache_entry->entry_point_data[n].args_region = nullptr;
+                        }
+                        if (cache_entry->entry_point_data[n].descriptor_pool) {
+                            vk_destroy_descriptor_pool(user_context, allocator, cache_entry->entry_point_data[n].descriptor_pool);
+                            cache_entry->entry_point_data[n].descriptor_pool = {0};
+                        }
+                        if (cache_entry->entry_point_data[n].compute_pipeline) {
+                            vk_destroy_compute_pipeline(user_context, allocator, cache_entry->entry_point_data[n].compute_pipeline);
+                            cache_entry->entry_point_data[n].compute_pipeline = {0};
+                        }
+                    }
+
+                    vk_host_free(user_context, cache_entry->entry_point_data, allocator->callbacks());
+                    cache_entry->entry_point_data = nullptr;
+                    cache_entry->entry_point_count = 0;
                 }
-                if (cache_entry->descriptor_set_layout) {
-                    vk_destroy_descriptor_set_layout(user_context, allocator, cache_entry->descriptor_set_layout);
-                    cache_entry->descriptor_set_layout = {0};
-                }
-                if (cache_entry->descriptor_pool) {
-                    vk_destroy_descriptor_pool(user_context, allocator, cache_entry->descriptor_pool);
-                    cache_entry->descriptor_pool = {0};
+                if (cache_entry->descriptor_set_layouts) {
+                    for( uint32_t n = 0; n < cache_entry->entry_point_count; n++) {
+                        vk_destroy_descriptor_set_layout(user_context, allocator, cache_entry->descriptor_set_layouts[n]);
+                        cache_entry->descriptor_set_layouts[n] = {0};
+                    }
+                    vk_host_free(user_context, cache_entry->descriptor_set_layouts, allocator->callbacks());
+                    cache_entry->descriptor_set_layouts = nullptr;
                 }
                 if (cache_entry->pipeline_layout) {
                     vk_destroy_pipeline_layout(user_context, allocator, cache_entry->pipeline_layout);
                     cache_entry->pipeline_layout = {0};
                 }
-                if (cache_entry->compute_pipeline) {
-                    vk_destroy_compute_pipeline(user_context, allocator, cache_entry->compute_pipeline);
-                    cache_entry->compute_pipeline = {0};
-                }
+
                 vk_host_free(user_context, cache_entry, allocator->callbacks());
             }
         }

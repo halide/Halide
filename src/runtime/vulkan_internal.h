@@ -23,6 +23,7 @@ namespace Vulkan {
 
 // Declarations
 class VulkanMemoryAllocator;
+struct VulkanEntryPointData;
 struct VulkanCompilationCacheEntry;
 
 // --------------------------------------------------------------------------
@@ -92,11 +93,17 @@ VkResult vk_fill_command_buffer_with_dispatch_call(void *user_context,
                                                    VkPipeline compute_pipeline,
                                                    VkPipelineLayout pipeline_layout,
                                                    VkDescriptorSet descriptor_set,
+                                                   uint32_t descriptor_set_index,
                                                    int blocksX, int blocksY, int blocksZ);
 
 VkResult vk_submit_command_buffer(void *user_context, VkQueue queue, VkCommandBuffer command_buffer);
 
 // -- Scalar Uniform Buffer
+bool vk_needs_scalar_uniform_buffer(void *user_context,
+                                    size_t arg_sizes[],
+                                    void *args[],
+                                    int8_t arg_is_buffer[]);
+
 size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
                                               size_t arg_sizes[],
                                               void *args[],
@@ -118,6 +125,7 @@ void vk_destroy_scalar_uniform_buffer(void *user_context, VulkanMemoryAllocator 
 // -- Descriptor Pool
 VkResult vk_create_descriptor_pool(void *user_context,
                                    VulkanMemoryAllocator *allocator,
+                                   uint32_t uniform_buffer_count,
                                    uint32_t storage_buffer_count,
                                    VkDescriptorPool *descriptor_pool);
 
@@ -132,10 +140,9 @@ uint32_t vk_count_bindings_for_descriptor_set(void *user_context,
                                               int8_t arg_is_buffer[]);
 
 VkResult vk_create_descriptor_set_layout(void *user_context,
-                                         VkDevice device,
-                                         size_t arg_sizes[],
-                                         void *args[],
-                                         int8_t arg_is_buffer[],
+                                         VulkanMemoryAllocator *allocator,
+                                         uint32_t uniform_buffer_count,
+                                         uint32_t storage_buffer_count,
                                          VkDescriptorSetLayout *layout);
 
 VkResult vk_destroy_descriptor_set_layout(void *user_context,
@@ -152,6 +159,7 @@ VkResult vk_create_descriptor_set(void *user_context,
 VkResult vk_update_descriptor_set(void *user_context,
                                   VulkanMemoryAllocator *allocator,
                                   VkBuffer *scalar_args_buffer,
+                                  size_t uniform_buffer_count,
                                   size_t storage_buffer_count,
                                   size_t arg_sizes[],
                                   void *args[],
@@ -161,7 +169,8 @@ VkResult vk_update_descriptor_set(void *user_context,
 // -- Pipeline Layout
 VkResult vk_create_pipeline_layout(void *user_context,
                                    VulkanMemoryAllocator *allocator,
-                                   VkDescriptorSetLayout *descriptor_set_layout,
+                                   uint32_t descriptor_set_count,
+                                   VkDescriptorSetLayout* descriptor_set_layouts,
                                    VkPipelineLayout *pipeline_layout);
 
 VkResult vk_destroy_pipeline_layout(void *user_context,
@@ -180,6 +189,9 @@ VkResult vk_destroy_compute_pipeline(void *user_context,
                                      VkPipeline compute_pipeline);
 
 // -- Shader Module
+VulkanEntryPointData* vk_decode_entry_point_data(void* user_context, VulkanMemoryAllocator *allocator, 
+                                                 const uint32_t* module_ptr, uint32_t module_size);
+
 VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
                                                       const char *src, int size);
 
