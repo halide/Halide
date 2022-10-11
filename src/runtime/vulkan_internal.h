@@ -170,7 +170,7 @@ VkResult vk_update_descriptor_set(void *user_context,
 VkResult vk_create_pipeline_layout(void *user_context,
                                    VulkanMemoryAllocator *allocator,
                                    uint32_t descriptor_set_count,
-                                   VkDescriptorSetLayout* descriptor_set_layouts,
+                                   VkDescriptorSetLayout *descriptor_set_layouts,
                                    VkPipelineLayout *pipeline_layout);
 
 VkResult vk_destroy_pipeline_layout(void *user_context,
@@ -189,8 +189,8 @@ VkResult vk_destroy_compute_pipeline(void *user_context,
                                      VkPipeline compute_pipeline);
 
 // -- Shader Module
-VulkanEntryPointData* vk_decode_entry_point_data(void* user_context, VulkanMemoryAllocator *allocator, 
-                                                 const uint32_t* module_ptr, uint32_t module_size);
+VulkanEntryPointData *vk_decode_entry_point_data(void *user_context, VulkanMemoryAllocator *allocator,
+                                                 const uint32_t *module_ptr, uint32_t module_size);
 
 VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
                                                       const char *src, int size);

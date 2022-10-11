@@ -23,8 +23,8 @@
 #include "IntrusivePtr.h"
 #include "Type.h"
 
-#include <spirv/1.0/spirv.h>         // Use v1.0 spec as the minimal viable version (for maximum compatiblity)
 #include <spirv/1.0/GLSL.std.450.h>  // GLSL extended instructions for common intrinsics
+#include <spirv/1.0/spirv.h>         // Use v1.0 spec as the minimal viable version (for maximum compatiblity)
 
 namespace Halide {
 namespace Internal {
@@ -270,13 +270,13 @@ public:
     SpvInstruction entry_point(const std::string &name) const;
     EntryPointNames entry_point_names() const;
     ImportNames import_names() const;
-    SpvId lookup_import(const std::string& Instruction_set) const;
+    SpvId lookup_import(const std::string &Instruction_set) const;
     uint32_t entry_point_count() const;
     const Instructions &execution_modes() const;
     uint32_t binding_count() const;
     SpvModule module() const;
 
-    bool is_imported(const std::string& instruction_set) const;
+    bool is_imported(const std::string &instruction_set) const;
     bool is_capability_required(SpvCapability val) const;
     bool is_extension_required(const std::string &val) const;
     bool is_defined() const;
@@ -363,11 +363,11 @@ public:
 
     SpvId import_glsl_intrinsics();
     SpvId import_instruction_set(const std::string &instruction_set);
-    
+
     void require_extension(const std::string &extension);
     void require_capability(SpvCapability);
 
-    bool is_imported(const std::string& instruction_set) const;
+    bool is_imported(const std::string &instruction_set) const;
     bool is_extension_required(const std::string &extension) const;
     bool is_capability_required(SpvCapability) const;
 
@@ -390,13 +390,13 @@ public:
     bool is_scalar_type(SpvId id) const;
     bool is_array_type(SpvId id) const;
     bool is_constant(SpvId id) const;
-    
+
     SpvId lookup_base_type(SpvId pointer_type) const;
     SpvStorageClass lookup_storage_class(SpvId id) const;
     SpvId lookup_id(const std::string &symbol) const;
     SpvId lookup_scope(SpvId id) const;
     SpvId lookup_import(const std::string &instruction_set) const;
-    
+
     std::string lookup_symbol(SpvId id) const;
     SpvId declare_symbol(const std::string &symbol, SpvId id, SpvId scope_id);
     void add_symbol(const std::string &symbol, SpvId id, SpvId scope_id);
@@ -557,7 +557,7 @@ struct SpvFactory {
     static SpvInstruction unary_op(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_id);
     static SpvInstruction binary_op(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
     static SpvInstruction convert(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_id);
-    static SpvInstruction extended(SpvId instruction_set_id, SpvId instruction_number, SpvId type_id, SpvId result_id, const SpvFactory::Operands& operands);
+    static SpvInstruction extended(SpvId instruction_set_id, SpvId instruction_number, SpvId type_id, SpvId result_id, const SpvFactory::Operands &operands);
 };
 
 /** Contents of a SPIR-V Instruction */

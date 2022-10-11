@@ -542,7 +542,7 @@ SpvInstruction SpvModule::entry_point(const std::string &name) const {
 
 void SpvModule::import_instruction_set(SpvId id, const std::string &instruction_set) {
     check_defined();
-    if(contents->imports.find(instruction_set) == contents->imports.end()) {
+    if (contents->imports.find(instruction_set) == contents->imports.end()) {
         contents->imports.insert({instruction_set, id});
     }
 }
@@ -597,16 +597,16 @@ SpvModule::EntryPointNames SpvModule::entry_point_names() const {
 SpvModule::ImportNames SpvModule::import_names() const {
     check_defined();
     SpvModule::ImportNames results(contents->imports.size());
-    for (const SpvModuleContents::Imports::value_type& v : contents->imports) {
+    for (const SpvModuleContents::Imports::value_type &v : contents->imports) {
         results.push_back(v.first);
     }
     return results;
 }
 
-SpvId SpvModule::lookup_import(const std::string& instruction_set) const {
+SpvId SpvModule::lookup_import(const std::string &instruction_set) const {
     SpvId result_id = SpvInvalidId;
     SpvModuleContents::Imports::const_iterator it = contents->imports.find(instruction_set);
-    if(it != contents->imports.end()) {
+    if (it != contents->imports.end()) {
         result_id = it->second;
     }
     return result_id;
@@ -645,7 +645,7 @@ void SpvModule::encode(SpvBinary &binary) const {
 
     // 3. Extended Instruction Set Imports
     for (const SpvModuleContents::Imports::value_type &import : contents->imports) {
-        const std::string& import_name = import.first;
+        const std::string &import_name = import.first;
         SpvId import_id = import.second;
         SpvInstruction inst = SpvFactory::import(import_id, import_name);
         inst.encode(binary);
@@ -1119,7 +1119,7 @@ SpvId SpvBuilder::lookup_scope(SpvId id) const {
 SpvId SpvBuilder::lookup_import(const std::string &instruction_set) const {
     return module.lookup_import(instruction_set);
 }
-    
+
 void SpvBuilder::enter_function(const SpvFunction &func) {
     active_function = func;
     enter_block(active_function.entry_block());
@@ -1175,7 +1175,7 @@ SpvId SpvBuilder::import_glsl_intrinsics() {
     return import_instruction_set("GLSL.std.450");
 }
 
-SpvId SpvBuilder::import_instruction_set(const std::string& instruction_set) {
+SpvId SpvBuilder::import_instruction_set(const std::string &instruction_set) {
     SpvId result_id = module.lookup_import(instruction_set);
     if (result_id == SpvInvalidId) {
         result_id = make_id(SpvImportId);
@@ -1190,7 +1190,7 @@ void SpvBuilder::require_capability(SpvCapability capability) {
     }
 }
 
-bool SpvBuilder::is_imported(const std::string& instruction_set) const {
+bool SpvBuilder::is_imported(const std::string &instruction_set) const {
     return module.is_imported(instruction_set);
 }
 
@@ -1241,7 +1241,7 @@ SpvId SpvBuilder::add_type(const Type &type, uint32_t array_size) {
         SpvId array_size_id = make_id(SpvIntConstantId);
         SpvId array_size_type_id = add_type(array_size_type);
         SpvInstruction array_size_inst = SpvFactory::constant(array_size_id, array_size_type_id, array_size_type.bytes(), &array_size);
-        module.add_type(array_size_inst); // needs to be defined in the type section (prior to its use in the array_type inst)
+        module.add_type(array_size_inst);  // needs to be defined in the type section (prior to its use in the array_type inst)
         constant_map[constant_key] = array_size_id;
 
         // declare the array type
@@ -1284,8 +1284,8 @@ SpvId SpvBuilder::add_type(const Type &type, uint32_t array_size) {
             }
         } else if (type.is_int_or_uint()) {
             SpvId signedness = 0;
-            bool signedness_support = module.is_capability_required(SpvCapabilityKernel) ? false : true; // kernel execution doesn't track signedness
-            if(signedness_support) {
+            bool signedness_support = module.is_capability_required(SpvCapabilityKernel) ? false : true;  // kernel execution doesn't track signedness
+            if (signedness_support) {
                 signedness = type.is_uint() ? 0 : 1;
             }
 
@@ -1696,7 +1696,7 @@ bool SpvBuilder::is_pointer_type(SpvId id) const {
 
 bool SpvBuilder::is_struct_type(SpvId id) const {
     SpvKind kind = kind_of(id);
-    if(kind == SpvStructTypeId) {
+    if (kind == SpvStructTypeId) {
         return true;
     }
     return false;
@@ -1704,7 +1704,7 @@ bool SpvBuilder::is_struct_type(SpvId id) const {
 
 bool SpvBuilder::is_vector_type(SpvId id) const {
     SpvKind kind = kind_of(id);
-    if(kind == SpvVectorTypeId) {
+    if (kind == SpvVectorTypeId) {
         return true;
     }
     return false;
@@ -1712,9 +1712,9 @@ bool SpvBuilder::is_vector_type(SpvId id) const {
 
 bool SpvBuilder::is_scalar_type(SpvId id) const {
     SpvKind kind = kind_of(id);
-    if((kind == SpvFloatTypeId) || 
-       (kind == SpvIntTypeId) || 
-       (kind == SpvBoolTypeId)) {
+    if ((kind == SpvFloatTypeId) ||
+        (kind == SpvIntTypeId) ||
+        (kind == SpvBoolTypeId)) {
         return true;
     }
     return false;
@@ -1722,7 +1722,7 @@ bool SpvBuilder::is_scalar_type(SpvId id) const {
 
 bool SpvBuilder::is_array_type(SpvId id) const {
     SpvKind kind = kind_of(id);
-    if((kind == SpvArrayTypeId)) {
+    if ((kind == SpvArrayTypeId)) {
         return true;
     }
     return false;
@@ -1730,12 +1730,12 @@ bool SpvBuilder::is_array_type(SpvId id) const {
 
 bool SpvBuilder::is_constant(SpvId id) const {
     SpvKind kind = kind_of(id);
-    if((kind == SpvConstantId) || 
-       (kind == SpvBoolConstantId) || 
-       (kind == SpvIntConstantId) || 
-       (kind == SpvFloatConstantId) || 
-       (kind == SpvStringConstantId) || 
-       (kind == SpvCompositeConstantId)) {
+    if ((kind == SpvConstantId) ||
+        (kind == SpvBoolConstantId) ||
+        (kind == SpvIntConstantId) ||
+        (kind == SpvFloatConstantId) ||
+        (kind == SpvStringConstantId) ||
+        (kind == SpvCompositeConstantId)) {
         return true;
     }
     return false;
@@ -2312,13 +2312,13 @@ SpvInstruction SpvFactory::import(SpvId instruction_set_id, const std::string &i
     return inst;
 }
 
-SpvInstruction SpvFactory::extended(SpvId instruction_set_id, SpvId instruction_number, SpvId type_id, SpvId result_id, const SpvFactory::Operands& operands) {
+SpvInstruction SpvFactory::extended(SpvId instruction_set_id, SpvId instruction_number, SpvId type_id, SpvId result_id, const SpvFactory::Operands &operands) {
     SpvInstruction inst = SpvInstruction::make(SpvOpExtInst);
     inst.set_type_id(type_id);
     inst.set_result_id(result_id);
     inst.add_operand(instruction_set_id);
     inst.add_immediate(instruction_number);
-    for(SpvId o : operands) {
+    for (SpvId o : operands) {
         inst.add_operand(o);
     }
     return inst;
@@ -2327,88 +2327,88 @@ SpvInstruction SpvFactory::extended(SpvId instruction_set_id, SpvId instruction_
 /** GLSL extended instruction utility methods */
 
 bool is_glsl_unary_op(SpvId glsl_op_code) {
-    switch(glsl_op_code) {
-        case GLSLstd450Round: 
-        case GLSLstd450RoundEven: 
-        case GLSLstd450Trunc:
-        case GLSLstd450FAbs:
-        case GLSLstd450SAbs:
-        case GLSLstd450FSign:
-        case GLSLstd450SSign:
-        case GLSLstd450Floor:
-        case GLSLstd450Ceil:
-        case GLSLstd450Fract:
-        case GLSLstd450Radians:
-        case GLSLstd450Degrees:
-        case GLSLstd450Sin:
-        case GLSLstd450Cos:
-        case GLSLstd450Tan:
-        case GLSLstd450Asin:
-        case GLSLstd450Acos: 
-        case GLSLstd450Atan: 
-        case GLSLstd450Asinh: 
-        case GLSLstd450Acosh: 
-        case GLSLstd450Atanh: 
-        case GLSLstd450Cosh: 
-        case GLSLstd450Exp: 
-        case GLSLstd450Log: 
-        case GLSLstd450Exp2: 
-        case GLSLstd450Log2: 
-        case GLSLstd450Sqrt: 
-        case GLSLstd450InverseSqrt: 
-        case GLSLstd450Determinant: 
-        case GLSLstd450MatrixInverse: 
-        case GLSLstd450ModfStruct: 
-        case GLSLstd450FrexpStruct: 
-        case GLSLstd450PackSnorm4x8: 
-        case GLSLstd450PackUnorm4x8: 
-        case GLSLstd450PackSnorm2x16: 
-        case GLSLstd450PackUnorm2x16: 
-        case GLSLstd450PackHalf2x16: 
-        case GLSLstd450PackDouble2x32: 
-        case GLSLstd450UnpackSnorm4x8: 
-        case GLSLstd450UnpackUnorm4x8: 
-        case GLSLstd450UnpackSnorm2x16: 
-        case GLSLstd450UnpackUnorm2x16: 
-        case GLSLstd450UnpackHalf2x16: 
-        case GLSLstd450UnpackDouble2x32: 
-        case GLSLstd450Length: 
-        case GLSLstd450Normalize: 
-        case GLSLstd450FindILsb: 
-        case GLSLstd450FindSMsb: 
-        case GLSLstd450FindUMsb: 
-        case GLSLstd450InterpolateAtCentroid:
-            return true;
-        default:
-            break;
+    switch (glsl_op_code) {
+    case GLSLstd450Round:
+    case GLSLstd450RoundEven:
+    case GLSLstd450Trunc:
+    case GLSLstd450FAbs:
+    case GLSLstd450SAbs:
+    case GLSLstd450FSign:
+    case GLSLstd450SSign:
+    case GLSLstd450Floor:
+    case GLSLstd450Ceil:
+    case GLSLstd450Fract:
+    case GLSLstd450Radians:
+    case GLSLstd450Degrees:
+    case GLSLstd450Sin:
+    case GLSLstd450Cos:
+    case GLSLstd450Tan:
+    case GLSLstd450Asin:
+    case GLSLstd450Acos:
+    case GLSLstd450Atan:
+    case GLSLstd450Asinh:
+    case GLSLstd450Acosh:
+    case GLSLstd450Atanh:
+    case GLSLstd450Cosh:
+    case GLSLstd450Exp:
+    case GLSLstd450Log:
+    case GLSLstd450Exp2:
+    case GLSLstd450Log2:
+    case GLSLstd450Sqrt:
+    case GLSLstd450InverseSqrt:
+    case GLSLstd450Determinant:
+    case GLSLstd450MatrixInverse:
+    case GLSLstd450ModfStruct:
+    case GLSLstd450FrexpStruct:
+    case GLSLstd450PackSnorm4x8:
+    case GLSLstd450PackUnorm4x8:
+    case GLSLstd450PackSnorm2x16:
+    case GLSLstd450PackUnorm2x16:
+    case GLSLstd450PackHalf2x16:
+    case GLSLstd450PackDouble2x32:
+    case GLSLstd450UnpackSnorm4x8:
+    case GLSLstd450UnpackUnorm4x8:
+    case GLSLstd450UnpackSnorm2x16:
+    case GLSLstd450UnpackUnorm2x16:
+    case GLSLstd450UnpackHalf2x16:
+    case GLSLstd450UnpackDouble2x32:
+    case GLSLstd450Length:
+    case GLSLstd450Normalize:
+    case GLSLstd450FindILsb:
+    case GLSLstd450FindSMsb:
+    case GLSLstd450FindUMsb:
+    case GLSLstd450InterpolateAtCentroid:
+        return true;
+    default:
+        break;
     };
     return false;
 }
 
 bool is_glsl_binary_op(SpvId glsl_op_code) {
-    switch(glsl_op_code) {
-        case GLSLstd450Atan2:
-        case GLSLstd450Pow:
-        case GLSLstd450Modf:
-        case GLSLstd450FMin:
-        case GLSLstd450UMin:
-        case GLSLstd450SMin:
-        case GLSLstd450FMax:
-        case GLSLstd450UMax:
-        case GLSLstd450SMax:
-        case GLSLstd450Step:
-        case GLSLstd450Frexp:
-        case GLSLstd450Ldexp:
-        case GLSLstd450Distance:
-        case GLSLstd450Cross:
-        case GLSLstd450Reflect:
-        case GLSLstd450InterpolateAtOffset:
-        case GLSLstd450InterpolateAtSample:
-        case GLSLstd450NMax:
-        case GLSLstd450NMin:
-            return true;
-        default:
-            break;
+    switch (glsl_op_code) {
+    case GLSLstd450Atan2:
+    case GLSLstd450Pow:
+    case GLSLstd450Modf:
+    case GLSLstd450FMin:
+    case GLSLstd450UMin:
+    case GLSLstd450SMin:
+    case GLSLstd450FMax:
+    case GLSLstd450UMax:
+    case GLSLstd450SMax:
+    case GLSLstd450Step:
+    case GLSLstd450Frexp:
+    case GLSLstd450Ldexp:
+    case GLSLstd450Distance:
+    case GLSLstd450Cross:
+    case GLSLstd450Reflect:
+    case GLSLstd450InterpolateAtOffset:
+    case GLSLstd450InterpolateAtSample:
+    case GLSLstd450NMax:
+    case GLSLstd450NMin:
+        return true;
+    default:
+        break;
     };
     return false;
 }

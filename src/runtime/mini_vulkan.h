@@ -6036,10 +6036,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetValidationCacheDataEXT(
 
 // Provided by VK_VERSION_1_2
 typedef struct VkPhysicalDeviceShaderFloat16Int8Features {
-    uint32_t           sType;
-    void*              pNext;
-    VkBool32           shaderFloat16;
-    VkBool32           shaderInt8;
+    uint32_t sType;
+    void *pNext;
+    VkBool32 shaderFloat16;
+    VkBool32 shaderInt8;
 } VkPhysicalDeviceShaderFloat16Int8FeaturesKHR;
 #define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES 1000082000
 

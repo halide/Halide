@@ -642,27 +642,27 @@ WEAK int halide_vulkan_run(void *user_context,
     // 3a. Locate the correct entry point from the cache
     bool found_entry_point = false;
     uint32_t entry_point_index = 0;
-    for(uint32_t n = 0; n < cache_entry->entry_point_count; ++n) {
-        if(strstr(cache_entry->entry_point_data[n].entry_point_name, entry_name) != nullptr) {
+    for (uint32_t n = 0; n < cache_entry->entry_point_count; ++n) {
+        if (strstr(cache_entry->entry_point_data[n].entry_point_name, entry_name) != nullptr) {
             entry_point_index = n;
             found_entry_point = true;
         }
     }
-    if(!found_entry_point) {
+    if (!found_entry_point) {
         error(user_context) << "Vulkan: Failed to locate shader entry point! Unable to proceed!\n";
         return halide_error_code_internal_error;
     }
-    debug(user_context) << "    found entry point [" 
-                        << entry_point_index << "/" << cache_entry->entry_point_count 
+    debug(user_context) << "    found entry point ["
+                        << entry_point_index << "/" << cache_entry->entry_point_count
                         << "] '" << entry_name << "'\n";
 
     halide_abort_if_false(user_context, cache_entry->descriptor_set_layouts != nullptr);
     if (cache_entry->pipeline_layout == 0) {
 
-        //// 1. Create all descriptor set layouts        
-        for(uint32_t n = 0; n < cache_entry->entry_point_count; ++n) {
-            uint32_t uniform_buffer_count = cache_entry->entry_point_data[n].uniform_buffer_count; 
-            uint32_t storage_buffer_count = cache_entry->entry_point_data[n].storage_buffer_count; 
+        //// 1. Create all descriptor set layouts
+        for (uint32_t n = 0; n < cache_entry->entry_point_count; ++n) {
+            uint32_t uniform_buffer_count = cache_entry->entry_point_data[n].uniform_buffer_count;
+            uint32_t storage_buffer_count = cache_entry->entry_point_data[n].storage_buffer_count;
             VkResult result = vk_create_descriptor_set_layout(user_context, ctx.allocator, uniform_buffer_count, storage_buffer_count, &(cache_entry->descriptor_set_layouts[n]));
             if (result != VK_SUCCESS) {
                 error(user_context) << "Vulkan: vk_create_descriptor_set_layout() failed! Unable to create shader module! Error: " << vk_get_error_name(result) << "\n";
@@ -678,7 +678,7 @@ WEAK int halide_vulkan_run(void *user_context,
         }
     }
 
-    VulkanEntryPointData* entry_point_data = (cache_entry->entry_point_data + entry_point_index);
+    VulkanEntryPointData *entry_point_data = (cache_entry->entry_point_data + entry_point_index);
     halide_abort_if_false(user_context, entry_point_data != nullptr);
 
     //// 1a. Create a buffer for the scalar parameters
@@ -710,8 +710,8 @@ WEAK int halide_vulkan_run(void *user_context,
         // NOTE: while this could be re-used across multiple pipelines, we only know the storage requirements of this kernel's
         //       inputs and outputs ... so create a pool specific to the number of buffers known at this time
 
-        uint32_t uniform_buffer_count = entry_point_data->uniform_buffer_count; // needs_scalar_uniform_buffer ? 1 : 0;
-        uint32_t storage_buffer_count = entry_point_data->storage_buffer_count; // entry_point_data->buffer_count;
+        uint32_t uniform_buffer_count = entry_point_data->uniform_buffer_count;  // needs_scalar_uniform_buffer ? 1 : 0;
+        uint32_t storage_buffer_count = entry_point_data->storage_buffer_count;  // entry_point_data->buffer_count;
         VkResult result = vk_create_descriptor_pool(user_context, ctx.allocator, uniform_buffer_count, storage_buffer_count, &(entry_point_data->descriptor_pool));
         if (result != VK_SUCCESS) {
             error(user_context) << "Vulkan: vk_create_descriptor_pool() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
@@ -758,9 +758,9 @@ WEAK int halide_vulkan_run(void *user_context,
 
     //// 7. Begin the command buffer
     result = vk_fill_command_buffer_with_dispatch_call(user_context,
-                                                       ctx.device, command_buffer, 
-                                                       entry_point_data->compute_pipeline, 
-                                                       cache_entry->pipeline_layout, 
+                                                       ctx.device, command_buffer,
+                                                       entry_point_data->compute_pipeline,
+                                                       cache_entry->pipeline_layout,
                                                        entry_point_data->descriptor_set,
                                                        entry_point_index,
                                                        blocksX, blocksY, blocksZ);

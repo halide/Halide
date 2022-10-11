@@ -253,29 +253,27 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
 
     // If the instance runtime supports querying extended device features, request them
     VkPhysicalDeviceShaderFloat16Int8FeaturesKHR shader_f16_i8_ext = {
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES, 
-        nullptr, VK_FALSE, VK_FALSE
-    };
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES,
+        nullptr, VK_FALSE, VK_FALSE};
 
     VkPhysicalDeviceFeatures2KHR device_features_ext = {
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR, 
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
         &shader_f16_i8_ext,
-        device_features
-    };    
+        device_features};
 
-    void* extended_features_ptr = nullptr;
-    void* standard_features_ptr = nullptr;
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(*instance, "vkGetPhysicalDeviceFeatures2KHR");   // v1.0+
-    if(!vkGetPhysicalDeviceFeatures2KHR) { vkGetPhysicalDeviceFeatures2KHR = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(*instance, "vkGetPhysicalDeviceFeatures2"); } // v1.1+
-    if(vkGetPhysicalDeviceFeatures2KHR) {
+    void *extended_features_ptr = nullptr;
+    void *standard_features_ptr = nullptr;
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(*instance, "vkGetPhysicalDeviceFeatures2KHR");     // v1.0+
+    if (!vkGetPhysicalDeviceFeatures2KHR) { vkGetPhysicalDeviceFeatures2KHR = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(*instance, "vkGetPhysicalDeviceFeatures2"); }  // v1.1+
+    if (vkGetPhysicalDeviceFeatures2KHR) {
         debug(user_context) << "Vulkan: Querying for extended device features...\n";
         vkGetPhysicalDeviceFeatures2KHR(*physical_device, &device_features_ext);
         debug(user_context) << "Vulkan: Shader Int8 support: " << (shader_f16_i8_ext.shaderInt8 ? "true" : "false") << "...\n";
         debug(user_context) << "Vulkan: Shader Float16 support: " << (shader_f16_i8_ext.shaderFloat16 ? "true" : "false") << "...\n";
-        extended_features_ptr = (void*)(&device_features_ext); // pass v1.1 extended features (which also contains the standard features)
+        extended_features_ptr = (void *)(&device_features_ext);  // pass v1.1 extended features (which also contains the standard features)
     } else {
         vkGetPhysicalDeviceFeatures(*physical_device, &device_features);
-        standard_features_ptr = &device_features;   // pass v1.0 standard features
+        standard_features_ptr = &device_features;  // pass v1.0 standard features
     }
 
     VkDeviceCreateInfo device_create_info = {
@@ -286,7 +284,7 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         &device_queue_create_info,
         (uint32_t)requested_layers.size(), requested_layers.data(),                      // Layers
         (uint32_t)required_device_extensions.size(), required_device_extensions.data(),  // Enabled extensions
-        (VkPhysicalDeviceFeatures*)standard_features_ptr,                                // Requested device features
+        (VkPhysicalDeviceFeatures *)standard_features_ptr,                               // Requested device features
     };
 
     VkResult result = vkCreateDevice(*physical_device, &device_create_info, alloc_callbacks, device);
