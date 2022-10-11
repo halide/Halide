@@ -1722,7 +1722,7 @@ bool SpvBuilder::is_scalar_type(SpvId id) const {
 
 bool SpvBuilder::is_array_type(SpvId id) const {
     SpvKind kind = kind_of(id);
-    if ((kind == SpvArrayTypeId)) {
+    if (kind == SpvArrayTypeId) {
         return true;
     }
     return false;
