@@ -58,7 +58,6 @@ tests(GROUPS error
       func_tuple_dim_mismatch.cpp
       func_tuple_types_mismatch.cpp
       func_tuple_update_types_mismatch.cpp
-      gpu_error_1.cpp
       implicit_args.cpp
       impossible_constraints.cpp
       incomplete_target.cpp
