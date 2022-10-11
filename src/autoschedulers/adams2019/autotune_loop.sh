@@ -1,10 +1,7 @@
 #!/bin/bash
 
-# Build the generator to autotune. This script will be autotuning the
-# autoscheduler's cost model training pipeline, which is large enough
-# to be interesting.
-if [ $# -lt 6 -o $# -gt 8 ]; then
-  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir halide_distrib_path samples_out_path [generator_args_sets]"
+if [ $# -lt 8 -o $# -gt 10 ]; then
+  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir halide_distrib_path samples_out_path num_cores pipeline_id [generator_args_sets]"
   exit
 fi
 
@@ -20,12 +17,14 @@ START_WEIGHTS_FILE=${4}
 AUTOSCHED_BIN=${5}
 HALIDE_DISTRIB_PATH=${6}
 SAMPLES=${7}
+NUM_CORES=${8}
+PIPELINE_ID=${9}
 
 # Read the generator-arg sets into an array. Each set is delimited
 # by space; multiple values within each set are are delimited with ;
 # e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
-if [ $# -ge 8 ]; then
-    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${8}"
+if [ $# -ge 10 ]; then
+    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${10}"
 else
     declare -a GENERATOR_ARGS_SETS_ARRAY=
 fi
@@ -67,7 +66,7 @@ fi
 
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
-BATCH_SIZE=32
+BATCH_SIZE=${NUM_CORES}
 
 TIMEOUT_CMD="timeout"
 if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
@@ -107,9 +106,9 @@ make_featurization() {
         -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
         target=${HL_TARGET} \
         ${EXTRA_GENERATOR_ARGS} \
-        -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.${PLUGIN_EXT} \
+        -p ${HALIDE_DISTRIB_PATH}/lib/libautoschedule_adams2019.${PLUGIN_EXT} \
         autoscheduler=Adams2019 \
-        autoscheduler.parallelism=32 \
+        autoscheduler.parallelism=${NUM_CORES} \
         autoscheduler.beam_size=${beam} \
         autoscheduler.random_dropout=${dropout} \
         autoscheduler.random_dropout_seed=${SEED} \
@@ -134,7 +133,7 @@ make_featurization() {
 benchmark_sample() {
     sleep 1 # Give CPU clocks a chance to spin back up if we're thermally throttling
     D=${1}
-    HL_NUM_THREADS=32 \
+    HL_NUM_THREADS=${NUM_CORES} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench \
         --estimate_all \
@@ -164,8 +163,8 @@ NUM_BATCHES=1
 for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
 
     SECONDS=0
-
-    for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
+    NUM_EXTRA_ARGS=${#GENERATOR_ARGS_SETS_ARRAY[@]}
+    for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${NUM_EXTRA_ARGS};EXTRA_ARGS_IDX++)); do
 
         # Compile a batch of samples using the generator in parallel
         DIR=${SAMPLES}/batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
@@ -206,7 +205,9 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID++)); do
             S=$(printf "%04d%04d" $BATCH_ID $SAMPLE_ID)
             FNAME=$(printf "%s_batch_%04d_sample_%04d" ${PIPELINE} $BATCH_ID $SAMPLE_ID)
-            benchmark_sample "${DIR}/${SAMPLE_ID}" $S $EXTRA_ARGS_IDX $FNAME
+            ID=$((${PIPELINE_ID} * ${NUM_EXTRA_ARGS} + ${EXTRA_ARGS_IDX}))
+            echo Pipeline ID is $ID
+            benchmark_sample "${DIR}/${SAMPLE_ID}" $S $ID $FNAME
         done
 
         # retrain model weights on all samples seen so far
@@ -216,7 +217,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
             ${AUTOSCHED_BIN}/retrain_cost_model \
                 --epochs=${BATCH_SIZE} \
                 --rates="0.0001" \
-                --num_cores=32 \
+                --num_cores=${NUM_CORES} \
                 --initial_weights=${WEIGHTS} \
                 --weights_out=${WEIGHTS} \
                 --best_benchmark=${SAMPLES}/best.${PIPELINE}.benchmark.txt \
