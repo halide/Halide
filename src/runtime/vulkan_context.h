@@ -263,8 +263,13 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
 
     void *extended_features_ptr = nullptr;
     void *standard_features_ptr = nullptr;
-    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(*instance, "vkGetPhysicalDeviceFeatures2KHR");     // v1.0+
-    if (!vkGetPhysicalDeviceFeatures2KHR) { vkGetPhysicalDeviceFeatures2KHR = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(*instance, "vkGetPhysicalDeviceFeatures2"); }  // v1.1+
+
+    // Look for v1.1+ device feature query method
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(*instance, "vkGetPhysicalDeviceFeatures2KHR");  // v1.0+
+    if (!vkGetPhysicalDeviceFeatures2KHR) {
+        vkGetPhysicalDeviceFeatures2KHR = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(*instance, "vkGetPhysicalDeviceFeatures2");
+    }
+
     if (vkGetPhysicalDeviceFeatures2KHR) {
         debug(user_context) << "Vulkan: Querying for extended device features...\n";
         vkGetPhysicalDeviceFeatures2KHR(*physical_device, &device_features_ext);
