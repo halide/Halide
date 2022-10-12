@@ -69,13 +69,6 @@ public:
                 .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
                 .vectorize(xi)
                 .unroll(yi);
-            // if (use_prefetch_sched) {
-            //     output.prefetch(input, y, 2);
-            // }
-            // if (use_parallel_sched) {
-            //     Var yo;
-            //     output.split(y, yo, y, 128).parallel(yo);
-            // }
         } else {
             const int vector_size = natural_vector_size<uint8_t>();
             bounded_input

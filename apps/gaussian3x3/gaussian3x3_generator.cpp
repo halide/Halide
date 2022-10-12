@@ -21,8 +21,8 @@ public:
     void schedule() {
         Var xi{"xi"}, yi{"yi"}, yo{"yo"};
 
-        input.dim(0).set_min(0);
-        input.dim(1).set_min(0);
+        // input.dim(0).set_min(0);
+        // input.dim(1).set_min(0);
 
         output.dim(0).set_min(0);
         output.dim(1).set_min(0);
@@ -32,15 +32,20 @@ public:
 
             output
                 .hexagon()
+#ifndef OLD_PREFETCH
                 .prefetch(input, y, y, 2, PrefetchBoundStrategy::NonFaulting)
+#else
+                .prefetch(input, y, 2, PrefetchBoundStrategy::NonFaulting)
+#endif
                 .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
                 .vectorize(xi)
                 .unroll(yi);
         } else {
             const int vector_size = natural_vector_size<uint8_t>();
             output
-                .vectorize(x, vector_size)
-                .parallel(y, 16);
+                .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
+                .vectorize(xi)
+                .unroll(yi);
         }
     }
 private:

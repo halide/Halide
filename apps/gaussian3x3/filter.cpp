@@ -23,10 +23,12 @@ int main(int argc, char **argv) {
     }
 
     Halide::Runtime::Buffer<uint8_t> input = load_and_convert_image(argv[1]);
-    Halide::Runtime::Buffer<uint8_t> output_llvm(input.width(), input.height());
-    Halide::Runtime::Buffer<uint8_t> output_halide(input.width(), input.height());
-    Halide::Runtime::Buffer<uint8_t> output_pitchfork(input.width(), input.height());
-    Halide::Runtime::Buffer<uint8_t> output_rake(input.width(), input.height());
+    Halide::Runtime::Buffer<uint8_t> output_llvm(input.width() - 32, input.height() - 32);
+    Halide::Runtime::Buffer<uint8_t> output_halide(input.width() - 32, input.height() - 32);
+    Halide::Runtime::Buffer<uint8_t> output_pitchfork(input.width() - 32, input.height() - 32);
+    Halide::Runtime::Buffer<uint8_t> output_rake(input.width() - 32, input.height() - 32);
+
+    input.set_min({-1, -1});
 
     int timing_iterations = atoi(argv[2]);
 
@@ -62,8 +64,8 @@ int main(int argc, char **argv) {
     });
     printf("Rake time: %gms\n", min_t_manual * 1e3);
 
-    for (int i = 0; i < input.width(); i++) {
-        for (int j = 0; j < input.height(); j++) {
+    for (int i = 0; i < output_llvm.width(); i++) {
+        for (int j = 0; j < output_llvm.height(); j++) {
             if (output_llvm(i, j) != output_halide(i, j)) {
                 std::cerr << "Halide failure at pixel i=" << i << ", j=" << j << ": "
                           << (int)output_llvm(i, j) << " != " << (int)output_halide(i, j) << "\n";

@@ -161,7 +161,11 @@ public:
                 .tile(x, y, xo, yo, x, y, vector_size_u8, kTileSizeHeight,
                     TailStrategy::RoundUp)
                 .reorder(yo, xo)
+#ifndef OLD_PREFETCH
                 .prefetch(mat_a_, yo, yo)
+#else
+                .prefetch(mat_a_, yo)
+#endif
                 .vectorize(x)
                 .unroll(y)
                 .parallel(xo);
@@ -184,8 +188,11 @@ public:
             row_sums_a.compute_at(output_, Var::outermost())
                 .split(y, y, yi, 32)
                 .parallel(y)
+#ifndef OLD_PREFETCH
                 .prefetch(mat_a_, yi, yi);
-
+#else
+                .prefetch(mat_a_, yi);
+#endif
             Var xi("xi");
             column_sums_b.compute_at(output_, Var::outermost())
                 .split(x, x, xi, vector_size_u8, TailStrategy::GuardWithIf)

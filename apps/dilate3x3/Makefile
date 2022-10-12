@@ -4,7 +4,7 @@ all: $(BIN)/$(HL_TARGET)/filter
 
 test: $(BIN)/$(HL_TARGET)/out.png
 
-APP_NAME=conv3x3_a16
+APP_NAME=dilate3x3
 
 HVX_TARGET=hexagon-32-noos-no_bounds_query-no_asserts-hvx_128-hvx_v66
 ARM_TARGET=arm-64-osx-no_runtime-arm_dot_prod
@@ -18,7 +18,7 @@ $(GENERATOR_BIN)/$(APP_NAME)_rake.generator: $(APP_NAME)_generator.cpp $(RAKE_GE
 	@mkdir -p $(@D)
 	export HL_RAKE_BENCHMARK_NAME=rake && \
 	export HL_ENABLE_RAKE=1 && \
-	$(CXX) $(RAKE_CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(RAKE_LIBHALIDE_LDFLAGS)
+	$(CXX) $(RAKE_CXXFLAGS) -g -DOLD_PREFETCH $(filter %.cpp,$^) -o $@ $(RAKE_LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/$(APP_NAME)_llvm.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	@mkdir -p $(@D)

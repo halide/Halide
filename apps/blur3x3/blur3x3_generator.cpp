@@ -27,13 +27,28 @@ public:
 
             blur_y.compute_root()
                 .hexagon()
+#ifndef OLD_PREFETCH
                 .prefetch(input, y, y, 2)
+#else
+                .prefetch(input, y, 2)
+#endif
                 .split(y, y, yi, 128)
                 .parallel(y)
                 .vectorize(x, vector_size);
             blur_x
                 .store_at(blur_y, y)
                 .compute_at(blur_y, yi)
+                .vectorize(x, vector_size);
+        } else {
+            const int vector_size = natural_vector_size<uint8_t>();
+
+            blur_y
+                .split(y, y, yi, 32)
+                .parallel(y)
+                .vectorize(x, vector_size);
+            blur_x
+                .store_at(blur_y, y)
+                .compute_at(blur_y, x)
                 .vectorize(x, vector_size);
         }
     }

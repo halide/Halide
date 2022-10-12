@@ -530,7 +530,11 @@ void CameraPipe::generate() {
         denoised
             .compute_at(processed, yi)
             .store_at(processed, yo)
-            .prefetch(input, y, y, 2)
+#ifndef OLD_PREFETCH
+                .prefetch(input, y, y, 2)
+#else
+                .prefetch(input, y, 2)
+#endif
             .fold_storage(y, 4)
             .tile(x, y, x, y, xi, yi, 2 * vec, 2)
             .vectorize(xi)
