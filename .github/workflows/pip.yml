@@ -14,13 +14,17 @@ concurrency:
   group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: true
 
+env:
+  LLVM_VER: 15.0.1
+
 jobs:
   pip-linux:
-    name: Package Halide Python bindings on Linux
+    name: Package Halide Python bindings
 
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
         arch: [ x86_64, aarch64 ]
 
@@ -44,9 +48,9 @@ jobs:
         env:
           CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
           CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux*"
-          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:15.0.1
-          # CIBW_MANYLINUX_I686_IMAGE: ghcr.io/halide/manylinux2014_i686-llvm:15.0.1
-          CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:15.0.1
+          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
+          # CIBW_MANYLINUX_I686_IMAGE: ghcr.io/halide/manylinux2014_i686-llvm:${{ env.LLVM_VER }}
+          CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: >
             cmake -G Ninja -S . -B build
             -DCMAKE_BUILD_TYPE=Release -DWITH_DOCS=NO -DWITH_PYTHON_BINDINGS=NO -DWITH_TESTS=NO
@@ -58,34 +62,44 @@ jobs:
           name: wheels
           path: ./wheelhouse/*.whl
 
-  build-llvm:
-    name: Build LLVM for ${{ matrix.runner }}
+  pip-other:
+    name: Package Halide Python bindings
 
     runs-on: ${{ matrix.runner }}
 
     env:
-      LLVM_REF: llvmorg-15.0.1
+      CMAKE_PREFIX_PATH: ${{ github.workspace }}/local
 
     strategy:
       fail-fast: false
       matrix:
-        runner: [ windows-latest, macos-latest ]
+        include:
+          - runner: windows-latest
+            pytag: win_amd64
+            arch: x64
+
+          - runner: macos-latest
+            pytag: macosx_universal2
+            arch: x86_64;arm64
 
     steps:
       - uses: actions/checkout@v3
-        with:
-          repository: llvm/llvm-project
-          ref: ${{ env.LLVM_REF }}
-
-      - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@latest
 
       - name: Cache LLVM build folder
         id: cache-llvm
         uses: actions/cache@v3
         with:
           path: local
-          key: ${{ env.LLVM_REF }}-${{ runner.os }}
+          key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
+
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: lukka/get-cmake@latest
+
+      - uses: actions/checkout@v3
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        with:
+          repository: llvm/llvm-project
+          ref: llvmorg-${{ env.LLVM_VER }}
 
       - name: Configure LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
@@ -110,48 +124,6 @@ jobs:
       - name: Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: cmake --install build --prefix local
-
-      - run: tar zcvf llvm.tgz local
-
-      - uses: actions/upload-artifact@v3
-        with:
-          name: ${{ env.LLVM_REF }}-${{ runner.os }}
-          path: llvm.tgz
-
-  pip-no-docker:
-    name: Package Halide Python bindings
-
-    runs-on: ${{ matrix.runner }}
-
-    needs: build-llvm
-
-    env:
-      CMAKE_PREFIX_PATH: ${{ github.workspace }}/local
-      LLVM_REF: llvmorg-15.0.1
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: windows-latest
-            pytag: win_amd64
-            arch: x64
-
-          - runner: macos-latest
-            pytag: macosx_universal2
-            arch: x86_64;arm64
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@latest
-
-      - uses: actions/download-artifact@v3
-        with:
-          name: ${{ env.LLVM_REF }}-${{ runner.os }}
-
-      - run: tar zxvf llvm.tgz
 
       - name: Configure Halide
         if: runner.os == 'Windows'
@@ -191,3 +163,34 @@ jobs:
         with:
           name: wheels
           path: ./wheelhouse/*.whl
+
+  pip-sdist:
+    name: Make SDist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: pipx run build --sdist
+      - uses: actions/upload-artifact@v3
+        with:
+          path: dist/*.tar.gz
+
+  upload_all:
+    needs: [ pip-linux, pip-other, pip-sdist ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: wheels
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@v1.5.1
+        with:
+          user: __token__
+          password: ${{ secrets.TEST_PYPI_TOKEN }}
+          repository_url: https://test.pypi.org/legacy/
+
+      - uses: pypa/gh-action-pypi-publish@v1.5.1
+        if: github.event_name == 'release' && github.event.action == 'published'
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_TOKEN }}
