@@ -14,11 +14,11 @@ $(GENERATOR_BIN)/$(APP_NAME).generator: $(APP_NAME)_generator.cpp $(GENERATOR_DE
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-$(GENERATOR_BIN)/$(APP_NAME)_rake.generator: $(APP_NAME)_generator.cpp $(RAKE_GENERATOR_DEPS)
+$(GENERATOR_BIN)/$(APP_NAME)_rake.generator: $(APP_NAME)_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	export HL_RAKE_BENCHMARK_NAME=rake && \
 	export HL_ENABLE_RAKE=1 && \
-	$(CXX) $(RAKE_CXXFLAGS) -g -DOLD_PREFETCH $(filter %.cpp,$^) -o $@ $(RAKE_LIBHALIDE_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g  $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/$(APP_NAME)_llvm.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	@mkdir -p $(@D)
@@ -26,7 +26,7 @@ $(BIN)/%/$(APP_NAME)_llvm.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=1 && \
 	export HL_DISABLE_HALIDE_LOWERING=1 && \
-	/usr/bin/time  $< -g $(APP_NAME) -f $(APP_NAME)_llvm -e stmt,assembly,static_library,c_header,llvm_assembly -o $(BIN)/$* target=$*
+	/usr/bin/time  $< -g conv3x3 -f $(APP_NAME)_llvm -e stmt,assembly,static_library,c_header,llvm_assembly -o $(BIN)/$* target=$*
 
 $(BIN)/%/$(APP_NAME)_halide.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	@mkdir -p $(@D)
@@ -34,7 +34,7 @@ $(BIN)/%/$(APP_NAME)_halide.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	export HL_ENABLE_RAKE_RULES=0 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	/usr/bin/time  $< -g $(APP_NAME) -f $(APP_NAME)_halide -e stmt,assembly,static_library,c_header,llvm_assembly -o $(BIN)/$* target=$*
+	/usr/bin/time  $< -g conv3x3 -f $(APP_NAME)_halide -e stmt,assembly,static_library,c_header,llvm_assembly -o $(BIN)/$* target=$*
 
 $(BIN)/%/$(APP_NAME)_pitchfork.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	@mkdir -p $(@D)
@@ -42,7 +42,7 @@ $(BIN)/%/$(APP_NAME)_pitchfork.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	/usr/bin/time  $< -g $(APP_NAME) -f $(APP_NAME)_pitchfork -e stmt,assembly,static_library,c_header,llvm_assembly -o $(BIN)/$* target=$*
+	/usr/bin/time  $< -g conv3x3 -f $(APP_NAME)_pitchfork -e stmt,assembly,static_library,c_header,llvm_assembly -o $(BIN)/$* target=$*
 
 $(BIN)/%/$(APP_NAME)_rake.a: $(GENERATOR_BIN)/$(APP_NAME)_rake.generator
 	@mkdir -p $(@D)
@@ -51,7 +51,7 @@ $(BIN)/%/$(APP_NAME)_rake.a: $(GENERATOR_BIN)/$(APP_NAME)_rake.generator
 	export HL_ENABLE_RAKE_RULES=1 && \
 	export HL_DISABLE_INTRINISICS=0 && \
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
-	/usr/bin/time  $< -g $(APP_NAME) -f $(APP_NAME)_rake -e stmt,assembly,static_library,c_header,llvm_assembly -o $(BIN)/$* target=$*
+	/usr/bin/time  $< -g conv3x3 -f $(APP_NAME)_rake -e stmt,assembly,static_library,c_header,llvm_assembly -o $(BIN)/$* target=$*
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	@mkdir -p $(@D)
