@@ -85,6 +85,18 @@ enum SpvKind {
     SpvUnknownItem,
 };
 
+/** Specific types of SPIR-V operand types */
+enum SpvValueType {
+    SpvInvalidValueType,
+    SpvOperandId,
+    SpvBitMaskLiteral,
+    SpvIntegerLiteral,
+    SpvIntegerData,
+    SpvFloatData,
+    SpvStringData,
+    SpvUnknownValueType
+};
+
 /** SPIR-V requires all IDs to be 32-bit unsigned integers */
 using SpvId = uint32_t;
 using SpvBinary = std::vector<uint32_t>;
@@ -116,6 +128,9 @@ using SpvInstructionContentsPtr = IntrusivePtr<SpvInstructionContents>;
 /** General interface for representing a SPIR-V Instruction */
 class SpvInstruction {
 public:
+    using Operands = std::vector<SpvId>;
+    using ValueTypes = std::vector<SpvValueType>;
+
     SpvInstruction() = default;
     ~SpvInstruction() = default;
 
@@ -129,14 +144,17 @@ public:
     void set_type_id(SpvId id);
     void set_op_code(SpvOp opcode);
     void add_operand(SpvId id);
-    void add_immediate(SpvId id);
-    void add_data(uint32_t bytes, const void *data);
+    void add_immediate(SpvId id, SpvValueType type);
+    void add_data(uint32_t bytes, const void *data, SpvValueType type);
     void add_string(const std::string &str);
 
     SpvId result_id() const;
     SpvId type_id() const;
     SpvOp op_code() const;
-    SpvId operand(uint32_t index);
+    SpvId operand(uint32_t index) const;
+    const void* data(uint32_t index=0) const;
+    SpvValueType value_type(uint32_t index) const;
+    const Operands& operands() const;
 
     bool has_type() const;
     bool has_result() const;
@@ -192,6 +210,9 @@ protected:
 /** General interface for representing a SPIR-V Function */
 class SpvFunction {
 public:
+    using Blocks = std::vector<SpvBlock>;
+    using Parameters = std::vector<SpvInstruction>;
+
     SpvFunction() = default;
     ~SpvFunction() = default;
 
@@ -208,9 +229,11 @@ public:
     void set_parameter_precision(uint32_t index, SpvPrecision precision);
     bool is_defined() const;
 
+    const Blocks& blocks() const;
     SpvBlock entry_block() const;
     SpvBlock tail_block() const;
     SpvPrecision return_precision() const;
+    const Parameters& parameters() const;
     SpvPrecision parameter_precision(uint32_t index) const;
     uint32_t parameter_count() const;
     uint32_t control_mask() const;
@@ -232,9 +255,14 @@ protected:
 /** General interface for representing a SPIR-V code module */
 class SpvModule {
 public:
+    using ImportDefinition = std::pair<SpvId, std::string>;
     using ImportNames = std::vector<std::string>;
     using EntryPointNames = std::vector<std::string>;
     using Instructions = std::vector<SpvInstruction>;
+    using Functions = std::vector<SpvFunction>;
+    using Capabilities = std::vector<SpvCapability>;
+    using Extensions = std::vector<std::string>;
+    using Imports = std::vector<ImportDefinition>;
 
     SpvModule() = default;
     ~SpvModule() = default;
@@ -264,6 +292,7 @@ public:
     void set_memory_model(SpvMemoryModel val);
     void set_binding_count(SpvId count);
 
+    uint32_t version_format() const;
     SpvSourceLanguage source_language() const;
     SpvAddressingModel addressing_model() const;
     SpvMemoryModel memory_model() const;
@@ -272,7 +301,20 @@ public:
     ImportNames import_names() const;
     SpvId lookup_import(const std::string &Instruction_set) const;
     uint32_t entry_point_count() const;
+
+    Imports imports() const;
+    Extensions extensions() const;
+    Capabilities capabilities() const;
+    Instructions entry_points() const;
     const Instructions &execution_modes() const;
+    const Instructions &debug_source() const;
+    const Instructions &debug_symbols() const;
+    const Instructions &annotations() const;
+    const Instructions &type_definitions() const;
+    const Instructions &global_constants() const;
+    const Instructions &global_variables() const;
+    const Functions &function_definitions() const;
+
     uint32_t binding_count() const;
     SpvModule module() const;
 
@@ -509,7 +551,7 @@ struct SpvFactory {
     static SpvInstruction runtime_array_type(SpvId result_type_id, SpvId base_type_id);
     static SpvInstruction pointer_type(SpvId pointer_type_id, SpvStorageClass storage_class, SpvId base_type_id);
     static SpvInstruction function_type(SpvId function_type_id, SpvId return_type_id, const ParamTypes &param_type_ids);
-    static SpvInstruction constant(SpvId result_id, SpvId type_id, size_t bytes, const void *data);
+    static SpvInstruction constant(SpvId result_id, SpvId type_id, size_t bytes, const void *data,  SpvValueType value_type);
     static SpvInstruction null_constant(SpvId result_id, SpvId type_id);
     static SpvInstruction bool_constant(SpvId result_id, SpvId type_id, bool value);
     static SpvInstruction string_constant(SpvId result_id, const std::string &value);
@@ -563,13 +605,13 @@ struct SpvFactory {
 /** Contents of a SPIR-V Instruction */
 struct SpvInstructionContents {
     using Operands = std::vector<SpvId>;
-    using Immediates = std::vector<bool>;
+    using ValueTypes = std::vector<SpvValueType>;
     mutable RefCount ref_count;
     SpvOp op_code = SpvOpNop;
     SpvId result_id = SpvNoResult;
     SpvId type_id = SpvNoType;
     Operands operands;
-    Immediates immediates;
+    ValueTypes value_types;
     SpvBlock block;
 };
 
@@ -616,6 +658,7 @@ struct SpvModuleContents {
 
     mutable RefCount ref_count;
     SpvId module_id = SpvInvalidId;
+    SpvId version_format = SpvVersion;
     SpvId binding_count = 0;
     SpvSourceLanguage source_language = SpvSourceLanguageUnknown;
     SpvAddressingModel addressing_model = SpvAddressingModelLogical;
@@ -635,8 +678,21 @@ struct SpvModuleContents {
     Instructions instructions;
 };
 
+/** Helper functions for determining calling convention of GLSL builtins **/
 bool is_glsl_unary_op(SpvId glsl_op_code);
 bool is_glsl_binary_op(SpvId glsl_op_code);
+
+/** Output the contents of a SPIR-V module in human-readable form **/
+std::ostream &operator<<(std::ostream &stream, const SpvModule &);
+
+/** Output the definition of a SPIR-V function in human-readable form **/
+std::ostream &operator<<(std::ostream &stream, const SpvFunction &);
+
+/** Output the contents of a SPIR-V block in human-readable form **/
+std::ostream &operator<<(std::ostream &stream, const SpvBlock &);
+
+/** Output a SPIR-V instruction in human-readable form **/
+std::ostream &operator<<(std::ostream &stream, const SpvInstruction &);
 
 }  // namespace Internal
 }  // namespace Halide
