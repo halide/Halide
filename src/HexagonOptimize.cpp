@@ -513,10 +513,17 @@ bool process_match_flags(vector<Expr> &matches, int flags, const Expr &expr) {
 
         if (t.is_uint()) {
             // Need to prove only that e is less than half the max
-            internal_assert(output_type.is_int());
-            const int64_t maximum = max_int(output_type.bits());
-            if (!is_upper_bounded(e, maximum)) {
-                return false;
+            if (output_type.is_int()) {
+                const int64_t maximum = max_int(output_type.bits());
+                if (!is_upper_bounded(e, maximum)) {
+                    return false;
+                }
+            } else {
+                // is_uint
+                const uint64_t maximum = max_uint(output_type.bits());
+                if (!is_upper_bounded(e, maximum)) {
+                    return false;
+                }
             }
         } else {
             // is_int
@@ -1052,7 +1059,7 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
         }
         // TODO: There can be better instruction selection for these.
         if (op->is_intrinsic(Call::widen_right_add)) {
-            if (enable_synthesized_rules() && !is_const(op->args[1])) {
+            if (enable_synthesized_rules() && op->type.element_of() == UInt(16) && !is_const(op->args[1])) {
                 // use vmpy-acc
                 Expr lowered = Add::make(op->args[0], widening_mul(op->args[1], make_one(op->args[1].type())));
                 return mutate(lowered);
@@ -2420,7 +2427,9 @@ private:
                 const Cast *cast_a = a.as<Cast>();
                 bool is_widening_cast = cast_a && cast_a->type.bits() >= cast_a->value.type().bits() * 2;
                 if (is_widening_cast || Call::as_intrinsic(a, {Call::widening_add, Call::widening_mul, Call::widening_sub})) {
-                    return mutate(distribute(a, make_one(a.type()) << *const_b));
+                    const uint64_t const_m = 1ull << *const_b;
+                    Expr b = make_const(a.type(), const_m);
+                    return mutate(distribute(a, b));
                 }
             }
         } else if (op->is_intrinsic(Call::widening_shift_left)) {
@@ -2731,7 +2740,9 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t, const FuncValueBound
 
     // Hexagon prefers widening shifts to be expressed as multiplies to
     // hopefully hit compound widening multiplies.
+    // std::cerr << "before\n" << s << "\n\n\n";
     s = DistributeShiftsAsMuls().mutate(s);
+    // std::cerr << "after\n" << s << "\n\n\n";
 
     // Pattern match VectorReduce IR node. Handle vector reduce instructions
     // before OptimizePatterns to prevent being mutated by patterns like
