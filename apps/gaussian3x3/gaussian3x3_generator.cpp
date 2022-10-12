@@ -32,7 +32,7 @@ public:
 
             output
                 .hexagon()
-#ifndef OLD_PREFETCH
+#ifndef OLD_SYNTAX
                 .prefetch(input, y, y, 2, PrefetchBoundStrategy::NonFaulting)
 #else
                 .prefetch(input, y, 2, PrefetchBoundStrategy::NonFaulting)

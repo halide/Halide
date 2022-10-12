@@ -154,7 +154,11 @@ public:
     void schedule() {
         Pipeline p(output);
 
+#ifndef OLD_SYNTAX
         if (using_autoscheduler()) {
+#else
+        if (auto_schedule) {
+#endif
             // blank
         } else if (get_target().has_gpu_feature()) {
             Var xi, yi;
@@ -216,6 +220,7 @@ public:
     // currently allow 8-bit computations
     GeneratorParam<Type> result_type{"result_type", UInt(8)};
 
+#ifndef OLD_SYNTAX
     Input<Buffer<uint16_t, 2>> input{"input"};
     Input<Buffer<float, 2>> matrix_3200{"matrix_3200"};
     Input<Buffer<float, 2>> matrix_7000{"matrix_7000"};
@@ -226,7 +231,18 @@ public:
     Input<int> blackLevel{"blackLevel"};
     Input<int> whiteLevel{"whiteLevel"};
     Output<Buffer<uint8_t, 3>> processed{"processed"};
-
+#else
+    Input<Buffer<uint16_t>> input{"input", 2};
+    Input<Buffer<float>> matrix_3200{"matrix_3200", 2};
+    Input<Buffer<float>> matrix_7000{"matrix_7000", 2};
+    Input<float> color_temp{"color_temp"};
+    Input<float> gamma{"gamma"};
+    Input<float> contrast{"contrast"};
+    Input<float> sharpen_strength{"sharpen_strength"};
+    Input<int> blackLevel{"blackLevel"};
+    Input<int> whiteLevel{"whiteLevel"};
+    Output<Buffer<uint8_t>> processed{"processed", 3};
+#endif
     void generate();
 
 private:
@@ -270,7 +286,11 @@ Func CameraPipe::color_correct(Func input) {
     Expr val = (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
     matrix(x, y) = cast<int16_t>(val * 256.0f);  // Q8.8 fixed point
 
+#ifndef OLD_SYNTAX
     if (!using_autoscheduler()) {
+#else
+    if (!auto_schedule) {
+#endif
         matrix.compute_root();
         if (get_target().has_gpu_feature()) {
             matrix.gpu_single_thread();
@@ -331,7 +351,11 @@ Func CameraPipe::apply_curve(Func input) {
     // makeLUT add guard band outside of (minRaw, maxRaw]:
     curve(x) = select(x <= minRaw, 0, select(x > maxRaw, 255, val));
 
+#ifndef OLD_SYNTAX
     if (!using_autoscheduler()) {
+#else
+    if (!auto_schedule) {
+#endif
         // It's a LUT, compute it once ahead of time.
         curve.compute_root();
         if (get_target().has_gpu_feature()) {
@@ -370,7 +394,11 @@ Func CameraPipe::sharpen(Func input) {
     // Convert the sharpening strength to 2.5 fixed point. This allows sharpening in the range [0, 4].
     Func sharpen_strength_x32("sharpen_strength_x32");
     sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
+#ifndef OLD_SYNTAX
     if (!using_autoscheduler()) {
+#else
+    if (!auto_schedule) {
+#endif
         sharpen_strength_x32.compute_root();
         if (get_target().has_gpu_feature()) {
             sharpen_strength_x32.gpu_single_thread();
@@ -439,12 +467,20 @@ void CameraPipe::generate() {
     processed.set_estimates({{0, 2592}, {0, 1968}, {0, 3}});
 
     // Schedule
+#ifndef OLD_SYNTAX
     if (using_autoscheduler()) {
+#else
+    if (auto_schedule) {
+#endif
         // nothing
     } else if (get_target().has_gpu_feature()) {
 
         // We can generate slightly better code if we know the output is even-sized
+#ifndef OLD_SYNTAX
         if (!using_autoscheduler()) {
+#else
+        if (!auto_schedule) {
+#endif
             // TODO: The autoscheduler really ought to be able to
             // accommodate bounds on the output Func.
             Expr out_width = processed.width();
@@ -530,7 +566,7 @@ void CameraPipe::generate() {
         denoised
             .compute_at(processed, yi)
             .store_at(processed, yo)
-#ifndef OLD_PREFETCH
+#ifndef OLD_SYNTAX
                 .prefetch(input, y, y, 2)
 #else
                 .prefetch(input, y, 2)

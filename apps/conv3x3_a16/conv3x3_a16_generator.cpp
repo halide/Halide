@@ -4,8 +4,8 @@ using namespace Halide;
 
 class Conv3x3 : public Generator<Conv3x3> {
 public:
+#ifndef OLD_SYNTAX
     GeneratorParam<Type> accumulator_type{"accumulator_type", Int(16)};
-    // GeneratorParam<Type> accumulator_type{"accumulator_type", Int(32)};
     // Takes an 8 bit image; one channel.
     Input<Buffer<uint8_t, 2>> input{"input"};
     Input<Buffer<int8_t, 2>> mask{"mask"};
@@ -14,6 +14,17 @@ public:
 
     GeneratorParam<bool> use_parallel_sched{"use_parallel_sched", true};
     GeneratorParam<bool> use_prefetch_sched{"use_prefetch_sched", true};
+#else
+    GeneratorParam<Type> accumulator_type{ "accumulator_type", Int(16) };
+    // Takes an 8 bit image; one channel.
+    Input<Buffer<uint8_t>> input{ "input", 2 };
+    Input<Buffer<int8_t>> mask{ "mask", 2 };
+    // Outputs an 8 bit image; one channel.
+    Output<Buffer<uint8_t>> output{ "output", 2 };
+
+    GeneratorParam<bool> use_parallel_sched{ "use_parallel_sched", true };
+    GeneratorParam<bool> use_prefetch_sched{ "use_prefetch_sched", true };
+#endif
 
     void generate() {
         bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
@@ -53,7 +64,7 @@ public:
                 .vectorize(xi)
                 .unroll(yi);
             if (use_prefetch_sched) {
-#ifndef OLD_PREFETCH
+#ifndef OLD_SYNTAX
                 output.prefetch(input, y, y, 2);
 #else
                 output.prefetch(input, y, 2);

@@ -27,7 +27,7 @@ public:
 
             blur_y.compute_root()
                 .hexagon()
-#ifndef OLD_PREFETCH
+#ifndef OLD_SYNTAX
                 .prefetch(input, y, y, 2)
 #else
                 .prefetch(input, y, 2)
