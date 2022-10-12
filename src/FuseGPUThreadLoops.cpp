@@ -1512,12 +1512,6 @@ class ValidateGPULoopNesting : public IRVisitor {
 
     using IRVisitor::visit;
 
-    static std::string get_fn_name(const std::string &n) {
-        const auto pos = n.find('.');
-        internal_assert(pos != std::string::npos);
-        return n.substr(0, pos);
-    }
-
     void visit(const For *op) override {
         ScopedValue<string> old_innermost_block_var(innermost_block_var);
         ScopedValue<string> old_innermost_thread_var(innermost_thread_var);
@@ -1532,16 +1526,6 @@ class ValidateGPULoopNesting : public IRVisitor {
                 user_assert(gpu_thread_depth == 0)
                     << "Invalid schedule: Loop over " << op->name
                     << " cannot be inside of loop over " << innermost_thread_var << "\n";
-                // There shouldn't be GPU-blocks loop active for more than one Func at a time --
-                // if there is, someone has tried to make an illegal schedule.
-                if (!innermost_block_var.empty()) {
-                    auto expected_fn = get_fn_name(innermost_block_var);
-                    auto actual_fn = get_fn_name(op->name);
-                    user_assert(expected_fn == actual_fn)
-                        << "Invalid schedule: Loop over " << op->name
-                        << " cannot be inside of a different Func's gpu_blocks() loop,"
-                        << " but was inside " << innermost_block_var << "\n";
-                }
                 innermost_block_var = op->name;
                 gpu_block_depth = i;
             }

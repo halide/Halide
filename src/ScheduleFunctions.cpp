@@ -1807,7 +1807,7 @@ private:
 class ComputeLegalSchedules : public IRVisitor {
 public:
     struct Site {
-        bool is_parallel;
+        bool is_parallel, is_gpu_block;
         LoopLevel loop_level;
     };
     vector<Site> sites_allowed;
@@ -1826,8 +1826,6 @@ private:
     const map<string, Function> &env;
 
     void visit(const For *f) override {
-        f->min.accept(this);
-        f->extent.accept(this);
         size_t first_dot = f->name.find('.');
         size_t last_dot = f->name.rfind('.');
         internal_assert(first_dot != string::npos && last_dot != string::npos);
@@ -1845,9 +1843,13 @@ private:
         // Since we are now in the lowering phase, we expect all LoopLevels to be locked;
         // thus any new ones we synthesize we must explicitly lock.
         loop_level.lock();
-        Site s = {f->is_parallel(), loop_level};
-        sites.push_back(s);
+        const bool is_gpu_block = (f->for_type == ForType::GPUBlock);
+        sites.push_back({f->is_parallel(), is_gpu_block, loop_level});
+
+        f->min.accept(this);
+        f->extent.accept(this);
         f->body.accept(this);
+
         sites.pop_back();
     }
 
@@ -2224,9 +2226,51 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         }
     }
 
-    // Check there isn't a parallel loop between the compute_at and the store_at
     std::ostringstream err;
 
+    // Additional sites to exclude from the allowed sites, based on (eg) GPU constraints
+    set<int> invalid_sites;
+
+    // If you're compute_at() inside a gpu blocks loop, you can't have a gpu blocks loop yourself
+    const auto has_gpu_blocks = [&]() {
+        for (const Dim &d : f.definition().schedule().dims()) {
+            if (d.for_type == ForType::GPUBlock) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (store_at_ok && compute_at_ok && has_gpu_blocks()) {
+        for (size_t i = 0; i <= compute_idx; i++) {
+            if (sites[i].is_gpu_block) {
+                string site_fname = sites[i].loop_level.func();
+                user_error << "Functions that are compute_at() a gpu_block() loop cannot have their own gpu_block() loops, "
+                           << "but Func \"" << f.name() << "\" is compute_at() \"" << site_fname << "\"\n";
+            }
+        }
+    }
+
+    // If you're compute_at() a var marked as a gpu block var, it must be the innermost one
+    if (store_at_ok && compute_at_ok && sites[compute_idx].is_gpu_block) {
+        string compute_at_fname = sites[compute_idx].loop_level.func();
+        int possibly_invalid_idx = compute_idx;
+        for (size_t i = compute_idx + 1; i < sites.size(); i++) {
+            if (!sites[i].is_gpu_block) {
+                continue;
+            }
+            string site_fname = sites[i].loop_level.func();
+            if (site_fname == compute_at_fname) {
+                err << "Functions that are compute_at() a gpu_block() loop must specify the innermost gpu_block() loop for that Func.\n";
+                invalid_sites.insert(possibly_invalid_idx);
+                // This one will also be invalid if we find a subsequent loop from the same func
+                possibly_invalid_idx = i;
+                store_at_ok = compute_at_ok = false;
+            }
+        }
+    }
+
+    // Check there isn't a parallel loop between the compute_at and the store_at
     if (store_at_ok && compute_at_ok) {
         for (size_t i = store_idx + 1; i <= compute_idx; i++) {
             if (sites[i].is_parallel) {
@@ -2243,7 +2287,14 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         err << "Func \"" << f.name() << "\" is computed at the following invalid location:\n"
             << "  " << schedule_to_source(f, store_at, compute_at) << "\n"
             << "Legal locations for this function are:\n";
-        for (const auto &site : sites) {
+        for (size_t i = 0; i < sites.size(); i++) {
+            const auto &site = sites[i];
+            if (invalid_sites.count(i)) {
+                if (debug::debug_level() > 0) {
+                    err << "  (INVALID) " << schedule_to_source(f, site.loop_level, site.loop_level) << "\n";
+                }
+                continue;
+            }
             err << "  " << schedule_to_source(f, site.loop_level, site.loop_level) << "\n";
         }
         err << "\"" << f.name() << "\" is used in the following places:\n";
