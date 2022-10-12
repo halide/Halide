@@ -152,9 +152,9 @@ public:
     SpvId type_id() const;
     SpvOp op_code() const;
     SpvId operand(uint32_t index) const;
-    const void* data(uint32_t index=0) const;
+    const void *data(uint32_t index = 0) const;
     SpvValueType value_type(uint32_t index) const;
-    const Operands& operands() const;
+    const Operands &operands() const;
 
     bool has_type() const;
     bool has_result() const;
@@ -229,11 +229,11 @@ public:
     void set_parameter_precision(uint32_t index, SpvPrecision precision);
     bool is_defined() const;
 
-    const Blocks& blocks() const;
+    const Blocks &blocks() const;
     SpvBlock entry_block() const;
     SpvBlock tail_block() const;
     SpvPrecision return_precision() const;
-    const Parameters& parameters() const;
+    const Parameters &parameters() const;
     SpvPrecision parameter_precision(uint32_t index) const;
     uint32_t parameter_count() const;
     uint32_t control_mask() const;
@@ -551,7 +551,7 @@ struct SpvFactory {
     static SpvInstruction runtime_array_type(SpvId result_type_id, SpvId base_type_id);
     static SpvInstruction pointer_type(SpvId pointer_type_id, SpvStorageClass storage_class, SpvId base_type_id);
     static SpvInstruction function_type(SpvId function_type_id, SpvId return_type_id, const ParamTypes &param_type_ids);
-    static SpvInstruction constant(SpvId result_id, SpvId type_id, size_t bytes, const void *data,  SpvValueType value_type);
+    static SpvInstruction constant(SpvId result_id, SpvId type_id, size_t bytes, const void *data, SpvValueType value_type);
     static SpvInstruction null_constant(SpvId result_id, SpvId type_id);
     static SpvInstruction bool_constant(SpvId result_id, SpvId type_id, bool value);
     static SpvInstruction string_constant(SpvId result_id, const std::string &value);
