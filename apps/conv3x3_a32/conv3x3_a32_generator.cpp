@@ -54,9 +54,9 @@ public:
                 .unroll(yi);
             if (use_prefetch_sched) {
 #ifndef OLD_PREFETCH
-                .prefetch(input, y, y, 2)
+                output.prefetch(input, y, y, 2)
 #else
-                .prefetch(input, y, 2)
+                output.prefetch(input, y, 2)
 #endif
             }
             if (use_parallel_sched) {
