@@ -4,6 +4,7 @@ MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
 
 HALIDE_DISTRIB_PATH ?= $(realpath ../../distrib)
+RAKE_HALIDE_DISTRIB_PATH = /home/aroot/pitchfork-devbox/rake-halide/distrib
 ifeq (,$(HALIDE_DISTRIB_PATH))
 $(error Could not find a Halide distribution. Before building an app, run "make distrib" at the root level, or set HALIDE_DISTRIB_PATH to the root of an existing Halide distribution)
 endif
@@ -68,18 +69,22 @@ endif
 
 CFLAGS += $(OPTIMIZE) -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
 CXXFLAGS += $(OPTIMIZE) -std=c++17 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
+RAKE_CXXFLAGS += $(OPTIMIZE) -std=c++17 -I $(RAKE_HALIDE_DISTRIB_PATH)/include/ -I $(RAKE_HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
 
 CXX_VERSION = $(shell $(CXX) --version | head -n1)
 ifneq (,$(findstring clang,$(CXX_VERSION)))
 CXXFLAGS += $(findstring -stdlib=libc++, $(HALIDE_LLVM_CXX_FLAGS))
+RAKE_CXXFLAGS += $(findstring -stdlib=libc++, $(HALIDE_LLVM_CXX_FLAGS))
 endif
 
 ifeq (0, $(HALIDE_RTTI))
 CXXFLAGS += -fno-rtti
+RAKE_CXXFLAGS += -fno-rtti
 endif
 
 ifeq ($(UNAME), Darwin)
 CXXFLAGS += -fvisibility=hidden
+RAKE_CXXFLAGS += -fvisibility=hidden
 endif
 
 ifeq ($(UNAME), Linux)
@@ -169,12 +174,15 @@ LDFLAGS-$(HL_TARGET) ?= $(LDFLAGS)
 LIB_HALIDE_STATIC = $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 
 LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/lib/libHalide.$(SHARED_EXT)
+RAKE_LIB_HALIDE = $(RAKE_HALIDE_DISTRIB_PATH)/lib/libHalide.$(SHARED_EXT)
 
 GENERATOR_DEPS ?= $(LIB_AUTOSCHEDULER) $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
+RAKE_GENERATOR_DEPS ?= $(RAKE_HALIDE_DISTRIB_PATH)/lib/libHalide.$(SHARED_EXT) $(RAKE_HALIDE_DISTRIB_PATH)/include/Halide.h $(RAKE_HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 GENERATOR_DEPS_STATIC ?= $(LIB_HALIDE_STATIC) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 
 # Generators which use autoscheduler plugin need to specify the linker where to find libHalide.so required by the plugin.
 LIBHALIDE_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lHalide $(LDFLAGS)
+RAKE_LIBHALIDE_LDFLAGS ?= -Wl,-rpath,$(dir $(RAKE_LIB_HALIDE)) -L $(dir $(RAKE_LIB_HALIDE)) -lHalide $(LDFLAGS)
 LIBHALIDE_LDFLAGS_STATIC ?= $(LIB_HALIDE_STATIC) $(LDFLAGS)
 
 # Autoschedulers. Mullapudi2016 is currently the default, because it's fast.
@@ -183,8 +191,10 @@ ifneq ($(AUTOSCHEDULER),)
 LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(PLUGIN_EXT)
 ifeq ($(UNAME), Darwin)
 LIBHALIDE_LDFLAGS +=  -Wl,-force_load $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(PLUGIN_EXT)
+RAKE_LIBHALIDE_LDFLAGS +=  -Wl,-force_load $(RAKE_HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(PLUGIN_EXT)
 else
 LIBHALIDE_LDFLAGS +=  -Wl,--no-as-needed -lautoschedule_$(AUTOSCHEDULER) -Wl,--as-needed
+RAKE_LIBHALIDE_LDFLAGS +=  -Wl,--no-as-needed -lautoschedule_$(AUTOSCHEDULER) -Wl,--as-needed
 endif
 endif
 

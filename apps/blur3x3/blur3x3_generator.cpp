@@ -22,16 +22,20 @@ public:
         blur_y.dim(0).set_min(0);
         blur_y.dim(1).set_min(0);
 
-        const int vector_size = natural_vector_size<uint8_t>();
+        if (get_target().has_feature(Target::HVX)) {
+            const int vector_size = 64;
 
-        blur_y
-            .split(y, y, yi, 32)
-            .parallel(y)
-            .vectorize(x, vector_size);
-        blur_x
-            .store_at(blur_y, y)
-            .compute_at(blur_y, x)
-            .vectorize(x, vector_size);
+            blur_y.compute_root()
+                .hexagon()
+                .prefetch(input, y, y, 2)
+                .split(y, y, yi, 128)
+                .parallel(y)
+                .vectorize(x, vector_size);
+            blur_x
+                .store_at(blur_y, y)
+                .compute_at(blur_y, yi)
+                .vectorize(x, vector_size);
+        }
     }
 
 private:

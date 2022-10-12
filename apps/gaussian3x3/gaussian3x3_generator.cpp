@@ -10,34 +10,38 @@ public:
     GeneratorParam<bool> use_prefetch_sched{"use_prefetch_sched", true};
 
     void generate() {
-        bounded_input(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
-
-        input_16(x, y) = cast<int16_t>(bounded_input(x, y));
+        input_16(x, y) = cast<int16_t>(input(x, y));
 
         rows(x, y) = input_16(x, y-1) + 2 * input_16(x, y) + input_16(x, y+1);
         cols(x,y) =  rows(x-1, y) + 2 * rows(x, y) + rows(x+1, y);
 
-        output(x, y)  = cast<uint8_t>((cols(x, y) + 8) >> 4);
+        output(x, y)  = cast<uint8_t> ((cols(x, y) + 8) >> 4);
     }
 
     void schedule() {
-        Var xi{"xi"}, yi{"yi"};
+        Var xi{"xi"}, yi{"yi"}, yo{"yo"};
 
-        // input.dim(0).set_min(0);
-        // input.dim(1).set_min(0);
+        input.dim(0).set_min(0);
+        input.dim(1).set_min(0);
 
         output.dim(0).set_min(0);
         output.dim(1).set_min(0);
 
-        const int vector_size = natural_vector_size<uint8_t>();
-        bounded_input
-            .compute_at(Func(output), y)
-            .align_storage(x, 128)
-            .vectorize(x, vector_size, TailStrategy::RoundUp);
-        output
-            .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
-            .vectorize(xi)
-            .unroll(yi);
+        if (get_target().features_any_of({Target::HVX})) {
+            const int vector_size = 128;
+
+            output
+                .hexagon()
+                .prefetch(input, y, y, 2, PrefetchBoundStrategy::NonFaulting)
+                .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
+                .vectorize(xi)
+                .unroll(yi);
+        } else {
+            const int vector_size = natural_vector_size<uint8_t>();
+            output
+                .vectorize(x, vector_size)
+                .parallel(y, 16);
+        }
     }
 private:
     Var x{"x"}, y{"y"};

@@ -52,15 +52,41 @@ public:
         output.dim(0).set_min(0);
         output.dim(1).set_min(0);
 
-        const int vector_size = natural_vector_size<uint8_t>();
-        bounded_input
-            .compute_at(Func(output), y)
-            .align_storage(x, 128)
-            .vectorize(x, vector_size, TailStrategy::RoundUp);
-        output
-            .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
-            .vectorize(xi)
-            .unroll(yi);
+        if (get_target().has_feature(Target::HVX)) {
+            // const int vector_size = 128;
+            const int vector_size = 256;
+            Expr input_stride = input.dim(1).stride();
+            input.dim(1).set_stride((input_stride / vector_size) * vector_size);
+
+            Expr output_stride = output.dim(1).stride();
+            output.dim(1).set_stride((output_stride / vector_size) * vector_size);
+            bounded_input
+                .compute_at(Func(output), y)
+                .align_storage(x, 128)
+                .vectorize(x, vector_size, TailStrategy::RoundUp);
+            output
+                .hexagon()
+                .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
+                .vectorize(xi)
+                .unroll(yi);
+            // if (use_prefetch_sched) {
+            //     output.prefetch(input, y, 2);
+            // }
+            // if (use_parallel_sched) {
+            //     Var yo;
+            //     output.split(y, yo, y, 128).parallel(yo);
+            // }
+        } else {
+            const int vector_size = natural_vector_size<uint8_t>();
+            bounded_input
+                .compute_at(Func(output), y)
+                .align_storage(x, 128)
+                .vectorize(x, vector_size, TailStrategy::RoundUp);
+            output
+                .tile(x, y, xi, yi, vector_size, 4, TailStrategy::RoundUp)
+                .vectorize(xi)
+                .unroll(yi);
+        }
     }
 
 private:

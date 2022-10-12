@@ -4,8 +4,8 @@ using namespace Halide;
 
 class Conv3x3 : public Generator<Conv3x3> {
 public:
-    GeneratorParam<Type> accumulator_type{"accumulator_type", Int(16)};
-    // GeneratorParam<Type> accumulator_type{"accumulator_type", Int(32)};
+    // GeneratorParam<Type> accumulator_type{"accumulator_type", Int(16)};
+    GeneratorParam<Type> accumulator_type{"accumulator_type", Int(32)};
     // Takes an 8 bit image; one channel.
     Input<Buffer<uint8_t, 2>> input{"input"};
     Input<Buffer<int8_t, 2>> mask{"mask"};
