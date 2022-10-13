@@ -365,11 +365,11 @@ public:
     // Look up the ID associated with the type for a given variable ID
     SpvId type_of(SpvId variable_id) const;
 
-    // Top-Level declaration methods ... each of these is a convenvience 
+    // Top-Level declaration methods ... each of these is a convenvience
     // function that checks to see if the requested thing has already been
     // declared, in which case it returns its existing id, otherwise it
     // adds a new declaration, and returns the new id.  This avoids all
-    // the logic checks in the calling code, and also ensures that 
+    // the logic checks in the calling code, and also ensures that
     // duplicates aren't created.
 
     SpvId declare_void_type();
@@ -392,7 +392,7 @@ public:
     SpvId declare_symbol(const std::string &symbol, SpvId id, SpvId scope_id);
 
     // Top level creation methods for adding new items ... these have a limited
-    // number of checks and the caller must insure that duplicates aren't created 
+    // number of checks and the caller must insure that duplicates aren't created
     SpvId add_type(const Type &type, uint32_t array_size = 1);
     SpvId add_struct(const std::string &name, const StructMemberTypes &member_types);
     SpvId add_runtime_array(SpvId base_type_id);
@@ -412,7 +412,7 @@ public:
 
     void add_execution_mode_local_size(SpvId entry_point_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z);
 
-    // Assigns a specific source language hint to the module 
+    // Assigns a specific source language hint to the module
     void set_source_language(SpvSourceLanguage val);
 
     // Sets the addressing model to use for the module
@@ -451,7 +451,7 @@ public:
     // Returns true if the given capability is required by the module
     bool is_capability_required(SpvCapability) const;
 
-    // Change the current build location to the given block. All local 
+    // Change the current build location to the given block. All local
     // declarations and instructions will be added here.
     void enter_block(const SpvBlock &block);
 
@@ -508,7 +508,7 @@ public:
     // Returns the symbol string for the given id (or an empty string if none is found)
     std::string lookup_symbol(SpvId id) const;
 
-    // Returns the current module being used for building 
+    // Returns the current module being used for building
     SpvModule current_module() const;
 
     // Appends the given instruction to the current build location
@@ -517,7 +517,7 @@ public:
     // Finalizes the module and prepares it for encoding (must be called before module can be used)
     void finalize();
 
-    // Encodes the current module to the given binary 
+    // Encodes the current module to the given binary
     void encode(SpvBinary &binary) const;
 
     // Resets the builder and all internal state

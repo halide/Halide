@@ -129,9 +129,9 @@ protected:
         void store_at_scalar_index(SpvId index_id, SpvId base_id, SpvId type_id, SpvId ptr_type_id, SpvStorageClass storage_class, SpvId value_id);
         void store_at_vector_index(const Store *op, SpvId base_id, SpvId type_id, SpvId ptr_type_id, SpvStorageClass storage_class, SpvId value_id);
 
-        SpvFactory::Components split_vector(Type type, SpvId value_id );
-        SpvId join_vector(Type type, const SpvFactory::Components& value_components );
-        SpvId cast_scalar(const Cast* op, Type target_type, Type value_type, SpvId value_id);
+        SpvFactory::Components split_vector(Type type, SpvId value_id);
+        SpvId join_vector(Type type, const SpvFactory::Components &value_components);
+        SpvId cast_scalar(const Cast *op, Type target_type, Type value_type, SpvId value_id);
 
         using BuiltinMap = std::unordered_map<std::string, SpvId>;
         const BuiltinMap spirv_builtin = {
@@ -212,10 +212,10 @@ protected:
         SymbolScope symbol_table;
 
         // Map from a variable ID for a buffer to its corresponding runtime array type
-        using RuntimeArrayMap = std::unordered_map<SpvId, SpvId>; 
+        using RuntimeArrayMap = std::unordered_map<SpvId, SpvId>;
         RuntimeArrayMap runtime_array_map;
 
-        // Keep track of the descriptor sets so we can add a sidecar to the 
+        // Keep track of the descriptor sets so we can add a sidecar to the
         // module indicating which descriptor set to use for each entry point
         struct DescriptorSet {
             std::string entry_point_name;
@@ -246,7 +246,7 @@ protected:
 // member stores the number of lanes in those loads and stores.
 //
 // FIXME: Refactor this and the version in CodeGen_OpenGLCompute_Dev to a common place!
-// 
+//
 class CheckAlignedDenseVectorLoadStore : public IRVisitor {
 public:
     // True if all loads and stores from the buffer are dense, aligned, and all
@@ -430,7 +430,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const FloatImm *imm) {
     }
 }
 
-SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_scalar(const Cast* op, Type target_type, Type value_type, SpvId value_id) {
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_scalar(const Cast *op, Type target_type, Type value_type, SpvId value_id) {
 
     SpvId target_type_id = builder.declare_type(target_type);
     SpvOp op_code = SpvOpNop;
@@ -481,12 +481,12 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Cast *op) {
     op->value.accept(this);
     SpvId value_id = builder.current_id();
 
-    if((value_type.is_vector() && target_type.is_vector())) {
+    if ((value_type.is_vector() && target_type.is_vector())) {
         Type scalar_target_type = target_type.with_lanes(1);
         Type scalar_value_type = value_type.with_lanes(1);
         SpvFactory::Components value_components = split_vector(value_type, value_id);
         SpvFactory::Components target_components;
-        for(SpvId value_component_id : value_components) {
+        for (SpvId value_component_id : value_components) {
             target_components.push_back(cast_scalar(op, scalar_target_type, scalar_value_type, value_component_id));
         }
         SpvId result_id = join_vector(target_type, target_components);
@@ -840,20 +840,20 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         e.accept(this);
         return;
 
-    } else if(op->name == "nan_f32") {
+    } else if (op->name == "nan_f32") {
         float value = NAN;
         SpvId result_id = builder.declare_constant(Float(32), &value);
         builder.update_id(result_id);
-    } else if(op->name == "inf_f32") {
+    } else if (op->name == "inf_f32") {
         float value = INFINITY;
         SpvId result_id = builder.declare_constant(Float(32), &value);
         builder.update_id(result_id);
-    } else if(op->name == "neg_inf_f32") {
+    } else if (op->name == "neg_inf_f32") {
         float value = -INFINITY;
         SpvId result_id = builder.declare_constant(Float(32), &value);
         builder.update_id(result_id);
-    } else if(op->name == "is_finite_f32" || 
-              op->name == "is_finite_f64") {
+    } else if (op->name == "is_finite_f32" ||
+               op->name == "is_finite_f64") {
         visit_unaryop(op->type, op->args[0], (SpvOp)SpvOpIsInf);
         SpvId is_inf_id = builder.current_id();
         visit_unaryop(op->type, op->args[0], (SpvOp)SpvOpIsNan);
@@ -964,14 +964,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_vector_index(const Load *op, S
 
     internal_assert(op->index.type().is_vector());
 
-    // If this is a load from a buffer block (mapped to a halide buffer) 
-    // and the runtime array is a vector type, then attempt to do a 
-    // dense vector load by using the base of the ramp divided by 
+    // If this is a load from a buffer block (mapped to a halide buffer)
+    // and the runtime array is a vector type, then attempt to do a
+    // dense vector load by using the base of the ramp divided by
     // the number of lanes.
-    RuntimeArrayMap::const_iterator it = runtime_array_map.find(base_id); 
-    if(it != runtime_array_map.end()) {
+    RuntimeArrayMap::const_iterator it = runtime_array_map.find(base_id);
+    if (it != runtime_array_map.end()) {
         SpvId array_element_type_id = it->second;
-        if(builder.is_vector_type(array_element_type_id)) {
+        if (builder.is_vector_type(array_element_type_id)) {
             Expr ramp_base = strided_ramp_base(op->index);
             if (ramp_base.defined()) {
                 Expr ramp_index = (ramp_base / op->type.lanes());
@@ -979,8 +979,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_vector_index(const Load *op, S
                 SpvId index_id = builder.current_id();
                 load_from_scalar_index(index_id, base_id, type_id, ptr_type_id, storage_class);
                 return;
-            }            
-        }            
+            }
+        }
     }
 
     op->index.accept(this);
@@ -1045,19 +1045,19 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_scalar_index(SpvId index_id, Sp
     builder.append(SpvFactory::store(dst_id, value_id));
 }
 
-SpvFactory::Components CodeGen_Vulkan_Dev::SPIRV_Emitter::split_vector(Type type, SpvId value_id ) {
+SpvFactory::Components CodeGen_Vulkan_Dev::SPIRV_Emitter::split_vector(Type type, SpvId value_id) {
     SpvFactory::Components value_components;
     SpvId scalar_value_type_id = builder.declare_type(type.with_lanes(1));
     for (uint32_t i = 0; i < (uint32_t)type.lanes(); i++) {
         SpvFactory::Indices extract_indices = {i};
         SpvId value_component_id = builder.reserve_id(SpvResultId);
         builder.append(SpvFactory::composite_extract(scalar_value_type_id, value_component_id, value_id, extract_indices));
-        value_components.push_back(value_component_id);            
+        value_components.push_back(value_component_id);
     }
     return value_components;
 }
 
-SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::join_vector(Type type, const SpvFactory::Components& value_components ) {
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::join_vector(Type type, const SpvFactory::Components &value_components) {
     SpvId type_id = builder.declare_type(type);
     SpvId result_id = builder.reserve_id(SpvResultId);
     builder.append(SpvFactory::composite_construct(type_id, result_id, value_components));
@@ -1073,14 +1073,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_vector_index(const Store *op, S
 
     internal_assert(op->index.type().is_vector());
 
-    // If this is a store to a buffer block (mapped to a halide buffer) 
-    // and the runtime array is a vector type, then attempt to do a 
-    // dense vector store by using the base of the ramp divided by 
+    // If this is a store to a buffer block (mapped to a halide buffer)
+    // and the runtime array is a vector type, then attempt to do a
+    // dense vector store by using the base of the ramp divided by
     // the number of lanes.
-    RuntimeArrayMap::const_iterator it = runtime_array_map.find(base_id); 
-    if(it != runtime_array_map.end()) {
+    RuntimeArrayMap::const_iterator it = runtime_array_map.find(base_id);
+    if (it != runtime_array_map.end()) {
         SpvId array_element_type_id = it->second;
-        if(builder.is_vector_type(array_element_type_id)) {
+        if (builder.is_vector_type(array_element_type_id)) {
             Expr ramp_base = strided_ramp_base(op->index);
             if (ramp_base.defined()) {
                 Expr ramp_index = (ramp_base / op->value.type().lanes());
@@ -1088,8 +1088,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_vector_index(const Store *op, S
                 SpvId index_id = builder.current_id();
                 store_at_scalar_index(index_id, base_id, type_id, ptr_type_id, storage_class, value_id);
                 return;
-            }            
-        }            
+            }
+        }
     }
 
     op->index.accept(this);
@@ -1830,8 +1830,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
     for (const auto &arg : args) {
         if (arg.is_buffer) {
 
-            // Check for dense loads & stores to determine the widest vector 
-            // width we can safely index 
+            // Check for dense loads & stores to determine the widest vector
+            // width we can safely index
             CheckAlignedDenseVectorLoadStore check_dense(arg.name);
             s.accept(&check_dense);
             int lanes = check_dense.are_all_dense ? check_dense.lanes : 1;
