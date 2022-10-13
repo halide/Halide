@@ -129,6 +129,10 @@ protected:
         void store_at_scalar_index(SpvId index_id, SpvId base_id, SpvId type_id, SpvId ptr_type_id, SpvStorageClass storage_class, SpvId value_id);
         void store_at_vector_index(const Store *op, SpvId base_id, SpvId type_id, SpvId ptr_type_id, SpvStorageClass storage_class, SpvId value_id);
 
+        SpvFactory::Components split_vector(Type type, SpvId value_id );
+        SpvId join_vector(Type type, const SpvFactory::Components& value_components );
+        SpvId cast_scalar(const Cast* op, Type target_type, Type value_type, SpvId value_id);
+
         using BuiltinMap = std::unordered_map<std::string, SpvId>;
         const BuiltinMap spirv_builtin = {
             {"is_nan_f16", SpvOpIsNan},
@@ -199,7 +203,7 @@ protected:
         void reset_workgroup_size();
         void declare_workgroup_size(SpvId kernel_func_id);
         void declare_entry_point(const Stmt &s, SpvId kernel_func_id);
-        void declare_device_args(uint32_t entry_point_index, const std::string &kernel_name, const std::vector<DeviceArgument> &args);
+        void declare_device_args(const Stmt &s, uint32_t entry_point_index, const std::string &kernel_name, const std::vector<DeviceArgument> &args);
 
         // The scope contains both the symbol id and its storage class
         using SymbolIdStorageClassPair = std::pair<SpvId, SpvStorageClass>;
@@ -207,8 +211,12 @@ protected:
         using ScopedSymbolBinding = ScopedBinding<SymbolIdStorageClassPair>;
         SymbolScope symbol_table;
 
-        // Keep track of the descriptor sets so we can add a sidecar to module
-        // indicating which descriptor set to use for each entry point
+        // Map from a variable ID for a buffer to its corresponding runtime array type
+        using RuntimeArrayMap = std::unordered_map<SpvId, SpvId>; 
+        RuntimeArrayMap runtime_array_map;
+
+        // Keep track of the descriptor sets so we can add a sidecar to the 
+        // module indicating which descriptor set to use for each entry point
         struct DescriptorSet {
             std::string entry_point_name;
             uint32_t uniform_buffer_count = 0;
@@ -231,6 +239,99 @@ protected:
     } emitter;
 
     std::string current_kernel_name;
+};
+
+// Check if all loads and stores to the member 'buffer' are dense, aligned, and
+// have the same number of lanes. If this is indeed the case then the 'lanes'
+// member stores the number of lanes in those loads and stores.
+//
+// FIXME: Refactor this and the version in CodeGen_OpenGLCompute_Dev to a common place!
+// 
+class CheckAlignedDenseVectorLoadStore : public IRVisitor {
+public:
+    // True if all loads and stores from the buffer are dense, aligned, and all
+    // have the same number of lanes, false otherwise.
+    bool are_all_dense = true;
+
+    // The number of lanes in the loads and stores. If the number of lanes is
+    // variable, then are_all_dense is set to false regardless, and this value
+    // is undefined. Initially set to -1 before any dense operation is
+    // discovered.
+    int lanes = -1;
+
+    CheckAlignedDenseVectorLoadStore(std::string name)
+        : buffer_name(std::move(name)) {
+    }
+
+private:
+    // The name of the buffer to check.
+    std::string buffer_name;
+
+    using IRVisitor::visit;
+
+    void visit(const Load *op) override {
+        IRVisitor::visit(op);
+
+        if (op->name != buffer_name) {
+            return;
+        }
+
+        if (op->type.is_scalar()) {
+            are_all_dense = false;
+            return;
+        }
+
+        Expr ramp_base = strided_ramp_base(op->index);
+        if (!ramp_base.defined()) {
+            are_all_dense = false;
+            return;
+        }
+
+        if ((op->alignment.modulus % op->type.lanes() != 0) ||
+            (op->alignment.remainder % op->type.lanes() != 0)) {
+            are_all_dense = false;
+            return;
+        }
+
+        if (lanes != -1 && op->type.lanes() != lanes) {
+            are_all_dense = false;
+            return;
+        }
+
+        lanes = op->type.lanes();
+    }
+
+    void visit(const Store *op) override {
+        IRVisitor::visit(op);
+
+        if (op->name != buffer_name) {
+            return;
+        }
+
+        if (op->value.type().is_scalar()) {
+            are_all_dense = false;
+            return;
+        }
+
+        Expr ramp_base = strided_ramp_base(op->index);
+        if (!ramp_base.defined()) {
+            are_all_dense = false;
+            return;
+        }
+
+        if ((op->alignment.modulus % op->value.type().lanes() != 0) ||
+            (op->alignment.remainder % op->value.type().lanes() != 0)) {
+            are_all_dense = false;
+            return;
+        }
+
+        if (lanes != -1 && op->value.type().lanes() != lanes) {
+            are_all_dense = false;
+            return;
+        }
+
+        lanes = op->value.type().lanes();
+    }
 };
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(const Expr &e) {
@@ -329,15 +430,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const FloatImm *imm) {
     }
 }
 
-void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Cast *op) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast): " << op->value.type() << " to " << op->type << "\n";
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_scalar(const Cast* op, Type target_type, Type value_type, SpvId value_id) {
 
-    Type value_type = op->value.type();
-    Type target_type = op->type;
     SpvId target_type_id = builder.declare_type(target_type);
-    op->value.accept(this);
-    SpvId src_id = builder.current_id();
-
     SpvOp op_code = SpvOpNop;
     if (value_type.is_float()) {
         if (target_type.is_float()) {
@@ -347,7 +442,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Cast *op) {
         } else if (target_type.is_int()) {
             op_code = SpvOpConvertFToS;
         } else {
-            internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast):  unhandled case " << value_type << " to " << target_type << "\n";
+            user_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_scalar():  unhandled case " << value_type << " to " << target_type << "\n";
         }
     } else if (value_type.is_uint()) {
         if (target_type.is_float()) {
@@ -355,39 +450,51 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Cast *op) {
         } else if (target_type.is_uint()) {
             op_code = SpvOpUConvert;
         } else if (target_type.is_int()) {
-            if (builder.is_capability_required(SpvCapabilityKernel)) {
-                op_code = SpvOpSatConvertUToS;
-            } else {
-                op_code = SpvOpBitcast;
-            }
+            op_code = SpvOpUConvert;
         } else {
-            internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast):  unhandled case " << value_type << " to " << target_type << "\n";
+            user_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_scalar():  unhandled case " << value_type << " to " << target_type << "\n";
         }
     } else if (value_type.is_int()) {
         if (target_type.is_float()) {
             op_code = SpvOpConvertSToF;
         } else if (target_type.is_uint()) {
-            if (builder.is_capability_required(SpvCapabilityKernel)) {
-                op_code = SpvOpSatConvertSToU;
-            } else {
-                op_code = SpvOpBitcast;
-            }
+            op_code = SpvOpSConvert;
         } else if (target_type.is_int()) {
             op_code = SpvOpSConvert;
         } else {
-            internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast):  unhandled case " << value_type << " to " << target_type << "\n";
+            user_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_scalar():  unhandled case " << value_type << " to " << target_type << "\n";
         }
     } else {
-        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast):  unhandled case " << value_type << " to " << target_type << "\n";
+        user_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_scalar():  unhandled case " << value_type << " to " << target_type << "\n";
     }
 
     SpvId result_id = builder.reserve_id(SpvResultId);
-    if (op_code == SpvOpBitcast) {
-        builder.append(SpvFactory::bitcast(target_type_id, result_id, src_id));
+    builder.append(SpvFactory::convert(op_code, target_type_id, result_id, value_id));
+    return result_id;
+}
+
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Cast *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Cast): " << op->value.type() << " to " << op->type << "\n";
+
+    Type value_type = op->value.type();
+    Type target_type = op->type;
+    op->value.accept(this);
+    SpvId value_id = builder.current_id();
+
+    if((value_type.is_vector() && target_type.is_vector())) {
+        Type scalar_target_type = target_type.with_lanes(1);
+        Type scalar_value_type = value_type.with_lanes(1);
+        SpvFactory::Components value_components = split_vector(value_type, value_id);
+        SpvFactory::Components target_components;
+        for(SpvId value_component_id : value_components) {
+            target_components.push_back(cast_scalar(op, scalar_target_type, scalar_value_type, value_component_id));
+        }
+        SpvId result_id = join_vector(target_type, target_components);
+        builder.update_id(result_id);
     } else {
-        builder.append(SpvFactory::convert(op_code, target_type_id, result_id, src_id));
+        SpvId result_id = cast_scalar(op, target_type, value_type, value_id);
+        builder.update_id(result_id);
     }
-    builder.update_id(result_id);
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Reinterpret *op) {
@@ -620,7 +727,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
 
     } else if (op->is_intrinsic(Call::IntrinsicOp::round)) {
         internal_assert(op->args.size() == 1);
-        visit_glsl_unaryop(op->type, op->args[0], GLSLstd450RoundEven);
+        visit_glsl_unaryop(op->type, op->args[0], GLSLstd450Round);
 
     } else if (op->is_intrinsic(Call::absd)) {
         internal_assert(op->args.size() == 2);
@@ -732,6 +839,34 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         Expr e = lower_intrinsic(op);
         e.accept(this);
         return;
+
+    } else if(op->name == "nan_f32") {
+        float value = NAN;
+        SpvId result_id = builder.declare_constant(Float(32), &value);
+        builder.update_id(result_id);
+    } else if(op->name == "inf_f32") {
+        float value = INFINITY;
+        SpvId result_id = builder.declare_constant(Float(32), &value);
+        builder.update_id(result_id);
+    } else if(op->name == "neg_inf_f32") {
+        float value = -INFINITY;
+        SpvId result_id = builder.declare_constant(Float(32), &value);
+        builder.update_id(result_id);
+    } else if(op->name == "is_finite_f32" || 
+              op->name == "is_finite_f64") {
+        visit_unaryop(op->type, op->args[0], (SpvOp)SpvOpIsInf);
+        SpvId is_inf_id = builder.current_id();
+        visit_unaryop(op->type, op->args[0], (SpvOp)SpvOpIsNan);
+        SpvId is_nan_id = builder.current_id();
+
+        SpvId type_id = builder.declare_type(op->type);
+        SpvId not_is_nan_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::logical_not(type_id, not_is_nan_id, is_nan_id));
+        SpvId not_is_inf_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::logical_not(type_id, not_is_inf_id, is_inf_id));
+        SpvId result_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::logical_and(type_id, result_id, not_is_inf_id, not_is_nan_id));
+        builder.update_id(result_id);
     } else {
 
         // First check for a standard SPIR-V built-in
@@ -829,47 +964,43 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::load_from_vector_index(const Load *op, S
 
     internal_assert(op->index.type().is_vector());
 
-    // determine the base type id for the source value
-    SpvId base_type_id = builder.type_of(base_id);
-    if (builder.is_pointer_type(base_type_id)) {
-        base_type_id = builder.lookup_base_type(base_type_id);
-    }
-
-    // If this is a dense vector load and the buffer has a vector base type,
-    // then index the buffer using the base of the ramp divided by the number
-    // of lanes.
-    if (builder.is_vector_type(base_type_id)) {
-        Expr ramp_base = strided_ramp_base(op->index);
-        if (ramp_base.defined()) {
-            Expr ramp_index = (ramp_base / op->type.lanes());
-            ramp_index.accept(this);
-            SpvId index_id = builder.current_id();
-            load_from_scalar_index(index_id, base_id, type_id, ptr_type_id, storage_class);
-            return;
-        }
+    // If this is a load from a buffer block (mapped to a halide buffer) 
+    // and the runtime array is a vector type, then attempt to do a 
+    // dense vector load by using the base of the ramp divided by 
+    // the number of lanes.
+    RuntimeArrayMap::const_iterator it = runtime_array_map.find(base_id); 
+    if(it != runtime_array_map.end()) {
+        SpvId array_element_type_id = it->second;
+        if(builder.is_vector_type(array_element_type_id)) {
+            Expr ramp_base = strided_ramp_base(op->index);
+            if (ramp_base.defined()) {
+                Expr ramp_index = (ramp_base / op->type.lanes());
+                ramp_index.accept(this);
+                SpvId index_id = builder.current_id();
+                load_from_scalar_index(index_id, base_id, type_id, ptr_type_id, storage_class);
+                return;
+            }            
+        }            
     }
 
     op->index.accept(this);
     SpvId index_id = builder.current_id();
 
+    SpvFactory::Components index_components = split_vector(op->index.type(), index_id);
+
     // Gather vector elements.
     SpvFactory::Components loaded_values;
     SpvId scalar_value_type_id = builder.declare_type(op->type.with_lanes(1));
     SpvId scalar_ptr_type_id = builder.declare_pointer_type(scalar_value_type_id, storage_class);
-    SpvId scalar_index_type_id = builder.declare_type(op->index.type().with_lanes(1));
-    for (uint32_t i = 0; i < (uint32_t)op->index.type().lanes(); i++) {
-        SpvFactory::Indices extract_indices = {i};
-        SpvId index_component_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::composite_extract(scalar_index_type_id, index_component_id, index_id, extract_indices));
-        load_from_scalar_index(index_component_id, base_id, scalar_value_type_id, scalar_ptr_type_id, storage_class);
+    for (SpvId scalar_index : index_components) {
+        load_from_scalar_index(scalar_index, base_id, scalar_value_type_id, scalar_ptr_type_id, storage_class);
         SpvId value_component_id = builder.current_id();
         loaded_values.push_back(value_component_id);
     }
 
     // Create a composite vector from the individual loads
     if (loaded_values.size() > 1) {
-        SpvId result_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::composite_construct(type_id, result_id, loaded_values));
+        SpvId result_id = join_vector(op->type, loaded_values);
         builder.update_id(result_id);
     }
 }
@@ -914,6 +1045,25 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_scalar_index(SpvId index_id, Sp
     builder.append(SpvFactory::store(dst_id, value_id));
 }
 
+SpvFactory::Components CodeGen_Vulkan_Dev::SPIRV_Emitter::split_vector(Type type, SpvId value_id ) {
+    SpvFactory::Components value_components;
+    SpvId scalar_value_type_id = builder.declare_type(type.with_lanes(1));
+    for (uint32_t i = 0; i < (uint32_t)type.lanes(); i++) {
+        SpvFactory::Indices extract_indices = {i};
+        SpvId value_component_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::composite_extract(scalar_value_type_id, value_component_id, value_id, extract_indices));
+        value_components.push_back(value_component_id);            
+    }
+    return value_components;
+}
+
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::join_vector(Type type, const SpvFactory::Components& value_components ) {
+    SpvId type_id = builder.declare_type(type);
+    SpvId result_id = builder.reserve_id(SpvResultId);
+    builder.append(SpvFactory::composite_construct(type_id, result_id, value_components));
+    return result_id;
+}
+
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_vector_index(const Store *op, SpvId base_id, SpvId type_id, SpvId ptr_type_id, SpvStorageClass storage_class, SpvId value_id) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_vector_index(): "
              << "base_id=" << base_id << " "
@@ -923,39 +1073,39 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::store_at_vector_index(const Store *op, S
 
     internal_assert(op->index.type().is_vector());
 
-    // determine the base type id for the source value
-    SpvId base_type_id = builder.type_of(base_id);
-    if (builder.is_pointer_type(base_type_id)) {
-        base_type_id = builder.lookup_base_type(base_type_id);
-    }
-
-    // If this is a dense vector load and the buffer has a vector base type,
-    // then index the buffer using the base of the ramp divided by the number
-    // of lanes.
-    if (builder.is_vector_type(base_type_id)) {
-        Expr ramp_base = strided_ramp_base(op->index);
-        if (ramp_base.defined()) {
-            Expr ramp_index = (ramp_base / op->value.type().lanes());
-            ramp_index.accept(this);
-            SpvId index_id = builder.current_id();
-            store_at_scalar_index(index_id, base_id, type_id, ptr_type_id, storage_class, value_id);
-            return;
-        }
+    // If this is a store to a buffer block (mapped to a halide buffer) 
+    // and the runtime array is a vector type, then attempt to do a 
+    // dense vector store by using the base of the ramp divided by 
+    // the number of lanes.
+    RuntimeArrayMap::const_iterator it = runtime_array_map.find(base_id); 
+    if(it != runtime_array_map.end()) {
+        SpvId array_element_type_id = it->second;
+        if(builder.is_vector_type(array_element_type_id)) {
+            Expr ramp_base = strided_ramp_base(op->index);
+            if (ramp_base.defined()) {
+                Expr ramp_index = (ramp_base / op->value.type().lanes());
+                ramp_index.accept(this);
+                SpvId index_id = builder.current_id();
+                store_at_scalar_index(index_id, base_id, type_id, ptr_type_id, storage_class, value_id);
+                return;
+            }            
+        }            
     }
 
     op->index.accept(this);
     SpvId index_id = builder.current_id();
 
+    // Split vector value into components
+    internal_assert(op->index.type().lanes() <= op->value.type().lanes());
+    SpvFactory::Components value_components = split_vector(op->value.type(), value_id);
+    SpvFactory::Components index_components = split_vector(op->index.type(), index_id);
+
     // Scatter vector elements.
     SpvId scalar_value_type_id = builder.declare_type(op->value.type().with_lanes(1));
     SpvId scalar_ptr_type_id = builder.declare_pointer_type(scalar_value_type_id, storage_class);
-    SpvId scalar_index_type_id = builder.declare_type(op->index.type().with_lanes(1));
-    for (uint32_t i = 0; i < (uint32_t)op->index.type().lanes(); i++) {
-        SpvFactory::Indices extract_indices = {i};
-        SpvId index_component_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::composite_extract(scalar_index_type_id, index_component_id, index_id, extract_indices));
-        SpvId value_component_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::composite_extract(scalar_value_type_id, value_component_id, value_id, extract_indices));
+    for (uint32_t i = 0; i < index_components.size(); i++) {
+        SpvId index_component_id = index_components[i];
+        SpvId value_component_id = value_components[i];
         store_at_scalar_index(index_component_id, base_id, scalar_value_type_id, scalar_ptr_type_id, storage_class, value_component_id);
     }
 }
@@ -980,19 +1130,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Load *op) {
         SpvId index_id = builder.current_id();
         load_from_scalar_index(index_id, base_id, type_id, ptr_type_id, storage_class);
     } else {
-
-        // If this is a dense vector load and the buffer has a vector base type,
-        // then index the buffer using the base of the ramp divided by the number
-        // of lanes.
-        if (op->type.is_vector()) {
-            Expr ramp_base = strided_ramp_base(op->index);
-            if (ramp_base.defined()) {
-                Expr ramp_index = (ramp_base / op->type.lanes());
-                ramp_index.accept(this);
-                SpvId index_id = builder.current_id();
-                load_from_scalar_index(index_id, base_id, type_id, ptr_type_id, storage_class);
-            }
-        }
         load_from_vector_index(op, base_id, type_id, ptr_type_id, storage_class);
     }
 }
@@ -1604,7 +1741,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_entry_point(const Stmt &s, SpvId
     builder.add_entry_point(kernel_func_id, SpvExecutionModelGLCompute, entry_point_variables);
 }
 
-void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(uint32_t entry_point_index,
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint32_t entry_point_index,
                                                             const std::string &entry_point_name,
                                                             const std::vector<DeviceArgument> &args) {
 
@@ -1689,13 +1826,20 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(uint32_t entry_point
         }
     }
 
-    // Add bindings for all device buffers as uniform buffers
+    // Add bindings for all device buffers declared as GLSL-style buffer blocks in uniform storage
     for (const auto &arg : args) {
         if (arg.is_buffer) {
 
+            // Check for dense loads & stores to determine the widest vector 
+            // width we can safely index 
+            CheckAlignedDenseVectorLoadStore check_dense(arg.name);
+            s.accept(&check_dense);
+            int lanes = check_dense.are_all_dense ? check_dense.lanes : 1;
+
             // Declare the runtime array (which maps directly to the Halide device buffer)
-            SpvId element_type_id = builder.declare_type(arg.type);
-            SpvId runtime_arr_type_id = builder.add_runtime_array(element_type_id);
+            Type array_element_type = arg.type.with_lanes(lanes);
+            SpvId array_element_type_id = builder.declare_type(array_element_type);
+            SpvId runtime_arr_type_id = builder.add_runtime_array(array_element_type_id);
 
             // Annotate the array with its stride
             SpvBuilder::Literals array_stride = {(uint32_t)(arg.type.bytes())};
@@ -1709,7 +1853,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(uint32_t entry_point
             // Declare a pointer to the struct as a global variable
             SpvStorageClass storage_class = SpvStorageClassUniform;
             SpvId ptr_struct_type_id = builder.declare_pointer_type(struct_type_id, storage_class);
-            SpvId param_id = builder.declare_global_variable(arg.name, ptr_struct_type_id, storage_class);
+            SpvId buffer_block_var_id = builder.declare_global_variable(arg.name, ptr_struct_type_id, storage_class);
 
             // Annotate the struct to indicate it's passed in a GLSL-style buffer block
             builder.add_annotation(struct_type_id, SpvDecorationBufferBlock);
@@ -1721,9 +1865,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(uint32_t entry_point
             // Set descriptor set and binding indices
             SpvBuilder::Literals dset_index = {entry_point_index};
             SpvBuilder::Literals binding_index = {uint32_t(binding_counter++)};
-            builder.add_annotation(param_id, SpvDecorationDescriptorSet, dset_index);
-            builder.add_annotation(param_id, SpvDecorationBinding, binding_index);
-            symbol_table.push(arg.name, {param_id, storage_class});
+            builder.add_annotation(buffer_block_var_id, SpvDecorationDescriptorSet, dset_index);
+            builder.add_annotation(buffer_block_var_id, SpvDecorationBinding, binding_index);
+            symbol_table.push(arg.name, {buffer_block_var_id, storage_class});
+            runtime_array_map[buffer_block_var_id] = array_element_type_id;
             descriptor_set.storage_buffer_count++;
         }
     }
@@ -1782,144 +1927,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     declare_entry_point(s, kernel_func_id);
 
     // Declare all parameters -- scalar args and device buffers
-    declare_device_args(entry_point_index, name, args);
-    /*
-        // TODO: only add the SIMT intrinsics used
-        SpvFactory::Variables entry_point_variables;
-        auto intrinsics = {"WorkgroupId", "LocalInvocationId"};
-        for (const std::string &intrinsic_name : intrinsics) {
+    declare_device_args(s, entry_point_index, name, args);
 
-            // The builtins are pointers to vec3
-            SpvId intrinsic_type_id = builder.declare_type(Type(Type::UInt, 32, 3));
-            SpvId intrinsic_ptr_type_id = builder.declare_pointer_type(intrinsic_type_id, SpvStorageClassInput);
-            SpvId intrinsic_id = builder.declare_global_variable(intrinsic_name, intrinsic_ptr_type_id, SpvStorageClassInput);
-            SpvId intrinsic_loaded_id = builder.reserve_id();
-            builder.append(SpvFactory::load(intrinsic_type_id, intrinsic_loaded_id, intrinsic_id));
-            symbol_table.push(intrinsic_name, {intrinsic_loaded_id, SpvStorageClassInput});
-
-            // Annotate that this is the specific builtin
-            SpvBuiltIn built_in_kind = starts_with(intrinsic_name, "Workgroup") ? SpvBuiltInWorkgroupId : SpvBuiltInLocalInvocationId;
-            SpvBuilder::Literals annotation_literals = {(uint32_t)built_in_kind};
-            builder.add_annotation(intrinsic_id, SpvDecorationBuiltIn, annotation_literals);
-
-            // Add the builtin to the interface
-            entry_point_variables.push_back(intrinsic_id);
-        }
-
-        // Add the entry point with the appropriate execution model
-        // NOTE: exec_model must be GLCompute to work with Vulkan ... Kernel is only supported in OpenCL
-        uint32_t current_entry_point = builder.current_module().entry_point_count();
-        builder.add_entry_point(kernel_func_id, SpvExecutionModelGLCompute, entry_point_variables);
-    */
-
-    /*
-        // GLSL-style: each input buffer is a runtime array in a buffer struct
-        // All other params get passed in as a single uniform block
-        // First, need to count scalar parameters to construct the uniform struct
-        SpvBuilder::StructMemberTypes param_struct_members;
-        for (const auto &arg : args) {
-            if (!arg.is_buffer) {
-                SpvId arg_type_id = builder.declare_type(arg.type);
-                param_struct_members.push_back(arg_type_id);
-            }
-        }
-
-        // Add a binding for a uniform buffer packed with all scalar args
-        uint32_t binding_counter = 0;
-        if (!param_struct_members.empty()) {
-            const std::string struct_name = std::string("_struct") + name + std::string("_args");
-            SpvId param_struct_type_id = builder.declare_struct(struct_name, param_struct_members);
-
-            // Add a decoration describing the offset for each parameter struct member
-            uint32_t param_member_index = 0;
-            uint32_t param_member_offset = 0;
-            for (const auto &arg : args) {
-                if (!arg.is_buffer) {
-                    SpvBuilder::Literals param_offset_literals = {param_member_offset};
-                    builder.add_struct_annotation(param_struct_type_id, param_member_index, SpvDecorationOffset, param_offset_literals);
-                    param_member_offset += arg.type.bytes();
-                    param_member_index++;
-                }
-            }
-
-            // Add a Block decoration for the parameter pack itself
-            builder.add_annotation(param_struct_type_id, SpvDecorationBlock);
-
-            // Add a variable for the parameter pack
-            const std::string param_pack_var_name = std::string("_var") + name + std::string("_args");
-            SpvId param_pack_ptr_type_id = builder.declare_pointer_type(param_struct_type_id, SpvStorageClassUniform);
-            SpvId param_pack_var_id = builder.declare_global_variable(param_pack_var_name, param_pack_ptr_type_id, SpvStorageClassUniform);
-
-            // We always pass in the parameter pack as the first binding
-            SpvBuilder::Literals binding_index = {0};
-            SpvBuilder::Literals dset_index = {current_entry_point};
-            builder.add_annotation(param_pack_var_id, SpvDecorationDescriptorSet, dset_index);
-            builder.add_annotation(param_pack_var_id, SpvDecorationBinding, binding_index);
-            descriptor_set.uniform_buffer_count++;
-            binding_counter++;
-
-            // Declare all the args with appropriate offsets into the parameter struct
-            uint32_t scalar_index = 0;
-            for (const auto &arg : args) {
-                if (!arg.is_buffer) {
-
-                    SpvId arg_type_id = builder.declare_type(arg.type);
-                    SpvId access_index_id = builder.declare_constant(UInt(32), &scalar_index);
-                    SpvId pointer_type_id = builder.declare_pointer_type(arg_type_id, SpvStorageClassUniform);
-                    SpvFactory::Indices access_indices = {access_index_id};
-                    SpvId access_chain_id = builder.declare_access_chain(pointer_type_id, param_pack_var_id, access_indices);
-                    scalar_index++;
-
-                    SpvId param_id = builder.reserve_id(SpvResultId);
-                    builder.append(SpvFactory::load(arg_type_id, param_id, access_chain_id));
-                    symbol_table.push(arg.name, {param_id, SpvStorageClassUniform});
-                }
-            }
-        }
-
-        // Add bindings for all device buffers
-        for (const auto &arg : args) {
-            if (arg.is_buffer) {
-
-                // Add required extension support for storage types
-                if (arg.type.is_int_or_uint()) {
-                    if (arg.type.bits() == 8) {
-                        builder.require_extension("SPV_KHR_8bit_storage");
-                    } else if (arg.type.bits() == 16) {
-                        builder.require_extension("SPV_KHR_16bit_storage");
-                    }
-                }
-
-                SpvId element_type_id = builder.declare_type(arg.type);
-                SpvId runtime_arr_type_id = builder.add_runtime_array(element_type_id);
-                SpvBuilder::StructMemberTypes struct_member_types = {runtime_arr_type_id};
-                const std::string struct_name = std::string("_struct") + name + std::string("_b") + std::to_string(binding_counter);
-                SpvId struct_type_id = builder.declare_struct(struct_name, struct_member_types);
-                SpvId ptr_struct_type_id = builder.declare_pointer_type(struct_type_id, SpvStorageClassUniform);
-                SpvId param_id = builder.declare_global_variable(arg.name, ptr_struct_type_id, SpvStorageClassUniform);
-
-                // Annotate the struct to indicate it's passed in a GLSL-style buffer block
-                builder.add_annotation(struct_type_id, SpvDecorationBufferBlock);
-
-                // Annotate the array with its stride
-                SpvBuilder::Literals array_stride = {(uint32_t)(arg.type.bytes())};
-                builder.add_annotation(runtime_arr_type_id, SpvDecorationArrayStride, array_stride);
-
-                // Annotate the offset for the array
-                SpvBuilder::Literals zero_literal = {uint32_t(0)};
-                builder.add_struct_annotation(struct_type_id, 0, SpvDecorationOffset, zero_literal);
-
-                // Set DescriptorSet and Binding
-                SpvBuilder::Literals dset_index = {current_entry_point};
-                SpvBuilder::Literals binding_index = {uint32_t(binding_counter++)};
-                builder.add_annotation(param_id, SpvDecorationDescriptorSet, dset_index);
-                builder.add_annotation(param_id, SpvDecorationBinding, binding_index);
-                symbol_table.push(arg.name, {param_id, SpvStorageClassUniform});
-                descriptor_set.storage_buffer_count++;
-            }
-        }
-        descriptor_set_table.push_back(descriptor_set);
-    */
+    // Traverse
     s.accept(this);
 
     // Insert return statement end delimiter
