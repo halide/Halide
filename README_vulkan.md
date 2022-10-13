@@ -53,22 +53,24 @@ https://www.intel.com/content/www/us/en/download-center/home.html
 On Ubuntu Linux, proprietary drivers can be installed via 'apt' using 
 PPA's for each vendor.
 
-For AMD:
+For AMD on Ubuntu v22.04:
 ```
 $ sudo add-apt-repository ppa:oibaf/graphics-drivers
 $ sudo apt update
 $ sudo apt upgrade
-$ sudo apt install libvulkan1 mesa-vulkan-drivers vulkan-utils
+$ sudo apt install libvulkan1 mesa-vulkan-drivers vulkan-tools
 ```
 
-For NVIDIA:
+For NVIDIA on Ubuntu v22.04:
 ```
 $ sudo add-apt-repository ppa:graphics-drivers/ppa
 $ sudo apt update
 $ sudo apt upgrade
 # - replace ### with latest driver release (eg 515)
-$ sudo apt install nvidia-driver-### nvidia-settings vulkan vulkan-utils
+$ sudo apt install nvidia-driver-### nvidia-settings vulkan vulkan-tools
 ```
+
+For earlier versions of Ubuntu (eg v20.x or v18.x) the contents of the `vulkan-tools` package was distributed as `vulkan-utils` so use this package instead.
 
 Note that only valid drivers for your system should be installed since there's been 
 reports of the Vulkan loader segfaulting just by having a non-supported driver present. 
