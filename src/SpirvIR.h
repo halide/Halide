@@ -353,11 +353,24 @@ public:
     SpvBuilder(const SpvBuilder &) = delete;
     SpvBuilder &operator=(const SpvBuilder &) = delete;
 
+    // Reserve a unique ID to use for identifying a specifc kind of SPIR-V result **/
     SpvId reserve_id(SpvKind = SpvResultId);
 
+    // Look up the specific kind of SPIR-V item from it's unique ID
     SpvKind kind_of(SpvId id) const;
+
+    // Get a human readable name for a specific kind of SPIR-V item
     std::string kind_name(SpvKind kind) const;
+
+    // Look up the ID associated with the type for a given variable ID
     SpvId type_of(SpvId variable_id) const;
+
+    // Top-Level declaration methods ... each of these is a convenvience 
+    // function that checks to see if the requested thing has already been
+    // declared, in which case it returns its existing id, otherwise it
+    // adds a new declaration, and returns the new id.  This avoids all
+    // the logic checks in the calling code, and also ensures that 
+    // duplicates aren't created.
 
     SpvId declare_void_type();
     SpvId declare_type(const Type &type, uint32_t array_size = 1);
@@ -376,7 +389,10 @@ public:
     SpvId declare_struct(const std::string &name, const StructMemberTypes &member_types);
     SpvId declare_variable(const std::string &name, SpvId type_id, SpvStorageClass storage_class, SpvId initializer_id = SpvInvalidId);
     SpvId declare_global_variable(const std::string &name, SpvId type_id, SpvStorageClass storage_class, SpvId initializer_id = SpvInvalidId);
+    SpvId declare_symbol(const std::string &symbol, SpvId id, SpvId scope_id);
 
+    // Top level creation methods for adding new items ... these have a limited
+    // number of checks and the caller must insure that duplicates aren't created 
     SpvId add_type(const Type &type, uint32_t array_size = 1);
     SpvId add_struct(const std::string &name, const StructMemberTypes &member_types);
     SpvId add_runtime_array(SpvId base_type_id);
@@ -389,43 +405,84 @@ public:
 
     void add_annotation(SpvId target_id, SpvDecoration decoration_type, const Literals &literals = {});
     void add_struct_annotation(SpvId struct_type_id, uint32_t member_index, SpvDecoration decoration_type, const Literals &literals = {});
+    void add_symbol(const std::string &symbol, SpvId id, SpvId scope_id);
 
     void add_entry_point(SpvId func_id, SpvExecutionModel exec_model,
                          const Variables &variables = {});
 
     void add_execution_mode_local_size(SpvId entry_point_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z);
 
+    // Assigns a specific source language hint to the module 
     void set_source_language(SpvSourceLanguage val);
+
+    // Sets the addressing model to use for the module
     void set_addressing_model(SpvAddressingModel val);
+
+    // Sets the memory model to use for the module
     void set_memory_model(SpvMemoryModel val);
 
+    // Returns the source language hint for the module
     SpvSourceLanguage source_language() const;
+
+    // Returns the addressing model used for the module
     SpvAddressingModel addressing_model() const;
+
+    // Returns the memory model used for the module
     SpvMemoryModel memory_model() const;
 
+    // Import the GLSL.std.450 external instruction set. Returns its corresponding ID.
     SpvId import_glsl_intrinsics();
+
+    // Import an external instruction set bby name. Returns its corresponding ID.
     SpvId import_instruction_set(const std::string &instruction_set);
 
+    // Add an extension string to the list of required extensions for the module
     void require_extension(const std::string &extension);
+
+    // Add a specific capability to the list of requirements for the module
     void require_capability(SpvCapability);
 
+    // Returns true if the given instruction set has been imported
     bool is_imported(const std::string &instruction_set) const;
+
+    // Returns true if the given extension string is required by the module
     bool is_extension_required(const std::string &extension) const;
+
+    // Returns true if the given capability is required by the module
     bool is_capability_required(SpvCapability) const;
 
+    // Change the current build location to the given block. All local 
+    // declarations and instructions will be added here.
     void enter_block(const SpvBlock &block);
+
+    // Create a new block with the given ID
     SpvBlock create_block(SpvId block_id);
+
+    // Returns the current block (the active scope for building)
     SpvBlock current_block() const;
+
+    // Resets the block build scope, and unassigns the current block
     SpvBlock leave_block();
 
+    // Change the current build scope to be within the given function
     void enter_function(const SpvFunction &func);
+
+    // Returns the function object for the given ID (or an invalid function if none is found)
     SpvFunction lookup_function(SpvId func_id) const;
+
+    // Returns the current function being used as the active build scope
     SpvFunction current_function() const;
+
+    // Resets the function build scope, and unassigns the current function
     SpvFunction leave_function();
 
+    // Returns the current id being used for building (ie the last item created)
     SpvId current_id() const;
+
+    // Updates the current id being used for building
     void update_id(SpvId id);
 
+    // Returns true if the given id is of the corresponding type
     bool is_pointer_type(SpvId id) const;
     bool is_struct_type(SpvId id) const;
     bool is_vector_type(SpvId id) const;
@@ -433,21 +490,37 @@ public:
     bool is_array_type(SpvId id) const;
     bool is_constant(SpvId id) const;
 
+    // Looks up the given pointer type id and returns a corresponding base type id (or an invalid id if none is found)
     SpvId lookup_base_type(SpvId pointer_type) const;
+
+    // Returns the storage class for the given variable id (or invalid if none is found)
     SpvStorageClass lookup_storage_class(SpvId id) const;
+
+    // Returns the item id for the given symbol name (or an invalid id if none is found)
     SpvId lookup_id(const std::string &symbol) const;
+
+    // Returns the build scope id for the item id (or an invalid id if none is found)
     SpvId lookup_scope(SpvId id) const;
+
+    // Returns the id for the imported instruction set (or an invalid id if none is found)
     SpvId lookup_import(const std::string &instruction_set) const;
 
+    // Returns the symbol string for the given id (or an empty string if none is found)
     std::string lookup_symbol(SpvId id) const;
-    SpvId declare_symbol(const std::string &symbol, SpvId id, SpvId scope_id);
-    void add_symbol(const std::string &symbol, SpvId id, SpvId scope_id);
 
+    // Returns the current module being used for building 
     SpvModule current_module() const;
 
+    // Appends the given instruction to the current build location
     void append(SpvInstruction inst);
+
+    // Finalizes the module and prepares it for encoding (must be called before module can be used)
     void finalize();
+
+    // Encodes the current module to the given binary 
     void encode(SpvBinary &binary) const;
+
+    // Resets the builder and all internal state
     void reset();
 
 protected:
@@ -469,6 +542,8 @@ protected:
     using FunctionTypeMap = std::unordered_map<FunctionTypeKey, SpvId>;
     using FunctionMap = std::unordered_map<SpvId, SpvFunction>;
 
+    // Internal methods for creating ids, keys, and look ups
+    
     SpvId make_id(SpvKind kind);
 
     TypeKey make_type_key(const Type &type, uint32_t array_size = 1) const;
