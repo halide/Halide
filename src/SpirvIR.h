@@ -543,7 +543,7 @@ protected:
     using FunctionMap = std::unordered_map<SpvId, SpvFunction>;
 
     // Internal methods for creating ids, keys, and look ups
-    
+
     SpvId make_id(SpvKind kind);
 
     TypeKey make_type_key(const Type &type, uint32_t array_size = 1) const;
@@ -642,7 +642,9 @@ struct SpvFactory {
     static SpvInstruction memory_barrier(SpvId memory_scope_id, SpvId semantics_mask_id);
     static SpvInstruction control_barrier(SpvId execution_scope_id, SpvId memory_scope_id, SpvId semantics_mask_id);
     static SpvInstruction bitwise_not(SpvId type_id, SpvId result_id, SpvId src_id);
+    static SpvInstruction bitwise_and(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
     static SpvInstruction logical_not(SpvId type_id, SpvId result_id, SpvId src_id);
+    static SpvInstruction logical_and(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
     static SpvInstruction shift_right_logical(SpvId type_id, SpvId result_id, SpvId src_id, SpvId shift_id);
     static SpvInstruction shift_right_arithmetic(SpvId type_id, SpvId result_id, SpvId src_id, SpvId shift_id);
     static SpvInstruction multiply_extended(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed);

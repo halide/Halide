@@ -2166,8 +2166,16 @@ SpvInstruction SpvFactory::bitwise_not(SpvId type_id, SpvId result_id, SpvId src
     return unary_op(SpvOpNot, type_id, result_id, src_id);
 }
 
+SpvInstruction SpvFactory::bitwise_and(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id) {
+    return binary_op(SpvOpBitwiseAnd, type_id, result_id, src_a_id, src_b_id);
+}
+
 SpvInstruction SpvFactory::logical_not(SpvId type_id, SpvId result_id, SpvId src_id) {
     return unary_op(SpvOpLogicalNot, type_id, result_id, src_id);
+}
+
+SpvInstruction SpvFactory::logical_and(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id) {
+    return binary_op(SpvOpLogicalAnd, type_id, result_id, src_a_id, src_b_id);
 }
 
 SpvInstruction SpvFactory::shift_right_logical(SpvId type_id, SpvId result_id, SpvId src_id, SpvId shift_id) {
@@ -4048,7 +4056,7 @@ std::ostream &operator<<(std::ostream &stream, const SpvInstruction &inst) {
                 stream << std::string(" ") << std::to_string(*data);
                 break;
             } else if (inst.value_type(i) == SpvBitMaskLiteral) {
-                stream << std::string(" ") << std::hex << std::showbase << std::uppercase << inst.operand(i);
+                stream << std::string(" ") << std::hex << std::showbase << std::uppercase << inst.operand(i) << std::dec;
             } else {
                 stream << std::string(" ") << std::to_string(inst.operand(i));
             }
