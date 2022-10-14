@@ -2212,24 +2212,18 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         return true;
     }
 
-    bool store_at_ok = false, compute_at_ok = false;
-    const vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
-    size_t store_idx = 0, compute_idx = 0;
+    vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
+    int store_idx = -1, compute_idx = -1;
     for (size_t i = 0; i < sites.size(); i++) {
         if (sites[i].loop_level.match(store_at)) {
-            store_at_ok = true;
             store_idx = i;
         }
-        if (sites[i].loop_level.match(compute_at)) {
-            compute_at_ok = store_at_ok;
+        if (sites[i].loop_level.match(compute_at) && store_idx >= 0) {
             compute_idx = i;
         }
     }
 
     std::ostringstream err;
-
-    // Additional sites to exclude from the allowed sites, based on (eg) GPU constraints
-    set<int> invalid_sites;
 
     // If you're compute_at() inside a gpu blocks loop, you can't have a gpu blocks loop yourself
     const auto has_gpu_blocks = [&]() {
@@ -2241,8 +2235,12 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         return false;
     };
 
-    if (store_at_ok && compute_at_ok && has_gpu_blocks()) {
-        for (size_t i = 0; i <= compute_idx; i++) {
+    const auto both_ok = [&]() {
+        return store_idx >= 0 && compute_idx >= 0;
+    };
+
+    if (both_ok() && has_gpu_blocks()) {
+        for (int i = 0; i <= compute_idx; i++) {
             if (sites[i].is_gpu_block) {
                 string site_fname = sites[i].loop_level.func();
                 user_error << "Functions that are compute_at() a gpu_block() loop cannot have their own gpu_block() loops, "
@@ -2252,48 +2250,43 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     }
 
     // If you're compute_at() a var marked as a gpu block var, it must be the innermost one
-    if (store_at_ok && compute_at_ok && sites[compute_idx].is_gpu_block) {
+    if (both_ok() && sites[compute_idx].is_gpu_block) {
         string compute_at_fname = sites[compute_idx].loop_level.func();
         int possibly_invalid_idx = compute_idx;
-        for (size_t i = compute_idx + 1; i < sites.size(); i++) {
+        for (int i = compute_idx + 1; i < (int)sites.size(); i++) {
             if (!sites[i].is_gpu_block) {
                 continue;
             }
             string site_fname = sites[i].loop_level.func();
             if (site_fname == compute_at_fname) {
                 err << "Functions that are compute_at() a gpu_block() loop must specify the innermost gpu_block() loop for that Func.\n";
-                invalid_sites.insert(possibly_invalid_idx);
+                sites.erase(sites.begin() + possibly_invalid_idx);
                 // This one will also be invalid if we find a subsequent loop from the same func
                 possibly_invalid_idx = i;
-                store_at_ok = compute_at_ok = false;
+                store_idx = compute_idx = -1;
             }
         }
     }
 
     // Check there isn't a parallel loop between the compute_at and the store_at
-    if (store_at_ok && compute_at_ok) {
-        for (size_t i = store_idx + 1; i <= compute_idx; i++) {
+    if (both_ok()) {
+        for (int i = store_idx + 1; i <= compute_idx; i++) {
             if (sites[i].is_parallel) {
                 err << "Func \"" << f.name()
                     << "\" is stored outside the parallel loop over "
                     << sites[i].loop_level.to_string()
                     << " but computed within it. This is a potential race condition.\n";
-                store_at_ok = compute_at_ok = false;
+                store_idx = compute_idx = -1;
             }
         }
     }
 
-    if (!store_at_ok || !compute_at_ok) {
+    if (!both_ok()) {
         err << "Func \"" << f.name() << "\" is computed at the following invalid location:\n"
             << "  " << schedule_to_source(f, store_at, compute_at) << "\n"
             << "Legal locations for this function are:\n";
         for (size_t i = 0; i < sites.size(); i++) {
             const auto &site = sites[i];
-            if (invalid_sites.count(i)) {
-                // Left here (commented out) for future debugging purposes
-                // err << "  (INVALID) " << schedule_to_source(f, site.loop_level, site.loop_level) << "\n";
-                continue;
-            }
             err << "  " << schedule_to_source(f, site.loop_level, site.loop_level) << "\n";
         }
         err << "\"" << f.name() << "\" is used in the following places:\n";
