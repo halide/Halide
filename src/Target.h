@@ -157,6 +157,7 @@ struct Target {
         ARMDotProd = halide_target_feature_arm_dot_prod,
         ARMFp16 = halide_target_feature_arm_fp16,
         Xtensa = halide_target_feature_xtensa,
+        XtensaQ8 = halide_target_feature_xtensa_q8,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         RVV = halide_target_feature_rvv,
         ARMv81a = halide_target_feature_armv81a,

@@ -26,86 +26,104 @@ using std::vector;
 using namespace Halide::ConciseCasts;
 
 template<>
-bool is_native_xtensa_vector<int8_t>(const Type &t) {
-    return t.is_int() && (t.bits() == 8) && (t.lanes() == 64);
+bool is_native_xtensa_vector<int8_t>(const Type &t, const Target &target) {
+    int vector_size = target.natural_vector_size<int8_t>();
+    return t.is_int() && (t.bits() == 8) && (t.lanes() == vector_size);
 }
 
 template<>
-bool is_native_xtensa_vector<uint8_t>(const Type &t) {
-    return t.is_uint() && (t.bits() == 8) && (t.lanes() == 64);
+bool is_native_xtensa_vector<uint8_t>(const Type &t, const Target &target) {
+    int vector_size = target.natural_vector_size<uint8_t>();
+    return t.is_uint() && (t.bits() == 8) && (t.lanes() == vector_size);
 }
 
 template<>
-bool is_native_xtensa_vector<int16_t>(const Type &t) {
-    return t.is_int() && (t.bits() == 16) && (t.lanes() == 32);
+bool is_native_xtensa_vector<int16_t>(const Type &t, const Target &target) {
+    int vector_size = target.natural_vector_size<int16_t>();
+    return t.is_int() && (t.bits() == 16) && (t.lanes() == vector_size);
 }
 
 template<>
-bool is_native_xtensa_vector<uint16_t>(const Type &t) {
-    return t.is_uint() && (t.bits() == 16) && (t.lanes() == 32);
+bool is_native_xtensa_vector<uint16_t>(const Type &t, const Target &target) {
+    int vector_size = target.natural_vector_size<uint16_t>();
+    return t.is_uint() && (t.bits() == 16) && (t.lanes() == vector_size);
 }
 
 template<>
-bool is_native_xtensa_vector<int32_t>(const Type &t) {
-    return t.is_int() && (t.bits() == 32) && (t.lanes() == 16);
+bool is_native_xtensa_vector<int32_t>(const Type &t, const Target &target) {
+    int vector_size = target.natural_vector_size<int32_t>();
+    return t.is_int() && (t.bits() == 32) && (t.lanes() == vector_size);
 }
 
 template<>
-bool is_native_xtensa_vector<int64_t>(const Type &t) {
-    return t.is_int() && (t.bits() == 64) && (t.lanes() == 16);
+bool is_native_xtensa_vector<int64_t>(const Type &t, const Target &target) {
+    // On Xtensa int64 vectors are *wide* vectors, so the number of lanes match
+    // the number of lanes for 32-bit vectors.
+    int vector_size = target.natural_vector_size<int32_t>();
+    return t.is_int() && (t.bits() == 64) && (t.lanes() == vector_size);
 }
 
 template<>
-bool is_native_xtensa_vector<uint32_t>(const Type &t) {
-    return t.is_uint() && (t.bits() == 32) && (t.lanes() == 16);
+bool is_native_xtensa_vector<uint32_t>(const Type &t, const Target &target) {
+    int vector_size = target.natural_vector_size<uint32_t>();
+    return t.is_uint() && (t.bits() == 32) && (t.lanes() == vector_size);
 }
 
 template<>
-bool is_native_xtensa_vector<float>(const Type &t) {
-    return t.is_float() && (t.bits() == 32) && (t.lanes() == 16);
+bool is_native_xtensa_vector<float>(const Type &t, const Target &target) {
+    int vector_size = target.natural_vector_size<float>();
+    return t.is_float() && (t.bits() == 32) && (t.lanes() == vector_size);
 }
 
-bool is_native_vector_type(const Type &t) {
-    if (t.is_int_or_uint() && (t.lanes() == 64) && (t.bits() == 8)) {
+bool is_native_vector_type(const Type &t, const Target &target) {
+    int native_lanes = target.natural_vector_size<uint8_t>();
+
+    if (t.is_int_or_uint() && (t.lanes() == native_lanes) && (t.bits() == 8)) {
         return true;
     }
 
-    if (t.is_int_or_uint() && (t.lanes() == 64) && (t.bits() == 24)) {
+    if (t.is_int_or_uint() && (t.lanes() == native_lanes) && (t.bits() == 24)) {
         return true;
     }
 
-    if (t.is_int_or_uint() && (t.lanes() == 32) && (t.bits() == 16)) {
+    if (t.is_int_or_uint() && (t.lanes() == native_lanes / 2) && (t.bits() == 16)) {
         return true;
     }
 
-    if (t.is_int_or_uint() && (t.lanes() == 32) && (t.bits() == 48)) {
+    if (t.is_int_or_uint() && (t.lanes() == native_lanes / 2) && (t.bits() == 48)) {
         return true;
     }
 
-    if (t.is_int_or_uint() && (t.lanes() == 16) && (t.bits() == 32)) {
+    if (t.is_int_or_uint() && (t.lanes() == native_lanes / 4) && (t.bits() == 32)) {
         return true;
     }
 
-    if (t.is_float() && (t.lanes() == 16) && (t.bits() == 32)) {
+    if (t.is_float() && (t.lanes() == native_lanes / 4) && (t.bits() == 32)) {
         return true;
     }
 
     return false;
 }
 
-bool is_double_native_vector_type(const Type &t) {
-    constexpr int double_vector_bitwidth = 512 * 2;
+bool is_double_native_vector_type(const Type &t, const Target &target) {
+    int single_vector_bitwidth = sizeof(uint8_t) * target.natural_vector_size<uint8_t>();
+
+    int double_vector_bitwidth = single_vector_bitwidth * 2;
     return (t.bits() % 8 == 0) && (double_vector_bitwidth % t.bits() == 0) && (double_vector_bitwidth / t.bits() == t.lanes());
 }
 
-Type get_native_xtensa_vector(const Type &t) {
+Type get_native_xtensa_vector(const Type &t, const Target &target) {
+    int vector_bitwidth = target.has_feature(Target::Feature::XtensaQ8) ? 1024 : 512;
+    int wide_vector_bitwidth = target.has_feature(Target::Feature::XtensaQ8) ? 4096 : 1536;
+
     if (t.bits() == 64) {
-        return t.with_lanes(16);
+        return t.with_lanes(vector_bitwidth / 32);
     }
+
     if (t.bits() == 24 || t.bits() == 48) {
-        return t.with_lanes(1536 / t.bits());
+        return t.with_lanes(wide_vector_bitwidth / t.bits());
     }
-    return t.with_lanes(512 / t.bits());
+    return t.with_lanes(vector_bitwidth / t.bits());
 }
 
 std::string suffix_for_type(Type t) {
@@ -1050,6 +1068,9 @@ private:
             }
         }
 
+        int slice_width_i16 = target.natural_vector_size<int16_t>();
+        int slice_width_i32 = target.natural_vector_size<int32_t>();
+
         static const std::vector<Pattern> calls = {
             {"halide_xtensa_abs_i8", abs(wild_i8x)},
             {"halide_xtensa_abs_i16", abs(wild_i16x)},
@@ -1176,26 +1197,26 @@ private:
             {"halide_xtensa_convert_i8_high_u16", halide_xtensa_slice_to_native_u16(u16(wild_i8x), 1, wild_i32, wild_i32)},
             {"halide_xtensa_convert_i8_low_i16", halide_xtensa_slice_to_native_i16(i16(wild_i8x), 0, wild_i32, wild_i32)},
             {"halide_xtensa_convert_i8_high_i16", halide_xtensa_slice_to_native_i16(i16(wild_i8x), 1, wild_i32, wild_i32)},
-            {"halide_xtensa_convert_i32_u16", halide_xtensa_slice_to_native_u16(u16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x, wild_i32x, wild_i32x)), 0, 32, 64), Pattern::PassOnlyOp0 | Pattern::PassOnlyOp1},
-            {"halide_xtensa_convert_i32_u16", halide_xtensa_slice_to_native_u16(u16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x, wild_i32x, wild_i32x)), 1, 32, 64), Pattern::PassOnlyOp2 | Pattern::PassOnlyOp3},
+            {"halide_xtensa_convert_i32_u16", halide_xtensa_slice_to_native_u16(u16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x, wild_i32x, wild_i32x)), 0, slice_width_i16, slice_width_i16 * 2), Pattern::PassOnlyOp0 | Pattern::PassOnlyOp1},
+            {"halide_xtensa_convert_i32_u16", halide_xtensa_slice_to_native_u16(u16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x, wild_i32x, wild_i32x)), 1, slice_width_i16, slice_width_i16 * 2), Pattern::PassOnlyOp2 | Pattern::PassOnlyOp3},
 
-            {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 0, 16, 32)},
-            {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 1, 16, 32)},
-            {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 0, 16, 64), Pattern::PassOnlyOp0},
-            {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 1, 16, 64), Pattern::PassOnlyOp0},
-            {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 2, 16, 64), Pattern::PassOnlyOp1},
-            {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 3, 16, 64), Pattern::PassOnlyOp1},
-            {"halide_xtensa_convert_i48_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 0, 16, 32)},
-            {"halide_xtensa_convert_i48_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 1, 16, 32)},
+            {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 0, slice_width_i32, slice_width_i32 * 2)},
+            {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i48x), 1, slice_width_i32, slice_width_i32 * 2)},
+            {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 0, slice_width_i32, slice_width_i32 * 4), Pattern::PassOnlyOp0},
+            {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 1, slice_width_i32, slice_width_i32 * 4), Pattern::PassOnlyOp0},
+            {"halide_xtensa_convert_i48_low_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 2, slice_width_i32, slice_width_i32 * 4), Pattern::PassOnlyOp1},
+            {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 3, slice_width_i32, slice_width_i32 * 4), Pattern::PassOnlyOp1},
+            {"halide_xtensa_convert_i48_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 0, slice_width_i32, slice_width_i32 * 2)},
+            {"halide_xtensa_convert_i48_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 1, slice_width_i32, slice_width_i32 * 2)},
 
-            {"halide_xtensa_convert_u16_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_u16x), 0, 16, 32)},
-            {"halide_xtensa_convert_u16_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_u16x), 1, 16, 32)},
-            {"halide_xtensa_convert_u16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_u16x), 0, 16, 32)},
-            {"halide_xtensa_convert_u16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_u16x), 1, 16, 32)},
-            {"halide_xtensa_convert_i16_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i16x), 0, 16, 32)},
-            {"halide_xtensa_convert_i16_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_i16x), 1, 16, 32)},
-            {"halide_xtensa_convert_i16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 0, 16, 32)},
-            {"halide_xtensa_convert_i16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 1, 16, 32)},
+            {"halide_xtensa_convert_u16_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_u16x), 0, slice_width_i32, slice_width_i32 * 2)},
+            {"halide_xtensa_convert_u16_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_u16x), 1, slice_width_i32, slice_width_i32 * 2)},
+            {"halide_xtensa_convert_u16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_u16x), 0, slice_width_i32, slice_width_i32 * 2)},
+            {"halide_xtensa_convert_u16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_u16x), 1, slice_width_i32, slice_width_i32 * 2)},
+            {"halide_xtensa_convert_i16_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i16x), 0, slice_width_i32, slice_width_i32 * 2)},
+            {"halide_xtensa_convert_i16_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_i16x), 1, slice_width_i32, slice_width_i32 * 2)},
+            {"halide_xtensa_convert_i16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 0, slice_width_i32, slice_width_i32 * 2)},
+            {"halide_xtensa_convert_i16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 1, slice_width_i32, slice_width_i32 * 2)},
 
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 0, 16, 64), Pattern::PassOnlyOp0},
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 1, 16, 64), Pattern::PassOnlyOp1},
@@ -1414,6 +1435,7 @@ Expr span_of_bounds(const Interval &bounds) {
 // possible.
 class OptimizeShuffles : public IRMutator {
     int lut_alignment;
+    int lut_size_in_bytes;
     Scope<Interval> bounds;
     std::vector<std::pair<std::string, Expr>> lets;
 
@@ -1474,7 +1496,6 @@ class OptimizeShuffles : public IRMutator {
                 // TODO(vksnk): in some cases it might be possible to prove that
                 // all indices span only a single vector (instead of two which is
                 // assumed here, which may help to save one vector load.
-                const int lut_size_in_bytes = 128;
                 int lut_size = lut_size_in_bytes / op->type.element_of().bytes();
                 if (can_prove(index_span < lut_size)) {
                     // This is a lookup within an up to 64 element array. We
@@ -1509,8 +1530,8 @@ class OptimizeShuffles : public IRMutator {
     }
 
 public:
-    OptimizeShuffles(int lut_alignment)
-        : lut_alignment(lut_alignment) {
+    OptimizeShuffles(int alignment, int size_in_bytes)
+        : lut_alignment(alignment), lut_size_in_bytes(size_in_bytes) {
     }
 };
 
@@ -2067,20 +2088,36 @@ private:
     }
 
 public:
-    SplitVectorsToNativeSizes() {
-        native_vector_types = {
-            {Type(Type::Int, 8, 64)},
-            {Type(Type::UInt, 8, 64)},
-            {Type(Type::Int, 16, 32)},
-            {Type(Type::UInt, 16, 32)},
-            {Type(Type::Int, 32, 16)},
-            {Type(Type::UInt, 32, 16)},
-            {Type(Type::Int, 24, 64)},
-            {Type(Type::Int, 48, 32)},
-            {Type(Type::Int, 64, 16)},
-            {Type(Type::Float, 16, 32)},
-            {Type(Type::Float, 32, 16)},
-        };
+    SplitVectorsToNativeSizes(const Target &target) {
+        if (target.has_feature(Target::Feature::XtensaQ8)) {
+            native_vector_types = {
+                {Type(Type::Int, 8, 128)},
+                {Type(Type::UInt, 8, 128)},
+                {Type(Type::Int, 16, 64)},
+                {Type(Type::UInt, 16, 64)},
+                {Type(Type::Int, 32, 32)},
+                {Type(Type::UInt, 32, 32)},
+                {Type(Type::Int, 24, 128)},
+                {Type(Type::Int, 48, 64)},
+                {Type(Type::Int, 64, 32)},
+                {Type(Type::Float, 16, 64)},
+                {Type(Type::Float, 32, 32)},
+            };
+        } else {
+            native_vector_types = {
+                {Type(Type::Int, 8, 64)},
+                {Type(Type::UInt, 8, 64)},
+                {Type(Type::Int, 16, 32)},
+                {Type(Type::UInt, 16, 32)},
+                {Type(Type::Int, 32, 16)},
+                {Type(Type::UInt, 32, 16)},
+                {Type(Type::Int, 24, 64)},
+                {Type(Type::Int, 48, 32)},
+                {Type(Type::Int, 64, 16)},
+                {Type(Type::Float, 16, 32)},
+                {Type(Type::Float, 32, 16)},
+            };
+        }
     }
 };
 
@@ -2238,8 +2275,10 @@ public:
 };
 
 Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
-    Stmt s = OptimizeShuffles(64).mutate(stmt);
-    s = align_loads(s, 64, 1);
+    const int alignment = target.natural_vector_size<uint8_t>();
+    const int lut_size_in_bytes = 2 * target.natural_vector_size<uint8_t>();
+    Stmt s = OptimizeShuffles(alignment, lut_size_in_bytes).mutate(stmt);
+    s = align_loads(s, alignment, 1);
     // NOTE(vksnk): CSE seemed to break loop carry
     // s = common_subexpression_elimination(s);
 
@@ -2255,7 +2294,7 @@ Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
 
     // Split to the native vectors sizes.
     s = substitute_in_all_lets(s);
-    s = SplitVectorsToNativeSizes().mutate(s);
+    s = SplitVectorsToNativeSizes(target).mutate(s);
     for (int ix = 0; ix < 3; ix++) {
         s = SimplifySliceConcat().mutate(s);
     }
