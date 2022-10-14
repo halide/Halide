@@ -225,7 +225,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Min *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const VectorReduce *op) {
-    if (op->op == VectorReduce::Add && (op->type.lanes() == 1)) {
+    if (op->op == VectorReduce::Add && op->type.is_float() && (op->type.lanes() == 1)) {
         if (const Mul *maybe_mul = op->value.as<Mul>()) {
             string a = print_expr(maybe_mul->a);
             string b = print_expr(maybe_mul->b);
