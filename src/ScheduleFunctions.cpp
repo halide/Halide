@@ -2290,9 +2290,8 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         for (size_t i = 0; i < sites.size(); i++) {
             const auto &site = sites[i];
             if (invalid_sites.count(i)) {
-                if (debug::debug_level() > 0) {
-                    err << "  (INVALID) " << schedule_to_source(f, site.loop_level, site.loop_level) << "\n";
-                }
+                // Left here (commented out) for future debugging purposes
+                // err << "  (INVALID) " << schedule_to_source(f, site.loop_level, site.loop_level) << "\n";
                 continue;
             }
             err << "  " << schedule_to_source(f, site.loop_level, site.loop_level) << "\n";
