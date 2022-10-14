@@ -101,7 +101,6 @@ protected:
         void visit(const Let *) override;
         void visit(const LetStmt *) override;
         void visit(const AssertStmt *) override;
-        //        void visit(const ProducerConsumer *) override;
         void visit(const For *) override;
         void visit(const Store *) override;
         void visit(const Provide *) override;
