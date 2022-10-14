@@ -2285,8 +2285,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         err << "Func \"" << f.name() << "\" is computed at the following invalid location:\n"
             << "  " << schedule_to_source(f, store_at, compute_at) << "\n"
             << "Legal locations for this function are:\n";
-        for (size_t i = 0; i < sites.size(); i++) {
-            const auto &site = sites[i];
+        for (const auto &site : sites) {
             err << "  " << schedule_to_source(f, site.loop_level, site.loop_level) << "\n";
         }
         err << "\"" << f.name() << "\" is used in the following places:\n";
