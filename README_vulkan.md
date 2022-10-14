@@ -193,14 +193,13 @@ https://github.com/KhronosGroup/SPIRV-Tools
 
 # Current Status
 
-The following table outlines the state of the correctness tests (as of Oct-04) when 
+The following table outlines the state of the correctness tests (as of Oct-13) when 
 run with `HL_JIT_TARGET=host-vulkan` (NOTE: some tests may need additional 
 modifications to run under Vulkan):
 
 | Totals | *PASS* 🟢 | *FAIL* 🔴 | 
 | --     | --        | --        |
-|        | 326       | 39        |
-
+|        | 329       | 36        |
 
 | Test Name | Status |
 | :--       |    --: |
@@ -216,9 +215,9 @@ modifications to run under Vulkan):
 | correctness_reorder_rvars | *PASS* 🟢 |
 | correctness_lossless_cast | *PASS* 🟢 |
 | correctness_gpu_reuse_shared_memory | *FAIL* 🔴 |
-| correctness_boundary_conditions | *FAIL* 🔴 |
+| correctness_boundary_conditions | *PASS* 🟢 |
 | correctness_min_extent | *PASS* 🟢 |
-| correctness_gpu_sum_scan | *PASS* 🟢 |
+| correctness_gpu_sum_scan | *FAIL* 🔴 |
 | correctness_dynamic_allocation_in_gpu_kernel | *FAIL* 🔴 |
 | correctness_image_of_lists | *PASS* 🟢 |
 | correctness_tracing_broadcast | *PASS* 🟢 |
@@ -232,7 +231,7 @@ modifications to run under Vulkan):
 | correctness_realize_larger_than_two_gigs | *PASS* 🟢 |
 | correctness_gpu_transpose | *FAIL* 🔴 |
 | correctness_side_effects | *PASS* 🟢 |
-| correctness_logical | *FAIL* 🔴 |
+| correctness_logical | *PASS* 🟢 |
 | correctness_func_lifetime_2 | *PASS* 🟢 |
 | correctness_device_crop | *FAIL* 🔴 |
 | correctness_print_loop_nest | *PASS* 🟢 |
@@ -259,7 +258,7 @@ modifications to run under Vulkan):
 | correctness_gpu_assertion_in_kernel | *PASS* 🟢 |
 | correctness_low_bit_depth_noise | *PASS* 🟢 |
 | correctness_fuse | *PASS* 🟢 |
-| correctness_vector_cast | *FAIL* 🔴 |
+| correctness_vector_cast | *PASS* 🟢 |
 | correctness_concat | *PASS* 🟢 |
 | correctness_mod | *PASS* 🟢 |
 | correctness_parallel_rvar | *PASS* 🟢 |
@@ -407,7 +406,7 @@ modifications to run under Vulkan):
 | correctness_reduction_schedule | *PASS* 🟢 |
 | correctness_many_small_extern_stages | *PASS* 🟢 |
 | correctness_parallel_alloc | *PASS* 🟢 |
-| correctness_multiple_outputs | *FAIL* 🔴 |
+| correctness_multiple_outputs | *PASS* 🟢 |
 | correctness_vectorize_nested | *PASS* 🟢 |
 | correctness_bad_likely | *PASS* 🟢 |
 | correctness_sliding_reduction | *PASS* 🟢 |
