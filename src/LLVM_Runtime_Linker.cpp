@@ -1034,7 +1034,18 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
             }
 
-            if (t.has_feature(Target::MSAN)) {
+#ifdef HALIDE_INTERNAL_USING_MSAN
+            // If we are building a JIT shared runtime (ie, we are jitting),
+            // and we are compiling with MSAN enabled (detected via preprocessor),
+            // we should always use the real MSAN stubs, even if the Target::MSan
+            // feature has been cleared (because JITModule::make_module() clears it).
+            const bool use_real_msan_runtime = t.has_feature(Target::MSAN) ||
+                                               module_type == ModuleJITShared;
+#else
+            const bool use_real_msan_runtime = t.has_feature(Target::MSAN);
+#endif
+
+            if (use_real_msan_runtime) {
                 modules.push_back(get_initmod_msan(c, bits_64, debug));
             } else {
                 modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));

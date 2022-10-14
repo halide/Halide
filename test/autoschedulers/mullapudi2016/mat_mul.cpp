@@ -110,11 +110,12 @@ double run_test(bool auto_schedule) {
         prod.compute_at(out, x).vectorize(x);
         prod.update().reorder(x, y, r).vectorize(x).unroll(y);
         out.tile(x, y, xi, yi, 16, 4).vectorize(xi).unroll(yi).parallel(y);
-        out.print_loop_nest();
+        // Inspect the schedule (only for debugging))
+        // out.print_loop_nest();
     }
 
-    // Inspect the schedule
-    out.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // out.print_loop_nest();
 
     // Benchmark the schedule
     Buffer<float> result(size, size);
@@ -141,14 +142,14 @@ int main(int argc, char **argv) {
     double manual_time = run_test(false);
     double auto_time = run_test(true);
 
-    std::cout << "======================\n"
-              << "Manual time: " << manual_time << "ms\n"
-              << "Auto time: " << auto_time << "ms\n"
-              << "======================\n";
-
-    if (!get_jit_target_from_environment().has_gpu_feature() &&
-        (auto_time > manual_time * 5.0)) {
-        fprintf(stderr, "Warning: Auto-scheduler is much much slower than it should be.\n");
+    const double slowdown_factor = 8.0;
+    if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
+        std::cerr << "Autoscheduler time is slower than expected:\n"
+                  << "======================\n"
+                  << "Manual time: " << manual_time << "ms\n"
+                  << "Auto time: " << auto_time << "ms\n"
+                  << "======================\n";
+        exit(1);
     }
 
     printf("Success!\n");

@@ -79,15 +79,18 @@ else ()
     set(rbase $ORIGIN)
 endif ()
 
-if (TARGET Halide_Adams2019)
-    set(autoscheduler_utils adams2019_retrain_cost_model adams2019_featurization_to_sample adams2019_get_host_target adams2019_weightsdir_to_weightsfile)
-    if (NOT CMAKE_INSTALL_RPATH)
-        set_target_properties(${autoscheduler_utils} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
-    endif ()
-    install(TARGETS ${autoscheduler_utils}
+foreach (util IN ITEMS adams2019_retrain_cost_model adams2019_featurization_to_sample adams2019_get_host_target adams2019_weightsdir_to_weightsfile)
+    if (TARGET ${util})
+        if (NOT CMAKE_INSTALL_RPATH)
+            set_target_properties(${util} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+        endif ()
+        install(
+            TARGETS ${util}
             EXPORT Halide_Interfaces
-            COMPONENT Halide_Development)
-endif ()
+            COMPONENT Halide_Development
+        )
+    endif ()
+endforeach ()
 
 ##
 # READMEs and other top-level documentation
