@@ -827,6 +827,8 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
             {"halide.hexagon.add_mpy.vuh.vub.ub", wild_i16x + cast(Int(16, 0), widening_mul(wild_u8x, wild_u8)), Pattern::ReinterleaveOp0, Int(16)},
         };
 
+        // std::cerr << "Optimizing: " << Expr(op) << "\n";
+
         static const vector<Pattern> adds = {
             // Use accumulating versions of vmpa, vdmpy, vrmpy instructions when possible.
             {"halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_i16x + halide_hexagon_add_2mpy(Int(16, 0), ".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0},
@@ -2427,17 +2429,26 @@ private:
                 const Cast *cast_a = a.as<Cast>();
                 bool is_widening_cast = cast_a && cast_a->type.bits() >= cast_a->value.type().bits() * 2;
                 if (is_widening_cast || Call::as_intrinsic(a, {Call::widening_add, Call::widening_mul, Call::widening_sub})) {
-                    const uint64_t const_m = 1ull << *const_b;
-                    Expr b = make_const(a.type(), const_m);
-                    return mutate(distribute(a, b));
+                    if (enable_synthesized_rules()) {
+                        const uint64_t const_m = 1ull << *const_b;
+                        Expr b = make_const(a.type(), const_m);
+                        return mutate(distribute(a, b));
+                    } else {
+                        return mutate(distribute(a, make_one(a.type()) << *const_b));
+                    }
                 }
             }
         } else if (op->is_intrinsic(Call::widening_shift_left)) {
             if (const uint64_t *const_b = as_const_uint(op->args[1])) {
-                const uint64_t const_m = 1ull << *const_b;
-                Expr b = make_const(op->type, const_m);
-                Expr a = Cast::make(op->type, op->args[0]);
-                return mutate(distribute(a, b));
+                if (enable_synthesized_rules()) {
+                    const uint64_t const_m = 1ull << *const_b;
+                    Expr b = make_const(op->type, const_m);
+                    Expr a = Cast::make(op->type, op->args[0]);
+                    return mutate(distribute(a, b));
+                } else {
+                    Expr a = Cast::make(op->type, op->args[0]);
+                    return mutate(distribute(a, make_one(a.type()) << *const_b));
+                }
             }
         }
         return IRMutator::visit(op);
@@ -2448,6 +2459,19 @@ private:
                op->type.is_int_or_uint() &&
                op->value.type().is_int_or_uint()) {
             // Normalize to casts for non lane-changing reinterprets.
+            // if (const Call *c = Call::as_intrinsic(op->value, {Call::widening_shift_left})) {
+            //     // try to rewrite this to mixed-operand widening_mul
+            //     internal_assert(c->args.size() == 2);
+            //     const Expr &a = c->args[0];
+            //     const Expr &b = c->args[1];
+            //     if (a.type().is_uint()) {
+            //         Expr c0 = lossless_cast(a.type().with_code(halide_type_int), b);
+            //         if (c0.defined()) {
+            //             return widening_mul(a, c0);
+            //         }
+            //     }
+            // }
+            // default behavior.
             return mutate(cast(op->type, op->value));
         } else {
             return IRMutator::visit(op);

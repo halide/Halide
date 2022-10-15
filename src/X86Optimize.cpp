@@ -144,6 +144,23 @@ protected:
 
              false)) {
             return mutate(rewrite.result);
+        // } else if (
+        //     rewrite(
+        //         widening_mul(x, y) + (z + widening_mul(w, u)),
+        //         (widening_mul(x, y) + widening_mul(w, u)) + z,
+        //         !is_intrin(z, Call::widening_mul) &&
+        //         is_int(x, 16) && is_int(y, 16) &&
+        //         is_int(w, 16) && is_int(u, 16)) ||
+            
+        //     rewrite(
+        //         widening_mul(x, y) + (widening_mul(w, u) + z),
+        //         (widening_mul(x, y) + widening_mul(w, u)) + z,
+        //         !is_intrin(z, Call::widening_mul) &&
+        //         is_int(x, 16) && is_int(y, 16) &&
+        //         is_int(w, 16) && is_int(u, 16)) ||
+
+        //     false) {
+        //     return mutate(rewrite.result);
         }
 
         if ((op->type.lanes() % 4 == 0) && should_use_dot_product(op->a, op->b, matches)) {
@@ -468,10 +485,18 @@ protected:
                  v_instr(VectorInstruction::dot_product, reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), x)),
                                                          reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), y))),
                  is_int(x, 16) && is_uint(y, 8)) ||
-                rewrite(
-                 widening_mul(x, y),
-                 v_instr(VectorInstruction::widening_mul, x, y),
-                 is_int(x, 16) && is_int(y, 16)))) ||
+
+                // don't do this if one or more operands is a load, it's faster to load wide + do pmulld
+                // rewrite(
+                //  widening_mul(x, y),
+                //  cast(op->type, x) * cast(op->type, y),
+                //  is_load(x) || is_load(y)) ||
+
+                // rewrite(
+                //  widening_mul(x, y),
+                //  v_instr(VectorInstruction::widening_mul, x, y),
+                //  is_int(x, 16) && is_int(y, 16))
+                 false)) ||
 
             (target.has_feature(Target::AVX512_SapphireRapids) &&
              (op->type.is_int() && (bits == 32)) &&
@@ -733,6 +758,8 @@ private:
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
+    IRMatcher::Wild<3> w;
+    IRMatcher::Wild<4> u;
     // IRMatcher::WildConst<0> c0;
 };
 

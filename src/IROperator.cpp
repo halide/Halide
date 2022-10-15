@@ -447,6 +447,15 @@ Expr lossless_cast(Type t, Expr e) {
         }
     }
 
+    if (const Reinterpret *r = e.as<Reinterpret>()) {
+        if (r->type.bits() == r->value.type().bits()) {
+            Expr expr = cast(r->type, r->value);
+            return lossless_cast(t, expr);
+        } else {
+            return Expr();
+        }
+    }
+
     if (const Broadcast *b = e.as<Broadcast>()) {
         Expr v = lossless_cast(t.element_of(), b->value);
         if (v.defined()) {

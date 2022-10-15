@@ -252,6 +252,13 @@ private:
         if (t.is_handle()) {
             interval = Interval::everything();
             return;
+        } else {
+            if (t.bits() == op->value.type().bits()) {
+                // reinterpret as a cast.
+                Expr expr = cast(op->type, op->value);
+                expr.accept(this);
+                return;
+            }
         }
 
         // Just use the bounds of the type
@@ -1517,6 +1524,9 @@ private:
                                      Call::widening_shift_left,
                                      Call::widening_shift_right,
                                      Call::widening_sub,
+                                     Call::widen_right_add,
+                                     Call::widen_right_sub,
+                                     Call::widen_right_mul,
                                      // TODO: the below intrinsics should not use the optimal lowering...
                                      Call::rounding_halving_add,
                                      Call::halving_add,
