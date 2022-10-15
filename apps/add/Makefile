@@ -14,11 +14,11 @@ $(GENERATOR_BIN)/$(APP_NAME).generator: $(APP_NAME)_generator.cpp $(GENERATOR_DE
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-$(GENERATOR_BIN)/$(APP_NAME)_rake.generator: $(APP_NAME)_generator.cpp $(RAKE_GENERATOR_DEPS)
+$(GENERATOR_BIN)/$(APP_NAME)_rake.generator: $(APP_NAME)_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	export HL_RAKE_BENCHMARK_NAME=rake && \
 	export HL_ENABLE_RAKE=1 && \
-	$(CXX) $(RAKE_CXXFLAGS) -g -DOLD_SYNTAX $(filter %.cpp,$^) -o $@ $(RAKE_LIBHALIDE_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/$(APP_NAME)_llvm.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	@mkdir -p $(@D)

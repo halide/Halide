@@ -1289,7 +1289,7 @@ class SubstituteInWideningLets : public IRMutator {
 };
 
 
-class LowerDivMod : public IRGraphMutator {
+class LowerForLLVM : public IRGraphMutator {
 protected:
     using IRGraphMutator::visit;
     Expr visit(const Div *op) override{
@@ -1307,6 +1307,27 @@ protected:
         }
         return IRGraphMutator::visit(op);
     }
+
+    std::string llvm_suffix(const Type &t) {
+        std::string intrin = "";
+        if (t.lanes() > 1) {
+            const int lanes = t.lanes();
+            intrin += "v" + std::to_string(lanes);
+        }
+        intrin += "i" + std::to_string(t.bits());
+        return intrin;
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::saturating_add)) {
+            const std::string name = (op->type.is_int() ? "llvm.sadd.sat." : "llvm.uadd.sat.") + llvm_suffix(op->type);
+            return mutate(Call::make(op->type, name, op->args, Call::PureExtern));
+        } else if (op->is_intrinsic(Call::saturating_sub)) {
+            const std::string name = (op->type.is_int() ? "llvm.ssub.sat." : "llvm.usub.sat.") + llvm_suffix(op->type);
+            return mutate(Call::make(op->type, name, op->args, Call::PureExtern));
+        }
+        return IRGraphMutator::visit(op);
+    }
 };
 
 }  // namespace
@@ -1314,7 +1335,7 @@ protected:
 Stmt find_intrinsics(const Stmt &s) {
     if (get_env_variable("HL_DISABLE_INTRINISICS") == "1") {
         // If we are disabling lifting, we should lower div/mod here.
-        return lower_intrinsics(LowerDivMod().mutate(s));
+        return lower_intrinsics(LowerForLLVM().mutate(s));
     }
     Stmt stmt = SubstituteInWideningLets().mutate(s);
     stmt = FindIntrinsics().mutate(stmt);
@@ -1327,7 +1348,7 @@ Stmt find_intrinsics(const Stmt &s) {
 Stmt find_intrinsics(const Stmt &s, const FuncValueBounds &fvb) {
     if (get_env_variable("HL_DISABLE_INTRINISICS") == "1") {
         // If we are disabling lifting, we should lower div/mod here.
-        return lower_intrinsics(LowerDivMod().mutate(s));
+        return lower_intrinsics(LowerForLLVM().mutate(s));
     }
     Stmt stmt = SubstituteInWideningLets().mutate(s);
     stmt = FindIntrinsics(fvb).mutate(stmt);
@@ -1340,7 +1361,7 @@ Stmt find_intrinsics(const Stmt &s, const FuncValueBounds &fvb) {
 Expr find_intrinsics(const Expr &e) {
     if (get_env_variable("HL_DISABLE_INTRINISICS") == "1") {
         // If we are disabling lifting, we should lower div/mod here.
-        return lower_intrinsics(LowerDivMod().mutate(e));
+        return lower_intrinsics(LowerForLLVM().mutate(e));
     }
     Expr expr = SubstituteInWideningLets().mutate(e);
     expr = FindIntrinsics().mutate(expr);
