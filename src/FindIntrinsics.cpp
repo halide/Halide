@@ -74,6 +74,10 @@ bool is_safe_for_add(const Expr &e, int max_depth) {
         } else if (cast->type.bits() == cast->value.type().bits()) {
             return is_safe_for_add(cast->value, max_depth);
         }
+    } else if (const Reinterpret *reint = e.as<Reinterpret>()) {
+        if (reint->type.bits() == reint->value.type().bits()) {
+            return is_safe_for_add(reint->value, max_depth);
+        }
     } else if (Call::as_intrinsic(e, {Call::widening_add, Call::widening_sub, Call::widen_right_add, Call::widen_right_sub})) {
         return true;
     }
@@ -297,9 +301,11 @@ protected:
         if (enable_synthesized_rules() &&
             (rewrite(widen_right_add(x, y) + widen_right_add(z, w), widening_add(y, w) + x + z) ||
              // TODO: should be a simplifier rule.
-             rewrite(reinterpret(op->type, x) + reinterpret(op->type, y), reinterpret(op->type, x + y)) || // TODO: need x and y same type.
+             rewrite(reinterpret(op->type, x) + reinterpret(op->type, y), reinterpret(op->type, x + y), types_match(x, y)) || // TODO: need x and y same type.
              rewrite(widening_shift_left(x, c0) + widening_shift_left(y, c0), shift_left(widening_add(x, y), c0)) ||
              rewrite(widening_shift_left(x, c0) + (widening_shift_left(y, c0) + z), z + shift_left(widening_add(x, y), c0)) ||
+             rewrite((z + widening_shift_left(x, c0)) + widening_shift_left(y, c0), z + shift_left(widening_add(x, y), c0)) ||
+             rewrite((widening_shift_left(x, c0) + z) + widening_shift_left(y, c0), z + shift_left(widening_add(x, y), c0)) ||
              rewrite(cast(op->type, widening_shift_left(x, c0)) + cast(op->type, widening_shift_left(y, c0)),
                      cast(op->type, shift_left(widening_add(x, y), c0)),
                      // If the cast is simply a reinterpret.
@@ -1314,6 +1320,7 @@ protected:
 Stmt find_intrinsics(const Stmt &s) {
     if (get_env_variable("HL_DISABLE_INTRINISICS") == "1") {
         // If we are disabling lifting, we should lower div/mod here.
+        // std::cerr << "Lowering Stmt (0):\n\n" << s << "\n";
         return lower_intrinsics(LowerDivMod().mutate(s));
     }
     Stmt stmt = SubstituteInWideningLets().mutate(s);
@@ -1327,6 +1334,7 @@ Stmt find_intrinsics(const Stmt &s) {
 Stmt find_intrinsics(const Stmt &s, const FuncValueBounds &fvb) {
     if (get_env_variable("HL_DISABLE_INTRINISICS") == "1") {
         // If we are disabling lifting, we should lower div/mod here.
+        // std::cerr << "Lowering Stmt (1):\n\n" << s << "\n";
         return lower_intrinsics(LowerDivMod().mutate(s));
     }
     Stmt stmt = SubstituteInWideningLets().mutate(s);
@@ -1393,12 +1401,19 @@ Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
     if (is_positive_const(b)) {
-        // We can handle the rounding with an averaging instruction. We prefer
-        // the rounding average instruction (we could use either), because the
-        // non-rounding one is missing on x86.
-        Expr shift = simplify(b - 1);
-        Expr round = simplify(cast(a.type(), (1 << shift) - 1));
-        return rounding_halving_add(a, round) >> shift;
+        if (a.type().is_uint()) {
+            // We can handle the rounding with an averaging instruction. We prefer
+            // the rounding average instruction (we could use either), because the
+            // non-rounding one is missing on x86.
+            Expr shift = simplify(b - 1);
+            Expr round = simplify(cast(a.type(), (1 << shift) - 1));
+            return rounding_halving_add(a, round) >> shift;
+        } else if (is_safe_for_add(a)) {
+            // Just perform the correct computation.
+            // TODO: only safe if bounds info is proven about a...
+            Expr round = simplify(cast(a.type(), (1 << (b - 1))));
+            return ((a + round) >> b);
+        }
     }
     // Shift right, then add one to the result if bits were dropped
     // (because b > 0) and the most significant dropped bit was a one.
@@ -1551,8 +1566,87 @@ Expr lower_mul_shift_right(const Expr &a, const Expr &b, const Expr &q) {
     return result;
 }
 
+Expr emulate_signed_mul_shift_right_31(Expr a, Expr b) {
+    // a = (a_hi << 16) + a_lo
+    // b = (b_hi << 16) + b_lo
+    // -32768 <= a_hi <= 32767
+    // 0 <= a_lo <= 65535
+
+    Expr a_hi = cast<int16_t>(a >> 16);
+    Expr b_hi = cast<int16_t>(b >> 16);
+    Expr a_lo = cast<uint16_t>(a);
+    Expr b_lo = cast<uint16_t>(b);
+
+    // a*b = ((a_hi * b_hi) << 32) + ((a_hi * b_lo + b_hi * a_lo) << 16) + (a_lo * b_lo)
+    Expr ab_hi = widening_mul(a_hi, b_hi);    // in [-1073709056, 1073741824]
+    Expr ab_mid0 = widening_mul(a_hi, b_lo);  // in [-2147450880, 2147385345]
+    Expr ab_mid1 = widening_mul(b_hi, a_lo);  // in [-2147450880, 2147385345]
+    Expr ab_lo = widening_mul(a_lo, b_lo);    // in [0, 4294836225]
+
+    assert(ab_hi.type() == Int(32));
+    assert(ab_mid0.type() == Int(32));
+    assert(ab_mid1.type() == Int(32));
+    assert(ab_lo.type() == UInt(32));
+
+    // a*b >> 31 = ((ab_hi << 32) + ((ab_mid0 + ab_mid1) << 16) + ab_lo) >> 31
+    // a*b >> 31 = (ab_hi << 1) + (ab_mid0 + ab_mid1 + (ab_lo >> 16)) >> 15
+    // a*b >> 31 = (ab_hi << 1) + avg(ab_mid0, ab_mid1 + (ab_lo >> 16)) >> 14
+
+    Expr lo = halving_add(ab_mid0, ab_mid1 + (ab_lo >> 16)) >> 14;  // in [-131070, 131068]
+    assert(lo.type() == Int(32));
+
+    return saturating_add(ab_hi, ab_hi + lo);
+}
+
+Expr emulate_signed_rounding_mul_shift_right_31(Expr a, Expr b) {
+    // a = (a_hi << 16) + a_lo
+    // b = (b_hi << 16) + b_lo
+    // -32768 <= a_hi <= 32767
+    // 0 <= a_lo <= 65535
+
+    Type int16 = Int(16, a.type().lanes());
+    Type uint16 = UInt(16, a.type().lanes());
+
+    Expr a_hi = cast(int16, a >> 16);
+    Expr b_hi = cast(int16, b >> 16);
+    Expr a_lo = cast(uint16, a);
+    Expr b_lo = cast(uint16, b);
+
+    // a*b = ((a_hi * b_hi) << 32) + ((a_hi * b_lo + b_hi * a_lo) << 16) + (a_lo * b_lo)
+    Expr ab_hi = widening_mul(a_hi, b_hi);    // in [-1073709056, 1073741824]
+    Expr ab_mid0 = widening_mul(a_hi, b_lo);  // in [-2147450880, 2147385345]
+    Expr ab_mid1 = widening_mul(b_hi, a_lo);  // in [-2147450880, 2147385345]
+    // Expr ab_lo = widening_mul(a_lo, b_lo);    // in [0, 4294836225]
+    Expr ab_lo_shifted = mul_shift_right(a_lo, b_lo, 16);
+
+    internal_assert(ab_hi.type().element_of() == Int(32));
+    internal_assert(ab_mid0.type().element_of() == Int(32));
+    internal_assert(ab_mid1.type().element_of() == Int(32));
+    // internal_assert(ab_lo.type().element_of() == UInt(32));
+    internal_assert(ab_lo_shifted.type().element_of() == UInt(16));
+
+    // (a*b + (1 << 30)) >> 31 = ((ab_hi << 32) + ((ab_mid0 + ab_mid1) << 16) + ab_lo + (1 << 30)) >> 31
+    // (a*b + (1 << 30)) >> 31 = (ab_hi << 1) + ((ab_mid0 + ab_mid1 + (ab_lo >> 16) + (1 << 14)) >> 15)
+    // (a*b + (1 << 30)) >> 31 = (ab_hi << 1) + (avg(ab_mid0 + (1 << 14), ab_mid1 + (ab_lo >> 16)) >> 14)
+
+    Expr lo = halving_add(ab_mid0 + (1 << 14), ab_mid1 + ab_lo_shifted) >> 14;
+    internal_assert(lo.type().element_of() == Int(32));
+
+    return saturating_add(ab_hi, ab_hi + lo);
+}
+
 Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q) {
     internal_assert(a.type() == b.type());
+
+    // std::cout << "Lowering rounding_mul_shift_right:\n" << a << "\n" << b << "\n" << q << "\n";
+
+    // TODO: && (get_env_variable("HL_ENABLE_RAKE_RULES") == "1")
+    if (is_const(q, 31) && a.type().element_of() == Int(32)) {
+        return emulate_signed_rounding_mul_shift_right_31(a, b);
+    // } else {
+    //     std::cout << "other rounding_mul_shift_right:\n" << a << "\n" << b << "\n" << q << "\n";
+    }
+
     int full_q = a.type().bits();
     if (a.type().is_int()) {
         full_q -= 1;
@@ -1582,6 +1676,26 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
         result = narrow(result);
     }
     return result;
+}
+
+class FindInt64 : public IRMutator {
+public:
+    using IRMutator::mutate;
+
+    Expr mutate(const Expr &expr) override {
+        if (expr.type().element_of() == Int(64)) {
+            found = true;
+        }
+        return IRMutator::mutate(expr);
+    }
+
+    bool found = false;
+};
+
+bool contains_int64(const Expr &e) {
+    FindInt64 finder;
+    finder.mutate(e);
+    return finder.found;
 }
 
 Expr lower_intrinsic(const Call *op) {
@@ -1649,6 +1763,16 @@ Expr lower_intrinsic(const Call *op) {
         return Expr();
     }
 }
+
+// Expr lower_intrinsic(const Call *op) {
+//     Expr e = lower_intrinsic_helper(op);
+//     if (e.defined() && contains_int64(e)) {
+//         std::cerr << "Failed in lowering:\n" << Expr(op) << "\n";
+//         std::cerr << "Lowered to:\n  " << e << "\n";
+//         internal_error << "done\n"; 
+//     }
+//     return e;
+// }
 
 Expr lower_intrinsic_semantically(const Call *op) {
     if (op->is_intrinsic(Call::widen_right_add)) {
