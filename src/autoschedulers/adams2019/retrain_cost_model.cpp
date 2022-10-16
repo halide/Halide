@@ -202,11 +202,10 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
         const size_t num_stages = num_features / features_per_stage;
 
         const float runtime = scratch[num_features];
-        if (runtime > 100000) {  // Don't try to predict runtime over 100s
+        if (runtime > 100000 || runtime < 0.1) {  // Don't try to predict runtime over 100s
             std::cout << "Implausible runtime in ms: " << runtime << "\n";
             continue;
         }
-        // std::cout << "Runtime: " << runtime << "\n";
 
         int pipeline_id = *((int32_t *)(&scratch[num_features + 1]));
         const int schedule_id = *((int32_t *)(&scratch[num_features + 2]));
@@ -217,7 +216,16 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
             best_path = s;
         }
 
-        PipelineSample &ps = result[pipeline_id];
+        uint64_t pipeline_hash = 0;
+        for (size_t i = 0; i < num_stages; i++) {
+            pipeline_hash =
+                hash_floats(pipeline_hash,
+                            &scratch[i * features_per_stage + head2_w],
+                            &scratch[(i + 1) * features_per_stage]);
+        }
+
+        // Just use the hash as the id. Hash collisions are very very unlikely.
+        PipelineSample &ps = result[pipeline_hash];
 
         if (ps.pipeline_features.data() == nullptr) {
             ps.pipeline_id = pipeline_id;
@@ -236,7 +244,15 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
                 }
             }
 
-            ps.pipeline_hash = hash_floats(0, ps.pipeline_features.begin(), ps.pipeline_features.end());
+            ps.pipeline_hash = pipeline_hash;
+        } else {
+            // Even for a huge number of pipelines, a hash collision is
+            // vanishingly unlikely. Still, this will detect ones that are going
+            // to cause UB during training:
+            if ((int)num_stages != ps.num_stages) {
+                std::cout << "Hash collision: two pipelines with a different number of stages both hashed to " << pipeline_hash << "\n";
+                continue;
+            }
         }
 
         uint64_t schedule_hash = 0;
@@ -410,10 +426,13 @@ int main(int argc, char **argv) {
 
     for (float learning_rate : flags.rates) {
         float loss_sum[kModels] = {0}, loss_sum_counter[kModels] = {0};
-        float correct_ordering_rate_sum[kModels] = {0};
-        float correct_ordering_rate_count[kModels] = {0};
-        float v_correct_ordering_rate_sum[kModels] = {0};
-        float v_correct_ordering_rate_count[kModels] = {0};
+        float single_shot_loss_sum[kModels] = {0};
+        float single_shot_loss_count[kModels] = {0};
+        float v_single_shot_loss_sum[kModels] = {0};
+        float v_single_shot_loss_count[kModels] = {0};
+
+        float r2[kModels] = {0};
+        float v_r2[kModels] = {0};
 
         for (int e = 0; e < flags.epochs; e++) {
             int counter = 0;
@@ -422,14 +441,6 @@ int main(int argc, char **argv) {
             uint64_t worst_miss_pipeline_id = 0;
             uint64_t worst_miss_schedule_id = 0;
 
-            struct Inversion {
-                int pipeline_id;
-                string f1, f2;
-                float p1, p2;
-                float r1, r2;
-                float badness = 0;
-            } worst_inversion;
-
 #if defined(_OPENMP)
 #pragma omp parallel for
 #endif
@@ -437,13 +448,16 @@ int main(int argc, char **argv) {
                 for (int train = 0; train < 2; train++) {
                     auto &tp = tpp[model];
 
+                    double sum_actual = 0, sum2_actual = 0, sum_predicted = 0, sum2_predicted = 0, sum_predicted_times_actual = 0;
+                    int n = 0;
+
                     for (auto &p : train ? samples : validation_set) {
                         if (kModels > 1 && rng() & 1) {
                             continue;  // If we are training multiple kModels, allow them to diverge.
                         }
-                        if (p.second.schedules.size() < 8) {
-                            continue;
-                        }
+                        // if (p.second.schedules.size() < 8) {
+                        //     continue;
+                        // }
                         tp->reset();
                         tp->set_pipeline_features(p.second.pipeline_features, flags.num_cores);
 
@@ -494,46 +508,61 @@ int main(int argc, char **argv) {
                             tp->evaluate_costs();
                         }
 
+                        // Compute statistics for R^2 on relative throughput
                         if (true) {
-                            int good = 0, bad = 0;
+                            auto &ref = p.second.schedules[p.second.fastest_schedule_hash];
                             for (auto &sched : p.second.schedules) {
-                                auto &ref = p.second.schedules[p.second.fastest_schedule_hash];
                                 if (sched.second.prediction[model] == 0) {
                                     continue;
                                 }
-                                assert(sched.second.runtimes[0] >= ref.runtimes[0]);
-                                float runtime_ratio = sched.second.runtimes[0] / ref.runtimes[0];
-                                if (runtime_ratio <= 1.3f) {
-                                    continue;  // Within 30% of the runtime of the best
+                                double actual = ref.runtimes[0] / sched.second.runtimes[0];
+                                double predicted = ref.runtimes[0] / sched.second.prediction[model];
+                                sum_actual += actual;
+                                sum2_actual += actual * actual;
+                                sum_predicted += predicted;
+                                sum2_predicted += predicted * predicted;
+                                sum_predicted_times_actual += predicted * actual;
+                                n++;
+                            }
+                        }
+
+                        // Compute how much performance we would leave on the
+                        // floor doing single-shot autoscheduling
+                        if (true) {
+                            auto &ref = p.second.schedules[p.second.fastest_schedule_hash];
+                            double best_predicted_runtime = 1e50;
+                            double actual_runtime_of_best_predicted_runtime = 0;
+                            for (auto &sched : p.second.schedules) {
+                                double predicted = sched.second.prediction[model];
+                                double actual = sched.second.runtimes[0];
+                                if (predicted == 0) {
+                                    continue;
                                 }
-                                if (sched.second.prediction[model] >= ref.prediction[model]) {
-                                    good++;
-                                } else {
-                                    if (train) {
-                                        float badness = (sched.second.runtimes[0] - ref.runtimes[0]) * (ref.prediction[model] - sched.second.prediction[model]);
-                                        badness /= (ref.runtimes[0] * ref.runtimes[0]);
-                                        if (badness > worst_inversion.badness) {
-                                            worst_inversion.pipeline_id = p.first;
-                                            worst_inversion.badness = badness;
-                                            worst_inversion.r1 = ref.runtimes[0];
-                                            worst_inversion.r2 = sched.second.runtimes[0];
-                                            worst_inversion.p1 = ref.prediction[model];
-                                            worst_inversion.p2 = sched.second.prediction[model];
-                                            worst_inversion.f1 = ref.filename;
-                                            worst_inversion.f2 = sched.second.filename;
-                                        }
-                                    }
-                                    bad++;
+                                assert(actual >= ref.runtimes[0]);
+                                if (predicted < best_predicted_runtime) {
+                                    best_predicted_runtime = predicted;
+                                    actual_runtime_of_best_predicted_runtime = actual;
                                 }
                             }
                             if (train) {
-                                correct_ordering_rate_sum[model] += good;
-                                correct_ordering_rate_count[model] += good + bad;
+                                single_shot_loss_sum[model] += ref.runtimes[0] / actual_runtime_of_best_predicted_runtime;
+                                single_shot_loss_count[model]++;
                             } else {
-                                v_correct_ordering_rate_sum[model] += good;
-                                v_correct_ordering_rate_count[model] += good + bad;
+                                v_single_shot_loss_sum[model] += ref.runtimes[0] / actual_runtime_of_best_predicted_runtime;
+                                v_single_shot_loss_count[model]++;
                             }
                         }
+                    }
+
+                    // Compute R^2
+                    double covariance = n * sum_predicted_times_actual - sum_predicted * sum_actual;
+                    double predicted_variance = n * sum2_predicted - sum_predicted * sum_predicted;
+                    double actual_variance = n * sum2_actual - sum_actual * sum_actual;
+                    double r = (covariance * covariance) / (predicted_variance * actual_variance);
+                    if (train) {
+                        r2[model] = r;
+                    } else {
+                        v_r2[model] = r;
                     }
                 }
 
@@ -543,29 +572,32 @@ int main(int argc, char **argv) {
             std::cout << "Loss: ";
             for (int model = 0; model < kModels; model++) {
                 std::cout << loss_sum[model] / loss_sum_counter[model] << " ";
-                loss_sum[model] *= 0.9f;
-                loss_sum_counter[model] *= 0.9f;
             }
             if (kModels > 1) {
                 std::cout << "\n";
             }
-            std::cout << " Rate: ";
+
+            std::cout << " R^2: ";
+            for (int model = 0; model < kModels; model++) {
+                std::cout << r2[model] << " " << v_r2[model] << " ";
+            }
+            if (kModels > 1) {
+                std::cout << "\n";
+            }
+
+            std::cout << " Single-shot: ";
             int best_model = 0;
             float best_rate = 0;
             for (int model = 0; model < kModels; model++) {
-                float rate = correct_ordering_rate_sum[model] / correct_ordering_rate_count[model];
+                float rate = single_shot_loss_sum[model] / single_shot_loss_count[model];
                 std::cout << rate << " ";
-                correct_ordering_rate_sum[model] *= 0.9f;
-                correct_ordering_rate_count[model] *= 0.9f;
 
-                rate = v_correct_ordering_rate_sum[model] / v_correct_ordering_rate_count[model];
+                rate = v_single_shot_loss_sum[model] / v_single_shot_loss_count[model];
                 if (rate < best_rate) {
                     best_model = model;
                     best_rate = rate;
                 }
                 std::cout << rate << " ";
-                v_correct_ordering_rate_sum[model] *= 0.9f;
-                v_correct_ordering_rate_count[model] *= 0.9f;
             }
 
             if (kModels > 1) {
@@ -578,25 +610,21 @@ int main(int argc, char **argv) {
                 std::cout << "\n";
             }
 
-            if (worst_inversion.badness > 0) {
-                std::cout << "Worst inversion:\n"
-                          << leaf(worst_inversion.f1) << " predicted: " << worst_inversion.p1 << " actual: " << worst_inversion.r1 << "\n"
-                          << leaf(worst_inversion.f2) << " predicted: " << worst_inversion.p2 << " actual: " << worst_inversion.r2 << "\n";
-                if (samples.size() > 50000) {
-                    // For robustness during training on large numbers
-                    // of random pipelines, we discard poorly
-                    // performing samples from the training set
-                    // only. Some of them are weird degenerate
-                    // pipelines.
-                    samples.erase(worst_inversion.pipeline_id);
-                }
-            }
-
             tpp[best_model]->save_weights();
 
             if (loss_sum[best_model] < 1e-5f) {
                 std::cout << "Zero loss, returning early\n";
                 return 0;
+            }
+
+            const float kSmoothing = 0.0f;
+            for (int model = 0; model < kModels; model++) {
+                loss_sum[model] *= kSmoothing;
+                loss_sum_counter[model] *= kSmoothing;
+                single_shot_loss_sum[model] *= kSmoothing;
+                single_shot_loss_count[model] *= kSmoothing;
+                v_single_shot_loss_sum[model] *= kSmoothing;
+                v_single_shot_loss_count[model] *= kSmoothing;
             }
         }
     }
