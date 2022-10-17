@@ -338,16 +338,6 @@ void CodeGen_LLVM::init_module() {
     module = get_initial_module_for_target(target, context);
 }
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-void CodeGen_LLVM::add_external_code(const Module &halide_module) {
-    for (const ExternalCode &code_blob : halide_module.external_code()) {
-        if (code_blob.is_for_cpu_target(get_target())) {
-            add_bitcode_to_module(context, *module, code_blob.contents(), code_blob.name());
-        }
-    }
-}
-#endif
-
 CodeGen_LLVM::~CodeGen_LLVM() {
     delete builder;
 }
@@ -504,10 +494,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    add_external_code(input);
-#endif
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";

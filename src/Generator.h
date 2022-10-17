@@ -272,9 +272,6 @@
 #include <vector>
 
 #include "AbstractGenerator.h"
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-#include "ExternalCode.h"
-#endif
 #include "Func.h"
 #include "ImageParam.h"
 #include "Introspection.h"
@@ -3037,10 +3034,6 @@ class GeneratorContext {
 public:
     friend class Internal::GeneratorBase;
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    using ExternsMap = std::map<std::string, ExternalCode>;
-#endif
-
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
@@ -3097,20 +3090,6 @@ private:
 #else
     AutoschedulerParams autoscheduler_params_;
 #endif
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    std::shared_ptr<ExternsMap> externs_map_ = std::make_shared<ExternsMap>();
-#endif
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    GeneratorContext(const Target &target,
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-                     bool auto_schedule,
-                     const MachineParams &machine_params,
-#else
-                     const AutoschedulerParams &autoscheduler_params,
-#endif
-                     std::shared_ptr<ExternsMap> externs_map);
-#endif  // HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 };
 
 class NamesInterface {
@@ -3551,31 +3530,6 @@ protected:
     }
 #endif
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    /** Generators can register ExternalCode objects onto
-     * themselves. The Generator infrastructure will arrange to have
-     * this ExternalCode appended to the Module that is finally
-     * compiled using the Generator. This allows encapsulating
-     * functionality that depends on external libraries or handwritten
-     * code for various targets. The name argument should match the
-     * name of the ExternalCode block and is used to ensure the same
-     * code block is not duplicated in the output. Halide does not do
-     * anything other than to compare names for equality. To guarantee
-     * uniqueness in public code, we suggest using a Java style
-     * inverted domain name followed by organization specific
-     * naming. E.g.:
-     *     com.yoyodyne.overthruster.0719acd19b66df2a9d8d628a8fefba911a0ab2b7
-     *
-     * See test/generator/external_code_generator.cpp for example use. */
-    std::shared_ptr<GeneratorContext::ExternsMap> get_externs_map() const {
-        return externs_map;
-    }
-#else
-    /** ExternalCode objects in Generator are deprecated in Halide 15 and will
-     * be removed in Halide 16. You may continue to use them in Halide 15
-     * by defining HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE when building Halide. */
-#endif
-
     // These must remain here for legacy code that access the fields directly.
     GeneratorParam<Target> target{"target", Target()};
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
@@ -3595,9 +3549,6 @@ private:
     friend class StubOutputBufferBase;
 
     const size_t size;
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    std::shared_ptr<GeneratorContext::ExternsMap> externs_map;
-#endif
 
     // Lazily-allocated-and-inited struct with info about our various Params.
     // Do not access directly: use the param_info() getter.
@@ -3800,10 +3751,6 @@ public:
 
     std::vector<Parameter> input_parameter(const std::string &name) override;
     std::vector<Func> output_func(const std::string &name) override;
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    ExternsMap external_code_map() override;
-#endif
 
     // This is overridden in the concrete Generator<> subclass.
     // Pipeline build_pipeline() override;
