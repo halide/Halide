@@ -88,7 +88,7 @@ hvx: $(BIN)/$(HVX_TARGET)/$(APP_NAME)_halide.a $(BIN)/$(HVX_TARGET)/$(APP_NAME)_
 
 	$(HEXAGON_SIM) -mv66 --memfill 0x0 --simulated_returnval --nullptr=2 $(BIN)/$(HVX_TARGET)/$(APP_NAME)_run.out -- 1920 1080 ../shared_hvx/test_vectors/football1920x1080.bin $(BIN)/$(HVX_TARGET)/out.bin
 
-	$(HEXAGON_SIM) -mv66 --memfill 0x0 --simulated_returnval --timing --nullptr=2 $(BIN)/$(HVX_TARGET)/$(APP_NAME)_run.out -- 1920 1080 ../shared_hvx/test_vectors/football1920x1080.bin $(BIN)/$(HVX_TARGET)/out.bin
+	# $(HEXAGON_SIM) -mv66 --memfill 0x0 --simulated_returnval --timing --nullptr=2 $(BIN)/$(HVX_TARGET)/$(APP_NAME)_run.out -- 1920 1080 ../shared_hvx/test_vectors/football1920x1080.bin $(BIN)/$(HVX_TARGET)/out.bin
 
 
 x86: $(BIN)/$(X86_TARGET)/out.png

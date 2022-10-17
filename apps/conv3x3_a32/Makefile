@@ -80,17 +80,15 @@ hvx: $(BIN)/$(HVX_TARGET)/$(APP_NAME)_halide.a $(BIN)/$(HVX_TARGET)/$(APP_NAME)_
         -I $(HALIDE_DIR)/include -I $(BIN)/$(HVX_TARGET)/ \
         ../shared_hvx/process.cpp \
 		../shared_hvx/stubs.cpp \
+		/home/aroot/rake-cache/conv3x3a32/conv3x3a32_hvx128.a \
+		-I/home/aroot/rake-cache/conv3x3a32/ \
 		$^ \
         /home/aroot/Halide/src/runtime/hexagon_remote/bin/v65/libsim_qurt.a -lhexagon \
         -o $(BIN)/$(HVX_TARGET)/$(APP_NAME)_run.out
 
-# TODO:
-# /home/aroot/rake-cache/$(APP_NAME)/$(APP_NAME)_hvx128.a \
-# -I/home/aroot/rake-cache/$(APP_NAME)/ \
-
 	$(HEXAGON_SIM) -mv66 --memfill 0x0 --simulated_returnval --nullptr=2 $(BIN)/$(HVX_TARGET)/$(APP_NAME)_run.out -- 1920 1080 ../shared_hvx/test_vectors/football1920x1080.bin $(BIN)/$(HVX_TARGET)/out.bin
 
-	$(HEXAGON_SIM) -mv66 --memfill 0x0 --simulated_returnval --timing --nullptr=2 $(BIN)/$(HVX_TARGET)/$(APP_NAME)_run.out -- 1920 1080 ../shared_hvx/test_vectors/football1920x1080.bin $(BIN)/$(HVX_TARGET)/out.bin
+	# $(HEXAGON_SIM) -mv66 --memfill 0x0 --simulated_returnval --timing --nullptr=2 $(BIN)/$(HVX_TARGET)/$(APP_NAME)_run.out -- 1920 1080 ../shared_hvx/test_vectors/football1920x1080.bin $(BIN)/$(HVX_TARGET)/out.bin
 
 
 x86: $(BIN)/$(X86_TARGET)/out.png
