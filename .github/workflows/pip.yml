@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  LLVM_VER: 15.0.2
+  LLVM_VER: 15.0.1
 
 jobs:
   pip-linux:
