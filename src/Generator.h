@@ -1972,16 +1972,6 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, dimensions)
     HALIDE_FORWARD_METHOD_CONST(Func, has_update_definition)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
-    const Type &output_type() const {
-        this->check_gio_access();
-        return this->as<Func>().type();
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
-    const std::vector<Type> &output_types() const {
-        this->check_gio_access();
-        return this->as<Func>().types();
-    }
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD_CONST(Func, rvars)
     HALIDE_FORWARD_METHOD_CONST(Func, type)
@@ -2347,16 +2337,6 @@ public:
     HALIDE_FORWARD_METHOD(Func, in)
     HALIDE_FORWARD_METHOD(Func, memoize)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
-    const Type &output_type() const {
-        this->check_gio_access();
-        return this->as<Func>().type();
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
-    const std::vector<Type> &output_types() const {
-        this->check_gio_access();
-        return this->as<Func>().types();
-    }
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD(Func, parallel)
     HALIDE_FORWARD_METHOD(Func, prefetch)
@@ -3090,21 +3070,6 @@ public:
 #else
     const AutoschedulerParams &autoscheduler_params() const {
         return autoscheduler_params_;
-    }
-#endif
-
-    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::target() instead of GeneratorContext::get_target().")
-    const Target &get_target() const {
-        return target_;
-    }
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::auto_schedule() instead of GeneratorContext::get_auto_schedule().")
-    bool get_auto_schedule() const {
-        return auto_schedule_;
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::machine_params() instead of GeneratorContext::get_machine_params().")
-    const MachineParams &get_machine_params() const {
-        return machine_params_;
     }
 #endif
 
