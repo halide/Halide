@@ -71,10 +71,6 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.wasm.avgr.unsigned.v16i8", UInt(8, 16), "rounding_halving_add", {UInt(8, 16), UInt(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.avgr.unsigned.v8i16", UInt(16, 8), "rounding_halving_add", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
 
-#if LLVM_VERSION == 130
-    {"float_to_double", Float(64, 4), "float_to_double", {Float(32, 4)}, Target::WasmSimd128},
-#endif
-
     // With some work, some of these could possibly be adapted to work under earlier versions of LLVM.
     {"widening_mul_i8x16", Int(16, 16), "widening_mul", {Int(8, 16), Int(8, 16)}, Target::WasmSimd128},
     {"widening_mul_i16x8", Int(32, 8), "widening_mul", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
@@ -155,9 +151,6 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
     static const Pattern patterns[] = {
         {"int_to_double", f64(wild_i32x_), Target::WasmSimd128},
         {"int_to_double", f64(wild_u32x_), Target::WasmSimd128},
-#if LLVM_VERSION == 130
-        {"float_to_double", f64(wild_f32x_), Target::WasmSimd128},
-#endif
         {"widen_integer", i16(wild_i8x_), Target::WasmSimd128},
         {"widen_integer", u16(wild_u8x_), Target::WasmSimd128},
         {"widen_integer", i32(wild_i16x_), Target::WasmSimd128},
