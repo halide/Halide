@@ -18,34 +18,6 @@ std::string weights_path;
 
 bool test_caching(Pipeline &p1, Pipeline &p2, const Target &target) {
     constexpr int parallelism = 32;
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    MachineParams params(parallelism, 16000000, 40);
-
-    static const std::string seed_value = Internal::get_env_variable("HL_SEED");
-    if (seed_value.empty()) {
-        // If HL_SEED is not set, then set seed for both autoscheduling executions.
-        int seed = (int)time(nullptr);
-        set_env_variable("HL_SEED", std::to_string(seed), /* overwrite */ 0);
-    }
-
-    // Turn off caching.
-    set_env_variable("HL_DISABLE_MEMOIZED_FEATURES", "1", /* overwrite */ 1);
-    set_env_variable("HL_DISABLE_MEMOIZED_BLOCKS", "1", /* overwrite */ 1);
-
-    auto results_without_caching = p1.auto_schedule(target, params);
-
-    // Turn on caching.
-    set_env_variable("HL_DISABLE_MEMOIZED_FEATURES", "0", /* overwrite */ 1);
-    set_env_variable("HL_DISABLE_MEMOIZED_BLOCKS", "0", /* overwrite */ 1);
-
-    auto results_with_caching = p2.auto_schedule(target, params);
-
-    // Reset environment variables to what they were before (memoization variables are reset in main).
-    if (seed_value.empty()) {
-        // Re-empty seed.
-        set_env_variable("HL_SEED", "", /* overwrite */ 1);
-    }
-#else
     int seed = (int)time(nullptr);
     AutoschedulerParams params(
         "Adams2019",
@@ -67,7 +39,6 @@ bool test_caching(Pipeline &p1, Pipeline &p2, const Target &target) {
     params.extra["disable_memoized_features"] = "0";
     params.extra["disable_memoized_blocks"] = "0";
     auto results_with_caching = p2.apply_autoscheduler(target, params);
-#endif
 
     // Compare calculated features.
     if (results_without_caching.featurization.size() != results_with_caching.featurization.size()) {
@@ -92,12 +63,6 @@ int main(int argc, char **argv) {
 
     load_plugin(argv[1]);
     weights_path = argv[2];
-
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    // Tests will mess with these environment variables, we save them in order to reset them later.
-    const std::string cache_features = Internal::get_env_variable("HL_DISABLE_MEMOIZED_FEATURES");
-    const std::string cache_blocks = Internal::get_env_variable("HL_DISABLE_MEMOIZED_BLOCKS");
-#endif
 
     // Use a fixed target for the analysis to get consistent results from this test.
     Target target("x86-64-linux-sse41-avx-avx2");
@@ -936,12 +901,6 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
-
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    // Reset environment variables.
-    set_env_variable("HL_DISABLE_MEMOIZED_FEATURES", cache_features, /* overwrite */ 1);
-    set_env_variable("HL_DISABLE_MEMOIZED_BLOCKS", cache_blocks, /* overwrite */ 1);
-#endif
 
     std::cout << "adams2019 testing passed\n";
     return 0;

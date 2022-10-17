@@ -3386,23 +3386,6 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }
 
 struct Mullapudi2016 {
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    void operator()(const Pipeline &pipeline, const Target &target, const MachineParams &params_in, AutoSchedulerResults *outputs) {
-        AutoSchedulerResults results;
-        results.target = target;
-        results.machine_params_string = params_in.to_string();
-
-        results.scheduler_name = "Mullapudi2016";
-        std::vector<Function> pipeline_outputs;
-        for (const Func &f : pipeline.outputs()) {
-            pipeline_outputs.push_back(f.function());
-        }
-        ArchParams arch_params{params_in.parallelism, params_in.last_level_cache_size, params_in.balance};
-        results.schedule_source = generate_schedules(pipeline_outputs, target, arch_params);
-        // this autoscheduler has no featurization
-        *outputs = std::move(results);
-    }
-#else
     void operator()(const Pipeline &pipeline, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *outputs) {
         internal_assert(params_in.name == "Mullapudi2016");
 
@@ -3428,7 +3411,6 @@ struct Mullapudi2016 {
         // this autoscheduler has no featurization
         *outputs = std::move(results);
     }
-#endif
 };
 
 REGISTER_AUTOSCHEDULER(Mullapudi2016)
