@@ -1128,13 +1128,6 @@ void CodeGen_LLVM::optimize_module() {
     llvm::CGSCCAnalysisManager cgam;
     llvm::ModuleAnalysisManager mam;
 
-#if LLVM_VERSION < 140
-    // If building against LLVM older than 14, explicitly specify AA pipeline.
-    // Not needed with LLVM14 or later, already the default.
-    llvm::AAManager aa = pb.buildDefaultAAPipeline();
-    fam.registerPass([&] { return std::move(aa); });
-#endif
-
     // Register all the basic analyses with the managers.
     pb.registerModuleAnalyses(mam);
     pb.registerCGSCCAnalyses(cgam);
@@ -1143,12 +1136,7 @@ void CodeGen_LLVM::optimize_module() {
     pb.crossRegisterProxies(lam, fam, cgam, mam);
     ModulePassManager mpm;
 
-#if LLVM_VERSION >= 140
     using OptimizationLevel = llvm::OptimizationLevel;
-#else
-    using OptimizationLevel = PassBuilder::OptimizationLevel;
-#endif
-
     OptimizationLevel level = OptimizationLevel::O3;
 
     if (get_target().has_feature(Target::SanitizerCoverage)) {
@@ -1183,7 +1171,6 @@ void CodeGen_LLVM::optimize_module() {
         });
 #endif
         pb.registerPipelineStartEPCallback([](ModulePassManager &mpm, OptimizationLevel) {
-#if LLVM_VERSION >= 140
             AddressSanitizerOptions asan_options;  // default values are good...
             asan_options.UseAfterScope = true;     // ...except this one
             constexpr bool use_global_gc = false;
@@ -1195,14 +1182,6 @@ void CodeGen_LLVM::optimize_module() {
 #else
             mpm.addPass(ModuleAddressSanitizerPass(
                 asan_options, use_global_gc, use_odr_indicator, destructor_kind));
-#endif
-#else
-            constexpr bool compile_kernel = false;
-            constexpr bool recover = false;
-            constexpr bool module_use_global_gc = false;
-            constexpr bool use_odr_indicator = true;
-            mpm.addPass(ModuleAddressSanitizerPass(
-                compile_kernel, recover, module_use_global_gc, use_odr_indicator));
 #endif
         });
     }
