@@ -86,7 +86,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-        path: halide-src
+        with:
+          path: halide-src
 
       - name: Cache LLVM build folder
         id: cache-llvm
