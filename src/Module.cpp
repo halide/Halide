@@ -329,9 +329,6 @@ struct ModuleContents {
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
     std::vector<Module> submodules;
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    std::vector<ExternalCode> external_code;
-#endif
     MetadataNameMap metadata_name_map;
     bool any_strict_float{false};
     std::unique_ptr<AutoSchedulerResults> auto_scheduler_results;
@@ -417,12 +414,6 @@ const std::vector<Module> &Module::submodules() const {
     return contents->submodules;
 }
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-const std::vector<ExternalCode> &Module::external_code() const {
-    return contents->external_code;
-}
-#endif
-
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
     for (const auto &f : functions()) {
         if (f.name == name) {
@@ -444,12 +435,6 @@ void Module::append(const Internal::LoweredFunc &function) {
 void Module::append(const Module &module) {
     contents->submodules.push_back(module);
 }
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-void Module::append(const ExternalCode &external_code) {
-    contents->external_code.push_back(external_code);
-}
-#endif
 
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {
     Module output(name, modules.front().target());
@@ -517,30 +502,8 @@ Module Module::resolve_submodules() const {
     for (const auto &buf : buffers()) {
         lowered_module.append(buf);
     }
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    for (const auto &ec : external_code()) {
-        lowered_module.append(ec);
-    }
-#endif
     for (const auto &m : submodules()) {
         Module copy(m.resolve_submodules());
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-        // Propagate external code blocks.
-        for (const auto &ec : external_code()) {
-            // TODO(zalman): Is this the right thing to do?
-            bool already_in_list = false;
-            for (const auto &ec_sub : copy.external_code()) {
-                if (ec_sub.name() == ec.name()) {
-                    already_in_list = true;
-                    break;
-                }
-            }
-            if (!already_in_list) {
-                copy.append(ec);
-            }
-        }
-#endif
 
         auto buf = copy.compile_to_buffer();
         lowered_module.append(buf);

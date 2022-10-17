@@ -19,26 +19,6 @@
 
 namespace Halide {
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-GeneratorContext::GeneratorContext(const Target &target,
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-                                   bool auto_schedule,
-                                   const MachineParams &machine_params,
-#else
-                                   const AutoschedulerParams &autoscheduler_params,
-#endif
-                                   std::shared_ptr<ExternsMap> externs_map)
-    : target_(target),
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-      auto_schedule_(auto_schedule),
-      machine_params_(machine_params),
-#else
-      autoscheduler_params_(autoscheduler_params),
-#endif
-      externs_map_(std::move(externs_map)) {
-}
-#endif  // HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 GeneratorContext::GeneratorContext(const Target &target,
                                    bool auto_schedule,
@@ -62,17 +42,9 @@ GeneratorContext::GeneratorContext(const Target &target,
 
 GeneratorContext GeneratorContext::with_target(const Target &t) const {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    return GeneratorContext(t, auto_schedule_, machine_params_, externs_map_);
-#else
     return GeneratorContext(t, auto_schedule_, machine_params_);
-#endif
-#else
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    return GeneratorContext(t, autoscheduler_params_, externs_map_);
 #else
     return GeneratorContext(t, autoscheduler_params_);
-#endif
 #endif
 }
 
@@ -1434,17 +1406,9 @@ GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name)
 
 GeneratorContext GeneratorBase::context() const {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    return GeneratorContext(target, auto_schedule, machine_params, externs_map);
-#else
     return GeneratorContext(target, auto_schedule, machine_params);
-#endif
-#else
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    return GeneratorContext(target, autoscheduler_.value(), externs_map);
 #else
     return GeneratorContext(target, autoscheduler_.value());
-#endif
 #endif
 }
 
@@ -1455,10 +1419,6 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     machine_params.set(context.machine_params_);
 #else
     autoscheduler_.set(context.autoscheduler_params_);
-#endif
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    externs_map = context.externs_map_;
 #endif
 
     // pre-emptively build our param_info now
@@ -1707,13 +1667,6 @@ std::vector<Func> GeneratorBase::output_func(const std::string &n) {
     }
     return output->funcs();
 }
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-ExternsMap GeneratorBase::external_code_map() {
-    // get_externs_map() returns a std::shared_ptr<ExternsMap>
-    return *get_externs_map();
-}
-#endif
 
 void GeneratorBase::bind_input(const std::string &name, const std::vector<Parameter> &v) {
     ensure_configure_has_been_called();

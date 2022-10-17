@@ -9,9 +9,6 @@ namespace {
 
 using Halide::Internal::AbstractGenerator;
 using Halide::Internal::AbstractGeneratorPtr;
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-using Halide::Internal::ExternsMap;
-#endif
 using Halide::Internal::GeneratorFactoryProvider;
 using ArgInfo = Halide::Internal::AbstractGenerator::ArgInfo;
 using Halide::Internal::ArgInfoDirection;
@@ -81,14 +78,6 @@ public:
     std::vector<Func> output_func(const std::string &name) override {
         return {generator_.attr("_get_output_func")(name).cast<Func>()};
     }
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    ExternsMap external_code_map() override {
-        // Python Generators don't support this (yet? ever?),
-        // but don't throw an error, just return an empty map.
-        return {};
-    }
-#endif
 
     void bind_input(const std::string &name, const std::vector<Parameter> &v) override {
         generator_.attr("_bind_input")(v);
