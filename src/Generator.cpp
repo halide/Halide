@@ -1095,7 +1095,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         if (!cpp_stub_only) {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
-            // Must re-create each time since each instance will have a different Target.
+                // Must re-create each time since each instance will have a different Target.
                 auto gen = args.create_generator(args.generator_name, GeneratorContext(target));
                 for (const auto &kv : args.generator_params) {
                     if (kv.first == "target") {

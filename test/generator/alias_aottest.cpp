@@ -5,10 +5,10 @@
 #include <stdio.h>
 
 #include "alias.h"
-#include "alias_with_offset_42.h"
 #include "alias_Adams2019.h"
 #include "alias_Li2018.h"
 #include "alias_Mullapudi2016.h"
+#include "alias_with_offset_42.h"
 
 using namespace Halide::Runtime;
 

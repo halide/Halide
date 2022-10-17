@@ -95,8 +95,8 @@ struct JITExtern;
 struct AutoSchedulerResults {
     Target target;                             // Target specified to the autoscheduler
     AutoschedulerParams autoscheduler_params;  // The autoscheduler used, along with its params
-    std::string schedule_source;         // The C++ source code of the generated schedule
-    std::vector<uint8_t> featurization;  // The featurization of the pipeline (if any)
+    std::string schedule_source;               // The C++ source code of the generated schedule
+    std::vector<uint8_t> featurization;        // The featurization of the pipeline (if any)
 };
 
 class Pipeline;
