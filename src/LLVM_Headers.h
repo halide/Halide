@@ -62,6 +62,7 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
 #include <llvm/MC/MCTargetOptions.h>
+#include <llvm/MC/TargetRegistry.h>
 #include <llvm/Object/ArchiveWriter.h>
 #include <llvm/Object/ObjectFile.h>
 #include <llvm/Passes/PassBuilder.h>
@@ -73,7 +74,6 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/FormattedStream.h>
-#include <llvm/MC/TargetRegistry.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/TypeSize.h>
 #include <llvm/Support/raw_os_ostream.h>
