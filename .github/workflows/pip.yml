@@ -70,7 +70,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     env:
-      CMAKE_PREFIX_PATH: ${{ github.workspace }}/local
+      CMAKE_PREFIX_PATH: "${{ github.workspace }}/local-llvm;${{ github.workspace }}/local-halide"
 
     strategy:
       fail-fast: false
@@ -88,18 +88,19 @@ jobs:
       - uses: actions/checkout@v3.1.0
 
       # Improving cache restore performance on Windows
-      # - name: Use GNU tar
-      #   if: ${{ runner.os == 'Windows' }}
-      #   shell: cmd
-      #   run: |
-      #     echo "Adding GNU tar to PATH"
-      #     echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
+      # (install-llvm-action uses actions/cache under the hood)
+      - name: Use GNU tar
+        if: ${{ runner.os == 'Windows' }}
+        shell: cmd
+        run: |
+          echo "Adding GNU tar to PATH"
+          echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
 
       # - name: Cache LLVM build folder
       #   id: cache-llvm
       #   uses: actions/cache@v3.0.11
       #   with:
-      #     path: local
+      #     path: local-llvm
       #     key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
 
       - uses: ilammy/msvc-dev-cmd@v1
@@ -137,12 +138,13 @@ jobs:
 
       # - name: Install LLVM
       #   if: steps.cache-llvm.outputs.cache-hit != 'true'
-      #   run: cmake --install llvm-build --prefix local
+      #   run: cmake --install llvm-build --prefix local-llvm;local-halide
 
       - name: Install LLVM
         uses: KyleMayes/install-llvm-action@v1.5.5
         with:
           version: ${{ env.LLVM_VER }}
+          directory: local-llvm
 
       - name: Configure Halide
         if: runner.os == 'Windows'
@@ -170,7 +172,7 @@ jobs:
         run: cmake --build halide-build --config Release
 
       - name: Install Halide
-        run: cmake --install halide-build --config Release --prefix local
+        run: cmake --install halide-build --config Release --prefix local-llvm;local-halide
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.10.2
