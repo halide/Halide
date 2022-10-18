@@ -149,34 +149,30 @@ jobs:
       - name: Downloading and Installing LLVM
         if: runner.os == 'Windows'
         run: |
-          choco install wget
+          # curl won't follow the redirect properly, so we need wget here
+          choco install --no-progress -y wget
           wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/LLVM-${{ env.LLVM_VER }}-win64.exe
           mkdir ${{ github.workspace }}/zlocal-llvm
-          ls ${{ github.workspace }}
           7z x ${{ github.workspace }}/LLVM-${{ env.LLVM_VER }}-win64.exe -o${{ github.workspace }}/zlocal-llvm -y
-          ls ${{ github.workspace }}/zlocal-llvm
-          ls ${{ github.workspace }}/zlocal-llvm/lib
+          ls ${{ github.workspace }}/zlocal-llvm/lib/cmake/llvm
           rm ${{ github.workspace }}/LLVM-${{ env.LLVM_VER }}-win64.exe
           ls
 
       - name: Downloading and Installing LLVM
         if: runner.os != 'Windows'
         run: |
-          set -x
           wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-arm64-apple-darwin21.0.tar.xz \
                   https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-x86_64-apple-darwin.tar.xz
           mkdir ${{ github.workspace }}/zlocal-llvm
           tar xf ${{ github.workspace }}/clang+llvm-${{ env.LLVM_VER }}-arm64-apple-darwin21.0.tar.xz -C ${{ github.workspace }}/zlocal-llvm --strip-components=1
           tar xf ${{ github.workspace }}/clang+llvm-${{ env.LLVM_VER }}-x86_64-apple-darwin.tar.xz -C ${{ github.workspace }}/zlocal-llvm --strip-components=1
-          ls ${{ github.workspace }}/zlocal-llvm
-          # ls ${{ github.workspace }}/zlocal-llvm/lib
           rm ${{ github.workspace }}/clang+llvm-*.tar.xz
 
       - name: Configure Halide
         if: runner.os == 'Windows'
         run: >
           cmake -G "Visual Studio 17 2022" -T ClangCL -A "${{ matrix.arch }}" -S . -B halide-build
-          -DLLVM_DIR=${{ github.workspace }}/zlocal-llvm/lib/cmake/llvm
+          -DLLVM_DIR=${{ github.workspace }}\zlocal-llvm\lib\cmake\llvm
           -DWITH_DOCS=NO
           -DWITH_PYTHON_BINDINGS=NO
           -DWITH_TESTS=NO
