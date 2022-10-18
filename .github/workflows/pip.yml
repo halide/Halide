@@ -31,7 +31,7 @@ jobs:
         arch: [ x86_64, aarch64 ]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.1.0
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2.0.0
@@ -85,51 +85,64 @@ jobs:
             arch: x86_64;arm64
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.1.0
 
-      - name: Cache LLVM build folder
-        id: cache-llvm
-        uses: actions/cache@v3
-        with:
-          path: local
-          key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
+      # Improving cache restore performance on Windows
+      # - name: Use GNU tar
+      #   if: ${{ runner.os == 'Windows' }}
+      #   shell: cmd
+      #   run: |
+      #     echo "Adding GNU tar to PATH"
+      #     echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
+
+      # - name: Cache LLVM build folder
+      #   id: cache-llvm
+      #   uses: actions/cache@v3.0.11
+      #   with:
+      #     path: local
+      #     key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
 
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@latest
 
-      - uses: actions/checkout@v3
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        with:
-          path: llvm-src
-          repository: llvm/llvm-project
-          ref: llvmorg-${{ env.LLVM_VER }}
+      # - uses: actions/checkout@v3.1.0
+      #   if: steps.cache-llvm.outputs.cache-hit != 'true'
+      #   with:
+      #     path: llvm-src
+      #     repository: llvm/llvm-project
+      #     ref: llvmorg-${{ env.LLVM_VER }}
 
-      - name: Configure LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: >
-          cmake -G Ninja -S llvm-src/llvm -B llvm-build
-          -DCMAKE_BUILD_TYPE=Release
-          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
-          "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly"
-          "-DLLVM_ENABLE_PROJECTS=clang;lld"
-          -DLLVM_ENABLE_ASSERTIONS=ON
-          -DLLVM_ENABLE_RTTI=ON
-          -DLLVM_ENABLE_EH=ON
-          -DLLVM_ENABLE_LIBXML2=OFF
-          -DLLVM_ENABLE_TERMINFO=OFF
-          -DLLVM_ENABLE_ZSTD=OFF
-          -DLLVM_ENABLE_ZLIB=OFF
-          -DLLVM_ENABLE_OCAMLDOC=OFF
-          -DLLVM_ENABLE_BINDINGS=OFF
-          -DLLVM_ENABLE_IDE=OFF
+      # - name: Configure LLVM
+      #   if: steps.cache-llvm.outputs.cache-hit != 'true'
+      #   run: >
+      #     cmake -G Ninja -S llvm-src/llvm -B llvm-build
+      #     -DCMAKE_BUILD_TYPE=Release
+      #     "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+      #     "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly"
+      #     "-DLLVM_ENABLE_PROJECTS=clang;lld"
+      #     -DLLVM_ENABLE_ASSERTIONS=ON
+      #     -DLLVM_ENABLE_RTTI=ON
+      #     -DLLVM_ENABLE_EH=ON
+      #     -DLLVM_ENABLE_LIBXML2=OFF
+      #     -DLLVM_ENABLE_TERMINFO=OFF
+      #     -DLLVM_ENABLE_ZSTD=OFF
+      #     -DLLVM_ENABLE_ZLIB=OFF
+      #     -DLLVM_ENABLE_OCAMLDOC=OFF
+      #     -DLLVM_ENABLE_BINDINGS=OFF
+      #     -DLLVM_ENABLE_IDE=OFF
 
-      - name: Build LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --build llvm-build
+      # - name: Build LLVM
+      #   if: steps.cache-llvm.outputs.cache-hit != 'true'
+      #   run: cmake --build llvm-build
+
+      # - name: Install LLVM
+      #   if: steps.cache-llvm.outputs.cache-hit != 'true'
+      #   run: cmake --install llvm-build --prefix local
 
       - name: Install LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --install llvm-build --prefix local
+        uses: KyleMayes/install-llvm-action@v1.5.5
+        with:
+          version: ${{ env.LLVM_VER }}
 
       - name: Configure Halide
         if: runner.os == 'Windows'
@@ -174,7 +187,7 @@ jobs:
     name: Make SDist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.1.0
       - run: pipx run build --sdist
       - uses: actions/upload-artifact@v3
         with:
