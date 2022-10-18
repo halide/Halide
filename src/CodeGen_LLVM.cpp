@@ -3389,8 +3389,13 @@ void CodeGen_LLVM::visit(const Call *op) {
             int w = vec.second;
 
             if (vec_fn) {
-                value = call_intrin(llvm_type_of(op->type), w,
-                                    get_llvm_function_name(vec_fn), args);
+                // TODO: previously, we always passed 'false' for scalable_vector_result,
+                // now, we infer it based on the actual result type. In theory, llvm_type_of()
+                // can return scalable vector types, so either the previous code was wrong
+                // in those instances, or this code path ~never happened to produce such
+                // a type (which is likely since we probably don't have any tests of extern
+                // calls returning a scalable vector type). Which is it?
+                value = call_intrin(llvm_type_of(op->type), w, get_llvm_function_name(vec_fn), args);
             } else {
 
                 // No vector version found. Scalarize. Extract each simd
@@ -4450,9 +4455,7 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
 
     llvm::Type *t = llvm_type_of(result_type);
 
-    return call_intrin(t,
-                       intrin_lanes,
-                       name, arg_values, isa<llvm::ScalableVectorType>(t));
+    return call_intrin(t, intrin_lanes, name, arg_values);
 }
 
 Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
@@ -4470,8 +4473,7 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
 }
 
 Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes,
-                                 const string &name, vector<Value *> arg_values,
-                                 bool scalable_vector_result) {
+                                 const string &name, vector<Value *> arg_values) {
     llvm::Function *fn = module->getFunction(name);
     if (!fn) {
         vector<llvm::Type *> arg_types(arg_values.size());
@@ -4481,6 +4483,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
 
         llvm::Type *intrinsic_result_type = result_type->getScalarType();
         if (intrin_lanes > 1) {
+            const bool scalable_vector_result = isa<llvm::ScalableVectorType>(result_type);
             if (scalable_vector_result && effective_vscale != 0) {
                 intrinsic_result_type = get_vector_type(result_type->getScalarType(),
                                                         intrin_lanes / effective_vscale, VectorTypeConstraint::VScale);
@@ -4787,12 +4790,7 @@ llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg)
     intrin += ".v" + std::to_string(lanes) + type_designator + bits_designator;
     Constant *poison = PoisonValue::get(scalable->getElementType());
     llvm::Value *result_vec = ConstantVector::getSplat(scalable->getElementCount(), poison);
-
-    std::vector<llvm::Value *> args;
-    args.push_back(result_vec);
-    args.push_back(value);
-    args.push_back(ConstantInt::get(i64_t, 0));
-    return call_intrin(scalable, lanes, intrin, args, true);
+    return call_intrin(scalable, lanes, intrin, {result_vec, value, ConstantInt::get(i64_t, 0)});
 }
 
 llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_arg) {
@@ -4818,11 +4816,7 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
     std::string bits_designator = std::to_string(fixed->getScalarSizeInBits());
     std::string intrin = "llvm.vector.extract.v" + std::to_string(fixed->getNumElements()) + type_designator + bits_designator;
     intrin += ".nxv" + std::to_string(scalable->getMinNumElements()) + type_designator + bits_designator;
-    std::vector<llvm::Value *> args;
-    args.push_back(scalable_arg);
-    args.push_back(ConstantInt::get(i64_t, 0));
-
-    return call_intrin(fixed, fixed->getNumElements(), intrin, args, false);
+    return call_intrin(fixed, fixed->getNumElements(), intrin, {scalable_arg, ConstantInt::get(i64_t, 0)});
 }
 
 int CodeGen_LLVM::get_vector_num_elements(const llvm::Type *t) {

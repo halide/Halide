@@ -463,8 +463,7 @@ protected:
     llvm::Value *call_intrin(const Type &t, int intrin_lanes,
                              llvm::Function *intrin, std::vector<Expr>);
     llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
-                             const std::string &name, std::vector<llvm::Value *>,
-                             bool scalable_vector_result = false);
+                             const std::string &name, std::vector<llvm::Value *>);
     llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
                              llvm::Function *intrin, std::vector<llvm::Value *>);
     // @}
