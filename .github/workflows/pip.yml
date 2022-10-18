@@ -150,9 +150,12 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           curl -O https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/LLVM-${{ env.LLVM_VER }}-win64.exe
-          ${{ github.workspace }}\LLVM-${{ env.LLVM_VER }}-win64.exe /S /D ${{ github.workspace }}\zlocal-llvm
-          dir ${{ github.workspace }}\zlocal-llvm
-          del ${{ github.workspace }}\LLVM-${{ env.LLVM_VER }}-win64.exe
+          mkdir zlocal-llvm
+          7z x ${{ github.workspace }}\LLVM-${{ env.LLVM_VER }}-win64.exe -o zlocal-llvm -y
+          dir zlocal-llvm
+          dir zlocal-llvm\lib
+          del LLVM-${{ env.LLVM_VER }}-win64.exe
+          dir
 
       - name: Downloading and Installing LLVM
         if: runner.os != 'Windows'
@@ -160,11 +163,13 @@ jobs:
           set -x
           curl -O https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-arm64-apple-darwin21.0.tar.xz \
                -O https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-x86_64-apple-darwin.tar.xz
+          mkdir zlocal-llvm
           tar xf clang+llvm-${{ env.LLVM_VER }}-arm64-apple-darwin21.0.tar.xz -C ${{ github.workspace }}/zlocal-llvm --strip-components=1
           tar xf clang+llvm-${{ env.LLVM_VER }}-x86_64-apple-darwin.tar.xz -C ${{ github.workspace }}/zlocal-llvm --strip-components=1
-          ls ${{ github.workspace }}/zlocal-llvm
-          ls ${{ github.workspace }}/zlocal-llvm/lib
-          rm ${{ github.workspace }}/clang+llvm-*.tar.xz
+          ls zlocal-llvm
+          ls zlocal-llvm/lib
+          rm clang+llvm-*.tar.xz
+          ls
 
       - name: Configure Halide
         if: runner.os == 'Windows'
