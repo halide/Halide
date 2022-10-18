@@ -1807,7 +1807,7 @@ private:
 class ComputeLegalSchedules : public IRVisitor {
 public:
     struct Site {
-        bool is_parallel;
+        bool is_parallel, is_gpu_block;
         LoopLevel loop_level;
     };
     vector<Site> sites_allowed;
@@ -1826,8 +1826,6 @@ private:
     const map<string, Function> &env;
 
     void visit(const For *f) override {
-        f->min.accept(this);
-        f->extent.accept(this);
         size_t first_dot = f->name.find('.');
         size_t last_dot = f->name.rfind('.');
         internal_assert(first_dot != string::npos && last_dot != string::npos);
@@ -1845,9 +1843,13 @@ private:
         // Since we are now in the lowering phase, we expect all LoopLevels to be locked;
         // thus any new ones we synthesize we must explicitly lock.
         loop_level.lock();
-        Site s = {f->is_parallel(), loop_level};
-        sites.push_back(s);
+        const bool is_gpu_block = (f->for_type == ForType::GPUBlock);
+        sites.push_back({f->is_parallel(), is_gpu_block, loop_level});
+
+        f->min.accept(this);
+        f->extent.accept(this);
         f->body.accept(this);
+
         sites.pop_back();
     }
 
@@ -2210,36 +2212,76 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         return true;
     }
 
-    bool store_at_ok = false, compute_at_ok = false;
-    const vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
-    size_t store_idx = 0, compute_idx = 0;
+    vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
+    int store_idx = -1, compute_idx = -1;
     for (size_t i = 0; i < sites.size(); i++) {
         if (sites[i].loop_level.match(store_at)) {
-            store_at_ok = true;
             store_idx = i;
         }
-        if (sites[i].loop_level.match(compute_at)) {
-            compute_at_ok = store_at_ok;
+        if (sites[i].loop_level.match(compute_at) && store_idx >= 0) {
             compute_idx = i;
         }
     }
 
-    // Check there isn't a parallel loop between the compute_at and the store_at
     std::ostringstream err;
 
-    if (store_at_ok && compute_at_ok) {
-        for (size_t i = store_idx + 1; i <= compute_idx; i++) {
+    // If you're compute_at() inside a gpu blocks loop, you can't have a gpu blocks loop yourself
+    const auto has_gpu_blocks = [&]() {
+        for (const Dim &d : f.definition().schedule().dims()) {
+            if (d.for_type == ForType::GPUBlock) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const auto both_ok = [&]() {
+        return store_idx >= 0 && compute_idx >= 0;
+    };
+
+    if (both_ok() && has_gpu_blocks()) {
+        for (int i = 0; i <= compute_idx; i++) {
+            if (sites[i].is_gpu_block) {
+                string site_fname = sites[i].loop_level.func();
+                user_error << "Functions that are compute_at() a gpu_block() loop cannot have their own gpu_block() loops, "
+                           << "but Func \"" << f.name() << "\" is compute_at() \"" << site_fname << "\"\n";
+            }
+        }
+    }
+
+    // If you're compute_at() a var marked as a gpu block var, it must be the innermost one
+    if (both_ok() && sites[compute_idx].is_gpu_block) {
+        string compute_at_fname = sites[compute_idx].loop_level.func();
+        int possibly_invalid_idx = compute_idx;
+        for (int i = compute_idx + 1; i < (int)sites.size(); i++) {
+            if (!sites[i].is_gpu_block) {
+                continue;
+            }
+            string site_fname = sites[i].loop_level.func();
+            if (site_fname == compute_at_fname) {
+                err << "Functions that are compute_at() a gpu_block() loop must specify the innermost gpu_block() loop for that Func.\n";
+                sites.erase(sites.begin() + possibly_invalid_idx);
+                // This one will also be invalid if we find a subsequent loop from the same func
+                possibly_invalid_idx = i;
+                store_idx = compute_idx = -1;
+            }
+        }
+    }
+
+    // Check there isn't a parallel loop between the compute_at and the store_at
+    if (both_ok()) {
+        for (int i = store_idx + 1; i <= compute_idx; i++) {
             if (sites[i].is_parallel) {
                 err << "Func \"" << f.name()
                     << "\" is stored outside the parallel loop over "
                     << sites[i].loop_level.to_string()
                     << " but computed within it. This is a potential race condition.\n";
-                store_at_ok = compute_at_ok = false;
+                store_idx = compute_idx = -1;
             }
         }
     }
 
-    if (!store_at_ok || !compute_at_ok) {
+    if (!both_ok()) {
         err << "Func \"" << f.name() << "\" is computed at the following invalid location:\n"
             << "  " << schedule_to_source(f, store_at, compute_at) << "\n"
             << "Legal locations for this function are:\n";

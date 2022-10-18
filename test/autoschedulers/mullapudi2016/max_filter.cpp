@@ -72,11 +72,7 @@ double run_test(bool auto_schedule) {
             .set_estimate(y, 0, in.height())
             .set_estimate(c, 0, in.channels());
         // Auto-schedule the pipeline
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        p.auto_schedule(target);
-#else
         p.apply_autoscheduler(target, {"Mullapudi2016"});
-#endif
     } else if (target.has_gpu_feature()) {
         slice_for_radius.compute_root();
         filter_height.compute_root();
@@ -113,8 +109,8 @@ double run_test(bool auto_schedule) {
     }
 
     p.compile_to_lowered_stmt("max_filter.html", {in}, HTML, target);
-    // Inspect the schedule
-    final.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // final.print_loop_nest();
 
     // Run the schedule
     Buffer<float> out(in.width(), in.height(), in.channels());
@@ -141,13 +137,14 @@ int main(int argc, char **argv) {
     double manual_time = run_test(false);
     double auto_time = run_test(true);
 
-    std::cout << "======================\n"
-              << "Manual time: " << manual_time << "ms\n"
-              << "Auto time: " << auto_time << "ms\n"
-              << "======================\n";
-
-    if (auto_time > manual_time * 2) {
-        fprintf(stderr, "Warning: Auto-scheduler is much much slower than it should be.\n");
+    const double slowdown_factor = 4.0;
+    if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
+        std::cerr << "Autoscheduler time is slower than expected:\n"
+                  << "======================\n"
+                  << "Manual time: " << manual_time << "ms\n"
+                  << "Auto time: " << auto_time << "ms\n"
+                  << "======================\n";
+        exit(1);
     }
 
     printf("Success!\n");

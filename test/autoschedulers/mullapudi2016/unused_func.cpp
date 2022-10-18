@@ -28,14 +28,10 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     Pipeline p(f);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    p.auto_schedule(target);
-#else
     p.apply_autoscheduler(target, {"Mullapudi2016"});
-#endif
 
-    // Inspect the schedule
-    f.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // f.print_loop_nest();
 
     // Run the schedule
     p.realize({256});

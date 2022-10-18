@@ -339,16 +339,6 @@ void CodeGen_LLVM::init_module() {
     module = get_initial_module_for_target(target, context);
 }
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-void CodeGen_LLVM::add_external_code(const Module &halide_module) {
-    for (const ExternalCode &code_blob : halide_module.external_code()) {
-        if (code_blob.is_for_cpu_target(get_target())) {
-            add_bitcode_to_module(context, *module, code_blob.contents(), code_blob.name());
-        }
-    }
-}
-#endif
-
 CodeGen_LLVM::~CodeGen_LLVM() {
     delete builder;
 }
@@ -505,10 +495,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    add_external_code(input);
-#endif
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
@@ -1129,13 +1115,6 @@ void CodeGen_LLVM::optimize_module() {
     llvm::CGSCCAnalysisManager cgam;
     llvm::ModuleAnalysisManager mam;
 
-#if LLVM_VERSION < 140
-    // If building against LLVM older than 14, explicitly specify AA pipeline.
-    // Not needed with LLVM14 or later, already the default.
-    llvm::AAManager aa = pb.buildDefaultAAPipeline();
-    fam.registerPass([&] { return std::move(aa); });
-#endif
-
     // Register all the basic analyses with the managers.
     pb.registerModuleAnalyses(mam);
     pb.registerCGSCCAnalyses(cgam);
@@ -1144,12 +1123,7 @@ void CodeGen_LLVM::optimize_module() {
     pb.crossRegisterProxies(lam, fam, cgam, mam);
     ModulePassManager mpm;
 
-#if LLVM_VERSION >= 140
     using OptimizationLevel = llvm::OptimizationLevel;
-#else
-    using OptimizationLevel = PassBuilder::OptimizationLevel;
-#endif
-
     OptimizationLevel level = OptimizationLevel::O3;
 
     if (get_target().has_feature(Target::SanitizerCoverage)) {
@@ -1184,7 +1158,6 @@ void CodeGen_LLVM::optimize_module() {
         });
 #endif
         pb.registerPipelineStartEPCallback([](ModulePassManager &mpm, OptimizationLevel) {
-#if LLVM_VERSION >= 140
             AddressSanitizerOptions asan_options;  // default values are good...
             asan_options.UseAfterScope = true;     // ...except this one
             constexpr bool use_global_gc = false;
@@ -1196,14 +1169,6 @@ void CodeGen_LLVM::optimize_module() {
 #else
             mpm.addPass(ModuleAddressSanitizerPass(
                 asan_options, use_global_gc, use_odr_indicator, destructor_kind));
-#endif
-#else
-            constexpr bool compile_kernel = false;
-            constexpr bool recover = false;
-            constexpr bool module_use_global_gc = false;
-            constexpr bool use_odr_indicator = true;
-            mpm.addPass(ModuleAddressSanitizerPass(
-                compile_kernel, recover, module_use_global_gc, use_odr_indicator));
 #endif
         });
     }

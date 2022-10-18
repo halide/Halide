@@ -22,15 +22,11 @@ double run_test(bool auto_schedule) {
 
     if (auto_schedule) {
         // Auto-schedule the pipeline
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        p.auto_schedule(target);
-#else
         p.apply_autoscheduler(target, {"Mullapudi2016"});
-#endif
     }
 
-    // Inspect the schedule
-    g.print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // g.print_loop_nest();
 
     // Benchmark the schedule
     Buffer<int> out(100);
@@ -57,10 +53,15 @@ int main(int argc, char **argv) {
     double manual_time = run_test(false);
     double auto_time = run_test(true);
 
-    std::cout << "======================\n"
-              << "Manual time: " << manual_time << "ms\n"
-              << "Auto time: " << auto_time << "ms\n"
-              << "======================\n";
+    const double slowdown_factor = 10.0;
+    if (!get_jit_target_from_environment().has_gpu_feature() && auto_time > manual_time * slowdown_factor) {
+        std::cerr << "Autoscheduler time is slower than expected:\n"
+                  << "======================\n"
+                  << "Manual time: " << manual_time << "ms\n"
+                  << "Auto time: " << auto_time << "ms\n"
+                  << "======================\n";
+        exit(1);
+    }
 
     printf("Success!\n");
     return 0;

@@ -1,8 +1,7 @@
 import halide as hl
+import sys
 
 def main():
-    hl.load_plugin("autoschedule_li2018")
-
     x = hl.Var('x')
     f_in = hl.Func('in')
     f_in[x] = hl.f32(x) # Cast to float 32
@@ -26,4 +25,10 @@ def main():
     buf = p.realize([1000]) # compute and get the buffer
 
 if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        print("Usage: test path/to/Li2018-autoscheduler-plugin",sys.argv)
+        sys.exit(1)
+
+    hl.load_plugin(sys.argv[1])
+
     main()

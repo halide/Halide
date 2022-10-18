@@ -294,20 +294,12 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             } else if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::Windows) {
-#if LLVM_VERSION >= 140
                 // For 32-bit MSVC targets, alignment of f80 values is 16 bytes (see https://reviews.llvm.org/D115942)
                 if (!target.has_feature(Target::JIT)) {
                     return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32-a:0:32-S32");
                 } else {
                     return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32-a:0:32-S32");
                 }
-#else
-                if (!target.has_feature(Target::JIT)) {
-                    return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
-                } else {
-                    return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
-                }
-#endif
             } else {
                 // Linux/Android
                 return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:32-n8:16:32-S128");
@@ -360,19 +352,11 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             "e-m:e-p:32:32:32-a:0-n16:32-i64:64:64-i32:32:32-i16:16:16-i1:8:8"
             "-f32:32:32-f64:64:64-v32:32:32-v64:64:64-v512:512:512-v1024:1024:1024-v2048:2048:2048");
     } else if (target.arch == Target::WebAssembly) {
-#if LLVM_VERSION >= 140
         if (target.bits == 32) {
             return llvm::DataLayout("e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20");
         } else {
             return llvm::DataLayout("e-m:e-p:64:64-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20");
         }
-#else
-        if (target.bits == 32) {
-            return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32:64-S128");
-        } else {
-            return llvm::DataLayout("e-m:e-p:64:64-i64:64-n32:64-S128");
-        }
-#endif
     } else if (target.arch == Target::RISCV) {
         // TODO: Valdidate this data layout is correct for RISCV. Assumption is it is like MIPS.
         if (target.bits == 32) {
@@ -1034,7 +1018,18 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
             }
 
-            if (t.has_feature(Target::MSAN)) {
+#ifdef HALIDE_INTERNAL_USING_MSAN
+            // If we are building a JIT shared runtime (ie, we are jitting),
+            // and we are compiling with MSAN enabled (detected via preprocessor),
+            // we should always use the real MSAN stubs, even if the Target::MSan
+            // feature has been cleared (because JITModule::make_module() clears it).
+            const bool use_real_msan_runtime = t.has_feature(Target::MSAN) ||
+                                               module_type == ModuleJITShared;
+#else
+            const bool use_real_msan_runtime = t.has_feature(Target::MSAN);
+#endif
+
+            if (use_real_msan_runtime) {
                 modules.push_back(get_initmod_msan(c, bits_64, debug));
             } else {
                 modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));

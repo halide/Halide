@@ -48,19 +48,16 @@ int main(int argc, char **argv) {
     // Auto-schedule the pipeline
     Target target = get_jit_target_from_environment();
     Pipeline p(stencils[num_stencils - 1]);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    AutoSchedulerResults results = p.auto_schedule(target);
-#else
     AutoSchedulerResults results = p.apply_autoscheduler(target, {"Mullapudi2016"});
-#endif
 
-    std::cout << "\n\n******************************************\nSCHEDULE:\n"
-              << "******************************************\n"
-              << results.schedule_source
-              << "\n******************************************\n\n";
+    // Don't dump to stdout (this is only for debugging)
+    // std::cout << "\n\n******************************************\nSCHEDULE:\n"
+    //           << "******************************************\n"
+    //           << results.schedule_source
+    //           << "\n******************************************\n\n";
 
-    // Inspect the schedule
-    stencils[num_stencils - 1].print_loop_nest();
+    // Inspect the schedule (only for debugging))
+    // stencils[num_stencils - 1].print_loop_nest();
 
     // Run the schedule
     p.realize({6204, 4604});

@@ -700,12 +700,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     pb.crossRegisterProxies(lam, fam, cgam, mam);
     ModulePassManager mpm;
 
-#if LLVM_VERSION >= 140
     using OptimizationLevel = llvm::OptimizationLevel;
-#else
-    using OptimizationLevel = PassBuilder::OptimizationLevel;
-#endif
-
     OptimizationLevel level = OptimizationLevel::O3;
 
     target_machine->registerPassBuilderCallbacks(pb);
