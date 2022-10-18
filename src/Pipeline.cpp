@@ -220,17 +220,6 @@ std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
     return autoschedulers;
 }
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-/* static */
-std::string &Pipeline::get_default_autoscheduler_name() {
-    static std::string autoscheduler_name = "";
-    if (autoscheduler_name.empty() && !get_autoscheduler_map().empty()) {
-        autoscheduler_name = get_autoscheduler_map().begin()->first;
-    }
-    return autoscheduler_name;
-}
-#endif
-
 /* static */
 AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_name) {
     const auto &m = get_autoscheduler_map();
@@ -246,25 +235,6 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
     return it->second;
 }
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) const {
-    auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
-    user_assert(autoscheduler_fn)
-        << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
-        << "Did you remember to load the plugin?";
-
-    AutoSchedulerResults results;
-    results.target = target;
-    results.machine_params_string = arch_params.to_string();
-
-    autoscheduler_fn(*this, target, arch_params, &results);
-    return results;
-}
-
-AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) const {
-    return auto_schedule(get_default_autoscheduler_name(), target, arch_params);
-}
-#else
 AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const AutoschedulerParams &autoscheduler_params) const {
     user_assert(!autoscheduler_params.name.empty()) << "apply_autoscheduler was called with no Autoscheduler specified.";
 
@@ -280,7 +250,6 @@ AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const A
     autoscheduler_fn(*this, target, autoscheduler_params, &results);
     return results;
 }
-#endif
 
 /* static */
 void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler) {
@@ -288,14 +257,6 @@ void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const Au
     user_assert(m.find(autoscheduler_name) == m.end()) << "'" << autoscheduler_name << "' is already registered as an autoscheduler.\n";
     m[autoscheduler_name] = autoscheduler;
 }
-
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-/* static */
-void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_name) {
-    (void)find_autoscheduler(autoscheduler_name);  // ensure it's valid
-    get_default_autoscheduler_name() = autoscheduler_name;
-}
-#endif
 
 Func Pipeline::get_func(size_t index) {
     // Compute an environment
@@ -1213,30 +1174,6 @@ JITExtern::JITExtern(const ExternCFunction &extern_c_function)
     : extern_c_function_(extern_c_function) {
 }
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-MachineParams MachineParams::generic() {
-    std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
-    if (params.empty()) {
-        return MachineParams(16, 16 * 1024 * 1024, 40);
-    } else {
-        return MachineParams(params);
-    }
-}
-
-std::string MachineParams::to_string() const {
-    std::ostringstream o;
-    o << parallelism << "," << last_level_cache_size << "," << balance;
-    return o.str();
-}
-
-MachineParams::MachineParams(const std::string &s) {
-    std::vector<std::string> v = Internal::split_string(s, ",");
-    user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
-    parallelism = std::atoi(v[0].c_str());
-    last_level_cache_size = std::atoll(v[1].c_str());
-    balance = std::atof(v[2].c_str());
-}
-#else
 std::string AutoschedulerParams::to_string() const {
     std::ostringstream os;
     if (!name.empty()) {
@@ -1247,6 +1184,5 @@ std::string AutoschedulerParams::to_string() const {
     }
     return os.str();
 }
-#endif
 
 }  // namespace Halide
