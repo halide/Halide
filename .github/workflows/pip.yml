@@ -70,7 +70,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     env:
-      CMAKE_PREFIX_PATH: "${{ github.workspace }}/zlocal-llvm;${{ github.workspace }}/zlocal-halide"
+      CMAKE_PREFIX_PATH: "${{ github.workspace }}/local-llvm;${{ github.workspace }}/local-halide"
 
     strategy:
       fail-fast: false
@@ -88,91 +88,61 @@ jobs:
       - uses: actions/checkout@v3.1.0
 
       # Improving cache restore performance on Windows
-      # (install-llvm-action uses actions/cache under the hood)
-      # - name: Use GNU tar
-      #   if: ${{ runner.os == 'Windows' }}
-      #   shell: cmd
-      #   run: |
-      #     echo "Adding GNU tar to PATH"
-      #     echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
+      - name: Use GNU tar
+        if: ${{ runner.os == 'Windows' }}
+        shell: cmd
+        run: |
+          echo "Adding GNU tar to PATH"
+          echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
 
-      # - name: Cache LLVM build folder
-      #   id: cache-llvm
-      #   uses: actions/cache@v3.0.11
-      #   with:
-      #     path: zlocal-llvm
-      #     key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
+      - name: Cache LLVM build folder
+        id: cache-llvm
+        uses: actions/cache@v3.0.11
+        with:
+          path: local-llvm
+          key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
 
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@latest
 
-      # - uses: actions/checkout@v3.1.0
-      #   if: steps.cache-llvm.outputs.cache-hit != 'true'
-      #   with:
-      #     path: llvm-src
-      #     repository: llvm/llvm-project
-      #     ref: llvmorg-${{ env.LLVM_VER }}
+      - uses: actions/checkout@v3.1.0
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        with:
+          path: llvm-src
+          repository: llvm/llvm-project
+          ref: llvmorg-${{ env.LLVM_VER }}
 
-      # - name: Configure LLVM
-      #   if: steps.cache-llvm.outputs.cache-hit != 'true'
-      #   run: >
-      #     cmake -G Ninja -S llvm-src/llvm -B llvm-build
-      #     -DCMAKE_BUILD_TYPE=Release
-      #     "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
-      #     "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly"
-      #     "-DLLVM_ENABLE_PROJECTS=clang;lld"
-      #     -DLLVM_ENABLE_ASSERTIONS=ON
-      #     -DLLVM_ENABLE_RTTI=ON
-      #     -DLLVM_ENABLE_EH=ON
-      #     -DLLVM_ENABLE_LIBXML2=OFF
-      #     -DLLVM_ENABLE_TERMINFO=OFF
-      #     -DLLVM_ENABLE_ZSTD=OFF
-      #     -DLLVM_ENABLE_ZLIB=OFF
-      #     -DLLVM_ENABLE_OCAMLDOC=OFF
-      #     -DLLVM_ENABLE_BINDINGS=OFF
-      #     -DLLVM_ENABLE_IDE=OFF
+      - name: Configure LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: >
+          cmake -G Ninja -S llvm-src/llvm -B llvm-build
+          -DCMAKE_BUILD_TYPE=Release
+          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+          "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly"
+          "-DLLVM_ENABLE_PROJECTS=clang;lld"
+          -DLLVM_ENABLE_ASSERTIONS=ON
+          -DLLVM_ENABLE_RTTI=ON
+          -DLLVM_ENABLE_EH=ON
+          -DLLVM_ENABLE_LIBXML2=OFF
+          -DLLVM_ENABLE_TERMINFO=OFF
+          -DLLVM_ENABLE_ZSTD=OFF
+          -DLLVM_ENABLE_ZLIB=OFF
+          -DLLVM_ENABLE_OCAMLDOC=OFF
+          -DLLVM_ENABLE_BINDINGS=OFF
+          -DLLVM_ENABLE_IDE=OFF
 
-      # - name: Build LLVM
-      #   if: steps.cache-llvm.outputs.cache-hit != 'true'
-      #   run: cmake --build llvm-build
+      - name: Build LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: cmake --build llvm-build
 
-      # - name: Install LLVM
-      #   if: steps.cache-llvm.outputs.cache-hit != 'true'
-      #   run: cmake --install llvm-build --prefix zlocal-llvm;zlocal-halide
-
-      # - name: Install LLVM
-      #   uses: KyleMayes/install-llvm-action@v1.5.5
-      #   with:
-      #     version: ${{ env.LLVM_VER }}
-      #     directory: zlocal-llvm
-
-      - name: Downloading and Installing LLVM
-        if: runner.os == 'Windows'
-        run: |
-          # curl won't follow the redirect properly, so we need wget here
-          choco install --no-progress -y wget
-          wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/LLVM-${{ env.LLVM_VER }}-win64.exe
-          mkdir ${{ github.workspace }}/zlocal-llvm
-          7z x ${{ github.workspace }}/LLVM-${{ env.LLVM_VER }}-win64.exe -o${{ github.workspace }}/zlocal-llvm -y
-          ls ${{ github.workspace }}/zlocal-llvm/lib/cmake/llvm
-          rm ${{ github.workspace }}/LLVM-${{ env.LLVM_VER }}-win64.exe
-          ls
-
-      - name: Downloading and Installing LLVM
-        if: runner.os != 'Windows'
-        run: |
-          wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-arm64-apple-darwin21.0.tar.xz \
-                  https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-x86_64-apple-darwin.tar.xz
-          mkdir ${{ github.workspace }}/zlocal-llvm
-          tar xf ${{ github.workspace }}/clang+llvm-${{ env.LLVM_VER }}-arm64-apple-darwin21.0.tar.xz -C ${{ github.workspace }}/zlocal-llvm --strip-components=1
-          tar xf ${{ github.workspace }}/clang+llvm-${{ env.LLVM_VER }}-x86_64-apple-darwin.tar.xz -C ${{ github.workspace }}/zlocal-llvm --strip-components=1
-          rm ${{ github.workspace }}/clang+llvm-*.tar.xz
+      - name: Install LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: cmake --install llvm-build --prefix local-llvm
 
       - name: Configure Halide
         if: runner.os == 'Windows'
         run: >
           cmake -G "Visual Studio 17 2022" -T ClangCL -A "${{ matrix.arch }}" -S . -B halide-build
-          -DLLVM_DIR=${{ github.workspace }}\zlocal-llvm\lib\cmake\llvm
           -DWITH_DOCS=NO
           -DWITH_PYTHON_BINDINGS=NO
           -DWITH_TESTS=NO
@@ -183,7 +153,6 @@ jobs:
         if: runner.os != 'Windows'
         run: >
           cmake -G Ninja -S . -B halide-build
-          -DLLVM_DIR=${{ github.workspace }}/zlocal-llvm/lib/cmake/llvm
           -DCMAKE_BUILD_TYPE=Release
           "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
           -DWITH_DOCS=NO
@@ -196,7 +165,7 @@ jobs:
         run: cmake --build halide-build --config Release
 
       - name: Install Halide
-        run: cmake --install halide-build --config Release --prefix zlocal-llvm;zlocal-halide
+        run: cmake --install halide-build --config Release --prefix local-halide
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.10.2
