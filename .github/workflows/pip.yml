@@ -70,7 +70,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     env:
-      CMAKE_PREFIX_PATH: "${{ github.workspace }}/local-llvm;${{ github.workspace }}/local-halide"
+      CMAKE_PREFIX_PATH: "${{ github.workspace }}/zlocal-llvm;${{ github.workspace }}/zlocal-halide"
 
     strategy:
       fail-fast: false
@@ -100,7 +100,7 @@ jobs:
       #   id: cache-llvm
       #   uses: actions/cache@v3.0.11
       #   with:
-      #     path: local-llvm
+      #     path: zlocal-llvm
       #     key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
 
       - uses: ilammy/msvc-dev-cmd@v1
@@ -138,28 +138,33 @@ jobs:
 
       # - name: Install LLVM
       #   if: steps.cache-llvm.outputs.cache-hit != 'true'
-      #   run: cmake --install llvm-build --prefix local-llvm;local-halide
+      #   run: cmake --install llvm-build --prefix zlocal-llvm;zlocal-halide
 
       # - name: Install LLVM
       #   uses: KyleMayes/install-llvm-action@v1.5.5
       #   with:
       #     version: ${{ env.LLVM_VER }}
-      #     directory: local-llvm
+      #     directory: zlocal-llvm
 
       - name: Downloading and Installing LLVM
         if: runner.os == 'Windows'
         run: |
-          curl https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/LLVM-${{ env.LLVM_VER }}-win64.exe
-          LLVM-${{ env.LLVM_VER }}-win64.exe /S /D ${{ github.workspace }}\local-llvm
-          del LLVM-${{ env.LLVM_VER }}-win64.exe
+          curl -O https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/LLVM-${{ env.LLVM_VER }}-win64.exe
+          ${{ github.workspace }}\LLVM-${{ env.LLVM_VER }}-win64.exe /S /D ${{ github.workspace }}\zlocal-llvm
+          dir ${{ github.workspace }}\zlocal-llvm
+          del ${{ github.workspace }}\LLVM-${{ env.LLVM_VER }}-win64.exe
 
-      # - name: Downloading and Installing LLVM
-      #   if: runner.os != 'Windows'
-      #   run: |
-      #     curl https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-arm64-apple-darwin21.0.tar.xz
-      #     curl https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-x86_64-apple-darwin.tar.xz
-      #     LLVM-${{ env.LLVM_VER }}-win64.exe /S /D ${{ github.workspace }}\local-llvm
-      #     rm clang+llvm-${{ env.LLVM_VER }}-win64.exe
+      - name: Downloading and Installing LLVM
+        if: runner.os != 'Windows'
+        run: |
+          set -x
+          curl -O https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-arm64-apple-darwin21.0.tar.xz \
+               -O https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-x86_64-apple-darwin.tar.xz
+          tar xf clang+llvm-${{ env.LLVM_VER }}-arm64-apple-darwin21.0.tar.xz -C ${{ github.workspace }}/zlocal-llvm --strip-components=1
+          tar xf clang+llvm-${{ env.LLVM_VER }}-x86_64-apple-darwin.tar.xz -C ${{ github.workspace }}/zlocal-llvm --strip-components=1
+          ls ${{ github.workspace }}/zlocal-llvm
+          ls ${{ github.workspace }}/zlocal-llvm/lib
+          rm ${{ github.workspace }}/clang+llvm-*.tar.xz
 
       - name: Configure Halide
         if: runner.os == 'Windows'
@@ -187,7 +192,7 @@ jobs:
         run: cmake --build halide-build --config Release
 
       - name: Install Halide
-        run: cmake --install halide-build --config Release --prefix local-llvm;local-halide
+        run: cmake --install halide-build --config Release --prefix zlocal-llvm;zlocal-halide
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.10.2
