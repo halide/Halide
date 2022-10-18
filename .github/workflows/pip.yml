@@ -86,8 +86,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-        with:
-          path: halide-src
 
       - name: Cache LLVM build folder
         id: cache-llvm
@@ -136,7 +134,7 @@ jobs:
       - name: Configure Halide
         if: runner.os == 'Windows'
         run: >
-          cmake -G "Visual Studio 17 2022" -T ClangCL -A "${{ matrix.arch }}" -S halide-src -B halide-build
+          cmake -G "Visual Studio 17 2022" -T ClangCL -A "${{ matrix.arch }}" -S . -B halide-build
           -DWITH_DOCS=NO
           -DWITH_PYTHON_BINDINGS=NO
           -DWITH_TESTS=NO
@@ -146,7 +144,7 @@ jobs:
       - name: Configure Halide
         if: runner.os != 'Windows'
         run: >
-          cmake -G Ninja -S halide-src -B halide-build
+          cmake -G Ninja -S . -B halide-build
           -DCMAKE_BUILD_TYPE=Release
           "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
           -DWITH_DOCS=NO
