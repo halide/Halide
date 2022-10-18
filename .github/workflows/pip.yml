@@ -139,6 +139,13 @@ jobs:
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: cmake --install llvm-build --prefix local-llvm
 
+      # Remove the LLVM source tree after building it, otherwise we can
+      # run out of local space while building halide
+      - name: Clean LLVM Source
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        shell: bash
+        run: rm -rf llvm-src
+
       - name: Configure Halide
         if: runner.os == 'Windows'
         run: >
