@@ -25,11 +25,6 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
 
     AutoSchedulerResults auto_schedule_results;
     const auto context = this->context();
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    if (context.auto_schedule()) {
-        auto_schedule_results = pipeline.auto_schedule(context.target(), context.machine_params());
-    }
-#else
     const auto &asp = context.autoscheduler_params();
     if (!asp.name.empty()) {
         debug(1) << "Applying autoscheduler " << asp.name << " to Generator " << name() << " ...\n";
@@ -37,7 +32,6 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
     } else {
         debug(1) << "Applying autoscheduler (NONE) to Generator " << name() << " ...\n";
     }
-#endif
 
     std::vector<Argument> filter_arguments;
     const auto arg_infos = arginfos();
@@ -220,17 +214,10 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
 
     AutoSchedulerResults auto_schedule_results;
     const auto context = this->context();
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    if (context.auto_schedule()) {
-        auto_schedule_results = grad_pipeline.auto_schedule(context.target(), context.machine_params());
-    }
-#else
     const auto &asp = context.autoscheduler_params();
     if (!asp.name.empty()) {
         auto_schedule_results = grad_pipeline.apply_autoscheduler(context.target(), asp);
-    }
-#endif
-    else {
+    } else {
         user_warning << "Autoscheduling is not enabled in build_gradient_module(), so the resulting "
                         "gradient module will be unscheduled; this is very unlikely to be what you want.\n";
     }
@@ -265,13 +252,8 @@ Callable AbstractGenerator::compile_to_callable(const JITHandlers *jit_handlers,
 
 void AbstractGenerator::set_generatorparam_values(const GeneratorParamsMap &m) {
     for (const auto &c : m) {
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        user_assert(c.first != "target" && c.first != "auto_schedule" && c.first != "machine_params")
-            << "The GeneratorParam '" << c.first << "' cannot be specified via string here; use GeneratorContext instead.";
-#else
         user_assert(c.first != "target" && c.first != "auto_scheduler")
             << "The GeneratorParam '" << c.first << "' cannot be specified via string here; use GeneratorContext instead.";
-#endif
         set_generatorparam_value(c.first, c.second);
     }
 }

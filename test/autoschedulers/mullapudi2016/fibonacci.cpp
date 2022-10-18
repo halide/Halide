@@ -22,11 +22,7 @@ double run_test(bool auto_schedule) {
 
     if (auto_schedule) {
         // Auto-schedule the pipeline
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        p.auto_schedule(target);
-#else
         p.apply_autoscheduler(target, {"Mullapudi2016"});
-#endif
     }
 
     // Inspect the schedule (only for debugging))
