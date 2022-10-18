@@ -89,12 +89,12 @@ jobs:
 
       # Improving cache restore performance on Windows
       # (install-llvm-action uses actions/cache under the hood)
-      - name: Use GNU tar
-        if: ${{ runner.os == 'Windows' }}
-        shell: cmd
-        run: |
-          echo "Adding GNU tar to PATH"
-          echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
+      # - name: Use GNU tar
+      #   if: ${{ runner.os == 'Windows' }}
+      #   shell: cmd
+      #   run: |
+      #     echo "Adding GNU tar to PATH"
+      #     echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
 
       # - name: Cache LLVM build folder
       #   id: cache-llvm
@@ -140,11 +140,26 @@ jobs:
       #   if: steps.cache-llvm.outputs.cache-hit != 'true'
       #   run: cmake --install llvm-build --prefix local-llvm;local-halide
 
-      - name: Install LLVM
-        uses: KyleMayes/install-llvm-action@v1.5.5
-        with:
-          version: ${{ env.LLVM_VER }}
-          directory: local-llvm
+      # - name: Install LLVM
+      #   uses: KyleMayes/install-llvm-action@v1.5.5
+      #   with:
+      #     version: ${{ env.LLVM_VER }}
+      #     directory: local-llvm
+
+      - name: Downloading and Installing LLVM
+        if: runner.os == 'Windows'
+        run: |
+          curl https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/LLVM-${{ env.LLVM_VER }}-win64.exe
+          LLVM-${{ env.LLVM_VER }}-win64.exe /S /D ${{ github.workspace }}\local-llvm
+          del LLVM-${{ env.LLVM_VER }}-win64.exe
+
+      # - name: Downloading and Installing LLVM
+      #   if: runner.os != 'Windows'
+      #   run: |
+      #     curl https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-arm64-apple-darwin21.0.tar.xz
+      #     curl https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ env.LLVM_VER }}/clang+llvm-${{ env.LLVM_VER }}-x86_64-apple-darwin.tar.xz
+      #     LLVM-${{ env.LLVM_VER }}-win64.exe /S /D ${{ github.workspace }}\local-llvm
+      #     rm clang+llvm-${{ env.LLVM_VER }}-win64.exe
 
       - name: Configure Halide
         if: runner.os == 'Windows'
