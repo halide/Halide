@@ -84,9 +84,23 @@ endif ()
 # Enable the SPIR-V target if requested (must declare before processing dependencies)
 option(TARGET_SPIRV "Include SPIR-V target" OFF)
 
-# Declare all options before we add any subdirectories, since some
-# (eg WITH_UTILS) are referenced in multiple subdirectories, and if we don't
-# declare them ahead of time, they will quietly be "false".
+##
+# Import dependencies
+##
+
+add_subdirectory(dependencies)
+
+##
+# Declare options
+##
+
+# Declare these options after we include dependencies (since it declares Halide_ENABLE_RTTI etc)
+# but before we add any subdirectories, since any option you test before it is defined is
+# implicitly false the *first* time that the build file is processed, and there are some
+# out-of-order dependencies here (e.g, code in src/ eventually checks WITH_UTILS).
+# This is especially subtle since it means that some options can end up with different
+# values if you build a target as part of the initial CMake run, so (e.g.) a `make install`
+# from as totally clean build might neglect to install some pieces.
 
 option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
 option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
@@ -97,12 +111,6 @@ cmake_dependent_option(
     "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
 )
 
-
-##
-# Import dependencies
-##
-
-add_subdirectory(dependencies)
 
 ##
 # Add source directories
