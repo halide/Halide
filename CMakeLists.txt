@@ -84,6 +84,20 @@ endif ()
 # Enable the SPIR-V target if requested (must declare before processing dependencies)
 option(TARGET_SPIRV "Include SPIR-V target" OFF)
 
+# Declare all options before we add any subdirectories, since some
+# (eg WITH_UTILS) are referenced in multiple subdirectories, and if we don't
+# declare them ahead of time, they will quietly be "false".
+
+option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_DOCS "Build documentation" OFF)
+option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
+cmake_dependent_option(
+    WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
+    "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
+)
+
+
 ##
 # Import dependencies
 ##
@@ -101,7 +115,6 @@ add_subdirectory(tools)
 # Add tests, tutorials, etc. if we're not being imported into another CMake project.
 ##
 
-option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
 if (WITH_TESTS)
     message(STATUS "Building tests enabled")
     add_subdirectory(test)
@@ -109,10 +122,6 @@ else ()
     message(STATUS "Building tests disabled")
 endif ()
 
-cmake_dependent_option(
-    WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
-    "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
-)
 if (WITH_PYTHON_BINDINGS)
     message(STATUS "Building Python bindings enabled")
     add_subdirectory(python_bindings)
@@ -120,7 +129,6 @@ else ()
     message(STATUS "Building Python bindings disabled")
 endif ()
 
-option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
 if (WITH_TUTORIALS)
     message(STATUS "Building tutorials enabled")
     add_subdirectory(tutorial)
@@ -128,7 +136,6 @@ else ()
     message(STATUS "Building tutorials disabled")
 endif ()
 
-option(WITH_DOCS "Build documentation" OFF)
 if (WITH_DOCS)
     message(STATUS "Building docs enabled")
     add_subdirectory(doc)
@@ -136,7 +143,6 @@ else ()
     message(STATUS "Building docs disabled")
 endif ()
 
-option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
 if (WITH_UTILS)
     message(STATUS "Building utils enabled")
     add_subdirectory(util)
