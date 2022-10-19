@@ -69,9 +69,6 @@ jobs:
 
     runs-on: ${{ matrix.runner }}
 
-    env:
-      CMAKE_PREFIX_PATH: "${{ github.workspace }}/local-llvm;${{ github.workspace }}/local-halide"
-
     strategy:
       fail-fast: false
       matrix:
@@ -138,7 +135,7 @@ jobs:
 
       - name: Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --install llvm-build --prefix "local-llvm;local-halide"
+        run: cmake --install llvm-build --prefix local-llvm
 
       # Remove the LLVM source tree after building it, otherwise we can
       # run out of local space while building halide
@@ -175,7 +172,7 @@ jobs:
         run: cmake --build halide-build --config Release
 
       - name: Install Halide
-        run: cmake --install halide-build --config Release --prefix "local-llvm;local-halide"
+        run: cmake --install halide-build --config Release --prefix local-halide
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.10.2
