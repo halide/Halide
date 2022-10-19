@@ -163,22 +163,6 @@ void define_func(py::module &m) {
             .def("defined", &Func::defined)
             .def("outputs", &Func::outputs)
 
-            .def("output_type", [](Func &f) {
-                // HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; call Func::type() instead.")
-                PyErr_WarnEx(PyExc_DeprecationWarning,
-                             "Func.output_type() is deprecated; use Func.type() instead.",
-                             1);
-                return f.type();
-            })
-
-            .def("output_types", [](Func &f) {
-                // HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; call Func::types() instead.")
-                PyErr_WarnEx(PyExc_DeprecationWarning,
-                             "Func.output_types() is deprecated; use Func.types() instead.",
-                             1);
-                return f.types();
-            })
-
             .def("type", &Func::type)
             .def("types", &Func::types)
 

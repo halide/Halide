@@ -116,7 +116,7 @@ the repository (where this README is).
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, and trunk. At the time of writing,
-this means versions 14.0 and 13.0 are supported, but 12.0 is not. The commands
+this means versions 16, 15, and 14 are supported, but 13 is not. The commands
 `llvm-config` and `clang` must be somewhere in the path.
 
 If your OS does not have packages for LLVM, you can find binaries for it at

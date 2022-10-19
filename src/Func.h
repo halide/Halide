@@ -1225,15 +1225,6 @@ public:
     const std::vector<Type> &types() const;
     // @}
 
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
-    const Type &output_type() const {
-        return type();
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
-    const std::vector<Type> &output_types() const {
-        return types();
-    }
-
     /** Get the number of outputs of this Func. Corresponds to the
      * size of the Tuple this Func was defined to return.
      * If the Func isn't yet defined, but was specified with required types,
