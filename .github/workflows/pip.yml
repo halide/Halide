@@ -88,6 +88,7 @@ jobs:
       - uses: actions/checkout@v3.1.0
 
       # Improving cache restore performance on Windows
+      # Do not do this: it cannot handle symlinks properly and will always fail
       # - name: Use GNU tar
       #   if: ${{ runner.os == 'Windows' }}
       #   shell: cmd
@@ -137,7 +138,7 @@ jobs:
 
       - name: Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --install llvm-build --prefix local-llvm;local-halide
+        run: cmake --install llvm-build --prefix "local-llvm;local-halide"
 
       # Remove the LLVM source tree after building it, otherwise we can
       # run out of local space while building halide
@@ -172,7 +173,7 @@ jobs:
         run: cmake --build halide-build --config Release
 
       - name: Install Halide
-        run: cmake --install halide-build --config Release --prefix local-llvm;local-halide
+        run: cmake --install halide-build --config Release --prefix "local-llvm;local-halide"
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.10.2
