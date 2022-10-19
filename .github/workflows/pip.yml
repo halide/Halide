@@ -88,12 +88,12 @@ jobs:
       - uses: actions/checkout@v3.1.0
 
       # Improving cache restore performance on Windows
-      - name: Use GNU tar
-        if: ${{ runner.os == 'Windows' }}
-        shell: cmd
-        run: |
-          echo "Adding GNU tar to PATH"
-          echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
+      # - name: Use GNU tar
+      #   if: ${{ runner.os == 'Windows' }}
+      #   shell: cmd
+      #   run: |
+      #     echo "Adding GNU tar to PATH"
+      #     echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
 
       - name: Cache LLVM build folder
         id: cache-llvm
