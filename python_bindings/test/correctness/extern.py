@@ -50,8 +50,6 @@ def test_extern():
         assert False, 'Did not see expected exception!'
 
     lib_path = "the_sort_function.so"
-    #lib_path = "/home/rodrigob/code/references/" \
-    #           "Halide_master/python_bindings/tests/the_sort_function.nohere.so"
     load_error = load_library_into_llvm(lib_path)
     assert load_error == False
 
