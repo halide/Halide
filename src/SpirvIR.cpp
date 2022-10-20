@@ -1002,7 +1002,7 @@ SpvId SpvBuilder::declare_type(const Type &type, uint32_t array_size) {
 SpvId SpvBuilder::declare_pointer_type(const Type &type, SpvStorageClass storage_class) {
     SpvId ptr_type_id = lookup_pointer_type(type, storage_class);
     if (ptr_type_id == SpvInvalidId) {
-        ptr_type_id = add_pointer_type(ptr_type_id, storage_class);
+        ptr_type_id = add_pointer_type(type, storage_class);
     }
     return ptr_type_id;
 }
@@ -1407,7 +1407,7 @@ SpvId SpvBuilder::add_type(const Type &type, uint32_t array_size) {
                 signedness = type.is_uint() ? 0 : 1;
             }
 
-            type_id = make_id(SpvIntTypeId);
+            type_id = make_id(signedness ? SpvIntTypeId : SpvUIntTypeId);
             debug(3) << "    add_integer_type: %" << type_id << " bits=" << type.bits() << " signed=" << (signedness ? "true" : "false") << "\n";
             SpvInstruction inst = SpvFactory::integer_type(type_id, type.bits(), signedness);
             module.add_type(inst);
@@ -1512,10 +1512,17 @@ SpvId SpvBuilder::lookup_pointer_type(SpvId base_type_id, SpvStorageClass storag
 SpvId SpvBuilder::add_pointer_type(const Type &type, SpvStorageClass storage_class) {
     SpvId base_type_id = declare_type(type);
     debug(3) << "    add_pointer_type: base_type=" << type << " base_type_id=" << base_type_id << " storage_class=" << (uint32_t)(storage_class) << "\n";
+    if (base_type_id == SpvInvalidId) {
+        internal_error << "SPIRV: Attempted to create pointer type for undeclared base type! " << type << "\n";
+    }
     return add_pointer_type(base_type_id, storage_class);
 }
 
 SpvId SpvBuilder::add_pointer_type(SpvId base_type_id, SpvStorageClass storage_class) {
+    if (base_type_id == SpvInvalidId) {
+        internal_error << "SPIRV: Attempted to create pointer type for undeclared base type!\n";
+    }
+
     PointerTypeKey key = make_pointer_type_key(base_type_id, storage_class);
     PointerTypeMap::const_iterator it = pointer_type_map.find(key);
     if (it != pointer_type_map.end()) {
@@ -2456,6 +2463,14 @@ SpvInstruction SpvFactory::extended(SpvId instruction_set_id, SpvId instruction_
 /** GLSL extended instruction utility methods */
 
 bool is_glsl_unary_op(SpvId glsl_op_code) {
+    return (glsl_operand_count(glsl_op_code) == 1);
+}
+
+bool is_glsl_binary_op(SpvId glsl_op_code) {
+    return (glsl_operand_count(glsl_op_code) == 2);
+}
+
+uint32_t glsl_operand_count(SpvId glsl_op_code) {
     switch (glsl_op_code) {
     case GLSLstd450Round:
     case GLSLstd450RoundEven:
@@ -2479,6 +2494,8 @@ bool is_glsl_unary_op(SpvId glsl_op_code) {
     case GLSLstd450Acosh:
     case GLSLstd450Atanh:
     case GLSLstd450Cosh:
+    case GLSLstd450Sinh:
+    case GLSLstd450Tanh:
     case GLSLstd450Exp:
     case GLSLstd450Log:
     case GLSLstd450Exp2:
@@ -2506,16 +2523,9 @@ bool is_glsl_unary_op(SpvId glsl_op_code) {
     case GLSLstd450FindILsb:
     case GLSLstd450FindSMsb:
     case GLSLstd450FindUMsb:
-    case GLSLstd450InterpolateAtCentroid:
-        return true;
-    default:
-        break;
-    };
-    return false;
-}
-
-bool is_glsl_binary_op(SpvId glsl_op_code) {
-    switch (glsl_op_code) {
+    case GLSLstd450InterpolateAtCentroid: {
+        return 1;  // unary op
+    }
     case GLSLstd450Atan2:
     case GLSLstd450Pow:
     case GLSLstd450Modf:
@@ -2534,12 +2544,25 @@ bool is_glsl_binary_op(SpvId glsl_op_code) {
     case GLSLstd450InterpolateAtOffset:
     case GLSLstd450InterpolateAtSample:
     case GLSLstd450NMax:
-    case GLSLstd450NMin:
-        return true;
+    case GLSLstd450NMin: {
+        return 2;  // binary op
+    }
+    case GLSLstd450FMix:
+    case GLSLstd450IMix:
+    case GLSLstd450SmoothStep:
+    case GLSLstd450Fma:
+    case GLSLstd450FClamp:
+    case GLSLstd450UClamp:
+    case GLSLstd450SClamp:
+    case GLSLstd450NClamp: {
+        return 3;  // trinary op
+    }
+    case GLSLstd450Bad:
+    case GLSLstd450Count:
     default:
         break;
     };
-    return false;
+    return SpvInvalidId;
 }
 
 /** Specializations for reference counted classes */

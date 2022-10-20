@@ -710,8 +710,8 @@ WEAK int halide_vulkan_run(void *user_context,
         // NOTE: while this could be re-used across multiple pipelines, we only know the storage requirements of this kernel's
         //       inputs and outputs ... so create a pool specific to the number of buffers known at this time
 
-        uint32_t uniform_buffer_count = entry_point_data->uniform_buffer_count;  // needs_scalar_uniform_buffer ? 1 : 0;
-        uint32_t storage_buffer_count = entry_point_data->storage_buffer_count;  // entry_point_data->buffer_count;
+        uint32_t uniform_buffer_count = entry_point_data->uniform_buffer_count;
+        uint32_t storage_buffer_count = entry_point_data->storage_buffer_count;
         VkResult result = vk_create_descriptor_pool(user_context, ctx.allocator, uniform_buffer_count, storage_buffer_count, &(entry_point_data->descriptor_pool));
         if (result != VK_SUCCESS) {
             error(user_context) << "Vulkan: vk_create_descriptor_pool() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";

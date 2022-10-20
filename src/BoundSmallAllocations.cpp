@@ -76,6 +76,8 @@ class BoundSmallAllocations : public IRMutator {
     bool must_be_constant(MemoryType memory_type) const {
         return (memory_type == MemoryType::Register ||
                 (device_api == DeviceAPI::OpenGLCompute &&
+                 memory_type == MemoryType::GPUShared) ||
+                (device_api == DeviceAPI::Vulkan &&
                  memory_type == MemoryType::GPUShared));
     }
 
@@ -131,6 +133,13 @@ class BoundSmallAllocations : public IRMutator {
                 << "Allocation " << op->name << " has a dynamic size. "
                 << "Only fixed-size allocations can be stored in shared memory "
                 << "in OpenGL compute shaders. Try storing in MemoryType::Heap "
+                << "instead.";
+
+            user_assert(!(device_api == DeviceAPI::Vulkan &&
+                          op->memory_type == MemoryType::GPUShared))
+                << "Allocation " << op->name << " has a dynamic size. "
+                << "Only fixed-size allocations can be stored in shared memory "
+                << "in Vulkan compute shaders. Try storing in MemoryType::Heap "
                 << "instead.";
         }
 

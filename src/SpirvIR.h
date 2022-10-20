@@ -58,6 +58,7 @@ enum SpvKind {
     SpvVoidTypeId,
     SpvBoolTypeId,
     SpvIntTypeId,
+    SpvUIntTypeId,
     SpvFloatTypeId,
     SpvVectorTypeId,
     SpvArrayTypeId,
@@ -758,6 +759,7 @@ struct SpvModuleContents {
 /** Helper functions for determining calling convention of GLSL builtins **/
 bool is_glsl_unary_op(SpvId glsl_op_code);
 bool is_glsl_binary_op(SpvId glsl_op_code);
+uint32_t glsl_operand_count(SpvId glsl_op_code);
 
 /** Output the contents of a SPIR-V module in human-readable form **/
 std::ostream &operator<<(std::ostream &stream, const SpvModule &);

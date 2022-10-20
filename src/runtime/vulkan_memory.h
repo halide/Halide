@@ -4,6 +4,9 @@
 #include "internal/block_allocator.h"
 #include "vulkan_internal.h"
 
+// Uncomment to enable verbose memory allocation debugging
+// #define HL_VK_DEBUG_MEM 1
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {
@@ -162,13 +165,14 @@ void VulkanMemoryAllocator::initialize(void *user_context,
 }
 
 MemoryRegion *VulkanMemoryAllocator::reserve(void *user_context, MemoryRequest &request) {
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Reserving memory ("
                    << "user_context=" << user_context << " "
                    << "block_allocator=" << (void *)(block_allocator) << " "
                    << "request_size=" << (uint32_t)(request.size) << " "
                    << "device=" << (void *)(device) << " "
                    << "physical_device=" << (void *)(physical_device) << ") ...\n";
-
+#endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
     halide_abort_if_false(user_context, block_allocator != nullptr);
@@ -176,12 +180,13 @@ MemoryRegion *VulkanMemoryAllocator::reserve(void *user_context, MemoryRequest &
 }
 
 void *VulkanMemoryAllocator::map(void *user_context, MemoryRegion *region) {
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Mapping region ("
                    << "user_context=" << user_context << " "
                    << "region=" << (void *)(region) << " "
                    << "device=" << (void *)(device) << " "
                    << "physical_device=" << (void *)(physical_device) << ") ...\n";
-
+#endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
     halide_abort_if_false(user_context, block_allocator != nullptr);
@@ -215,12 +220,13 @@ void *VulkanMemoryAllocator::map(void *user_context, MemoryRegion *region) {
 }
 
 void VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Unmapping region ("
                    << "user_context=" << user_context << " "
                    << "region=" << (void *)(region) << " "
                    << "device=" << (void *)(device) << " "
                    << "physical_device=" << (void *)(physical_device) << ") ...\n";
-
+#endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
 
@@ -246,10 +252,11 @@ void VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
 }
 
 void VulkanMemoryAllocator::reclaim(void *user_context, MemoryRegion *region) {
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Reclaiming region ("
                    << "user_context=" << user_context << " "
                    << "region=" << (void *)(region) << ") ... \n";
-
+#endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
 
@@ -257,9 +264,10 @@ void VulkanMemoryAllocator::reclaim(void *user_context, MemoryRegion *region) {
 }
 
 bool VulkanMemoryAllocator::collect(void *user_context) {
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Collecting unused memory ("
                    << "user_context=" << user_context << ") ... \n";
-
+#endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
 
@@ -267,9 +275,10 @@ bool VulkanMemoryAllocator::collect(void *user_context) {
 }
 
 void VulkanMemoryAllocator::release(void *user_context) {
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Releasing ("
                    << "user_context=" << user_context << ") ... \n";
-
+#endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
 
@@ -277,9 +286,10 @@ void VulkanMemoryAllocator::release(void *user_context) {
 }
 
 void VulkanMemoryAllocator::destroy(void *user_context) {
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Destroying allocator ("
                    << "user_context=" << user_context << ") ... \n";
-
+#endif
     block_allocator->destroy(this);
 }
 
@@ -292,22 +302,25 @@ VulkanMemoryAllocator::default_config() {
 // --
 
 void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *block) {
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Allocating block ("
                    << "user_context=" << user_context << " "
                    << "block=" << (void *)(block) << ") ... \n";
-
+#endif
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(user_context);
     halide_abort_if_false(user_context, instance != nullptr);
     halide_abort_if_false(user_context, instance->device != nullptr);
     halide_abort_if_false(user_context, instance->physical_device != nullptr);
     halide_abort_if_false(user_context, block != nullptr);
 
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Allocating block ("
                    << "size=" << (uint32_t)block->size << ", "
                    << "dedicated=" << (block->dedicated ? "true" : "false") << " "
                    << "usage=" << halide_memory_usage_name(block->properties.usage) << " "
                    << "caching=" << halide_memory_caching_name(block->properties.caching) << " "
                    << "visibility=" << halide_memory_visibility_name(block->properties.visibility) << ")\n";
+#endif
 
     // Find an appropriate memory type given the flags
     uint32_t memory_type = instance->select_memory_type(user_context, instance->physical_device, block->properties, 0);
@@ -359,10 +372,13 @@ void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *bloc
     VkMemoryRequirements memory_requirements = {0};
     vkGetBufferMemoryRequirements(instance->device, buffer, &memory_requirements);
     vkDestroyBuffer(instance->device, buffer, instance->alloc_callbacks);
+
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Block allocated ("
                    << "size=" << (uint32_t)block->size << ", "
                    << "alignment=" << (uint32_t)memory_requirements.alignment << ", "
                    << "dedicated=" << (block->dedicated ? "true" : "false") << ")\n";
+#endif
 
     block->properties.alignment = memory_requirements.alignment;
     block->handle = (void *)device_memory;
@@ -371,9 +387,11 @@ void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *bloc
 }
 
 void VulkanMemoryAllocator::deallocate_block(void *user_context, MemoryBlock *block) {
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Deallocating block ("
                    << "user_context=" << user_context << " "
                    << "block=" << (void *)(block) << ") ... \n";
+#endif
 
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(user_context);
     halide_abort_if_false(user_context, instance != nullptr);
@@ -381,21 +399,23 @@ void VulkanMemoryAllocator::deallocate_block(void *user_context, MemoryBlock *bl
     halide_abort_if_false(user_context, instance->physical_device != nullptr);
     halide_abort_if_false(user_context, block != nullptr);
 
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanBlockAllocator: deallocating block ("
                    << "size=" << (uint32_t)block->size << ", "
                    << "dedicated=" << (block->dedicated ? "true" : "false") << " "
                    << "usage=" << halide_memory_usage_name(block->properties.usage) << " "
                    << "caching=" << halide_memory_caching_name(block->properties.caching) << " "
                    << "visibility=" << halide_memory_visibility_name(block->properties.visibility) << ")\n";
+#endif
 
     if (block->handle == nullptr) {
-        debug(nullptr) << "VulkanBlockAllocator: Unable to deallocate block! Invalid handle!\n";
+        error(nullptr) << "VulkanBlockAllocator: Unable to deallocate block! Invalid handle!\n";
         return;
     }
 
     VkDeviceMemory *device_memory = reinterpret_cast<VkDeviceMemory *>(block->handle);
     if (device_memory == nullptr) {
-        debug(nullptr) << "VulkanBlockAllocator: Unable to deallocate block! Invalid device memory handle!\n";
+        error(nullptr) << "VulkanBlockAllocator: Unable to deallocate block! Invalid device memory handle!\n";
         return;
     }
 
@@ -439,7 +459,7 @@ uint32_t VulkanMemoryAllocator::select_memory_type(void *user_context,
     case MemoryVisibility::DefaultVisibility:
     case MemoryVisibility::InvalidVisibility:
     default:
-        debug(nullptr) << "VulkanMemoryAllocator: Unable to convert type! Invalid memory visibility request!\n\t"
+        error(nullptr) << "VulkanMemoryAllocator: Unable to convert type! Invalid memory visibility request!\n\t"
                        << "visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
         return invalid_memory_type;
     };
@@ -465,7 +485,7 @@ uint32_t VulkanMemoryAllocator::select_memory_type(void *user_context,
         break;
     case MemoryCaching::InvalidCaching:
     default:
-        debug(nullptr) << "VulkanMemoryAllocator: Unable to convert type! Invalid memory caching request!\n\t"
+        error(nullptr) << "VulkanMemoryAllocator: Unable to convert type! Invalid memory caching request!\n\t"
                        << "caching=" << halide_memory_caching_name(properties.caching) << "\n";
         return invalid_memory_type;
     };
@@ -501,7 +521,7 @@ uint32_t VulkanMemoryAllocator::select_memory_type(void *user_context,
     }
 
     if (result == invalid_memory_type) {
-        debug(nullptr) << "VulkanBlockAllocator: Failed to find appropriate memory type for given properties:\n\t"
+        error(nullptr) << "VulkanBlockAllocator: Failed to find appropriate memory type for given properties:\n\t"
                        << "usage=" << halide_memory_usage_name(properties.usage) << " "
                        << "caching=" << halide_memory_caching_name(properties.caching) << " "
                        << "visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
@@ -514,9 +534,11 @@ uint32_t VulkanMemoryAllocator::select_memory_type(void *user_context,
 // --
 
 void VulkanMemoryAllocator::allocate_region(void *user_context, MemoryRegion *region) {
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Allocating region ("
                    << "user_context=" << user_context << " "
                    << "region=" << (void *)(region) << ") ... \n";
+#endif
 
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(user_context);
     halide_abort_if_false(user_context, instance != nullptr);
@@ -524,6 +546,7 @@ void VulkanMemoryAllocator::allocate_region(void *user_context, MemoryRegion *re
     halide_abort_if_false(user_context, instance->physical_device != nullptr);
     halide_abort_if_false(user_context, region != nullptr);
 
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanRegionAllocator: Allocating region ("
                    << "size=" << (uint32_t)region->size << ", "
                    << "offset=" << (uint32_t)region->offset << ", "
@@ -531,6 +554,7 @@ void VulkanMemoryAllocator::allocate_region(void *user_context, MemoryRegion *re
                    << "usage=" << halide_memory_usage_name(region->properties.usage) << " "
                    << "caching=" << halide_memory_caching_name(region->properties.caching) << " "
                    << "visibility=" << halide_memory_visibility_name(region->properties.visibility) << ")\n";
+#endif
 
     uint32_t usage_flags = instance->select_memory_usage(user_context, region->properties);
 
@@ -583,15 +607,19 @@ void VulkanMemoryAllocator::allocate_region(void *user_context, MemoryRegion *re
 }
 
 void VulkanMemoryAllocator::deallocate_region(void *user_context, MemoryRegion *region) {
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Deallocating region ("
                    << "user_context=" << user_context << " "
                    << "region=" << (void *)(region) << ") ... \n";
+#endif
 
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(user_context);
     halide_abort_if_false(user_context, instance != nullptr);
     halide_abort_if_false(user_context, instance->device != nullptr);
     halide_abort_if_false(user_context, instance->physical_device != nullptr);
     halide_abort_if_false(user_context, region != nullptr);
+
+#if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanRegionAllocator: Deallocating region ("
                    << "size=" << (uint32_t)region->size << ", "
                    << "offset=" << (uint32_t)region->offset << ", "
@@ -599,9 +627,10 @@ void VulkanMemoryAllocator::deallocate_region(void *user_context, MemoryRegion *
                    << "usage=" << halide_memory_usage_name(region->properties.usage) << " "
                    << "caching=" << halide_memory_caching_name(region->properties.caching) << " "
                    << "visibility=" << halide_memory_visibility_name(region->properties.visibility) << ")\n";
+#endif
 
     if (region->handle == nullptr) {
-        debug(nullptr) << "VulkanRegionAllocator: Unable to deallocate region! Invalid handle!\n";
+        error(nullptr) << "VulkanRegionAllocator: Unable to deallocate region! Invalid handle!\n";
         return;
     }
 

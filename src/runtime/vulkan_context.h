@@ -102,6 +102,15 @@ int vk_create_instance(void *user_context, const StringTable &requested_layers, 
         debug(user_context) << "    extension: " << required_instance_extensions[n] << "\n";
     }
 
+    // If we're running under Molten VK, we must enable the portability extension and create flags
+    // to allow non-physical devices that are emulated to appear in the device list.
+    uint32_t create_flags = 0;
+    if (supported_instance_extensions.contains("VK_KHR_portability_enumeration") &&
+        supported_instance_extensions.contains("VK_MVK_macos_surface")) {
+        create_flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+        required_instance_extensions.append(user_context, "VK_KHR_portability_enumeration");
+    }
+
     VkApplicationInfo app_info = {
         VK_STRUCTURE_TYPE_APPLICATION_INFO,                                                        // struct type
         nullptr,                                                                                   // Next
@@ -114,7 +123,7 @@ int vk_create_instance(void *user_context, const StringTable &requested_layers, 
     VkInstanceCreateInfo create_info = {
         VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         nullptr,                                                                            // Next
-        0,                                                                                  // Flags
+        create_flags,                                                                       // Flags
         &app_info,                                                                          // ApplicationInfo
         (uint32_t)requested_layers.size(), requested_layers.data(),                         // Layers
         (uint32_t)required_instance_extensions.size(), required_instance_extensions.data()  // Extensions
@@ -250,6 +259,14 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     // Get the device features so that all supported features are enabled when device is created
     //
     VkPhysicalDeviceFeatures device_features = {};
+    void *extended_features_ptr = nullptr;
+    void *standard_features_ptr = nullptr;
+
+    debug(user_context) << "Vulkan: Querying for device features...\n";
+    vkGetPhysicalDeviceFeatures(*physical_device, &device_features);
+    debug(user_context) << "Vulkan: Shader Float64 support: " << (device_features.shaderFloat64 ? "true" : "false") << "...\n";
+    debug(user_context) << "Vulkan: Shader Int64 support: " << (device_features.shaderInt64 ? "true" : "false") << "...\n";
+    debug(user_context) << "Vulkan: Shader Int16 support: " << (device_features.shaderInt16 ? "true" : "false") << "...\n";
 
     // If the instance runtime supports querying extended device features, request them
     VkPhysicalDeviceShaderFloat16Int8FeaturesKHR shader_f16_i8_ext = {
@@ -260,9 +277,6 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
         &shader_f16_i8_ext,
         device_features};
-
-    void *extended_features_ptr = nullptr;
-    void *standard_features_ptr = nullptr;
 
     // Look for v1.1+ device feature query method
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(*instance, "vkGetPhysicalDeviceFeatures2KHR");  // v1.0+
@@ -277,7 +291,6 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         debug(user_context) << "Vulkan: Shader Float16 support: " << (shader_f16_i8_ext.shaderFloat16 ? "true" : "false") << "...\n";
         extended_features_ptr = (void *)(&device_features_ext);  // pass v1.1 extended features (which also contains the standard features)
     } else {
-        vkGetPhysicalDeviceFeatures(*physical_device, &device_features);
         standard_features_ptr = &device_features;  // pass v1.0 standard features
     }
 

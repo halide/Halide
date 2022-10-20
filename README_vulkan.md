@@ -177,8 +177,14 @@ https://github.com/KhronosGroup/SPIRV-Tools
 
 -   During CodeGen we enable capabilities in the SPIR-V binary for 
     Int8, Int16, Float16, and Float64 based on the Halide IR, assuming
-    the device will support these requirements.  We may need limit 
-    these if targetting a lower class device.
+    the device will support these requirements.  We may need to limit 
+    these if targetting a lower class device. We may need to add Halide 
+	feature flags to address these issues.
+
+-   When generating vector lengths greater than 8 components, we assume 
+    Vector16 support is available.  This may not be the case when running
+	on lower class devices.  Same as above ... we may need a feature flag
+	to limit vector lengths to a specific class of device.
 
 # Known TODO:
 

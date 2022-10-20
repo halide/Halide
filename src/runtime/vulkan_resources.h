@@ -839,7 +839,7 @@ VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, Vulkan
     }
 
     VkResult result = vkCreateShaderModule(allocator->current_device(), &shader_info, allocator->callbacks(), &cache_entry->shader_module);
-    if ((result != VK_SUCCESS)) {  // } || (cache_entry->shader_module == nullptr)) {
+    if ((result != VK_SUCCESS)) {
         error(user_context) << "Vulkan: vkCreateShaderModule Failed! Error returned: " << vk_get_error_name(result) << "\n";
         vk_host_free(user_context, cache_entry->entry_point_data, allocator->callbacks());
         vk_host_free(user_context, cache_entry, allocator->callbacks());
@@ -853,7 +853,7 @@ VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, Vulkan
             error(user_context) << "Vulkan: Failed to allocate descriptor set layouts for cache entry! Out of memory!\n";
             return nullptr;
         }
-        memset(cache_entry->descriptor_set_layouts, 0, sizeof(VkDescriptorSetLayout));
+        memset(cache_entry->descriptor_set_layouts, 0, cache_entry->entry_point_count * sizeof(VkDescriptorSetLayout));
     }
 
 #ifdef DEBUG_RUNTIME
