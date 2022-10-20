@@ -1,5 +1,5 @@
 cmake>=3.22
-imageio
+imageio>=2.16
 ninja; platform_system!='Windows'
 numpy
 pillow
