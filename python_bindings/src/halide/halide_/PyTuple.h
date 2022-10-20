@@ -21,7 +21,7 @@ inline py::tuple to_python_tuple(const T &ht) {
 // in: convertible-to-Expr, or tuple-of-convertible-to-Expr
 // out: Halide::Tuple
 // throws exception if not convertible
-Tuple to_halide_tuple(py::object o);
+Tuple to_halide_tuple(const py::object &o);
 
 }  // namespace PythonBindings
 }  // namespace Halide

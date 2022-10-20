@@ -3,7 +3,7 @@
 namespace Halide {
 namespace PythonBindings {
 
-Tuple to_halide_tuple(py::object o) {
+Tuple to_halide_tuple(const py::object &o) {
     try {
         Expr e = o.cast<Expr>();
         return Tuple(e);
@@ -13,7 +13,7 @@ Tuple to_halide_tuple(py::object o) {
 
     try {
         py::tuple t = o.cast<py::tuple>();
-        if (t.size() == 0) {
+        if (t.empty()) {
             throw py::value_error("Cannot use a zero-length tuple-of-Expr");
         }
         std::vector<Expr> v(t.size());
