@@ -25,6 +25,9 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    env:
+      CMAKE_PREFIX_PATH: "${{ github.workspace }}/local-llvm;${{ github.workspace }}/local-halide"
+
     strategy:
       fail-fast: false
       matrix:
