@@ -1,6 +1,6 @@
 // A Halide implementation of bilateral-guided upsampling.
 
-// Adapted from https://github.com/google/bgu/blob/master/src/halide/bgu.cpp
+// Adapted from https://github.com/google/bgu/tree/master/src/halide
 
 // Copyright 2016 Google Inc.
 //
