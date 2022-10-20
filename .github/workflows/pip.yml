@@ -25,9 +25,6 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    env:
-      CMAKE_PREFIX_PATH: ${{ github.workspace }}/local-halide
-
     strategy:
       fail-fast: false
       matrix:
@@ -181,6 +178,7 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.10.2
         env:
+          CMAKE_PREFIX_PATH: ${{ github.workspace }}/local-halide
           CIBW_BUILD: "cp38-${{ matrix.pytag }} cp39-${{ matrix.pytag }} cp310-${{ matrix.pytag }}"
           CIBW_ARCHS_MACOS: "universal2"
 
