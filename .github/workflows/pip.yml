@@ -98,7 +98,8 @@ jobs:
 
       - name: Cache LLVM build folder
         id: cache-llvm
-        uses: actions/cache@v3.0.11
+        # uses: actions/cache@v3.0.11 TODO
+        uses: pat-s/always-upload-cache@v3.0.1
         with:
           path: local-llvm
           key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
