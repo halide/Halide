@@ -106,7 +106,7 @@ bool is_native_vector_type(const Type &t, const Target &target) {
 }
 
 bool is_double_native_vector_type(const Type &t, const Target &target) {
-    int single_vector_bitwidth = sizeof(uint8_t) * target.natural_vector_size<uint8_t>();
+    int single_vector_bitwidth = 8 * target.natural_vector_size<uint8_t>();
 
     int double_vector_bitwidth = single_vector_bitwidth * 2;
     return (t.bits() % 8 == 0) && (double_vector_bitwidth % t.bits() == 0) && (double_vector_bitwidth / t.bits() == t.lanes());
