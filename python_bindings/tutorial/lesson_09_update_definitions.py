@@ -1,18 +1,26 @@
 #!/usr/bin/python3
-
+#
 # Halide tutorial lesson 9
-
+#
 # This lesson demonstrates how to define a hl.Func in multiple passes,
 # including scattering.
-
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_09_update_definitions
-# in a shell with the current directory at python_bindings/
-from datetime import datetime
+#
+# With Halide for Python installed, run
+#
+#    python3 path/to/lesson_09_update_definitions.py
+#
+# in a shell.
+#
+# - To install Halide for Python from PyPI:
+#   - python3 -m pip install halide
+#
+# - To install Halide for Python from source:
+#   - Build and install Halide locally using CMake (see README_cmake.md)
+#   - export HALIDE_INSTALL=path/to/halide/install
+#   - export PYTHONPATH=$HALIDE_INSTALL/lib/python3/site-packages
 
 import halide as hl
-
-import imageio
+import imageio.v2 as imageio
 import numpy as np
 import os.path
 
@@ -22,10 +30,10 @@ def main():
     x, y = hl.Var("x"), hl.Var("y")
 
     # Load a grayscale image to use as an input.
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/gray.png")
+    image_path = os.path.join(os.path.dirname(__file__), "images/gray.png")
     input_data = imageio.imread(image_path)
     if True:
-         # making the image smaller to go faster
+        # making the image smaller to go faster
         input_data = input_data[:160, :150]
     assert input_data.dtype == np.uint8
     input = hl.Buffer(input_data)
@@ -33,8 +41,8 @@ def main():
     # You can define a hl.Func in multiple passes. Let's see a toy
     # example first.
     if True:
-        # The first definition must be one like we have seen already
-        # - a mapping from Vars to an hl.Expr:
+        # The first definition must be one like we have seen already:
+        # a mapping from Vars to an hl.Expr:
         f = hl.Func("f")
         f[x, y] = x + y
         # We call this first definition the "pure" definition.
@@ -47,12 +55,6 @@ def main():
         # "reduction" definitions. A reduction definition is an
         # update definition that recursively refers back to the
         # function's current value at the same site:
-        if False:
-            e = f[x, y] + 17
-            print("f[x, y] + 17", e)
-            print("(f[x, y] + 17).type()", e.type())
-            print("(f[x, y]).type()", f[x, y].type())
-
         f[x, y] = f[x, y] + 17
 
         # If we confine our update to a single row, we can
@@ -68,19 +70,17 @@ def main():
         # definition in all references to the function on the left-
         # and right-hand sides. So the following definitions are
         # legal updates:
-        # x is used, so all uses of f must have x as the first argument.
         f[x, 17] = x + 8
-        # y is used, so all uses of f must have y as the second argument.
         f[0, y] = y * 8
         f[x, x + 1] = x + 8
         f[y / 2, y] = f[0, y] * 17
 
-        # But these ones would cause an error:
+        # But these would cause an error:
+        #
         # f[x, 0) = f[x + 1, 0) <- First argument to f on the right-hand-side must be 'x', not 'x + 1'.
         # f[y, y + 1) = y + 8   <- Second argument to f on the left-hand-side must be 'y', not 'y + 1'.
-        # f[y, x) = y - x      <- Arguments to f on the left-hand-side are in the wrong places.
-        # f[3, 4) = x + y      <- Free variables appear on the right-hand-side
-        # but not the left-hand-side.
+        # f[y, x) = y - x       <- Arguments to f on the left-hand-side are in the wrong places.
+        # f[3, 4) = x + y       <- Free variables appear on the right-hand-side but not the left-hand-side.
 
         # We'll realize this one just to make sure it compiles. The
         # second-to-last definition forces us to realize over a
@@ -91,8 +91,8 @@ def main():
         # before the next one begins. Let's trace the loads and
         # stores for a simpler example:
         g = hl.Func("g")
-        g[x, y] = x + y   # Pure definition
-        g[2, 1] = 42      # First update definition
+        g[x, y] = x + y    # Pure definition
+        g[2, 1] = 42       # First update definition
         g[x, 0] = g[x, 1]  # Second update definition
 
         g.trace_loads()
@@ -110,9 +110,11 @@ def main():
 
         # First update definition
         result[1][2] = 42
+
         # Second update definition
         for xx in range(4):
             result[0][xx] = result[1][xx]
+
     # end of section
 
     # Putting update passes inside loops.
@@ -130,10 +132,10 @@ def main():
         # ...
         # f[x, 49) = f[x, 49) * f[x, 49)
 
-        # Or equivalently using a compile-time loop in our C++:
-        # for (int i = 0 i < 50 i++) {
-        #   f[x, i) = f[x, i) * f[x, i)
+        # Or equivalently using a compile-time loop in our Python:
         #
+        #   for i in range (0, 50):
+        #     f[x, i] = f[x, i] * f[x, i]
 
         # But it's more manageable and more flexible to put the loop
         # in the generated code. We do this by defining a "reduction
@@ -198,7 +200,8 @@ def main():
         # Check the answers agree:
         for xx in range(256):
             assert py_result[xx] == halide_result[xx], \
-                "halide_result(%d) = %d instead of %d" % (xx, halide_result[xx], py_result[xx])
+                "halide_result(%d) = %d instead of %d" % (
+                    xx, halide_result[xx], py_result[xx])
 
     # Scheduling update steps
     if True:
@@ -223,15 +226,14 @@ def main():
         # and parallelizes the pure definition only.
         f.vectorize(x, 4).parallel(y)
 
-        # We use hl.Func::update(int) to get a handle to an update step
+        # We use hl.Func.update(int) to get a handle to an update step
         # for the purposes of scheduling. The following line
         # vectorizes the first update step across x. We can't do
         # anything with y for this update step, because it doesn't
         # use y.
         f.update(0).vectorize(x, 4)
 
-        # Now we parallelize the second update step in chunks of size
-        # 4.
+        # Now we parallelize the second update step in chunks of size 4.
         yo, yi = hl.Var("yo"), hl.Var("yi")
         f.update(1).split(y, yo, yi, 4).parallel(yo)
 
@@ -263,7 +265,7 @@ def main():
                 yy = yo * 4 + yi
                 py_result[yy][1] = py_result[yy][0] + 2
 
-        # Check the C and Halide results match:
+        # Check the Python and Halide results match:
         for yy in range(16):
             for xx in range(16):
                 assert halide_result[xx, yy] == py_result[yy][xx], \
@@ -300,7 +302,8 @@ def main():
         # Check the results match
         for xx in range(10):
             assert halide_result[xx] == py_result[xx], \
-                "halide_result(%d) = %d instead of %d" % (xx, halide_result[xx], py_result[xx])
+                "halide_result(%d) = %d instead of %d" % (
+                    xx, halide_result[xx], py_result[xx])
 
         # For all other compute_at/store_at options, the reduction
         # gets placed where you would expect, somewhere in the loop
@@ -310,8 +313,7 @@ def main():
     # producer-consumer pair. This is a little more involved.
     if True:
         if True:
-            # Case 1: The consumer references the producer in the pure step
-            # only.
+            # Case 1: The consumer references the producer in the pure step only.
             producer, consumer = hl.Func("producer"), hl.Func("consumer")
             # The producer is pure.
             producer[x] = x * 17
@@ -358,11 +360,11 @@ def main():
             # Check the results match
             for xx in range(10):
                 assert halide_result[xx] == py_result[xx], \
-                    "halide_result(%d) = %d instead of %d" % (xx, halide_result[xx], py_result[xx])
+                    "halide_result(%d) = %d instead of %d" % (
+                        xx, halide_result[xx], py_result[xx])
 
         if True:
-            # Case 2: The consumer references the producer in the update step
-            # only
+            # Case 2: The consumer references the producer in the update step only
             producer, consumer = hl.Func("producer"), hl.Func("consumer")
             producer[x] = x * 17
             consumer[x] = x
@@ -376,7 +378,7 @@ def main():
 
             # Note however, that we didn't say:
             #
-            # producer.compute_at(consumer.update(0), x).
+            #   producer.compute_at(consumer.update(0), x).
             #
             # Scheduling is done with respect to Vars of a hl.Func, and
             # the Vars of a hl.Func are shared across the pure and
@@ -400,7 +402,8 @@ def main():
             # Check the results match
             for xx in range(10):
                 assert halide_result[xx] == py_result[xx], \
-                    "halide_result(%d) = %d instead of %d" % (xx, halide_result[xx], py_result[xx])
+                    "halide_result(%d) = %d instead of %d" % (
+                        xx, halide_result[xx], py_result[xx])
 
         if True:
             # Case 3: The consumer references the producer in
@@ -438,7 +441,8 @@ def main():
             # Check the results match
             for xx in range(10):
                 assert halide_result[xx] == py_result[xx], \
-                    "halide_result(%d) = %d instead of %d" % (xx, halide_result[xx], py_result[xx])
+                    "halide_result(%d) = %d instead of %d" % (
+                        xx, halide_result[xx], py_result[xx])
 
         if True:
             # Case 4: The consumer references the producer in
@@ -548,7 +552,8 @@ def main():
             # Check the results match
             for xx in range(10):
                 assert halide_result[xx] == py_result[xx], \
-                    "halide_result(%d) = %d instead of %d" % (xx, halide_result[xx], py_result[xx])
+                    "halide_result(%d) = %d instead of %d" % (
+                        xx, halide_result[xx], py_result[xx])
 
     # A real-world example of a reduction inside a producer-consumer chain.
     if True:
@@ -581,13 +586,12 @@ def main():
         # because the default schedule for reductions is
         # compute-innermost. Here's the equivalent Python:
 
-        #cast_to_uint8 = lambda x_: np.array([x_], dtype=np.uint8)[0]
         local_sum = np.empty((1), dtype=np.int32)
 
         py_result = hl.Buffer(hl.UInt(8), [input.width(), input.height()])
         for yy in range(input.height()):
             for xx in range(input.width()):
-                # FIXME this loop is quite slow
+                # FIXME: this loop is quite slow
                 # Pure step of local_sum
                 local_sum[0] = 0
                 # Update step of local_sum
@@ -599,9 +603,6 @@ def main():
                         local_sum[0] += input[clamped_x, clamped_y]
 
                 # Pure step of blurry
-                # py_result(x, y) = (uint8_t)(local_sum[0] / 25)
-                #py_result[xx, yy] = cast_to_uint8(local_sum[0] / 25)
-                # hl.cast done internally
                 py_result[xx, yy] = int(local_sum[0] / 25)
 
         # Check the results match
@@ -615,8 +616,7 @@ def main():
     if True:
         # There are several reduction helper functions provided in
         # Halide.h, which compute small reductions and schedule them
-        # innermost into their consumer. The most useful one is
-        # "sum".
+        # innermost into their consumer. The most useful one is "sum".
         f1 = hl.Func("f1")
         r = hl.RDom([(0, 100)])
         f1[x] = hl.sum(r + x) * 7
@@ -647,9 +647,11 @@ def main():
         # Check they all match.
         for xx in range(10):
             assert halide_result_1[xx] == py_result[xx], \
-                "halide_result_1(%d) = %d instead of %d" % (xx, halide_result_1[xx], py_result[xx])
+                "halide_result_1(%d) = %d instead of %d" % (
+                    xx, halide_result_1[xx], py_result[xx])
             assert halide_result_2[xx] == py_result[xx], \
-                "halide_result_2(%d) = %d instead of %d" % (xx, halide_result_2[xx], py_result[xx])
+                "halide_result_2(%d) = %d instead of %d" % (
+                    xx, halide_result_2[xx], py_result[xx])
 
     print("Success!")
     return 0

@@ -1,13 +1,23 @@
 #!/usr/bin/python3
-
+#
 # Halide tutorial lesson 3
-
+#
 # This lesson demonstrates how to inspect what the Halide compiler is
 # producing.
-
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_03_debugging_1
-# in a shell with the current directory at python_bindings/
+#
+# With Halide for Python installed, run
+#
+#    python3 path/to/lesson_03_debugging_1.py
+#
+# in a shell.
+#
+# - To install Halide for Python from PyPI:
+#   - python3 -m pip install halide
+#
+# - To install Halide for Python from source:
+#   - Build and install Halide locally using CMake (see README_cmake.md)
+#   - export HALIDE_INSTALL=path/to/halide/install
+#   - export PYTHONPATH=$HALIDE_INSTALL/lib/python3/site-packages
 
 import halide as hl
 
@@ -17,13 +27,14 @@ def main():
     # We'll start by defining the simple single-stage imaging
     # pipeline from lesson 1.
 
-    # This lesson will be about debugging, but unfortunately in C++,
+    # This lesson will be about debugging, but unfortunately, in Python,
     # objects don't know their own names, which makes it hard for us
     # to understand the generated code. To get around this, you can
     # pass a string to the hl.Func and hl.Var constructors to give them a
     # name for debugging purposes.
     gradient = hl.Func("gradient")
     x, y = hl.Var("x"), hl.Var("y")
+
     gradient[x, y] = x + y
 
     # Realize the function to produce an output image. We'll keep it
@@ -41,14 +52,14 @@ def main():
     # of compilation, and also the llvm bitcode we generate at the
     # end.
 
-    # If you'd prefer to read C code, the compile_to_c method emits C
-    # code that implements the Halide pipeline. It can't compile
-    # as-is without you also implementing some support functions, but
-    # it can be helpful for understanding what the Halide pipeline is
-    # doing. You pass it the name of the file, a list of arguments
-    # the generated function should take (none in this case), and the
-    # name of the generated function. Have a look inside gradient.cpp
-    # after compiling and running this lesson.
+    # If you'd prefer to read C++ code, the compile_to_c method emits C++ code
+    # that implements the Halide pipeline (not plain C, despite the name). It
+    # can't compile as-is without you also implementing some support functions,
+    # but it can be helpful for understanding what the Halide pipeline is
+    # doing. You pass it the name of the file, a list of arguments the
+    # generated function should take (none in this case), and the name of the
+    # generated function. Have a look inside gradient.cpp after compiling and
+    # running this lesson.
     gradient.compile_to_c("gradient.cpp", [], "gradient")
 
     # Using these two tricks -- setting HL_DEBUG_CODEGEN and calling

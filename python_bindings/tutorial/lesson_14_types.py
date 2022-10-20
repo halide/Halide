@@ -1,12 +1,22 @@
 #!/usr/bin/python3
-
+#
 # Halide tutorial lesson 14: The Halide type system
-
+#
 # This lesson more precisely describes Halide's type system.
-
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_14_types
-# in a shell with the current directory at python_bindings/
+#
+# With Halide for Python installed, run
+#
+#    python3 path/to/lesson_14_types.py
+#
+# in a shell.
+#
+# - To install Halide for Python from PyPI:
+#   - python3 -m pip install halide
+#
+# - To install Halide for Python from source:
+#   - Build and install Halide locally using CMake (see README_cmake.md)
+#   - export HALIDE_INSTALL=path/to/halide/install
+#   - export PYTHONPATH=$HALIDE_INSTALL/lib/python3/site-packages
 
 
 import halide as hl
@@ -24,13 +34,18 @@ def main():
     valid_halide_types = [
         hl.UInt(8), hl.UInt(16), hl.UInt(32), hl.UInt(64),
         hl.Int(8), hl.Int(16), hl.Int(32), hl.Int(64),
-        hl.Float(32), hl.Float(64), hl.Handle()]
+        hl.Float(16), hl.Float(32), hl.Float(64),
+        hl.Handle()]
+
+    # Note that Halide's C++ bindings support another type (BFloat16)
+    # which isn't yet supported in the Halide Python bindings. We intend
+    # to add that support in the future.
 
     # Constructing and inspecting types.
     if True:
         # You can programmatically examine the properties of a Halide
         # type. This is useful when you write a C++ function that has
-        # hl.Expr arguments and you wish to check their types:
+        # Expr arguments and you wish to check their types:
         assert hl.UInt(8).bits() == 8
         assert hl.Int(8).is_int()
 
@@ -40,28 +55,27 @@ def main():
         t = t.with_bits(t.bits() * 2)
         assert t == hl.UInt(16)
 
-        # The Type struct is also capable of representing vector types,
+        # The Type object is also capable of representing vector types,
         # but this is reserved for Halide's internal use. You should
-        # vectorize code by using hl.Func::vectorize, not by attempting to
+        # vectorize code by using Func.vectorize(), not by attempting to
         # construct vector expressions directly. You may encounter vector
         # types if you programmatically manipulate lowered Halide code,
-        # but this is an advanced topic (see
-        # hl.Func::add_custom_lowering_pass).
+        # but this is an advanced topic (see Func.add_custom_lowering_pass()).
 
-        # You can query any Halide hl.Expr for its type. An hl.Expr
-        # representing a hl.Var has type hl.Int(32):
+        # You can query any Expr for its type. An Expr
+        # representing a Var has type Int(32):
         x = hl.Var("x")
         assert hl.Expr(x).type() == hl.Int(32)
 
-        # Most transcendental functions in Halide hl.cast their inputs to a
-        # hl.Float(32) and return a hl.Float(32):
+        # Most transcendental functions in Halide cast their inputs to a
+        # Float(32) and return a Float(32):
         assert hl.sin(x).type() == hl.Float(32)
 
-        # You can hl.cast an hl.Expr from one Type to another using the hl.cast
-        # operator:
+        # You can cast an Expr from one Type to another using the cast()
+        # function:
         assert hl.cast(hl.UInt(8), x).type() == hl.UInt(8)
 
-        # You can also query any defined hl.Func for the types it produces.
+        # You can also query any defined Func for the types it produces.
         f1 = hl.Func("f1")
         f1[x] = hl.cast(hl.UInt(8), x)
         assert f1.types()[0] == hl.UInt(8)
@@ -91,8 +105,8 @@ def main():
         # The rules are as follows, and are applied in the order they are
         # written below.
 
-        # 1) It is an error to hl.cast or use arithmetic operators on Exprs of
-        # type hl.Handle().
+        # 1) It is an error to call cast() or use arithmetic operators on Exprs of
+        # type Handle().
 
         # 2) If the types are the same, then no type conversions occur.
         for t in valid_halide_types:
@@ -125,7 +139,8 @@ def main():
         # If this rule would cause the integer to overflow, then Halide
         # will trigger an error, e.g. uncommenting the following line
         # will cause this program to terminate with an error.
-        # hl.Expr bad = u8 + 257
+        #
+        #   bad = u8 + 257
 
         # 6) If both types are unsigned integers, or both types are
         # signed integers, then the narrower argument is promoted to
@@ -201,7 +216,6 @@ def average(a, b):
     if type(b) is not hl.Expr:
         b = hl.Expr(b)
 
-    "hl.Expr average(hl.Expr a, hl.Expr b)"
     # Types must match.
     assert a.type() == b.type()
 

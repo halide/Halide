@@ -1,13 +1,23 @@
 #!/usr/bin/python3
-
+#
 # Halide tutorial lesson 6.
-
+#
 # This lesson demonstrates how to evaluate a hl.Func over a domain that
 # does not start at (0, 0).
-
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_06_realizing_over_shifted_domains
-# in a shell with the current directory at python_bindings/
+#
+# With Halide for Python installed, run
+#
+#    python3 path/to/lesson_06_realizing_over_shifted_domains.py
+#
+# in a shell.
+#
+# - To install Halide for Python from PyPI:
+#   - python3 -m pip install halide
+#
+# - To install Halide for Python from source:
+#   - Build and install Halide locally using CMake (see README_cmake.md)
+#   - export HALIDE_INSTALL=path/to/halide/install
+#   - export PYTHONPATH=$HALIDE_INSTALL/lib/python3/site-packages
 
 import halide as hl
 
@@ -29,7 +39,7 @@ def main():
 
     # Previously we've realized gradient like so:
     #
-    # gradient.realize([8, 8])
+    #   gradient.realize([8, 8])
     #
     # This does three things internally:
     # 1) Generates code than can evaluate gradient over an arbitrary
@@ -68,7 +78,7 @@ def main():
     # evaluating gradient over an arbitrary rectangle.
     gradient.realize(shifted)
 
-    # From C++, we also access the image object using coordinates
+    # From Python, we also access the image object using coordinates
     # that start at (100, 50).
     for yy in range(50, 57):
         for xx in range(100, 105):
