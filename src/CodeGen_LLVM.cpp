@@ -2032,7 +2032,7 @@ void CodeGen_LLVM::visit(const Load *op) {
 
         llvm::Type *load_type = llvm_type_of(op->type.element_of());
         if (ramp && stride && stride->value == 1) {
-          value = codegen_dense_vector_load(op, nullptr);
+            value = codegen_dense_vector_load(op, nullptr);
         } else if (ramp && stride && 2 <= stride->value && stride->value <= 4) {
             // Try to rewrite strided loads as shuffles of dense loads,
             // aligned to the stride. This makes adjacent strided loads
@@ -3848,7 +3848,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                     }
                     bool generated = try_vector_predication_intrinsic("llvm.experimental.vp.strided.store", void_t, slice_lanes, AllEnabledMask(),
                                                                       {VPArg(slice_val, 0), VPArg(vec_ptr, 1, alignment), VPArg(stride_val, 2)});
-                    internal_assert(generated) << "Using vector predicated intrinsics, but code generation was not successful for strided store.\n"; 
+                    internal_assert(generated) << "Using vector predicated intrinsics, but code generation was not successful for strided store.\n";
                     add_tbaa_metadata(dyn_cast<Instruction>(value), op->name, slice_index);
                 } else {
                     Value *slice_index = slice_vector(index, i, slice_lanes);
@@ -5173,7 +5173,7 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llv
     internal_assert(!(any_scalable && any_fixed)) << "Cannot combine fixed and scalable vectors to vector predication intrinsic.\n";
 
     bool is_scalable = any_scalable;
-    
+
     std::vector<llvm::Value *> args;
     args.reserve(2 + vp_args.size());
     std::vector<string> mangled_types(args.size());
@@ -5234,7 +5234,7 @@ bool CodeGen_LLVM::try_vector_predication_comparison(const std::string &name, co
     llvm::MDBuilder builder(*context);
     llvm::Value *md_val = llvm::MetadataAsValue::get(*context, builder.createString(cmp_op));
     return try_vector_predication_intrinsic(name, llvm_type_of(result_type), result_type.lanes(), mask,
-                                            { VPArg(a, 0), VPArg(b), VPArg(md_val) });
+                                            {VPArg(a, 0), VPArg(b), VPArg(md_val)});
 }
 
 }  // namespace Internal
