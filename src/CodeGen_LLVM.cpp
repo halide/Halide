@@ -5234,7 +5234,7 @@ bool CodeGen_LLVM::try_vector_predication_comparison(const std::string &name, co
     llvm::MDBuilder builder(*context);
     llvm::Value *md_val = llvm::MetadataAsValue::get(*context, builder.createString(cmp_op));
     return try_vector_predication_intrinsic(name, llvm_type_of(result_type), result_type.lanes(), mask,
-                                            { VPArg(a, 0), VPArg(b), VPArg(md_val) });
+                                            {VPArg(a, 0), VPArg(b), VPArg(md_val)});
 }
 
 }  // namespace Internal
