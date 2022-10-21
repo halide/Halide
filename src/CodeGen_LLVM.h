@@ -597,8 +597,8 @@ protected:
      * returns true if it an instuction is generated, otherwise
      * returns false. */
     bool try_vector_predication_comparison(const std::string &name, const Type &result_type,
-                                                   MaskVariant mask, llvm::Value *a, llvm::Value *b,
-                                                   const char *cmp_op);
+                                           MaskVariant mask, llvm::Value *a, llvm::Value *b,
+                                           const char *cmp_op);
 
     /** Generate an intrisic call if use_llvm_vp_intrinsics is true
      * and length is greater than 1. If generated, assigns result

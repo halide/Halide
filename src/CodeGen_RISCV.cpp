@@ -86,7 +86,7 @@ int CodeGen_RISCV::native_vector_bits() const {
 int CodeGen_RISCV::maximum_vector_bits() const {
     return native_vector_bits() * 8;
 }
-  
+
 int CodeGen_RISCV::target_vscale() const {
     if (target.vector_bits != 0 &&
         target.has_feature(Target::RVV)) {
