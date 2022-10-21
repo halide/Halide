@@ -596,7 +596,7 @@ protected:
      * type. If generated, assigns result of vp intrinsic to value and
      * returns true if it an instuction is generated, otherwise
      * returns false. */
-    virtual bool try_vector_predication_comparison(const std::string &name, const Type &result_type,
+    bool try_vector_predication_comparison(const std::string &name, const Type &result_type,
                                                    MaskVariant mask, llvm::Value *a, llvm::Value *b,
                                                    const char *cmp_op);
 
