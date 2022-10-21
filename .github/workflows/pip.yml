@@ -4,13 +4,11 @@
 
 name: Build PyPI package
 
-#on:
-  # push:
-  #   branches: [ main ]
-  # release:
-  #   types: [ created ]
-
-on: [pull_request]
+on:
+  push:
+    branches: [ main ]
+  release:
+    types: [ created ]
 
 concurrency:
   group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
@@ -84,19 +82,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3.1.0
 
-      # Improving cache restore performance on Windows
-      # Do not do this: it cannot handle symlinks properly and will always fail
-      # - name: Use GNU tar
-      #   if: ${{ runner.os == 'Windows' }}
-      #   shell: cmd
-      #   run: |
-      #     echo "Adding GNU tar to PATH"
-      #     echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
-
       - name: Cache LLVM build folder
         id: cache-llvm
-        # uses: actions/cache@v3.0.11 TODO
-        uses: pat-s/always-upload-cache@v3.0.1
+        uses: actions/cache@v3.0.11
         with:
           path: local-llvm
           key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
