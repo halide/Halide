@@ -8,10 +8,10 @@ set(tests
     lesson_07_multi_stage_pipelines.py
     lesson_08_scheduling_2.py
     lesson_09_update_definitions.py
-    lesson_10_aot_compilation_generate.py
-    lesson_10_aot_compilation_run.py
-    lesson_11_cross_compilation.py
-    lesson_12_using_the_gpu.py
+    # lesson_10_aot_compilation_generate.py
+    # lesson_10_aot_compilation_run.py
+    # lesson_11_cross_compilation.py
+    # lesson_12_using_the_gpu.py
     lesson_13_tuples.py
     lesson_14_types.py
     )
