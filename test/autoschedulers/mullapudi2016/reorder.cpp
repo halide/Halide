@@ -25,11 +25,7 @@ double run_test_1(bool auto_schedule) {
         // Provide estimates on the pipeline output
         r.set_estimates({{0, 1024}, {0, 1024}, {0, 3}});
         // Auto-schedule the pipeline
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        p.auto_schedule(target);
-#else
         p.apply_autoscheduler(target, {"Mullapudi2016"});
-#endif
     } else {
         /*
         r.update(0).fuse(c, y, par).parallel(par).reorder(x, dom.x, dom.y).vectorize(x, 4);
@@ -82,11 +78,7 @@ double run_test_2(bool auto_schedule) {
         // Provide estimates on the pipeline output
         diff.set_estimates({{0, left_im.width()}, {0, left_im.height()}, {0, 32}, {0, 3}});
         // Auto-schedule the pipeline
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        p.auto_schedule(target);
-#else
         p.apply_autoscheduler(target, {"Mullapudi2016"});
-#endif
     } else {
         Var t("t");
         diff.reorder(c, z).fuse(c, z, t).parallel(t).vectorize(x, 16);
@@ -126,11 +118,7 @@ double run_test_3(bool auto_schedule) {
         // Provide estimates on the pipeline output
         r.set_estimates({{0, 1024}, {0, 1024}, {0, 3}});
         // Auto-schedule the pipeline
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        p.auto_schedule(target);
-#else
         p.apply_autoscheduler(target, {"Mullapudi2016"});
-#endif
     } else {
         Var par("par");
         r.update(0).fuse(c, y, par).parallel(par).reorder(x, dom.x, dom.y).vectorize(x, 4);

@@ -35,6 +35,7 @@ class GlobalVariable;
 #include <map>
 #include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "IRVisitor.h"
@@ -180,11 +181,6 @@ protected:
      * module. This allows reuse of one CodeGen_LLVM object to compiled
      * multiple related modules (e.g. multiple device kernels). */
     virtual void init_module();
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    /** Add external_code entries to llvm module. */
-    void add_external_code(const Module &halide_module);
-#endif
 
     /** Run all of llvm's optimization passes on the module. */
     void optimize_module();
@@ -566,38 +562,54 @@ protected:
     llvm::Constant *get_splat(int lanes, llvm::Constant *value,
                               VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
 
-    /** Call an "@llvm.vp.*" intrinsic, forming the full overloaded name and argument list.
-     * A key detail here is that the length of the vector operation is taken from the
-     * Halide type while the size of the LLVM vector type used (fixed or scalable) is taken
-     * from the LLVM promotion of the vector type, which should be the same as the types used
-     * in the arguments. These can be different. It may become useful to pass an explict
-     * length as well.
-     *
-     * The method is virtual to allow backends to extend this for architecture specific
-     * intrinsics. (E.g. RISC V LMUL.) Unfortunately, this involves matching the name as
-     * as string to do much. (TODO(zalman): decide if this is the right way to go based
-     * on LMUL experiment. Really LLVM ought to do this automatically for these intrinsics
-     * on larger lengths.)
-     *
-     * The name is the simple name like "add" for "@llvm.vp.add.v16i32".
-     * If mask is nullptr, it is provided as constant true.
-     * If b or c is nullptr, it is assumed to be a unary or binary operator respectively.
-     *
-     * Assigns result of vp intrinsic to value and returns true if it an instuction is generated,
-     * otherwise returns false.
+    /** Support for generating LLVM vector predication intrinsics
+     * ("@llvm.vp.*" and "@llvm.experimental.vp.*")
      */
-    virtual bool call_vector_predication_intrinsic(const std::string &name, const Type &result_type,
-                                                   llvm::Value *mask, llvm::Value *a, llvm::Value *b = nullptr,
-                                                   llvm::Value *c = nullptr, int alignment = 0,
-                                                   const std::string &overload_suffix = "",
-                                                   bool void_return = false, bool is_reduction = false);
+    // @{
+    /** Struct to hold descriptor for an argument to a vector
+     *  predicated intrinsic. This includes the value, whether the
+     *  type of the argument should be mangled into the intrisic name
+     *  and if so, where, and the alignment for pointer arguments. */
+    struct VPArg {
+        llvm::Value *value;
+        int mangle_index;
+        int alignment;
+        VPArg(llvm::Value *value, int32_t mangle_index = -1, int32_t alignment = 0)
+            : value(value), mangle_index(mangle_index), alignment(alignment) {
+        }
+    };
 
-    virtual bool call_vector_predication_comparison(const std::string &name, const Type &result_type,
-                                                    llvm::Value *mask,  // Pass nullptr for constrant true.
-                                                    llvm::Value *a, llvm::Value *b, const char *cmp_op);
+    /** Type indicating an intrinsic does not take a mask. */
+    struct NoMask {
+    };
+
+    /** Type indicating mask to use is all true -- all lanes enabled. */
+    struct AllEnabledMask {
+    };
+
+    /** Predication mask using the above two types for special cases
+     *   and an llvm::Value for the general one. */
+    typedef std::variant<NoMask, AllEnabledMask, llvm::Value *> MaskVariant;
+
+    /** Generate a vector predicated comparison intrinsic call if
+     * use_llvm_vp_intrinsics is true and result_type is a vector
+     * type. If generated, assigns result of vp intrinsic to value and
+     * returns true if it an instuction is generated, otherwise
+     * returns false. */
+    bool try_vector_predication_comparison(const std::string &name, const Type &result_type,
+                                                   MaskVariant mask, llvm::Value *a, llvm::Value *b,
+                                                   const char *cmp_op);
+
+    /** Generate an intrisic call if use_llvm_vp_intrinsics is true
+     * and length is greater than 1. If generated, assigns result
+     * of vp intrinsic to value and returns true if it an instuction
+     * is generated, otherwise returns false. */
+    bool try_vector_predication_intrinsic(const std::string &name, llvm::Type *llvm_result_type,
+                                          int32_t length, MaskVariant mask, std::vector<VPArg> args);
 
     /** Controls use of vector predicated intrinsics for vector operations. */
     bool use_llvm_vp_intrinsics;
+    // @}
 
 private:
     /** All the values in scope at the current code location during

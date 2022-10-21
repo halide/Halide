@@ -1,0 +1,3 @@
+graft python_bindings
+prune python_bindings/test
+prune python_bindings/tutorial
