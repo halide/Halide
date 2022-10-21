@@ -29,7 +29,7 @@ jobs:
         arch: [ x86_64, aarch64 ]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.1.0
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2.0.0
@@ -67,9 +67,6 @@ jobs:
 
     runs-on: ${{ matrix.runner }}
 
-    env:
-      CMAKE_PREFIX_PATH: ${{ github.workspace }}/local
-
     strategy:
       fail-fast: false
       matrix:
@@ -83,28 +80,29 @@ jobs:
             arch: x86_64;arm64
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.1.0
 
       - name: Cache LLVM build folder
         id: cache-llvm
-        uses: actions/cache@v3
+        uses: actions/cache@v3.0.11
         with:
-          path: local
+          path: local-llvm
           key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
 
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@latest
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.1.0
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         with:
+          path: llvm-src
           repository: llvm/llvm-project
           ref: llvmorg-${{ env.LLVM_VER }}
 
       - name: Configure LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: >
-          cmake -G Ninja -S llvm -B build
+          cmake -G Ninja -S llvm-src/llvm -B llvm-build
           -DCMAKE_BUILD_TYPE=Release
           "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
           "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly"
@@ -116,29 +114,40 @@ jobs:
           -DLLVM_ENABLE_TERMINFO=OFF
           -DLLVM_ENABLE_ZSTD=OFF
           -DLLVM_ENABLE_ZLIB=OFF
+          -DLLVM_ENABLE_OCAMLDOC=OFF
+          -DLLVM_ENABLE_BINDINGS=OFF
+          -DLLVM_ENABLE_IDE=OFF
 
       - name: Build LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --build build
+        run: cmake --build llvm-build
 
       - name: Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --install build --prefix local
+        run: cmake --install llvm-build --prefix local-llvm
+
+      # Remove the LLVM source tree after building it, otherwise we can
+      # run out of local space while building halide
+      - name: Clean LLVM Source
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        shell: bash
+        run: rm -rf llvm-src
 
       - name: Configure Halide
         if: runner.os == 'Windows'
         run: >
-          cmake -G "Visual Studio 17 2022" -T ClangCL -A "${{ matrix.arch }}" -S . -B build
+          cmake -G "Visual Studio 17 2022" -T ClangCL -A "${{ matrix.arch }}" -S . -B halide-build
           -DWITH_DOCS=NO
           -DWITH_PYTHON_BINDINGS=NO
           -DWITH_TESTS=NO
           -DWITH_TUTORIALS=NO
           -DWITH_UTILS=NO
+          -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
 
       - name: Configure Halide
         if: runner.os != 'Windows'
         run: >
-          cmake -G Ninja -S . -B build
+          cmake -G Ninja -S . -B halide-build
           -DCMAKE_BUILD_TYPE=Release
           "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
           -DWITH_DOCS=NO
@@ -146,16 +155,18 @@ jobs:
           -DWITH_TESTS=NO
           -DWITH_TUTORIALS=NO
           -DWITH_UTILS=NO
+          -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
 
       - name: Build Halide
-        run: cmake --build build --config Release
+        run: cmake --build halide-build --config Release
 
       - name: Install Halide
-        run: cmake --install build --config Release --prefix local
+        run: cmake --install halide-build --config Release --prefix local-halide
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.10.2
         env:
+          CMAKE_PREFIX_PATH: ${{ github.workspace }}/local-halide
           CIBW_BUILD: "cp38-${{ matrix.pytag }} cp39-${{ matrix.pytag }} cp310-${{ matrix.pytag }}"
           CIBW_ARCHS_MACOS: "universal2"
 
@@ -168,7 +179,7 @@ jobs:
     name: Make SDist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3.1.0
       - run: pipx run build --sdist
       - uses: actions/upload-artifact@v3
         with:
