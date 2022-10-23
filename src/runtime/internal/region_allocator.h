@@ -472,6 +472,7 @@ bool RegionAllocator::collect(void *user_context) {
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Collecting free block regions ("
                                     << "user_context=" << (void *)(user_context) << ") ...\n";
 
+    uint32_t count = 0;
     uint64_t reserved = block->reserved;
     StackBasicPrinter<256>(nullptr) << "    collecting unused regions ("
                                     << "block_ptr=" << (void *)block << " "
@@ -480,12 +481,12 @@ bool RegionAllocator::collect(void *user_context) {
 #endif
 
     bool result = false;
-    uint32_t count = 0;
     for (BlockRegion *block_region = block->regions; block_region != nullptr; block_region = block_region->next_ptr) {
         if (block_region->status == AllocationStatus::Available) {
             if (can_coalesce(block_region)) {
 
 #ifdef DEBUG_INTERNAL
+                count++;
                 StackBasicPrinter<256>(nullptr) << "    collecting region ("
                                                 << "block_ptr=" << (void *)block_region->block_ptr << " "
                                                 << "block_region=" << (void *)block_region << " "
@@ -495,7 +496,6 @@ bool RegionAllocator::collect(void *user_context) {
 #endif
                 block_region = coalesce_block_regions(user_context, block_region);
                 result = true;
-                count++;
             }
         }
     }
