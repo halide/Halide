@@ -1,5 +1,6 @@
 #include "SpirvIR.h"
 #include <iostream>
+#include <signal.h>
 
 #ifdef WITH_SPIRV
 
@@ -252,6 +253,9 @@ bool SpvBlock::is_defined() const {
 
 bool SpvBlock::is_terminated() const {
     check_defined();
+    if(contents->instructions.empty()) {
+        return false;
+    }
     switch (contents->instructions.back().op_code()) {
     case SpvOpBranch:
     case SpvOpBranchConditional:
@@ -313,7 +317,7 @@ SpvBlock SpvFunction::create_block(SpvId block_id) {
     check_defined();
     if (!contents->blocks.empty()) {
         SpvBlock last_block = tail_block();
-        if (!last_block.is_terminated()) {
+        if (last_block.is_defined() && !last_block.is_terminated()) {
             last_block.add_instruction(SpvFactory::branch(block_id));
         }
     }
@@ -1545,9 +1549,11 @@ SpvBuilder::ConstantKey SpvBuilder::make_constant_key(uint8_t code, uint8_t bits
     key = hash_combine(key, lanes);
     key = hash_combine(key, bytes);
 
-    const int8_t *ptr = reinterpret_bits<const int8_t *>(data);
-    for (size_t i = 0; i < bytes; ++i) {
-        key = hash_combine(key, uint64_t(ptr[i]));
+    if(data != nullptr) {
+        const int8_t *ptr = reinterpret_bits<const int8_t *>(data);
+        for (size_t i = 0; i < bytes; ++i) {
+            key = hash_combine(key, uint64_t(ptr[i]));
+        }
     }
     return key;
 }
@@ -2257,6 +2263,18 @@ SpvInstruction SpvFactory::store(SpvId ptr_id, SpvId obj_id, uint32_t access_mas
     return inst;
 }
 
+SpvInstruction SpvFactory::composite_insert(SpvId type_id, SpvId result_id, SpvId object_id, SpvId composite_id, const SpvFactory::Indices &indices) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpCompositeInsert);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operand(object_id);
+    inst.add_operand(composite_id);
+    for (SpvId i : indices) {
+        inst.add_immediate(i, SpvIntegerLiteral);
+    }
+    return inst;
+}
+
 SpvInstruction SpvFactory::composite_extract(SpvId type_id, SpvId result_id, SpvId composite_id, const SpvFactory::Indices &indices) {
     SpvInstruction inst = SpvInstruction::make(SpvOpCompositeExtract);
     inst.set_type_id(type_id);
@@ -2278,13 +2296,23 @@ SpvInstruction SpvFactory::composite_construct(SpvId type_id, SpvId result_id, c
     return inst;
 }
 
-SpvInstruction SpvFactory::vector_insert_dynamic(SpvId type_id, SpvId result_id, SpvId vector_id, SpvId value_id, uint32_t index) {
+SpvInstruction SpvFactory::vector_insert_dynamic(SpvId type_id, SpvId result_id, SpvId vector_id, SpvId value_id, SpvId index_id) {
     SpvInstruction inst = SpvInstruction::make(SpvOpVectorInsertDynamic);
     inst.set_type_id(type_id);
     inst.set_result_id(result_id);
     inst.add_operand(vector_id);
     inst.add_operand(value_id);
-    inst.add_immediate(index, SpvIntegerLiteral);
+    inst.add_operand(index_id);
+    return inst;
+}
+
+SpvInstruction SpvFactory::vector_extract_dynamic(SpvId type_id, SpvId result_id, SpvId vector_id, SpvId value_id, SpvId index_id) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpVectorExtractDynamic);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operand(vector_id);
+    inst.add_operand(value_id);
+    inst.add_operand(index_id);
     return inst;
 }
 

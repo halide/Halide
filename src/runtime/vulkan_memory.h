@@ -56,7 +56,8 @@ public:
 
     // Public interface methods
     MemoryRegion *reserve(void *user_context, MemoryRequest &request);
-    void reclaim(void *user_context, MemoryRegion *region);
+    void release(void *user_context, MemoryRegion *region); //< unmark and cache the region for reuse
+    void reclaim(void *user_context, MemoryRegion *region); //< free the region and consolidate
     bool collect(void *user_context);  //< returns true if any blocks were removed
     void release(void *user_context);
     void destroy(void *user_context);
@@ -152,6 +153,10 @@ void VulkanMemoryAllocator::initialize(void *user_context,
     device = dev;
     physical_device = phys_dev;
     alloc_callbacks = callbacks;
+    region_count = 0;
+    region_byte_count = 0;
+    block_count = 0;
+    block_byte_count = 0;
     BlockAllocator::MemoryAllocators allocators;
     allocators.system = system_allocator;
     allocators.block = {VulkanMemoryAllocator::allocate_block, VulkanMemoryAllocator::deallocate_block};
@@ -251,6 +256,18 @@ void VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
     vkUnmapMemory(device, *device_memory);
 }
 
+void VulkanMemoryAllocator::release(void *user_context, MemoryRegion *region) {
+#if defined(HL_VK_DEBUG_MEM)
+    debug(nullptr) << "VulkanMemoryAllocator: Releasing region ("
+                   << "user_context=" << user_context << " "
+                   << "region=" << (void *)(region) << ") ... \n";
+#endif
+    halide_abort_if_false(user_context, device != nullptr);
+    halide_abort_if_false(user_context, physical_device != nullptr);
+
+    return block_allocator->release(this, region);
+}
+
 void VulkanMemoryAllocator::reclaim(void *user_context, MemoryRegion *region) {
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Reclaiming region ("
@@ -291,6 +308,10 @@ void VulkanMemoryAllocator::destroy(void *user_context) {
                    << "user_context=" << user_context << ") ... \n";
 #endif
     block_allocator->destroy(this);
+    region_count = 0;
+    region_byte_count = 0;
+    block_count = 0;
+    block_byte_count = 0;
 }
 
 const VulkanMemoryConfig &
@@ -420,8 +441,20 @@ void VulkanMemoryAllocator::deallocate_block(void *user_context, MemoryBlock *bl
     }
 
     vkFreeMemory(instance->device, *device_memory, instance->alloc_callbacks);
-    instance->block_byte_count -= block->size;
-    instance->block_count--;
+
+    if(instance->block_count > 0) {
+        instance->block_count--;
+    } else {
+        error(nullptr) << "VulkanRegionAllocator: Block counter invalid ... reseting to zero!\n";
+        instance->block_count = 0;
+    }
+
+    if( int64_t(instance->block_byte_count) - int64_t(block->size) >= 0 ) {   
+        instance->block_byte_count -= block->size;
+    } else {
+        error(nullptr) << "VulkanRegionAllocator: Block byte counter invalid ... reseting to zero!\n";
+        instance->block_byte_count = 0;
+    }
 
     vk_host_free(nullptr, device_memory, instance->alloc_callbacks);
     device_memory = nullptr;
@@ -642,9 +675,19 @@ void VulkanMemoryAllocator::deallocate_region(void *user_context, MemoryRegion *
 
     vkDestroyBuffer(instance->device, *buffer, instance->alloc_callbacks);
     region->handle = nullptr;
-    instance->region_byte_count -= region->size;
-    instance->region_count--;
+    if(instance->region_count > 0) {
+        instance->region_count--;
+    } else {
+        error(nullptr) << "VulkanRegionAllocator: Region counter invalid ... reseting to zero!\n";
+        instance->region_count = 0;
+    }
 
+    if( int64_t(instance->region_byte_count) - int64_t(region->size) >= 0 ) {   
+        instance->region_byte_count -= region->size;
+    } else {
+        error(nullptr) << "VulkanRegionAllocator: Region byte counter invalid ... reseting to zero!\n";
+        instance->region_byte_count = 0;
+    }
     vk_host_free(nullptr, buffer, instance->alloc_callbacks);
     buffer = nullptr;
 }

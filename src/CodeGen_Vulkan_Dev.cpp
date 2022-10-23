@@ -16,6 +16,7 @@
 
 // Temporary:
 #include <fstream>
+#include <signal.h>
 
 #ifdef WITH_SPIRV
 
@@ -107,6 +108,7 @@ protected:
         void visit(const Allocate *) override;
         void visit(const Free *) override;
         void visit(const Realize *) override;
+        void visit(const ProducerConsumer *op) override;
         void visit(const IfThenElse *) override;
         void visit(const Evaluate *) override;
         void visit(const Shuffle *) override;
@@ -340,10 +342,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(const Expr &e) {
     SpvId result_id = value_id;
     for (int i = 0; i < e.type().lanes(); i++) {
         extract_lane(e, i).accept(this);
-        SpvId vector_id = builder.current_id();
-        SpvId composite_vector_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::vector_insert_dynamic(type_id, composite_vector_id, vector_id, value_id, i));
-        result_id = composite_vector_id;
+        SpvId extracted_id = builder.current_id();
+        SpvId composite_id = builder.reserve_id(SpvResultId);
+        SpvFactory::Indices indices = { (uint32_t)i };
+        builder.append(SpvFactory::composite_insert(type_id, composite_id, extracted_id, value_id, indices));
+        result_id = composite_id;
     }
     builder.update_id(result_id);
 }
@@ -560,8 +563,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mod): " << op->type << " ((" << op->a << ") % (" << op->b << "))\n";
     if (op->type.is_float()) {
-        // Takes sign of result from op->b
-        visit_binary_op(SpvOpFMod, op->type, op->a, op->b);
+        // SPIR-V FMod is strangely not what we want .. FRem does what we need
+        visit_binary_op(SpvOpFRem, op->type, op->a, op->b);
     } else {
         Expr e = lower_int_uint_mod(op->a, op->b);
         e.accept(this);
@@ -684,6 +687,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Not *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Not): " << op->type << " !(" << op->a << ")\n";
     visit_unary_op(SpvOpLogicalNot, op->type, op->a);
 }
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const ProducerConsumer *op) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(ProducerConsumer): name=" << op->name << " is_producer=" << (op->is_producer ? "true" : "false") << "\n";
+    op->body.accept(this);
+}
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Call): " << op->type << " " << op->name << " args=" << (uint32_t)op->args.size() << "\n";
@@ -695,53 +702,33 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 
-        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device &&
-            !(fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared)) {
+        // Follow GLSL semantics for GLCompute ... 
+        //
+        // barrier() -> control_barrier(Workgroup, Workgroup, AcquireRelease | WorkgroupMemory)
+        //
+        uint32_t execution_scope = SpvWorkgroupScope;
+        uint32_t memory_scope = SpvWorkgroupScope;
+        uint32_t control_mask = (SpvMemorySemanticsAcquireReleaseMask | SpvMemorySemanticsWorkgroupMemoryMask);
+        SpvId exec_scope_id = builder.declare_constant(UInt(32), &execution_scope);
+        SpvId memory_scope_id = builder.declare_constant(UInt(32), &memory_scope);
+        SpvId control_mask_id = builder.declare_constant(UInt(32), &control_mask);
+        builder.append(SpvFactory::control_barrier(exec_scope_id, memory_scope_id, control_mask_id));
 
-            // In Vulkan, execution scope is limited to Workgroup or Subgroup
-            uint32_t execution_scope = SpvWorkgroupScope;
-            uint32_t memory_scope = SpvDeviceScope;
-            uint32_t control_mask = (SpvMemorySemanticsAcquireReleaseMask |
-                                     SpvMemorySemanticsWorkgroupMemoryMask);
-            SpvId exec_scope_id = builder.declare_constant(UInt(32), &execution_scope);
-            SpvId memory_scope_id = builder.declare_constant(UInt(32), &memory_scope);
-            SpvId control_mask_id = builder.declare_constant(UInt(32), &control_mask);
-            builder.append(SpvFactory::control_barrier(exec_scope_id, memory_scope_id, control_mask_id));
+        if ((fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) ||
+            (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared)) {
 
-        } else if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
-            // In Vulkan, execution scope is limited to Workgroup or Subgroup
-            uint32_t execution_scope = SpvWorkgroupScope;
-            uint32_t memory_scope = SpvDeviceScope;
-            uint32_t control_mask = (SpvMemorySemanticsSequentiallyConsistentMask |
+            // groupMemoryBarrier() -> memory_barrier(Workgroup, AcquireRelease | UniformMemory | WorkgroupMemory | ImageMemory)
+            //
+            uint32_t memory_mask = (SpvMemorySemanticsAcquireReleaseMask |
                                      SpvMemorySemanticsUniformMemoryMask |
-                                     SpvMemorySemanticsSubgroupMemoryMask |
                                      SpvMemorySemanticsWorkgroupMemoryMask |
-                                     SpvMemorySemanticsCrossWorkgroupMemoryMask |
-                                     SpvMemorySemanticsAtomicCounterMemoryMask |
                                      SpvMemorySemanticsImageMemoryMask);
-            SpvId exec_scope_id = builder.declare_constant(UInt(32), &execution_scope);
-            SpvId memory_scope_id = builder.declare_constant(UInt(32), &memory_scope);
-            SpvId control_mask_id = builder.declare_constant(UInt(32), &control_mask);
-            builder.append(SpvFactory::control_barrier(exec_scope_id, memory_scope_id, control_mask_id));
-
-        } else if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared) {
-            uint32_t memory_scope = SpvWorkgroupScope;
-            uint32_t control_mask = (SpvMemorySemanticsAcquireReleaseMask |
-                                     SpvMemorySemanticsWorkgroupMemoryMask);
-            SpvId memory_scope_id = builder.declare_constant(UInt(32), &memory_scope);
-            SpvId control_mask_id = builder.declare_constant(UInt(32), &control_mask);
-            builder.append(SpvFactory::memory_barrier(memory_scope_id, control_mask_id));
-
-        } else {
-            // In Vulkan, execution scope is limited to Workgroup or Subgroup
-            uint32_t execution_scope = SpvWorkgroupScope;
-            uint32_t memory_scope = SpvDeviceScope;
-            uint32_t control_mask = SpvMemorySemanticsMaskNone;
-            SpvId exec_scope_id = builder.declare_constant(UInt(32), &execution_scope);
-            SpvId memory_scope_id = builder.declare_constant(UInt(32), &memory_scope);
-            SpvId control_mask_id = builder.declare_constant(UInt(32), &control_mask);
-            builder.append(SpvFactory::control_barrier(exec_scope_id, memory_scope_id, control_mask_id));
-        }
+            SpvId memory_mask_id = builder.declare_constant(UInt(32), &memory_mask);
+            builder.append(SpvFactory::memory_barrier(memory_scope_id, memory_mask_id));
+        } 
+        SpvId result_id = builder.declare_null_constant(op->type);
+        builder.update_id(result_id);        
+        
     } else if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
 
@@ -785,12 +772,21 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         visit_unary_op(SpvOpNot, op->type, op->args[0]);
     } else if (op->is_intrinsic(Call::if_then_else)) {
-        if (op->type.is_vector()) {
+        Expr cond = op->args[0];
+        if (const Broadcast *b = cond.as<Broadcast>()) {
+            cond = b->value;
+        }
+        if (cond.type().is_vector()) {
             scalarize(op);
+
         } else {
             // Generate Phi node if used as an expression.
-            internal_assert(op->args.size() == 3);
-            SpvFactory::BlockVariables block_vars = emit_if_then_else(op->args[0], op->args[1], op->args[2]);
+            internal_assert(op->args.size() == 2 || op->args.size() == 3);
+            Expr else_expr;
+            if( op->args.size() == 3 ) {
+                else_expr = op->args[2];
+            }
+            SpvFactory::BlockVariables block_vars = emit_if_then_else(op->args[0], op->args[1], else_expr);
             SpvId type_id = builder.declare_type(op->type);
             SpvId result_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::phi(type_id, result_id, block_vars));
@@ -1241,9 +1237,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LetStmt *let) {
     SpvId current_id = builder.current_id();
     ScopedSymbolBinding binding(symbol_table, let->name, {current_id, SpvStorageClassFunction});
     let->body.accept(this);
-
-    // TODO: Figure out undef here?
-    builder.update_id(SpvInvalidId);
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const AssertStmt *stmt) {
@@ -1331,11 +1324,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
 
     } else {
 
-        internal_assert(op->for_type == ForType::Serial) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit unhandled For type: " << op->for_type << "\n";
+        debug(2) << "  (serial for loop): min=" << op->min << " extent=" << op->extent << "\n";
 
-        // TODO: Loop vars are alway int32_t right?
-        SpvId index_type_id = builder.declare_type(Int(32));
-        SpvId index_var_type_id = builder.declare_pointer_type(index_type_id, SpvStorageClassFunction);
+        internal_assert(op->for_type == ForType::Serial) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit unhandled For type: " << op->for_type << "\n";
+        user_assert(op->min.type() == op->extent.type());
+        user_assert(op->min.type().is_int() || op->min.type().is_uint());
 
         op->min.accept(this);
         SpvId min_id = builder.current_id();
@@ -1343,11 +1336,17 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         SpvId extent_id = builder.current_id();
 
         // Compute max.
+        Type index_type = Int(32);
+        SpvId index_type_id = builder.declare_type(index_type);
+        SpvStorageClass storage_class = SpvStorageClassFunction;
+        SpvId index_var_type_id = builder.declare_pointer_type(index_type_id, storage_class);
         SpvId max_id = builder.reserve_id(SpvResultId);
         builder.append(SpvFactory::integer_add(index_type_id, max_id, min_id, extent_id));
 
         // Declare loop var
-        SpvId loop_var_id = builder.declare_variable(unique_name("_loop_idx"), index_var_type_id, SpvStorageClassFunction, min_id);
+        const std::string loop_var_name = unique_name("_loop_idx");
+        SpvId loop_var_id = builder.declare_variable(loop_var_name, index_var_type_id, storage_class, min_id);
+        symbol_table.push(loop_var_name, { loop_var_id, storage_class});
 
         SpvId header_block_id = builder.reserve_id(SpvBlockId);
         SpvId top_block_id = builder.reserve_id(SpvBlockId);
@@ -1358,7 +1357,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         SpvBlock header_block = builder.create_block(header_block_id);
         builder.enter_block(header_block);
         {
-            builder.append(SpvFactory::loop_merge(merge_block_id, continue_block_id, SpvLoopControlMaskNone));
+            builder.append(SpvFactory::loop_merge(merge_block_id, continue_block_id, SpvLoopControlDontUnrollMask));
             builder.append(SpvFactory::branch(top_block_id));
         }
         builder.leave_block();
@@ -1370,7 +1369,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
             SpvId loop_test_type_id = builder.declare_type(Bool());
             SpvId loop_test_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::load(index_type_id, current_index_id, loop_var_id));
-            builder.append(SpvFactory::less_than_equal(loop_test_type_id, loop_test_id, current_index_id, max_id, true));
+            builder.append(SpvFactory::less_than(loop_test_type_id, loop_test_id, current_index_id, max_id, true));
             builder.append(SpvFactory::conditional_branch(loop_test_id, body_block_id, merge_block_id));
         }
         builder.leave_block();
@@ -1378,7 +1377,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         SpvBlock body_block = builder.create_block(body_block_id);
         builder.enter_block(body_block);
         {
-            ScopedSymbolBinding binding(symbol_table, op->name, {current_index_id, SpvStorageClassFunction});
+            ScopedSymbolBinding binding(symbol_table, op->name, {current_index_id, storage_class});
             op->body.accept(this);
             builder.append(SpvFactory::branch(continue_block_id));
         }
@@ -1396,6 +1395,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
             builder.append(SpvFactory::branch(header_block_id));
         }
         builder.leave_block();
+        symbol_table.pop(loop_var_name);
 
         SpvBlock merge_block = builder.create_block(merge_block_id);
         builder.enter_block(merge_block);
@@ -1573,6 +1573,9 @@ CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const IfThenElse *op) {
+    if(!builder.current_function().is_defined()) {
+        user_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const IfThenElse *op): No active function for building!!\n";
+    }
     emit_if_then_else(op->condition, op->then_case, op->else_case);
 }
 
@@ -1581,19 +1584,172 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Evaluate *op) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op) {
-    internal_assert(op->vectors.size() == 2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Shuffle *op): SPIR-V codegen currently only supports shuffles of vector pairs.\n";
-    SpvId type_id = builder.declare_type(op->type);
-    op->vectors[0].accept(this);
-    SpvId vector0_id = builder.current_id();
-    op->vectors[1].accept(this);
-    SpvId vector1_id = builder.current_id();
+    std::cout << " CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Shuffle): " 
+             << "type=" << op->type << " "
+             << "vectors=" << (uint32_t)op->vectors.size() << " "
+             << "is_interleave=" << (op->is_interleave() ? "true" : "false") << " "
+             << "is_extract_element=" << (op->is_extract_element() ? "true" : "false") << "\n";
 
-    SpvFactory::Indices indices;
-    indices.insert(indices.end(), op->indices.begin(), op->indices.end());
+    // Traverse all the arg vectors
+    uint32_t arg_idx = 0;
+    SpvFactory::Operands arg_ids;
+    arg_ids.reserve(op->vectors.size());
+    for(const Expr& e : op->vectors) {
+        debug(2) << " CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Shuffle): Arg[" << arg_idx++ << "] => " << e << "\n"; 
+        e.accept(this);
+        arg_ids.push_back(builder.current_id());
+    }
 
-    SpvId result_id = builder.reserve_id(SpvResultId);
-    builder.append(SpvFactory::vector_shuffle(type_id, result_id, vector0_id, vector1_id, indices));
-    builder.update_id(result_id);
+    if (op->is_interleave()) {
+        int op_lanes = op->type.lanes();
+        internal_assert(!arg_ids.empty());
+        int arg_lanes = op->vectors[0].type().lanes();
+
+        std::cout << "    vector interleave x" << (uint32_t)op->vectors.size() << " : ";
+        for(int idx : op->indices) {
+            std::cout << idx << " ";
+        }
+        std::cout << "\n";
+
+        if (arg_ids.size() == 1) {
+
+            // 1 argument, just do a simple assignment via a cast
+            SpvId result_id = cast_type(op->type, op->vectors[0].type(), arg_ids[0]);
+            builder.update_id(result_id);
+
+        } else if (arg_ids.size() == 2) {
+
+            // 2 arguments, use a composite insert to update even and odd indices 
+            uint32_t even_idx = 0;
+            uint32_t odd_idx = 1;
+            SpvFactory::Indices even_indices;
+            SpvFactory::Indices odd_indices;
+            for(int i = 0; i < op_lanes; ++i) {
+                even_indices.push_back(even_idx);
+                odd_indices.push_back(odd_idx);
+                even_idx += 2;
+                odd_idx += 2;
+            }
+
+            SpvId type_id = builder.declare_type(op->type);
+            SpvId value_id = builder.declare_null_constant(op->type);
+            SpvId partial_id = builder.reserve_id(SpvResultId);
+            SpvId result_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::composite_insert(type_id, partial_id, arg_ids[0], value_id, even_indices));
+            builder.append(SpvFactory::composite_insert(type_id, result_id, arg_ids[1], partial_id, odd_indices));
+            builder.update_id(result_id);
+
+        } else {
+            // 3+ arguments, shuffle via a vector literal
+            // selecting the appropriate elements of the vectors
+            int num_vectors = (int)op->vectors.size();           
+            std::vector<SpvFactory::Components> vector_component_ids(num_vectors);
+            for(uint32_t i = 0; i < (uint32_t)arg_ids.size(); ++i) {
+                if(op->vectors[i].type().is_vector()) {
+                    vector_component_ids[i] = split_vector(op->vectors[i].type(), arg_ids[i]);
+                } else {
+                    vector_component_ids[i] = { arg_ids[i] };
+                }
+            }
+            
+            SpvFactory::Components result_component_ids(op_lanes);
+            for (int i = 0; i < op_lanes; i++) {
+                int arg = i % num_vectors;
+                int arg_idx = i / num_vectors;
+                internal_assert(arg_idx <= arg_lanes);
+                result_component_ids[i] = vector_component_ids[arg][arg_idx];
+            }
+
+            SpvId result_id = join_vector(op->type, result_component_ids);
+            builder.update_id(result_id);
+        }
+    } else if (op->is_extract_element()) {
+        int idx = op->indices[0];
+        internal_assert(idx >= 0);
+        internal_assert(idx <= op->vectors[0].type().lanes());
+        if(op->vectors[0].type().is_vector()) {
+            SpvFactory::Indices indices = { (uint32_t)idx };
+            SpvId type_id = builder.declare_type(op->type);
+            SpvId result_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::composite_extract(type_id, result_id, arg_ids[0], indices));
+            builder.update_id(result_id);
+        } else {
+            SpvId result_id = cast_type(op->type, op->vectors[0].type(), arg_ids[0]);
+            builder.update_id(result_id);
+        }
+    } else if (op->type.is_scalar()) {
+        // Deduce which vector we need. Apparently it's not required
+        // that all vectors have identical lanes, so a loop is required.
+        // Since idx of -1 means "don't care", we'll treat it as 0 to simplify.
+        SpvId result_id = SpvInvalidId;
+        int idx = std::max(0, op->indices[0]);
+        for (size_t vec_idx = 0; vec_idx < op->vectors.size(); vec_idx++) {
+            const int vec_lanes = op->vectors[vec_idx].type().lanes();
+            if (idx < vec_lanes) {
+                if (op->vectors[vec_idx].type().is_vector()) {
+                    SpvFactory::Indices indices = { (uint32_t)idx };
+                    SpvId type_id = builder.declare_type(op->type);
+                    result_id = builder.reserve_id(SpvResultId);
+                    builder.append(SpvFactory::composite_extract(type_id, result_id, arg_ids[vec_idx], indices));
+                } else {
+                    result_id = arg_ids[vec_idx];
+                }
+                break;
+            }
+            idx -= vec_lanes;
+        }
+    
+    } else {
+
+        // vector shuffle ... not interleaving
+        int op_lanes = op->type.lanes();
+        int num_vectors = (int)op->vectors.size();
+
+        std::cout << "    vector shuffle x" << num_vectors << " : ";
+        for(int idx : op->indices) {
+            std::cout << idx << " ";
+        }
+        std::cout << "\n";
+
+        if(num_vectors == 1) {
+            // 1 argument, just do a simple assignment via a cast
+            SpvId result_id = cast_type(op->type, op->vectors[0].type(), arg_ids[0]);
+            builder.update_id(result_id);
+        
+        } else if(num_vectors == 2) {
+
+            // 2 arguments, use the builtin vector shuffle that takes a pair of vectors
+            SpvFactory::Indices indices;
+            indices.reserve(op->indices.size());
+            indices.insert(indices.end(), op->indices.begin(), op->indices.end());
+            SpvId type_id = builder.declare_type(op->type);
+            SpvId result_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::vector_shuffle(type_id, result_id, arg_ids[0], arg_ids[1], indices));
+            builder.update_id(result_id);
+        } else {
+            std::vector<SpvFactory::Components> vector_component_ids(num_vectors);
+            for(uint32_t i = 0; i < (uint32_t)arg_ids.size(); ++i) {
+                if(op->vectors[i].type().is_vector()) {
+                    vector_component_ids[i] = split_vector(op->vectors[i].type(), arg_ids[i]);
+                } else {
+                    vector_component_ids[i] = { arg_ids[i] };
+                }
+            }
+            
+            SpvFactory::Components result_component_ids(op_lanes);
+            for (int i = 0; i < op_lanes && i < (int)op->indices.size(); i++) {
+                int idx = op->indices[i];
+                int arg = idx % num_vectors;
+                int arg_idx = idx / num_vectors;
+                internal_assert(arg_idx <= (int)vector_component_ids[arg].size());
+                result_component_ids[i] = vector_component_ids[arg][arg_idx];
+            }
+
+            SpvId result_id = join_vector(op->type, result_component_ids);
+            builder.update_id(result_id);        
+
+        }
+    }
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const VectorReduce *) {
@@ -1686,7 +1842,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::init_module() {
     // TODO: Should we autodetect and/or force 32bit or 64bit?
     builder.set_addressing_model(SpvAddressingModelLogical);
 
-    // TODO: Is there a better memory model to use?
+    // TODO: Should we autodetect the VulkanMemoryModel extension and use that instead?
     builder.set_memory_model(SpvMemoryModelGLSL450);
 
     // NOTE: Execution model for Vulkan must be GLCompute which requires Shader support
