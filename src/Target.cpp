@@ -976,11 +976,13 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return !has_feature(Metal) &&
+                   !has_feature(Vulkan) &&
                    !has_feature(OpenGLCompute) &&
                    !has_feature(D3D12Compute) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
             return (!has_feature(Metal) &&
+                    !has_feature(Vulkan) &&
                     !has_feature(OpenGLCompute) &&
                     !has_feature(D3D12Compute));
         }
