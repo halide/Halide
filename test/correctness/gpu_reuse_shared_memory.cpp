@@ -191,6 +191,8 @@ int main(int argc, char **argv) {
         printf("Running dynamic shared test\n");
         if (t.has_feature(Target::OpenGLCompute) && memory_type == MemoryType::GPUShared) {
             printf("Skipping test because GL doesn't support dynamic sizes for shared memory\n");
+        } else if(t.has_feature(Target::Vulkan) && memory_type == MemoryType::GPUShared) {
+            printf("Skipping test because Vulkan doesn't support dynamic sizes for shared memory\n");
         } else {
             if (dynamic_shared_test(memory_type) != 0) {
                 return -1;
