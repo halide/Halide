@@ -53,8 +53,9 @@ int find_pi() {
 
     T secant_result = evaluate_may_gpu<T>(g()[0]);
 
-    // Trig in openglcompute/d3d12 is approximate
-    float tolerance = target.has_feature(Target::OpenGLCompute) ||
+    // Trig in vulkan/openglcompute/d3d12 is approximate
+    float tolerance = target.has_feature(Target::Vulkan) ||
+                      target.has_feature(Target::OpenGLCompute) ||
                               target.has_feature(Target::D3D12Compute) ?
                           1e-5f :
                           1e-20f;

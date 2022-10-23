@@ -10,6 +10,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (t.has_feature(Target::Vulkan)) {
+        printf("[SKIP] Skipping test for Vulkan, as it does not support dynamically-sized shared memory\n");
+        return 0;
+    }
+
     if (t.has_feature(Target::OpenGLCompute)) {
         printf("[SKIP] Skipping test for OpenGLCompute, as it does not support dynamically-sized shared memory\n");
         return 0;

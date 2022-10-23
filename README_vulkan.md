@@ -205,7 +205,7 @@ modifications to run under Vulkan):
 
 | Totals | *PASS* 🟢 | *FAIL* 🔴 | 
 | --     | --        | --        |
-|        | 338       | 27        |
+|        | 340       | 25        |
 
 | Test Name | Status |
 | :--       |    --: |
@@ -312,7 +312,7 @@ modifications to run under Vulkan):
 | correctness_interval | *PASS* 🟢 |
 | correctness_unused_func | *PASS* 🟢 |
 | correctness_fuzz_float_stores | *PASS* 🟢 |
-| correctness_newtons_method | *FAIL* 🔴 |
+| correctness_newtons_method | *PASS* 🟢 |
 | correctness_compile_to_bitcode | *PASS* 🟢 |
 | correctness_lazy_convolution | *PASS* 🟢 |
 | correctness_image_wrapper | *PASS* 🟢 |
@@ -553,7 +553,7 @@ modifications to run under Vulkan):
 | correctness_unroll_huge_mux | *PASS* 🟢 |
 | correctness_parallel | *PASS* 🟢 |
 | correctness_code_explosion | *PASS* 🟢 |
-| correctness_gpu_dynamic_shared | *FAIL* 🔴 |
+| correctness_gpu_dynamic_shared | *PASS* 🟢 |
 | correctness_div_by_zero | *PASS* 🟢 |
 | correctness_convolution_multiple_kernels | *FAIL* 🔴 |
 | correctness_deinterleave4 | *PASS* 🟢 |
