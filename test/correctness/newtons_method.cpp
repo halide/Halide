@@ -55,7 +55,7 @@ int find_pi() {
 
     // Trig in vulkan/openglcompute/d3d12 is approximate
     float tolerance = target.has_feature(Target::Vulkan) ||
-                      target.has_feature(Target::OpenGLCompute) ||
+                              target.has_feature(Target::OpenGLCompute) ||
                               target.has_feature(Target::D3D12Compute) ?
                           1e-5f :
                           1e-20f;
