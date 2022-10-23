@@ -199,13 +199,13 @@ https://github.com/KhronosGroup/SPIRV-Tools
 
 # Current Status
 
-The following table outlines the state of the correctness tests (as of Oct-13) when 
+The following table outlines the state of the correctness tests (as of Oct-23) when 
 run with `HL_JIT_TARGET=host-vulkan` (NOTE: some tests may need additional 
 modifications to run under Vulkan):
 
 | Totals | *PASS* 🟢 | *FAIL* 🔴 | 
 | --     | --        | --        |
-|        | 329       | 36        |
+|        | 338       | 27        |
 
 | Test Name | Status |
 | :--       |    --: |
@@ -223,7 +223,7 @@ modifications to run under Vulkan):
 | correctness_gpu_reuse_shared_memory | *FAIL* 🔴 |
 | correctness_boundary_conditions | *PASS* 🟢 |
 | correctness_min_extent | *PASS* 🟢 |
-| correctness_gpu_sum_scan | *FAIL* 🔴 |
+| correctness_gpu_sum_scan | *PASS* 🟢 |
 | correctness_dynamic_allocation_in_gpu_kernel | *FAIL* 🔴 |
 | correctness_image_of_lists | *PASS* 🟢 |
 | correctness_tracing_broadcast | *PASS* 🟢 |
@@ -235,9 +235,9 @@ modifications to run under Vulkan):
 | correctness_compare_vars | *PASS* 🟢 |
 | correctness_non_vector_aligned_embeded_buffer | *PASS* 🟢 |
 | correctness_realize_larger_than_two_gigs | *PASS* 🟢 |
-| correctness_gpu_transpose | *FAIL* 🔴 |
+| correctness_gpu_transpose | *PASS* 🟢 |
 | correctness_side_effects | *PASS* 🟢 |
-| correctness_logical | *PASS* 🟢 |
+| correctness_logical | *FAIL* 🔴 |
 | correctness_func_lifetime_2 | *PASS* 🟢 |
 | correctness_device_crop | *FAIL* 🔴 |
 | correctness_print_loop_nest | *PASS* 🟢 |
@@ -249,7 +249,7 @@ modifications to run under Vulkan):
 | correctness_parallel_scatter | *PASS* 🟢 |
 | correctness_multi_splits_with_diff_tail_strategies | *PASS* 🟢 |
 | correctness_gpu_arg_types | *PASS* 🟢 |
-| correctness_cascaded_filters | *FAIL* 🔴 |
+| correctness_cascaded_filters | *PASS* 🟢 |
 | correctness_trim_no_ops | *PASS* 🟢 |
 | correctness_float16_t_comparison | *PASS* 🟢 |
 | correctness_legal_race_condition | *PASS* 🟢 |
@@ -297,7 +297,7 @@ modifications to run under Vulkan):
 | correctness_inverse | *FAIL* 🔴 |
 | correctness_skip_stages | *PASS* 🟢 |
 | correctness_cuda_8_bit_dot_product | *PASS* 🟢 |
-| correctness_gpu_vectorize | *FAIL* 🔴 |
+| correctness_gpu_vectorize | *PASS* 🟢 |
 | correctness_gpu_object_lifetime_3 | *PASS* 🟢 |
 | correctness_histogram | *PASS* 🟢 |
 | correctness_shared_self_references | *PASS* 🟢 |
@@ -336,7 +336,7 @@ modifications to run under Vulkan):
 | correctness_extern_consumer | *PASS* 🟢 |
 | correctness_func_wrapper | *PASS* 🟢 |
 | correctness_bounds_of_multiply | *PASS* 🟢 |
-| correctness_gpu_store_in_register_with_no_lanes_loop | *FAIL* 🔴 |
+| correctness_gpu_store_in_register_with_no_lanes_loop | *PASS* 🟢 |
 | correctness_gpu_condition_lifting | *PASS* 🟢 |
 | correctness_extern_consumer_tiled | *PASS* 🟢 |
 | correctness_float16_t_neon_op_check | *PASS* 🟢 |
@@ -434,7 +434,7 @@ modifications to run under Vulkan):
 | correctness_reduction_non_rectangular | *PASS* 🟢 |
 | correctness_left_shift_negative | *PASS* 🟢 |
 | correctness_set_custom_trace | *PASS* 🟢 |
-| correctness_vectorized_gpu_allocation | *FAIL* 🔴 |
+| correctness_vectorized_gpu_allocation | *PASS* 🟢 |
 | correctness_split_store_compute | *PASS* 🟢 |
 | correctness_c_function | *PASS* 🟢 |
 | correctness_specialize | *PASS* 🟢 |
@@ -446,12 +446,12 @@ modifications to run under Vulkan):
 | correctness_atomics | *PASS* 🟢 |
 | correctness_multipass_constraints | *PASS* 🟢 |
 | correctness_target | *PASS* 🟢 |
-| correctness_tuple_reduction | *FAIL* 🔴 |
+| correctness_tuple_reduction | *PASS* 🟢 |
 | correctness_dilate3x3 | *PASS* 🟢 |
 | correctness_image_io | *PASS* 🟢 |
 | correctness_gpu_param_allocation | *FAIL* 🔴 |
 | correctness_reschedule | *PASS* 🟢 |
-| correctness_isnan | *FAIL* 🔴 |
+| correctness_isnan | *PASS* 🟢 |
 | correctness_halide_buffer | *PASS* 🟢 |
 | correctness_bounds_of_cast | *PASS* 🟢 |
 | correctness_handle | *PASS* 🟢 |
@@ -484,7 +484,7 @@ modifications to run under Vulkan):
 | correctness_gpu_cpu_simultaneous_read | *PASS* 🟢 |
 | correctness_fast_trigonometric | *PASS* 🟢 |
 | correctness_compute_with | *PASS* 🟢 |
-| correctness_gpu_allocation_cache | *FAIL* 🔴 |
+| correctness_gpu_allocation_cache | *PASS* 🟢 |
 | correctness_compile_to | *PASS* 🟢 |
 | correctness_extern_output_expansion | *PASS* 🟢 |
 | correctness_gpu_texture | *PASS* 🟢 |
@@ -509,7 +509,7 @@ modifications to run under Vulkan):
 | correctness_loop_invariant_extern_calls | *PASS* 🟢 |
 | correctness_skip_stages_external_array_functions | *PASS* 🟢 |
 | correctness_chunk_sharing | *PASS* 🟢 |
-| correctness_multi_way_select | *FAIL* 🔴 |
+| correctness_multi_way_select | *PASS* 🟢 |
 | correctness_async_copy_chain | *FAIL* 🔴 |
 | correctness_gpu_give_input_buffers_device_allocations | *PASS* 🟢 |
 | correctness_oddly_sized_output | *PASS* 🟢 |
