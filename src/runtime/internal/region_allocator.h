@@ -47,9 +47,9 @@ public:
 
     // Public interface methods
     MemoryRegion *reserve(void *user_context, const MemoryRequest &request);
-    void release(void *user_context, MemoryRegion *memory_region); //< unmark and cache the region for reuse
-    void reclaim(void *user_context, MemoryRegion *memory_region); //< free the region and consolidate
-    bool collect(void *user_context);  //< returns true if any blocks were removed
+    void release(void *user_context, MemoryRegion *memory_region);  //< unmark and cache the region for reuse
+    void reclaim(void *user_context, MemoryRegion *memory_region);  //< free the region and consolidate
+    bool collect(void *user_context);                               //< returns true if any blocks were removed
     void release(void *user_context);
     void destroy(void *user_context);
 
@@ -139,8 +139,8 @@ MemoryRegion *RegionAllocator::reserve(void *user_context, const MemoryRequest &
     if (remaining < request.size) {
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "RegionAllocator: Unable to reserve more memory from block "
-                            << "-- requested size (" << (int32_t)(request.size) << " bytes) "
-                            << "greater than available (" << (int32_t)(remaining) << " bytes)!\n";
+                                        << "-- requested size (" << (int32_t)(request.size) << " bytes) "
+                                        << "greater than available (" << (int32_t)(remaining) << " bytes)!\n";
 #endif
         return nullptr;
     }
@@ -149,7 +149,7 @@ MemoryRegion *RegionAllocator::reserve(void *user_context, const MemoryRequest &
     if (block_region == nullptr) {
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "RegionAllocator: Failed to locate region for requested size ("
-                            << (int32_t)(request.size) << " bytes)!\n";
+                                        << (int32_t)(request.size) << " bytes)!\n";
 #endif
         return nullptr;
     }
@@ -157,7 +157,7 @@ MemoryRegion *RegionAllocator::reserve(void *user_context, const MemoryRequest &
     if (can_split(block_region, request.size)) {
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "RegionAllocator: Splitting region of size ( " << (int32_t)(block_region->memory.size) << ") "
-                            << "to accomodate requested size (" << (int32_t)(request.size) << " bytes)!\n";
+                                        << "to accomodate requested size (" << (int32_t)(request.size) << " bytes)!\n";
 #endif
         split_block_region(user_context, block_region, request.size, request.alignment);
     }
@@ -244,8 +244,8 @@ BlockRegion *RegionAllocator::coalesce_block_regions(void *user_context, BlockRe
 
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "RegionAllocator: Coalescing "
-                            << "previous region (offset=" << (int32_t)prev_region->memory.offset << " size=" << (int32_t)(prev_region->memory.size) << " bytes) "
-                            << "into current region (offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes)\n!";
+                                        << "previous region (offset=" << (int32_t)prev_region->memory.offset << " size=" << (int32_t)(prev_region->memory.size) << " bytes) "
+                                        << "into current region (offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes)\n!";
 #endif
 
         prev_region->next_ptr = block_region->next_ptr;
@@ -262,8 +262,8 @@ BlockRegion *RegionAllocator::coalesce_block_regions(void *user_context, BlockRe
 
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "RegionAllocator: Coalescing "
-                            << "next region (offset=" << (int32_t)next_region->memory.offset << " size=" << (int32_t)(next_region->memory.size) << " bytes) "
-                            << "into current region (offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes)!\n";
+                                        << "next region (offset=" << (int32_t)next_region->memory.offset << " size=" << (int32_t)(next_region->memory.size) << " bytes) "
+                                        << "into current region (offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes)!\n";
 #endif
 
         if (next_region->next_ptr) {
@@ -286,9 +286,9 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
 
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Conforming alignment ("
-                        << "requested=" << (uint32_t)alignment << " "
-                        << "required=" << (uint32_t)block->memory.properties.alignment << " "
-                        << "actual=" << (uint32_t)alignment << ")\n";
+                                    << "requested=" << (uint32_t)alignment << " "
+                                    << "required=" << (uint32_t)block->memory.properties.alignment << " "
+                                    << "actual=" << (uint32_t)alignment << ")\n";
 #endif
 
     size_t adjusted_size = aligned_size(block_region->memory.offset, size, alignment);
@@ -297,8 +297,8 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
 
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Splitting "
-                        << "current region (offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes) "
-                        << "to create empty region (offset=" << (int32_t)adjusted_offset << " size=" << (int32_t)(empty_size) << " bytes)!\n";
+                                    << "current region (offset=" << (int32_t)block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes) "
+                                    << "to create empty region (offset=" << (int32_t)adjusted_offset << " size=" << (int32_t)(empty_size) << " bytes)!\n";
 #endif
 
     BlockRegion *next_region = block_region->next_ptr;
@@ -320,14 +320,14 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
 BlockRegion *RegionAllocator::create_block_region(void *user_context, const MemoryProperties &properties, size_t offset, size_t size, bool dedicated) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Creating block region ("
-                        << "user_context=" << (void *)(user_context) << " "
-                        << "offset=" << (uint32_t)offset << " "
-                        << "size=" << (uint32_t)size << " "
-                        << "alignment=" << (uint32_t)properties.alignment << " "
-                        << "dedicated=" << (dedicated ? "true" : "false") << " "
-                        << "usage=" << halide_memory_usage_name(properties.usage) << " "
-                        << "caching=" << halide_memory_caching_name(properties.caching) << " "
-                        << "visibility=" << halide_memory_visibility_name(properties.visibility) << ") ...\n";
+                                    << "user_context=" << (void *)(user_context) << " "
+                                    << "offset=" << (uint32_t)offset << " "
+                                    << "size=" << (uint32_t)size << " "
+                                    << "alignment=" << (uint32_t)properties.alignment << " "
+                                    << "dedicated=" << (dedicated ? "true" : "false") << " "
+                                    << "usage=" << halide_memory_usage_name(properties.usage) << " "
+                                    << "caching=" << halide_memory_caching_name(properties.caching) << " "
+                                    << "visibility=" << halide_memory_visibility_name(properties.visibility) << ") ...\n";
 #endif
 
     BlockRegion *block_region = static_cast<BlockRegion *>(arena->reserve(user_context, true));
@@ -339,8 +339,8 @@ BlockRegion *RegionAllocator::create_block_region(void *user_context, const Memo
 
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Added block region ("
-                        << "user_context=" << (void *)(user_context) << " "
-                        << "block_region=" << (void *)(block_region) << ") ...\n";
+                                    << "user_context=" << (void *)(user_context) << " "
+                                    << "block_region=" << (void *)(block_region) << ") ...\n";
 #endif
 
     block_region->memory.offset = offset;
@@ -352,10 +352,10 @@ BlockRegion *RegionAllocator::create_block_region(void *user_context, const Memo
 
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "Creating region ("
-        << "block_ptr=" << (void*)block_region->block_ptr << " "
-        << "block_region=" << (void*)block_region << " "
-        << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
-        << ")\n";
+                                    << "block_ptr=" << (void *)block_region->block_ptr << " "
+                                    << "block_region=" << (void *)block_region << " "
+                                    << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
+                                    << ")\n";
 #endif
 
     return block_region;
@@ -364,8 +364,8 @@ BlockRegion *RegionAllocator::create_block_region(void *user_context, const Memo
 void RegionAllocator::release_block_region(void *user_context, BlockRegion *block_region) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Releasing block region ("
-                        << "user_context=" << (void *)(user_context) << " "
-                        << "block_region=" << (void *)(block_region) << ") ...\n";
+                                    << "user_context=" << (void *)(user_context) << " "
+                                    << "block_region=" << (void *)(block_region) << ") ...\n";
 #endif
 
     if ((block_region->status == AllocationStatus::InUse) ||
@@ -373,11 +373,11 @@ void RegionAllocator::release_block_region(void *user_context, BlockRegion *bloc
 
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "Releasing region ("
-            << "block_ptr=" << (void*)block_region->block_ptr << " "
-            << "block_region=" << (void*)block_region << " "
-            << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
-            << "block_reserved=" << (uint32_t)(block->reserved - block_region->memory.size) << " "
-            << ")\n";
+                                        << "block_ptr=" << (void *)block_region->block_ptr << " "
+                                        << "block_region=" << (void *)block_region << " "
+                                        << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
+                                        << "block_reserved=" << (uint32_t)(block->reserved - block_region->memory.size) << " "
+                                        << ")\n";
 #endif
 
         block->reserved -= block_region->memory.size;
@@ -388,8 +388,8 @@ void RegionAllocator::release_block_region(void *user_context, BlockRegion *bloc
 void RegionAllocator::destroy_block_region(void *user_context, BlockRegion *block_region) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Destroying block region ("
-                        << "user_context=" << (void *)(user_context) << " "
-                        << "block_region=" << (void *)(block_region) << ") ...\n";
+                                    << "user_context=" << (void *)(user_context) << " "
+                                    << "block_region=" << (void *)(block_region) << ") ...\n";
 #endif
 
     free_block_region(user_context, block_region);
@@ -403,29 +403,28 @@ void RegionAllocator::alloc_block_region(void *user_context, BlockRegion *block_
     halide_abort_if_false(user_context, allocators.region.allocate != nullptr);
     halide_abort_if_false(user_context, block_region->status == AllocationStatus::Available);
     MemoryRegion *memory_region = &(block_region->memory);
-    if(memory_region->handle == nullptr) {
+    if (memory_region->handle == nullptr) {
         allocators.region.allocate(user_context, memory_region);
 
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "Allocating region ("
-            << "block_ptr=" << (void*)block_region->block_ptr << " "
-            << "block_region=" << (void*)block_region << " "
-            << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
-            << "block_reserved=" << (uint32_t)block->reserved << " "
-            << ")\n";
+                                        << "block_ptr=" << (void *)block_region->block_ptr << " "
+                                        << "block_region=" << (void *)block_region << " "
+                                        << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
+                                        << "block_reserved=" << (uint32_t)block->reserved << " "
+                                        << ")\n";
 #endif
 
     } else {
 
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "Re-using region  ("
-            << "block_ptr=" << (void*)block_region->block_ptr << " "
-            << "block_region=" << (void*)block_region << " "
-            << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
-            << "block_reserved=" << (uint32_t)block->reserved << " "
-            << ")\n";
+                                        << "block_ptr=" << (void *)block_region->block_ptr << " "
+                                        << "block_region=" << (void *)block_region << " "
+                                        << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
+                                        << "block_reserved=" << (uint32_t)block->reserved << " "
+                                        << ")\n";
 #endif
-
     }
     block_region->status = block_region->memory.dedicated ? AllocationStatus::Dedicated : AllocationStatus::InUse;
     block->reserved += block_region->memory.size;
@@ -434,18 +433,18 @@ void RegionAllocator::alloc_block_region(void *user_context, BlockRegion *block_
 void RegionAllocator::free_block_region(void *user_context, BlockRegion *block_region) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Freeing block region ("
-                        << "user_context=" << (void *)(user_context) << " "
-                        << "block_region=" << (void *)(block_region) << ") ...\n";
+                                    << "user_context=" << (void *)(user_context) << " "
+                                    << "block_region=" << (void *)(block_region) << ") ...\n";
 #endif
     if ((block_region->status == AllocationStatus::InUse) ||
         (block_region->status == AllocationStatus::Dedicated)) {
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "Freeing region ("
-            << "block_ptr=" << (void*)block_region->block_ptr << " "
-            << "block_region=" << (void*)block_region << " "
-            << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
-            << "block_reserved=" << (uint32_t)block->reserved << " "
-            << ")\n";
+                                        << "block_ptr=" << (void *)block_region->block_ptr << " "
+                                        << "block_region=" << (void *)block_region << " "
+                                        << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
+                                        << "block_reserved=" << (uint32_t)block->reserved << " "
+                                        << ")\n";
 #endif
         halide_abort_if_false(user_context, allocators.region.deallocate != nullptr);
         MemoryRegion *memory_region = &(block_region->memory);
@@ -461,7 +460,7 @@ void RegionAllocator::free_block_region(void *user_context, BlockRegion *block_r
 void RegionAllocator::release(void *user_context) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Releasing all regions ("
-                        << "user_context=" << (void *)(user_context) << ") ...\n";
+                                    << "user_context=" << (void *)(user_context) << ") ...\n";
 #endif
     for (BlockRegion *block_region = block->regions; block_region != nullptr; block_region = block_region->next_ptr) {
         release_block_region(user_context, block_region);
@@ -471,13 +470,13 @@ void RegionAllocator::release(void *user_context) {
 bool RegionAllocator::collect(void *user_context) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Collecting free block regions ("
-                        << "user_context=" << (void *)(user_context) << ") ...\n";
+                                    << "user_context=" << (void *)(user_context) << ") ...\n";
 
     uint64_t reserved = block->reserved;
     StackBasicPrinter<256>(nullptr) << "    collecting unused regions ("
-        << "block_ptr=" << (void*)block << " "
-        << "block_reserved=" << (uint32_t)block->reserved << " "
-        << ")\n";
+                                    << "block_ptr=" << (void *)block << " "
+                                    << "block_reserved=" << (uint32_t)block->reserved << " "
+                                    << ")\n";
 #endif
 
     bool result = false;
@@ -488,11 +487,11 @@ bool RegionAllocator::collect(void *user_context) {
 
 #ifdef DEBUG_INTERNAL
                 StackBasicPrinter<256>(nullptr) << "    collecting region ("
-                    << "block_ptr=" << (void*)block_region->block_ptr << " "
-                    << "block_region=" << (void*)block_region << " "
-                    << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
-                    << "block_reserved=" << (uint32_t)block->reserved << " "
-                    << ")\n";
+                                                << "block_ptr=" << (void *)block_region->block_ptr << " "
+                                                << "block_region=" << (void *)block_region << " "
+                                                << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
+                                                << "block_reserved=" << (uint32_t)block->reserved << " "
+                                                << ")\n";
 #endif
                 block_region = coalesce_block_regions(user_context, block_region);
                 result = true;
@@ -501,14 +500,14 @@ bool RegionAllocator::collect(void *user_context) {
         }
     }
 
-    if(result) {
+    if (result) {
 
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "    collected unused regions ("
-            << "block_ptr=" << (void*)block << " "
-            << "region_count=" << (uint32_t)count << " "
-            << "collected=" << (uint32_t)(reserved - block->reserved) << " "
-            << ")\n";
+                                        << "block_ptr=" << (void *)block << " "
+                                        << "region_count=" << (uint32_t)count << " "
+                                        << "collected=" << (uint32_t)(reserved - block->reserved) << " "
+                                        << ")\n";
 #endif
     }
     return result;
@@ -517,7 +516,7 @@ bool RegionAllocator::collect(void *user_context) {
 void RegionAllocator::destroy(void *user_context) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Destroying all block regions ("
-                        << "user_context=" << (void *)(user_context) << ") ...\n";
+                                    << "user_context=" << (void *)(user_context) << ") ...\n";
 #endif
     for (BlockRegion *block_region = block->regions; block_region != nullptr;) {
 

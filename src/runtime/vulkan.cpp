@@ -97,7 +97,7 @@ WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *halide_b
     // get the allocated region for the device
     MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(halide_buffer->device);
     if (ctx.allocator && device_region && device_region->handle) {
-        if(halide_can_reuse_device_allocations(user_context)) {
+        if (halide_can_reuse_device_allocations(user_context)) {
             ctx.allocator->release(user_context, device_region);
         } else {
             ctx.allocator->reclaim(user_context, device_region);
@@ -421,7 +421,7 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     }
 
     //// 15. Reclaim the staging buffer
-    if(halide_can_reuse_device_allocations(user_context)) {
+    if (halide_can_reuse_device_allocations(user_context)) {
         ctx.allocator->release(user_context, staging_region);
     } else {
         ctx.allocator->reclaim(user_context, staging_region);
@@ -571,7 +571,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 
     // unmap the pointer and reclaim the staging region
     ctx.allocator->unmap(user_context, staging_region);
-    if(halide_can_reuse_device_allocations(user_context)) {
+    if (halide_can_reuse_device_allocations(user_context)) {
         ctx.allocator->release(user_context, staging_region);
     } else {
         ctx.allocator->reclaim(user_context, staging_region);
@@ -800,12 +800,12 @@ WEAK int halide_vulkan_run(void *user_context,
 
 #ifdef DEBUG_RUNTIME
     debug(user_context) << "Vulkan: blocks_allocated="
-        << (uint32_t)ctx.allocator->blocks_allocated() << " "
-        << "bytes_allocated_for_blocks=" << (uint32_t)ctx.allocator->bytes_allocated_for_blocks() << " "
-        << "regions_allocated=" << (uint32_t)ctx.allocator->regions_allocated() << " "
-        << "bytes_allocated_for_regions=" << (uint32_t)ctx.allocator->bytes_allocated_for_regions() << " "
-        << "\n";
-    
+                        << (uint32_t)ctx.allocator->blocks_allocated() << " "
+                        << "bytes_allocated_for_blocks=" << (uint32_t)ctx.allocator->bytes_allocated_for_blocks() << " "
+                        << "regions_allocated=" << (uint32_t)ctx.allocator->regions_allocated() << " "
+                        << "bytes_allocated_for_regions=" << (uint32_t)ctx.allocator->bytes_allocated_for_regions() << " "
+                        << "\n";
+
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
@@ -866,7 +866,7 @@ WEAK int halide_vulkan_release_unused_device_allocations(void *user_context) {
     if (ctx.error != VK_SUCCESS) {
         return -1;
     }
-    
+
     // collect all unused allocations
     ctx.allocator->collect(user_context);
     return 0;

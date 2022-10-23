@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
     }
 
     // Vulkan will OOM unless allocation cache is used ... skip this since we just ran the same tests above concurrently
-    if(!target.has_feature(Target::Vulkan)) {
+    if (!target.has_feature(Target::Vulkan)) {
 
         // Now benchmark with and without, (just informational, as this isn't a performance test)
         double t1 = Tools::benchmark([&]() {
@@ -166,8 +166,8 @@ int main(int argc, char **argv) {
         });
 
         printf("Runtime with cache: %f\n"
-            "Without cache: %f\n",
-            t1, t2);
+               "Without cache: %f\n",
+               t1, t2);
     }
 
     printf("Success!\n");

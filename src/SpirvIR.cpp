@@ -1,6 +1,5 @@
 #include "SpirvIR.h"
 #include <iostream>
-#include <signal.h>
 
 #ifdef WITH_SPIRV
 
@@ -253,7 +252,7 @@ bool SpvBlock::is_defined() const {
 
 bool SpvBlock::is_terminated() const {
     check_defined();
-    if(contents->instructions.empty()) {
+    if (contents->instructions.empty()) {
         return false;
     }
     switch (contents->instructions.back().op_code()) {
@@ -1549,7 +1548,7 @@ SpvBuilder::ConstantKey SpvBuilder::make_constant_key(uint8_t code, uint8_t bits
     key = hash_combine(key, lanes);
     key = hash_combine(key, bytes);
 
-    if(data != nullptr) {
+    if (data != nullptr) {
         const int8_t *ptr = reinterpret_bits<const int8_t *>(data);
         for (size_t i = 0; i < bytes; ++i) {
             key = hash_combine(key, uint64_t(ptr[i]));

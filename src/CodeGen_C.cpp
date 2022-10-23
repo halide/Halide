@@ -61,6 +61,7 @@ const string headers = R"INLINE_CODE(
 #endif
 
 #include <assert.h>
+#include <fenv.h>
 #include <float.h>
 #include <limits.h>
 #include <math.h>
@@ -68,7 +69,6 @@ const string headers = R"INLINE_CODE(
 #include <stdio.h>
 #include <string.h>
 #include <type_traits>
-#include <fenv.h>
 )INLINE_CODE";
 
 // We now add definitions of things in the runtime which are
