@@ -25,11 +25,7 @@ int main(int argc, char **argv) {
 
     // This should throw an error since auto-scheduler does not currently
     // support partial schedules
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    p.auto_schedule(target);
-#else
     p.apply_autoscheduler(target, {"Mullapudi2016"});
-#endif
 
     printf("Success!\n");
     return 0;

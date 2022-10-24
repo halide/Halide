@@ -996,7 +996,7 @@ public:
             check(arm32 ? "vmovl.u32" : "ushll", 2 * w, i64(u32_1));
 
             // VMOVN    I       -       Move and Narrow
-            if (Halide::Internal::get_llvm_version() >= 140 && w > 1) {
+            if (w > 1) {
                 check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, i8(i16_1));
                 check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, u8(u16_1));
                 check(arm32 ? "vmovn.i32" : "uzp1", 4 * w, i16(i32_1));
@@ -1389,23 +1389,14 @@ public:
             check(arm32 ? "vrshr.u32" : "urshr", 4 * w, u32((u64(u32_1) + 32) >> 6));
 
             // VRSHRN   I       -       Rounding Shift Right Narrow
-            if (Halide::Internal::get_llvm_version() >= 140) {
-                // LLVM14 converts RSHRN/RSHRN2 to RADDHN/RADDHN2 when the shift amount is half the width of the vector element
-                // See https://reviews.llvm.org/D116166
-                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, i8((i32(i16_1) + 128) >> 8));
-                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
-                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
-                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, u8((u32(u16_1) + 128) >> 8));
-                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
-                // check(arm32 ? "vrshrn.i64" : "raddhn", 2 * w, u32((u64_1 + 64) >> 7));
-            } else {
-                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
-                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
-                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
-                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
-                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
-                // check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
-            }
+            // LLVM14 converts RSHRN/RSHRN2 to RADDHN/RADDHN2 when the shift amount is half the width of the vector element
+            // See https://reviews.llvm.org/D116166
+            check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+            check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+            check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+            // check(arm32 ? "vrshrn.i64" : "raddhn", 2 * w, u32((u64_1 + 64) >> 7));
 
             // VRSQRTE  I, F    -       Reciprocal Square Root Estimate
             check(arm32 ? "vrsqrte.f32" : "frsqrte", 4 * w, fast_inverse_sqrt(f32_1));
@@ -2223,10 +2214,8 @@ public:
                 check("f32x4.convert_i32x4_u", 8 * w, cast<float>(u32_1));
 
                 // Integer to double-precision floating point
-                if (Halide::Internal::get_llvm_version() >= 140) {
-                    check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
-                    check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
-                }
+                check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
+                check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
 
                 // Single-precision floating point to integer with saturation
                 check("i32x4.trunc_sat_f32x4_s", 4 * w, cast<int32_t>(f32_1));
@@ -2242,12 +2231,8 @@ public:
                 // check("f32x4.demote_f64x2_zero", 4 * w, ???);
 
                 // Single-precision floating point to double-precision
-                if (Halide::Internal::get_llvm_version() >= 140) {
-                    // TODO(https://github.com/halide/Halide/issues/5130): broken for > 128bit vector widths
-                    if (w < 2) {
-                        check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
-                    }
-                } else {
+                // TODO(https://github.com/halide/Halide/issues/5130): broken for > 128bit vector widths
+                if (w < 2) {
                     check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
                 }
 

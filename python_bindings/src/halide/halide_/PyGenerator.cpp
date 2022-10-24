@@ -9,9 +9,6 @@ namespace {
 
 using Halide::Internal::AbstractGenerator;
 using Halide::Internal::AbstractGeneratorPtr;
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-using Halide::Internal::ExternsMap;
-#endif
 using Halide::Internal::GeneratorFactoryProvider;
 using ArgInfo = Halide::Internal::AbstractGenerator::ArgInfo;
 using Halide::Internal::ArgInfoDirection;
@@ -82,14 +79,6 @@ public:
         return {generator_.attr("_get_output_func")(name).cast<Func>()};
     }
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    ExternsMap external_code_map() override {
-        // Python Generators don't support this (yet? ever?),
-        // but don't throw an error, just return an empty map.
-        return {};
-    }
-#endif
-
     void bind_input(const std::string &name, const std::vector<Parameter> &v) override {
         generator_.attr("_bind_input")(v);
     }
@@ -147,18 +136,10 @@ void define_generator(py::module &m) {
     // for __enter__ and __exit__ handling
     auto generatorcontext_class =
         py::class_<GeneratorContext>(m, "GeneratorContext", py::dynamic_attr())
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-            .def(py::init<const Target &, bool, const MachineParams &>(),
-                 py::arg("target"), py::arg("auto_schedule") = false, py::arg("machine_params") = MachineParams::generic())
-            .def("target", &GeneratorContext::target)
-            .def("auto_schedule", &GeneratorContext::auto_schedule)
-            .def("machine_params", &GeneratorContext::machine_params)
-#else
             .def(py::init<const Target &>(), py::arg("target"))
             .def(py::init<const Target &, const AutoschedulerParams &>(), py::arg("target"), py::arg("autoscheduler_params"))
             .def("target", &GeneratorContext::target)
             .def("autoscheduler_params", &GeneratorContext::autoscheduler_params)
-#endif
             .def("__enter__", [](const GeneratorContext &context) -> py::object {
                 auto _generatorcontext_enter = py::module_::import("halide").attr("_generatorcontext_enter");
                 return _generatorcontext_enter(context);

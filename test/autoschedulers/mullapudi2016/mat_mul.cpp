@@ -40,11 +40,7 @@ double run_test(bool auto_schedule) {
         // Provide estimates on the pipeline output
         out.set_estimate(x, 0, size).set_estimate(y, 0, size);
         // Auto-schedule the pipeline
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        p.auto_schedule(target);
-#else
         p.apply_autoscheduler(target, {"Mullapudi2016"});
-#endif
     } else if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi"), xii("xii"), yii("yii"), xt("xt"), yt("yt");
         out.tile(x, y, xi, yi, 8, 8).unroll(xi).unroll(yi).gpu_tile(x, y, xt, yt, 8, 8);
