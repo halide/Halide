@@ -10,6 +10,8 @@ void define_buffer(py::module &m);
 
 Type format_descriptor_to_type(const std::string &fd);
 
+py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos);
+
 template<typename T = void,
          int Dims = AnyDims,
          int InClassDimStorage = (Dims == AnyDims ? 4 : std::max(Dims, 1))>
