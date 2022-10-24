@@ -2032,7 +2032,7 @@ void CodeGen_LLVM::visit(const Load *op) {
 
         llvm::Type *load_type = llvm_type_of(op->type.element_of());
         if (ramp && stride && stride->value == 1) {
-            value = codegen_dense_vector_load(op, nullptr);
+            value = codegen_dense_vector_load(op);
         } else if (ramp && stride && 2 <= stride->value && stride->value <= 4) {
             // Try to rewrite strided loads as shuffles of dense loads,
             // aligned to the stride. This makes adjacent strided loads
@@ -2088,7 +2088,8 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Expr slice_base = simplify(base + load_base_i);
 
                 Value *load_i = codegen_vector_load(op->type.with_lanes(load_lanes_i), op->name, slice_base,
-                                                    op->image, op->param, align, nullptr, false, nullptr);
+                                                    op->image, op->param, align, /*vpred=*/nullptr,
+                                                    /*slice_to_native=*/false);
 
                 std::vector<int> constants;
                 for (int j = 0; j < lanes_i; j++) {
@@ -4320,8 +4321,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             }
 
             if (use_llvm_vp_intrinsics) {
-                string vp_name = "llvm.vp.reduce.";
-                vp_name += name;
+                string vp_name = "llvm.vp.reduce." + name;
                 codegen(initial_value);
                 llvm::Value *init = value;
                 codegen(op->value);
