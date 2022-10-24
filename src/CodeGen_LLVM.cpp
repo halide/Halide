@@ -1518,7 +1518,7 @@ void CodeGen_LLVM::visit(const Add *op) {
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        // TODO(zalman): This needs vector predication, but I can't
+        // TODO(zvookin): This needs vector predication, but I can't
         // see a way to do it. May go away in introducing correct
         // index type instead of using int32_t.
         value = builder->CreateNSWAdd(a, b);
@@ -1547,7 +1547,7 @@ void CodeGen_LLVM::visit(const Sub *op) {
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        // TODO(zalman): This needs vector predication, but I can't
+        // TODO(zvookin): This needs vector predication, but I can't
         // see a way to do it. May go away in introducing correct
         // index type instead of using int32_t.
         value = builder->CreateNSWSub(a, b);
@@ -1580,7 +1580,7 @@ void CodeGen_LLVM::visit(const Mul *op) {
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        // TODO(zalman): This needs vector predication, but I can't
+        // TODO(zvookin): This needs vector predication, but I can't
         // see a way to do it. May go away in introducing correct
         // index type instead of using int32_t.
         value = builder->CreateNSWMul(a, b);
@@ -3679,7 +3679,7 @@ void CodeGen_LLVM::visit(const For *op) {
     Value *extent = codegen(op->extent);
     const Acquire *acquire = op->body.as<Acquire>();
 
-    // TODO(zalman): remove this after validating it doesn't happen
+    // TODO(zvookin): remove this after validating it doesn't happen
     internal_assert(!(op->for_type == ForType::Parallel ||
                       (op->for_type == ForType::Serial &&
                        acquire &&
@@ -3790,7 +3790,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     } else {
         int alignment = value_type.bytes();
         const Ramp *ramp = op->index.as<Ramp>();
-        // TODO(zalman): consider splitting out vector predication path. Current
+        // TODO(zvookin): consider splitting out vector predication path. Current
         // code shows how vector predication would simplify things as the
         // following scalarization cases would go away.
         bool is_dense = ramp && is_const_one(ramp->stride);
@@ -4274,14 +4274,14 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
                     break;
                 case VectorReduce::Min:
                     name = "fmin";
-                    // TODO(zvookin): For signed case, whether this is Inf or the max floating-point value depends on strict_float. (Or maybe it is QNaN in strict_float.)
+                    // TODO(zvookin): Not correct for stricT_float. See: https://github.com/halide/Halide/issues/7118
                     if (takes_initial_value && !initial_value.defined()) {
                         initial_value = op->type.max();
                     }
                     break;
                 case VectorReduce::Max:
                     name = "fmax";
-                    // TODO(zvookin): For signed case, whether this is -Inf or the min floating-point value depends on strict_float. (Or maybe it is -QNaN in strict_float.)
+                    // TODO(zvookin): Not correct for stricT_float. See: https://github.com/halide/Halide/issues/7118
                     if (takes_initial_value && !initial_value.defined()) {
                         initial_value = op->type.min();
                     }
@@ -4321,7 +4321,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             }
 
             if (use_llvm_vp_intrinsics) {
-                string vp_name = "llvm.vp.reduce." + name;
+                string vp_name = "llvm.vp.reduce." + std::string(name);
                 codegen(initial_value);
                 llvm::Value *init = value;
                 codegen(op->value);
