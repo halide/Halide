@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
     // toolchain. There are several small examples of this in the
     // Halide repository under the apps folder. See HelloAndroid and
     // HelloiOS here:
-    // https://github.com/halide/Halide/tree/master/apps/
+    // https://github.com/halide/Halide/tree/main/apps/
     printf("Success!\n");
     return 0;
 }
