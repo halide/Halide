@@ -31,7 +31,7 @@ set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
 ##
 
 # Halide currently requires Python 3.8 or later
-set(Halide_PYTHON_VERSION_MINIMUM 3.8)
+set(Halide_PYTHON_VERSION_MINIMUM 3.8.0)
 
 # The plain Development component is the same as requesting both
 # Development.Module and Development.Embed. We don't need the Embed
