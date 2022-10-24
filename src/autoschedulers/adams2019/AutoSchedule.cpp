@@ -27,51 +27,6 @@
   HL_PERMIT_FAILED_UNROLL
   Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-
-  Most of the settings in this Autoscheduler are controlled by the values specified via
-  an `autoscheduler.fieldname` GeneratorParam, as listed in the Adams2019Params struct;
-  this is the preferred way to set these.
-
-  For now, however, you can (instead) control these settings via env vars;
-  doing so requires that you compile all of Halide with HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-  defined. (Note that this ability is deprecated, and likely to be removed in Halide 16.)
-
-  That said, here are the (legacy) env vars you can still use when HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-  is defined:
-
-  HL_BEAM_SIZE
-  Beam size to use in the beam search. Defaults to 32. Use 1 to get a greedy search instead.
-
-  HL_CYOS
-  "Choose-your-own-schedule". If set to 1, lets you navigate the search tree by hand in the terminal. Whee! This is for debugging the autoscheduler.
-
-  HL_RANDOM_DROPOUT
-  percent chance of accepting each state in the beam. Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
-
-  HL_SEED
-  Random seed used by the random dropout.
-
-  HL_WEIGHTS_DIR
-  When training or schedule, read weights from this directory or file
-  (if path ends in `.weights` it is written as a single file, otherwise a directory of files)
-
-  HL_NO_SUBTILING
-  If set to 1, limits the search space to that of Mullapudi et al.
-
-  HL_AUTOSCHEDULE_MEMORY_LIMIT
-  If set, only consider schedules that allocate at most this much memory (measured in bytes).
-
-  HL_DISABLE_MEMOIZED_FEATURES
-  If set, features of possible schedules are always recalculated, and are not cached across passes.
-  (see Cache.h for more information)
-
-  HL_DISABLE_MEMOIZED_BLOCKS
-  If set, then tiling sizes are not cached across passes.
-  (see Cache.h for more information)
-
-#endif
-
 #ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
 
   HL_CYOS
@@ -171,21 +126,6 @@ private:
     static constexpr int ProgressBarLogLevel = 1;
     const bool draw_progress_bar = isatty(2) && aslog::aslog_level() >= ProgressBarLogLevel;
 };
-
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-template<typename T>
-T get_scalar_env_var(const char *nm, T def = T()) {
-    auto str = get_env_variable(nm);
-    if (str.empty()) {
-        return def;
-    }
-    std::istringstream iss(str);
-    T t;
-    iss >> t;
-    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << str;
-    return t;
-}
-#endif
 
 // Decide whether or not to drop a beam search state. Used for
 // randomly exploring the search tree for autotuning and to generate
@@ -627,9 +567,6 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 
     if (auto_scheduler_results) {
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        auto_scheduler_results->scheduler_name = "Adams2019";
-#endif
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;
@@ -641,25 +578,6 @@ void generate_schedule(const std::vector<Function> &outputs,
 }
 
 struct Adams2019 {
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    void operator()(const Pipeline &p, const Target &target, const MachineParams &params_in, AutoSchedulerResults *results) {
-        std::vector<Function> outputs;
-        for (const Func &f : p.outputs()) {
-            outputs.push_back(f.function());
-        }
-        Adams2019Params params;
-        params.parallelism = params_in.parallelism;
-        params.beam_size = get_scalar_env_var<int>("HL_BEAM_SIZE", 32);
-        params.random_dropout = get_scalar_env_var<int>("HL_RANDOM_DROPOUT", 100);
-        params.random_dropout_seed = get_scalar_env_var<int>("HL_SEED", (int)time(nullptr));
-        params.weights_path = get_scalar_env_var<int>("HL_WEIGHTS_DIR");
-        params.disable_subtiling = get_scalar_env_var<int>("HL_NO_SUBTILING", 0);
-        params.disable_memoized_features = get_scalar_env_var<int>("HL_DISABLE_MEMOIZED_FEATURES", 0);
-        params.disable_memoized_blocks = get_scalar_env_var<int>("HL_DISABLE_MEMOIZED_BLOCKS", 0);
-        params.memory_limit = get_scalar_env_var<int64_t>("HL_AUTOSCHEDULE_MEMORY_LIMIT", -1);
-        Autoscheduler::generate_schedule(outputs, target, params, results);
-    }
-#else
     void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
         internal_assert(params_in.name == "Adams2019");
 
@@ -684,7 +602,6 @@ struct Adams2019 {
         Autoscheduler::generate_schedule(outputs, target, params, results);
         results->autoscheduler_params = params_in;
     }
-#endif
 };
 
 REGISTER_AUTOSCHEDULER(Adams2019)
