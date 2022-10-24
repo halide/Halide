@@ -1518,7 +1518,7 @@ void CodeGen_LLVM::visit(const Add *op) {
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        // TODO(zalman): This needs vector predication, but I can't
+        // TODO(zvookin): This needs vector predication, but I can't
         // see a way to do it. May go away in introducing correct
         // index type instead of using int32_t.
         value = builder->CreateNSWAdd(a, b);
@@ -1547,7 +1547,7 @@ void CodeGen_LLVM::visit(const Sub *op) {
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        // TODO(zalman): This needs vector predication, but I can't
+        // TODO(zvookin): This needs vector predication, but I can't
         // see a way to do it. May go away in introducing correct
         // index type instead of using int32_t.
         value = builder->CreateNSWSub(a, b);
@@ -1580,7 +1580,7 @@ void CodeGen_LLVM::visit(const Mul *op) {
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
-        // TODO(zalman): This needs vector predication, but I can't
+        // TODO(zvookin): This needs vector predication, but I can't
         // see a way to do it. May go away in introducing correct
         // index type instead of using int32_t.
         value = builder->CreateNSWMul(a, b);
@@ -2032,7 +2032,7 @@ void CodeGen_LLVM::visit(const Load *op) {
 
         llvm::Type *load_type = llvm_type_of(op->type.element_of());
         if (ramp && stride && stride->value == 1) {
-            value = codegen_dense_vector_load(op, nullptr);
+            value = codegen_dense_vector_load(op);
         } else if (ramp && stride && 2 <= stride->value && stride->value <= 4) {
             // Try to rewrite strided loads as shuffles of dense loads,
             // aligned to the stride. This makes adjacent strided loads
@@ -2088,7 +2088,8 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Expr slice_base = simplify(base + load_base_i);
 
                 Value *load_i = codegen_vector_load(op->type.with_lanes(load_lanes_i), op->name, slice_base,
-                                                    op->image, op->param, align, nullptr, false, nullptr);
+                                                    op->image, op->param, align, /*vpred=*/nullptr,
+                                                    /*slice_to_native=*/false);
 
                 std::vector<int> constants;
                 for (int j = 0; j < lanes_i; j++) {
@@ -2440,6 +2441,11 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
         Value *slice_mask = (vpred != nullptr) ? slice_vector(vpred, i, slice_lanes) : nullptr;
 
         Instruction *load_inst = nullptr;
+        // In this path, strided predicated loads are only handled if vector
+        // predication is enabled. Otherwise this would be scalarized at a higher
+        // level. Assume that if stride is passed, this is not dense, though
+        // LLVM should codegen the same thing for a constant 1 strided load as
+        // for a non-strided load.
         if (stride) {
             if (get_target().bits == 64 && !stride->getType()->isIntegerTy(64)) {
                 stride = builder->CreateIntCast(stride, i64_t, true);
@@ -2481,17 +2487,14 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
-    if (use_llvm_vp_intrinsics && stride) {
-        Value *vpred = codegen(op->predicate);
-        Value *llvm_stride = codegen(stride);
-        value = codegen_vector_load(op->type, op->name, ramp->base, op->image, op->param,
-                                    op->alignment, vpred, true, llvm_stride);
-        return;
-    }
-
     if (ramp && is_const_one(ramp->stride)) {  // Dense vector load
         Value *vpred = codegen(op->predicate);
         value = codegen_dense_vector_load(op, vpred);
+    } else if (use_llvm_vp_intrinsics && stride) {  // Case only handled by vector predication, otherwise must scalarize.
+        Value *vpred = codegen(op->predicate);
+        Value *llvm_stride = codegen(stride);  // Not 1 (dense) as that was caught above.
+        value = codegen_vector_load(op->type, op->name, ramp->base, op->image, op->param,
+                                    op->alignment, vpred, true, llvm_stride);
     } else if (ramp && stride && stride->value == -1) {
         debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
         vector<int> indices(ramp->lanes);
@@ -3678,7 +3681,7 @@ void CodeGen_LLVM::visit(const For *op) {
     Value *extent = codegen(op->extent);
     const Acquire *acquire = op->body.as<Acquire>();
 
-    // TODO(zalman): remove this after validating it doesn't happen
+    // TODO(zvookin): remove this after validating it doesn't happen
     internal_assert(!(op->for_type == ForType::Parallel ||
                       (op->for_type == ForType::Serial &&
                        acquire &&
@@ -3789,7 +3792,7 @@ void CodeGen_LLVM::visit(const Store *op) {
     } else {
         int alignment = value_type.bytes();
         const Ramp *ramp = op->index.as<Ramp>();
-        // TODO(zalman): consider splitting out vector predication path. Current
+        // TODO(zvookin): consider splitting out vector predication path. Current
         // code shows how vector predication would simplify things as the
         // following scalarization cases would go away.
         bool is_dense = ramp && is_const_one(ramp->stride);
@@ -4273,14 +4276,14 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
                     break;
                 case VectorReduce::Min:
                     name = "fmin";
-                    // TODO(zvookin): For signed case, whether this is Inf or the max floating-point value depends on strict_float. (Or maybe it is QNaN in strict_float.)
+                    // TODO(zvookin): Not correct for stricT_float. See: https://github.com/halide/Halide/issues/7118
                     if (takes_initial_value && !initial_value.defined()) {
                         initial_value = op->type.max();
                     }
                     break;
                 case VectorReduce::Max:
                     name = "fmax";
-                    // TODO(zvookin): For signed case, whether this is -Inf or the min floating-point value depends on strict_float. (Or maybe it is -QNaN in strict_float.)
+                    // TODO(zvookin): Not correct for stricT_float. See: https://github.com/halide/Halide/issues/7118
                     if (takes_initial_value && !initial_value.defined()) {
                         initial_value = op->type.min();
                     }
@@ -4320,8 +4323,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             }
 
             if (use_llvm_vp_intrinsics) {
-                string vp_name = "llvm.vp.reduce.";
-                vp_name += name;
+                string vp_name = "llvm.vp.reduce." + std::string(name);
                 codegen(initial_value);
                 llvm::Value *init = value;
                 codegen(op->value);
@@ -5180,12 +5182,12 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llv
 
     for (const VPArg &arg : vp_args) {
         args.push_back(arg.value);
-        if (arg.mangle_index != -1) {
+        if (arg.mangle_index) {
             llvm::Type *llvm_type = arg.value->getType();
             if (isa<PointerType>(llvm_type)) {
-                mangled_types[arg.mangle_index] = ".p0";
+                mangled_types[arg.mangle_index.value()] = ".p0";
             } else {
-                mangled_types[arg.mangle_index] = mangle_llvm_vector_type(llvm_type);
+                mangled_types[arg.mangle_index.value()] = mangle_llvm_vector_type(llvm_type);
             }
         }
     }
