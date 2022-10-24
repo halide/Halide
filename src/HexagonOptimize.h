@@ -48,6 +48,7 @@ std::string type_suffix(const Expr &a, const Expr &b, bool signed_variants = tru
 
 std::string type_suffix(const std::vector<Expr> &ops, bool signed_variants = true);
 
+void eliminate_interleaves_test();
 }  // namespace Internal
 }  // namespace Halide
 

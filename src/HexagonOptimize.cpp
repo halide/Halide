@@ -2483,6 +2483,24 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
     s = FuseInterleaves().mutate(s);
     return s;
 }
+void eliminate_interleaves_test() {
+    Expr x = Variable::make(Int(32), "x");
+    Expr ramp_a = Ramp::make(x, 1, 128);
+    Expr ramp_b = Ramp::make(x+128, 1, 128);
+    Expr ramp_c = Ramp::make(x+256, 1, 128);
+    Target t = get_host_target();
+    Expr v0 = Load::make(UInt(8, 128), "buf", ramp_a, Buffer<>(), Parameter(), const_true(128), ModulusRemainder());
+    Expr v1 = Load::make(UInt(8, 128), "buf", ramp_b, Buffer<>(), Parameter(), const_true(128), ModulusRemainder());
+    Expr v1_high = Shuffle::make_slice(Cast::make(UInt(16, 128), v1), 64, 1, 64);
+    Expr v1_low = Shuffle::make_slice(Cast::make(UInt(16, 128), v1), 0, 1, 64);
+    Expr v2 = Load::make(UInt(8, 128), "buf", ramp_c, Buffer<>(), Parameter(), const_true(128), ModulusRemainder());
+    Expr input = v0 + native_interleave(Shuffle::make_concat({v1_low, v1_high}));
+    Expr res = EliminateInterleaves(t.with_feature(Target::HVX).natural_vector_size(Int(8))).mutate(input);
+    //    Expr res = EliminateInterleaves(t.with_feature(Target::HVX).natural_vector_size(Int(8))).mutate(native_interleave(Shuffle::make_concat({v1, v2})));
+    debug(0) << "input = " << input << "\n";
+    debug(0) << "res = " << res << "\n";
+    std::cout << "eliminate_interleaves_test passed" << std::endl;
 
+}
 }  // namespace Internal
 }  // namespace Halide
