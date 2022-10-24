@@ -595,7 +595,7 @@ protected:
 
     /** Predication mask using the above two types for special cases
      *   and an llvm::Value for the general one. */
-    typedef std::variant<NoMask, AllEnabledMask, llvm::Value *> MaskVariant;
+    using MaskVariant = std::variant<NoMask, AllEnabledMask, llvm::Value *>;
 
     /** Generate a vector predicated comparison intrinsic call if
      * use_llvm_vp_intrinsics is true and result_type is a vector
