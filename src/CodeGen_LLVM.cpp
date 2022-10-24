@@ -5180,12 +5180,12 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llv
 
     for (const VPArg &arg : vp_args) {
         args.push_back(arg.value);
-        if (arg.mangle_index != -1) {
+        if (arg.mangle_index) {
             llvm::Type *llvm_type = arg.value->getType();
             if (isa<PointerType>(llvm_type)) {
-                mangled_types[arg.mangle_index] = ".p0";
+                mangled_types[arg.mangle_index.value()] = ".p0";
             } else {
-                mangled_types[arg.mangle_index] = mangle_llvm_vector_type(llvm_type);
+                mangled_types[arg.mangle_index.value()] = mangle_llvm_vector_type(llvm_type);
             }
         }
     }

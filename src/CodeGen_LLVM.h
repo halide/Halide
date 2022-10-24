@@ -34,6 +34,7 @@ class GlobalVariable;
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -303,7 +304,11 @@ protected:
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
 
-    /** Return an appropriate type string for a type which is of VectorType. */
+    /** Return type string for LLVM vector type using LLVM IR intrinsic type mangling.
+     * E.g. ".nxv4i32" for a scalable vector of four 32-bit integers,
+     * or ".v4f32" for a fixed vector of four 32-bit floats.
+     * The dot is included in the result.
+     */
     std::string mangle_llvm_vector_type(llvm::Type *type);
 
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
@@ -572,9 +577,10 @@ protected:
      *  and if so, where, and the alignment for pointer arguments. */
     struct VPArg {
         llvm::Value *value;
-        int mangle_index;
+        // If provided, put argument's type into the intrinsic name via LLVM IR type mangling.
+        std::optional<size_t> mangle_index;
         int alignment;
-        VPArg(llvm::Value *value, int32_t mangle_index = -1, int32_t alignment = 0)
+        VPArg(llvm::Value *value, std::optional<size_t> mangle_index = std::nullopt, int32_t alignment = 0)
             : value(value), mangle_index(mangle_index), alignment(alignment) {
         }
     };
@@ -607,7 +613,8 @@ protected:
     bool try_vector_predication_intrinsic(const std::string &name, llvm::Type *llvm_result_type,
                                           int32_t length, MaskVariant mask, std::vector<VPArg> args);
 
-    /** Controls use of vector predicated intrinsics for vector operations. */
+    /** Controls use of vector predicated intrinsics for vector operations.
+     * Will be set by certain backends (e.g. RISC V) to control codegen. */
     bool use_llvm_vp_intrinsics;
     // @}
 
