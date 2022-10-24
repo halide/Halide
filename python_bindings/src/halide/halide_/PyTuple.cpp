@@ -3,6 +3,31 @@
 namespace Halide {
 namespace PythonBindings {
 
+Tuple to_halide_tuple(const py::object &o) {
+    try {
+        Expr e = o.cast<Expr>();
+        return Tuple(e);
+    } catch (...) {
+        // fall thru
+    }
+
+    try {
+        py::tuple t = o.cast<py::tuple>();
+        if (t.empty()) {
+            throw py::value_error("Cannot use a zero-length tuple-of-Expr");
+        }
+        std::vector<Expr> v(t.size());
+        for (size_t i = 0; i < t.size(); i++) {
+            v[i] = t[i].cast<Expr>();
+        }
+        return Tuple(v);
+    } catch (...) {
+        // fall thru
+    }
+
+    throw py::value_error("Expected an Expr or tuple-of-Expr.");
+}
+
 void define_tuple(py::module &m) {
     // Halide::Tuple isn't surfaced to the user in Python;
     // we define it here to allow PyBind to do some automatic
@@ -42,6 +67,7 @@ void define_tuple(py::module &m) {
                 o << "<halide.Tuple of size " << t.size() << ">";
                 return o.str();
             });
+
     py::implicitly_convertible<py::tuple, Tuple>();
 
     // If we autoconvert from vector<Expr>, we must also special-case FuncRef, alas
