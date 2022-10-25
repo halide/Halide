@@ -34,7 +34,9 @@ class GlobalVariable;
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "IRVisitor.h"
@@ -136,6 +138,11 @@ protected:
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
 
+    /** Used to decide whether to break a vector up into multiple smaller
+     * operations. This is the largest size the architecture supports. */
+    virtual int maximum_vector_bits() const {
+        return native_vector_bits();
+    }
     /** For architectures that have vscale vectors, return the constant vscale to use.
      * Default of 0 means do not use vscale vectors. Generally will depend on
      * the target flags and vector_bits settings.
@@ -296,6 +303,13 @@ protected:
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, Expr index);
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
+
+    /** Return type string for LLVM vector type using LLVM IR intrinsic type mangling.
+     * E.g. ".nxv4i32" for a scalable vector of four 32-bit integers,
+     * or ".v4f32" for a fixed vector of four 32-bit floats.
+     * The dot is included in the result.
+     */
+    std::string mangle_llvm_vector_type(llvm::Type *type);
 
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
     llvm::Value *make_halide_type_t(const Type &);
@@ -464,9 +478,10 @@ protected:
                              llvm::Function *intrin, std::vector<Expr>);
     llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
                              const std::string &name, std::vector<llvm::Value *>,
-                             bool scalable_vector_result = false);
+                             bool scalable_vector_result = false, bool is_reduction = false);
     llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
-                             llvm::Function *intrin, std::vector<llvm::Value *>);
+                             llvm::Function *intrin, std::vector<llvm::Value *>,
+                             bool is_reduction = false);
     // @}
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs
@@ -552,6 +567,57 @@ protected:
     llvm::Constant *get_splat(int lanes, llvm::Constant *value,
                               VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
 
+    /** Support for generating LLVM vector predication intrinsics
+     * ("@llvm.vp.*" and "@llvm.experimental.vp.*")
+     */
+    // @{
+    /** Struct to hold descriptor for an argument to a vector
+     *  predicated intrinsic. This includes the value, whether the
+     *  type of the argument should be mangled into the intrisic name
+     *  and if so, where, and the alignment for pointer arguments. */
+    struct VPArg {
+        llvm::Value *value;
+        // If provided, put argument's type into the intrinsic name via LLVM IR type mangling.
+        std::optional<size_t> mangle_index;
+        int alignment;
+        VPArg(llvm::Value *value, std::optional<size_t> mangle_index = std::nullopt, int32_t alignment = 0)
+            : value(value), mangle_index(mangle_index), alignment(alignment) {
+        }
+    };
+
+    /** Type indicating an intrinsic does not take a mask. */
+    struct NoMask {
+    };
+
+    /** Type indicating mask to use is all true -- all lanes enabled. */
+    struct AllEnabledMask {
+    };
+
+    /** Predication mask using the above two types for special cases
+     *   and an llvm::Value for the general one. */
+    using MaskVariant = std::variant<NoMask, AllEnabledMask, llvm::Value *>;
+
+    /** Generate a vector predicated comparison intrinsic call if
+     * use_llvm_vp_intrinsics is true and result_type is a vector
+     * type. If generated, assigns result of vp intrinsic to value and
+     * returns true if it an instuction is generated, otherwise
+     * returns false. */
+    bool try_vector_predication_comparison(const std::string &name, const Type &result_type,
+                                           MaskVariant mask, llvm::Value *a, llvm::Value *b,
+                                           const char *cmp_op);
+
+    /** Generate an intrisic call if use_llvm_vp_intrinsics is true
+     * and length is greater than 1. If generated, assigns result
+     * of vp intrinsic to value and returns true if it an instuction
+     * is generated, otherwise returns false. */
+    bool try_vector_predication_intrinsic(const std::string &name, llvm::Type *llvm_result_type,
+                                          int32_t length, MaskVariant mask, std::vector<VPArg> args);
+
+    /** Controls use of vector predicated intrinsics for vector operations.
+     * Will be set by certain backends (e.g. RISC V) to control codegen. */
+    bool use_llvm_vp_intrinsics;
+    // @}
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
@@ -593,9 +659,9 @@ private:
     llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name,
                                      bool result_in_argv, std::vector<bool> &arg_is_buffer);
 
-    llvm::Value *codegen_dense_vector_load(const Type &type, const std::string &name, const Expr &base,
-                                           const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
-                                           llvm::Value *vpred = nullptr, bool slice_to_native = true);
+    llvm::Value *codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
+                                     const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
+                                     llvm::Value *vpred = nullptr, bool slice_to_native = true, llvm::Value *stride = nullptr);
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
     virtual void codegen_predicated_load(const Load *op);

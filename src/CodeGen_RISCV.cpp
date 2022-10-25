@@ -25,11 +25,13 @@ protected:
     string mabi() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
+    int maximum_vector_bits() const override;
     int target_vscale() const override;
 };
 
 CodeGen_RISCV::CodeGen_RISCV(const Target &t)
     : CodeGen_Posix(t) {
+    use_llvm_vp_intrinsics = true;
 }
 
 string CodeGen_RISCV::mcpu_target() const {
@@ -79,6 +81,10 @@ int CodeGen_RISCV::native_vector_bits() const {
         return target.vector_bits;
     }
     return 0;
+}
+
+int CodeGen_RISCV::maximum_vector_bits() const {
+    return native_vector_bits() * 8;
 }
 
 int CodeGen_RISCV::target_vscale() const {
