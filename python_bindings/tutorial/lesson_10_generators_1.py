@@ -120,8 +120,7 @@ def use_first_generator():
             assert output_buffer[xx, yy] == 192
 
 
-# If you like, you can put multiple Generators in the same source file. This
-# can be handy if they share some common code. Let's define another, more complex generator:
+# Let's define another, more complex generator:
 
 @hl.generator(name="my_second_generator")
 class MySecondGenerator:
