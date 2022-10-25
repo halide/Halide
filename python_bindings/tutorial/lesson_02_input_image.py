@@ -56,9 +56,7 @@ def main():
     # Cast it to a floating point value.
     value = hl.cast(hl.Float(32), value)
 
-    # Multiply it by 1.5 to brighten it. Halide represents real
-    # numbers as floats, not doubles, so we stick an 'f' on the end
-    # of our constant.
+    # Multiply it by 1.5 to brighten it.
     value = value * 1.5
 
     # Clamp it to be less than 255, so we don't get overflow when we
@@ -73,7 +71,6 @@ def main():
 
     # The equivalent one-liner to all of the above is:
     #
-    #   brighter(x, y, c) = hl.cast<uint8_t>(hl.min(input(x, y, c) * 1.5f, 255))
     #   brighter[x, y, c] = hl.cast(hl.UInt(8), hl.min(input[x, y, c] * 1.5, 255))
     #
     # In the shorter version:
