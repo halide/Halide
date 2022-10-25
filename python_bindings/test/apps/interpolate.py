@@ -5,7 +5,7 @@ Fast image interpolation using a pyramid.
 import halide as hl
 
 from datetime import datetime
-import imageio
+import imageio.v2 as imageio
 import numpy as np
 import os.path
 

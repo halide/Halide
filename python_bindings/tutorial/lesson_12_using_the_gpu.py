@@ -10,7 +10,7 @@
 
 import halide as hl
 
-import imageio
+import imageio.v2 as imageio
 import os.path
 import struct
 

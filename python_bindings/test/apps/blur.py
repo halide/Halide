@@ -1,7 +1,7 @@
 import halide as hl
 
 import numpy as np
-import imageio
+import imageio.v2 as imageio
 import os.path
 
 # Return the directory to look in for test images:
