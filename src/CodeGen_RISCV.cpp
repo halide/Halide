@@ -24,7 +24,7 @@ namespace {
 
 constexpr int max_intrinsic_args = 4;
 
-struct FixedOrScalableVector {
+struct IntrinsicArgPattern {
     enum TypePattern {
         Undefined,
         Fixed,
@@ -35,19 +35,19 @@ struct FixedOrScalableVector {
     Type type;
     int relative_scale;
 
-    FixedOrScalableVector(const Type &type, bool scalable = true)
+    IntrinsicArgPattern(const Type &type)
         : type_pattern(type.is_vector() ? Fixed : Scalable),
           type(type), relative_scale(1) {
     }
-    FixedOrScalableVector(halide_type_code_t code)
+    IntrinsicArgPattern(halide_type_code_t code)
         : type_pattern(WildcardWidths),
           type(code, 8, 1), relative_scale(1) {
     }
-    FixedOrScalableVector(halide_type_code_t code, int relative_scale)
+    IntrinsicArgPattern(halide_type_code_t code, int relative_scale)
         : type_pattern(WildcardWidths),
           type(code, 8, 1), relative_scale(relative_scale) {
     }
-    FixedOrScalableVector()
+    IntrinsicArgPattern()
         : type_pattern(Undefined),
           type() {
     }
@@ -55,9 +55,9 @@ struct FixedOrScalableVector {
 
 struct RISCVIntrinsic {
     const char *riscv_name;
-    FixedOrScalableVector ret_type;
+    IntrinsicArgPattern ret_type;
     const char *name;
-    FixedOrScalableVector arg_types[max_intrinsic_args];
+    IntrinsicArgPattern arg_types[max_intrinsic_args];
     int flags;
     enum {
         AddVLArg = 1 << 0,          // Add a constant full size vector length argument
@@ -67,8 +67,8 @@ struct RISCVIntrinsic {
     };
 };
 
-Type concretize_fixed_or_scalable(const FixedOrScalableVector &f_or_v, int type_width_scale, int vector_bits) {
-    if (f_or_v.type_pattern == FixedOrScalableVector::Fixed) {
+Type concretize_fixed_or_scalable(const IntrinsicArgPattern &f_or_v, int type_width_scale, int vector_bits) {
+    if (f_or_v.type_pattern == IntrinsicArgPattern::Fixed) {
         return f_or_v.type;
     }
     int bit_width = f_or_v.type.bits() * f_or_v.relative_scale * type_width_scale;
@@ -206,7 +206,7 @@ void CodeGen_RISCV::init_module() {
     int effective_vscale = target_vscale();
     if (effective_vscale != 0) {
         for (const RISCVIntrinsic &intrin : intrinsic_defs) {
-            if (intrin.ret_type.type_pattern == FixedOrScalableVector::WildcardWidths) {
+            if (intrin.ret_type.type_pattern == IntrinsicArgPattern::WildcardWidths) {
                 for (int scale = 0; scale < 4; scale++) {
                     int bit_width_scale = 1 << scale;
 
@@ -222,7 +222,7 @@ void CodeGen_RISCV::init_module() {
                     arg_types.push_back(ret_type);
 
                     for (const auto &arg_type : intrin.arg_types) {
-                        if (arg_type.type_pattern == FixedOrScalableVector::Undefined) {
+                        if (arg_type.type_pattern == IntrinsicArgPattern::Undefined) {
                             break;
                         }
                         if ((arg_type.relative_scale * bit_width_scale * arg_type.type.bits()) > 64) {
@@ -244,7 +244,7 @@ void CodeGen_RISCV::init_module() {
                 arg_types.push_back(ret_type);
 
                 for (const auto &arg_type : intrin.arg_types) {
-                    if (arg_type.type_pattern == FixedOrScalableVector::Undefined) {
+                    if (arg_type.type_pattern == IntrinsicArgPattern::Undefined) {
                         break;
                     }
                     arg_types.push_back(concretize_fixed_or_scalable(arg_type, 1, target.vector_bits));
@@ -268,13 +268,13 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
     Type ret_type = concretize_fixed_or_scalable(intrin.ret_type, bit_width_scale,
                                                  target.vector_bits);
     if (intrin.flags & RISCVIntrinsic::MangleReturnType) {
-        bool scalable = (intrin.ret_type.type_pattern != FixedOrScalableVector::Fixed);
+        bool scalable = (intrin.ret_type.type_pattern != IntrinsicArgPattern::Fixed);
         mangled_name += "." + mangle_vector_argument_type(ret_type, scalable, effective_vscale);
     }
     llvm::Type *llvm_ret_type;
     if (ret_type.is_vector()) {
         int lanes = ret_type.lanes();
-        bool scalable = (intrin.ret_type.type_pattern != FixedOrScalableVector::Fixed);
+        bool scalable = (intrin.ret_type.type_pattern != IntrinsicArgPattern::Fixed);
         if (scalable) {
             lanes /= effective_vscale;
         }
@@ -286,12 +286,12 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
 
     llvm_arg_types.push_back(llvm_ret_type);
     for (const auto &arg_type_pattern : intrin.arg_types) {
-        if (arg_type_pattern.type_pattern == FixedOrScalableVector::Undefined) {
+        if (arg_type_pattern.type_pattern == IntrinsicArgPattern::Undefined) {
             break;
         }
         Type arg_type = concretize_fixed_or_scalable(arg_type_pattern, bit_width_scale, target.vector_bits);
 
-        bool scalable = (arg_type_pattern.type_pattern != FixedOrScalableVector::Fixed);
+        bool scalable = (arg_type_pattern.type_pattern != IntrinsicArgPattern::Fixed);
         mangled_name += "." + mangle_vector_argument_type(arg_type, scalable, effective_vscale);
         llvm::Type *llvm_type;
         if (arg_type.is_vector()) {
@@ -348,7 +348,6 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
     }
 
     // Call the LLVM intrinsic.
-    // TODO: This does not work for reductions.
     int actual_lanes = ret_type.lanes();
     llvm::Constant *vtype = llvm::ConstantInt::get(xlen_type, actual_lanes);
     // Add an initial argument to handle tail propagation. Only done if result is vector type.
@@ -364,7 +363,7 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
     wrapper->addFnAttr(llvm::Attribute::ReadNone);
     wrapper->addFnAttr(llvm::Attribute::NoUnwind);
 
-    // llvm::verifyFunction(*wrapper);
+    llvm::verifyFunction(*wrapper);
     return wrapper;
 }
 
