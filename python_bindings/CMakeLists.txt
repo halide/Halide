@@ -35,6 +35,9 @@ set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
 # part, so only requesting Module avoids failures when Embed is not
 # available, as is the case in the manylinux Docker images.
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
+if (Python3_VERSION VERSION_LESS "3.8")
+    message(FATAL_ERROR "Halide requires Python v3.8 or later, but found ${Python3_VERSION}.")
+endif ()
 
 if (PYBIND11_USE_FETCHCONTENT)
     include(FetchContent)
