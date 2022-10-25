@@ -345,6 +345,7 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
         // for discussion of fixed-point rounding mode.
         // TODO: When LLVM finally fixes the instructions to take rounding modes,
         // this will have to change to passing the rounding mode to the intrinsic.
+        // https://github.com/halide/Halide/issues/7123
         llvm::FunctionType *csrw_llvm_type = llvm::FunctionType::get(void_t, {xlen_type}, false);
         llvm::InlineAsm *inline_csrw = llvm::InlineAsm::get(csrw_llvm_type, "csrw vxrm,${0:z}", "rJ,~{memory}", true);
         builder->CreateCall(inline_csrw, {rounding_mode});
