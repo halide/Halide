@@ -341,6 +341,8 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
     if (round_down || round_up) {
         internal_assert(!(round_down && round_up));
         llvm::Value *rounding_mode = llvm::ConstantInt::get(xlen_type, round_down ? 2 : 0);
+        // See https://github.com/riscv/riscv-v-spec/releases/download/v1.0/riscv-v-spec-1.0.pdf page 15
+        // for discussion of fixed-point rounding mode.
         // TODO: When LLVM finally fixes the instructions to take rounding modes,
         // this will have to change to passing the rounding mode to the intrinsic.
         llvm::FunctionType *csrw_llvm_type = llvm::FunctionType::get(void_t, {xlen_type}, false);
