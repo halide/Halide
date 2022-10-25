@@ -35,21 +35,21 @@ struct FixedOrScalableVector {
     Type type;
     int relative_scale;
 
-    FixedOrScalableVector(const Type &type, bool scalable = true) :
-        type_pattern(type.is_vector() ? Fixed : Scalable),
-        type(type), relative_scale(1) {
+    FixedOrScalableVector(const Type &type, bool scalable = true)
+        : type_pattern(type.is_vector() ? Fixed : Scalable),
+          type(type), relative_scale(1) {
     }
-    FixedOrScalableVector(halide_type_code_t code) :
-        type_pattern(WildcardWidths),
-        type(code, 8, 1), relative_scale(1) {
+    FixedOrScalableVector(halide_type_code_t code)
+        : type_pattern(WildcardWidths),
+          type(code, 8, 1), relative_scale(1) {
     }
-    FixedOrScalableVector(halide_type_code_t code, int relative_scale) :
-        type_pattern(WildcardWidths),
-        type(code, 8, 1), relative_scale(relative_scale) {
+    FixedOrScalableVector(halide_type_code_t code, int relative_scale)
+        : type_pattern(WildcardWidths),
+          type(code, 8, 1), relative_scale(relative_scale) {
     }
-    FixedOrScalableVector() :
-        type_pattern(Undefined),
-        type() {
+    FixedOrScalableVector()
+        : type_pattern(Undefined),
+          type() {
     }
 };
 
@@ -60,10 +60,10 @@ struct RISCVIntrinsic {
     FixedOrScalableVector arg_types[max_intrinsic_args];
     int flags;
     enum {
-        AddVLArg = 1 << 0,   // Add a constant full size vector length argument
-        RoundDown = 1 << 1,   // Set rounding mode to down (rdn) before intrinsic.
-        RoundUp = 1 << 2,   // Set rounding mode to up (rdu) before intrinsic.
-        MangleReturnType = 1 << 3, // Put return type mangling at start of type list.
+        AddVLArg = 1 << 0,          // Add a constant full size vector length argument
+        RoundDown = 1 << 1,         // Set rounding mode to down (rdn) before intrinsic.
+        RoundUp = 1 << 2,           // Set rounding mode to up (rdu) before intrinsic.
+        MangleReturnType = 1 << 3,  // Put return type mangling at start of type list.
     };
 };
 
@@ -192,12 +192,12 @@ const RISCVIntrinsic intrinsic_defs[] = {
     {"vaaddu", Type::UInt, "halving_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundDown},
     {"vaadd", Type::Int, "rounding_halving_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundUp},
     {"vaaddu", Type::UInt, "rounding_halving_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundUp},
-    {"vwadd", { Type::Int, 2}, "widening_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwaddu", { Type::UInt, 2}, "widening_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwsub", { Type::Int, 2}, "widening_sub", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwsubu", { Type::UInt, 2}, "widening_sub", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwmul", { Type::Int, 2}, "widening_mul", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwmulu", { Type::UInt, 2}, "widening_mul", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
+    {"vwadd", {Type::Int, 2}, "widening_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
+    {"vwaddu", {Type::UInt, 2}, "widening_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
+    {"vwsub", {Type::Int, 2}, "widening_sub", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
+    {"vwsubu", {Type::UInt, 2}, "widening_sub", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
+    {"vwmul", {Type::Int, 2}, "widening_mul", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
+    {"vwmulu", {Type::UInt, 2}, "widening_mul", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
 };
 
 void CodeGen_RISCV::init_module() {
@@ -276,7 +276,7 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
         int lanes = ret_type.lanes();
         bool scalable = (intrin.ret_type.type_pattern != FixedOrScalableVector::Fixed);
         if (scalable) {
-             lanes /= effective_vscale;
+            lanes /= effective_vscale;
         }
         llvm_ret_type = llvm::VectorType::get(llvm_type_of(ret_type.element_of()),
                                               lanes, scalable);
@@ -342,7 +342,7 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
         llvm::Value *rounding_mode = llvm::ConstantInt::get(xlen_type, round_down ? 2 : 0);
         // TODO: When LLVM finally fixes the instructions to take rounding modes,
         // this will have to change to passing the rounding mode to the intrinsic.
-        llvm::FunctionType *csrw_llvm_type = llvm::FunctionType::get(void_t, { xlen_type }, false);
+        llvm::FunctionType *csrw_llvm_type = llvm::FunctionType::get(void_t, {xlen_type }, false);
         llvm::InlineAsm *inline_csrw = llvm::InlineAsm::get(csrw_llvm_type, "csrw vxrm,${0:z}", "rJ,~{memory}", true);
         builder->CreateCall(inline_csrw, {rounding_mode});
     }
@@ -368,7 +368,7 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
     return wrapper;
 }
 
-}  // anonymous namepspace
+}  // namepspace
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_RISCV(const Target &target) {
     return std::make_unique<CodeGen_RISCV>(target);
