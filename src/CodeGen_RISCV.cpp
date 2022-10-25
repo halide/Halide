@@ -49,7 +49,7 @@ struct IntrinsicArgPattern {
     }
     IntrinsicArgPattern()
         : type_pattern(Undefined),
-          type() {
+          type(), relative_scale(0) {
     }
 };
 
@@ -61,8 +61,8 @@ struct RISCVIntrinsic {
     int flags;
     enum {
         AddVLArg = 1 << 0,          // Add a constant full size vector length argument
-        RoundDown = 1 << 1,         // Set rounding mode to down (rdn) before intrinsic.
-        RoundUp = 1 << 2,           // Set rounding mode to up (rdu) before intrinsic.
+        RoundDown = 1 << 1,         // Set vxrm rounding mode to down (rdn) before intrinsic.
+        RoundUp = 1 << 2,           // Set vxrm rounding mode to up (rdu) before intrinsic.
         MangleReturnType = 1 << 3,  // Put return type mangling at start of type list.
     };
 };
@@ -75,6 +75,7 @@ Type concretize_fixed_or_scalable(const IntrinsicArgPattern &f_or_v, int type_wi
     return Type(f_or_v.type.code(), bit_width, (vector_bits * f_or_v.relative_scale) / bit_width);
 }
 
+// Produce LLVM IR intrisic type name mangling for Halide type, with vector codegen info provided.
 std::string mangle_vector_argument_type(const Type &arg_type, bool scalable, int effective_vscale) {
     std::string result;
     if (arg_type.is_vector()) {
