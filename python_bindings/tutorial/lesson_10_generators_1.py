@@ -170,9 +170,9 @@ class MySecondGenerator:
         if self.rotation == "none":
             rotated[self.x, self.y] = brighter[self.x, self.y]
         elif self.rotation == "cw":
-            rotated[self.x, self.y] = brighter[w - self.y - 1, self.x]
-        elif self.rotation == "ccw":
             rotated[self.x, self.y] = brighter[self.y, h - self.x - 1]
+        elif self.rotation == "ccw":
+            rotated[self.x, self.y] = brighter[w - self.y - 1, self.x]
         else:
             # Illegal or unsupported values for a GeneratorParam should always be
             # handled by raising an exception.
@@ -212,11 +212,8 @@ def use_second_generator():
 
     # We'll read in an image here so that the effects of the code are easier to see.
 
-    im = imageio.imread(os.path.join(os.path.dirname(__file__), "images/gray.png"))
-    # We need to ensure that the image is arranged in 'F' order, so that the innermost axis
-    # varies most quickly (this is necessary for efficient vectorization in Halide).
-    # imageio doesn't guarantee this for grayscale images, so we'll force the issue via np.asarray().
-    input_buffer = hl.Buffer(np.asarray(im, order='F'))
+    image_path = os.path.join(os.path.dirname(__file__), "images/gray.png")
+    input_buffer = hl.Buffer(imageio.imread(image_path))
 
     # Now, let's override rotation to specify a clockwise rotate.
     rotate_cw = {
