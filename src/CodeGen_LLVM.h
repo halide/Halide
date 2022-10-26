@@ -609,7 +609,7 @@ protected:
     struct VPResultType {
         llvm::Type *type;
         std::optional<size_t> mangle_index;
-        VPResultType(llvm::Type*type, std::optional<size_t> mangle_index = std::nullopt)
+        VPResultType(llvm::Type *type, std::optional<size_t> mangle_index = std::nullopt)
             : type(type), mangle_index(mangle_index) {
         }
     };

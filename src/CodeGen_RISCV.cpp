@@ -305,8 +305,8 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
         llvm_arg_types.push_back(llvm_type);
     }
     if (intrin.flags & RISCVIntrinsic::ReverseBinOp) {
-      internal_assert(llvm_arg_types.size() > 2);
-        std::swap(llvm_arg_types[1],  llvm_arg_types[2]);
+        internal_assert(llvm_arg_types.size() > 2);
+        std::swap(llvm_arg_types[1], llvm_arg_types[2]);
     }
     if (intrin.flags & RISCVIntrinsic::AddVLArg) {
         mangled_name += (target.bits == 64) ? ".i64" : ".i32";
