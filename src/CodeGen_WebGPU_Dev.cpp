@@ -164,6 +164,7 @@ void CodeGen_WebGPU_Dev::init_module() {
         << "    return nan_f32();             \n"
         << "  }                               \n"
         << "}                                 \n"
+        << "fn rint(x : f32) -> f32 {return round(x);}\n"
         << "fn round_f32(x : f32) -> f32 {return round(x);}\n"
         << "fn sin_f32(x : f32) -> f32 {return sin(x);}\n"
         << "fn sinh_f32(x : f32) -> f32 {return sinh(x);}\n"
