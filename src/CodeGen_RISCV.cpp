@@ -210,6 +210,8 @@ void CodeGen_RISCV::init_module() {
     int effective_vscale = target_vscale();
     if (effective_vscale != 0) {
         for (const RISCVIntrinsic &intrin : intrinsic_defs) {
+            std::vector<Type> arg_types;
+            arg_types.reserve(max_intrinsic_args);
             if (intrin.ret_type.type_pattern == IntrinsicArgPattern::AllTypeWidths) {
                 // Iterate over 8/16/32/64 bit integer type widths via log2 shift amount.
                 // TODO: Will need to add floating point bit widths when an intrinsic is added.
@@ -223,7 +225,6 @@ void CodeGen_RISCV::init_module() {
                     Type ret_type = concretize_fixed_or_scalable(intrin.ret_type, bit_width_scale,
                                                                  target.vector_bits);
 
-                    std::vector<Type> arg_types;
                     if ((intrin.ret_type.relative_scale * bit_width_scale * intrin.ret_type.type.bits()) > 64) {
                         break;
                     }
@@ -240,13 +241,12 @@ void CodeGen_RISCV::init_module() {
                     }
                     llvm::Function *intrin_impl = define_riscv_intrinsic_wrapper(intrin, bit_width_scale);
                     declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
+                    arg_types.clear();
                 }
             } else {
                 llvm::Function *intrin_impl = define_riscv_intrinsic_wrapper(intrin, 1);
                 Type ret_type = concretize_fixed_or_scalable(intrin.ret_type, 1,
                                                              target.vector_bits);
-                std::vector<Type> arg_types;
-
                 for (const auto &arg_type : intrin.arg_types) {
                     if (arg_type.type_pattern == IntrinsicArgPattern::Undefined) {
                         break;
@@ -254,6 +254,7 @@ void CodeGen_RISCV::init_module() {
                     arg_types.push_back(concretize_fixed_or_scalable(arg_type, 1, target.vector_bits));
                 }
                 declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
+                arg_types.clear();
             }
         }
     }
@@ -265,7 +266,7 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
 
     llvm::Type *xlen_type = target.bits == 32 ? i32_t : i64_t;
 
-    // Produce intrinsic name and
+    // Produce intrinsic name and type mangling.
     std::vector<llvm::Type *> llvm_arg_types;
     std::string mangled_name = "llvm.riscv.";
     mangled_name += intrin.riscv_name;
