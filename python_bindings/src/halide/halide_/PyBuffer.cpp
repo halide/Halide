@@ -326,7 +326,7 @@ void define_buffer(py::module &m) {
                 std::vector<Py_ssize_t> shape, strides;
                 // Halide's default indexing convention is col-major (the most rapidly varying index comes first);
                 // Numpy's default is row-major (most rapidly varying comes last).
-                // We want to reverse the order so that most-varying comes first, for better vectorization.
+                // We want to reverse the order so that most-varying comes first.
                 for (int i = d - 1; i >= 0; i--) {
                     shape.push_back((Py_ssize_t)b.raw_buffer()->dim[i].extent);
                     strides.push_back((Py_ssize_t)(b.raw_buffer()->dim[i].stride * bytes));

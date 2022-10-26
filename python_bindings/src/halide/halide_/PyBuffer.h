@@ -25,7 +25,7 @@ Halide::Runtime::Buffer<T, Dims, InClassDimStorage> pybufferinfo_to_halidebuffer
         }
         // Halide's default indexing convention is col-major (the most rapidly varying index comes first);
         // Numpy's default is row-major (most rapidly varying comes last).
-        // We want to reverse the order so that most-varying comes first, for better vectorization.
+        // We want to reverse the order so that most-varying comes first.
         dims[info.ndim - i - 1] = {0, (int32_t)info.shape[i], (int32_t)(info.strides[i] / t.bytes())};
     }
     return Halide::Runtime::Buffer<T, Dims, InClassDimStorage>(t, info.ptr, (int)info.ndim, dims);
