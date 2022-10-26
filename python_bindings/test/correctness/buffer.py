@@ -15,21 +15,21 @@ def test_ndarray_to_buffer():
     assert b0.name() == "float32_test_buffer"
     assert b0.all_equal(1)
 
-    assert b0.dim(0).min() == 0
-    assert b0.dim(0).max() == 199
-    assert b0.dim(0).extent() == 200
-    assert b0.dim(0).stride() == 300
-
     assert b0.dim(1).min() == 0
-    assert b0.dim(1).max() == 299
-    assert b0.dim(1).extent() == 300
-    assert b0.dim(1).stride() == 1
+    assert b0.dim(1).max() == 199
+    assert b0.dim(1).extent() == 200
+    assert b0.dim(1).stride() == 300
+
+    assert b0.dim(0).min() == 0
+    assert b0.dim(0).max() == 299
+    assert b0.dim(0).extent() == 300
+    assert b0.dim(0).stride() == 1
 
     a0[12, 34] = 56
-    assert b0[12, 34] == 56
+    assert b0[34, 12] == 56
 
     b0[56, 34] = 12
-    assert a0[56, 34] == 12
+    assert a0[34, 56] == 12
 
 
 def test_buffer_to_ndarray():
@@ -43,17 +43,17 @@ def test_buffer_to_ndarray():
     array_shared = np.array(buf, copy = False)
     assert array_shared.shape == (4, 4)
     assert array_shared.dtype == np.int16
-    assert array_shared[1, 2] == 42
+    assert array_shared[2, 1] == 42
 
     # Should *not* share storage with buf
     array_copied = np.array(buf, copy = True)
     assert array_copied.shape == (4, 4)
     assert array_copied.dtype == np.int16
-    assert array_copied[1, 2] == 42
+    assert array_copied[2, 1] == 42
 
     buf[1, 2] = 3
-    assert array_shared[1, 2] == 3
-    assert array_copied[1, 2] == 42
+    assert array_shared[2, 1] == 3
+    assert array_copied[2, 1] == 42
 
     # Ensure that Buffers that have nonzero mins get converted correctly,
     # since the Python Buffer Protocol doesn't have the 'min' concept
@@ -62,25 +62,25 @@ def test_buffer_to_ndarray():
 
     # Should share storage with cropped (and buf)
     cropped_array_shared = np.array(cropped, copy = False)
-    assert cropped_array_shared.shape == (2, 4)
+    assert cropped_array_shared.shape == (4, 2)
     assert cropped_array_shared.dtype == np.int16
-    assert cropped_array_shared[0, 2] == 3
+    assert cropped_array_shared[2, 0] == 3
 
     # Should *not* share storage with anything
     cropped_array_copied = np.array(cropped, copy = True)
-    assert cropped_array_copied.shape == (2, 4)
+    assert cropped_array_copied.shape == (4, 2)
     assert cropped_array_copied.dtype == np.int16
-    assert cropped_array_copied[0, 2] == 3
+    assert cropped_array_copied[2, 0] == 3
 
     cropped[1, 2] = 5
 
     assert buf[1, 2] == 3
-    assert array_shared[1, 2] == 3
-    assert array_copied[1, 2] == 42
+    assert array_shared[2, 1] == 3
+    assert array_copied[2, 1] == 42
 
     assert cropped[1, 2] == 5
-    assert cropped_array_shared[0, 2] == 5
-    assert cropped_array_copied[0, 2] == 3
+    assert cropped_array_shared[2, 0] == 5
+    assert cropped_array_copied[2, 0] == 3
 
 
 def _assert_fn(e):
@@ -169,8 +169,9 @@ def test_make_interleaved():
     assert b.dim(2).stride() == 1
 
     a = np.array(b, copy = False)
-    assert a.shape == (w, h, c)
-    assert a.strides == (c, w*c, 1)
+    # NumPy shape order is opposite that of Halide shape order
+    assert a.shape == (c, h, w)
+    assert a.strides == (1, w*c, c)
     assert a.dtype == np.uint8
 
 def test_interleaved_ndarray():
@@ -188,16 +189,16 @@ def test_interleaved_ndarray():
     assert b.type() == hl.UInt(8)
 
     assert b.dim(0).min() == 0
-    assert b.dim(0).extent() == w
-    assert b.dim(0).stride() == c
+    assert b.dim(0).extent() == c
+    assert b.dim(0).stride() == 1
 
     assert b.dim(1).min() == 0
     assert b.dim(1).extent() == h
     assert b.dim(1).stride() == w * c
 
     assert b.dim(2).min() == 0
-    assert b.dim(2).extent() == c
-    assert b.dim(2).stride() == 1
+    assert b.dim(2).extent() == w
+    assert b.dim(2).stride() == c
 
 def test_reorder():
     W = 7

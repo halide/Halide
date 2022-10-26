@@ -23,7 +23,10 @@ Halide::Runtime::Buffer<T, Dims, InClassDimStorage> pybufferinfo_to_halidebuffer
         if (INT_MAX < info.shape[i] || INT_MAX < (info.strides[i] / t.bytes())) {
             throw py::value_error("Out of range dimensions in buffer conversion.");
         }
-        dims[i] = {0, (int32_t)info.shape[i], (int32_t)(info.strides[i] / t.bytes())};
+        // Halide's default indexing convention is col-major (the most rapidly varying index comes first);
+        // Numpy's default is row-major (most rapidly varying comes last).
+        // We want to reverse the order so that most-varying comes first, for better vectorization.
+        dims[info.ndim - i - 1] = {0, (int32_t)info.shape[i], (int32_t)(info.strides[i] / t.bytes())};
     }
     return Halide::Runtime::Buffer<T, Dims, InClassDimStorage>(t, info.ptr, (int)info.ndim, dims);
 }
