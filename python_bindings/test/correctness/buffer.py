@@ -285,6 +285,39 @@ def test_scalar_buffers():
     buf.fill(32)
     assert buf[()] == 32
 
+def test_oob():
+    buf = hl.Buffer(hl.Int(16), [4, 6])
+    buf.fill(0)
+
+    # getitem below min
+    try:
+        print(buf[-1, 2])
+    except IndexError as e:
+        assert 'index -1 is out of bounds for axis 0 with min=0, extent=4' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    # getitem above max
+    try:
+        print(buf[1, 6])
+    except IndexError as e:
+        assert 'index 6 is out of bounds for axis 1 with min=0, extent=6' in str(e)
+
+    # setitem below min
+    try:
+        buf[-1, 2] = 42
+    except IndexError as e:
+        assert 'index -1 is out of bounds for axis 0 with min=0, extent=4' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    # setitem above max
+    try:
+        buf[1, 6] = 42
+    except IndexError as e:
+        assert 'index 6 is out of bounds for axis 1 with min=0, extent=6' in str(e)
+
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -301,3 +334,4 @@ if __name__ == "__main__":
     test_overflow()
     test_buffer_to_str()
     test_scalar_buffers()
+    test_oob()
