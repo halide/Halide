@@ -5165,16 +5165,26 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llv
 
     bool any_scalable = isa<llvm::ScalableVectorType>(llvm_result_type);
     bool any_fixed = isa<llvm::FixedVectorType>(llvm_result_type);
+    bool result_is_vector_type = any_scalable || any_fixed;
     bool is_reduction = !any_scalable && !any_fixed;
+    llvm::Type *base_vector_type = nullptr;
     for (const VPArg &arg : vp_args) {
-        any_scalable |= isa<llvm::ScalableVectorType>(arg.value->getType());
-        any_fixed |= isa<llvm::FixedVectorType>(arg.value->getType());
+        llvm::Type *arg_type = arg.value->getType();
+        bool scalable = isa<llvm::ScalableVectorType>(arg_type);
+        bool fixed = isa<llvm::FixedVectorType>(arg_type);
+        if (base_vector_type == nullptr && (fixed || scalable)) {
+            base_vector_type = arg_type;
+        }
+        any_scalable |= scalable;
+        any_fixed |= fixed;
     }
     if (!any_fixed && !any_scalable) {
         return false;
     }
     internal_assert(!(any_scalable && any_fixed)) << "Cannot combine fixed and scalable vectors to vector predication intrinsic.\n";
-
+    if (base_vector_type == nullptr && result_is_vector_type) {
+        base_vector_type = llvm_result_type;
+    }
     bool is_scalable = any_scalable;
 
     std::vector<llvm::Value *> args;
@@ -5200,12 +5210,13 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llv
 
     if (!std::holds_alternative<NoMask>(mask)) {
         if (std::holds_alternative<AllEnabledMask>(mask)) {
+            internal_assert(base_vector_type != nullptr) << "Requested all enabled mask without any vector type to use for type/length.\n";
             llvm::ElementCount llvm_vector_ec;
             if (is_scalable) {
-                const auto *vt = cast<llvm::ScalableVectorType>(llvm_result_type);
+                const auto *vt = cast<llvm::ScalableVectorType>(base_vector_type);
                 llvm_vector_ec = vt->getElementCount();
             } else {
-                const auto *vt = cast<llvm::FixedVectorType>(llvm_result_type);
+                const auto *vt = cast<llvm::FixedVectorType>(base_vector_type);
                 llvm_vector_ec = vt->getElementCount();
             }
             args.push_back(ConstantVector::getSplat(llvm_vector_ec, ConstantInt::get(i1_t, 1)));
