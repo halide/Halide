@@ -195,8 +195,6 @@ Type format_descriptor_to_type(const std::string &fd) {
     return Type();
 }
 
-namespace {
-
 py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
     if ((size_t)pos.size() != (size_t)buf.dimensions()) {
         throw py::value_error("Incorrect number of dimensions.");
@@ -227,6 +225,8 @@ py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
     throw py::value_error("Unsupported Buffer<> type.");
     return py::object();
 }
+
+namespace {
 
 py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, const py::object &value) {
     if ((size_t)pos.size() != (size_t)buf.dimensions()) {
