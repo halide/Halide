@@ -449,42 +449,42 @@ public:
 
         if (use_avx2) {
             auto check_x86_fixed_point = [&](const std::string &suffix, const int m) {
-                check("vpaddb*" + suffix, 32 * m,u8_1 + u8_2);
-                check("vpsubb*" + suffix, 32 * m,u8_1 - u8_2);
-                check("vpaddsb*" + suffix, 32 * m,i8_sat(i16(i8_1) + i16(i8_2)));
-                check("vpsubsb*" + suffix, 32 * m,i8_sat(i16(i8_1) - i16(i8_2)));
-                check("vpaddusb*" + suffix, 32 * m,u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-                check("vpsubusb*" + suffix, 32 * m,u8(max(i16(u8_1) - i16(u8_2), 0)));
-                check("vpaddw*" + suffix, 16 * m,u16_1 + u16_2);
-                check("vpsubw*" + suffix, 16 * m,u16_1 - u16_2);
-                check("vpaddsw*" + suffix, 16 * m,i16_sat(i32(i16_1) + i32(i16_2)));
-                check("vpsubsw*" + suffix, 16 * m,i16_sat(i32(i16_1) - i32(i16_2)));
-                check("vpaddusw*" + suffix, 16 * m,u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-                check("vpsubusw*" + suffix, 16 * m,u16(max(i32(u16_1) - i32(u16_2), 0)));
-                check("vpaddd*" + suffix, 8 * m,i32_1 + i32_2);
-                check("vpsubd*" + suffix, 8 * m,i32_1 - i32_2);
-                check("vpmulhw*" + suffix, 16 * m,i16((i32(i16_1) * i32(i16_2)) / (256 * 256)));
-                check("vpmulhw*" + suffix, 16 * m,i16((i32(i16_1) * i32(i16_2)) >> cast<unsigned>(16)));
-                check("vpmulhw*" + suffix, 16 * m,i16((i32(i16_1) * i32(i16_2)) >> cast<int>(16)));
-                check("vpmulhw*" + suffix, 16 * m,i16((i32(i16_1) * i32(i16_2)) << cast<int>(-16)));
-                check("vpmullw*" + suffix, 16 * m,i16_1 * i16_2);
+                check("vpaddb*" + suffix, 32 * m, u8_1 + u8_2);
+                check("vpsubb*" + suffix, 32 * m, u8_1 - u8_2);
+                check("vpaddsb*" + suffix, 32 * m, i8_sat(i16(i8_1) + i16(i8_2)));
+                check("vpsubsb*" + suffix, 32 * m, i8_sat(i16(i8_1) - i16(i8_2)));
+                check("vpaddusb*" + suffix, 32 * m, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
+                check("vpsubusb*" + suffix, 32 * m, u8(max(i16(u8_1) - i16(u8_2), 0)));
+                check("vpaddw*" + suffix, 16 * m, u16_1 + u16_2);
+                check("vpsubw*" + suffix, 16 * m, u16_1 - u16_2);
+                check("vpaddsw*" + suffix, 16 * m, i16_sat(i32(i16_1) + i32(i16_2)));
+                check("vpsubsw*" + suffix, 16 * m, i16_sat(i32(i16_1) - i32(i16_2)));
+                check("vpaddusw*" + suffix, 16 * m, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+                check("vpsubusw*" + suffix, 16 * m, u16(max(i32(u16_1) - i32(u16_2), 0)));
+                check("vpaddd*" + suffix, 8 * m, i32_1 + i32_2);
+                check("vpsubd*" + suffix, 8 * m, i32_1 - i32_2);
+                check("vpmulhw*" + suffix, 16 * m, i16((i32(i16_1) * i32(i16_2)) / (256 * 256)));
+                check("vpmulhw*" + suffix, 16 * m, i16((i32(i16_1) * i32(i16_2)) >> cast<unsigned>(16)));
+                check("vpmulhw*" + suffix, 16 * m, i16((i32(i16_1) * i32(i16_2)) >> cast<int>(16)));
+                check("vpmulhw*" + suffix, 16 * m, i16((i32(i16_1) * i32(i16_2)) << cast<int>(-16)));
+                check("vpmullw*" + suffix, 16 * m, i16_1 * i16_2);
 
-                check("vpmulhrsw*" + suffix, 16 * m,i16((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
-                check("vpmulhrsw*" + suffix, 16 * m,i16_sat((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
+                check("vpmulhrsw*" + suffix, 16 * m, i16((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
+                check("vpmulhrsw*" + suffix, 16 * m, i16_sat((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
 
-                check("vpcmp*b*" + suffix, 32 * m,select(u8_1 == u8_2, u8(1), u8(2)));
-                check("vpcmp*b*" + suffix, 32 * m,select(u8_1 > u8_2, u8(1), u8(2)));
-                check("vpcmp*w*" + suffix, 16 * m,select(u16_1 == u16_2, u16(1), u16(2)));
-                check("vpcmp*w*" + suffix, 16 * m,select(u16_1 > u16_2, u16(1), u16(2)));
-                check("vpcmp*d*" + suffix, 8 * m,select(u32_1 == u32_2, u32(1), u32(2)));
-                check("vpcmp*d*" + suffix, 8 * m,select(u32_1 > u32_2, u32(1), u32(2)));
+                check("vpcmp*b*" + suffix, 32 * m, select(u8_1 == u8_2, u8(1), u8(2)));
+                check("vpcmp*b*" + suffix, 32 * m, select(u8_1 > u8_2, u8(1), u8(2)));
+                check("vpcmp*w*" + suffix, 16 * m, select(u16_1 == u16_2, u16(1), u16(2)));
+                check("vpcmp*w*" + suffix, 16 * m, select(u16_1 > u16_2, u16(1), u16(2)));
+                check("vpcmp*d*" + suffix, 8 * m, select(u32_1 == u32_2, u32(1), u32(2)));
+                check("vpcmp*d*" + suffix, 8 * m, select(u32_1 > u32_2, u32(1), u32(2)));
 
-                check("vpavgb*" + suffix, 32 * m,u8((u16(u8_1) + u16(u8_2) + 1) / 2));
-                check("vpavgw*" + suffix, 16 * m,u16((u32(u16_1) + u32(u16_2) + 1) / 2));
-                check("vpmaxsw*" + suffix, 16 * m,max(i16_1, i16_2));
-                check("vpminsw*" + suffix, 16 * m,min(i16_1, i16_2));
-                check("vpmaxub*" + suffix, 32 * m,max(u8_1, u8_2));
-                check("vpminub*" + suffix, 32 * m,min(u8_1, u8_2));
+                check("vpavgb*" + suffix, 32 * m, u8((u16(u8_1) + u16(u8_2) + 1) / 2));
+                check("vpavgw*" + suffix, 16 * m, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
+                check("vpmaxsw*" + suffix, 16 * m, max(i16_1, i16_2));
+                check("vpminsw*" + suffix, 16 * m, min(i16_1, i16_2));
+                check("vpmaxub*" + suffix, 32 * m, max(u8_1, u8_2));
+                check("vpminub*" + suffix, 32 * m, min(u8_1, u8_2));
             };
 
             check_x86_fixed_point("ymm", 1);
