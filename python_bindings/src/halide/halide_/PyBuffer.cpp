@@ -310,7 +310,7 @@ py::buffer_info to_buffer_info(Buffer<> &b, bool reverse_axes = true) {
     for (int i = 0; i < d; i++) {
         const int dst_axis = reverse_axes ? (d - i - 1) : i;
         shape[dst_axis] = (Py_ssize_t)b.raw_buffer()->dim[i].extent;
-        strides[dst_axis] = (Py_ssize_t)(b.raw_buffer()->dim[i].stride * bytes);
+        strides[dst_axis] = (Py_ssize_t)b.raw_buffer()->dim[i].stride * (Py_ssize_t)bytes;
     }
 
     return py::buffer_info(
