@@ -20,7 +20,9 @@ def _as_interleaved(im):
        Note that this call must be used with care, as the returnee may or may
        not be a copy."""
     if im.ndim == 3 and not is_interleaved(im):
-        im = numpy.moveaxis(im, 0, 2)
+        return numpy.moveaxis(im, 0, 2)
+    else:
+        return im
 
 
 def _as_planar(im):
@@ -30,9 +32,9 @@ def _as_planar(im):
        Note that this call must be used with care, as the returnee may or may
        not be a copy."""
     if is_interleaved(im):
-        im = numpy.moveaxis(im, 2, 0)
-
-    return im
+        return numpy.moveaxis(im, 2, 0)
+    else:
+        return im
 
 
 def copy_to_interleaved(im):
