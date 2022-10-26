@@ -161,6 +161,19 @@ std::string type_to_format_descriptor(const Type &type) {
     return std::string();
 }
 
+void check_out_of_bounds(Buffer<> &buf, const std::vector<int> &pos) {
+    const int d = buf.dimensions();
+    if ((size_t)pos.size() != (size_t)d) {
+        throw py::value_error("Incorrect number of dimensions.");
+    }
+    for (int i = 0; i < d; i++) {
+        const auto &dim = buf.dim(i);
+        if (pos[i] < dim.min() || pos[i] > dim.max()) {
+            throw py::value_error("Out-of-bounds access in dimension " + std::to_string(i));
+        }
+    }
+}
+
 }  // namespace
 
 Type format_descriptor_to_type(const std::string &fd) {
@@ -196,10 +209,7 @@ Type format_descriptor_to_type(const std::string &fd) {
 }
 
 py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
-    if ((size_t)pos.size() != (size_t)buf.dimensions()) {
-        throw py::value_error("Incorrect number of dimensions.");
-    }
-    // TODO: add bounds checking?
+    check_out_of_bounds(buf, pos);
 
 #define HANDLE_BUFFER_TYPE(TYPE)       \
     if (buf.type() == type_of<TYPE>()) \
@@ -229,10 +239,8 @@ py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
 namespace {
 
 py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, const py::object &value) {
-    if ((size_t)pos.size() != (size_t)buf.dimensions()) {
-        throw py::value_error("Incorrect number of dimensions.");
-    }
-// TODO: add bounds checking?
+    check_out_of_bounds(buf, pos);
+
 #define HANDLE_BUFFER_TYPE(TYPE)       \
     if (buf.type() == type_of<TYPE>()) \
         return py::cast(buf.as<TYPE>()(pos.data()) = value_cast<TYPE>(value));
@@ -264,8 +272,8 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, c
 class PyBuffer : public Buffer<> {
     py::buffer_info info;
 
-    PyBuffer(py::buffer_info &&info, const std::string &name)
-        : Buffer<>(pybufferinfo_to_halidebuffer(info), name),
+    PyBuffer(py::buffer_info &&info, const std::string &name, bool reverse_axes)
+        : Buffer<>(pybufferinfo_to_halidebuffer(info, reverse_axes), name),
           info(std::move(info)) {
     }
 
@@ -278,8 +286,8 @@ public:
         : Buffer<>(b), info() {
     }
 
-    PyBuffer(const py::buffer &buffer, const std::string &name)
-        : PyBuffer(buffer.request(/*writable*/ true), name) {
+    PyBuffer(const py::buffer &buffer, const std::string &name, bool reverse_axes)
+        : PyBuffer(buffer.request(/*writable*/ true), name, reverse_axes) {
         // Default to setting host-dirty on any PyBuffer we create from an existing py::buffer;
         // this allows (e.g.) code like
         //
@@ -299,6 +307,30 @@ public:
     ~PyBuffer() override = default;
 };
 
+py::buffer_info to_buffer_info(Buffer<> &b, bool reverse_axes = true) {
+    if (b.data() == nullptr) {
+        throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
+    }
+
+    const int d = b.dimensions();
+    const int bytes = b.type().bytes();
+    std::vector<Py_ssize_t> shape(d), strides(d);
+    for (int i = 0; i < d; i++) {
+        const int dst_axis = reverse_axes ? (d - i - 1) : i;
+        shape[dst_axis] = (Py_ssize_t)b.raw_buffer()->dim[i].extent;
+        strides[dst_axis] = (Py_ssize_t)(b.raw_buffer()->dim[i].stride * bytes);
+    }
+
+    return py::buffer_info(
+        b.data(),                             // Pointer to buffer
+        bytes,                                // Size of one scalar
+        type_to_format_descriptor(b.type()),  // Python struct-style format descriptor
+        d,                                    // Number of dimensions
+        shape,                                // Buffer dimensions
+        strides                               // Strides (in bytes) for each index
+    );
+}
+
 }  // namespace
 
 void define_buffer(py::module &m) {
@@ -317,34 +349,12 @@ void define_buffer(py::module &m) {
             // Note that this allows us to convert a Buffer<> to any buffer-like object in Python;
             // most notably, we can convert to an ndarray by calling numpy.array()
             .def_buffer([](Buffer<> &b) -> py::buffer_info {
-                if (b.data() == nullptr) {
-                    throw py::value_error("Cannot convert a Buffer<> with null host ptr to a Python buffer.");
-                }
-
-                const int d = b.dimensions();
-                const int bytes = b.type().bytes();
-                std::vector<Py_ssize_t> shape, strides;
-                // Halide's default indexing convention is col-major (the most rapidly varying index comes first);
-                // Numpy's default is row-major (most rapidly varying comes last).
-                // We want to reverse the order so that most-varying comes first.
-                for (int i = d - 1; i >= 0; i--) {
-                    shape.push_back((Py_ssize_t)b.raw_buffer()->dim[i].extent);
-                    strides.push_back((Py_ssize_t)(b.raw_buffer()->dim[i].stride * bytes));
-                }
-
-                return py::buffer_info(
-                    b.data(),                             // Pointer to buffer
-                    bytes,                                // Size of one scalar
-                    type_to_format_descriptor(b.type()),  // Python struct-style format descriptor
-                    d,                                    // Number of dimensions
-                    shape,                                // Buffer dimensions
-                    strides                               // Strides (in bytes) for each index
-                );
+                return to_buffer_info(b, /*reverse_axes*/ true);
             })
 
             // This allows us to use any buffer-like python entity to create a Buffer<>
             // (most notably, an ndarray)
-            .def(py::init_alias<py::buffer, const std::string &>(), py::arg("buffer"), py::arg("name") = "")
+            .def(py::init_alias<py::buffer, const std::string &, bool>(), py::arg("buffer"), py::arg("name") = "", py::arg("reverse_axes") = true)
             .def(py::init_alias<>())
             .def(py::init_alias<const Buffer<> &>())
             .def(py::init([](Type type, const std::vector<int> &sizes, const std::string &name) -> Buffer<> {
@@ -407,6 +417,14 @@ void define_buffer(py::module &m) {
 
             .def("copy", &Buffer<>::copy)
             .def("copy_from", &Buffer<>::copy_from<void, Buffer<>::AnyDims>)
+            .def("reverse_axes", [](Buffer<> &b) -> Buffer<> {
+                const int d = b.dimensions();
+                std::vector<int> order;
+                for (int i = 0; i < b.dimensions(); i++) {
+                    order.push_back(d - i - 1);
+                }
+                return b.transposed(order);
+            })
 
             .def("add_dimension", (void(Buffer<>::*)()) & Buffer<>::add_dimension)
 
