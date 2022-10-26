@@ -26,10 +26,10 @@ constexpr int max_intrinsic_args = 4;
 
 struct IntrinsicArgPattern {
     enum TypePattern {
-        Undefined,       // Invalid value for sentinel.
-        Fixed,           // Argument is a fixed width vector.
-        Scalable,        // Argument is a scalable vector.
-        AllTypeWidths,   // Argument generalizes to all bit widths of type.
+        Undefined,      // Invalid value for sentinel.
+        Fixed,          // Argument is a fixed width vector.
+        Scalable,       // Argument is a scalable vector.
+        AllTypeWidths,  // Argument generalizes to all bit widths of type.
     } type_pattern;
 
     Type type;
