@@ -2439,6 +2439,7 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
         Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
 
         Value *slice_mask = (vpred != nullptr) ? slice_vector(vpred, i, slice_lanes) : nullptr;
+        MaskVariant vp_slice_mask = slice_mask ? MaskVariant(slice_mask) : AllEnabledMask();
 
         Instruction *load_inst = nullptr;
         // In this path, strided predicated loads are only handled if vector
@@ -2450,14 +2451,14 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
             if (get_target().bits == 64 && !stride->getType()->isIntegerTy(64)) {
                 stride = builder->CreateIntCast(stride, i64_t, true);
             }
-            if (try_vector_predication_intrinsic("llvm.experimental.vp.strided.load", slice_type, slice_lanes, slice_mask,
+            if (try_vector_predication_intrinsic("llvm.experimental.vp.strided.load", slice_type, slice_lanes, vp_slice_mask,
                                                  {VPArg(vec_ptr, 0, align_bytes), VPArg(stride, 1)})) {
                 load_inst = dyn_cast<Instruction>(value);
             } else {
                 internal_error << "Vector predicated strided load should not be requested if not supported.\n";
             }
         } else {
-            if (try_vector_predication_intrinsic("llvm.vp.load", slice_type, slice_lanes, slice_mask,
+            if (try_vector_predication_intrinsic("llvm.vp.load", slice_type, slice_lanes, vp_slice_mask,
                                                  {VPArg(vec_ptr, 0, align_bytes)})) {
                 load_inst = dyn_cast<Instruction>(value);
             } else {
