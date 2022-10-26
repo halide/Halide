@@ -2439,6 +2439,7 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
         Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
 
         Value *slice_mask = (vpred != nullptr) ? slice_vector(vpred, i, slice_lanes) : nullptr;
+        MaskVariant vp_slice_mask = slice_mask ? MaskVariant(slice_mask) : AllEnabledMask();
 
         Instruction *load_inst = nullptr;
         // In this path, strided predicated loads are only handled if vector
@@ -2450,15 +2451,16 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
             if (get_target().bits == 64 && !stride->getType()->isIntegerTy(64)) {
                 stride = builder->CreateIntCast(stride, i64_t, true);
             }
-            if (try_vector_predication_intrinsic("llvm.experimental.vp.strided.load", slice_type, slice_lanes, slice_mask,
-                                                 {VPArg(vec_ptr, 0, align_bytes), VPArg(stride, 1)})) {
+            if (try_vector_predication_intrinsic("llvm.experimental.vp.strided.load", VPResultType(slice_type, 0),
+                                                 slice_lanes, vp_slice_mask,
+                                                 {VPArg(vec_ptr, 1, align_bytes), VPArg(stride, 1)})) {
                 load_inst = dyn_cast<Instruction>(value);
             } else {
                 internal_error << "Vector predicated strided load should not be requested if not supported.\n";
             }
         } else {
-            if (try_vector_predication_intrinsic("llvm.vp.load", slice_type, slice_lanes, slice_mask,
-                                                 {VPArg(vec_ptr, 0, align_bytes)})) {
+            if (try_vector_predication_intrinsic("llvm.vp.load", VPResultType(slice_type, 0), slice_lanes, vp_slice_mask,
+                                                 {VPArg(vec_ptr, 1, align_bytes)})) {
                 load_inst = dyn_cast<Instruction>(value);
             } else {
                 if (slice_mask != nullptr) {
@@ -4328,7 +4330,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
                 llvm::Value *init = value;
                 codegen(op->value);
                 llvm::Value *val = value;
-                bool generated = try_vector_predication_intrinsic(vp_name, llvm_type_of(op->value.type()), op->value.type().lanes(),
+                bool generated = try_vector_predication_intrinsic(vp_name, llvm_type_of(op->type), op->value.type().lanes(),
                                                                   AllEnabledMask(), {VPArg(init), VPArg(val, 0)});
                 internal_assert(generated) << "Vector predication intrinsic generation failed for vector reduction " << name << "\n";
             } else {
@@ -5156,29 +5158,40 @@ std::string CodeGen_LLVM::mangle_llvm_vector_type(llvm::Type *type) {
     return type_string;
 }
 
-bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llvm::Type *llvm_result_type,
+bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, VPResultType result_type,
                                                     int32_t length, MaskVariant mask, std::vector<VPArg> vp_args) {
     if (!use_llvm_vp_intrinsics) {
         return false;
     }
 
+    llvm::Type *llvm_result_type = result_type.type;
     bool any_scalable = isa<llvm::ScalableVectorType>(llvm_result_type);
     bool any_fixed = isa<llvm::FixedVectorType>(llvm_result_type);
+    bool result_is_vector_type = any_scalable || any_fixed;
     bool is_reduction = !any_scalable && !any_fixed;
+    llvm::Type *base_vector_type = nullptr;
     for (const VPArg &arg : vp_args) {
-        any_scalable |= isa<llvm::ScalableVectorType>(arg.value->getType());
-        any_fixed |= isa<llvm::FixedVectorType>(arg.value->getType());
+        llvm::Type *arg_type = arg.value->getType();
+        bool scalable = isa<llvm::ScalableVectorType>(arg_type);
+        bool fixed = isa<llvm::FixedVectorType>(arg_type);
+        if (base_vector_type == nullptr && (fixed || scalable)) {
+            base_vector_type = arg_type;
+        }
+        any_scalable |= scalable;
+        any_fixed |= fixed;
     }
     if (!any_fixed && !any_scalable) {
         return false;
     }
     internal_assert(!(any_scalable && any_fixed)) << "Cannot combine fixed and scalable vectors to vector predication intrinsic.\n";
-
+    if (base_vector_type == nullptr && result_is_vector_type) {
+        base_vector_type = llvm_result_type;
+    }
     bool is_scalable = any_scalable;
 
     std::vector<llvm::Value *> args;
     args.reserve(2 + vp_args.size());
-    std::vector<string> mangled_types(args.size());
+    std::vector<string> mangled_types(vp_args.size() + 1);
 
     for (const VPArg &arg : vp_args) {
         args.push_back(arg.value);
@@ -5191,6 +5204,13 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llv
             }
         }
     }
+    if (result_type.mangle_index) {
+        if (isa<PointerType>(llvm_result_type)) {
+            mangled_types[result_type.mangle_index.value()] = ".p0";
+        } else {
+            mangled_types[result_type.mangle_index.value()] = mangle_llvm_vector_type(llvm_result_type);
+        }
+    }
 
     std::string full_name = name;
     for (const std::string &mangle : mangled_types) {
@@ -5199,12 +5219,13 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llv
 
     if (!std::holds_alternative<NoMask>(mask)) {
         if (std::holds_alternative<AllEnabledMask>(mask)) {
+            internal_assert(base_vector_type != nullptr) << "Requested all enabled mask without any vector type to use for type/length.\n";
             llvm::ElementCount llvm_vector_ec;
             if (is_scalable) {
-                const auto *vt = cast<llvm::ScalableVectorType>(llvm_result_type);
+                const auto *vt = cast<llvm::ScalableVectorType>(base_vector_type);
                 llvm_vector_ec = vt->getElementCount();
             } else {
-                const auto *vt = cast<llvm::FixedVectorType>(llvm_result_type);
+                const auto *vt = cast<llvm::FixedVectorType>(base_vector_type);
                 llvm_vector_ec = vt->getElementCount();
             }
             args.push_back(ConstantVector::getSplat(llvm_vector_ec, ConstantInt::get(i1_t, 1)));
@@ -5216,7 +5237,7 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llv
 
     value = call_intrin(llvm_result_type, length, full_name, args, is_scalable, is_reduction);
     llvm::CallInst *call = dyn_cast<llvm::CallInst>(value);
-    for (size_t i = 0; i < args.size(); i++) {
+    for (size_t i = 0; i < vp_args.size(); i++) {
         if (vp_args[i].alignment != 0) {
             call->addParamAttr(i, Attribute::getWithAlignment(*context, llvm::Align(vp_args[i].alignment)));
         }
