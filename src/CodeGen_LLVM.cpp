@@ -2451,15 +2451,16 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
             if (get_target().bits == 64 && !stride->getType()->isIntegerTy(64)) {
                 stride = builder->CreateIntCast(stride, i64_t, true);
             }
-            if (try_vector_predication_intrinsic("llvm.experimental.vp.strided.load", slice_type, slice_lanes, vp_slice_mask,
-                                                 {VPArg(vec_ptr, 0, align_bytes), VPArg(stride, 1)})) {
+            if (try_vector_predication_intrinsic("llvm.experimental.vp.strided.load", VPResultType(slice_type, 0),
+                                                 slice_lanes, vp_slice_mask,
+                                                 {VPArg(vec_ptr, 1, align_bytes), VPArg(stride, 1)})) {
                 load_inst = dyn_cast<Instruction>(value);
             } else {
                 internal_error << "Vector predicated strided load should not be requested if not supported.\n";
             }
         } else {
-            if (try_vector_predication_intrinsic("llvm.vp.load", slice_type, slice_lanes, vp_slice_mask,
-                                                 {VPArg(vec_ptr, 0, align_bytes)})) {
+            if (try_vector_predication_intrinsic("llvm.vp.load", VPResultType(slice_type, 0), slice_lanes, vp_slice_mask,
+                                                 {VPArg(vec_ptr, 1, align_bytes)})) {
                 load_inst = dyn_cast<Instruction>(value);
             } else {
                 if (slice_mask != nullptr) {
@@ -4329,7 +4330,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
                 llvm::Value *init = value;
                 codegen(op->value);
                 llvm::Value *val = value;
-                bool generated = try_vector_predication_intrinsic(vp_name, llvm_type_of(op->value.type()), op->value.type().lanes(),
+                bool generated = try_vector_predication_intrinsic(vp_name, llvm_type_of(op->type), op->value.type().lanes(),
                                                                   AllEnabledMask(), {VPArg(init), VPArg(val, 0)});
                 internal_assert(generated) << "Vector predication intrinsic generation failed for vector reduction " << name << "\n";
             } else {
@@ -5157,12 +5158,13 @@ std::string CodeGen_LLVM::mangle_llvm_vector_type(llvm::Type *type) {
     return type_string;
 }
 
-bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llvm::Type *llvm_result_type,
+bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, VPResultType result_type,
                                                     int32_t length, MaskVariant mask, std::vector<VPArg> vp_args) {
     if (!use_llvm_vp_intrinsics) {
         return false;
     }
 
+    llvm::Type *llvm_result_type = result_type.type;
     bool any_scalable = isa<llvm::ScalableVectorType>(llvm_result_type);
     bool any_fixed = isa<llvm::FixedVectorType>(llvm_result_type);
     bool result_is_vector_type = any_scalable || any_fixed;
@@ -5189,7 +5191,7 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llv
 
     std::vector<llvm::Value *> args;
     args.reserve(2 + vp_args.size());
-    std::vector<string> mangled_types(vp_args.size());
+    std::vector<string> mangled_types(vp_args.size() + 1);
 
     for (const VPArg &arg : vp_args) {
         args.push_back(arg.value);
@@ -5200,6 +5202,13 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llv
             } else {
                 mangled_types[arg.mangle_index.value()] = mangle_llvm_vector_type(llvm_type);
             }
+        }
+    }
+    if (result_type.mangle_index) {
+        if (isa<PointerType>(llvm_result_type)) {
+            mangled_types[result_type.mangle_index.value()] = ".p0";
+        } else {
+            mangled_types[result_type.mangle_index.value()] = mangle_llvm_vector_type(llvm_result_type);
         }
     }
 
