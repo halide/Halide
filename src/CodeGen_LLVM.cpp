@@ -5178,7 +5178,7 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, llv
 
     std::vector<llvm::Value *> args;
     args.reserve(2 + vp_args.size());
-    std::vector<string> mangled_types(args.size());
+    std::vector<string> mangled_types(vp_args.size());
 
     for (const VPArg &arg : vp_args) {
         args.push_back(arg.value);
