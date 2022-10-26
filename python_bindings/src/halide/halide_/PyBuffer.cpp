@@ -232,7 +232,7 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, c
     if ((size_t)pos.size() != (size_t)buf.dimensions()) {
         throw py::value_error("Incorrect number of dimensions.");
     }
-    // TODO: add bounds checking?
+// TODO: add bounds checking?
 
 #define HANDLE_BUFFER_TYPE(TYPE)       \
     if (buf.type() == type_of<TYPE>()) \
