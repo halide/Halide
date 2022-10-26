@@ -115,11 +115,6 @@ public:
         return {};
     }
 
-    ExternsMap external_code_map() override {
-        // none
-        return {};
-    }
-
     void bind_input(const std::string &name, const std::vector<Parameter> &v) override {
         _halide_user_assert(false) << "OOPS";
     }

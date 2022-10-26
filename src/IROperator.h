@@ -322,6 +322,15 @@ Stmt remove_promises(const Stmt &s);
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);
 
+template<typename T>
+struct is_printable_arg {
+    static constexpr bool value = std::is_convertible<T, const char *>::value ||
+                                  std::is_convertible<T, Halide::Expr>::value;
+};
+
+template<typename... Args>
+struct all_are_printable_args : meta_and<is_printable_arg<Args>...> {};
+
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
@@ -341,6 +350,13 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &arg
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
+
+/** Compute a + widen(b). */
+Expr widen_right_add(Expr a, Expr b);
+/** Compute a * widen(b). */
+Expr widen_right_mul(Expr a, Expr b);
+/** Compute a - widen(b). */
+Expr widen_right_sub(Expr a, Expr b);
 
 /** Compute widen(a) + widen(b). */
 Expr widening_add(Expr a, Expr b);
@@ -1020,10 +1036,12 @@ Expr floor(Expr x);
 Expr ceil(Expr x);
 
 /** Return the whole number closest to a floating-point expression. If the
- * argument is not floating-point, it is cast to Float(32). The return value
- * is still in floating point, despite being a whole number. On ties, we
- * follow IEEE754 conventions and round to the nearest even number. Vectorizes
- * cleanly. */
+ * argument is not floating-point, it is cast to Float(32). The return value is
+ * still in floating point, despite being a whole number. On ties, we round
+ * towards the nearest even integer. Note that this is not the same as
+ * std::round in C, which rounds away from zero. On platforms without a native
+ * instruction for this, it is emulated, and may be more expensive than
+ * cast<int>(x + 0.5f) or similar. */
 Expr round(Expr x);
 
 /** Return the integer part of a floating-point expression. If the argument is
@@ -1059,7 +1077,7 @@ Expr reinterpret(Type t, Expr e);
 
 template<typename T>
 Expr reinterpret(Expr e) {
-    return reinterpret(type_of<T>(), e);
+    return reinterpret(type_of<T>(), std::move(e));
 }
 
 /** Return the bitwise and of two expressions (which need not have the
@@ -1560,6 +1578,54 @@ Expr gather(const Expr &e, Args &&...args) {
     return gather({e, std::forward<Args>(args)...});
 }
 // @}
+
+/** Extract a contiguous subsequence of the bits of 'e', starting at the bit
+ * index given by 'lsb', where zero is the least-significant bit, returning a
+ * value of type 't'. Any out-of-range bits requested are filled with zeros.
+ *
+ * extract_bits is especially useful when one wants to load a small vector of a
+ * wide type, and treat it as a larger vector of a smaller type. For example,
+ * loading a vector of 32 uint8 values from a uint32 Func can be done as
+ * follows:
+\code
+f8(x) = extract_bits<uint8_t>(f32(x/4), 8*(x%4));
+f8.align_bounds(x, 4).vectorize(x, 32);
+\endcode
+ * Note that the align_bounds call is critical so that the narrow Exprs are
+ * aligned to the wider Exprs. This makes the x%4 term collapse to a
+ * constant. If f8 is an output Func, then constraining the min value of x to be
+ * a known multiple of four would also be sufficient, e.g. via:
+\code
+f8.output_buffer().dim(0).set_min(0);
+\endcode
+ *
+ * See test/correctness/extract_concat_bits.cpp for a complete example. */
+// @{
+Expr extract_bits(Type t, const Expr &e, const Expr &lsb);
+
+template<typename T>
+Expr extract_bits(const Expr &e, const Expr &lsb) {
+    return extract_bits(type_of<T>(), e, lsb);
+}
+// @}
+
+/** Given a number of Exprs of the same type, concatenate their bits producing a
+ * single Expr of the same type code of the input but with more bits. The
+ * number of arguments must be a power of two.
+ *
+ * concat_bits is especially useful when one wants to treat a Func containing
+ * values of a narrow type as a Func containing fewer values of a wider
+ * type. For example, the following code reinterprets vectors of 32 uint8 values
+ * as a vector of 8 uint32s:
+ *
+\code
+f32(x) = concat_bits({f8(4*x), f8(4*x + 1), f8(4*x + 2), f8(4*x + 3)});
+f32.vectorize(x, 8);
+\endcode
+ *
+ * See test/correctness/extract_concat_bits.cpp for a complete example.
+ */
+Expr concat_bits(const std::vector<Expr> &e);
 
 }  // namespace Halide
 

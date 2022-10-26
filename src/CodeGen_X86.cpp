@@ -1,3 +1,4 @@
+#include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
@@ -119,6 +120,11 @@ const x86Intrinsic intrinsic_defs[] = {
     {"abs_i32x4", UInt(32, 4), "abs", {Int(32, 4)}, Target::SSE41},
     {"abs_f32x4", Float(32, 4), "abs", {Float(32, 4)}},
 
+    {"round_f32x4", Float(32, 4), "round", {Float(32, 4)}, Target::SSE41},
+    {"round_f64x2", Float(64, 2), "round", {Float(64, 2)}, Target::SSE41},
+    {"round_f32x8", Float(32, 8), "round", {Float(32, 8)}, Target::AVX},
+    {"round_f64x4", Float(64, 4), "round", {Float(64, 4)}, Target::AVX},
+
     {"llvm.sadd.sat.v32i8", Int(8, 32), "saturating_add", {Int(8, 32), Int(8, 32)}, Target::AVX2},
     {"llvm.sadd.sat.v16i8", Int(8, 16), "saturating_add", {Int(8, 16), Int(8, 16)}},
     {"llvm.sadd.sat.v8i8", Int(8, 8), "saturating_add", {Int(8, 8), Int(8, 8)}},
@@ -130,6 +136,11 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.sadd.sat.v8i16", Int(16, 8), "saturating_add", {Int(16, 8), Int(16, 8)}},
     {"llvm.ssub.sat.v16i16", Int(16, 16), "saturating_sub", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.ssub.sat.v8i16", Int(16, 8), "saturating_sub", {Int(16, 8), Int(16, 8)}},
+
+    // Sum of absolute differences
+    {"llvm.x86.sse2.psad.bw", UInt(64, 2), "sum_of_absolute_differences", {UInt(8, 16), UInt(8, 16)}},
+    {"llvm.x86.avx2.psad.bw", UInt(64, 4), "sum_of_absolute_differences", {UInt(8, 32), UInt(8, 32)}, Target::AVX2},
+    {"llvm.x86.avx512.psad.bw.512", UInt(64, 8), "sum_of_absolute_differences", {UInt(8, 64), UInt(8, 64)}, Target::AVX512_Skylake},
 
     // Some of the instructions referred to below only appear with
     // AVX2, but LLVM generates better AVX code if you give it
@@ -188,6 +199,14 @@ const x86Intrinsic intrinsic_defs[] = {
     // 2-way dot products
     {"llvm.x86.avx2.pmadd.ub.sw", Int(16, 16), "saturating_dot_product", {UInt(8, 32), Int(8, 32)}, Target::AVX2},
     {"llvm.x86.ssse3.pmadd.ub.sw.128", Int(16, 8), "saturating_dot_product", {UInt(8, 16), Int(8, 16)}, Target::SSE41},
+
+    // Horizontal widening adds using 2-way dot products.
+    {"hadd_pmadd_u8_sse3", UInt(16, 8), "horizontal_widening_add", {UInt(8, 16)}, Target::SSE41},
+    {"hadd_pmadd_u8_sse3", Int(16, 8), "horizontal_widening_add", {UInt(8, 16)}, Target::SSE41},
+    {"hadd_pmadd_i8_sse3", Int(16, 8), "horizontal_widening_add", {Int(8, 16)}, Target::SSE41},
+    {"hadd_pmadd_u8_avx2", UInt(16, 16), "horizontal_widening_add", {UInt(8, 32)}, Target::AVX2},
+    {"hadd_pmadd_u8_avx2", Int(16, 16), "horizontal_widening_add", {UInt(8, 32)}, Target::AVX2},
+    {"hadd_pmadd_i8_avx2", Int(16, 16), "horizontal_widening_add", {Int(8, 32)}, Target::AVX2},
 
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "dot_product", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "dot_product", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
@@ -460,11 +479,6 @@ void CodeGen_X86::visit(const Cast *op) {
         // saturate the result.
         {"pmulhrs", i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), 15))},
 
-        {"saturating_narrow", i16_sat(wild_i32x_)},
-        {"saturating_narrow", u16_sat(wild_i32x_)},
-        {"saturating_narrow", i8_sat(wild_i16x_)},
-        {"saturating_narrow", u8_sat(wild_i16x_)},
-
         {"f32_to_bf16", bf16(wild_f32x_)},
     };
     // clang-format on
@@ -494,8 +508,15 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
+    if (op->is_intrinsic(Call::round)) {
+        value = call_overloaded_intrin(op->type, "round", op->args);
+        if (value) {
+            return;
+        }
+    }
+
     if (!op->type.is_vector()) {
-        // We only have peephole optimizations for vectors in here.
+        // We only have peephole optimizations for vectors beyond this point.
         CodeGen_Posix::visit(op);
         return;
     }
@@ -523,6 +544,18 @@ void CodeGen_X86::visit(const Call *op) {
                 return;
             }
         }
+    } else if (op->type.is_int() &&
+               op->type.bits() <= 16 &&
+               op->is_intrinsic(Call::rounding_halving_add)) {
+        // We can redirect signed rounding halving add to unsigned rounding
+        // halving add by adding 128 / 32768 to the result if the sign of the
+        // args differs.
+        internal_assert(op->args.size() == 2);
+        Type t = op->type.with_code(halide_type_uint);
+        Expr a = cast(t, op->args[0]);
+        Expr b = cast(t, op->args[1]);
+        codegen(cast(op->type, rounding_halving_add(a, b) + ((a ^ b) & (1 << (t.bits() - 1)))));
+        return;
     } else if (op->is_intrinsic(Call::absd)) {
         internal_assert(op->args.size() == 2);
         if (op->args[0].type().is_uint()) {
@@ -550,6 +583,10 @@ void CodeGen_X86::visit(const Call *op) {
         {"pmulh", mul_shift_right(wild_i16x_, wild_i16x_, 16)},
         {"pmulh", mul_shift_right(wild_u16x_, wild_u16x_, 16)},
         {"saturating_pmulhrs", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15)},
+        {"saturating_narrow", i16_sat(wild_i32x_)},
+        {"saturating_narrow", u16_sat(wild_i32x_)},
+        {"saturating_narrow", i8_sat(wild_i16x_)},
+        {"saturating_narrow", u8_sat(wild_i16x_)},
     };
     // clang-format on
 
@@ -583,6 +620,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         enum {
             CombineInit = 1 << 0,
             SwapOperands = 1 << 1,
+            SingleArg = 1 << 2,
         };
     };
     // clang-format off
@@ -612,8 +650,15 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         {VectorReduce::Add, 2, wild_f32x_ * wild_f32x_, "dot_product", BFloat(16), Pattern::CombineInit},
 
         // One could do a horizontal widening addition with
-        // dot_product against a vector of ones. Currently disabled
-        // because I haven't found case where it's clearly better.
+        // other dot_products against a vector of ones. Currently disabled
+        // because I haven't found other cases where it's clearly better.
+        {VectorReduce::Add, 2, u16(wild_u8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
+        {VectorReduce::Add, 2, i16(wild_u8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
+        {VectorReduce::Add, 2, i16(wild_i8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
+
+        // Sum of absolute differences
+        {VectorReduce::Add, 8, u64(absd(wild_u8x_, wild_u8x_)), "sum_of_absolute_differences", {}},
+
     };
     // clang-format on
 
@@ -623,35 +668,90 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             continue;
         }
         if (expr_match(p.pattern, op->value, matches)) {
-            Expr a = matches[0];
-            Expr b = matches[1];
-            if (p.flags & Pattern::SwapOperands) {
-                std::swap(a, b);
-            }
-            if (p.narrow_type.bits() > 0) {
-                a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
-                b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
-            }
-            if (!a.defined() || !b.defined()) {
-                continue;
-            }
+            if (p.flags & Pattern::SingleArg) {
+                Expr a = matches[0];
 
-            if (init.defined() && (p.flags & Pattern::CombineInit)) {
-                value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
-                if (value) {
-                    return;
+                if (p.narrow_type.bits() > 0) {
+                    a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
+                }
+                if (!a.defined()) {
+                    continue;
+                }
+
+                if (init.defined() && (p.flags & Pattern::CombineInit)) {
+                    value = call_overloaded_intrin(op->type, p.intrin, {init, a});
+                    if (value) {
+                        return;
+                    }
+                } else {
+                    value = call_overloaded_intrin(op->type, p.intrin, {a});
+                    if (value) {
+                        if (init.defined()) {
+                            Value *x = value;
+                            Value *y = codegen(init);
+                            value = builder->CreateAdd(x, y);
+                        }
+                        return;
+                    }
                 }
             } else {
-                value = call_overloaded_intrin(op->type, p.intrin, {a, b});
-                if (value) {
-                    if (init.defined()) {
-                        Value *x = value;
-                        Value *y = codegen(init);
-                        value = builder->CreateAdd(x, y);
+                Expr a = matches[0];
+                Expr b = matches[1];
+                if (p.flags & Pattern::SwapOperands) {
+                    std::swap(a, b);
+                }
+                if (p.narrow_type.bits() > 0) {
+                    a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
+                    b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
+                }
+                if (!a.defined() || !b.defined()) {
+                    continue;
+                }
+
+                if (init.defined() && (p.flags & Pattern::CombineInit)) {
+                    value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
+                    if (value) {
+                        return;
                     }
-                    return;
+                } else {
+                    value = call_overloaded_intrin(op->type, p.intrin, {a, b});
+                    if (value) {
+                        if (init.defined()) {
+                            Value *x = value;
+                            Value *y = codegen(init);
+                            value = builder->CreateAdd(x, y);
+                        }
+                        return;
+                    }
                 }
             }
+        }
+    }
+
+    // Rewrite non-native sum-of-absolute-difference variants to the native
+    // op. We support reducing to various types. We could consider supporting
+    // multiple reduction factors too, but in general we don't handle non-native
+    // reduction factors for VectorReduce nodes (yet?).
+    if (op->op == VectorReduce::Add &&
+        factor == 8) {
+        const Cast *cast = op->value.as<Cast>();
+        const Call *call = cast ? cast->value.as<Call>() : nullptr;
+        if (call &&
+            call->is_intrinsic(Call::absd) &&
+            cast->type.element_of().can_represent(UInt(8)) &&
+            (cast->type.is_int() || cast->type.is_uint()) &&
+            call->args[0].type().element_of() == UInt(8)) {
+
+            internal_assert(cast->type.element_of() != UInt(64)) << "Should have pattern-matched above\n";
+
+            // Cast to uint64 instead
+            Expr equiv = Cast::make(UInt(64, cast->value.type().lanes()), cast->value);
+            // Reduce on that to hit psadbw
+            equiv = VectorReduce::make(VectorReduce::Add, equiv, op->type.lanes());
+            // Then cast that to the desired type
+            equiv = Cast::make(cast->type.with_lanes(equiv.type().lanes()), equiv);
+            codegen(equiv);
+            return;
         }
     }
 

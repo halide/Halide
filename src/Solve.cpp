@@ -1124,6 +1124,10 @@ class SolveForInterval : public IRVisitor {
         fail();
     }
 
+    void visit(const Reinterpret *op) override {
+        fail();
+    }
+
     void visit(const Load *op) override {
         fail();
     }

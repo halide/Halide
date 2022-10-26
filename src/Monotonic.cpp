@@ -259,6 +259,10 @@ class DerivativeBounds : public IRVisitor {
         }
     }
 
+    void visit(const Reinterpret *op) override {
+        result = ConstantInterval::everything();
+    }
+
     void visit(const Variable *op) override {
         if (op->name == var) {
             result = ConstantInterval::single_point(1);
@@ -476,7 +480,8 @@ class DerivativeBounds : public IRVisitor {
         }
 
         if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
-            op->is_intrinsic(Call::promise_clamped)) {
+            op->is_intrinsic(Call::promise_clamped) ||
+            op->is_intrinsic(Call::saturating_cast)) {
             op->args[0].accept(this);
             return;
         }

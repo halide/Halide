@@ -480,7 +480,7 @@ Expr lossless_cast(Type t, Expr e) {
         }
     }
 
-    if ((t.is_int() || t.is_uint()) && t.bits() >= 16) {
+    if (t.is_int_or_uint() && t.bits() >= 16) {
         if (const Add *add = e.as<Add>()) {
             // If we can losslessly narrow the args even more
             // aggressively, we're good.
@@ -1104,6 +1104,46 @@ Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) 
                                 args, Internal::Call::PureIntrinsic);
 }
 
+Expr widen_right_add(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "widen_right_add of undefined Expr\n"
+                                            << a << ", " << b << "\n";
+    user_assert(a.type().is_int_or_uint() && b.type().is_int_or_uint())
+        << "widen_right_add only defined for integer types, received:\n " << a << "\n " << b << "\n";
+    user_assert(b.type().bits() <= 32) << "widen_right_add of large Expr\n"
+                                       << a << ", " << b << "\n";
+    match_lanes(a, b);
+    Type wide_type = b.type().widen();
+    user_assert(wide_type == a.type()) << "widen_right_add type mismatch\n " << a << "\n " << b << "\n";
+    return Call::make(wide_type, Call::widen_right_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widen_right_mul(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "widen_right_mul of undefined Expr\n"
+                                            << a << ", " << b << "\n";
+    user_assert(a.type().is_int_or_uint() && b.type().is_int_or_uint())
+        << "widen_right_mul only defined for integer types, received:\n " << a << "\n " << b << "\n";
+    user_assert(b.type().bits() <= 32) << "widen_right_mul of large Expr\n"
+                                       << a << ", " << b << "\n";
+    match_lanes(a, b);
+    Type wide_type = b.type().widen();
+    user_assert(wide_type == a.type()) << "widen_right_mul type mismatch\n " << a << "\n " << b << "\n";
+    return Call::make(wide_type, Call::widen_right_mul, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widen_right_sub(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "widen_right_sub of undefined Expr\n"
+                                            << a << ", " << b << "\n";
+    user_assert(a.type().is_int_or_uint() && b.type().is_int_or_uint())
+        << "widen_right_sub only defined for integer types, received:\n " << a << "\n " << b << "\n";
+    user_assert(b.type().bits() <= 32) << "widen_right_sub of large Expr\n"
+                                       << a << ", " << b << "\n";
+    match_lanes(a, b);
+    Type wide_type = b.type().widen();
+    user_assert(wide_type == a.type()) << "widen_right_sub type mismatch\n"
+                                       << a << ", " << b << "\n";
+    return Call::make(wide_type, Call::widen_right_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
 Expr widening_add(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "widening_add of undefined Expr\n";
     match_types(a, b);
@@ -1426,44 +1466,11 @@ Expr require(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(args[0].type(),
                                 Internal::Call::require,
                                 {likely(std::move(condition)), args[0], std::move(err)},
-                                Internal::Call::PureIntrinsic);
+                                Internal::Call::Intrinsic);
 }
 
 Expr saturating_cast(Type t, Expr e) {
-    // For float to float, guarantee infinities are always pinned to range.
-    if (t.is_float() && e.type().is_float()) {
-        if (t.bits() < e.type().bits()) {
-            e = cast(t, clamp(std::move(e), t.min(), t.max()));
-        } else {
-            e = clamp(cast(t, std::move(e)), t.min(), t.max());
-        }
-    } else if (e.type() != t) {
-        // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
-        if (e.type().is_float() && !t.is_float() && t.bits() >= e.type().bits()) {
-            e = max(std::move(e), t.min());  // min values turn out to be always representable
-
-            // This line depends on t.max() rounding upward, which should always
-            // be the case as it is one less than a representable value, thus
-            // the one larger is always the closest.
-            e = select(e >= cast(e.type(), t.max()), t.max(), cast(t, e));
-        } else {
-            Expr min_bound;
-            if (!e.type().is_uint()) {
-                min_bound = lossless_cast(e.type(), t.min());
-            }
-            Expr max_bound = lossless_cast(e.type(), t.max());
-
-            if (min_bound.defined() && max_bound.defined()) {
-                e = clamp(std::move(e), min_bound, max_bound);
-            } else if (min_bound.defined()) {
-                e = max(std::move(e), min_bound);
-            } else if (max_bound.defined()) {
-                e = min(std::move(e), max_bound);
-            }
-            e = cast(t, std::move(e));
-        }
-    }
-    return e;
+    return Internal::Call::make(t, Internal::Call::saturating_cast, {std::move(e)}, Internal::Call::PureIntrinsic);
 }
 
 Expr select(Expr condition, Expr true_value, Expr false_value) {
@@ -2241,12 +2248,7 @@ Expr floor(Expr x) {
         return Internal::Call::make(t, "floor_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
         t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "floor_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+        return Internal::Call::make(t, "floor_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
 
@@ -2259,31 +2261,18 @@ Expr ceil(Expr x) {
         return Internal::Call::make(t, "ceil_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
         t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "ceil_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+        return Internal::Call::make(t, "ceil_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
 
 Expr round(Expr x) {
     user_assert(x.defined()) << "round of undefined Expr\n";
     Type t = x.type();
-    if (t.element_of() == Float(64)) {
-        return Internal::Call::make(t, "round_f64", {std::move(x)}, Internal::Call::PureExtern);
-    } else if (t.element_of() == Float(16)) {
-        return Internal::Call::make(t, "round_f16", {std::move(x)}, Internal::Call::PureExtern);
-    } else {
-        t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "round_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+    if (!t.is_float()) {
+        x = cast<float>(x);
+        t = x.type();
     }
+    return Internal::Call::make(t, Internal::Call::round, {std::move(x)}, Internal::Call::PureIntrinsic);
 }
 
 Expr trunc(Expr x) {
@@ -2295,12 +2284,7 @@ Expr trunc(Expr x) {
         return Internal::Call::make(t, "trunc_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
         t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "trunc_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+        return Internal::Call::make(t, "trunc_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
 
@@ -2361,15 +2345,7 @@ Expr fract(const Expr &x) {
 }
 
 Expr reinterpret(Type t, Expr e) {
-    user_assert(e.defined()) << "reinterpret of undefined Expr\n";
-    int from_bits = e.type().bits() * e.type().lanes();
-    int to_bits = t.bits() * t.lanes();
-    user_assert(from_bits == to_bits)
-        << "Reinterpret cast from type " << e.type()
-        << " which has " << from_bits
-        << " bits, to type " << t
-        << " which has " << to_bits << " bits\n";
-    return Internal::Call::make(t, Internal::Call::reinterpret, {std::move(e)}, Internal::Call::PureIntrinsic);
+    return Internal::Reinterpret::make(t, std::move(e));
 }
 
 Expr operator&(Expr x, Expr y) {
@@ -2632,7 +2608,7 @@ Expr strict_float(Expr e) {
 Expr undef(Type t) {
     return Internal::Call::make(t, Internal::Call::undef,
                                 std::vector<Expr>(),
-                                Internal::Call::PureIntrinsic);
+                                Internal::Call::Intrinsic);
 }
 
 namespace Internal {
@@ -2650,7 +2626,7 @@ Expr make_scatter_gather(const std::vector<Expr> &args) {
     return Halide::Internal::Call::make(args[0].type(),
                                         Halide::Internal::Call::scatter_gather,
                                         args,
-                                        Halide::Internal::Call::PureIntrinsic);
+                                        Halide::Internal::Call::Intrinsic);
 }
 }  // namespace
 
@@ -2660,6 +2636,20 @@ Expr scatter(const std::vector<Expr> &args) {
 
 Expr gather(const std::vector<Expr> &args) {
     return make_scatter_gather(args);
+}
+
+Expr extract_bits(Type t, const Expr &e, const Expr &lsb) {
+    return Internal::Call::make(t, Internal::Call::extract_bits, {e, lsb}, Internal::Call::Intrinsic);
+}
+
+Expr concat_bits(const std::vector<Expr> &e) {
+    user_assert(!e.empty()) << "concat_bits requires at least one argument\n";
+    user_assert((e.size() & (e.size() - 1)) == 0) << "concat_bits received " << e.size() << " arguments, which is not a power of two.\n";
+    Type t = e[0].type();
+    for (size_t i = 1; i < e.size(); i++) {
+        user_assert(e[i].type() == t) << "All arguments to concat_bits must have the same type\n";
+    }
+    return Internal::Call::make(t.with_bits(t.bits() * (int)e.size()), Internal::Call::concat_bits, e, Internal::Call::Intrinsic);
 }
 
 }  // namespace Halide

@@ -37,20 +37,9 @@ struct Target;
 
 namespace Internal {
 
-/** Get the llvm type equivalent to a given halide type */
-llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
-
-/** Get the number of elements in an llvm vector type, or return 1 if
- * it's not a vector type. */
-int get_vector_num_elements(llvm::Type *);
-
 /** Get the scalar type of an llvm vector type. Returns the argument
  * if it's not a vector type. */
 llvm::Type *get_vector_element_type(llvm::Type *);
-
-llvm::ElementCount element_count(int e);
-
-llvm::Type *get_vector_type(llvm::Type *, int);
 
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
@@ -91,6 +80,16 @@ Expr lower_signed_shift_right(const Expr &a, const Expr &b);
 
 /** Reduce a mux intrinsic to a select tree */
 Expr lower_mux(const Call *mux);
+
+/** Reduce bit extraction and concatenation to bit ops */
+///@{
+Expr lower_extract_bits(const Call *c);
+Expr lower_concat_bits(const Call *c);
+///@}
+
+/** An vectorizable implementation of Halide::round that doesn't depend on any
+ * standard library being present. */
+Expr lower_round_to_nearest_ties_to_even(const Expr &);
 
 /** Given an llvm::Module, set llvm:TargetOptions information */
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options);

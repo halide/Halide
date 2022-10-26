@@ -860,7 +860,7 @@ public:
 
         // Do any pure inlining (TODO: This is currently slow)
         for (size_t i = f.size(); i > 0; i--) {
-            Function func = f[i - 1];
+            const Function &func = f[i - 1];
             if (inlined[i - 1]) {
                 for (auto &s : stages) {
                     for (auto &cond_val : s.exprs) {

@@ -11,6 +11,9 @@ namespace Halide {
 namespace Internal {
 
 /** Implement intrinsics with non-intrinsic using equivalents. */
+Expr lower_widen_right_add(const Expr &a, const Expr &b);
+Expr lower_widen_right_mul(const Expr &a, const Expr &b);
+Expr lower_widen_right_sub(const Expr &a, const Expr &b);
 Expr lower_widening_add(const Expr &a, const Expr &b);
 Expr lower_widening_mul(const Expr &a, const Expr &b);
 Expr lower_widening_sub(const Expr &a, const Expr &b);
@@ -22,6 +25,7 @@ Expr lower_rounding_shift_right(const Expr &a, const Expr &b);
 
 Expr lower_saturating_add(const Expr &a, const Expr &b);
 Expr lower_saturating_sub(const Expr &a, const Expr &b);
+Expr lower_saturating_cast(const Type &t, const Expr &a);
 
 Expr lower_halving_add(const Expr &a, const Expr &b);
 Expr lower_halving_sub(const Expr &a, const Expr &b);

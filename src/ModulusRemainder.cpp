@@ -35,6 +35,7 @@ public:
     void visit(const FloatImm *) override;
     void visit(const StringImm *) override;
     void visit(const Cast *) override;
+    void visit(const Reinterpret *) override;
     void visit(const Variable *) override;
     void visit(const Add *) override;
     void visit(const Sub *) override;
@@ -100,6 +101,10 @@ void ComputeModulusRemainder::visit(const StringImm *) {
 void ComputeModulusRemainder::visit(const Cast *) {
     // TODO: Could probably do something reasonable for integer
     // upcasts and downcasts where the modulus is a power of two.
+    result = ModulusRemainder{};
+}
+
+void ComputeModulusRemainder::visit(const Reinterpret *) {
     result = ModulusRemainder{};
 }
 

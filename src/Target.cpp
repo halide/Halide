@@ -529,6 +529,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"armv81a", Target::ARMv81a},
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
+    {"spirv", Target::SPIRV},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -553,6 +554,22 @@ int parse_vector_bits(const std::string &tok) {
     return -1;
 }
 
+void set_sanitizer_bits(Target &t) {
+// Note, we must include Util.h for these to be defined properly (or not)
+#ifdef HALIDE_INTERNAL_USING_ASAN
+    t.set_feature(Target::ASAN);
+#endif
+#ifdef HALIDE_INTERNAL_USING_MSAN
+    t.set_feature(Target::MSAN);
+#endif
+#ifdef HALIDE_INTERNAL_USING_TSAN
+    t.set_feature(Target::TSAN);
+#endif
+#ifdef HALIDE_INTERNAL_USING_COVSAN
+    t.set_feature(Target::SanitizerCoverage);
+#endif
+}
+
 }  // End anonymous namespace
 
 Target get_target_from_environment() {
@@ -567,22 +584,10 @@ Target get_target_from_environment() {
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
-#if defined(__has_feature)
-#if __has_feature(address_sanitizer)
-    host.set_feature(Target::ASAN);
-#endif
-#if __has_feature(memory_sanitizer)
-    host.set_feature(Target::MSAN);
-#endif
-#if __has_feature(thread_sanitizer)
-    host.set_feature(Target::TSAN);
-#endif
-#if __has_feature(coverage_sanitizer)
-    host.set_feature(Target::SanitizerCoverage);
-#endif
-#endif
+
     string target = Internal::get_env_variable("HL_JIT_TARGET");
     if (target.empty()) {
+        set_sanitizer_bits(host);
         return host;
     } else {
         Target t(target);
@@ -593,6 +598,7 @@ Target get_jit_target_from_environment() {
             << "Host is " << host.to_string() << ".\n";
         user_assert(!t.has_feature(Target::NoBoundsQuery))
             << "The Halide JIT requires the use of bounds query, but HL_JIT_TARGET was specified with no_bounds_query: " << target;
+        set_sanitizer_bits(t);
         return t;
     }
 }

@@ -28,7 +28,7 @@ struct ParameterContents {
 
     ParameterContents(Type t, bool b, int d, const std::string &n)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
-          host_alignment(t.bytes()), buffer_constraints(dimensions), is_buffer(b) {
+          host_alignment(t.bytes()), buffer_constraints(std::max(0, dimensions)), is_buffer(b) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)

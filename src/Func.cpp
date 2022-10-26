@@ -10,6 +10,7 @@
 #include "ApplySplit.h"
 #include "Argument.h"
 #include "Associativity.h"
+#include "Callable.h"
 #include "CodeGen_LLVM.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
@@ -3399,6 +3400,10 @@ void Func::infer_input_bounds(JITUserContext *context,
 
 void Func::compile_jit(const Target &target) {
     pipeline().compile_jit(target);
+}
+
+Callable Func::compile_to_callable(const std::vector<Argument> &args, const Target &target) {
+    return pipeline().compile_to_callable(args, target);
 }
 
 }  // namespace Halide

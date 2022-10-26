@@ -290,6 +290,8 @@ public:
         check("vdelta(v*,v*)", hvx_width / 2, in_u32(3 * x / 2));
         check("vdelta(v*,v*)", hvx_width * 3, in_u16(x * 3));
         check("vdelta(v*,v*)", hvx_width * 3, in_u8(x * 3));
+        check("vdelta(v*,v*)", hvx_width * 4, in_u16(x * 4));
+        check("vdelta(v*,v*)", hvx_width * 4, in_u8(x * 4));
 
         check("vlut32(v*.b,v*.b,r*)", hvx_width / 1, in_u8(u8_1));
         check("vlut32(v*.b,v*.b,r*)", hvx_width / 1, in_u8(clamp(u16_1, 0, 63)));
@@ -456,7 +458,7 @@ public:
         check("vmpyi(v*.h,v*.h)", hvx_width / 2, i16_1 * i16_2);
         check("vmpyio(v*.w,v*.h)", hvx_width / 2, i32_1 * i32(i16_1));
         check("vmpyie(v*.w,v*.uh)", hvx_width / 2, i32_1 * i32(u16_1));
-        check("vmpy(v*.uh,v*.uh)", hvx_width / 2, u32_1 * u32(u16_1));
+        check("vmpyie(v*.w,v*.uh)", hvx_width / 2, u32_1 * u32(u16_1));
         check("vmpyieo(v*.h,v*.h)", hvx_width / 4, i32_1 * i32_2);
         // The inconsistency in the expected instructions here is
         // correct. For bytes, the unsigned value is first, for half

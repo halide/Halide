@@ -13,7 +13,6 @@
 
 #include "Argument.h"
 #include "Expr.h"
-#include "ExternalCode.h"
 #include "Function.h"  // for NameMangling
 #include "ModulusRemainder.h"
 
@@ -161,7 +160,6 @@ public:
     const std::vector<Internal::LoweredFunc> &functions() const;
     std::vector<Internal::LoweredFunc> &functions();
     const std::vector<Module> &submodules() const;
-    const std::vector<ExternalCode> &external_code() const;
     // @}
 
     /** Return the function with the given name. If no such function
@@ -173,7 +171,6 @@ public:
     void append(const Buffer<void> &buffer);
     void append(const Internal::LoweredFunc &function);
     void append(const Module &module);
-    void append(const ExternalCode &external_code);
     // @}
 
     /** Compile a halide Module to variety of outputs, depending on

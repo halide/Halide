@@ -158,9 +158,14 @@ public:
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) >> 1));
 
-            // Rounding right shifts should also use pavg
+            // Rounding right shifts, halving subtracts, and signed rounding
+            // averages should also use pavg
             check("pavgb", 8 * w, rounding_shift_right(u8_1, 2));
             check("pavgw", 4 * w, rounding_shift_right(u16_1, 2));
+            check("pavgb", 8 * w, halving_sub(u8_1, u8_2));
+            check("pavgw", 4 * w, halving_sub(u16_1, u16_2));
+            check("pavgb", 8 * w, rounding_halving_add(i8_1, i8_2));
+            check("pavgw", 4 * w, rounding_halving_add(i16_1, i16_2));
 
             check("pmaxsw", 4 * w, max(i16_1, i16_2));
             check("pminsw", 4 * w, min(i16_1, i16_2));
@@ -237,6 +242,18 @@ public:
             check(std::string("packssdw") + check_suffix, 4 * w, i16_sat(i32_1));
             check(std::string("packsswb") + check_suffix, 8 * w, i8_sat(i16_1));
             check(std::string("packuswb") + check_suffix, 8 * w, u8_sat(i16_1));
+
+            // Sum-of-absolute-difference ops
+            {
+                const int f = 8;  // reduction factor.
+                RDom r(0, f);
+                check("psadbw", w, sum(u64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(u32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(u16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(i64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(i32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(i16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+            }
         }
 
         // SSE 3 / SSSE 3
@@ -303,6 +320,11 @@ public:
                 RDom r2(0, 2);
                 check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_u8(2 * x + r2)) * in_i8(2 * x + r2 + 32)));
                 check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_i8(2 * x + r2)) * in_u8(2 * x + r2 + 32)));
+
+                // uint8 -> uint16 or int16 and int8 -> int16 horizontal widening adds should use pmaddubsw.
+                check(check_pmaddubsw, 4 * w, sum(u16(in_u8(2 * x + r2))));
+                check(check_pmaddubsw, 4 * w, sum(i16(in_u8(2 * x + r2))));
+                check(check_pmaddubsw, 4 * w, sum(i16(in_i8(2 * x + r2))));
             }
         }
 
@@ -508,6 +530,18 @@ public:
             check("vpcmpeqq*ymm", 4, select(i64_1 == i64_2, i64(1), i64(2)));
             check("vpackusdw*ymm", 16, u16(clamp(i32_1, 0, max_u16)));
             check("vpcmpgtq*ymm", 4, select(i64_1 > i64_2, i64(1), i64(2)));
+
+            // Sum-of-absolute-difference ops
+            for (int w : {4, 8}) {
+                const int f = 8;  // reduction factor.
+                RDom r(0, f);
+                check("vpsadbw", w, sum(u64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(u32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(u16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(i64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(i32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(i16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+            }
         }
 
         if (use_avx512) {
@@ -582,6 +616,7 @@ public:
     void check_neon_all() {
         Expr f64_1 = in_f64(x), f64_2 = in_f64(x + 16), f64_3 = in_f64(x + 32);
         Expr f32_1 = in_f32(x), f32_2 = in_f32(x + 16), f32_3 = in_f32(x + 32);
+        Expr f16_1 = in_f16(x), f16_2 = in_f16(x + 16), f16_3 = in_f16(x + 32);
         Expr i8_1 = in_i8(x), i8_2 = in_i8(x + 16), i8_3 = in_i8(x + 32);
         Expr u8_1 = in_u8(x), u8_2 = in_u8(x + 16), u8_3 = in_u8(x + 32);
         Expr i16_1 = in_i16(x), i16_2 = in_i16(x + 16), i16_3 = in_i16(x + 32);
@@ -961,7 +996,7 @@ public:
             check(arm32 ? "vmovl.u32" : "ushll", 2 * w, i64(u32_1));
 
             // VMOVN    I       -       Move and Narrow
-            if (Halide::Internal::get_llvm_version() >= 140 && w > 1) {
+            if (w > 1) {
                 check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, i8(i16_1));
                 check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, u8(u16_1));
                 check(arm32 ? "vmovn.i32" : "uzp1", 4 * w, i16(i32_1));
@@ -1354,29 +1389,28 @@ public:
             check(arm32 ? "vrshr.u32" : "urshr", 4 * w, u32((u64(u32_1) + 32) >> 6));
 
             // VRSHRN   I       -       Rounding Shift Right Narrow
-            if (Halide::Internal::get_llvm_version() >= 140) {
-                // LLVM14 converts RSHRN/RSHRN2 to RADDHN/RADDHN2 when the shift amount is half the width of the vector element
-                // See https://reviews.llvm.org/D116166
-                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, i8((i32(i16_1) + 128) >> 8));
-                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
-                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
-                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, u8((u32(u16_1) + 128) >> 8));
-                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
-                // check(arm32 ? "vrshrn.i64" : "raddhn", 2 * w, u32((u64_1 + 64) >> 7));
-            } else {
-                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
-                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
-                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
-                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
-                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
-                // check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
-            }
+            // LLVM14 converts RSHRN/RSHRN2 to RADDHN/RADDHN2 when the shift amount is half the width of the vector element
+            // See https://reviews.llvm.org/D116166
+            check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+            check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+            check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+            // check(arm32 ? "vrshrn.i64" : "raddhn", 2 * w, u32((u64_1 + 64) >> 7));
 
             // VRSQRTE  I, F    -       Reciprocal Square Root Estimate
             check(arm32 ? "vrsqrte.f32" : "frsqrte", 4 * w, fast_inverse_sqrt(f32_1));
 
             // VRSQRTS  F       -       Reciprocal Square Root Step
             check(arm32 ? "vrsqrts.f32" : "frsqrts", 4 * w, fast_inverse_sqrt(f32_1));
+
+            // VFRINTN
+            if (target.bits == 64) {
+                // LLVM doesn't want to emit vfrintn on arm-32
+                check(arm32 ? "vfrintn.f16" : "frintn", 8 * w, round(f16_1));
+                check(arm32 ? "vfrintn.f32" : "frintn", 4 * w, round(f32_1));
+                check(arm32 ? "vfrintn.f64" : "frintn", 2 * w, round(f64_1));
+            }
 
             // VRSRA    I       -       Rounding Shift Right and Accumulate
             check(arm32 ? "vrsra.s8" : "srsra", 16 * w, i8_2 + i8((i16(i8_1) + 4) >> 3));
@@ -1439,12 +1473,22 @@ public:
             check(arm32 ? "vshr.u64" : "ushr", 2 * w, u64_1 / 16);
 
             // VSHRN    I       -       Shift Right Narrow
-            check(arm32 ? "vshrn.i16" : "shrn", 8 * w, i8(i16_1 / 256));
-            check(arm32 ? "vshrn.i32" : "shrn", 4 * w, i16(i32_1 / 65536));
-            check(arm32 ? "vshrn.i64" : "shrn", 2 * w, i32(i64_1 >> 32));
-            check(arm32 ? "vshrn.i16" : "shrn", 8 * w, u8(u16_1 / 256));
-            check(arm32 ? "vshrn.i32" : "shrn", 4 * w, u16(u32_1 / 65536));
-            check(arm32 ? "vshrn.i64" : "shrn", 2 * w, u32(u64_1 >> 32));
+            // LLVM15 emits UZP2 if the shift amount is half the width of the vector element.
+            const auto shrn_or_uzp2 = [&](int element_width, int shift_amt, int vector_width) {
+                constexpr int simd_vector_bits = 128;
+                if (Halide::Internal::get_llvm_version() >= 150 &&
+                    ((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
+                    shift_amt == element_width / 2) {
+                    return "uzp2";
+                }
+                return "shrn";
+            };
+            check(arm32 ? "vshrn.i16" : shrn_or_uzp2(16, 8, 8 * w), 8 * w, i8(i16_1 / 256));
+            check(arm32 ? "vshrn.i32" : shrn_or_uzp2(32, 16, 4 * w), 4 * w, i16(i32_1 / 65536));
+            check(arm32 ? "vshrn.i64" : shrn_or_uzp2(64, 32, 2 * w), 2 * w, i32(i64_1 >> 32));
+            check(arm32 ? "vshrn.i16" : shrn_or_uzp2(16, 8, 8 * w), 8 * w, u8(u16_1 / 256));
+            check(arm32 ? "vshrn.i32" : shrn_or_uzp2(32, 16, 4 * w), 4 * w, u16(u32_1 / 65536));
+            check(arm32 ? "vshrn.i64" : shrn_or_uzp2(64, 32, 2 * w), 2 * w, u32(u64_1 >> 32));
             check(arm32 ? "vshrn.i16" : "shrn", 8 * w, i8(i16_1 / 16));
             check(arm32 ? "vshrn.i32" : "shrn", 4 * w, i16(i32_1 / 16));
             check(arm32 ? "vshrn.i64" : "shrn", 2 * w, i32(i64_1 / 16));
@@ -2170,10 +2214,8 @@ public:
                 check("f32x4.convert_i32x4_u", 8 * w, cast<float>(u32_1));
 
                 // Integer to double-precision floating point
-                if (Halide::Internal::get_llvm_version() >= 140) {
-                    check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
-                    check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
-                }
+                check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
+                check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
 
                 // Single-precision floating point to integer with saturation
                 check("i32x4.trunc_sat_f32x4_s", 4 * w, cast<int32_t>(f32_1));
@@ -2189,12 +2231,8 @@ public:
                 // check("f32x4.demote_f64x2_zero", 4 * w, ???);
 
                 // Single-precision floating point to double-precision
-                if (Halide::Internal::get_llvm_version() >= 140) {
-                    // TODO(https://github.com/halide/Halide/issues/5130): broken for > 128bit vector widths
-                    if (w < 2) {
-                        check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
-                    }
-                } else {
+                // TODO(https://github.com/halide/Halide/issues/5130): broken for > 128bit vector widths
+                if (w < 2) {
                     check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
                 }
 
