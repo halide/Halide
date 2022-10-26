@@ -111,13 +111,13 @@ struct x86Intrinsic {
 
 // clang-format off
 const x86Intrinsic intrinsic_defs[] = {
-    {"abs_i8x32", UInt(8, 32), "abs", {Int(8, 32)}, Target::AVX2},
-    {"abs_i16x16", UInt(16, 16), "abs", {Int(16, 16)}, Target::AVX2},
-    {"abs_i32x8", UInt(32, 8), "abs", {Int(32, 8)}, Target::AVX2},
+    {"llvm.x86.avx2.pabs.b", UInt(8, 32), "abs", {Int(8, 32)}, Target::AVX2},
+    {"llvm.x86.avx2.pabs.d", UInt(16, 16), "abs", {Int(16, 16)}, Target::AVX2},
+    {"llvm.x86.avx2.pabs.w", UInt(32, 8), "abs", {Int(32, 8)}, Target::AVX2},
     {"abs_f32x8", Float(32, 8), "abs", {Float(32, 8)}, Target::AVX2},
-    {"abs_i8x16", UInt(8, 16), "abs", {Int(8, 16)}, Target::SSE41},
-    {"abs_i16x8", UInt(16, 8), "abs", {Int(16, 8)}, Target::SSE41},
-    {"abs_i32x4", UInt(32, 4), "abs", {Int(32, 4)}, Target::SSE41},
+    {"llvm.x86.ssse3.pabs.b.128", UInt(8, 16), "abs", {Int(8, 16)}, Target::SSE41},
+    {"llvm.x86.ssse3.pabs.d.128", UInt(16, 8), "abs", {Int(16, 8)}, Target::SSE41},
+    {"llvm.x86.ssse3.pabs.w.128", UInt(32, 4), "abs", {Int(32, 4)}, Target::SSE41},
     {"abs_f32x4", Float(32, 4), "abs", {Float(32, 4)}},
 
     {"round_f32x4", Float(32, 4), "round", {Float(32, 4)}, Target::SSE41},
@@ -125,15 +125,23 @@ const x86Intrinsic intrinsic_defs[] = {
     {"round_f32x8", Float(32, 8), "round", {Float(32, 8)}, Target::AVX},
     {"round_f64x4", Float(64, 4), "round", {Float(64, 4)}, Target::AVX},
 
+    {"llvm.sadd.sat.v64i8", Int(8, 64), "saturating_add", {Int(8, 64), Int(8, 64)}, Target::AVX512_Cannonlake},
+    {"llvm.sadd.sat.v64i8", Int(8, 64), "saturating_add", {Int(8, 64), Int(8, 64)}, Target::AVX512_Skylake},
     {"llvm.sadd.sat.v32i8", Int(8, 32), "saturating_add", {Int(8, 32), Int(8, 32)}, Target::AVX2},
     {"llvm.sadd.sat.v16i8", Int(8, 16), "saturating_add", {Int(8, 16), Int(8, 16)}},
     {"llvm.sadd.sat.v8i8", Int(8, 8), "saturating_add", {Int(8, 8), Int(8, 8)}},
+    {"llvm.ssub.sat.v64i8", Int(8, 64), "saturating_sub", {Int(8, 64), Int(8, 64)}, Target::AVX512_Cannonlake},
+    {"llvm.ssub.sat.v64i8", Int(8, 64), "saturating_sub", {Int(8, 64), Int(8, 64)}, Target::AVX512_Skylake},
     {"llvm.ssub.sat.v32i8", Int(8, 32), "saturating_sub", {Int(8, 32), Int(8, 32)}, Target::AVX2},
     {"llvm.ssub.sat.v16i8", Int(8, 16), "saturating_sub", {Int(8, 16), Int(8, 16)}},
     {"llvm.ssub.sat.v8i8", Int(8, 8), "saturating_sub", {Int(8, 8), Int(8, 8)}},
 
+    {"llvm.sadd.sat.v32i16", Int(16, 32), "saturating_add", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
+    {"llvm.sadd.sat.v32i16", Int(16, 32), "saturating_add", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
     {"llvm.sadd.sat.v16i16", Int(16, 16), "saturating_add", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.sadd.sat.v8i16", Int(16, 8), "saturating_add", {Int(16, 8), Int(16, 8)}},
+    {"llvm.ssub.sat.v32i16", Int(16, 32), "saturating_sub", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
+    {"llvm.ssub.sat.v32i16", Int(16, 32), "saturating_sub", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
     {"llvm.ssub.sat.v16i16", Int(16, 16), "saturating_sub", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.ssub.sat.v8i16", Int(16, 8), "saturating_sub", {Int(16, 8), Int(16, 8)}},
 
@@ -149,13 +157,21 @@ const x86Intrinsic intrinsic_defs[] = {
     // Target::AVX instead of Target::AVX2 as the feature flag
     // requirement.
     // TODO: Just use llvm.*add/*sub.sat, and verify the above comment?
+    {"llvm.uadd.sat.v64i8", UInt(8, 64), "saturating_add", {UInt(8, 64), UInt(8, 64)}, Target::AVX512_Cannonlake},
+    {"llvm.uadd.sat.v64i8", UInt(8, 64), "saturating_add", {UInt(8, 64), UInt(8, 64)}, Target::AVX512_Skylake},
     {"paddusbx32", UInt(8, 32), "saturating_add", {UInt(8, 32), UInt(8, 32)}, Target::AVX},
     {"paddusbx16", UInt(8, 16), "saturating_add", {UInt(8, 16), UInt(8, 16)}},
+    {"llvm.usub.sat.v64i8", UInt(8, 64), "saturating_sub", {UInt(8, 64), UInt(8, 64)}, Target::AVX512_Cannonlake},
+    {"llvm.usub.sat.v64i8", UInt(8, 64), "saturating_sub", {UInt(8, 64), UInt(8, 64)}, Target::AVX512_Skylake},
     {"psubusbx32", UInt(8, 32), "saturating_sub", {UInt(8, 32), UInt(8, 32)}, Target::AVX},
     {"psubusbx16", UInt(8, 16), "saturating_sub", {UInt(8, 16), UInt(8, 16)}},
 
+    {"llvm.uadd.sat.v32i16", UInt(16, 32), "saturating_add", {UInt(16, 32), UInt(16, 32)}, Target::AVX512_Cannonlake},
+    {"llvm.uadd.sat.v32i16", UInt(16, 32), "saturating_add", {UInt(16, 32), UInt(16, 32)}, Target::AVX512_Skylake},
     {"padduswx16", UInt(16, 16), "saturating_add", {UInt(16, 16), UInt(16, 16)}, Target::AVX},
     {"padduswx8", UInt(16, 8), "saturating_add", {UInt(16, 8), UInt(16, 8)}},
+    {"llvm.usub.sat.v32i16", UInt(16, 32), "saturating_sub", {UInt(16, 32), UInt(16, 32)}, Target::AVX512_Cannonlake},
+    {"llvm.usub.sat.v32i16", UInt(16, 32), "saturating_sub", {UInt(16, 32), UInt(16, 32)}, Target::AVX512_Skylake},
     {"psubuswx16", UInt(16, 16), "saturating_sub", {UInt(16, 16), UInt(16, 16)}, Target::AVX},
     {"psubuswx8", UInt(16, 8), "saturating_sub", {UInt(16, 8), UInt(16, 8)}},
 
@@ -180,14 +196,18 @@ const x86Intrinsic intrinsic_defs[] = {
     {"wmul_pmaddwd_sse2", Int(32, 4), "widening_mul", {Int(16, 4), Int(16, 4)}},
 
     // Multiply keep high half
+    {"llvm.x86.avx512.pmulh.w.512", Int(16, 32), "pmulh", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
+    {"llvm.x86.avx512.pmulh.w.512", Int(16, 32), "pmulh", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
     {"llvm.x86.avx2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.x86.avx512.pmulhu.w.512", UInt(16, 32), "pmulh", {UInt(16, 32), UInt(16, 32)}, Target::AVX512_Cannonlake},
+    {"llvm.x86.avx512.pmulhu.w.512", UInt(16, 32), "pmulh", {UInt(16, 32), UInt(16, 32)}, Target::AVX512_Skylake},
     {"llvm.x86.avx2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
+    {"llvm.x86.avx512.pmul.hr.sw.512", Int(16, 32), "pmulhrs", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
+    {"llvm.x86.avx512.pmul.hr.sw.512", Int(16, 32), "pmulhrs", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
     {"llvm.x86.avx2.pmul.hr.sw", Int(16, 16), "pmulhrs", {Int(16, 16), Int(16, 16)}, Target::AVX2},
-    {"saturating_pmulhrswx16", Int(16, 16), "saturating_pmulhrs", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.x86.sse2.pmulh.w", Int(16, 8), "pmulh", {Int(16, 8), Int(16, 8)}},
     {"llvm.x86.sse2.pmulhu.w", UInt(16, 8), "pmulh", {UInt(16, 8), UInt(16, 8)}},
     {"llvm.x86.ssse3.pmul.hr.sw.128", Int(16, 8), "pmulhrs", {Int(16, 8), Int(16, 8)}, Target::SSE41},
-    {"saturating_pmulhrswx8", Int(16, 8), "saturating_pmulhrs", {Int(16, 8), Int(16, 8)}, Target::SSE41},
 
     // Convert FP32 to BF16
     {"vcvtne2ps2bf16x32", BFloat(16, 32), "f32_to_bf16", {Float(32, 32)}, Target::AVX512_SapphireRapids},
@@ -582,7 +602,6 @@ void CodeGen_X86::visit(const Call *op) {
     static Pattern patterns[] = {
         {"pmulh", mul_shift_right(wild_i16x_, wild_i16x_, 16)},
         {"pmulh", mul_shift_right(wild_u16x_, wild_u16x_, 16)},
-        {"saturating_pmulhrs", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15)},
         {"saturating_narrow", i16_sat(wild_i32x_)},
         {"saturating_narrow", u16_sat(wild_i32x_)},
         {"saturating_narrow", i8_sat(wild_i16x_)},
@@ -598,6 +617,22 @@ void CodeGen_X86::visit(const Call *op) {
                 return;
             }
         }
+    }
+
+    // Special case of saturating_pmulhrs.
+    static Expr saturating_pmulhrs = rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15);
+    if (expr_match(saturating_pmulhrs, op, matches)) {
+        // Rewrite so that we can take advantage of pmulhrs.
+        internal_assert(matches.size() == 2);
+        const Expr &a = matches[0];
+        const Expr &b = matches[1];
+        Expr pmulhrs = i16(rounding_shift_right(widening_mul(a, b), 15));
+        // Handle edge case of possible overflow.
+        Expr i16_min = op->type.min();
+        Expr i16_max = op->type.max();
+        Expr expr = select((a == i16_min) && (b == i16_min), i16_max, pmulhrs);
+        expr.accept(this);
+        return;
     }
 
     CodeGen_Posix::visit(op);
