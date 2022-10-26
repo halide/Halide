@@ -64,6 +64,7 @@ struct RISCVIntrinsic {
         RoundDown = 1 << 1,         // Set vxrm rounding mode to down (rdn) before intrinsic.
         RoundUp = 1 << 2,           // Set vxrm rounding mode to up (rdu) before intrinsic.
         MangleReturnType = 1 << 3,  // Put return type mangling at start of type list.
+        ReverseBinOp = 1 << 4,      // Switch first two arguments to handle asymmetric ops.
     };
 };
 
@@ -199,6 +200,8 @@ const RISCVIntrinsic intrinsic_defs[] = {
     {"vwsubu", {Type::UInt, 2}, "widening_sub", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
     {"vwmul", {Type::Int, 2}, "widening_mul", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
     {"vwmulu", {Type::UInt, 2}, "widening_mul", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
+    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::Int, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
+    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::UInt, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::ReverseBinOp},
 };
 
 void CodeGen_RISCV::init_module() {
@@ -219,9 +222,6 @@ void CodeGen_RISCV::init_module() {
                         break;
                     }
 
-                    // Add an initial argument to handle tail propagation.
-                    arg_types.push_back(ret_type);
-
                     for (const auto &arg_type : intrin.arg_types) {
                         if (arg_type.type_pattern == IntrinsicArgPattern::Undefined) {
                             break;
@@ -240,9 +240,6 @@ void CodeGen_RISCV::init_module() {
                 Type ret_type = concretize_fixed_or_scalable(intrin.ret_type, 1,
                                                              target.vector_bits);
                 std::vector<Type> arg_types;
-
-                // Add an initial argument to handle tail propagation.
-                arg_types.push_back(ret_type);
 
                 for (const auto &arg_type : intrin.arg_types) {
                     if (arg_type.type_pattern == IntrinsicArgPattern::Undefined) {
@@ -307,6 +304,10 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
         }
         llvm_arg_types.push_back(llvm_type);
     }
+    if (intrin.flags & RISCVIntrinsic::ReverseBinOp) {
+      internal_assert(llvm_arg_types.size() > 2);
+        std::swap(llvm_arg_types[1],  llvm_arg_types[2]);
+    }
     if (intrin.flags & RISCVIntrinsic::AddVLArg) {
         mangled_name += (target.bits == 64) ? ".i64" : ".i32";
         llvm_arg_types.push_back(xlen_type);
@@ -355,8 +356,14 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
     int actual_lanes = ret_type.lanes();
     llvm::Constant *vtype = llvm::ConstantInt::get(xlen_type, actual_lanes);
     // Add an initial argument to handle tail propagation. Only done if result is vector type.
-    llvm::Value *ret = builder->CreateCall(inner, {llvm::UndefValue::get(llvm_ret_type), wrapper->getArg(0), wrapper->getArg(1), vtype});
-
+    int left_arg = 0;
+    int right_arg = 1;
+    if (intrin.flags & RISCVIntrinsic::ReverseBinOp) {
+        std::swap(left_arg, right_arg);
+    }
+    llvm::Value *ret = builder->CreateCall(inner, {llvm::UndefValue::get(llvm_ret_type),
+                                                   wrapper->getArg(left_arg), wrapper->getArg(right_arg),
+                                                   vtype});
     builder->CreateRet(ret);
 
     // Always inline these wrappers.
