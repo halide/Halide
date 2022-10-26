@@ -26,10 +26,10 @@ constexpr int max_intrinsic_args = 4;
 
 struct IntrinsicArgPattern {
     enum TypePattern {
-        Undefined,
-        Fixed,
-        Scalable,
-        WildcardWidths,
+        Undefined,       // Invalid value for sentinel.
+        Fixed,           // Argument is a fixed width vector.
+        Scalable,        // Argument is a scalable vector.
+        AllTypeWidths,   // Argument generalizes to all bit widths of type.
     } type_pattern;
 
     Type type;
@@ -40,11 +40,11 @@ struct IntrinsicArgPattern {
           type(type), relative_scale(1) {
     }
     IntrinsicArgPattern(halide_type_code_t code)
-        : type_pattern(WildcardWidths),
+        : type_pattern(AllTypeWidths),
           type(code, 8, 1), relative_scale(1) {
     }
     IntrinsicArgPattern(halide_type_code_t code, int relative_scale)
-        : type_pattern(WildcardWidths),
+        : type_pattern(AllTypeWidths),
           type(code, 8, 1), relative_scale(relative_scale) {
     }
     IntrinsicArgPattern()
@@ -210,9 +210,15 @@ void CodeGen_RISCV::init_module() {
     int effective_vscale = target_vscale();
     if (effective_vscale != 0) {
         for (const RISCVIntrinsic &intrin : intrinsic_defs) {
-            if (intrin.ret_type.type_pattern == IntrinsicArgPattern::WildcardWidths) {
-                for (int scale = 0; scale < 4; scale++) {
-                    int bit_width_scale = 1 << scale;
+            if (intrin.ret_type.type_pattern == IntrinsicArgPattern::AllTypeWidths) {
+                // Iterate over 8/16/32/64 bit integer type widths via log2 shift amount.
+                // TODO: Will need to add floating point bit widths when an intrinsic is added.
+                //     Not doing this now as it is there would be no coverage, it requires
+                //     deciding whether to get floatness from an argument or return type,
+                //     and it probably has to check target flags to figure out Float(16)
+                //     and BFloat(16) availability.
+                for (int log2_of_scale = 0; log2_of_scale < 4; log2_of_scale++) {
+                    int bit_width_scale = 1 << log2_of_scale;
 
                     Type ret_type = concretize_fixed_or_scalable(intrin.ret_type, bit_width_scale,
                                                                  target.vector_bits);
