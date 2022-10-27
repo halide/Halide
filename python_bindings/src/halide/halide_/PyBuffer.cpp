@@ -161,6 +161,22 @@ std::string type_to_format_descriptor(const Type &type) {
     return std::string();
 }
 
+void check_out_of_bounds(Buffer<> &buf, const std::vector<int> &pos) {
+    const int d = buf.dimensions();
+    if ((size_t)pos.size() != (size_t)d) {
+        throw py::value_error("Incorrect number of dimensions.");
+    }
+    for (int i = 0; i < d; i++) {
+        const auto &dim = buf.dim(i);
+        if (pos[i] < dim.min() || pos[i] > dim.max()) {
+            // Try to mimic the wording of similar errors in NumPy
+            std::ostringstream o;
+            o << "index " << pos[i] << " is out of bounds for axis " << i << " with min=" << dim.min() << ", extent=" << dim.extent();
+            throw py::index_error(o.str());
+        }
+    }
+}
+
 }  // namespace
 
 Type format_descriptor_to_type(const std::string &fd) {
@@ -196,10 +212,7 @@ Type format_descriptor_to_type(const std::string &fd) {
 }
 
 py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
-    if ((size_t)pos.size() != (size_t)buf.dimensions()) {
-        throw py::value_error("Incorrect number of dimensions.");
-    }
-    // TODO: add bounds checking?
+    check_out_of_bounds(buf, pos);
 
 #define HANDLE_BUFFER_TYPE(TYPE)       \
     if (buf.type() == type_of<TYPE>()) \
@@ -229,10 +242,8 @@ py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
 namespace {
 
 py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, const py::object &value) {
-    if ((size_t)pos.size() != (size_t)buf.dimensions()) {
-        throw py::value_error("Incorrect number of dimensions.");
-    }
-// TODO: add bounds checking?
+    check_out_of_bounds(buf, pos);
+
 #define HANDLE_BUFFER_TYPE(TYPE)       \
     if (buf.type() == type_of<TYPE>()) \
         return py::cast(buf.as<TYPE>()(pos.data()) = value_cast<TYPE>(value));
