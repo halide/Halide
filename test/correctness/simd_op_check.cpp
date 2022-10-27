@@ -486,11 +486,9 @@ public:
                 check("vpmaxub*" + suffix, 32 * m, max(u8_1, u8_2));
                 check("vpminub*" + suffix, 32 * m, min(u8_1, u8_2));
 
-
                 check("vpabsb*" + suffix, 32 * m, abs(i8_1));
                 check("vpabsw*" + suffix, 16 * m, abs(i16_1));
                 check("vpabsd*" + suffix, 8 * m, abs(i32_1));
-
             };
 
             check_x86_fixed_point("ymm", 1);
@@ -502,7 +500,6 @@ public:
             check(use_avx512 ? "vpaddq*zmm" : "vpaddq*ymm", 8, i64_1 + i64_2);
             check(use_avx512 ? "vpsubq*zmm" : "vpsubq*ymm", 8, i64_1 - i64_2);
             check(use_avx512 ? "vpmullq" : "vpmuludq*ymm", 8, u64_1 * u64_2);
-
 
             // llvm doesn't distinguish between signed and unsigned multiplies
             // check("vpmuldq", 8, i64(i32_1) * i64(i32_2));
