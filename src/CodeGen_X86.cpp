@@ -620,7 +620,7 @@ void CodeGen_X86::visit(const Call *op) {
     }
 
     // Check for saturating_pmulhrs. On x86, pmulhrs is truncating, but it's still faster
-    // to use pmulhrs then to lower (producing widening multiplication), and have a check
+    // to use pmulhrs than to lower (producing widening multiplication), and have a check
     // for the singular overflow case.
     static Expr saturating_pmulhrs = rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15);
     if (expr_match(saturating_pmulhrs, op, matches)) {
