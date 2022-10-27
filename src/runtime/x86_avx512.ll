@@ -138,3 +138,21 @@ define weak_odr <4 x i32>  @dpwssdsx4(<4 x i32> %init, <8 x i16> %a, <8 x i16> %
   ret <4 x i32> %3
 }
 declare <4 x i32> @llvm.x86.avx512.vpdpwssds.128(<4 x i32>, <4 x i32>, <4 x i32>)
+
+define weak_odr <64 x i8> @abs_i8x64(<64 x i8> %arg) {
+ %1 = tail call <64 x i8> @llvm.abs.v64i8(<64 x i8> %arg, i1 false)
+ ret <64 x i8> %1
+}
+declare <64 x i8> @llvm.abs.v64i8(<64 x i8>, i1) nounwind readnone
+
+define weak_odr <32 x i16> @abs_i16x32(<32 x i16> %arg) {
+ %1 = tail call <32 x i16> @llvm.abs.v32i16(<32 x i16> %arg, i1 false)
+ ret <32 x i16> %1
+}
+declare <32 x i16> @llvm.abs.v32i16(<32 x i16>, i1) nounwind readnone
+
+define weak_odr <16 x i32> @abs_i32x16(<16 x i32> %arg) {
+ %1 = tail call <16 x i32> @llvm.abs.v16i32(<16 x i32> %arg, i1 false)
+ ret <16 x i32> %1
+}
+declare <16 x i32> @llvm.abs.v16i32(<16 x i32>, i1) nounwind readnone

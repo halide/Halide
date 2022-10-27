@@ -35,6 +35,9 @@ Target complete_x86_target(Target t) {
     if (t.has_feature(Target::AVX512_Cannonlake) ||
         t.has_feature(Target::AVX512_Skylake) ||
         t.has_feature(Target::AVX512_KNL)) {
+        t.set_feature(Target::AVX512);
+    }
+    if (t.has_feature(Target::AVX512)) {
         t.set_feature(Target::AVX2);
     }
     if (t.has_feature(Target::AVX2)) {
@@ -113,6 +116,10 @@ struct x86Intrinsic {
 const x86Intrinsic intrinsic_defs[] = {
     // AVX2/SSSE3 LLVM intrinsics for pabs fail in JIT. The integer wrappers
     // just call `llvm.abs` (which requires a second argument).
+    // AVX512BW's pabs instructions aren't directly exposed by LLVM.
+    {"abs_i8x64", UInt(8, 64), "abs", {Int(8, 64)}, Target::AVX512_Skylake},
+    {"abs_i16x32", UInt(16, 32), "abs", {Int(16, 32)}, Target::AVX512_Skylake},
+    {"abs_i32x16", UInt(32, 16), "abs", {Int(32, 16)}, Target::AVX512_Skylake},
     {"abs_i8x32", UInt(8, 32), "abs", {Int(8, 32)}, Target::AVX2},
     {"abs_i16x16", UInt(16, 16), "abs", {Int(16, 16)}, Target::AVX2},
     {"abs_i32x8", UInt(32, 8), "abs", {Int(32, 8)}, Target::AVX2},
