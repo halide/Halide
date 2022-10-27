@@ -221,6 +221,13 @@ namespace {
 
 halide_error_code_t init_error_code = halide_error_code_success;
 
+void device_lost_callback(WGPUDeviceLostReason reason,
+                          char const *message,
+                          void *user_context) {
+    error(user_context) << "WGPU device lost (" << reason << "): "
+                        << message << "\n";
+}
+
 void request_device_callback(WGPURequestDeviceStatus status,
                              WGPUDevice device,
                              char const *message,
@@ -231,6 +238,7 @@ void request_device_callback(WGPURequestDeviceStatus status,
         init_error_code = halide_error_code_generic_error;
         return;
     }
+    wgpuDeviceSetDeviceLostCallback(device, device_lost_callback, user_context);
     global_device = device;
 }
 
@@ -456,6 +464,7 @@ WEAK int halide_webgpu_device_release(void *user_context) {
 
         // Release the device/adapter/instance, if we created them.
         if (device == global_device) {
+            wgpuDeviceSetDeviceLostCallback(device, nullptr, nullptr);
             wgpuDeviceRelease(device);
             global_device = nullptr;
 
