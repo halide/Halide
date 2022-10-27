@@ -15,7 +15,7 @@ def is_interleaved(im):
 
 def _as_interleaved(im):
     """If the given ndarray is 3-dimensional and appears to be planar layout,
-       return a copy that is in interleaved form, leaving the input unchanged.
+       return a view that is in interleaved form, leaving the input unchanged.
        Otherwise, return the image ndarray unchanged.
        Note that this call must be used with care, as the returnee may or may
        not be a copy."""
@@ -27,7 +27,7 @@ def _as_interleaved(im):
 
 def _as_planar(im):
     """If the given ndarray is 3-dimensional and appears to be interleaved
-       layout, return a copy that is in planar form, leaving the input
+       layout, return a view that is in planar form, leaving the input
        unchanged. Otherwise, return the image ndarray unchanged.
        Note that this call must be used with care, as the returnee may or may
        not be a copy."""
