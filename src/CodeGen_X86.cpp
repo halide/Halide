@@ -111,9 +111,11 @@ struct x86Intrinsic {
 
 // clang-format off
 const x86Intrinsic intrinsic_defs[] = {
-    {"llvm.x86.avx2.pabs.b", UInt(8, 32), "abs", {Int(8, 32)}, Target::AVX2},
-    {"llvm.x86.avx2.pabs.w", UInt(16, 16), "abs", {Int(16, 16)}, Target::AVX2},
-    {"llvm.x86.avx2.pabs.d", UInt(32, 8), "abs", {Int(32, 8)}, Target::AVX2},
+    // AVX2/SSSE3 LLVM intrinsics for pabs fail in JIT. The integer wrappers
+    // just call `llvm.abs` (which requires a second argument).
+    {"abs_i8x32", UInt(8, 32), "abs", {Int(8, 32)}, Target::AVX2},
+    {"abs_i16x16", UInt(16, 16), "abs", {Int(16, 16)}, Target::AVX2},
+    {"abs_i32x8", UInt(32, 8), "abs", {Int(32, 8)}, Target::AVX2},
     {"abs_f32x8", Float(32, 8), "abs", {Float(32, 8)}, Target::AVX2},
     {"abs_i8x16", UInt(8, 16), "abs", {Int(8, 16)}, Target::SSE41},
     {"abs_i16x8", UInt(16, 8), "abs", {Int(16, 8)}, Target::SSE41},
