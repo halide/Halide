@@ -84,6 +84,17 @@ _add_python_aot_and_stub_extension(SOURCES bitpy_generator.py GENERATORS bitpy)
 _add_python_aot_and_stub_extension(SOURCES complexpy_generator.py GENERATORS complexpy)
 _add_python_aot_and_stub_extension(SOURCES simplepy_generator.py GENERATORS simplepy)
 
+_add_python_aot_and_stub_extension(SOURCES interpolate_generator.py
+                                   GENERATORS interpolate
+                                              interpolate_Mullapudi2016)
+
+_add_python_aot_and_stub_extension(SOURCES local_laplacian_generator.py
+                                   GENERATORS local_laplacian
+                                              local_laplacian_Mullapudi2016)
+
+_add_python_aot_and_stub_extension(SOURCES blur_generator.py
+                                   GENERATORS blur)
+
 # Bind several libraries into a single python extension;
 # they will be in the same module (and share the same Halide runtime)
 add_halide_python_extension_library(pyext_multi_method_module
