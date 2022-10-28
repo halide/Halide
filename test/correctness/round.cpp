@@ -13,6 +13,7 @@ bool test(Expr e, const char *funcname, int vector_width, int N, Buffer<T> &inpu
     if (t.has_gpu_feature()) {
         if (e.type() == Float(64) &&
             ((t.has_feature(Target::OpenCL) && !t.has_feature(Target::CLDoubles)) ||
+             t.has_feature(Target::Vulkan) ||
              t.has_feature(Target::Metal) ||
              t.has_feature(Target::D3D12Compute))) {
             return true;
