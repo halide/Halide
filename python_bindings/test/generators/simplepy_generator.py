@@ -1,9 +1,10 @@
 import halide as hl
 
-x = hl.Var('x')
-y = hl.Var('y')
+x = hl.Var("x")
+y = hl.Var("y")
 
-@hl.generator(name = "simplepy")
+
+@hl.generator(name="simplepy")
 class SimplePy:
     offset = hl.GeneratorParam(0)
 
@@ -20,6 +21,6 @@ class SimplePy:
         g.simple_output[x, y] = hl.f32(g.offset + g.buffer_input[x, y]) + g.float_arg
         g.simple_output.compute_root()
 
+
 if __name__ == "__main__":
     hl.main()
-

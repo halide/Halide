@@ -44,10 +44,21 @@ def test_target():
     assert hl.Target.validate_target_string(ts)
 
     # Full specification round-trip, crazy features
-    t1 = hl.Target(hl.TargetOS.Android, hl.TargetArch.ARM, 32,
-                   [hl.TargetFeature.JIT, hl.TargetFeature.SSE41, hl.TargetFeature.AVX, hl.TargetFeature.AVX2,
-                    hl.TargetFeature.CUDA, hl.TargetFeature.OpenCL, hl.TargetFeature.OpenGLCompute,
-                    hl.TargetFeature.Debug])
+    t1 = hl.Target(
+        hl.TargetOS.Android,
+        hl.TargetArch.ARM,
+        32,
+        [
+            hl.TargetFeature.JIT,
+            hl.TargetFeature.SSE41,
+            hl.TargetFeature.AVX,
+            hl.TargetFeature.AVX2,
+            hl.TargetFeature.CUDA,
+            hl.TargetFeature.OpenCL,
+            hl.TargetFeature.OpenGLCompute,
+            hl.TargetFeature.Debug,
+        ],
+    )
     ts = t1.to_string()
     assert ts == "arm-32-android-avx-avx2-cuda-debug-jit-opencl-openglcompute-sse41"
     assert hl.Target.validate_target_string(ts)
@@ -92,16 +103,23 @@ def test_target():
 
     # with_feature
     t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [hl.TargetFeature.SSE41])
-    t2 = t1.with_feature(hl.TargetFeature.NoAsserts).with_feature(hl.TargetFeature.NoBoundsQuery)
+    t2 = t1.with_feature(hl.TargetFeature.NoAsserts).with_feature(
+        hl.TargetFeature.NoBoundsQuery
+    )
     ts = t2.to_string()
     assert ts == "x86-32-linux-no_asserts-no_bounds_query-sse41"
 
     # without_feature
-    t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 32, [
-                   hl.TargetFeature.SSE41, hl.TargetFeature.NoAsserts])
+    t1 = hl.Target(
+        hl.TargetOS.Linux,
+        hl.TargetArch.X86,
+        32,
+        [hl.TargetFeature.SSE41, hl.TargetFeature.NoAsserts],
+    )
     # Note that NoBoundsQuery wasn't set here, so 'without' is a no-op
     t2 = t1.without_feature(hl.TargetFeature.NoAsserts).without_feature(
-        hl.TargetFeature.NoBoundsQuery)
+        hl.TargetFeature.NoBoundsQuery
+    )
     ts = t2.to_string()
     assert ts == "x86-32-linux-sse41"
 
@@ -120,7 +138,12 @@ def test_target():
     assert not t2.has_gpu_feature()
 
     # has_large_buffers & maximum_buffer_size
-    t1 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 64, [hl.TargetFeature.LargeBuffers])
+    t1 = hl.Target(
+        hl.TargetOS.Linux,
+        hl.TargetArch.X86,
+        64,
+        [hl.TargetFeature.LargeBuffers],
+    )
     t2 = hl.Target(hl.TargetOS.Linux, hl.TargetArch.X86, 64, [])
     assert t1.has_large_buffers()
     assert t1.maximum_buffer_size() == 9223372036854775807
@@ -146,7 +169,9 @@ def test_target():
     assert not t2.supports_type(hl.Float(64), hl.DeviceAPI.Metal)
 
     # target_feature_for_device_api
-    assert hl.target_feature_for_device_api(hl.DeviceAPI.OpenCL) == hl.TargetFeature.OpenCL
+    assert (
+        hl.target_feature_for_device_api(hl.DeviceAPI.OpenCL) == hl.TargetFeature.OpenCL
+    )
 
     # with_feature with non-convertible lists
     try:
@@ -154,7 +179,8 @@ def test_target():
     except TypeError as e:
         assert "incompatible constructor arguments" in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
+
 
 if __name__ == "__main__":
     test_target()
