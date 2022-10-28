@@ -11,7 +11,8 @@ class BlurGPUSchedule(Enum):
     Inline = 0
     # Schedule caching intermedia result of blur_x.
     Cache = 1
-    # Schedule enabling sliding window opt within each work-item or cuda thread.
+    # Schedule enabling sliding window opt within each work-item or cuda
+    # thread.
     Slide = 2
     # The same as above plus vectorization per work-item.
     SlideVectorize = 3
@@ -23,10 +24,6 @@ _GPU_SCHEDULE_ENUM_MAP = {
     "slide": BlurGPUSchedule.Slide,
     "slide_vector": BlurGPUSchedule.SlideVectorize,
 }
-
-
-def _vars(*args):
-    return (hl.Var(n) for n in args)
 
 
 @hl.generator()
@@ -43,20 +40,21 @@ class blur:
     def generate(self):
         g = self
 
-        x, y, xi, yi = _vars("x", "y", "xi", "yi")
+        x, y, xi, yi = hl.vars("x y xi yi")
 
         # The algorithm
         clamped = hl.BoundaryConditions.repeat_edge(g.input_buf)
 
         blur_x = hl.Func("blur_x")
-        blur_x[x, y] = (clamped[x, y] + clamped[x + 1, y] + clamped[x + 2, y]) / 3
-        g.blur_y[x, y] = (blur_x[x, y] + blur_x[x, y + 1] + blur_x[x, y + 2]) / 3
+        blur_x[x, y] = (clamped[x, y] + clamped[x + 1, y] + clamped[x + 2, y]) // 3
+        g.blur_y[x, y] = (blur_x[x, y] + blur_x[x, y + 1] + blur_x[x, y + 2]) // 3
 
         # How to schedule it
         if g.target().has_gpu_feature():
             # GPU schedule.
 
-            # This will raise an exception for unknown strings, which is what we want
+            # This will raise an exception for unknown strings, which is what
+            # we want
             schedule_enum = _GPU_SCHEDULE_ENUM_MAP[g.gpu_schedule]
 
             if schedule_enum == BlurGPUSchedule.Inline:
@@ -118,7 +116,7 @@ class blur:
             # Halide will store blur_x in a circular buffer so its
             # results can be re-used.
             vector_size = g.natural_vector_size(g.input_buf.type())
-            (g.blur_y.split(y, y, yi, 32).parallel(y).vectorize(x, vector_size))
+            g.blur_y.split(y, y, yi, 32).parallel(y).vectorize(x, vector_size)
             (
                 blur_x.store_at(g.blur_y, y)
                 .compute_at(g.blur_y, x)

@@ -4,25 +4,18 @@ Local Laplacian.
 
 import halide as hl
 
+# Just declare these at global scope, for simplicity
+x, y, c, k = hl.vars("x y c k")
+
 
 def _func_list(name, size):
+    """Return a list containing `size` Funcs, named `name_n` for n in 0..size-1."""
     return [hl.Func("%s_%d" % (name, i)) for i in range(size)]
 
 
-def _funcs(*args):
-    return (hl.Func(n) for n in args)
-
-
-def _vars(*args):
-    return (hl.Var(n) for n in args)
-
-
-# Just declare these at global scope, for simplicity
-x, y, c, k = _vars("x", "y", "c", "k")
-
-# Downsample with a 1 3 3 1 filter
 def _downsample(f):
-    downx, downy = _funcs("downx", "downy")
+    """Downsample with a 1 3 3 1 filter"""
+    downx, downy = hl.funcs("downx downy")
     downx[x, y, hl._] = (
         f[2 * x - 1, y, hl._]
         + 3.0 * (f[2 * x, y, hl._] + f[2 * x + 1, y, hl._])
@@ -36,21 +29,23 @@ def _downsample(f):
     return downy
 
 
-# Upsample using bilinear interpolation
 def _upsample(f):
-    upx, upy = _funcs("upx", "upy")
+    """Upsample using bilinear interpolation"""
+    upx, upy = hl.funcs("upx upy")
     upx[x, y, hl._] = hl.lerp(
-        f[(x + 1) // 2, y, hl._], f[(x - 1) // 2, y, hl._], ((x % 2) * 2 + 1) / 4.0
+        f[(x + 1) // 2, y, hl._],
+        f[(x - 1) // 2, y, hl._],
+        ((x % 2) * 2 + 1) / 4.0,
     )
     upy[x, y, hl._] = hl.lerp(
-        upx[x, (y + 1) // 2, hl._], upx[x, (y - 1) // 2, hl._], ((y % 2) * 2 + 1) / 4.0
+        upx[x, (y + 1) // 2, hl._],
+        upx[x, (y - 1) // 2, hl._],
+        ((y % 2) * 2 + 1) / 4.0,
     )
     return upy
 
 
-@hl.alias(
-    local_laplacian_Mullapudi2016={"autoscheduler": "Mullapudi2016"},
-)
+@hl.alias(local_laplacian_Mullapudi2016={"autoscheduler": "Mullapudi2016"})
 @hl.generator()
 class local_laplacian:
     pyramid_levels = hl.GeneratorParam(8)
@@ -121,7 +116,7 @@ class local_laplacian:
             li = hl.clamp(hl.i32(level), 0, g.levels - 2)
             lf = level - hl.f32(li)
             # Linearly interpolate between the nearest processed pyramid levels
-            outLPyramid[j][x, y] = ((1.0 - lf) * lPyramid[j][x, y, li]) + (
+            outLPyramid[j][x, y] = (1.0 - lf) * lPyramid[j][x, y, li] + (
                 lf * lPyramid[j][x, y, li + 1]
             )
 
@@ -133,7 +128,8 @@ class local_laplacian:
                 _upsample(outGPyramid[j + 1])[x, y] + outLPyramid[j][x, y]
             )
 
-        # Reintroduce color (Connelly: use eps to avoid scaling up noise w/ apollo3.png input)
+        # Reintroduce color (Connelly: use eps to avoid scaling up noise w/
+        # apollo3.png input)
         color = hl.Func("color")
         eps = hl.f32(0.01)
         color[x, y, c] = (
@@ -161,8 +157,8 @@ class local_laplacian:
             # GPU schedule.
             # 3.19ms on an RTX 2060.
             remap.compute_root()
-            xi, yi = _vars("xi", "yi")
-            (g.output_buf.compute_root().gpu_tile(x, y, xi, yi, 16, 8))
+            xi, yi = hl.vars("xi yi")
+            g.output_buf.compute_root().gpu_tile(x, y, xi, yi, 16, 8)
             for j in range(0, J):
                 blockw = 16
                 blockh = 8
@@ -172,8 +168,11 @@ class local_laplacian:
 
                 if j > 0:
                     inGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh)
-                    gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(
-                        x, y, xi, yi, blockw, blockh
+                    (
+                        gPyramid[j]
+                        .compute_root()
+                        .reorder(k, x, y)
+                        .gpu_tile(x, y, xi, yi, blockw, blockh)
                     )
 
                 outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh)
@@ -191,12 +190,15 @@ class local_laplacian:
 
             remap.compute_root()
             yo = hl.Var("yo")
-            g.output_buf.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(
-                x, 8
+            (
+                g.output_buf.reorder(c, x, y)
+                .split(y, yo, y, 64)
+                .parallel(yo)
+                .vectorize(x, 8)
             )
             gray.compute_root().parallel(y, 32).vectorize(x, 8)
             for j in range(1, 5):
-                (inGPyramid[j].compute_root().parallel(y, 32).vectorize(x, 8))
+                inGPyramid[j].compute_root().parallel(y, 32).vectorize(x, 8)
                 (
                     gPyramid[j]
                     .compute_root()
@@ -213,7 +215,7 @@ class local_laplacian:
                     .vectorize(x, 8)
                 )
 
-            (outGPyramid[0].compute_at(g.output_buf, y).vectorize(x, 8))
+            outGPyramid[0].compute_at(g.output_buf, y).vectorize(x, 8)
             for j in range(5, J):
                 inGPyramid[j].compute_root()
                 gPyramid[j].compute_root().parallel(k)

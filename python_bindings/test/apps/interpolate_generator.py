@@ -6,11 +6,8 @@ import halide as hl
 
 
 def _func_list(name, size):
+    """Return a list containing `size` Funcs, named `name_n` for n in 0..size-1."""
     return [hl.Func("%s_%d" % (name, i)) for i in range(size)]
-
-
-def _vars(*args):
-    return (hl.Var(n) for n in args)
 
 
 @hl.alias(
@@ -26,7 +23,7 @@ class interpolate:
     def generate(self):
         g = self
 
-        x, y, c = _vars("x", "y", "c")
+        x, y, c = hl.vars("x y c")
 
         # Input must have four color channels - rgba
         g.input_buf.dim(2).set_bounds(0, 4)
@@ -40,7 +37,9 @@ class interpolate:
         clamped = hl.BoundaryConditions.repeat_edge(g.input_buf)
 
         downsampled[0][x, y, c] = hl.select(
-            c < 3, clamped[x, y, c] * clamped[x, y, 3], clamped[x, y, 3]
+            c < 3,
+            clamped[x, y, c] * clamped[x, y, 3],
+            clamped[x, y, 3],
         )
 
         for l in range(1, g.levels):
@@ -90,9 +89,7 @@ class interpolate:
             pass
         elif g.target().has_gpu_feature():
             # 0.86ms on a 2060 RTX
-            yo, yi, xo, xi, ci, xii, yii = _vars(
-                "yo", "yi", "xo", "xi", "ci", "xii", "yii"
-            )
+            yo, yi, xo, xi, ci, xii, yii = hl.vars("yo yi xo xi ci xii yii")
 
             (
                 g.output_buf.bound(x, 0, g.input_buf.width())
@@ -163,7 +160,7 @@ class interpolate:
 
         else:
             # 4.54ms on an Intel i9-9960X using 16 threads
-            xo, xi, yo, yi = _vars("xo", "xi", "yo", "yi")
+            xo, xi, yo, yi = hl.vars("xo xi yo yi")
             vec = g.natural_vector_size(hl.Float(32))
             for l in range(1, g.levels - 1):
                 # We must refer to the downsampled stages in the

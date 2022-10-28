@@ -5,14 +5,6 @@ Bilateral histogram.
 import halide as hl
 
 
-def _funcs(*args):
-    return (hl.Func(n) for n in args)
-
-
-def _vars(*args):
-    return (hl.Var(n) for n in args)
-
-
 @hl.alias(
     bilateral_grid_Adams2019={"autoscheduler": "Adams2019"},
     bilateral_grid_Mullapudi2016={"autoscheduler": "Mullapudi2016"},
@@ -29,7 +21,7 @@ class bilateral_grid:
     def generate(self):
         g = self
 
-        x, y, z, c = _vars("x", "y", "z", "c")
+        x, y, z, c = hl.vars("x y z c")
 
         # Add a boundary condition
         clamped = hl.BoundaryConditions.repeat_edge(g.input_buf)
@@ -37,7 +29,8 @@ class bilateral_grid:
         # Construct the bilateral grid
         r = hl.RDom([(0, g.s_sigma), (0, g.s_sigma)])
         val = clamped[
-            x * g.s_sigma + r.x - g.s_sigma // 2, y * g.s_sigma + r.y - g.s_sigma // 2
+            x * g.s_sigma + r.x - g.s_sigma // 2,
+            y * g.s_sigma + r.y - g.s_sigma // 2,
         ]
         val = hl.clamp(val, 0.0, 1.0)
 
@@ -48,7 +41,7 @@ class bilateral_grid:
         histogram[x, y, zi, c] += hl.mux(c, [val, 1.0])
 
         # Blur the histogram using a five-tap filter
-        blurx, blury, blurz = _funcs("blurx", "blury", "blurz")
+        blurx, blury, blurz = hl.funcs("blurx blury blurz")
         blurz[x, y, z, c] = (
             histogram[x, y, z - 2, c]
             + histogram[x, y, z - 1, c] * 4
@@ -121,12 +114,12 @@ class bilateral_grid:
         elif g.target().has_gpu_feature():
             # 0.50ms on an RTX 2060
 
-            xi, yi, zi = _vars("xi", "yi", "zi")
+            xi, yi, zi = hl.vars("xi yi zi")
 
             # Schedule blurz in 8x8 tiles. This is a tile in
             # grid-space, which means it represents something like
             # 64x64 pixels in the input (if s_sigma is 8).
-            (blurz.compute_root().reorder(c, z, x, y).gpu_tile(x, y, xi, yi, 8, 8))
+            blurz.compute_root().reorder(c, z, x, y).gpu_tile(x, y, xi, yi, 8, 8)
 
             # Schedule histogram to happen per-tile of blurz, with
             # intermediate results in shared memory. This means histogram
@@ -134,10 +127,11 @@ class bilateral_grid:
             # 1) Zero out the 8x8 set of histograms
             # 2) Compute those histogram by iterating over lots of the input image
             # 3) Blur the set of histograms in z
-            (histogram.reorder(c, z, x, y).compute_at(blurz, x).gpu_threads(x, y))
-            (histogram.update().reorder(c, r.x, r.y, x, y).gpu_threads(x, y).unroll(c))
+            histogram.reorder(c, z, x, y).compute_at(blurz, x).gpu_threads(x, y)
+            histogram.update().reorder(c, r.x, r.y, x, y).gpu_threads(x, y).unroll(c)
 
-            # Schedule the remaining blurs and the sampling at the end similarly.
+            # Schedule the remaining blurs and the sampling at the end
+            # similarly.
             (
                 blurx.compute_root()
                 .reorder(c, x, y, z)
@@ -154,8 +148,8 @@ class bilateral_grid:
                 .unroll(y, 2, hl.TailStrategy.RoundUp)
                 .gpu_tile(x, y, z, xi, yi, zi, 32, 8, 1, hl.TailStrategy.RoundUp)
             )
-            (g.bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, 32, 8))
-            (interpolated.compute_at(g.bilateral_grid, xi).vectorize(c))
+            g.bilateral_grid.compute_root().gpu_tile(x, y, xi, yi, 32, 8)
+            interpolated.compute_at(g.bilateral_grid, xi).vectorize(c)
         else:
             # CPU schedule.
 
@@ -173,13 +167,13 @@ class bilateral_grid:
                 .vectorize(x, 8)
                 .unroll(c)
             )
-            (histogram.compute_at(blurz, y))
-            (histogram.update().reorder(c, r.x, r.y, x, y).unroll(c))
+            histogram.compute_at(blurz, y)
+            histogram.update().reorder(c, r.x, r.y, x, y).unroll(c)
             (
-                blurx.compute_root()
-                .reorder(c, x, y, z)
-                .parallel(z)
-                .vectorize(x, 8)
+                blurx.compute_root()  #
+                .reorder(c, x, y, z)  #
+                .parallel(z)  #
+                .vectorize(x, 8)  #
                 .unroll(c)
             )
             (
@@ -189,7 +183,7 @@ class bilateral_grid:
                 .vectorize(x, 8)
                 .unroll(c)
             )
-            (g.bilateral_grid.compute_root().parallel(y).vectorize(x, 8))
+            g.bilateral_grid.compute_root().parallel(y).vectorize(x, 8)
 
 
 if __name__ == "__main__":
