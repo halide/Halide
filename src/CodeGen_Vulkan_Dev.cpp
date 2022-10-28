@@ -448,30 +448,51 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type 
     if (!value_type.is_bool()) {
         value_id = cast_type(Bool(), value_type, value_id);
     }
-    uint8_t true_data[target_type.bytes()];
-    uint8_t false_data[target_type.bytes()];
+    std::vector<uint8_t> true_data(target_type.bytes(), uint8_t(0));
+    std::vector<uint8_t> false_data(target_type.bytes(), uint8_t(0));
     for (int i = 0; i < target_type.lanes(); ++i) {
         if (target_type.is_int_or_uint() && target_type.bits() == 8) {
-            reinterpret_cast<int8_t *>(true_data)[i] = int8_t(1);
-            reinterpret_cast<int8_t *>(false_data)[i] = int8_t(0);
+            int8_t *td = reinterpret_cast<int8_t *>(&true_data[0]);
+            int8_t *fd = reinterpret_cast<int8_t *>(&false_data[0]);
+            td[i] = int8_t(1);
+            fd[i] = int8_t(0);
         } else if (target_type.is_int_or_uint() && target_type.bits() == 16) {
-            reinterpret_cast<int16_t *>(true_data)[i] = int16_t(1);
-            reinterpret_cast<int16_t *>(false_data)[i] = int16_t(0);
+            int16_t *td = reinterpret_cast<int16_t *>(&true_data[0]);
+            int16_t *fd = reinterpret_cast<int16_t *>(&false_data[0]);
+            td[i] = int16_t(1);
+            fd[i] = int16_t(0);
         } else if (target_type.is_int_or_uint() && target_type.bits() == 32) {
-            reinterpret_cast<int32_t *>(true_data)[i] = int32_t(1);
-            reinterpret_cast<int32_t *>(false_data)[i] = int32_t(0);
+            int32_t *td = reinterpret_cast<int32_t *>(&true_data[0]);
+            int32_t *fd = reinterpret_cast<int32_t *>(&false_data[0]);
+            td[i] = int32_t(1);
+            fd[i] = int32_t(0);
         } else if (target_type.is_int_or_uint() && target_type.bits() == 64) {
-            reinterpret_cast<int64_t *>(true_data)[i] = int64_t(1);
-            reinterpret_cast<int64_t *>(false_data)[i] = int64_t(0);
+            int64_t *td = reinterpret_cast<int64_t *>(&true_data[0]);
+            int64_t *fd = reinterpret_cast<int64_t *>(&false_data[0]);
+            td[i] = int64_t(1);
+            fd[i] = int64_t(0);
         } else if (target_type.is_float() && target_type.bits() == 16) {
-            reinterpret_cast<uint16_t *>(true_data)[i] = uint16_t(1);
-            reinterpret_cast<uint16_t *>(false_data)[i] = uint16_t(0);
+            if (target_type.is_bfloat()) {
+                bfloat16_t *td = reinterpret_cast<bfloat16_t *>(&true_data[0]);
+                bfloat16_t *fd = reinterpret_cast<bfloat16_t *>(&false_data[0]);
+                td[i] = bfloat16_t(1.0f);
+                fd[i] = bfloat16_t(0.0f);
+            } else {
+                float16_t *td = reinterpret_cast<float16_t *>(&true_data[0]);
+                float16_t *fd = reinterpret_cast<float16_t *>(&false_data[0]);
+                td[i] = float16_t(1.0f);
+                fd[i] = float16_t(0.0f);
+            }
         } else if (target_type.is_float() && target_type.bits() == 32) {
-            reinterpret_cast<float *>(true_data)[i] = 1.0f;
-            reinterpret_cast<float *>(false_data)[i] = 0.0f;
+            float *td = reinterpret_cast<float *>(&true_data[0]);
+            float *fd = reinterpret_cast<float *>(&false_data[0]);
+            td[i] = float(1.0f);
+            fd[i] = float(0.0f);
         } else if (target_type.is_float() && target_type.bits() == 64) {
-            reinterpret_cast<double *>(true_data)[i] = 1.0;
-            reinterpret_cast<double *>(false_data)[i] = 0.0;
+            double *td = reinterpret_cast<double *>(&true_data[0]);
+            double *fd = reinterpret_cast<double *>(&false_data[0]);
+            td[i] = double(1.0);
+            fd[i] = double(0.0);
         } else {
             user_error << "Unhandled type cast from value type '" << value_type << "' to target type '" << target_type << "'!";
         }
