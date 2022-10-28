@@ -57,7 +57,7 @@ class blur:
             # GPU schedule.
 
             # This will raise an exception for unknown strings, which is what we want
-            schedule_enum = _GPU_SCHEDULE_ENUM_MAP[g.schedule]
+            schedule_enum = _GPU_SCHEDULE_ENUM_MAP[g.gpu_schedule]
 
             if schedule_enum == BlurGPUSchedule.Inline:
                 # - Fully inlining.
