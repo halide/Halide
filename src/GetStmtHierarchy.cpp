@@ -113,7 +113,7 @@ string GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
        << "</span>";
 
     // color div
-    int computation_range = ir_viz.get_color_range(op, false, true);
+    int computation_range = ir_viz.get_color_range(op, StmtCostModel::Compute);
     string class_name = "computation-cost-div CostColor" + std::to_string(computation_range);
     ss << "<div id='stmtHierarchyButtonTooltip" << stmt_hierarchy_tooltip_count << "' ";
     ss << "aria-describedby='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count << "' ";
@@ -135,7 +135,7 @@ string GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
        << "</span>";
 
     // color div
-    int data_movement_range = ir_viz.get_color_range(op, false, false);
+    int data_movement_range = ir_viz.get_color_range(op, StmtCostModel::DataMovement);
     string class_name = "memory-cost-div CostColor" + std::to_string(data_movement_range);
     ss << "<div id='stmtHierarchyButtonTooltip" << stmt_hierarchy_tooltip_count << "' "
        << "aria-describedby='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count << "' "
@@ -604,27 +604,24 @@ void GetStmtHierarchy::visit(const Atomic *op) {
 string GetStmtHierarchy::generate_stmt_hierarchy_js() {
     ostringstream stmt_hierarchy_js;
 
-    stmt_hierarchy_js
-        << "\n// stmtHierarchy JS\n"
-        << "for (let i = 1; i <= " << stmt_hierarchy_tooltip_count << "; i++) { \n"
-        << "    const button = document.getElementById('stmtHierarchyButtonTooltip' + i); \n"
-        << "    const tooltip = document.getElementById('stmtHierarchyTooltip' + i); \n"
-        << "    button.addEventListener('mouseenter', () => { \n"
-        << "        showTooltip(button, tooltip); \n"
-        << "    }); \n"
-        << "    button.addEventListener('mouseleave', () => { \n"
-        << "        hideTooltip(tooltip); \n"
-        << "    } \n"
-        << "    ); \n"
-        << "    tooltip.addEventListener('focus', () => { \n"
-        << "        showTooltip(button, tooltip); \n"
-        << "    } \n"
-        << "    ); \n"
-        << "    tooltip.addEventListener('blur', () => { \n"
-        << "        hideTooltip(tooltip); \n"
-        << "    } \n"
-        << "    ); \n"
-        << "} \n";
+    stmt_hierarchy_js << R"(
+// stmtHierarchy JS
+for (let i = 1; i <= )" << stmt_hierarchy_tooltip_count << R"(; i++) {
+    const button = document.getElementById('stmtHierarchyButtonTooltip' + i);
+    const tooltip = document.getElementById('stmtHierarchyTooltip' + i);
+    button.addEventListener('mouseenter', () => {
+        showTooltip(button, tooltip);
+    });
+    button.addEventListener('mouseleave', () => {
+        hideTooltip(tooltip);
+    });
+    tooltip.addEventListener('focus', () => {
+        showTooltip(button, tooltip);
+    });
+    tooltip.addEventListener('blur', () => {
+        hideTooltip(tooltip);
+    });
+})";
 
     return stmt_hierarchy_js.str();
 }
@@ -721,7 +718,7 @@ function expandNodeChildren(nodeNum) {
 function addDotDotDotChild(nodeNum, colorCost) {
     var liDotDotDot = document.createElement('li');
     liDotDotDot.id = 'node' + nodeNum + 'dotdotdot';
-    const span =\"<span class='tf-nc end-node'>...</span> \";
+    const span ="<span class='tf-nc end-node'>...</span>";
     liDotDotDot.innerHTML = span;
     return liDotDotDot;
 }

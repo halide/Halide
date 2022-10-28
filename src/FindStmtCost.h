@@ -12,15 +12,22 @@
 namespace Halide {
 namespace Internal {
 
-constexpr int NORMAL_NODE_CC = 1;
-constexpr int NORMAL_NODE_DMC = 0;
-constexpr int LOAD_DM_COST = 2;
-constexpr int STORE_DM_COST = 3;
+// Different classes of costs
+enum StmtCostModel { Compute,
+                     DataMovement,
+                     ComputeInclusive,
+                     DataMovementInclusive };
 
 /*
  * StmtCost struct
  */
 struct StmtCost {
+    // DMC == Data Movement Cost, CC == Compute Cost
+    static constexpr int NormalNodeCC = 1;
+    static constexpr int NormalNodeDMC = 0;
+    static constexpr int LoadDMC = 2;
+    static constexpr int StoreDMC = 3;
+
     int depth;                         // per nested loop
     int computation_cost_inclusive;    // per entire node (includes cost of body)
     int data_movement_cost_inclusive;  // per entire node (includes cost of body)
@@ -45,13 +52,13 @@ public:
 
     // checks if node is IfThenElse or something else - will call get_if_node_cost if it is,
     // get_computation_cost/get_data_movement_cost otherwise
-    int get_cost(const IRNode *node, bool inclusive, bool is_computation) const;
+    int get_cost(const IRNode *node, StmtCostModel cost_model) const;
 
     // gets the depth of the node
     int get_depth(const IRNode *node) const;
 
     // gets max costs
-    int get_max_cost(bool inclusive, bool is_computation) const;
+    int get_max_cost(StmtCostModel cost_model) const;
 
     // prints node type
     std::string print_node(const IRNode *node) const;
@@ -75,7 +82,7 @@ private:
 
     // treats if nodes differently when visualizing cost - will have cost be:
     //      cost of condition + cost of then_case (exclude else_case in cost)
-    int get_if_node_cost(const IRNode *op, bool inclusive, bool is_computation) const;
+    int get_if_node_cost(const IfThenElse *op, StmtCostModel cost_model) const;
 
     // gets costs from `stmt_cost` map of children nodes and sum them up accordingly
     std::vector<int> get_costs_children(const IRNode *parent, const std::vector<const IRNode *> &children,

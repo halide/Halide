@@ -850,14 +850,12 @@ gengen
             output_types.insert(OutputFileType::registration);
             output_types.insert(OutputFileType::static_library);
         } else {
-            // if emit_flags contains "stmt_viz", add "assembly" to the list
-            for (const auto &f : emit_flags) {
-                if (f == "stmt_viz") {
-                    output_types.insert(OutputFileType::assembly);
-                    debug(1) << "Adding assembly to output types because stmt_viz flag was given.\n";
-                    break;
-                }
-            }
+            // if emit_flags contains "stmt_viz" but not "assembly", throw an error
+            bool has_stmt_viz = std::find(emit_flags.begin(), emit_flags.end(), "stmt_viz") != emit_flags.end();
+            bool has_assembly = std::find(emit_flags.begin(), emit_flags.end(), "assembly") != emit_flags.end();
+            
+            user_assert(!has_stmt_viz || has_assembly)
+                << "Output flag `stmt_viz` requires the `assembly` flag to also be set.";
 
             // Build a reverse lookup table. Allow some legacy aliases on the command line,
             // to allow legacy build systems to work more easily.

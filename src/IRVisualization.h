@@ -85,10 +85,10 @@ public:
     std::string generate_data_movement_cost_tooltip(const IRNode *op, const std::string &extraNote);
 
     // returns the range of the node's cost based on the other nodes' costs
-    int get_color_range(const IRNode *op, bool inclusive, bool is_computation) const;
+    int get_color_range(const IRNode *op, StmtCostModel cost_model) const;
 
     // returns color range when blocks are collapsed in code viz
-    int get_combined_color_range(const IRNode *op, bool is_computation) const;
+    int get_combined_color_range(const IRNode *op, bool is_compcost) const;
 
 private:
     using IRVisitor::visit;
@@ -156,7 +156,7 @@ private:
     std::string open_content_div() const;
 
     // gets cost percentages of a given node
-    int get_cost_percentage(const IRNode *node, bool inclusive, bool is_computation) const;
+    int get_cost_percentage(const IRNode *node, StmtCostModel cost_model) const;
 
     // builds the tooltip cost table based on given input table
     std::string tooltip_table(std::vector<std::pair<std::string, std::string>> &table, const std::string &extra_note = "");

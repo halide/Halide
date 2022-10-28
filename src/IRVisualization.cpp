@@ -133,13 +133,13 @@ string IRVisualization::generate_computation_cost_tooltip(const IRNode *op, cons
 
     if (op == nullptr) {
         depth = 0;
-        computation_cost_exclusive = NORMAL_NODE_CC;
+        computation_cost_exclusive = StmtCost::NormalNodeCC;
     } else {
         depth = find_stmt_cost.get_depth(op);
     }
 
-    computation_cost_exclusive = get_cost_percentage(op, false, true);
-    computation_cost_inclusive = get_cost_percentage(op, true, true);
+    computation_cost_exclusive = get_cost_percentage(op, StmtCostModel::Compute);
+    computation_cost_inclusive = get_cost_percentage(op, StmtCostModel::ComputeInclusive);
 
     // build up values of the table that will be displayed
     vector<pair<string, string>> table_rows;
@@ -163,8 +163,8 @@ string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, co
         depth = find_stmt_cost.get_depth(op);
     }
 
-    data_movement_cost_exclusive = get_cost_percentage(op, false, false);
-    data_movement_cost_inclusive = get_cost_percentage(op, true, false);
+    data_movement_cost_exclusive = get_cost_percentage(op, StmtCostModel::DataMovement);
+    data_movement_cost_inclusive = get_cost_percentage(op, StmtCostModel::DataMovementInclusive);
 
     // build up values of the table that will be displayed
     vector<pair<string, string>> table_rows;
@@ -180,36 +180,34 @@ string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, co
     return tooltip_table(table_rows, extra_note);
 }
 
-int IRVisualization::get_color_range(const IRNode *op, bool inclusive, bool is_computation) const {
+int IRVisualization::get_color_range(const IRNode *op, StmtCostModel cost_model) const {
     if (op == nullptr) {
         return 0;
     }
 
-    int range_size;
-    int cost;
-    int range;
-
     // divide max cost by NUMBER_COST_COLORS and round up to get range size
-    if (inclusive) {
-        range_size = (find_stmt_cost.get_max_cost(true, is_computation) / NUMBER_COST_COLORS) + 1;
-        cost = find_stmt_cost.get_cost(op, inclusive, is_computation);
-        range = cost / range_size;
-    } else {
-        range_size = (find_stmt_cost.get_max_cost(false, is_computation) / NUMBER_COST_COLORS) + 1;
-        cost = find_stmt_cost.get_cost(op, inclusive, is_computation);
-        range = cost / range_size;
-    }
-    return range;
+    int range_size = (find_stmt_cost.get_max_cost(cost_model) / NUMBER_COST_COLORS) + 1;
+    int cost = find_stmt_cost.get_cost(op, cost_model);
+    
+    return cost / range_size;
 }
 
-int IRVisualization::get_combined_color_range(const IRNode *op, bool is_computation) const {
+int IRVisualization::get_combined_color_range(const IRNode *op, bool is_compcost) const {
     if (op == nullptr) {
         return 0;
     }
 
     // divide max cost by NUMBER_COST_COLORS and round up to get range size
-    int range_size = (find_stmt_cost.get_max_cost(false, is_computation) / NUMBER_COST_COLORS) + 1;
-    int cost = find_stmt_cost.get_cost(op, true, is_computation);
+    int cost, max_cost;
+    if (is_compcost) {
+        cost = find_stmt_cost.get_cost(op, StmtCostModel::Compute);
+        max_cost = find_stmt_cost.get_max_cost(StmtCostModel::ComputeInclusive);
+    } else {
+        cost = find_stmt_cost.get_cost(op, StmtCostModel::DataMovement);
+        max_cost = find_stmt_cost.get_max_cost(StmtCostModel::DataMovementInclusive);
+    }
+    
+    int range_size = (max_cost / NUMBER_COST_COLORS) + 1;
     int range = cost / range_size;
 
     if (range >= NUMBER_COST_COLORS) {
@@ -691,7 +689,7 @@ string IRVisualization::generate_computation_cost_div(const IRNode *op) {
     ss << tooltip_text;
     ss << "</span>";
 
-    int computation_range = get_color_range(op, true, true);
+    int computation_range = get_color_range(op, StmtCostModel::ComputeInclusive);
     string class_name = "computation-cost-div CostColor" + std::to_string(computation_range);
     ss << "<div id='irVizButton" << ir_viz_tooltip_count << "' ";
     ss << "aria-describedby='irVizTooltip" << ir_viz_tooltip_count << "' ";
@@ -719,7 +717,7 @@ string IRVisualization::generate_memory_cost_div(const IRNode *op) {
     ss << tooltip_text;
     ss << "</span>";
 
-    int data_movement_range = get_color_range(op, true, false);
+    int data_movement_range = get_color_range(op, StmtCostModel::DataMovementInclusive);
     string class_name = "memory-cost-div CostColor" + std::to_string(data_movement_range);
     ss << "<div id='irVizButton" << ir_viz_tooltip_count << "' ";
     ss << "aria-describedby='irVizTooltip" << ir_viz_tooltip_count << "' ";
@@ -733,15 +731,27 @@ string IRVisualization::open_content_div() const {
     return "<div class='content'>";
 }
 
-int IRVisualization::get_cost_percentage(const IRNode *node, bool inclusive,
-                                         bool is_computation) const {
+int IRVisualization::get_cost_percentage(const IRNode *node, StmtCostModel cost_model) const {
     int cost;
     if (node == nullptr) {
-        cost = NORMAL_NODE_CC;
+        cost = StmtCost::NormalNodeCC;
     } else {
-        cost = find_stmt_cost.get_cost(node, inclusive, is_computation);
+        cost = find_stmt_cost.get_cost(node, cost_model);
     }
-    int total_cost = find_stmt_cost.get_max_cost(true, is_computation);
+
+    int total_cost;
+
+    switch (cost_model) {
+    case StmtCostModel::Compute:
+        total_cost = find_stmt_cost.get_max_cost(StmtCostModel::ComputeInclusive);
+        break;
+    case StmtCostModel::DataMovement:
+        total_cost = find_stmt_cost.get_max_cost(StmtCostModel::DataMovementInclusive);
+        break;
+    default:
+        total_cost = find_stmt_cost.get_max_cost(cost_model);
+    }
+    
     return (int)((float)cost / (float)total_cost * 100);
 }
 
@@ -776,7 +786,7 @@ string IRVisualization::IRVisualization::color_button(int color_range) {
 }
 string IRVisualization::computation_div(const IRNode *op) {
     // want exclusive cost (so that the colors match up with exclusive costs)
-    int computation_range = get_color_range(op, false, true);
+    int computation_range = get_color_range(op, StmtCostModel::Compute);
 
     ostringstream ss;
     ss << color_button(computation_range);
@@ -793,7 +803,7 @@ string IRVisualization::computation_div(const IRNode *op) {
 }
 string IRVisualization::data_movement_div(const IRNode *op) {
     // want exclusive cost (so that the colors match up with exclusive costs)
-    int data_movement_range = get_color_range(op, false, false);
+    int data_movement_range = get_color_range(op, StmtCostModel::DataMovement);
 
     ostringstream ss;
     ss << color_button(data_movement_range);

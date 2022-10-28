@@ -19,13 +19,26 @@ void FindStmtCost::generate_costs(const Module &m) {
     set_max_costs(m);
 }
 
-int FindStmtCost::get_cost(const IRNode *node, bool inclusive, bool is_computation) const {
+int FindStmtCost::get_cost(const IRNode *node, StmtCostModel cost_model) const {
     if (node->node_type == IRNodeType::IfThenElse) {
-        return get_if_node_cost(node, inclusive, is_computation);
-    } else if (is_computation) {
-        return get_computation_cost(node, inclusive);
+        return get_if_node_cost(static_cast<const IfThenElse*>(node), cost_model);
     } else {
-        return get_data_movement_cost(node, inclusive);
+        switch (cost_model) {
+        case StmtCostModel::Compute:
+            return get_computation_cost(node, false);
+        case StmtCostModel::ComputeInclusive:
+            return get_computation_cost(node, true);
+        case StmtCostModel::DataMovement:
+            return get_data_movement_cost(node, false);
+        case StmtCostModel::DataMovementInclusive:
+            return get_data_movement_cost(node, true);
+        default:
+            internal_assert(false) << "\n"
+                                   << "FindStmtCost::get_cost doest not recognize the cost model:"
+                                   << cost_model
+                                   << "\n\n";
+            return -1;
+        }
     }
 }
 
@@ -63,19 +76,22 @@ int FindStmtCost::get_depth(const IRNode *node) const {
     return it->second.depth;
 }
 
-int FindStmtCost::get_max_cost(bool inclusive, bool is_computation) const {
-    if (is_computation) {
-        if (inclusive) {
-            return max_computation_cost_inclusive;
-        } else {
-            return max_computation_cost_exclusive;
-        }
-    } else {
-        if (inclusive) {
-            return max_data_movement_cost_inclusive;
-        } else {
-            return max_data_movement_cost_exclusive;
-        }
+int FindStmtCost::get_max_cost(StmtCostModel cost_model) const {
+    switch (cost_model) {
+    case StmtCostModel::Compute:
+        return max_computation_cost_exclusive;
+    case StmtCostModel::ComputeInclusive:
+        return max_computation_cost_inclusive;
+    case StmtCostModel::DataMovement:
+        return max_data_movement_cost_inclusive;
+    case StmtCostModel::DataMovementInclusive:
+        return max_data_movement_cost_exclusive;
+    default:
+        internal_assert(false) << "\n"
+                               << "FindStmtCost::get_max_cost doest not recognize the cost model:"
+                               << cost_model
+                               << "\n\n";
+        return -1;
     }
 }
 
@@ -101,14 +117,14 @@ int FindStmtCost::get_computation_cost(const IRNode *node, bool inclusive) const
         // StmtToViz.cpp - set cost_node to be fresh StmtCost to avoid crashing
         if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
             type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
-            cost = NORMAL_NODE_CC;
+            cost = StmtCost::NormalNodeCC;
         }
 
         // this happens when visualizing cost of else_case in StmtToViz.cpp
         else if (type == IRNodeType::Variable) {
             const Variable *var = (const Variable *)node;
             if (var->name == StmtToViz_canIgnoreVariableName_string) {
-                cost = NORMAL_NODE_CC;
+                cost = StmtCost::NormalNodeCC;
             }
         }
 
@@ -148,14 +164,14 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node, bool inclusive) con
         // StmtToViz.cpp - set cost_node to be fresh StmtCost to avoid crashing
         if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
             type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
-            cost = NORMAL_NODE_DMC;
+            cost = StmtCost::NormalNodeDMC;
         }
 
         // this happens when visualizing cost of else_case in StmtToViz.cpp
         else if (type == IRNodeType::Variable) {
             const Variable *var = (const Variable *)node;
             if (var->name == StmtToViz_canIgnoreVariableName_string) {
-                cost = NORMAL_NODE_DMC;
+                cost = StmtCost::NormalNodeDMC;
             }
         } else {
             internal_assert(false) << "\n"
@@ -180,34 +196,25 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node, bool inclusive) con
     return cost;
 }
 
-int FindStmtCost::get_if_node_cost(const IRNode *op, bool inclusive, bool is_computation) const {
-    internal_assert(op->node_type == IRNodeType::IfThenElse) << "\n"
-                                                             << "FindStmtCost::get_if_node_cost: " << print_node(op)
-                                                             << "node is not IfThenElse"
-                                                             << "\n\n";
-
-    int cost;
-    const IfThenElse *if_then_else = dynamic_cast<const IfThenElse *>(op);
-
-    if (is_computation) {
-        if (inclusive) {
-            int computation_cost = get_computation_cost(if_then_else->condition.get(), inclusive) +
-                                   get_computation_cost(if_then_else->then_case.get(), inclusive);
-            cost = computation_cost;
-        } else {
-            cost = NORMAL_NODE_CC;
-        }
-    } else {
-        if (inclusive) {
-            int data_movement_cost =
-                get_data_movement_cost(if_then_else->condition.get(), inclusive) +
-                get_data_movement_cost(if_then_else->then_case.get(), inclusive);
-            cost = data_movement_cost;
-        } else {
-            cost = NORMAL_NODE_DMC;
-        }
+int FindStmtCost::get_if_node_cost(const IfThenElse *if_then_else, StmtCostModel cost_model) const {
+    switch (cost_model) {
+    case StmtCostModel::Compute:
+        return StmtCost::NormalNodeCC;
+    case StmtCostModel::ComputeInclusive:
+        return get_computation_cost(if_then_else->condition.get(), true) +
+               get_computation_cost(if_then_else->then_case.get(), true);
+    case StmtCostModel::DataMovement:
+        return StmtCost::NormalNodeDMC;
+    case StmtCostModel::DataMovementInclusive:
+        return get_data_movement_cost(if_then_else->condition.get(), true) +
+               get_data_movement_cost(if_then_else->then_case.get(), true);
+    default:
+        internal_assert(false) << "\n"
+                               << "FindStmtCost::get_if_node_cost doest not recognize the cost model:"
+                               << cost_model
+                               << "\n\n";
+        return -1;
     }
-    return cost;
 }
 
 vector<int> FindStmtCost::get_costs_children(const IRNode *parent, const vector<const IRNode *> &children,
@@ -227,8 +234,8 @@ vector<int> FindStmtCost::get_costs_children(const IRNode *parent, const vector<
 
 void FindStmtCost::set_costs(
     bool inclusive, const IRNode *node, const vector<const IRNode *> &children,
-    const std::function<int(int)> &calculate_cc = [](int x) { return NORMAL_NODE_CC + x; },
-    const std::function<int(int)> &calculate_dmc = [](int x) { return NORMAL_NODE_DMC + x; }) {
+    const std::function<int(int)> &calculate_cc = [](int x) { return StmtCost::NormalNodeCC + x; },
+    const std::function<int(int)> &calculate_dmc = [](int x) { return StmtCost::NormalNodeDMC + x; }) {
 
     vector<int> costs_children = get_costs_children(node, children, inclusive);
 
@@ -440,11 +447,11 @@ void FindStmtCost::visit(const Load *op) {
     int scaling_factor = get_scaling_factor(bits, lanes);
 
     std::function<int(int)> calculate_cc = [scaling_factor](int children_cost) {
-        return scaling_factor * (NORMAL_NODE_CC + children_cost);
+        return scaling_factor * (StmtCost::NormalNodeCC + children_cost);
     };
 
     std::function<int(int)> calculate_dmc = [scaling_factor](int children_cost) {
-        return scaling_factor * (LOAD_DM_COST + children_cost);
+        return scaling_factor * (StmtCost::LoadDMC + children_cost);
     };
 
     // inclusive and exclusive costs are the same
@@ -524,11 +531,11 @@ void FindStmtCost::visit(const VectorReduce *op) {
     int count_cost = op->value.type().lanes() - 1;
 
     std::function<int(int)> calculate_cc = [count_cost](int children_cost) {
-        return count_cost * (NORMAL_NODE_CC + children_cost);
+        return count_cost * (StmtCost::NormalNodeCC + children_cost);
     };
 
     std::function<int(int)> calculate_dmc = [count_cost](int children_cost) {
-        return count_cost * (NORMAL_NODE_DMC + children_cost);
+        return count_cost * (StmtCost::NormalNodeDMC + children_cost);
     };
 
     // inclusive and exclusive costs are the same
@@ -609,11 +616,11 @@ void FindStmtCost::visit(const Store *op) {
     op->value.accept(this);
 
     std::function<int(int)> calculate_cc = [](int children_cost) {
-        return NORMAL_NODE_CC + children_cost;
+        return StmtCost::NormalNodeCC + children_cost;
     };
 
     std::function<int(int)> calculate_dmc = [](int children_cost) {
-        return STORE_DM_COST + children_cost;
+        return StmtCost::StoreDMC + children_cost;
     };
 
     // inclusive and exclusive costs are the same

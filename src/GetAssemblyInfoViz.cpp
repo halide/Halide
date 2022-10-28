@@ -69,7 +69,7 @@ void GetAssemblyInfoViz::generate_assembly_html_and_line_numbers(const string &f
 }
 
 string GetAssemblyInfoViz::get_assembly_filename(const string &filename) {
-    string assembly_filename = "./" + filename;
+    string assembly_filename = filename;
     assembly_filename.replace(assembly_filename.find(".stmt.viz.html"), 15, ".s");
     return assembly_filename;
 }
@@ -131,8 +131,7 @@ void GetAssemblyInfoViz::visit(const ProducerConsumer *op) {
     assembly_marker += op->name;
 
     // replace all $ with \$
-    std::regex dollar("\\$");
-    assembly_marker = std::regex_replace(assembly_marker, dollar, "\\$");
+    assembly_marker = replace_all(assembly_marker, "$", "\\$");
 
     std::regex regex(assembly_marker);
 
