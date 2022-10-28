@@ -252,6 +252,7 @@ void lower_impl(const vector<Function> &output_funcs,
     // OpenGL relies on GPU var canonicalization occurring before
     // storage flattening.
     if (t.has_gpu_feature() ||
+        t.has_feature(Target::Vulkan) ||
         t.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Canonicalizing GPU var names...\n";
         s = canonicalize_gpu_vars(s);
