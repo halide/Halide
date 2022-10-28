@@ -6,7 +6,7 @@ from bilateral_grid import bilateral_grid
 from bilateral_grid_Adams2019 import bilateral_grid_Adams2019
 from bilateral_grid_Li2018 import bilateral_grid_Li2018
 from bilateral_grid_Mullapudi2016 import bilateral_grid_Mullapudi2016
-import imageio
+import halide.imageio
 import numpy as np
 import sys
 from timeit import Timer
@@ -26,7 +26,7 @@ def main():
     timing_iterations = 10
 
     print("Reading from %s ..." % input_path)
-    input_buf_u8 = imageio.imread(input_path)
+    input_buf_u8 = halide.imageio.imread(input_path)
     assert input_buf_u8.dtype == np.uint8
     # Convert to float32
     input_buf = input_buf_u8.astype(np.float32)
@@ -55,7 +55,7 @@ def main():
     output_buf *= 255.0
     output_buf_u8 = output_buf.astype(np.uint8)
     print("Saving to %s ..." % output_path)
-    imageio.imsave(output_path, output_buf_u8)
+    halide.imageio.imwrite(output_path, output_buf_u8)
 
     print("Success!")
     sys.exit(0)
