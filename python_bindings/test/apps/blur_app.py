@@ -3,7 +3,7 @@ Bilateral histogram.
 """
 
 from blur import blur
-import imageio
+import halide.imageio
 import numpy as np
 import sys
 from timeit import Timer
@@ -20,7 +20,7 @@ def main():
     timing_iterations = 10
 
     print("Reading from %s ..." % input_path)
-    input_buf_u8 = imageio.imread(input_path)
+    input_buf_u8 = halide.imageio.imread(input_path)
     assert input_buf_u8.dtype == np.uint8
     # Convert to uint16... but remember that the blur() generator
     # is documented as only working on <= 14 bits of image; if
@@ -41,7 +41,7 @@ def main():
 
     output_buf_u8 = output_buf.astype(np.uint8)
     print("Saving to %s ..." % output_path)
-    imageio.imsave(output_path, output_buf_u8)
+    halide.imageio.imwrite(output_path, output_buf_u8)
 
     print("Success!")
     sys.exit(0)

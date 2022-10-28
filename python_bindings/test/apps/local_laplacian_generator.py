@@ -22,32 +22,28 @@ x, y, c, k = _vars("x", "y", "c", "k")
 
 # Downsample with a 1 3 3 1 filter
 def _downsample(f):
-    _ = hl._
-
     downx, downy = _funcs("downx", "downy")
-    downx[x, y, _] = (
-        f[2 * x - 1, y, _]
-        + 3.0 * (f[2 * x, y, _] + f[2 * x + 1, y, _])
-        + f[2 * x + 2, y, _]
+    downx[x, y, hl._] = (
+        f[2 * x - 1, y, hl._]
+        + 3.0 * (f[2 * x, y, hl._] + f[2 * x + 1, y, hl._])
+        + f[2 * x + 2, y, hl._]
     ) / 8.0
-    downy[x, y, _] = (
-        downx[x, 2 * y - 1, _]
-        + 3.0 * (downx[x, 2 * y, _] + downx[x, 2 * y + 1, _])
-        + downx[x, 2 * y + 2, _]
+    downy[x, y, hl._] = (
+        downx[x, 2 * y - 1, hl._]
+        + 3.0 * (downx[x, 2 * y, hl._] + downx[x, 2 * y + 1, hl._])
+        + downx[x, 2 * y + 2, hl._]
     ) / 8.0
     return downy
 
 
 # Upsample using bilinear interpolation
 def _upsample(f):
-    _ = hl._
-
     upx, upy = _funcs("upx", "upy")
-    upx[x, y, _] = hl.lerp(
-        f[(x + 1) / 2, y, _], f[(x - 1) / 2, y, _], ((x % 2) * 2 + 1) / 4.0
+    upx[x, y, hl._] = hl.lerp(
+        f[(x + 1) // 2, y, hl._], f[(x - 1) // 2, y, hl._], ((x % 2) * 2 + 1) / 4.0
     )
-    upy[x, y, _] = hl.lerp(
-        upx[x, (y + 1) / 2, _], upx[x, (y - 1) / 2, _], ((y % 2) * 2 + 1) / 4.0
+    upy[x, y, hl._] = hl.lerp(
+        upx[x, (y + 1) // 2, hl._], upx[x, (y - 1) // 2, hl._], ((y % 2) * 2 + 1) / 4.0
     )
     return upy
 
@@ -125,9 +121,9 @@ class local_laplacian:
             li = hl.clamp(hl.i32(level), 0, g.levels - 2)
             lf = level - hl.f32(li)
             # Linearly interpolate between the nearest processed pyramid levels
-            outLPyramid[j][x, y] = (1.0 - lf) * lPyramid[j][x, y, li] + lf * lPyramid[
-                j
-            ][x, y, li + 1]
+            outLPyramid[j][x, y] = ((1.0 - lf) * lPyramid[j][x, y, li]) + (
+                lf * lPyramid[j][x, y, li + 1]
+            )
 
         # Make the Gaussian pyramid of the output
         outGPyramid = _func_list("outGPyramid", J)

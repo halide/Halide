@@ -4,6 +4,11 @@ Bilateral histogram.
 
 import halide as hl
 
+
+def _funcs(*args):
+    return (hl.Func(n) for n in args)
+
+
 def _vars(*args):
     return (hl.Var(n) for n in args)
 
@@ -43,7 +48,7 @@ class bilateral_grid:
         histogram[x, y, zi, c] += hl.mux(c, [val, 1.0])
 
         # Blur the histogram using a five-tap filter
-        blurx, blury, blurz = hl.Func("blurx"), hl.Func("blury"), hl.Func("blurz")
+        blurx, blury, blurz = _funcs("blurx", "blury", "blurz")
         blurz[x, y, z, c] = (
             histogram[x, y, z - 2, c]
             + histogram[x, y, z - 1, c] * 4

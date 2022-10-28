@@ -14,9 +14,7 @@ from timeit import Timer
 
 def main():
     if len(sys.argv) < 4:
-        print(
-            "Usage: %s input.png output.png range_sigma" % sys.argv[0]
-        )
+        print("Usage: %s input.png output.png range_sigma" % sys.argv[0])
         print("e.g. %s input.png output.png 0.1 10" % sys.argv[0])
         sys.exit(1)
 

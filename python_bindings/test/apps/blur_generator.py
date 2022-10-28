@@ -117,14 +117,13 @@ class blur:
             # Compute blur_x as needed at each vector of the output.
             # Halide will store blur_x in a circular buffer so its
             # results can be re-used.
-            blur_x.compute_root()
-            # vector_size = g.natural_vector_size(g.input_buf.type())
-            # (g.blur_y.split(y, y, yi, 32).parallel(y).vectorize(x, vector_size))
-            # (
-            #     blur_x.store_at(g.blur_y, y)
-            #     .compute_at(g.blur_y, x)
-            #     .vectorize(x, vector_size)
-            # )
+            vector_size = g.natural_vector_size(g.input_buf.type())
+            (g.blur_y.split(y, y, yi, 32).parallel(y).vectorize(x, vector_size))
+            (
+                blur_x.store_at(g.blur_y, y)
+                .compute_at(g.blur_y, x)
+                .vectorize(x, vector_size)
+            )
 
 
 if __name__ == "__main__":
