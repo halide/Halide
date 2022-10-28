@@ -113,6 +113,7 @@ class SpvFunction;
 class SpvBlock;
 class SpvInstruction;
 class SpvBuilder;
+struct SpvFactory;
 
 /** Pre-declarations for SPIR-V IR data structures */
 struct SpvModuleContents;
@@ -129,6 +130,8 @@ using SpvInstructionContentsPtr = IntrusivePtr<SpvInstructionContents>;
 /** General interface for representing a SPIR-V Instruction */
 class SpvInstruction {
 public:
+    using LiteralValue = std::pair<uint32_t, SpvValueType>;
+    using Immediates = std::vector<LiteralValue>;
     using Operands = std::vector<SpvId>;
     using ValueTypes = std::vector<SpvValueType>;
 
@@ -145,9 +148,14 @@ public:
     void set_type_id(SpvId id);
     void set_op_code(SpvOp opcode);
     void add_operand(SpvId id);
+    void add_operands(const Operands& operands);
     void add_immediate(SpvId id, SpvValueType type);
+    void add_immediates(const Immediates& Immediates);
     void add_data(uint32_t bytes, const void *data, SpvValueType type);
     void add_string(const std::string &str);
+
+    template<typename T>
+    void append(const T& operands_or_immediates_or_strings);
 
     SpvId result_id() const;
     SpvId type_id() const;
@@ -343,6 +351,7 @@ protected:
 class SpvBuilder {
 public:
     using ParamTypes = std::vector<SpvId>;
+    using Components = std::vector<SpvId>;
     using StructMemberTypes = std::vector<SpvId>;
     using Variables = std::vector<SpvId>;
     using Indices = std::vector<uint32_t>;
@@ -559,6 +568,12 @@ protected:
     PointerTypeKey make_pointer_type_key(SpvId base_type_id, SpvStorageClass storage_class) const;
     SpvId lookup_pointer_type(SpvId base_type_id, SpvStorageClass storage_class) const;
 
+    template<typename T>
+    SpvId declare_scalar_constant_of_type(const Type& scalar_type, const T* data);
+
+    template<typename T>
+    SpvBuilder::Components declare_constants_for_each_lane(Type type, const void* data);
+    
     ConstantKey make_bool_constant_key(bool value) const;
     ConstantKey make_string_constant_key(const std::string &value) const;
     ConstantKey make_constant_key(uint8_t code, uint8_t bits, int lanes, size_t bytes, const void *data) const;
@@ -663,15 +678,15 @@ struct SpvFactory {
     static SpvInstruction is_inf(SpvId type_id, SpvId result_id, SpvId src_id);
     static SpvInstruction is_nan(SpvId type_id, SpvId result_id, SpvId src_id);
     static SpvInstruction bitcast(SpvId type_id, SpvId result_id, SpvId src_id);
-    static SpvInstruction integer_add(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
     static SpvInstruction float_add(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
+    static SpvInstruction integer_add(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
+    static SpvInstruction integer_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
+    static SpvInstruction integer_not_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
+    static SpvInstruction integer_less_than(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed);
+    static SpvInstruction integer_less_than_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed);
+    static SpvInstruction integer_greater_than(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed);
+    static SpvInstruction integer_greater_than_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed);
     static SpvInstruction branch(SpvId target_label_id);
-    static SpvInstruction equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
-    static SpvInstruction not_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id);
-    static SpvInstruction less_than(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed);
-    static SpvInstruction less_than_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed);
-    static SpvInstruction greater_than(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed);
-    static SpvInstruction greater_than_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed);
     static SpvInstruction conditional_branch(SpvId condition_label_id, SpvId true_label_id, SpvId false_label_id, const BranchWeights &weights = {});
     static SpvInstruction loop_merge(SpvId merge_label_id, SpvId continue_label_id, uint32_t loop_control_mask = SpvLoopControlMaskNone);
     static SpvInstruction selection_merge(SpvId merge_label_id, uint32_t selection_control_mask = SpvSelectionControlMaskNone);

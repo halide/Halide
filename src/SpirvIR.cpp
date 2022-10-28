@@ -8,6 +8,101 @@ namespace Internal {
 
 namespace {
 
+template<typename T>
+T saturate_value(T val, T min = std::numeric_limits<T>::min(), T max = std::numeric_limits<T>::max()) {
+    return std::min(std::max(val, min), max);
+}
+
+template<typename T>
+void assign_constant(void* dst, const void* src) {
+    reinterpret_cast<T*>(dst)[0] = saturate_value<T>(reinterpret_cast<const T*>(src)[0]);
+}
+
+template<>
+void assign_constant<bfloat16_t>(void* dst, const void* src) {
+    reinterpret_cast<bfloat16_t*>(dst)[0] = reinterpret_cast<const bfloat16_t*>(src)[0];
+}
+
+template<>
+void assign_constant<float16_t>(void* dst, const void* src) {
+    reinterpret_cast<float16_t*>(dst)[0] = reinterpret_cast<const float16_t*>(src)[0];
+}
+
+template<>
+void assign_constant<float>(void* dst, const void* src) {
+    reinterpret_cast<float*>(dst)[0] = reinterpret_cast<const float*>(src)[0];
+}
+
+template<>
+void assign_constant<double>(void* dst, const void* src) {
+    reinterpret_cast<double*>(dst)[0] = reinterpret_cast<const double*>(src)[0];
+}
+
+template<typename T>
+std::string stringify_constant(const T& value) {
+    return std::string();
+}
+
+template<>
+std::string  stringify_constant(const int8_t& value) {
+    return std::to_string(int8_t(value));
+}
+
+template<>
+std::string  stringify_constant(const int16_t& value) {
+    return std::to_string(int16_t(value));
+}
+
+template<>
+std::string  stringify_constant(const int32_t& value) {
+    return std::to_string(int32_t(value));
+}
+
+template<>
+std::string  stringify_constant(const int64_t& value) {
+    return std::to_string(int64_t(value));
+}
+
+template<>
+std::string  stringify_constant(const uint8_t& value) {
+    return std::to_string(uint8_t(value));
+}
+
+template<>
+std::string  stringify_constant(const uint16_t& value) {
+    return std::to_string(uint16_t(value));
+}
+
+template<>
+std::string  stringify_constant(const uint32_t& value) {
+    return std::to_string(uint32_t(value));
+}
+
+template<>
+std::string  stringify_constant(const uint64_t& value) {
+    return std::to_string(uint64_t(value));
+}
+
+template<>
+std::string  stringify_constant(const bfloat16_t& value) {
+    return std::to_string(float(value));
+}
+
+template<>
+std::string  stringify_constant(const float16_t& value) {
+    return std::to_string(float(value));
+}
+
+template<>
+std::string  stringify_constant(const float& value) {
+    return std::to_string(float(value));
+}
+
+template<>
+std::string  stringify_constant(const double& value) {
+    return std::to_string(double(value));
+}
+
 /** Returns the major version of the SPIR-V header version indicator **/
 inline uint32_t spirv_major_version(uint32_t version) {
     return ((version >> 16) & 0xff);
@@ -77,10 +172,45 @@ void SpvInstruction::add_operand(SpvId id) {
     contents->value_types.push_back(SpvOperandId);
 }
 
+void SpvInstruction::add_operands(const SpvInstruction::Operands& operands) {
+    check_defined();
+    SpvInstructionContents::ValueTypes value_types(operands.size(), SpvOperandId);
+    contents->operands.insert(contents->operands.end(), operands.begin(), operands.end());
+    contents->value_types.insert(contents->value_types.end(), value_types.begin(), value_types.end());
+}
+
 void SpvInstruction::add_immediate(SpvId id, SpvValueType value_type) {
     check_defined();
     contents->operands.push_back(id);
     contents->value_types.push_back(value_type);
+}
+
+void SpvInstruction::add_immediates(const SpvInstruction::Immediates& literals) {
+    check_defined();
+    for(const SpvInstruction::LiteralValue& v : literals) {
+        contents->operands.push_back(v.first); // SpvId
+        contents->value_types.push_back(v.second); // SpvValueType
+    }
+}
+
+template<>
+void SpvInstruction::append(const SpvInstruction::Operands& operands) {
+    add_operands(operands);
+}
+
+template<>
+void SpvInstruction::append(const SpvInstruction::Immediates& immediates) {
+    add_immediates(immediates);
+}
+
+template<>
+void SpvInstruction::append(const std::string& str) {
+    add_string(str);
+}
+
+template<typename T>
+void SpvInstruction::append(const T&) {
+    internal_error << "SPIRV: Unhandled type encountered when appending to instruction!\n";
 }
 
 SpvId SpvInstruction::result_id() const {
@@ -153,21 +283,33 @@ SpvBlock SpvInstruction::block() const {
 
 void SpvInstruction::add_data(uint32_t bytes, const void *data, SpvValueType value_type) {
     check_defined();
-    uint32_t extra_words = (bytes + 3) / 4;
+    
+    
+    uint32_t total_entries = (bytes + 3) / 4;
+    debug(3) << "    add_data bytes=" << bytes << " total_entries=" << total_entries << "\n";
+
+    if(bytes == sizeof(uint32_t)) {
+        uint32_t entry = 0;
+        memcpy(&entry, data, sizeof(uint32_t));
+        add_immediate(entry, value_type);
+        return;
+    }
+    const size_t entry_size = sizeof(uint32_t);
     const uint8_t *ptr = (const uint8_t *)data;
     size_t bytes_copied = 0;
-    for (uint32_t i = 0; i < extra_words; i++) {
-        size_t copy_size = std::min(bytes - bytes_copied, (size_t)4);
+    for (uint32_t i = 0; i < total_entries; i++) {
+        size_t copy_size = std::min(bytes - bytes_copied, entry_size);
         SpvId entry = 0;
         memcpy(&entry, ptr, copy_size);
         bytes_copied += copy_size;
         add_immediate(entry, value_type);
-        ptr += 4;
+        ptr += entry_size;
     }
 }
 
 void SpvInstruction::add_string(const std::string &str) {
     check_defined();
+    debug(3) << "    add_string str=" << str << " length=" << (uint32_t)str.length() << "\n";
     add_data(str.length() + 1, (const void *)str.c_str(), SpvStringData);
 }
 
@@ -1634,6 +1776,46 @@ SpvId SpvBuilder::declare_string_constant(const std::string &value) {
     return result_id;
 }
 
+template<typename T>
+SpvId SpvBuilder::declare_scalar_constant_of_type(const Type& scalar_type, const T* data) {
+
+    ConstantKey constant_key = make_constant_key(scalar_type, data);
+    ConstantMap::const_iterator it = constant_map.find(constant_key);
+    if (it != constant_map.end()) {
+        return it->second;
+    }
+
+    SpvId result_id = SpvInvalidId;
+    SpvValueType value_type = SpvInvalidValueType;
+    if (scalar_type.is_bool()) {
+        const bool value = (reinterpret_cast<const bool *>(data)[0]);
+        return declare_bool_constant(value);
+    } else if (scalar_type.is_float()) {
+        result_id = make_id(SpvFloatConstantId);
+        value_type = SpvFloatData;
+    } else if (scalar_type.is_int_or_uint()) {
+        result_id = make_id(SpvIntConstantId);
+        value_type = SpvIntegerData;
+    } else {
+        internal_error << "SPIRV: Unsupported type:" << scalar_type << "\n";
+        return SpvInvalidId;
+    }
+
+    T value = T(0);
+    assign_constant<T>(&value, data);
+    SpvId type_id = add_type(scalar_type);
+
+    debug(3) << "    declare_scalar_constant_of_type: " 
+             << "%" << result_id << " "
+             << "type=" << scalar_type << " "
+             << "data=" << stringify_constant(value) << "\n";
+
+    SpvInstruction inst = SpvFactory::constant(result_id, type_id, scalar_type.bytes(), &value, value_type);
+    module.add_constant(inst);
+    constant_map[constant_key] = result_id;
+    return result_id;
+}
+
 SpvId SpvBuilder::declare_scalar_constant(const Type &scalar_type, const void *data) {
     if (scalar_type.lanes() != 1) {
         internal_error << "SPIRV: Invalid type provided for scalar constant!" << scalar_type << "\n";
@@ -1646,31 +1828,61 @@ SpvId SpvBuilder::declare_scalar_constant(const Type &scalar_type, const void *d
         return it->second;
     }
 
+    SpvId result_id = SpvInvalidId;
     if (scalar_type.is_bool() && data) {
         bool value = *reinterpret_cast<const bool *>(data);
         return declare_bool_constant(value);
-    }
-
-    SpvId result_id = SpvInvalidId;
-    SpvValueType value_type = SpvInvalidValueType;
-    if (scalar_type.is_float()) {
-        result_id = make_id(SpvFloatConstantId);
-        value_type = SpvFloatData;
-        debug(3) << "    declare_scalar_constant: %" << result_id << " type=" << scalar_type << " data=" << (*(const float *)(data)) << "\n";
-    } else if (scalar_type.is_int_or_uint()) {
-        result_id = make_id(SpvIntConstantId);
-        value_type = SpvIntegerData;
-        debug(3) << "    declare_scalar_constant: %" << result_id << " type=" << scalar_type << " data=" << (*(const int32_t *)(data)) << "\n";
+    } else if(scalar_type.is_int() && scalar_type.bits() == 8) {
+        result_id = declare_scalar_constant_of_type<int8_t>(scalar_type, reinterpret_cast<const int8_t*>(data));
+    } else if(scalar_type.is_int() && scalar_type.bits() == 16) {
+        result_id = declare_scalar_constant_of_type<int16_t>(scalar_type, reinterpret_cast<const int16_t*>(data));
+    } else if(scalar_type.is_int() && scalar_type.bits() == 32) {
+        result_id = declare_scalar_constant_of_type<int32_t>(scalar_type, reinterpret_cast<const int32_t*>(data));
+    } else if(scalar_type.is_int() && scalar_type.bits() == 64) {
+        result_id = declare_scalar_constant_of_type<int64_t>(scalar_type, reinterpret_cast<const int64_t*>(data));
+    } else if(scalar_type.is_uint() && scalar_type.bits() == 8) {
+        result_id = declare_scalar_constant_of_type<uint8_t>(scalar_type, reinterpret_cast<const uint8_t*>(data));
+    } else if(scalar_type.is_uint() && scalar_type.bits() == 16) {
+        result_id = declare_scalar_constant_of_type<uint16_t>(scalar_type, reinterpret_cast<const uint16_t*>(data));
+    } else if(scalar_type.is_uint() && scalar_type.bits() == 32) {
+        result_id = declare_scalar_constant_of_type<uint32_t>(scalar_type, reinterpret_cast<const uint32_t*>(data));
+    } else if(scalar_type.is_uint() && scalar_type.bits() == 64) {
+        result_id = declare_scalar_constant_of_type<uint64_t>(scalar_type, reinterpret_cast<const uint64_t*>(data));
+    } else if(scalar_type.is_float() && scalar_type.bits() == 16) {
+        if(scalar_type.is_bfloat()) {
+            result_id = declare_scalar_constant_of_type<bfloat16_t>(scalar_type, reinterpret_cast<const bfloat16_t*>(data));
+        } else {
+            result_id = declare_scalar_constant_of_type<float16_t>(scalar_type, reinterpret_cast<const float16_t*>(data));
+        }
+    } else if(scalar_type.is_float() && scalar_type.bits() == 32) {
+        result_id = declare_scalar_constant_of_type<float>(scalar_type, reinterpret_cast<const float*>(data));
+    } else if(scalar_type.is_float() && scalar_type.bits() == 64) {
+        result_id = declare_scalar_constant_of_type<double>(scalar_type, reinterpret_cast<const double*>(data));
     } else {
-        internal_error << "SPIRV: Unsupported type:" << scalar_type << "\n";
-        return SpvInvalidId;
+        user_error << "Unhandled constant data conversion from value type '" << scalar_type << "'!\n";
+    }
+    internal_assert(result_id != SpvInvalidId) << "Failed to declare scalar constant of type '" << scalar_type << "'!\n";
+    return result_id;
+}
+
+template<typename T>
+SpvBuilder::Components SpvBuilder::declare_constants_for_each_lane(Type type, const void* data) {
+    SpvBuilder::Components components;
+    components.reserve(type.lanes());
+
+    if (type.lanes() == 1) {
+        internal_error << "SPIRV: Invalid type provided for vector constant!" << type << "\n";
+        return components;
     }
 
-    SpvId type_id = add_type(scalar_type);
-    SpvInstruction inst = SpvFactory::constant(result_id, type_id, scalar_type.bytes(), data, value_type);
-    module.add_constant(inst);
-    constant_map[constant_key] = result_id;
-    return result_id;
+    Type scalar_type = type.with_lanes(1);
+    const T *values = reinterpret_cast<const T *>(data);
+    for (int c = 0; c < type.lanes(); c++) {
+        const T *entry = &(values[c]);
+        SpvId scalar_id = declare_scalar_constant(scalar_type, (const void *)entry);
+        components.push_back(scalar_id);
+    }
+    return components;
 }
 
 SpvId SpvBuilder::declare_vector_constant(const Type &type, const void *data) {
@@ -1685,54 +1897,39 @@ SpvId SpvBuilder::declare_vector_constant(const Type &type, const void *data) {
         return it->second;
     }
 
-    Type scalar_type = type.with_lanes(1);
-    std::vector<SpvId> components(type.lanes());
-    if (scalar_type.is_float()) {
-        if (type.bits() == 64) {
-            const double *values = (const double *)data;
-            for (int c = 0; c < type.lanes(); c++) {
-                const double *entry = &(values[c]);
-                SpvId scalar_id = declare_scalar_constant(scalar_type, (const void *)entry);
-                components.push_back(scalar_id);
-            }
+    SpvBuilder::Components components;
+    if(type.is_int() && type.bits() == 8) {
+        components = declare_constants_for_each_lane<int8_t>(type, data);
+    } else if(type.is_int() && type.bits() == 16) {
+        components = declare_constants_for_each_lane<int16_t>(type, data);
+    } else if(type.is_int() && type.bits() == 32) {
+        components = declare_constants_for_each_lane<int32_t>(type, data);
+    } else if(type.is_int() && type.bits() == 64) {
+        components = declare_constants_for_each_lane<int64_t>(type, data);
+    } else if(type.is_uint() && type.bits() == 8) {
+        components = declare_constants_for_each_lane<uint8_t>(type, data);
+    } else if(type.is_uint() && type.bits() == 16) {
+        components = declare_constants_for_each_lane<uint16_t>(type, data);
+    } else if(type.is_uint() && type.bits() == 32) {
+        components = declare_constants_for_each_lane<uint32_t>(type, data);
+    } else if(type.is_uint() && type.bits() == 64) {
+        components = declare_constants_for_each_lane<uint64_t>(type, data);
+    } else if(type.is_float() && type.bits() == 16) {
+        if(type.is_bfloat()) {
+            components = declare_constants_for_each_lane<bfloat16_t>(type, data);        
         } else {
-            const float *values = (const float *)data;
-            for (int c = 0; c < type.lanes(); c++) {
-                const float *entry = &(values[c]);
-                SpvId scalar_id = declare_scalar_constant(scalar_type, (const void *)entry);
-                components.push_back(scalar_id);
-            }
+            components = declare_constants_for_each_lane<float16_t>(type, data);
         }
-    } else if (scalar_type.is_bool()) {
-        const bool *values = (const bool *)data;
-        for (int c = 0; c < type.lanes(); c++) {
-            const bool *entry = &(values[c]);
-            SpvId scalar_id = declare_scalar_constant(scalar_type, (const void *)entry);
-            components.push_back(scalar_id);
-        }
-    } else if (scalar_type.is_int_or_uint()) {
-        if (type.bits() == 64) {
-            const uint64_t *values = (const uint64_t *)data;
-            for (int c = 0; c < type.lanes(); c++) {
-                const uint64_t *entry = &(values[c]);
-                SpvId scalar_id = declare_scalar_constant(scalar_type, (const void *)entry);
-                components.push_back(scalar_id);
-            }
-        } else {
-            const uint32_t *values = (const uint32_t *)data;
-            for (int c = 0; c < type.lanes(); c++) {
-                const uint32_t *entry = &(values[c]);
-                SpvId scalar_id = declare_scalar_constant(scalar_type, (const void *)entry);
-                components.push_back(scalar_id);
-            }
-        }
+    } else if(type.is_float() && type.bits() == 32) {
+        components = declare_constants_for_each_lane<float>(type, data);
+    } else if(type.is_float() && type.bits() == 64) {
+        components = declare_constants_for_each_lane<double>(type, data);
     } else {
-        internal_error << "SPIRV: Unsupported type:" << type << "\n";
-        return SpvInvalidId;
+        user_error << "Unhandled constant data conversion from value type '" << type << "'!";
     }
 
-    SpvId result_id = make_id(SpvCompositeConstantId);
     SpvId type_id = add_type(type);
+    SpvId result_id = make_id(SpvCompositeConstantId);
     debug(3) << "    declare_vector_constant: %" << result_id << " key=" << key << " type=" << type << " data=" << data << "\n";
     SpvInstruction inst = SpvFactory::composite_constant(result_id, type_id, components);
     module.add_constant(inst);
@@ -1908,8 +2105,10 @@ SpvInstruction SpvFactory::label(SpvId result_id) {
 SpvInstruction SpvFactory::debug_line(SpvId string_id, uint32_t line, uint32_t column) {
     SpvInstruction inst = SpvInstruction::make(SpvOpLine);
     inst.add_operand(string_id);
-    inst.add_immediate(line, SpvIntegerLiteral);
-    inst.add_immediate(column, SpvIntegerLiteral);
+    inst.add_immediates({
+        {line, SpvIntegerLiteral},
+        {column, SpvIntegerLiteral},
+    });
     return inst;
 }
 
@@ -1940,8 +2139,10 @@ SpvInstruction SpvFactory::decorate(SpvId target_id, SpvDecoration decoration_ty
 SpvInstruction SpvFactory::decorate_member(SpvId struct_type_id, uint32_t member_index, SpvDecoration decoration_type, const SpvFactory::Literals &literals) {
     SpvInstruction inst = SpvInstruction::make(SpvOpMemberDecorate);
     inst.add_operand(struct_type_id);
-    inst.add_immediate(member_index, SpvIntegerLiteral);
-    inst.add_immediate(decoration_type, SpvIntegerLiteral);
+    inst.add_immediates({
+        {member_index, SpvIntegerLiteral}, 
+        {decoration_type, SpvIntegerLiteral}
+    });
     for (uint32_t l : literals) {
         inst.add_immediate(l, SpvIntegerLiteral);
     }
@@ -1960,8 +2161,7 @@ SpvInstruction SpvFactory::binary_op(SpvOp op_code, SpvId type_id, SpvId result_
     SpvInstruction inst = SpvInstruction::make(op_code);
     inst.set_type_id(type_id);
     inst.set_result_id(result_id);
-    inst.add_operand(src_a_id);
-    inst.add_operand(src_b_id);
+    inst.add_operands({src_a_id, src_b_id});
     return inst;
 }
 
@@ -1988,8 +2188,10 @@ SpvInstruction SpvFactory::bool_type(SpvId bool_type_id) {
 SpvInstruction SpvFactory::integer_type(SpvId int_type_id, uint32_t bits, uint32_t signedness) {
     SpvInstruction inst = SpvInstruction::make(SpvOpTypeInt);
     inst.set_result_id(int_type_id);
-    inst.add_immediate(bits, SpvIntegerLiteral);
-    inst.add_immediate(signedness, SpvIntegerLiteral);
+    inst.add_immediates({
+        {bits, SpvIntegerLiteral},
+        {signedness, SpvIntegerLiteral}
+    });
     return inst;
 }
 
@@ -2011,17 +2213,14 @@ SpvInstruction SpvFactory::vector_type(SpvId vector_type_id, SpvId element_type_
 SpvInstruction SpvFactory::array_type(SpvId array_type_id, SpvId element_type_id, SpvId array_size_id) {
     SpvInstruction inst = SpvInstruction::make(SpvOpTypeArray);
     inst.set_result_id(array_type_id);
-    inst.add_operand(element_type_id);
-    inst.add_operand(array_size_id);
+    inst.add_operands({ element_type_id, array_size_id });
     return inst;
 }
 
 SpvInstruction SpvFactory::struct_type(SpvId result_id, const SpvFactory::MemberTypeIds &member_type_ids) {
     SpvInstruction inst = SpvInstruction::make(SpvOpTypeStruct);
     inst.set_result_id(result_id);
-    for (const SpvId member_type : member_type_ids) {
-        inst.add_operand(member_type);
-    }
+    inst.add_operands(member_type_ids);
     return inst;
 }
 
@@ -2044,9 +2243,7 @@ SpvInstruction SpvFactory::function_type(SpvId function_type_id, SpvId return_ty
     SpvInstruction inst = SpvInstruction::make(SpvOpTypeFunction);
     inst.set_result_id(function_type_id);
     inst.add_operand(return_type_id);
-    for (SpvId type_id : param_type_ids) {
-        inst.add_operand(type_id);
-    }
+    inst.add_operands(param_type_ids);
     return inst;
 }
 
@@ -2084,9 +2281,7 @@ SpvInstruction SpvFactory::composite_constant(SpvId result_id, SpvId type_id, co
     SpvInstruction inst = SpvInstruction::make(SpvOpConstantComposite);
     inst.set_type_id(type_id);
     inst.set_result_id(result_id);
-    for (SpvId scalar_id : components) {
-        inst.add_operand(scalar_id);
-    }
+    inst.add_operands(components);
     return inst;
 }
 
@@ -2136,41 +2331,40 @@ SpvInstruction SpvFactory::entry_point(SpvId exec_model, SpvId func_id, const st
     inst.add_immediate(exec_model, SpvIntegerLiteral);
     inst.add_operand(func_id);
     inst.add_string(name);
-    for (SpvId var : variables) {
-        inst.add_operand(var);
-    }
+    inst.add_operands(variables);
     return inst;
 }
 
 SpvInstruction SpvFactory::memory_model(SpvAddressingModel addressing_model, SpvMemoryModel memory_model) {
     SpvInstruction inst = SpvInstruction::make(SpvOpMemoryModel);
-    inst.add_immediate(addressing_model, SpvIntegerLiteral);
-    inst.add_immediate(memory_model, SpvIntegerLiteral);
+    inst.add_immediates({
+        {addressing_model, SpvIntegerLiteral},
+        {memory_model, SpvIntegerLiteral}
+    });
     return inst;
 }
 
 SpvInstruction SpvFactory::exec_mode_local_size(SpvId function_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z) {
     SpvInstruction inst = SpvInstruction::make(SpvOpExecutionMode);
     inst.add_operand(function_id);
-    inst.add_immediate(SpvExecutionModeLocalSize, SpvIntegerLiteral);
-    inst.add_immediate(wg_size_x, SpvIntegerLiteral);
-    inst.add_immediate(wg_size_y, SpvIntegerLiteral);
-    inst.add_immediate(wg_size_z, SpvIntegerLiteral);
+    inst.add_immediates({
+        {SpvExecutionModeLocalSize, SpvIntegerLiteral},
+        {wg_size_x, SpvIntegerLiteral},
+        {wg_size_y, SpvIntegerLiteral},
+        {wg_size_z, SpvIntegerLiteral},
+    });
     return inst;
 }
 
 SpvInstruction SpvFactory::memory_barrier(SpvId memory_scope_id, SpvId semantics_mask_id) {
     SpvInstruction inst = SpvInstruction::make(SpvOpMemoryBarrier);
-    inst.add_operand(memory_scope_id);
-    inst.add_operand(semantics_mask_id);
+    inst.add_operands({memory_scope_id, semantics_mask_id});
     return inst;
 }
 
 SpvInstruction SpvFactory::control_barrier(SpvId execution_scope_id, SpvId memory_scope_id, SpvId semantics_mask_id) {
     SpvInstruction inst = SpvInstruction::make(SpvOpControlBarrier);
-    inst.add_operand(execution_scope_id);
-    inst.add_operand(memory_scope_id);
-    inst.add_operand(semantics_mask_id);
+    inst.add_operands({execution_scope_id, memory_scope_id, semantics_mask_id});
     return inst;
 }
 
@@ -2192,19 +2386,17 @@ SpvInstruction SpvFactory::logical_and(SpvId type_id, SpvId result_id, SpvId src
 
 SpvInstruction SpvFactory::shift_right_logical(SpvId type_id, SpvId result_id, SpvId src_id, SpvId shift_id) {
     SpvInstruction inst = SpvInstruction::make(SpvOpShiftRightLogical);
-    inst.add_operand(type_id);
-    inst.add_operand(result_id);
-    inst.add_operand(src_id);
-    inst.add_operand(shift_id);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operands({ src_id, shift_id });
     return inst;
 }
 
 SpvInstruction SpvFactory::shift_right_arithmetic(SpvId type_id, SpvId result_id, SpvId src_id, SpvId shift_id) {
     SpvInstruction inst = SpvInstruction::make(SpvOpShiftRightArithmetic);
-    inst.add_operand(type_id);
-    inst.add_operand(result_id);
-    inst.add_operand(src_id);
-    inst.add_operand(shift_id);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operands({ src_id, shift_id });
     return inst;
 }
 
@@ -2216,9 +2408,7 @@ SpvInstruction SpvFactory::select(SpvId type_id, SpvId result_id, SpvId conditio
     SpvInstruction inst = SpvInstruction::make(SpvOpSelect);
     inst.set_type_id(type_id);
     inst.set_result_id(result_id);
-    inst.add_operand(condition_id);
-    inst.add_operand(true_id);
-    inst.add_operand(false_id);
+    inst.add_operands({condition_id, true_id, false_id});
     return inst;
 }
 
@@ -2227,9 +2417,7 @@ SpvInstruction SpvFactory::in_bounds_access_chain(SpvId type_id, SpvId result_id
     inst.set_type_id(type_id);
     inst.set_result_id(result_id);
     inst.add_operand(base_id);
-    for (SpvId i : indices) {
-        inst.add_operand(i);
-    }
+    inst.add_operands(indices);
     return inst;
 }
 
@@ -2237,11 +2425,8 @@ SpvInstruction SpvFactory::pointer_access_chain(SpvId type_id, SpvId result_id, 
     SpvInstruction inst = SpvInstruction::make(SpvOpPtrAccessChain);
     inst.set_type_id(type_id);
     inst.set_result_id(result_id);
-    inst.add_operand(base_id);
-    inst.add_operand(element_id);
-    for (SpvId i : indices) {
-        inst.add_operand(i);
-    }
+    inst.add_operands({base_id, element_id});
+    inst.add_operands(indices);
     return inst;
 }
 
@@ -2256,8 +2441,7 @@ SpvInstruction SpvFactory::load(SpvId type_id, SpvId result_id, SpvId ptr_id, ui
 
 SpvInstruction SpvFactory::store(SpvId ptr_id, SpvId obj_id, uint32_t access_mask) {
     SpvInstruction inst = SpvInstruction::make(SpvOpStore);
-    inst.add_operand(ptr_id);
-    inst.add_operand(obj_id);
+    inst.add_operands({ ptr_id, obj_id });
     inst.add_immediate(access_mask, SpvBitMaskLiteral);
     return inst;
 }
@@ -2266,8 +2450,7 @@ SpvInstruction SpvFactory::composite_insert(SpvId type_id, SpvId result_id, SpvI
     SpvInstruction inst = SpvInstruction::make(SpvOpCompositeInsert);
     inst.set_type_id(type_id);
     inst.set_result_id(result_id);
-    inst.add_operand(object_id);
-    inst.add_operand(composite_id);
+    inst.add_operands({ object_id, composite_id });
     for (SpvId i : indices) {
         inst.add_immediate(i, SpvIntegerLiteral);
     }
@@ -2299,9 +2482,7 @@ SpvInstruction SpvFactory::vector_insert_dynamic(SpvId type_id, SpvId result_id,
     SpvInstruction inst = SpvInstruction::make(SpvOpVectorInsertDynamic);
     inst.set_type_id(type_id);
     inst.set_result_id(result_id);
-    inst.add_operand(vector_id);
-    inst.add_operand(value_id);
-    inst.add_operand(index_id);
+    inst.add_operands({vector_id, value_id, index_id});
     return inst;
 }
 
@@ -2309,9 +2490,7 @@ SpvInstruction SpvFactory::vector_extract_dynamic(SpvId type_id, SpvId result_id
     SpvInstruction inst = SpvInstruction::make(SpvOpVectorExtractDynamic);
     inst.set_type_id(type_id);
     inst.set_result_id(result_id);
-    inst.add_operand(vector_id);
-    inst.add_operand(value_id);
-    inst.add_operand(index_id);
+    inst.add_operands({vector_id, value_id, index_id});
     return inst;
 }
 
@@ -2367,66 +2546,58 @@ SpvInstruction SpvFactory::branch(SpvId target_label_id) {
 
 SpvInstruction SpvFactory::conditional_branch(SpvId condition_label_id, SpvId true_label_id, SpvId false_label_id, const SpvFactory::BranchWeights &weights) {
     SpvInstruction inst = SpvInstruction::make(SpvOpBranchConditional);
-    inst.add_operand(condition_label_id);
-    inst.add_operand(true_label_id);
-    inst.add_operand(false_label_id);
+    inst.add_operands({condition_label_id, true_label_id, false_label_id});
     for (uint32_t w : weights) {
         inst.add_immediate(w, SpvIntegerLiteral);
     }
     return inst;
 }
 
-SpvInstruction SpvFactory::equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id) {
+SpvInstruction SpvFactory::integer_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id) {
     SpvInstruction inst = SpvInstruction::make(SpvOpIEqual);
-    inst.add_operand(type_id);
-    inst.add_operand(result_id);
-    inst.add_operand(src_a_id);
-    inst.add_operand(src_b_id);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operands({src_a_id, src_b_id});
     return inst;
 }
 
-SpvInstruction SpvFactory::not_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id) {
+SpvInstruction SpvFactory::integer_not_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id) {
     SpvInstruction inst = SpvInstruction::make(SpvOpINotEqual);
-    inst.add_operand(type_id);
-    inst.add_operand(result_id);
-    inst.add_operand(src_a_id);
-    inst.add_operand(src_b_id);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operands({src_a_id, src_b_id});
     return inst;
 }
 
-SpvInstruction SpvFactory::less_than(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed) {
+SpvInstruction SpvFactory::integer_less_than(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed) {
     SpvInstruction inst = SpvInstruction::make(is_signed ? SpvOpSLessThan : SpvOpULessThan);
-    inst.add_operand(type_id);
-    inst.add_operand(result_id);
-    inst.add_operand(src_a_id);
-    inst.add_operand(src_b_id);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operands({src_a_id, src_b_id});
     return inst;
 }
 
-SpvInstruction SpvFactory::less_than_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed) {
+SpvInstruction SpvFactory::integer_less_than_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed) {
     SpvInstruction inst = SpvInstruction::make(is_signed ? SpvOpSLessThanEqual : SpvOpULessThanEqual);
-    inst.add_operand(type_id);
-    inst.add_operand(result_id);
-    inst.add_operand(src_a_id);
-    inst.add_operand(src_b_id);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operands({src_a_id, src_b_id});
     return inst;
 }
 
-SpvInstruction SpvFactory::greater_than(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed) {
+SpvInstruction SpvFactory::integer_greater_than(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed) {
     SpvInstruction inst = SpvInstruction::make(is_signed ? SpvOpSGreaterThan : SpvOpUGreaterThan);
-    inst.add_operand(type_id);
-    inst.add_operand(result_id);
-    inst.add_operand(src_a_id);
-    inst.add_operand(src_b_id);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operands({src_a_id, src_b_id});
     return inst;
 }
 
-SpvInstruction SpvFactory::greater_than_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed) {
+SpvInstruction SpvFactory::integer_greater_than_equal(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed) {
     SpvInstruction inst = SpvInstruction::make(is_signed ? SpvOpSGreaterThanEqual : SpvOpUGreaterThanEqual);
-    inst.add_operand(type_id);
-    inst.add_operand(result_id);
-    inst.add_operand(src_a_id);
-    inst.add_operand(src_b_id);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operands({src_a_id, src_b_id});
     return inst;
 }
 
@@ -2450,8 +2621,7 @@ SpvInstruction SpvFactory::phi(SpvId type_id, SpvId result_id, const SpvFactory:
     inst.set_type_id(type_id);
     inst.set_result_id(result_id);
     for (const SpvFactory::VariableBlockIdPair &vb : block_vars) {
-        inst.add_operand(vb.first);   // variable id
-        inst.add_operand(vb.second);  // block id
+        inst.add_operands({vb.first, vb.second});  // variable id, block id
     }
     return inst;
 }
@@ -2481,9 +2651,7 @@ SpvInstruction SpvFactory::extended(SpvId instruction_set_id, SpvId instruction_
     inst.set_result_id(result_id);
     inst.add_operand(instruction_set_id);
     inst.add_immediate(instruction_number, SpvIntegerLiteral);
-    for (SpvId o : operands) {
-        inst.add_operand(o);
-    }
+    inst.add_operands(operands);
     return inst;
 }
 
