@@ -422,7 +422,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const StringImm *imm) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const FloatImm *imm) {
     if (imm->type.bits() == 16) {
-        if(imm->type.is_bfloat()) {
+        if (imm->type.is_bfloat()) {
             const bfloat16_t value = bfloat16_t(imm->value);
             SpvId constant_id = builder.declare_constant(imm->type, &value);
             builder.update_id(constant_id);
@@ -445,33 +445,33 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const FloatImm *imm) {
 }
 
 SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type value_type, SpvId value_id) {
-    if(!value_type.is_bool()) {
+    if (!value_type.is_bool()) {
         value_id = cast_type(Bool(), value_type, value_id);
     }
-    uint8_t true_data[ target_type.bytes() ];
-    uint8_t false_data[ target_type.bytes() ];
-    for(int i = 0; i < target_type.lanes(); ++i) {
-        if(target_type.is_int_or_uint() && target_type.bits() == 8) {
-            reinterpret_cast<int8_t*>(true_data)[i] = int8_t(1);
-            reinterpret_cast<int8_t*>(false_data)[i] = int8_t(0);
-        } else if(target_type.is_int_or_uint() && target_type.bits() == 16) {
-            reinterpret_cast<int16_t*>(true_data)[i] = int16_t(1);
-            reinterpret_cast<int16_t*>(false_data)[i] = int16_t(0);
-        } else if(target_type.is_int_or_uint() && target_type.bits() == 32) {
-            reinterpret_cast<int32_t*>(true_data)[i] = int32_t(1);
-            reinterpret_cast<int32_t*>(false_data)[i] = int32_t(0);
-        } else if(target_type.is_int_or_uint() && target_type.bits() == 64) {
-            reinterpret_cast<int64_t*>(true_data)[i] = int64_t(1);
-            reinterpret_cast<int64_t*>(false_data)[i] = int64_t(0);
-        } else if(target_type.is_float() && target_type.bits() == 16) {
-            reinterpret_cast<uint16_t*>(true_data)[i] = uint16_t(1);
-            reinterpret_cast<uint16_t*>(false_data)[i] = uint16_t(0);
-        } else if(target_type.is_float() && target_type.bits() == 32) {
-            reinterpret_cast<float*>(true_data)[i] = 1.0f;
-            reinterpret_cast<float*>(false_data)[i] = 0.0f;
-        } else if(target_type.is_float() && target_type.bits() == 64) {
-            reinterpret_cast<double*>(true_data)[i] = 1.0;
-            reinterpret_cast<double*>(false_data)[i] = 0.0;
+    uint8_t true_data[target_type.bytes()];
+    uint8_t false_data[target_type.bytes()];
+    for (int i = 0; i < target_type.lanes(); ++i) {
+        if (target_type.is_int_or_uint() && target_type.bits() == 8) {
+            reinterpret_cast<int8_t *>(true_data)[i] = int8_t(1);
+            reinterpret_cast<int8_t *>(false_data)[i] = int8_t(0);
+        } else if (target_type.is_int_or_uint() && target_type.bits() == 16) {
+            reinterpret_cast<int16_t *>(true_data)[i] = int16_t(1);
+            reinterpret_cast<int16_t *>(false_data)[i] = int16_t(0);
+        } else if (target_type.is_int_or_uint() && target_type.bits() == 32) {
+            reinterpret_cast<int32_t *>(true_data)[i] = int32_t(1);
+            reinterpret_cast<int32_t *>(false_data)[i] = int32_t(0);
+        } else if (target_type.is_int_or_uint() && target_type.bits() == 64) {
+            reinterpret_cast<int64_t *>(true_data)[i] = int64_t(1);
+            reinterpret_cast<int64_t *>(false_data)[i] = int64_t(0);
+        } else if (target_type.is_float() && target_type.bits() == 16) {
+            reinterpret_cast<uint16_t *>(true_data)[i] = uint16_t(1);
+            reinterpret_cast<uint16_t *>(false_data)[i] = uint16_t(0);
+        } else if (target_type.is_float() && target_type.bits() == 32) {
+            reinterpret_cast<float *>(true_data)[i] = 1.0f;
+            reinterpret_cast<float *>(false_data)[i] = 0.0f;
+        } else if (target_type.is_float() && target_type.bits() == 64) {
+            reinterpret_cast<double *>(true_data)[i] = 1.0;
+            reinterpret_cast<double *>(false_data)[i] = 0.0;
         } else {
             user_error << "Unhandled type cast from value type '" << value_type << "' to target type '" << target_type << "'!";
         }
@@ -486,7 +486,7 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type 
 }
 
 SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(Type target_type, Type value_type, SpvId value_id) {
-    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(): casting from value type '" 
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(): casting from value type '"
              << value_type << "' to target type '" << target_type << "'!\n";
 
     if (value_type == target_type) {
@@ -550,9 +550,9 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(Type target_type, Type value_
         builder.append(SpvFactory::bitcast(target_type_id, result_id, value_id));
     } else if (op_code == SpvOpSelect) {
         result_id = convert_to_bool(target_type, value_type, value_id);
-    } else if(op_code == SpvOpUConvert && target_type.is_int()) {
+    } else if (op_code == SpvOpUConvert && target_type.is_int()) {
         // Vulkan requires both value and target types to be unsigned for UConvert
-        // so do the conversion to an equivalent unsigned type then bitcast this 
+        // so do the conversion to an equivalent unsigned type then bitcast this
         // result into the target type
         Type unsigned_type = target_type.with_code(halide_type_uint).narrow();
         SpvId unsigned_type_id = builder.declare_type(unsigned_type);
@@ -658,14 +658,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Max *op) {
 
     std::vector<Expr> args;
     args.reserve(2);
-    if(op->type.is_vector()) {
-        if(op->a.type().is_scalar()) {
+    if (op->type.is_vector()) {
+        if (op->a.type().is_scalar()) {
             Expr a_vector = Broadcast::make(op->a, op->type.lanes());
             args.push_back(a_vector);
         } else {
             args.push_back(op->a);
         }
-        if(op->b.type().is_scalar()) {
+        if (op->b.type().is_scalar()) {
             Expr b_vector = Broadcast::make(op->b, op->type.lanes());
             args.push_back(b_vector);
         } else {
@@ -693,14 +693,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Min *op) {
 
     std::vector<Expr> args;
     args.reserve(2);
-    if(op->type.is_vector()) {
-        if(op->a.type().is_scalar()) {
+    if (op->type.is_vector()) {
+        if (op->a.type().is_scalar()) {
             Expr a_vector = Broadcast::make(op->a, op->type.lanes());
             args.push_back(a_vector);
         } else {
             args.push_back(op->a);
         }
-        if(op->b.type().is_scalar()) {
+        if (op->b.type().is_scalar()) {
             Expr b_vector = Broadcast::make(op->b, op->type.lanes());
             args.push_back(b_vector);
         } else {
@@ -716,7 +716,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Min *op) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const EQ *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(EQ): " << op->type << " (" << op->a << ") == (" << op->b << ")\n";
     visit_binary_op(op->type.is_float() ? SpvOpFOrdEqual : SpvOpIEqual, op->type, op->a, op->b);
-    if(!op->type.is_bool()) {
+    if (!op->type.is_bool()) {
         Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
         SpvId result_id = cast_type(op->type, bool_type, current_id);
@@ -727,7 +727,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const EQ *op) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const NE *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(NE): " << op->type << " (" << op->a << ") != (" << op->b << ")\n";
     visit_binary_op(op->type.is_float() ? SpvOpFOrdNotEqual : SpvOpINotEqual, op->type, op->a, op->b);
-    if(!op->type.is_bool()) {
+    if (!op->type.is_bool()) {
         Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
         SpvId result_id = cast_type(op->type, bool_type, current_id);
@@ -748,7 +748,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LT *op) {
         internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LT *op): unhandled type: " << op->a.type() << "\n";
     }
     visit_binary_op(op_code, op->type, op->a, op->b);
-    if(!op->type.is_bool()) {
+    if (!op->type.is_bool()) {
         Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
         SpvId result_id = cast_type(op->type, bool_type, current_id);
@@ -769,7 +769,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op) {
         internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op): unhandled type: " << op->a.type() << "\n";
     }
     visit_binary_op(op_code, op->type, op->a, op->b);
-    if(!op->type.is_bool()) {
+    if (!op->type.is_bool()) {
         Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
         SpvId result_id = cast_type(op->type, bool_type, current_id);
@@ -790,7 +790,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GT *op) {
         internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GT *op): unhandled type: " << op->a.type() << "\n";
     }
     visit_binary_op(op_code, op->type, op->a, op->b);
-    if(!op->type.is_bool()) {
+    if (!op->type.is_bool()) {
         Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
         SpvId result_id = cast_type(op->type, bool_type, current_id);
@@ -811,7 +811,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GE *op) {
         internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GE *op): unhandled type: " << op->a.type() << "\n";
     }
     visit_binary_op(op_code, op->type, op->a, op->b);
-    if(!op->type.is_bool()) {
+    if (!op->type.is_bool()) {
         Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
         SpvId result_id = cast_type(op->type, bool_type, current_id);
@@ -1039,7 +1039,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
     } else if (starts_with(op->name, "fast_inverse_f")) {
         internal_assert(op->args.size() == 1);
 
-        if(op->type.lanes() > 1) {
+        if (op->type.lanes() > 1) {
             user_error << "Vulkan: Expected scalar value for fast_inverse!\n";
         }
 
@@ -1048,18 +1048,18 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
 
         SpvId one_constant_id = SpvInvalidId;
         SpvId type_id = builder.declare_type(op->type);
-        if(op->type.is_float() && op->type.bits() == 16) {
-            if(op->type.is_bfloat()) {
+        if (op->type.is_float() && op->type.bits() == 16) {
+            if (op->type.is_bfloat()) {
                 bfloat16_t one_value = bfloat16_t(1.0f);
                 one_constant_id = builder.declare_constant(op->type, &one_value);
             } else {
                 float16_t one_value = float16_t(1.0f);
                 one_constant_id = builder.declare_constant(op->type, &one_value);
             }
-        } else if(op->type.is_float() && op->type.bits() == 32) {
+        } else if (op->type.is_float() && op->type.bits() == 32) {
             float one_value = float(1.0f);
             one_constant_id = builder.declare_constant(op->type, &one_value);
-        } else if(op->type.is_float() && op->type.bits() == 64) {
+        } else if (op->type.is_float() && op->type.bits() == 64) {
             double one_value = double(1.0);
             one_constant_id = builder.declare_constant(op->type, &one_value);
         } else {
@@ -1531,7 +1531,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         builder.append(SpvFactory::store(loop_var_id, min_id));
         SpvBlock header_block = builder.create_block(header_block_id);
         builder.enter_block(header_block);
-        {            
+        {
             builder.append(SpvFactory::loop_merge(merge_block_id, continue_block_id, SpvLoopControlDontUnrollMask));
             builder.append(SpvFactory::branch(top_block_id));
         }
@@ -1600,7 +1600,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Ramp *op) {
         SpvId this_id = builder.reserve_id(SpvResultId);
         if (op->base.type().is_float()) {
             builder.append(SpvFactory::float_add(base_type_id, this_id, prev_id, stride_id));
-        } else if(op->base.type().is_int_or_uint()) {
+        } else if (op->base.type().is_int_or_uint()) {
             builder.append(SpvFactory::integer_add(base_type_id, this_id, prev_id, stride_id));
         } else {
             internal_error << "SPIRV: Unhandled base type encountered in ramp!\n";
@@ -1719,7 +1719,8 @@ CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
     builder.leave_block();
 
     // Then block
-    debug(2) << "Vulkan: Then =>\n" << then_case << "\n";
+    debug(2) << "Vulkan: Then =>\n"
+             << then_case << "\n";
     SpvBlock then_block = builder.create_block(then_block_id);
     builder.enter_block(then_block);
     {
@@ -1732,7 +1733,8 @@ CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
 
     // Else block (optional)
     if (else_case.defined()) {
-        debug(2) << "Vulkan: Else =>\n" << else_case << "\n";
+        debug(2) << "Vulkan: Else =>\n"
+                 << else_case << "\n";
         SpvBlock else_block = builder.create_block(else_block_id);
         builder.enter_block(else_block);
         {

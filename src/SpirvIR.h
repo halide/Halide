@@ -148,14 +148,14 @@ public:
     void set_type_id(SpvId id);
     void set_op_code(SpvOp opcode);
     void add_operand(SpvId id);
-    void add_operands(const Operands& operands);
+    void add_operands(const Operands &operands);
     void add_immediate(SpvId id, SpvValueType type);
-    void add_immediates(const Immediates& Immediates);
+    void add_immediates(const Immediates &Immediates);
     void add_data(uint32_t bytes, const void *data, SpvValueType type);
     void add_string(const std::string &str);
 
     template<typename T>
-    void append(const T& operands_or_immediates_or_strings);
+    void append(const T &operands_or_immediates_or_strings);
 
     SpvId result_id() const;
     SpvId type_id() const;
@@ -569,11 +569,11 @@ protected:
     SpvId lookup_pointer_type(SpvId base_type_id, SpvStorageClass storage_class) const;
 
     template<typename T>
-    SpvId declare_scalar_constant_of_type(const Type& scalar_type, const T* data);
+    SpvId declare_scalar_constant_of_type(const Type &scalar_type, const T *data);
 
     template<typename T>
-    SpvBuilder::Components declare_constants_for_each_lane(Type type, const void* data);
-    
+    SpvBuilder::Components declare_constants_for_each_lane(Type type, const void *data);
+
     ConstantKey make_bool_constant_key(bool value) const;
     ConstantKey make_string_constant_key(const std::string &value) const;
     ConstantKey make_constant_key(uint8_t code, uint8_t bits, int lanes, size_t bytes, const void *data) const;
