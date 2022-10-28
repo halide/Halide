@@ -5,7 +5,7 @@ Local Laplacian, see e.g. Aubry et al 2011, "Fast and Robust Pyramid-based Image
 import halide as hl
 
 import numpy as np
-import imageio
+import halide.imageio
 import os.path
 
 # Return the directory to look in for test images:
@@ -188,12 +188,10 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
 
 def get_input_data():
     image_path = os.path.join(apps_images_dir(), "rgb.png")
-    assert os.path.exists(image_path), "Could not find {}".format(image_path)
-
-    rgb_data = imageio.imread(image_path)
+    rgb_data = halide.imageio.imread(image_path)
 
     # input data is in range [0, 256*256]
-    input_data = rgb_data.astype(np.uint16, order="F") << 8
+    input_data = rgb_data.astype(np.uint16) << 8
     return input_data
 
 
@@ -208,7 +206,7 @@ def filter_test_image(local_laplacian, input):
     output_data = np.empty_like(input_data)
 
     # do the actual computation
-    input_width, input_height = input_data.shape[:2]
+    input_width, input_height = input_image.width(), input_image.height()
     output_image = local_laplacian.realize([input_width, input_height, 3])
     output_data = np.asanyarray(output_image)
 
@@ -220,8 +218,8 @@ def filter_test_image(local_laplacian, input):
     input_path = os.path.join(apps_output_dir(), "local_laplacian_input.png")
     output_path = os.path.join(apps_output_dir(), "local_laplacian.png")
 
-    imageio.imsave(input_path, input_data)
-    imageio.imsave(output_path, output_data)
+    halide.imageio.imwrite(input_path, input_data)
+    halide.imageio.imwrite(output_path, output_data)
 
     print()
     print("local_laplacian realized on output_image.")
