@@ -10,7 +10,7 @@
 
 import halide as hl
 
-import imageio
+import halide.imageio
 import os.path
 import struct
 
@@ -240,7 +240,7 @@ class MyPipeline:
 def main():
     # Load an input image.
     image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
-    input = hl.Buffer(imageio.imread(image_path))
+    input = hl.Buffer(halide.imageio.imread(image_path))
 
     # Allocated an image that will store the correct output
     reference_output = hl.Buffer(hl.UInt(8), [input.width(), input.height(), input.channels()])
