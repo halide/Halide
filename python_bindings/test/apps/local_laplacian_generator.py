@@ -1,5 +1,5 @@
 """
-Fast image interpolation using a pyramid.
+Local Laplacian.
 """
 
 import halide as hl

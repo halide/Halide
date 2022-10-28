@@ -1,5 +1,5 @@
 """
-Bilateral histogram.
+Simple blur.
 """
 
 from blur import blur

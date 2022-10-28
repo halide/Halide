@@ -1,5 +1,5 @@
 """
-Shell for running Fast image interpolation using a pyramid.
+Shell for running Local Laplacian.
 """
 
 from local_laplacian import local_laplacian
