@@ -11,9 +11,9 @@ from timeit import Timer
 
 
 def main():
-    if len(sys.argv) < 7:
+    if len(sys.argv) < 6:
         print(
-            "Usage: %s input.png input.png levels alpha beta output.png timing_iterations"
+            "Usage: %s input.png input.png levels alpha beta output.png"
             % sys.argv[0]
         )
         print("e.g. %s input.png 8 1 1 output.png 10" % sys.argv[0])
@@ -24,7 +24,7 @@ def main():
     alpha = float(sys.argv[3])
     beta = float(sys.argv[4])
     output_path = sys.argv[5]
-    timing_iterations = int(sys.argv[6])
+    timing_iterations = 10
 
     print("Reading from %s ..." % input_path)
     input_buf_u8 = imageio.imread(input_path)

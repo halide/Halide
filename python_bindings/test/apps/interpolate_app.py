@@ -11,14 +11,14 @@ from timeit import Timer
 
 
 def main():
-    if len(sys.argv) < 4:
-        print("Usage: %s input.png output.png timing_iterations" % sys.argv[0])
+    if len(sys.argv) < 3:
+        print("Usage: %s input.png output.png" % sys.argv[0])
         print("e.g. %s input.png output.png 10" % sys.argv[0])
         sys.exit(1)
 
     input_path = sys.argv[1]
     output_path = sys.argv[2]
-    timing_iterations = int(sys.argv[3])
+    timing_iterations = 10
 
     print("Reading from %s ..." % input_path)
     input_buf_u8 = imageio.imread(input_path)

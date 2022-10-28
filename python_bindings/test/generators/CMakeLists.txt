@@ -75,25 +75,9 @@ _add_python_aot_and_stub_extension(SOURCES addconstantpy_generator.py
                                    GENERATORS addconstantpy
                                               addconstantpy_with_offset_42
                                               addconstantpy_with_negative_offset)
-_add_python_aot_and_stub_extension(SOURCES bilateral_grid_generator.py
-                                   GENERATORS bilateral_grid
-                                              bilateral_grid_Adams2019
-                                              bilateral_grid_Li2018
-                                              bilateral_grid_Mullapudi2016)
 _add_python_aot_and_stub_extension(SOURCES bitpy_generator.py GENERATORS bitpy)
 _add_python_aot_and_stub_extension(SOURCES complexpy_generator.py GENERATORS complexpy)
 _add_python_aot_and_stub_extension(SOURCES simplepy_generator.py GENERATORS simplepy)
-
-_add_python_aot_and_stub_extension(SOURCES interpolate_generator.py
-                                   GENERATORS interpolate
-                                              interpolate_Mullapudi2016)
-
-_add_python_aot_and_stub_extension(SOURCES local_laplacian_generator.py
-                                   GENERATORS local_laplacian
-                                              local_laplacian_Mullapudi2016)
-
-_add_python_aot_and_stub_extension(SOURCES blur_generator.py
-                                   GENERATORS blur)
 
 # Bind several libraries into a single python extension;
 # they will be in the same module (and share the same Halide runtime)

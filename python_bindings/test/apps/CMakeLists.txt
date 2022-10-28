@@ -1,36 +1,52 @@
-set(tests
-    bilateral_grid_app.py
-    blur_app.py
-    interpolate_app.py
-    local_laplacian_app.py)
-
 set(TEST_TMPDIR "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}>")
 set(TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../../apps/images>")
 
-set(DEPS_bilateral_grid_app   py_aot_bilateral_grid)
-set(PYPATH_bilateral_grid_app "$<TARGET_FILE_DIR:py_aot_bilateral_grid>")
-set(ARGS_bilateral_grid_app   ${TEST_IMAGES_DIR}/gray.png ${TEST_TMPDIR}/out.png 0.1 10)
+set(APPS
+    bilateral_grid
+    blur
+    interpolate
+    local_laplacian)
 
-set(DEPS_blur_app   py_aot_blur)
-set(PYPATH_blur_app "$<TARGET_FILE_DIR:py_aot_blur>")
-set(ARGS_blur_app   ${TEST_IMAGES_DIR}/gray.png ${TEST_TMPDIR}/out.png 10)
+set(GENERATORS_bilateral_grid   bilateral_grid bilateral_grid_Adams2019 bilateral_grid_Li2018 bilateral_grid_Mullapudi2016)
+set(GENERATORS_interpolate      interpolate interpolate_Mullapudi2016)
+set(GENERATORS_local_laplacian  local_laplacian local_laplacian_Mullapudi2016)
+set(GENERATORS_blur             blur)
 
-set(DEPS_interpolate_app   py_aot_interpolate)
-set(PYPATH_interpolate_app "$<TARGET_FILE_DIR:py_aot_interpolate>")
-set(ARGS_interpolate_app   ${TEST_IMAGES_DIR}/rgba.png ${TEST_TMPDIR}/out.png 10)
+set(ARGS_bilateral_grid   ${TEST_IMAGES_DIR}/gray.png 0.1 ${TEST_TMPDIR}/out.png)
+set(ARGS_blur             ${TEST_IMAGES_DIR}/gray.png ${TEST_TMPDIR}/out.png)
+set(ARGS_interpolate      ${TEST_IMAGES_DIR}/rgba.png ${TEST_TMPDIR}/out.png)
+set(ARGS_local_laplacian  ${TEST_IMAGES_DIR}/rgba.png 8 1 1 ${TEST_TMPDIR}/out.png)
 
-set(DEPS_local_laplacian_app   py_aot_local_laplacian)
-set(PYPATH_local_laplacian_app "$<TARGET_FILE_DIR:py_aot_local_laplacian>")
-set(ARGS_local_laplacian_app   ${TEST_IMAGES_DIR}/rgba.png 8 1 1 ${TEST_TMPDIR}/out.png 10)
+foreach (app IN LISTS APPS)
+    set(app_generator_src "${app}_generator.py")
+    add_halide_generator(app_gen_${app}
+                         SOURCES ${app_generator_src})
 
-foreach (test IN LISTS tests)
-    cmake_path(GET test STEM test_name)
+    set(DEPS "")
+    foreach (G IN ITEMS ${GENERATORS_${app}})
+        add_halide_library(app_aot_${G}
+                           FROM app_gen_${app}
+                           GENERATOR ${G}
+                           FUNCTION_NAME ${G}
+                           USE_RUNTIME ${RUNTIME_${G}}
+                           PYTHON_EXTENSION _ignored_result
+                           # We don't really need all the plugins at once here --
+                           # it's just easier to specify them all
+                           PLUGINS Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016)
+
+        add_halide_python_extension_library(app_ext_${G}
+                                            MODULE_NAME ${G}
+                                            HALIDE_LIBRARIES app_aot_${G})
+        list(APPEND DEPS app_ext_${G})
+    endforeach()
+
+    set(app_src "${app}_app.py")
     add_python_test(
-        FILE "${test}"
-        TEST_ARGS ${ARGS_${test_name}}
+        FILE "${app_src}"
+        TEST_ARGS ${ARGS_${app}}
         LABEL python_apps
-        DEPENDS ${DEPS_${test_name}}
-        PYTHONPATH ${PYPATH_${test_name}}
+        DEPENDS ${DEPS}
+        PYTHONPATH "$<TARGET_FILE_DIR:app_ext_${app}>"
         ENVIRONMENT
         "TEST_TMPDIR=${TEST_TMPDIR}"
         "TEST_IMAGES_DIR=${TEST_IMAGES_DIR}"
