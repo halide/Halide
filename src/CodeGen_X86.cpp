@@ -624,14 +624,27 @@ void CodeGen_X86::visit(const Call *op) {
     if (expr_match(saturating_pmulhrs, op, matches)) {
         // Rewrite so that we can take advantage of pmulhrs.
         internal_assert(matches.size() == 2);
+        internal_assert(op->type.element_of() == Int(16));
         const Expr &a = matches[0];
         const Expr &b = matches[1];
+
         Expr pmulhrs = i16(rounding_shift_right(widening_mul(a, b), 15));
-        // Handle edge case of possible overflow.
+
         Expr i16_min = op->type.min();
         Expr i16_max = op->type.max();
-        Expr expr = select((a == i16_min) && (b == i16_min), i16_max, pmulhrs);
-        expr.accept(this);
+
+        // Handle edge case of possible overflow.
+        // See https://github.com/halide/Halide/pull/7129/files#r1008331426
+        // On AVX512 (and with enough lanes) we can use a mask register.
+        if (target.has_feature(Target::AVX512) && op->type.lanes() >= 32) {
+            Expr expr = select((a == i16_min) && (b == i16_min), i16_max, pmulhrs);
+            expr.accept(this);
+        } else {
+            Expr mask = select(max(a, b) == i16_min, cast(op->type, -1), cast(op->type, 0));
+            Expr expr = mask ^ pmulhrs;
+            expr.accept(this);
+        }
+
         return;
     }
 
