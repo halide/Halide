@@ -92,7 +92,10 @@ public:
                     argv[slot] = b.raw_buffer();
                 } else {
                     const bool writable = c_arg.is_output();
-                    buffers.buffers[slot] = pybuffer_to_halidebuffer<void, AnyDims, MaxFastDimensions>(cast_to<py::buffer>(value), writable);
+                    const bool reverse_axes = true;
+                    buffers.buffers[slot] =
+                        pybuffer_to_halidebuffer<void, AnyDims, MaxFastDimensions>(
+                            cast_to<py::buffer>(value), writable, reverse_axes);
                     argv[slot] = buffers.buffers[slot].raw_buffer();
                 }
                 cci[slot] = Callable::make_buffer_qcci();
