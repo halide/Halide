@@ -339,8 +339,14 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
             // Collect non-buffer arguments into a single uniform buffer.
             internal_assert(arg.type.bytes() <= 4)
                 << "unimplemented: non-buffer args larger than 4 bytes";
-            uniforms << "  " << print_name(arg.name) << " : "
-                     << print_type(arg.type) << ",\n";
+            uniforms << "  " << print_name(arg.name) << " : ";
+            if (arg.type == Bool()) {
+                // The bool type cannot appear in a uniform, so use i32 instead.
+                uniforms << "i32";
+            } else {
+                uniforms << print_type(arg.type);
+            }
+            uniforms << ",\n";
         }
     }
     if (!uniforms.str().empty()) {
@@ -412,8 +418,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     for (const DeviceArgument &arg : args) {
         if (!arg.is_buffer) {
             stream << get_indent() << "let " << print_name(arg.name)
-                   << " : " << print_type(arg.type)
-                   << " = " << args_var << "." << print_name(arg.name) << ";\n";
+                   << " = " << print_type(arg.type)
+                   << "(" << args_var << "." << print_name(arg.name) << ");\n";
         }
     }
 
