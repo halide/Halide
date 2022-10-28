@@ -72,11 +72,7 @@ double run_test(bool auto_schedule) {
             .set_estimate(y, 0, in.height())
             .set_estimate(c, 0, in.channels());
         // Auto-schedule the pipeline
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        p.auto_schedule(target);
-#else
         p.apply_autoscheduler(target, {"Mullapudi2016"});
-#endif
     } else if (target.has_gpu_feature()) {
         slice_for_radius.compute_root();
         filter_height.compute_root();

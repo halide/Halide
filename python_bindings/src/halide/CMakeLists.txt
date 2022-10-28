@@ -18,7 +18,6 @@ set(native_sources
     PyIROperator.cpp
     PyLambda.cpp
     PyLoopLevel.cpp
-    PyMachineParams.cpp
     PyModule.cpp
     PyParam.cpp
     PyPipeline.cpp

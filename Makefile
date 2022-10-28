@@ -1097,25 +1097,9 @@ $(BUILD_DIR)/initmod.%_32_debug.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 $(RUNTIME_CXX_FLAGS) -fpic -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32_debug.d
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 130))
-# For LLVM14+, we must add elementtype() annotations to some of our LLVM IR;
-# earlier versions either don't understand that keyword at all, or don't support
-# the uses we have for it. Rather than forking these sources, for now we'll just
-# edit the files at build time to remove the offending uses. Note that while we could use `sed`
-# here, that isn't an option for CMake builds (since they must support Windows environments without
-# such tooling); to ensure consistent transformations in all builds, we'll use the tool here, too.
-#
-# (This may well need attention in the future, depending on how the LLVM opaque-pointers work proceeeds;
-# see https://llvm.org/docs/OpaquePointers.html)
-$(BUILD_DIR)/initmod.%_ll.ll: $(SRC_DIR)/runtime/%.ll $(BIN_DIR)/regexp_replace
-	@mkdir -p $(@D)
-	$(BIN_DIR)/regexp_replace 'elementtype\(i[0-9]+\)' '' < $(SRC_DIR)/runtime/$*.ll > $(BUILD_DIR)/initmod.$*_ll.ll
-else
 $(BUILD_DIR)/initmod.%_ll.ll: $(SRC_DIR)/runtime/%.ll
 	@mkdir -p $(@D)
 	cp $(SRC_DIR)/runtime/$*.ll $(BUILD_DIR)/initmod.$*_ll.ll
-endif
-
 
 $(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll $(BUILD_DIR)/llvm_ok
 	$(LLVM_AS) $(BUILD_DIR)/initmod.$*.ll -o $(BUILD_DIR)/initmod.$*.bc
@@ -2222,7 +2206,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 130 140 150 160))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 140 150 160))
 LLVM_OK=yes
 endif
 
