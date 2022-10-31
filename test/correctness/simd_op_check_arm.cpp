@@ -602,7 +602,7 @@ private:
                 add_arm64("scvtf", cast_f(i_1));
                 add_arm64({{"fcvtzu", bits, force_vectorized_lanes}}, vf, cast(UInt(bits), f_1));
                 add_arm64({{"fcvtzs", bits, force_vectorized_lanes}}, vf, cast(Int(bits), f_1));
-                add_arm64({{"frinti", bits, force_vectorized_lanes}}, vf, round(f_1));
+                add_arm64({{"frintn", bits, force_vectorized_lanes}}, vf, round(f_1));
                 add_arm64({{"frintm", bits, force_vectorized_lanes}}, vf, floor(f_1));
                 add_arm64({{"frintp", bits, force_vectorized_lanes}}, vf, ceil(f_1));
                 add_arm64({{"frintz", bits, force_vectorized_lanes}}, vf, trunc(f_1));

@@ -7,6 +7,7 @@
 #include <intrin.h>
 #endif
 
+#include <cfenv>
 #include <functional>
 #include <unordered_map>
 
@@ -632,7 +633,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else {
             return Call::make(op->type, Call::mux, mutated_args, Call::PureIntrinsic);
         }
-    } else if (op->call_type == Call::PureExtern) {
+    } else if (op->call_type == Call::PureExtern || op->call_type == Call::PureIntrinsic) {
         // TODO: This could probably be simplified into a single map-lookup
         // with a bit more cleverness; not sure if the reduced lookup time
         // would pay for itself (in comparison with the possible lost code clarity).
@@ -711,15 +712,19 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             // else fall thru
         }
 
-        // Handle all the PureExtern cases of float -> integerized-float
+        // Handle all the PureExtern/PureIntrinsic cases of float -> integerized-float
         {
             using FnType = double (*)(double);
             static const std::unordered_map<std::string, FnType>
                 pure_externs_truncation = {
                     {"ceil_f32", std::ceil},
                     {"floor_f32", std::floor},
-                    {"round_f32", std::nearbyint},
-                    {"trunc_f32", [](double a) -> double { return (a < 0 ? std::ceil(a) : std::floor(a)); }},
+                    {Call::get_intrinsic_name(Call::round), [](double a) -> double {
+                         std::fesetround(FE_TONEAREST);
+                         a = std::nearbyint(a);
+                         return a;
+                     }},
+                    {"trunc_f32", std::trunc},
                 };
             auto it = pure_externs_truncation.find(op->name);
             if (it != pure_externs_truncation.end()) {
@@ -730,7 +735,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 if (const double *f = as_const_float(arg)) {
                     auto fn = it->second;
                     return make_const(arg.type(), fn(*f));
-                } else if (call && call->call_type == Call::PureExtern &&
+                } else if (call && (call->call_type == Call::PureExtern || call->call_type == Call::PureIntrinsic) &&
                            (it = pure_externs_truncation.find(call->name)) != pure_externs_truncation.end()) {
                     // For any combination of these integer-valued functions, we can
                     // discard the outer function. For example, floor(ceil(x)) == ceil(x).

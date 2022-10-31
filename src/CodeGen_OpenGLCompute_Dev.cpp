@@ -103,7 +103,6 @@ protected:
         {"mix", "mix"},
         {"mod", "mod"},
         {"notEqual", "notEqual"},
-        {"round_f32", "roundEven"},
         {"sin_f32", "sin"},
         {"sinh_f32", "sinh"},
         {"sqrt_f32", "sqrt"},
@@ -421,6 +420,9 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
         // Simply discard the first argument, which is generally a call to
         // 'halide_printf'.
         print_assignment(op->type, print_expr(op->args[1]));
+        return;
+    } else if (op->is_intrinsic(Call::round)) {
+        print_assignment(op->type, "roundEven(" + print_expr(op->args[0]) + ")");
         return;
     } else if (op->name == "fast_inverse_f32") {
         print_expr(make_one(op->type) / op->args[0]);

@@ -3,6 +3,11 @@
 
 #include "PyHalide.h"
 
+// This is an expedient: a unique Handle type that we use as a placeholder
+// in Python generators. It should never be visible to the end user.
+struct UnspecifiedType {};
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(UnspecifiedType);
+
 namespace Halide {
 namespace PythonBindings {
 

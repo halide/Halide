@@ -33,7 +33,11 @@ std::string halide_type_to_string(const Type &type) {
             stream << "float";
             break;
         case halide_type_handle:
-            stream << "handle";
+            if (type.handle_type) {
+                stream << type.handle_type->inner_name.name;
+            } else {
+                stream << "handle";
+            }
             break;
         default:
             stream << "#unknown";
@@ -92,6 +96,12 @@ void define_type(py::module &m) {
     m.def("Float", Float, py::arg("bits"), py::arg("lanes") = 1);
     m.def("Bool", Bool, py::arg("lanes") = 1);
     m.def("Handle", make_handle, py::arg("lanes") = 1);
+
+    // This is an expedient: a unique Handle type that we use as a placeholder
+    // in Python generators. It should never be visible to the end user.
+    m.def("_UnspecifiedType", []() -> Type {
+        return type_of<UnspecifiedType *>();
+    });
 }
 
 }  // namespace PythonBindings

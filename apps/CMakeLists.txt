@@ -21,10 +21,16 @@ function(add_app app_name)
     endif ()
 endfunction()
 
+# TODO: most of the apps need to be smartened to be crosscompilable under wasm.
+message(STATUS "Halide_TARGET ${Halide_TARGET}")
+if (Halide_TARGET MATCHES "wasm")
+    message(WARNING "Skipping apps when building under wasm")
+    return()
+endif()
+
 # add_app(HelloAndroid)  # TODO(#5374): missing CMake build
 # add_app(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
 # add_app(HelloPyTorch)  # TODO(#5374): missing CMake build
-# add_app(HelloWasm)  # TODO(#5374): missing CMake build
 # add_app(HelloiOS)  # TODO(#5374): missing CMake build
 # add_app(auto_viz)  # TODO(#5374): missing CMake build
 add_app(bgu)

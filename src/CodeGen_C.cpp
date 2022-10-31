@@ -68,6 +68,7 @@ const string headers = R"INLINE_CODE(
 #include <stdio.h>
 #include <string.h>
 #include <type_traits>
+#include <fenv.h>
 )INLINE_CODE";
 
 // We now add definitions of things in the runtime which are
@@ -109,7 +110,6 @@ inline float log_f32(float x) {return logf(x);}
 inline float pow_f32(float x, float y) {return powf(x, y);}
 inline float floor_f32(float x) {return floorf(x);}
 inline float ceil_f32(float x) {return ceilf(x);}
-inline float round_f32(float x) {return nearbyint(x);}
 
 inline double sqrt_f64(double x) {return sqrt(x);}
 inline double sin_f64(double x) {return sin(x);}
@@ -128,7 +128,6 @@ inline double log_f64(double x) {return log(x);}
 inline double pow_f64(double x, double y) {return pow(x, y);}
 inline double floor_f64(double x) {return floor(x);}
 inline double ceil_f64(double x) {return ceil(x);}
-inline double round_f64(double x) {return nearbyint(x);}
 
 inline float nan_f32() {return NAN;}
 inline float neg_inf_f32() {return -INFINITY;}
@@ -2069,7 +2068,12 @@ void CodeGen_C::visit(const Variable *op) {
         // This is the name of a global, so we can't modify it.
         id = op->name;
     } else {
-        id = print_name(op->name);
+        // This substitution ensures const correctness for all calls
+        if (op->name == "__user_context") {
+            id = "_ucon";
+        } else {
+            id = print_name(op->name);
+        }
     }
 }
 
@@ -2378,6 +2382,11 @@ void CodeGen_C::visit(const Call *op) {
             create_assertion(op->args[0], op->args[2]);
             rhs << print_expr(op->args[1]);
         }
+    } else if (op->is_intrinsic(Call::round)) {
+        // There's no way to get rounding with ties to nearest even that works
+        // in all contexts where someone might be compiling generated C++ code,
+        // so we just lower it into primitive operations.
+        rhs << print_expr(lower_round_to_nearest_ties_to_even(op->args[0]));
     } else if (op->is_intrinsic(Call::abs)) {
         internal_assert(op->args.size() == 1);
         Expr a0 = op->args[0];
@@ -2755,7 +2764,7 @@ void CodeGen_C::visit(const Store *op) {
 void CodeGen_C::visit(const Let *op) {
     string id_value = print_expr(op->value);
     Expr body = op->body;
-    if (op->value.type().is_handle()) {
+    if (op->value.type().is_handle() && op->name != "__user_context") {
         // The body might contain a Load that references this directly
         // by name, so we can't rewrite the name.
         std::string name = print_name(op->name);
@@ -2850,7 +2859,7 @@ void CodeGen_C::visit(const LetStmt *op) {
     string id_value = print_expr(op->value);
     Stmt body = op->body;
 
-    if (op->value.type().is_handle()) {
+    if (op->value.type().is_handle() && op->name != "__user_context") {
         // The body might contain a Load or Store that references this
         // directly by name, so we can't rewrite the name.
         std::string name = print_name(op->name);

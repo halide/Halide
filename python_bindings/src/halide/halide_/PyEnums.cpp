@@ -9,6 +9,15 @@ void define_enums(py::module &m) {
         .value("InputBuffer", Argument::Kind::InputBuffer)
         .value("OutputBuffer", Argument::Kind::OutputBuffer);
 
+    py::enum_<Internal::ArgInfoKind>(m, "ArgInfoKind")
+        .value("Scalar", Internal::ArgInfoKind::Scalar)
+        .value("Buffer", Internal::ArgInfoKind::Buffer)
+        .value("Function", Internal::ArgInfoKind::Function);
+
+    py::enum_<Internal::ArgInfoDirection>(m, "ArgInfoDirection")
+        .value("Input", Internal::ArgInfoDirection::Input)
+        .value("Output", Internal::ArgInfoDirection::Output);
+
     py::enum_<DeviceAPI>(m, "DeviceAPI")
         .value("None", DeviceAPI::None)
         .value("Host", DeviceAPI::Host)
