@@ -3,6 +3,7 @@
 #include "device_interface.h"
 #include "mini_opengl.h"
 #include "printer.h"
+#include "scoped_mutex_lock.h"
 
 // Implementation note: all function that directly or indirectly access the
 // runtime state in halide_openglcompute_state must be declared as WEAK, otherwise
@@ -107,29 +108,51 @@ struct KernelInfo {
 };
 
 struct ModuleState {
-    KernelInfo *kernel;
-    ModuleState *next;
-};
+    KernelInfo *find_kernel_by_name(const char *kernel_name);
+    void add_kernel(KernelInfo *kernel);
+    void release_kernels();
+    bool has_kernels();
 
-WEAK KernelInfo *find_kernel_by_name(const char *kernel_name, const ModuleState *module) {
-    KernelInfo *kernel = module->kernel;
-    while (kernel && strcmp(kernel_name, kernel->kernel_name) != 0) {
-        kernel = kernel->next;
-    }
-    return kernel;
-}
+    // Note that the ctor to this is never called;
+    // we just malloc() an entry and memset it all to zero,
+    // so all members should treat zero as a good default state.
+
+    ModuleState *next;
+
+private:
+    halide_mutex kernel_list_lock_;
+    KernelInfo *kernel_;
+};
 
 // All persistent state maintained by the runtime.
 struct GlobalState {
-    void init();
+    enum InitResult {
+        InitializedOK = 0,
+        InitializedWithError = -1,
+        NotInitialized = -2
+    };
+
+    InitResult init(void *user_context);
+    ModuleState *init_module(void *user_context, void **state_ptr);
+    void release_modules(void *user_context);
     bool CheckAndReportError(void *user_context, const char *location);
 
-    bool initialized;
+#ifdef DEBUG_RUNTIME
+    bool is_inited_ok();
+#endif
 
     // Declare pointers used OpenGL functions
-#define GLFUNC(PTYPE, VAR) PTYPE VAR
+#define GLFUNC(PTYPE, VAR) PTYPE VAR = nullptr;
     USED_GL_FUNCTIONS;
 #undef GLFUNC
+
+private:
+    bool fill_in_funcs(void *user_context);
+
+    halide_mutex global_state_lock_ = {{0}};
+
+    InitResult init_result_ = NotInitialized;
+    ModuleState *module_state_list_ = nullptr;
 };
 
 WEAK bool GlobalState::CheckAndReportError(void *user_context, const char *location) {
@@ -147,7 +170,6 @@ WEAK bool GlobalState::CheckAndReportError(void *user_context, const char *locat
 WEAK GlobalState global_state;
 
 // A list of module-specific state. Each module corresponds to a single Halide filter
-WEAK ModuleState *state_list;
 
 // ---------- Helper functions ----------
 
@@ -167,13 +189,6 @@ WEAK void debug_buffer(void *user_context, halide_buffer_t *buf) {
         << "  device_dirty: " << buf->device_dirty() << "\n";
 }
 
-WEAK void GlobalState::init() {
-    initialized = false;
-#define GLFUNC(type, name) name = nullptr;
-    USED_GL_FUNCTIONS;
-#undef GLFUNC
-}
-
 WEAK int load_gl_func(void *user_context, const char *name, void **ptr, bool required) {
     void *p = halide_opengl_get_proc_address(user_context, name);
     if (!p && required) {
@@ -184,32 +199,112 @@ WEAK int load_gl_func(void *user_context, const char *name, void **ptr, bool req
     return 0;
 }
 
-// Initialize the OpenGL-specific parts of the runtime.
-WEAK int halide_openglcompute_init(void *user_context) {
-    if (global_state.initialized) {
-        return 0;
-    }
+#ifdef DEBUG_RUNTIME
+WEAK bool GlobalState::is_inited_ok() {
+    ScopedMutexLock lock(&global_state_lock_);
+    return init_result_ == GlobalState::InitializedOK;
+}
+#endif
 
-    global_state.init();
-
-    // Make a context if there isn't one
-    if (halide_opengl_create_context(user_context)) {
-        error(user_context) << "Failed to make OpenGL context";
-        return -1;
-    }
-
+WEAK bool GlobalState::fill_in_funcs(void *user_context) {
     // Initialize pointers to OpenGL functions.
-#define GLFUNC(TYPE, VAR)                                                              \
-    if (load_gl_func(user_context, "gl" #VAR, (void **)&global_state.VAR, true) < 0) { \
-        return -1;                                                                     \
+#define GLFUNC(TYPE, VAR)                                                   \
+    if (load_gl_func(user_context, "gl" #VAR, (void **)&(VAR), true) < 0) { \
+        return false;                                                       \
     }
     USED_GL_FUNCTIONS;
 #undef GLFUNC
 
-    debug(user_context) << "Halide running on " << global_state.GetString(GL_VERSION) << "\n";
+    return true;
+}
 
-    global_state.initialized = true;
-    return 0;
+WEAK GlobalState::InitResult GlobalState::init(void *user_context) {
+    ScopedMutexLock lock(&global_state_lock_);
+
+    if (init_result_ == GlobalState::NotInitialized) {
+        init_result_ = InitializedWithError;
+
+        // Make a context if there isn't one
+        if (halide_opengl_create_context(user_context)) {
+            error(user_context) << "Failed to make OpenGL context";
+            return init_result_;
+        }
+        if (!fill_in_funcs(user_context)) {
+            return init_result_;
+        }
+
+        init_result_ = InitializedOK;
+        debug(user_context) << "OpenGLCompute: Halide running on " << (const char *)GetString(GL_VERSION) << "\n";
+    }
+
+    return init_result_;
+}
+
+WEAK ModuleState *GlobalState::init_module(void *user_context, void **state_ptr) {
+    ScopedMutexLock lock(&global_state_lock_);
+
+    if (init_result_ == InitializedOK) {
+        ModuleState **state = (ModuleState **)state_ptr;
+        ModuleState *module = *state;
+        if (!module) {
+            module = (ModuleState *)malloc(sizeof(ModuleState));
+            memset(module, 0, sizeof(ModuleState));
+            module->next = module_state_list_;
+            module_state_list_ = module;
+            *state = module;
+        }
+        return module;
+    }
+
+    return nullptr;
+}
+
+WEAK void GlobalState::release_modules(void *user_context) {
+    ScopedMutexLock lock(&global_state_lock_);
+
+    while (module_state_list_) {
+        module_state_list_->release_kernels();
+        ModuleState *next = module_state_list_->next;
+        // do not call free(module_state_list_) to avoid dangling pointers: the module state
+        // is still referenced in the code generated by Halide (see
+        // CodeGen_GPU_Host::get_module_state).
+        module_state_list_ = next;
+    }
+}
+
+WEAK KernelInfo *ModuleState::find_kernel_by_name(const char *kernel_name) {
+    ScopedMutexLock lock(&kernel_list_lock_);
+
+    KernelInfo *k = kernel_;
+    while (k && strcmp(kernel_name, k->kernel_name) != 0) {
+        k = k->next;
+    }
+    return k;
+}
+
+WEAK void ModuleState::add_kernel(KernelInfo *kernel) {
+    ScopedMutexLock lock(&kernel_list_lock_);
+
+    kernel->next = kernel_;
+    kernel_ = kernel;
+}
+
+WEAK void ModuleState::release_kernels() {
+    ScopedMutexLock lock(&kernel_list_lock_);
+
+    while (kernel_) {
+        KernelInfo *next_kernel = kernel_->next;
+        global_state.DeleteProgram(kernel_->program_id);
+        free(kernel_->kernel_name);
+        free(kernel_);
+        kernel_ = next_kernel;
+    }
+}
+
+WEAK bool ModuleState::has_kernels() {
+    ScopedMutexLock lock(&kernel_list_lock_);
+
+    return kernel_ != nullptr;
 }
 
 // Release all data allocated by the runtime.
@@ -224,25 +319,7 @@ WEAK int halide_openglcompute_device_release(void *user_context) {
     debug(user_context) << "OpenGLCompute: halide_openglcompute_device_release(user_context: "
                         << user_context << ")\n";
 
-    ModuleState *mod = state_list;
-    while (mod) {
-        KernelInfo *kernel = mod->kernel;
-        while (kernel) {
-            KernelInfo *next_kernel = kernel->next;
-            global_state.DeleteProgram(kernel->program_id);
-            free(kernel->kernel_name);
-            free(kernel);
-            kernel = next_kernel;
-        }
-        mod->kernel = nullptr;
-        ModuleState *next = mod->next;
-        // do not call free(mod) to avoid dangling pointers: the module state
-        // is still referenced in the code generated by Halide (see
-        // CodeGen_GPU_Host::get_module_state).
-        mod = next;
-    }
-
-    global_state = GlobalState();
+    global_state.release_modules(user_context);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -263,9 +340,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     debug(user_context) << "OpenGLCompute: halide_openglcompute_device_malloc (user_context: "
                         << user_context << ", buf: " << buf << ")\n";
 
-    if (int error = halide_openglcompute_init(user_context)) {
-        return error;
-    }
+    halide_debug_assert(user_context, global_state.is_inited_ok());
 
     size_t size = buf->size_in_bytes();
     halide_abort_if_false(user_context, size != 0);
@@ -290,9 +365,6 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
                         << buf->dim[3].stride << " "
                         << "(type: " << buf->type << ")\n";
 
-    if (int error = halide_openglcompute_init(user_context)) {
-        return error;
-    }
     debug(user_context) << "openglcompute_device_malloc: initialization completed.\n";
 
     if (!buf) {
@@ -340,10 +412,7 @@ WEAK int halide_openglcompute_device_free(void *user_context, halide_buffer_t *b
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    if (!global_state.initialized) {
-        error(user_context) << "OpenGL runtime not initialized in call to halide_openglcompute_device_free.";
-        return 1;
-    }
+    halide_debug_assert(user_context, global_state.is_inited_ok());
 
     if (buf->device == 0) {
         return 0;
@@ -401,15 +470,12 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    if (!global_state.initialized) {
-        error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_copy_to_device).";
-        return 1;
-    }
+    halide_debug_assert(user_context, global_state.is_inited_ok());
 
     GLuint the_buffer = (GLuint)buf->device;
     debug(user_context) << "OGLC: halide_openglcompute_copy_to_device ("
                         << "user_context: " << user_context
-                        << ", buf: " << buf
+                        << ", buf: " << *buf
                         << ", the_buffer:" << the_buffer << ")\n";
 
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
@@ -423,17 +489,22 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
         return 1;
     }
 
-    debug(user_context) << "Calling global_state.MapBufferRange(GL_ARRAY_BUFFER, 0, " << (uint64_t)size << ", GL_MAP_READ_BIT|GL_MAP_WRITE_BIT)\n";
+    debug(user_context) << "Calling global_state.MapBufferRange(GL_ARRAY_BUFFER, 0, " << (uint64_t)size << ", GL_MAP_WRITE_BIT)\n";
     void *device_data = global_state.MapBufferRange(GL_ARRAY_BUFFER,
                                                     0,
                                                     size,
-                                                    GL_MAP_READ_BIT | GL_MAP_WRITE_BIT);
-    if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) {
+                                                    GL_MAP_WRITE_BIT);
+    // MapBufferRange may simply return null for errors, so be sure to check that too.
+    if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange") || device_data == nullptr) {
+        error(user_context) << "global_state.MapBufferRange() failed!\n";
         return 1;
     }
+    halide_debug_assert(user_context, device_data != nullptr);
     halide_buffer_t buf_copy = *buf;
     buf_copy.device = (uint64_t)device_data;
     device_copy dev_copy = make_host_to_device_copy(&buf_copy);
+    halide_debug_assert(user_context, dev_copy.src != 0);
+    halide_debug_assert(user_context, dev_copy.dst != 0);
 
     if (buf->type.code == halide_type_int) {
         if (buf->type.bits == 8) {
@@ -492,10 +563,7 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    if (!global_state.initialized) {
-        error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_copy_to_host).";
-        return 1;
-    }
+    halide_debug_assert(user_context, global_state.is_inited_ok());
 
     GLuint the_buffer = (GLuint)buf->device;
     size_t size = buf->size_in_bytes();
@@ -604,10 +672,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
         << "shmem: " << shared_mem_bytes << "\n";
 
-    if (!global_state.initialized) {
-        error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_run).";
-        return -1;
-    }
+    halide_debug_assert(user_context, global_state.is_inited_ok());
 
     ModuleState *mod = (ModuleState *)state_ptr;
     if (!mod) {
@@ -615,7 +680,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
         return -1;
     }
 
-    KernelInfo *kernel = find_kernel_by_name(entry_name, mod);
+    KernelInfo *kernel = mod->find_kernel_by_name(entry_name);
     if (!kernel) {
         error(user_context) << "Internal error: unknown kernel named '" << entry_name << "'";
         return -1;
@@ -633,7 +698,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
         debug(user_context) << "    args " << i
                             << " " << arg_types[i]
                             << " [" << (*((void **)args[i])) << " ...] "
-                            << arg_is_buffer[i] << "\n";
+                            << (arg_is_buffer[i] ? "buffer" : "scalar") << " ";
         if (arg_is_buffer[i] == 0) {
             if (arg_types[i].code == halide_type_int) {
                 int value;
@@ -726,10 +791,8 @@ WEAK int halide_openglcompute_device_sync(void *user_context, halide_buffer_t *)
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    if (!global_state.initialized) {
-        error(user_context) << "OpenGL Compute runtime not initialized (halide_openglcompute_device_sync).";
-        return 1;
-    }
+    halide_debug_assert(user_context, global_state.is_inited_ok());
+
     global_state.Finish();
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -759,21 +822,19 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    if (int error = halide_openglcompute_init(user_context)) {
+    if (int error = (int)global_state.init(user_context)) {
+        debug(user_context) << "halide_openglcompute_initialize_kernels: init() fails with " << error << "\n";
         return error;
     }
 
-    ModuleState **state = (ModuleState **)state_ptr;
-    ModuleState *module = *state;
+    ModuleState *module = global_state.init_module(user_context, state_ptr);
     if (!module) {
-        module = (ModuleState *)malloc(sizeof(ModuleState));
-        module->kernel = nullptr;
-        module->next = state_list;
-        state_list = module;
-        *state = module;
+        debug(user_context) << "halide_openglcompute_initialize_kernels(" << (void *)module << "): init_module() failed\n";
+        return -1;
     }
 
-    if (module->kernel) {
+    if (module->has_kernels()) {
+        debug(user_context) << "halide_openglcompute_initialize_kernels(" << (void *)module << "): already have kernel\n";
         return 0;
     }
 
@@ -798,8 +859,8 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
 
         KernelInfo *kernel = (KernelInfo *)malloc(sizeof(KernelInfo));
         kernel->kernel_name = kernel_name;
-        kernel->next = module->kernel;
-        module->kernel = kernel;
+        kernel->next = nullptr;
+        module->add_kernel(kernel);
 
         GLuint shader = global_state.CreateShader(GL_COMPUTE_SHADER);
         if (global_state.CheckAndReportError(user_context, "create shader")) {
@@ -809,7 +870,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         const GLint sources_lengths = {(GLint)src_len};
 
 #ifdef DEBUG_RUNTIME
-        print(user_context) << "Compute shader source for: " << kernel_name;
+        print(user_context) << "Compute shader source for: " << kernel_name << "\n";
         halide_print(user_context, src);
 #endif
 
@@ -828,7 +889,12 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
             print(user_context) << "Could not compile shader:\n";
             GLint log_len;
             global_state.GetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_len);
+            if (global_state.CheckAndReportError(user_context, "get shader log length")) {
+                return -1;
+            }
+            print(user_context) << "log_len:" << log_len << "\n";
             HalideMalloc log_tmp(user_context, log_len);
+            print(user_context) << "log_tmp.ptr:" << log_tmp.ptr << "\n";
             if (log_tmp.ptr) {
                 char *log = (char *)log_tmp.ptr;
                 global_state.GetShaderInfoLog(shader, log_len, nullptr, log);
@@ -865,6 +931,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
                                     << log << "\n";
             }
             global_state.DeleteProgram(program);
+            debug(user_context) << "status failure: " << status << "\n";
             return -1;
         }
         kernel->program_id = program;
