@@ -6,7 +6,7 @@ import numpy as np
 
 
 def is_interleaved(im):
-    """If the given ndarray is 3-dimensional and appears to have an interleaved
+    """If the given buffer is 3-dimensional and appears to have an interleaved
        layout, return True. Otherwise, return False."""
 
     # Assume that 'interleaved' will only apply to channels <= 4
@@ -15,9 +15,9 @@ def is_interleaved(im):
 
 
 def _as_interleaved(im):
-    """If the given ndarray is 3-dimensional and appears to be planar layout,
+    """If the given buffer is 3-dimensional and appears to be planar layout,
        return a view that is in interleaved form, leaving the input unchanged.
-       Otherwise, return the image ndarray unchanged.
+       Otherwise, return the image buffer unchanged.
        Note that this call must be used with care, as the returnee may or may
        not be a copy."""
     mv = memoryview(im)
@@ -28,9 +28,9 @@ def _as_interleaved(im):
 
 
 def _as_planar(im):
-    """If the given ndarray is 3-dimensional and appears to be interleaved
+    """If the given buffer is 3-dimensional and appears to be interleaved
        layout, return a view that is in planar form, leaving the input
-       unchanged. Otherwise, return the image ndarray unchanged.
+       unchanged. Otherwise, return the image buffer unchanged.
        Note that this call must be used with care, as the returnee may or may
        not be a copy."""
     mv = memoryview(im)
@@ -41,7 +41,7 @@ def _as_planar(im):
 
 
 def copy_to_interleaved(im):
-    """If the given ndarray is 3-dimensional and appears to be planar
+    """If the given buffer is 3-dimensional and appears to be planar
        layout, return a copy that is in interleaved form. Otherwise, return
        an unchanged copy of the input. Note that this call will always return
        a copy, leaving the input unchanged."""
@@ -49,7 +49,7 @@ def copy_to_interleaved(im):
 
 
 def copy_to_planar(im):
-    """If the given ndarray is 3-dimensional and appears to be interleaved
+    """If the given buffer is 3-dimensional and appears to be interleaved
        layout, return a copy that is in planar form. Otherwise, return
        an unchanged copy of the input. Note that this call will always return
        a copy, leaving the input unchanged."""
