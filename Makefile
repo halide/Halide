@@ -768,6 +768,7 @@ RUNTIME_CPP_COMPONENTS = \
   errors \
   fake_get_symbol \
   fake_thread_pool \
+  fake_halide_context \
   float16_t \
   force_include_types \
   fuchsia_clock \
@@ -805,6 +806,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_clock \
   posix_error_handler \
   posix_get_symbol \
+  posix_halide_context \
   posix_io \
   posix_print \
   posix_threads \
@@ -816,6 +818,7 @@ RUNTIME_CPP_COMPONENTS = \
   profiler_inlined \
   pseudostack \
   qurt_allocator \
+  qurt_halide_context \
   qurt_hvx \
   qurt_hvx_vtcm \
   qurt_threads \
@@ -825,6 +828,7 @@ RUNTIME_CPP_COMPONENTS = \
   runtime_api \
   timer_profiler \
   to_string \
+  tls_halide_context \
   trace_helper \
   tracing \
   wasm_cpu_features \
@@ -833,6 +837,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_d3d12compute_arm \
   windows_d3d12compute_x86 \
   windows_get_symbol \
+  windows_halide_context \
   windows_io \
   windows_opencl \
   windows_profiler \
@@ -1529,6 +1534,14 @@ $(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
 $(BIN_DIR)/$(TARGET)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
 
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.halide_generated.cpp
+
+$(BIN_DIR)/$(TARGET)/generator_aot_halide_context: $(ROOT_DIR)/test/generator/halide_context_aottest.cpp $(FILTERS_DIR)/async_parallel.a $(FILTERS_DIR)/async_parallel.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_halide_context: $(ROOT_DIR)/test/generator/halide_context_aottest.cpp $(FILTERS_DIR)/async_parallel.halide_generated.cpp $(FILTERS_DIR)/async_parallel.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
 $(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
 	@mkdir -p $(@D)

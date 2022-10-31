@@ -212,5 +212,11 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_d3d12compute_finalize_kernels,
     (void *)&halide_d3d12compute_release_context,
     (void *)&halide_d3d12compute_run,
+    (void *)&halide_context_allocate_key,
+    (void *)&halide_context_free_key,
+    (void *)&halide_context_get_value,
+    (void *)&halide_context_set_value,
+    (void *)&halide_context_get_current_info,
+    (void *)&halide_context_set_current_info,
     (void *)&halide_unused_force_include_types,
 };

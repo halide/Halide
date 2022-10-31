@@ -90,6 +90,7 @@ DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(fake_get_symbol)
 DECLARE_CPP_INITMOD(fake_thread_pool)
+DECLARE_CPP_INITMOD(fake_halide_context)
 DECLARE_CPP_INITMOD(float16_t)
 DECLARE_CPP_INITMOD(force_include_types)
 DECLARE_CPP_INITMOD(fuchsia_clock)
@@ -119,6 +120,7 @@ DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
 DECLARE_CPP_INITMOD(posix_get_symbol)
+DECLARE_CPP_INITMOD(posix_halide_context)
 DECLARE_CPP_INITMOD(posix_io)
 DECLARE_CPP_INITMOD(posix_print)
 DECLARE_CPP_INITMOD(posix_threads)
@@ -132,18 +134,21 @@ DECLARE_CPP_INITMOD(pseudostack)
 DECLARE_CPP_INITMOD(qurt_allocator)
 DECLARE_CPP_INITMOD(hexagon_cache_allocator)
 DECLARE_CPP_INITMOD(hexagon_dma_pool)
+DECLARE_CPP_INITMOD(qurt_halide_context)
 DECLARE_CPP_INITMOD(qurt_hvx)
 DECLARE_CPP_INITMOD(qurt_hvx_vtcm)
 DECLARE_CPP_INITMOD(qurt_threads)
 DECLARE_CPP_INITMOD(qurt_threads_tsan)
 DECLARE_CPP_INITMOD(qurt_yield)
 DECLARE_CPP_INITMOD(runtime_api)
+DECLARE_CPP_INITMOD(tls_halide_context)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
+DECLARE_CPP_INITMOD(windows_halide_context)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(windows_profiler)
@@ -755,6 +760,7 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(std::move(extra_module));
     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+    modules.push_back(get_initmod_fake_halide_context(c, bits_64, debug));
     modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
     modules.push_back(get_initmod_halide_buffer_t(c, bits_64, debug));
     modules.push_back(get_initmod_destructors(c, bits_64, debug));
@@ -789,6 +795,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         ModuleGPU
     } module_type;
 
+    bool is_aot = false;
     if (t.has_feature(Target::JIT)) {
         if (just_gpu) {
             module_type = ModuleGPU;
@@ -799,8 +806,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         }
     } else if (t.has_feature(Target::NoRuntime)) {
         module_type = ModuleAOTNoRuntime;
+        is_aot = true;
     } else {
         module_type = ModuleAOT;
+        is_aot = true;
     }
 
     //    Halide::Internal::debug(0) << "Getting initial module type " << (int)module_type << "\n";
@@ -833,6 +842,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
+                if (is_aot && t.arch == Target::X86) {
+                    // tls_halide_context is most efficient, but only for AOT code on x86-based systems
+                    modules.push_back(get_initmod_tls_halide_context(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_halide_context(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::WebAssemblyRuntime) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -845,8 +860,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.has_feature(Target::WasmThreads)) {
                     // Assume that the wasm libc will be providing pthreads
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_halide_context(c, bits_64, debug));
                 } else {
                     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                    modules.push_back(get_initmod_fake_halide_context(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
@@ -861,6 +878,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_posix_threads_tsan(c, bits_64, debug));
                 } else {
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+                }
+                if (is_aot && t.arch == Target::X86) {
+                    // tls_halide_context is most efficient, but only for AOT code on x86-based systems
+                    modules.push_back(get_initmod_tls_halide_context(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_halide_context(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
@@ -881,6 +904,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
+                if (is_aot && t.arch == Target::X86) {
+                    // tls_halide_context is most efficient, but only for AOT code on x86-based systems
+                    modules.push_back(get_initmod_tls_halide_context(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_halide_context(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -894,6 +923,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_windows_threads(c, bits_64, debug));
                 }
+                modules.push_back(get_initmod_windows_halide_context(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::IOS) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -908,6 +938,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
+                modules.push_back(get_initmod_posix_halide_context(c, bits_64, debug));
             } else if (t.os == Target::QuRT) {
                 modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_qurt_yield(c, bits_64, debug));
@@ -916,6 +947,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_qurt_threads(c, bits_64, debug));
                 }
+                modules.push_back(get_initmod_qurt_halide_context(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
                 // The OS-specific symbols provided by the modules
                 // above are expected to be provided by the containing
@@ -926,6 +958,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_fake_halide_context(c, bits_64, debug));
             } else if (t.os == Target::Fuchsia) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
@@ -939,6 +972,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
+                // TODO: probably needs attention, or at least careful testing
+                modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             }
         }

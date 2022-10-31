@@ -17,6 +17,7 @@ set(RUNTIME_CPP
     errors
     fake_get_symbol
     fake_thread_pool
+    fake_halide_context
     float16_t
     force_include_types
     fuchsia_clock
@@ -54,6 +55,7 @@ set(RUNTIME_CPP
     posix_clock
     posix_error_handler
     posix_get_symbol
+    posix_halide_context
     posix_io
     posix_print
     posix_threads
@@ -65,6 +67,7 @@ set(RUNTIME_CPP
     profiler_inlined
     pseudostack
     qurt_allocator
+    qurt_halide_context
     qurt_hvx
     qurt_hvx_vtcm
     qurt_threads
@@ -73,6 +76,7 @@ set(RUNTIME_CPP
     riscv_cpu_features
     runtime_api
     timer_profiler
+    tls_halide_context
     to_string
     trace_helper
     tracing
@@ -82,6 +86,7 @@ set(RUNTIME_CPP
     windows_d3d12compute_x86
     windows_d3d12compute_arm
     windows_get_symbol
+    windows_halide_context
     windows_io
     windows_opencl
     windows_profiler
