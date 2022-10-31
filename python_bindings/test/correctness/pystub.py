@@ -67,33 +67,36 @@ def test_simple(cls):
         # too many positional args
         f = cls.call(b_in, 3.5, 4)
     except hl.HalideError as e:
-        assert 'allows at most 2 positional args, but 3 were specified.' in str(e)
+        assert "allows at most 2 positional args, but 3 were specified." in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # too few positional args
         f = cls.call(b_in)
     except hl.HalideError as e:
-        assert 'requires 2 args, but 1 were specified.' in str(e)
+        assert "requires 2 args, but 1 were specified." in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
         f = cls.call(hl.f32(3.141592), "happy")
     except hl.HalideError as e:
-        assert 'Input buffer_input requires an ImageParam or Buffer argument' in str(e)
+        assert "Input buffer_input requires an ImageParam or Buffer argument" in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # Inputs that can't be converted to what the receiver needs (named)
         f = cls.call(b_in, float_arg="bogus")
     except hl.HalideError as e:
-        assert 'Input float_arg requires a Param (or scalar literal) argument when using call' in str(e)
+        assert (
+            "Input float_arg requires a Param (or scalar literal) argument when using call"
+            in str(e)
+        )
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # Input specified by both pos and kwarg
@@ -101,7 +104,7 @@ def test_simple(cls):
     except hl.HalideError as e:
         assert "Input float_arg specified multiple times." in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # generator_params is not a dict
@@ -109,7 +112,7 @@ def test_simple(cls):
     except hl.HalideError as e:
         assert "generator_params must be a dict" in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # Bad gp name
@@ -117,32 +120,35 @@ def test_simple(cls):
     except hl.HalideError as e:
         assert "has no GeneratorParam" in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # Bad input name
-        f = cls.call(buzzer_input=b_in,
-                     float_arg=3.5,
-                     generator_params=gp)
+        f = cls.call(buzzer_input=b_in, float_arg=3.5, generator_params=gp)
     except hl.HalideError as e:
         assert "Unknown input 'buzzer_input' specified via keyword argument" in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # Bad gp name
-        f = cls.call(buffer_input=b_in,
-                     float_arg=3.5,
-                     generator_params=gp,
-                     nonexistent_generator_param="wat")
+        f = cls.call(
+            buffer_input=b_in,
+            float_arg=3.5,
+            generator_params=gp,
+            nonexistent_generator_param="wat",
+        )
     except hl.HalideError as e:
-        assert "Unknown input 'nonexistent_generator_param' specified via keyword argument" in str(e)
+        assert (
+            "Unknown input 'nonexistent_generator_param' specified via keyword argument"
+            in str(e)
+        )
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
 
 def _make_constant_image(type):
-    constant_image = hl.Buffer(type, [32, 32, 3], 'constant_image')
+    constant_image = hl.Buffer(type, [32, 32, 3], "constant_image")
     for x in range(32):
         for y in range(32):
             for c in range(3):
@@ -150,10 +156,10 @@ def _make_constant_image(type):
     return constant_image
 
 
-def test_complex(cls, extra_input_name = ""):
+def test_complex(cls, extra_input_name=""):
     constant_image = _make_constant_image(hl.UInt(8))
     constant_image_u16 = _make_constant_image(hl.UInt(16))
-    input = hl.ImageParam(hl.UInt(8), 3, 'input')
+    input = hl.ImageParam(hl.UInt(8), 3, "input")
     input.set(constant_image)
 
     x, y, c = hl.Var(), hl.Var(), hl.Var()
@@ -184,8 +190,15 @@ def test_complex(cls, extra_input_name = ""):
 
     # return value is a tuple; unpack separately to avoid
     # making the callsite above unreadable
-    (simple_output, tuple_output, typed_buffer_output, untyped_buffer_output,
-     static_compiled_buffer_output, scalar_output, extra_func_output) = r
+    (
+        simple_output,
+        tuple_output,
+        typed_buffer_output,
+        untyped_buffer_output,
+        static_compiled_buffer_output,
+        scalar_output,
+        extra_func_output,
+    ) = r
 
     b = simple_output.realize([32, 32, 3], target)
     assert b.type() == hl.Float(32)
@@ -194,8 +207,7 @@ def test_complex(cls, extra_input_name = ""):
             for c in range(3):
                 expected = constant_image[x, y, c]
                 actual = b[x, y, c]
-                assert expected == actual, "Expected %s Actual %s" % (expected,
-                                                                      actual)
+                assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
     b = tuple_output.realize([32, 32, 3], target)
     assert b[0].type() == hl.Float(32)
@@ -208,9 +220,13 @@ def test_complex(cls, extra_input_name = ""):
                 expected2 = expected1 + int_arg
                 actual1, actual2 = b[0][x, y, c], b[1][x, y, c]
                 assert expected1 == actual1, "Expected1 %s Actual1 %s" % (
-                    expected1, actual1)
+                    expected1,
+                    actual1,
+                )
                 assert expected2 == actual2, "Expected2 %s Actual1 %s" % (
-                    expected2, actual2)
+                    expected2,
+                    actual2,
+                )
 
     # TODO: Output<Buffer<>> has additional behaviors useful when a Stub
     # is used within another Generator; this isn't yet implemented since there
@@ -223,8 +239,7 @@ def test_complex(cls, extra_input_name = ""):
             for c in range(3):
                 expected = constant_image[x, y, c]
                 actual = b[x, y, c]
-                assert expected == actual, "Expected %s Actual %s" % (expected,
-                                                                      actual)
+                assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
     b = untyped_buffer_output.realize([32, 32, 3], target)
     assert b.type() == hl.UInt(8)
@@ -233,8 +248,7 @@ def test_complex(cls, extra_input_name = ""):
             for c in range(3):
                 expected = constant_image[x, y, c]
                 actual = b[x, y, c]
-                assert expected == actual, "Expected %s Actual %s" % (expected,
-                                                                      actual)
+                assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
     b = static_compiled_buffer_output.realize([4, 4, 1], target)
     assert b.type() == hl.UInt(8)
@@ -243,8 +257,7 @@ def test_complex(cls, extra_input_name = ""):
             for c in range(1):
                 expected = constant_image[x, y, c] + 42
                 actual = b[x, y, c]
-                assert expected == actual, "Expected %s Actual %s" % (expected,
-                                                                      actual)
+                assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
     b = scalar_output.realize([], target)
     assert b.type() == hl.Float(32)
@@ -259,8 +272,7 @@ def test_complex(cls, extra_input_name = ""):
             else:
                 expected = 0
             actual = b[x, y]
-            assert expected == actual, "Expected %s Actual %s" % (expected,
-                                                                  actual)
+            assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
 
 if __name__ == "__main__":
@@ -268,7 +280,7 @@ if __name__ == "__main__":
     with hl.GeneratorContext(target):
         test_simple(simplecpp_pystub)
         test_complex(complexcpp_pystub)
-        test_complex(complexcpp_pystub, extra_input_name = "foo_input")
+        test_complex(complexcpp_pystub, extra_input_name="foo_input")
         test_simple(SimplePy)
         test_complex(ComplexPy)
-        test_complex(ComplexPy, extra_input_name = "foo_input")
+        test_complex(ComplexPy, extra_input_name="foo_input")
