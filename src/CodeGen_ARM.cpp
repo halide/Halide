@@ -980,14 +980,16 @@ void CodeGen_ARM::begin_func(LinkageType linkage, const std::string &simple_name
                              const std::string &extern_name, const std::vector<LoweredArgument> &args) {
     CodeGen_Posix::begin_func(linkage, simple_name, extern_name, args);
 
-    if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
-        // Make sure run-time vscale is equal to compile-time vscale
-        Value *val_runtime_vscale = codegen(runtime_vscale());
-        Value *val_compiletime_vscale = ConstantInt::get(i32_t, effective_vscale);
-        Value *cond = builder->CreateICmpEQ(val_runtime_vscale, val_compiletime_vscale);
-        create_assertion(cond, Call::make(Int(32), "halide_error_vscale_invalid",
-                                          {simple_name, runtime_vscale(), Expr(effective_vscale)}, Call::Extern));
-    }
+    // TODO: This assert causes LLVM compilation error in test/correctness/async_parallel_generator
+    //       where destructor block is updated later with "user_context1", which is undefined when this assert happens.
+    // if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
+    //     // Make sure run-time vscale is equal to compile-time vscale
+    //     Value *val_runtime_vscale = codegen(runtime_vscale());
+    //     Value *val_compiletime_vscale = ConstantInt::get(i32_t, effective_vscale);
+    //     Value *cond = builder->CreateICmpEQ(val_runtime_vscale, val_compiletime_vscale);
+    //     create_assertion(cond, Call::make(Int(32), "halide_error_vscale_invalid",
+    //                                       {simple_name, runtime_vscale(), Expr(effective_vscale)}, Call::Extern));
+    // }
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
