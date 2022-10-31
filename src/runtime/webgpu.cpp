@@ -254,12 +254,29 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
     }
     global_adapter = adapter;
 
+    // Use the defaults for most limits.
+    WGPURequiredLimits requestedLimits{.nextInChain = nullptr};
+    memset(&requestedLimits.limits, 0xFF, sizeof(WGPULimits));
+
+    WGPUSupportedLimits supportedLimits{.nextInChain = nullptr};
+    if (!wgpuAdapterGetLimits(adapter, &supportedLimits)) {
+        debug(user_context) << "wgpuAdapterGetLimits failed\n";
+    } else {
+        // Raise the limits on buffer size and workgroup storage size.
+        requestedLimits.limits.maxBufferSize =
+            supportedLimits.limits.maxBufferSize;
+        requestedLimits.limits.maxStorageBufferBindingSize =
+            supportedLimits.limits.maxStorageBufferBindingSize;
+        requestedLimits.limits.maxComputeWorkgroupStorageSize =
+            supportedLimits.limits.maxComputeWorkgroupStorageSize;
+    }
+
     WGPUDeviceDescriptor desc = {
         .nextInChain = nullptr,
         .label = nullptr,
         .requiredFeaturesCount = 0,
         .requiredFeatures = nullptr,
-        .requiredLimits = nullptr,
+        .requiredLimits = &requestedLimits,
     };
     wgpuAdapterRequestDevice(adapter, &desc, request_device_callback,
                              user_context);
