@@ -2,7 +2,7 @@ try:
     import imageio.v2 as imageio
 except:
     import imageio
-import numpy
+import numpy as np
 
 
 def is_interleaved(im):
@@ -10,7 +10,8 @@ def is_interleaved(im):
        layout, return True. Otherwise, return False."""
 
     # Assume that 'interleaved' will only apply to channels <= 4
-    return im.ndim == 3 and im.strides[2] == 1 and im.shape[2] in [1, 2, 3, 4]
+    mv = memoryview(im)
+    return mv.ndim == 3 and mv.strides[2] == 1 and mv.shape[2] in [1, 2, 3, 4]
 
 
 def _as_interleaved(im):
@@ -19,10 +20,11 @@ def _as_interleaved(im):
        Otherwise, return the image ndarray unchanged.
        Note that this call must be used with care, as the returnee may or may
        not be a copy."""
-    if im.ndim == 3 and not is_interleaved(im):
-        return numpy.moveaxis(im, 0, 2)
+    mv = memoryview(im)
+    if mv.ndim == 3 and not is_interleaved(mv):
+        return np.moveaxis(mv, 0, 2)
     else:
-        return im
+        return mv
 
 
 def _as_planar(im):
@@ -31,10 +33,11 @@ def _as_planar(im):
        unchanged. Otherwise, return the image ndarray unchanged.
        Note that this call must be used with care, as the returnee may or may
        not be a copy."""
-    if is_interleaved(im):
-        return numpy.moveaxis(im, 2, 0)
+    mv = memoryview(im)
+    if is_interleaved(mv):
+        return np.moveaxis(mv, 2, 0)
     else:
-        return im
+        return mv
 
 
 def copy_to_interleaved(im):
@@ -42,7 +45,7 @@ def copy_to_interleaved(im):
        layout, return a copy that is in interleaved form. Otherwise, return
        an unchanged copy of the input. Note that this call will always return
        a copy, leaving the input unchanged."""
-    return _as_interleaved(im).copy()
+    return np.copy(_as_interleaved(im))
 
 
 def copy_to_planar(im):
@@ -50,7 +53,7 @@ def copy_to_planar(im):
        layout, return a copy that is in planar form. Otherwise, return
        an unchanged copy of the input. Note that this call will always return
        a copy, leaving the input unchanged."""
-    return _as_planar(im).copy()
+    return np.copy(_as_planar(im))
 
 
 def imread(uri, format=None, **kwargs):
