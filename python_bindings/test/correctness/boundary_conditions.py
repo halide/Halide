@@ -1,4 +1,3 @@
-
 import halide as hl
 
 test_exterior = 42
@@ -9,7 +8,7 @@ x, y = hl.Var(), hl.Var()
 
 
 def expect_eq(actual, expected):
-    assert expected == actual, 'Failed: expected %d, actual %d' % (expected, actual)
+    assert expected == actual, "Failed: expected %d, actual %d" % (expected, actual)
 
 
 def schedule_test(f, vector_width, target):
@@ -21,8 +20,17 @@ def schedule_test(f, vector_width, target):
         f.gpu_tile(x, y, xo, yo, xi, yi, 2, 2)
 
 
-def realize_and_check(f, checker, input, test_min_x, test_extent_x, test_min_y,
-                      test_extent_y, vector_width, target):
+def realize_and_check(
+    f,
+    checker,
+    input,
+    test_min_x,
+    test_extent_x,
+    test_min_y,
+    test_extent_y,
+    vector_width,
+    target,
+):
     result = hl.Buffer(hl.UInt(8), [test_extent_x, test_extent_y])
     result.set_min([test_min_x, test_min_y])
     f2 = hl.lambda_func(x, y, f[x, y])
@@ -91,58 +99,100 @@ def test_all(vector_width, target):
     input = hl.Buffer(hl.UInt(8), [W, H])
     for r in range(H):
         for c in range(W):
-            input[c, r] = (c + r * W) & 0xff
+            input[c, r] = (c + r * W) & 0xFF
 
     input_f = hl.Func()
     input_f[x, y] = input[x, y]
 
     tests = [
-            (hl.BoundaryConditions.constant_exterior, check_constant_exterior),
-            (hl.BoundaryConditions.repeat_edge, check_repeat_edge),
-            (hl.BoundaryConditions.repeat_image, check_repeat_image),
-            (hl.BoundaryConditions.mirror_image, check_mirror_image),
-            (hl.BoundaryConditions.mirror_interior, check_mirror_interior),
+        (hl.BoundaryConditions.constant_exterior, check_constant_exterior),
+        (hl.BoundaryConditions.repeat_edge, check_repeat_edge),
+        (hl.BoundaryConditions.repeat_image, check_repeat_image),
+        (hl.BoundaryConditions.mirror_image, check_mirror_image),
+        (hl.BoundaryConditions.mirror_interior, check_mirror_interior),
     ]
 
     for bc, checker in tests:
         # print('  Testing %s:%d...' % (bc.__name__, vector_width))
-        func_input_args = {'f': input_f, 'bounds': [(0, W), (0, H)]}
-        image_input_args = {'f': input, 'bounds': [(0, W), (0, H)]}
-        undef_min_args = {'f': input, 'bounds': [(hl.Expr(), hl.Expr()), (0, H)]}
-        undef_max_args = {'f': input, 'bounds': [(0, W), (hl.Expr(), hl.Expr())]}
-        implicit_bounds_args = {'f': input}
+        func_input_args = {"f": input_f, "bounds": [(0, W), (0, H)]}
+        image_input_args = {"f": input, "bounds": [(0, W), (0, H)]}
+        undef_min_args = {"f": input, "bounds": [(hl.Expr(), hl.Expr()), (0, H)]}
+        undef_max_args = {"f": input, "bounds": [(0, W), (hl.Expr(), hl.Expr())]}
+        implicit_bounds_args = {"f": input}
 
         if bc == hl.BoundaryConditions.constant_exterior:
-            func_input_args['exterior'] = test_exterior
-            image_input_args['exterior'] = test_exterior
-            undef_min_args['exterior'] = test_exterior
-            undef_max_args['exterior'] = test_exterior
-            implicit_bounds_args['exterior'] = test_exterior
+            func_input_args["exterior"] = test_exterior
+            image_input_args["exterior"] = test_exterior
+            undef_min_args["exterior"] = test_exterior
+            undef_max_args["exterior"] = test_exterior
+            implicit_bounds_args["exterior"] = test_exterior
 
         realize_and_check(
-                bc(**func_input_args), checker, input, test_min, test_extent, test_min,
-                test_extent, vector_width, target)
+            bc(**func_input_args),
+            checker,
+            input,
+            test_min,
+            test_extent,
+            test_min,
+            test_extent,
+            vector_width,
+            target,
+        )
         realize_and_check(
-                bc(**image_input_args), checker, input, test_min, test_extent, test_min,
-                test_extent, vector_width, target)
+            bc(**image_input_args),
+            checker,
+            input,
+            test_min,
+            test_extent,
+            test_min,
+            test_extent,
+            vector_width,
+            target,
+        )
         realize_and_check(
-                bc(**undef_min_args), checker, input, 0, W, test_min, test_extent,
-                vector_width, target)
+            bc(**undef_min_args),
+            checker,
+            input,
+            0,
+            W,
+            test_min,
+            test_extent,
+            vector_width,
+            target,
+        )
         realize_and_check(
-                bc(**undef_max_args), checker, input, test_min, test_extent, 0, H,
-                vector_width, target)
+            bc(**undef_max_args),
+            checker,
+            input,
+            test_min,
+            test_extent,
+            0,
+            H,
+            vector_width,
+            target,
+        )
         realize_and_check(
-                bc(**implicit_bounds_args), checker, input, test_min, test_extent,
-                test_min, test_extent, vector_width, target)
+            bc(**implicit_bounds_args),
+            checker,
+            input,
+            test_min,
+            test_extent,
+            test_min,
+            test_extent,
+            vector_width,
+            target,
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     target = hl.get_jit_target_from_environment()
 
     vector_width_power_max = 6
     # https://github.com/halide/Halide/issues/2148
-    if target.has_feature(hl.TargetFeature.Metal) or target.has_feature(hl.TargetFeature.D3D12Compute):
-        vector_width_power_max = 3;
+    if target.has_feature(hl.TargetFeature.Metal) or target.has_feature(
+        hl.TargetFeature.D3D12Compute
+    ):
+        vector_width_power_max = 3
 
     for i in range(0, vector_width_power_max):
         vector_width = 1 << i

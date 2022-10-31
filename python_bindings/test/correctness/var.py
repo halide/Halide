@@ -1,5 +1,6 @@
 import halide as hl
 
+
 def test_var():
     v1 = hl.Var()
     v2 = hl.Var()
@@ -42,7 +43,7 @@ def test_var():
     assert outermost.name() == "__outermost"
 
     # repr() and str()
-    x = hl.Var('x')
+    x = hl.Var("x")
     assert str(x) == "x"
     assert repr(x) == "<halide.Var 'x'>"
 
@@ -51,6 +52,7 @@ def test_var():
 
     # This verifies that halide.Var is explicitly convertible to halide.Expr
     r = hl.random_int(hl.Expr(x))
+
 
 if __name__ == "__main__":
     test_var()

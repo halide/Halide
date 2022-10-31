@@ -1,8 +1,8 @@
 import halide as hl
 
-x = hl.Var('x')
-y = hl.Var('y')
-c = hl.Var('c')
+x = hl.Var("x")
+y = hl.Var("y")
+c = hl.Var("c")
 
 # Note that this Generator explicitly inherits from hl.Generator;
 # this isn't necessary (the decorator will inject the base class for you),
@@ -10,7 +10,8 @@ c = hl.Var('c')
 # as pytype. Thus, this is left here as a test to verify that this option
 # remains functional.
 
-@hl.generator(name = "complexpy")
+
+@hl.generator(name="complexpy")
 class ComplexPy(hl.Generator):
     vectorize = hl.GeneratorParam(True)
     extra_input_name = hl.GeneratorParam("")
@@ -40,12 +41,18 @@ class ComplexPy(hl.Generator):
 
         g.simple_output[x, y, c] = hl.f32(g.simple_input[x, y, c])
         g.typed_buffer_output[x, y, c] = hl.f32(g.typed_buffer_input[x, y, c])
-        g.untyped_buffer_output[x, y, c] = hl.cast(g.untyped_buffer_output.type(), g.untyped_buffer_input[x, y, c])
+        g.untyped_buffer_output[x, y, c] = hl.cast(
+            g.untyped_buffer_output.type(),
+            g.untyped_buffer_input[x, y, c],
+        )
 
         intermediate = hl.Func("intermediate")
         intermediate[x, y, c] = g.simple_input[x, y, c] * g.float_arg
 
-        g.tuple_output[x, y, c] = (intermediate[x, y, c], intermediate[x, y, c] + g.int_arg)
+        g.tuple_output[x, y, c] = (
+            intermediate[x, y, c],
+            intermediate[x, y, c] + g.int_arg,
+        )
 
         # This should be compiled into the Generator product itself,
         # and not produce another input for the Stub or AOT filter.
@@ -65,9 +72,12 @@ class ComplexPy(hl.Generator):
 
         g.scalar_output[()] = g.float_arg + g.int_arg
 
-        intermediate.compute_at(g.tuple_output, y);
-        intermediate.specialize(g.vectorize).vectorize(x, g.natural_vector_size(hl.Float(32)));
+        (
+            intermediate.compute_at(g.tuple_output, y)
+            .specialize(g.vectorize)
+            .vectorize(x, g.natural_vector_size(hl.Float(32)))
+        )
+
 
 if __name__ == "__main__":
     hl.main()
-

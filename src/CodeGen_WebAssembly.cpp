@@ -187,7 +187,7 @@ void CodeGen_WebAssembly::visit(const Call *op) {
 
     // clang-format off
     static const Pattern patterns[] = {
-        {"q15mulr_sat_s", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))), Target::WasmSimd128},
+        {"q15mulr_sat_s", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15), Target::WasmSimd128},
         {"saturating_narrow", i8_sat(wild_i16x_), Target::WasmSimd128},
         {"saturating_narrow", u8_sat(wild_i16x_), Target::WasmSimd128},
         {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
