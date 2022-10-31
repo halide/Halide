@@ -172,6 +172,13 @@ void CodeGen_WebGPU_Dev::init_module() {
         << "fn tan_f32(x : f32) -> f32 {return tan(x);}\n"
         << "fn tanh_f32(x : f32) -> f32 {return tanh(x);}\n"
         << "fn trunc_f32(x : f32) -> f32 {return trunc(x);}\n";
+
+    // Create pipeline-overridable constants for the workgroup size and
+    // workgroup array size.
+    src_stream << "override wgsize_x : u32;\n"
+               << "override wgsize_y : u32;\n"
+               << "override wgsize_z : u32;\n"
+               << "override workgroup_mem_bytes : u32;\n";
 }
 
 vector<char> CodeGen_WebGPU_Dev::compile_to_src() {
@@ -359,54 +366,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
                << args_var << " : " << struct_name << " ;\n\n";
     }
 
-    // Determine the workgroup size.
-    // TODO: Remove this and use overridable constants instead.
-    struct GetWorkgroupSize : public IRVisitor {
-        using IRVisitor::visit;
-        void visit(const For *loop) override {
-            if (!is_gpu_var(loop->name)) {
-                return loop->body.accept(this);
-            }
-            if (loop->for_type != ForType::GPUThread) {
-                return loop->body.accept(this);
-            }
-            int index = loop_name_to_wgsize_index(loop->name);
-            user_assert(index >= 0 && index <= 2)
-                << "invalid 'wgsize' index for loop variable '" << loop->name
-                << "'.\n";
-            const IntImm *limit = loop->extent.as<IntImm>();
-            user_assert(limit != nullptr)
-                << "dynamic workgroup sizes are not yet supported.";
-            user_assert(limit->value > 0)
-                << "'" << loop->name << "' must be greater than zero.\n";
-            values[index] = limit->value;
-            debug(4) << "wgsize[" << index << "] is " << values[index] << "\n";
-            loop->body.accept(this);
-        }
-        int loop_name_to_wgsize_index(const string &name) {
-            string ids[] = {
-                ".__thread_id_x",
-                ".__thread_id_y",
-                ".__thread_id_z",
-                ".__thread_id_w",
-            };
-            for (auto &id : ids) {
-                if (ends_with(name, id)) {
-                    return (&id - ids);
-                }
-            }
-            return -1;
-        }
-        int values[3] = {1, 1, 1};
-    };
-    GetWorkgroupSize wgsize;
-    s.accept(&wgsize);
-
     // Emit the function prototype.
-    stream << "@compute @workgroup_size("
-           << wgsize.values[0] << ", "
-           << wgsize.values[1] << ", "
-           << wgsize.values[2] << ")\n";
+    stream << "@compute @workgroup_size(wgsize_x, wgsize_y, wgsize_z)\n";
     stream << "fn " << name << "(\n"
            << "  @builtin(local_invocation_id) local_id : vec3<u32>,\n"
            << "  @builtin(workgroup_id) group_id : vec3<u32>,\n"
@@ -429,19 +390,15 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     close_scope("shader " + name);
 
     if (workgroup_array) {
+        std::stringstream ss;
         if (is_const(workgroup_array->extents[0])) {
-            std::stringstream ss;
             ss << workgroup_array->extents[0];
-            size_t elements = 0;
-            ss >> elements;
-            stream << "var<workgroup> " << print_name(workgroup_array->name)
-                   << " : array<" << print_type(workgroup_array->type) << ", "
-                   << elements << ">;\n";
         } else {
-            // TODO: Implement.
-            internal_error
-                << "dynamically sized GPU shared memory is not yet implemented";
+            ss << "workgroup_mem_bytes / " << workgroup_array->type.bytes();
         }
+        stream << "var<workgroup> " << print_name(workgroup_array->name)
+               << " : array<" << print_type(workgroup_array->type) << ", "
+               << ss.str() << ">;\n";
     }
     workgroup_array = nullptr;
 

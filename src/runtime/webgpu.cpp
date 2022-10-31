@@ -866,17 +866,19 @@ WEAK int halide_webgpu_run(void *user_context,
     bool found = shader_cache.lookup(context.device, state_ptr, shader_module);
     halide_abort_if_false(user_context, found && shader_module != nullptr);
 
-    // TODO: Add support for dynamically-sized shared memory via a
-    // pipeline-overridable workgroup array.
-    // halide_abort_if_false(user_context, workgroup_mem_bytes == 0);
-
     // Create the compute pipeline.
+    WGPUConstantEntry overrides[4] = {
+        {nullptr, "wgsize_x", (double)threadsX},
+        {nullptr, "wgsize_y", (double)threadsY},
+        {nullptr, "wgsize_z", (double)threadsZ},
+        {nullptr, "workgroup_mem_bytes", (double)workgroup_mem_bytes},
+    };
     WGPUProgrammableStageDescriptor stage_desc = {
         .nextInChain = nullptr,
         .module = shader_module,
         .entryPoint = entry_name,
-        .constantCount = 0,
-        .constants = nullptr,
+        .constantCount = 4,
+        .constants = overrides,
     };
     WGPUComputePipelineDescriptor pipeline_desc = {
         .nextInChain = nullptr,
