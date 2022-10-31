@@ -17,6 +17,9 @@ concurrency:
 env:
   LLVM_VER: 15.0.1
 
+permissions:
+  contents: read  #  to fetch code (actions/checkout)
+
 jobs:
   pip-linux:
     name: Package Halide Python bindings
