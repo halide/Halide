@@ -12,8 +12,10 @@ def test_warnings():
     g = hl.Func("g")
     g[i] = f[i * i]
 
-    expected_warning = "Warning: It is meaningless to bound dimension v0 of function f to be within [0, 127] because " \
-                       "the function is scheduled inline.\n"
+    expected_warning = (
+        "Warning: It is meaningless to bound dimension v0 of function f to be within [0, 127] because "
+        "the function is scheduled inline.\n"
+    )
 
     buffer = StringIO()
     with redirect_stdout(buffer):
@@ -24,5 +26,5 @@ def test_warnings():
     assert stdout_lines == [expected_warning] * 3
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_warnings()
