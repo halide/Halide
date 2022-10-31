@@ -27,6 +27,7 @@ setup(
         "-DHalide_Python_INSTALL_IMPORTED_DEPS=ON",
         "-DWITH_TESTS=NO",
         "-DWITH_TUTORIALS=NO",
+        "-DCMAKE_PREFIX_PATH=$ENV{CMAKE_PREFIX_PATH}",
         "--no-warn-unused-cli",
     ],
 )

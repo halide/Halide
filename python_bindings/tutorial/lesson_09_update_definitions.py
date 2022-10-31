@@ -20,7 +20,7 @@
 #   - export PYTHONPATH=$HALIDE_INSTALL/lib/python3/site-packages
 
 import halide as hl
-import imageio.v2 as imageio
+import halide.imageio
 import numpy as np
 import os.path
 
@@ -31,10 +31,10 @@ def main():
 
     # Load a grayscale image to use as an input.
     image_path = os.path.join(os.path.dirname(__file__), "images/gray.png")
-    input_data = imageio.imread(image_path)
+    input_data = halide.imageio.imread(image_path)
     if True:
         # making the image smaller to go faster
-        input_data = input_data[:160, :150]
+        input_data = input_data[:150, :160]
     assert input_data.dtype == np.uint8
     input = hl.Buffer(input_data)
 
@@ -195,7 +195,7 @@ def main():
 
         for r_y in range(input.height()):
             for r_x in range(input.width()):
-                py_result[input_data[r_x, r_y]] += 1
+                py_result[input_data[r_y, r_x]] += 1
 
         # Check the answers agree:
         for xx in range(256):

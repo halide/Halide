@@ -1,7 +1,7 @@
 import halide as hl
 
 import numpy as np
-import imageio
+import halide.imageio
 import os.path
 
 # Return the directory to look in for test images:
@@ -44,13 +44,10 @@ def get_blur(input):
 
 def get_input_data():
     image_path = os.path.join(apps_images_dir(), "rgb.png")
-    assert os.path.exists(image_path), \
-        "Could not find %s" % image_path
-    rgb_data = imageio.imread(image_path)
-    print("rgb_data", type(rgb_data), rgb_data.shape, rgb_data.dtype)
+    rgb_data = halide.imageio.imread(image_path)
 
-    grey_data = np.mean(rgb_data, axis=2, dtype=np.float32).astype(rgb_data.dtype)
-    input_data = np.copy(grey_data, order="F")
+    grey_data = np.mean(rgb_data, axis=0, dtype=np.float32).astype(rgb_data.dtype)
+    input_data = np.copy(grey_data)
 
     return input_data
 
@@ -65,11 +62,8 @@ def main():
     input_image = hl.Buffer(input_data)
     input.set(input_image)
 
-    output_data = np.empty(input_data.shape, dtype=input_data.dtype, order="F")
+    output_data = np.empty(input_data.shape, dtype=input_data.dtype)
     output_image = hl.Buffer(output_data)
-
-    print("input_image", input_image)
-    print("output_image", output_image)
 
     # do the actual computation
     blur.realize(output_image)
@@ -77,8 +71,8 @@ def main():
     # save results
     input_path = os.path.join(apps_output_dir(), "blur_input.png")
     output_path = os.path.join(apps_output_dir(), "blur_result.png")
-    imageio.imsave(input_path, input_data)
-    imageio.imsave(output_path, output_data)
+    halide.imageio.imwrite(input_path, input_data)
+    halide.imageio.imwrite(output_path, output_data)
     print("\nblur realized on output image.",
           "Result saved at", output_path,
           "( input data copy at", input_path, ")")
