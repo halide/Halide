@@ -24,8 +24,9 @@ def copy_to_interleaved(im):
         # We are presumably planar, in (c, y, x) order; we need (y, x, c) order
         mv = np.moveaxis(mv, 0, 2)
         mv = np.copy(mv, order="F")
-
-    return mv
+        return mv
+    else:
+        return im
 
 
 def copy_to_planar(im):
@@ -39,8 +40,9 @@ def copy_to_planar(im):
         # (which hl.Buffer will reverse into x, y, c order)
         mv = np.moveaxis(mv, 2, 0)
         mv = np.copy(mv, order="C")
-
-    return mv
+        return mv
+    else:
+        return im
 
 
 def imread(uri, format=None, **kwargs):
