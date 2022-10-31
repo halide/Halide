@@ -1,0 +1,11 @@
+cmake>=3.22
+imageio
+ninja; platform_system!='Windows'
+numpy
+pillow
+pybind11==2.6.2
+scikit-build
+scipy
+setuptools>=43
+wheel
+build

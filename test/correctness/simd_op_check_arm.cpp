@@ -284,7 +284,7 @@ private:
                 add_8_16_32_widen(sel_op("vmovl.u", "ushll"), widen_i(u_1));
 
                 // VMOVN    I       -       Move and Narrow
-                if (Halide::Internal::get_llvm_version() >= 140 && total_bits >= 128) {
+                if (total_bits >= 128) {
                     if (is_arm32()) {
                         add_16_32_64_narrow("vmovn.i", narrow_i(i_1));
                         add_16_32_64_narrow("vmovn.i", narrow_u(u_1));
@@ -446,12 +446,10 @@ private:
                 add_8_16_32(sel_op("vrshr.u", "urshr", "urshl"), cast_u((widen_u(u_1) + 1) >> 1));
 
                 // VRSHRN   I       -       Rounding Shift Right Narrow
-                if (Halide::Internal::get_llvm_version() >= 140) {
-                    // LLVM14 converts RSHRN/RSHRN2 to RADDHN/RADDHN2 when the shift amount is half the width of the vector element
-                    // See https://reviews.llvm.org/D116166
-                    add_16_32_narrow(sel_op("vrshrn.i", "raddhn"), narrow_i((widen_i(i_1) + (cast_i(1) << (bits / 2 - 1))) >> (bits / 2)));
-                    add_16_32_narrow(sel_op("vrshrn.i", "raddhn"), narrow_u((widen_u(u_1) + (cast_u(1) << (bits / 2 - 1))) >> (bits / 2)));
-                }
+                // LLVM14 converts RSHRN/RSHRN2 to RADDHN/RADDHN2 when the shift amount is half the width of the vector element
+                // See https://reviews.llvm.org/D116166
+                add_16_32_narrow(sel_op("vrshrn.i", "raddhn"), narrow_i((widen_i(i_1) + (cast_i(1) << (bits / 2 - 1))) >> (bits / 2)));
+                add_16_32_narrow(sel_op("vrshrn.i", "raddhn"), narrow_u((widen_u(u_1) + (cast_u(1) << (bits / 2 - 1))) >> (bits / 2)));
                 add_16_32_64_narrow(sel_op("vrshrn.i", "rshrn"), narrow_i((widen_i(i_1) + (1 << (bits / 4))) >> (bits / 4 + 1)));
                 add_16_32_narrow(sel_op("vrshrn.i", "rshrn"), narrow_u((widen_u(u_1) + (1 << (bits / 4))) >> (bits / 4 + 1)));
 

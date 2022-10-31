@@ -5,7 +5,7 @@ Fast image interpolation using a pyramid.
 import halide as hl
 
 from datetime import datetime
-import imageio
+import halide.imageio
 import numpy as np
 import os.path
 
@@ -162,12 +162,10 @@ def get_interpolate(input, levels):
 
 def get_input_data():
     image_path = os.path.join(apps_images_dir(), "rgba.png")
-    assert os.path.exists(image_path), "Could not find %s" % image_path
-
-    rgba_data = imageio.imread(image_path)
+    rgba_data = halide.imageio.imread(image_path)
 
     # input data is in range [0, 1]
-    input_data = np.copy(rgba_data, order="F").astype(np.float32) / 255.0
+    input_data = np.copy(rgba_data).astype(np.float32) / 255.0
     return input_data
 
 
@@ -179,11 +177,11 @@ def main():
 
     # preparing input and output memory buffers (numpy ndarrays)
     input_data = get_input_data()
-    assert input_data.shape[2] == 4
     input_image = hl.Buffer(input_data)
+    assert input_image.channels() == 4
     input.set(input_image)
 
-    input_width, input_height = input_data.shape[:2]
+    input_width, input_height = input_image.width(), input_image.height()
 
     t0 = datetime.now()
     output_image = interpolate.realize([input_width, input_height, 3])
@@ -201,8 +199,8 @@ def main():
     # save results
     input_path = os.path.join(apps_output_dir(), "interpolate_input.png")
     output_path = os.path.join(apps_output_dir(), "interpolate_result.png")
-    imageio.imsave(input_path, input_data)
-    imageio.imsave(output_path, output_data)
+    halide.imageio.imwrite(input_path, input_data)
+    halide.imageio.imwrite(output_path, output_data)
 
     print()
     print('blur realized on output image. Result saved at {} (input data copy at {})'.format(output_path, input_path))

@@ -772,7 +772,7 @@ in future releases.
 ## License
 
 The Python bindings use the same
-[MIT license](https://github.com/halide/Halide/blob/master/LICENSE.txt) as
+[MIT license](https://github.com/halide/Halide/blob/main/LICENSE.txt) as
 Halide.
 
 Python bindings provided by Connelly Barnes (2012-2013), Fred Rotbart (2014),
