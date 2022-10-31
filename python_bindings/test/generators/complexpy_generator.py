@@ -72,11 +72,10 @@ class ComplexPy(hl.Generator):
 
         g.scalar_output[()] = g.float_arg + g.int_arg
 
-        intermediate.compute_at(g.tuple_output, y)
         (
-            intermediate.specialize(g.vectorize).vectorize(
-                x, g.natural_vector_size(hl.Float(32))
-            )
+            intermediate.compute_at(g.tuple_output, y)
+            .specialize(g.vectorize)
+            .vectorize(x, g.natural_vector_size(hl.Float(32)))
         )
 
 
