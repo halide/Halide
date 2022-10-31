@@ -80,8 +80,9 @@ class MyFirstGenerator:
 
         # Define the Output(s) as you would for any other Func of Halide code.
         # We'll mimic the code from lesson 2.
-        self.brighter[x, y] = hl.cast(hl.UInt(8), hl.min(
-            self.input_buffer[x, y] * self.brighten_factor, 255))
+        self.brighter[x, y] = hl.cast(
+            hl.UInt(8), hl.min(self.input_buffer[x, y] * self.brighten_factor, 255)
+        )
 
         # Also provide whatever schedule you like. As noted above,
         # all Output(s) will implicitly be calculated as .compute_root(),
@@ -122,6 +123,7 @@ def use_first_generator():
 
 # Let's define another, more complex generator:
 
+
 @hl.generator(name="my_second_generator")
 class MySecondGenerator:
     # This generator will take some compile-time parameters too,
@@ -159,8 +161,10 @@ class MySecondGenerator:
 
         # Define the brightening Func.
         brighter = hl.Func("brighter")
-        brighter[self.x, self.y] = hl.cast(hl.UInt(8), hl.min(
-            self.input_buffer[self.x, self.y] * self.brighten_factor, 255))
+        brighter[self.x, self.y] = hl.cast(
+            hl.UInt(8),
+            hl.min(self.input_buffer[self.x, self.y] * self.brighten_factor, 255),
+        )
 
         # Now, possibly do some sort of rotation, depending on the
         # value specified in self.rotation. (In production code, we'd likely prefer
@@ -177,11 +181,13 @@ class MySecondGenerator:
             # Illegal or unsupported values for a GeneratorParam should always be
             # handled by raising an exception.
             raise ValueError(
-                "Unsupported value for GeneratorParam rotation: %s" % self.rotation)
+                "Unsupported value for GeneratorParam rotation: %s" % self.rotation
+            )
 
         # Finally, assign to the output buffer.
         self.output_buffer[self.x, self.y] = hl.cast(
-            self.output_buffer.type(), rotated[self.x, self.y])
+            self.output_buffer.type(), rotated[self.x, self.y]
+        )
 
         # The structure of the pipeline depended on the generator
         # params, and (in this case) so will the schedule.
@@ -201,7 +207,7 @@ class MySecondGenerator:
         # If there was a rotation, we'll schedule that to occur per
         # scanline of the output and vectorize it according to its
         # type.
-        if (self.rotation != "none"):
+        if self.rotation != "none":
             v = self.natural_vector_size(rotated.type())
             rotated.compute_at(self.output_buffer, self.y).vectorize(self.x, v)
 
@@ -221,8 +227,9 @@ def use_second_generator():
     }
 
     with hl.GeneratorContext(hl.get_jit_target_from_environment()):
-        output_func = MySecondGenerator.call(input_buffer, brighten_factor=1.5,
-                                             generator_params=rotate_cw)
+        output_func = MySecondGenerator.call(
+            input_buffer, brighten_factor=1.5, generator_params=rotate_cw
+        )
 
     # Since we're rotating it, we must adjust the output buffer dimensions
     # appropriately (note that height and width are swapped!)

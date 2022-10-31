@@ -127,8 +127,7 @@ def main():
             for x_outer in range(2):
                 for x_inner in range(2):
                     xx = x_outer * 2 + x_inner
-                    print("Evaluating at x = %d, y = %d: %d" %
-                          (xx, yy, xx + yy))
+                    print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
         print()
 
@@ -205,8 +204,7 @@ def main():
                     for x_inner in range(2):
                         xx = x_outer * 2 + x_inner
                         yy = y_outer * 2 + y_inner
-                        print("Evaluating at x = %d, y = %d: %d" %
-                              (xx, yy, xx + yy))
+                        print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
         print()
 
@@ -264,8 +262,7 @@ def main():
                     x_outer * 4 + 2,
                     x_outer * 4 + 3,
                 ]
-                val = [x_vec[0] + yy, x_vec[1] + yy,
-                       x_vec[2] + yy, x_vec[3] + yy]
+                val = [x_vec[0] + yy, x_vec[1] + yy, x_vec[2] + yy, x_vec[3] + yy]
                 print(
                     "Evaluating at <%d, %d, %d, %d>, <%d, %d, %d, %d>: <%d, %d, %d, %d>"
                     % (
@@ -321,14 +318,12 @@ def main():
                 if True:
                     x_inner = 0
                     xx = x_outer * 2 + x_inner
-                    print("Evaluating at x = %d, y = %d: %d" %
-                          (xx, yy, xx + yy))
+                    print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
                 if True:
                     x_inner = 1
                     xx = x_outer * 2 + x_inner
-                    print("Evaluating at x = %d, y = %d: %d" %
-                          (xx, yy, xx + yy))
+                    print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
         print()
 
@@ -367,8 +362,7 @@ def main():
                     if xx > 3:
                         xx = 3
                     xx += x_inner
-                    print("Evaluating at x = %d, y = %d: %d" %
-                          (xx, yy, xx + yy))
+                    print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
         print()
 
@@ -453,8 +447,7 @@ def main():
                 for x_inner in range(2):
                     yy = y_outer * 2 + y_inner
                     xx = x_outer * 2 + x_inner
-                    print("Evaluating at x = %d, y = %d: %d" %
-                          (xx, yy, xx + yy))
+                    print("Evaluating at x = %d, y = %d: %d" % (xx, yy, xx + yy))
 
         print()
 
@@ -473,8 +466,7 @@ def main():
         x_inner, y_inner = hl.Var("x_inner"), hl.Var("y_inner")
         tile_index = hl.Var("tile_index")
         (
-            gradient_fast
-            .tile(x, y, x_outer, y_outer, x_inner, y_inner, 256, 256)
+            gradient_fast.tile(x, y, x_outer, y_outer, x_inner, y_inner, 256, 256)
             .fuse(x_outer, y_outer, tile_index)
             .parallel(tile_index)
         )
@@ -488,8 +480,9 @@ def main():
         y_inner_outer = hl.Var("y_inner_outer")
         x_vectors, y_pairs = hl.Var("x_vectors"), hl.Var("y_pairs")
         (
-            gradient_fast
-            .tile(x_inner, y_inner, x_inner_outer, y_inner_outer, x_vectors, y_pairs, 4, 2)
+            gradient_fast.tile(
+                x_inner, y_inner, x_inner_outer, y_inner_outer, x_vectors, y_pairs, 4, 2
+            )
             .vectorize(x_vectors)
             .unroll(y_pairs)
         )
@@ -533,8 +526,9 @@ def main():
 
                         # Check the result.
                         for i in range(4):
-                            assert result[x_vec[i], y_vec[i]] == val[i], "There was an error at %d %d!" % (
-                                x_vec[i], y_vec[i])
+                            assert (
+                                result[x_vec[i], y_vec[i]] == val[i]
+                            ), "There was an error at %d %d!" % (x_vec[i], y_vec[i])
 
                     if True:
                         # y_pairs = 1
@@ -549,8 +543,9 @@ def main():
 
                         # Check the result.
                         for i in range(4):
-                            assert result[x_vec[i], y_vec[i]] == val[i], "There was an error at %d %d!" % (
-                                x_vec[i], y_vec[i])
+                            assert (
+                                result[x_vec[i], y_vec[i]] == val[i]
+                            ), "There was an error at %d %d!" % (x_vec[i], y_vec[i])
 
         print()
 

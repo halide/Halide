@@ -41,10 +41,12 @@ def main():
 
         # Now we'll add a second stage which adds together multiple
         # points in the first stage.
-        consumer[x, y] = (producer[x, y] +
-                          producer[x, y + 1] +
-                          producer[x + 1, y] +
-                          producer[x + 1, y + 1])
+        consumer[x, y] = (
+            producer[x, y]
+            + producer[x, y + 1]
+            + producer[x + 1, y]
+            + producer[x + 1, y + 1]
+        )
 
         # We'll turn on tracing for both functions.
         consumer.trace_stores()
@@ -72,10 +74,12 @@ def main():
         result = np.empty((4, 4), dtype=np.float32)
         for yy in range(4):
             for xx in range(4):
-                result[yy][xx] = (math.sqrt(xx * yy) +
-                                  math.sqrt(xx * (yy + 1)) +
-                                  math.sqrt((xx + 1) * yy) +
-                                  math.sqrt((xx + 1) * (yy + 1)))
+                result[yy][xx] = (
+                    math.sqrt(xx * yy)
+                    + math.sqrt(xx * (yy + 1))
+                    + math.sqrt((xx + 1) * yy)
+                    + math.sqrt((xx + 1) * (yy + 1))
+                )
 
         print()
 
@@ -93,10 +97,12 @@ def main():
         # Start with the same function definitions:
         producer, consumer = hl.Func("producer_root"), hl.Func("consumer_root")
         producer[x, y] = hl.sqrt(x * y)
-        consumer[x, y] = (producer[x, y] +
-                          producer[x, y + 1] +
-                          producer[x + 1, y] +
-                          producer[x + 1, y + 1])
+        consumer[x, y] = (
+            producer[x, y]
+            + producer[x, y + 1]
+            + producer[x + 1, y]
+            + producer[x + 1, y + 1]
+        )
 
         # Tell Halide to evaluate all of producer before any of consumer.
         producer.compute_root()
@@ -127,10 +133,12 @@ def main():
         # Compute the consumer. Skip the prints this time.
         for yy in range(4):
             for xx in range(4):
-                result[yy][xx] = (producer_storage[yy][xx] +
-                                  producer_storage[yy + 1][xx] +
-                                  producer_storage[yy][xx + 1] +
-                                  producer_storage[yy + 1][xx + 1])
+                result[yy][xx] = (
+                    producer_storage[yy][xx]
+                    + producer_storage[yy + 1][xx]
+                    + producer_storage[yy][xx + 1]
+                    + producer_storage[yy + 1][xx + 1]
+                )
 
         # Note that consumer was evaluated over a 4x4 box, so Halide
         # automatically inferred that producer was needed over a 5x5
@@ -185,10 +193,12 @@ def main():
         # Start with the same function definitions:
         producer, consumer = hl.Func("producer_y"), hl.Func("consumer_y")
         producer[x, y] = hl.sqrt(x * y)
-        consumer[x, y] = (producer[x, y] +
-                          producer[x, y + 1] +
-                          producer[x + 1, y] +
-                          producer[x + 1, y + 1])
+        consumer[x, y] = (
+            producer[x, y]
+            + producer[x, y + 1]
+            + producer[x + 1, y]
+            + producer[x + 1, y + 1]
+        )
 
         # Tell Halide to evaluate producer as needed per y coordinate
         # of the consumer:
@@ -224,10 +234,12 @@ def main():
 
             # Compute a scanline of the consumer.
             for xx in range(4):
-                result[yy][xx] = (producer_storage[0][xx] +
-                                  producer_storage[1][xx] +
-                                  producer_storage[0][xx + 1] +
-                                  producer_storage[1][xx + 1])
+                result[yy][xx] = (
+                    producer_storage[0][xx]
+                    + producer_storage[1][xx]
+                    + producer_storage[0][xx + 1]
+                    + producer_storage[1][xx + 1]
+                )
 
         # Again, if we print the loop nest, we'll see something very
         # similar to the Python above.
@@ -258,10 +270,12 @@ def main():
         producer = hl.Func("producer_store_root_compute_y")
         consumer = hl.Func("consumer_store_root_compute_y")
         producer[x, y] = hl.sqrt(x * y)
-        consumer[x, y] = (producer[x, y] +
-                          producer[x, y + 1] +
-                          producer[x + 1, y] +
-                          producer[x + 1, y + 1])
+        consumer[x, y] = (
+            producer[x, y]
+            + producer[x, y + 1]
+            + producer[x + 1, y]
+            + producer[x + 1, y + 1]
+        )
 
         # Tell Halide to make a buffer to store all of producer at
         # the outermost level:
@@ -309,10 +323,12 @@ def main():
 
             # Compute a scanline of the consumer.
             for xx in range(4):
-                result[yy][xx] = (producer_storage[yy][xx] +
-                                  producer_storage[yy + 1][xx] +
-                                  producer_storage[yy][xx + 1] +
-                                  producer_storage[yy + 1][xx + 1])
+                result[yy][xx] = (
+                    producer_storage[yy][xx]
+                    + producer_storage[yy + 1][xx]
+                    + producer_storage[yy][xx + 1]
+                    + producer_storage[yy + 1][xx + 1]
+                )
 
         print("Pseudo-code for the schedule:")
         consumer.print_loop_nest()
@@ -355,10 +371,12 @@ def main():
                 for xx in range(4):
                     # Loads from producer_storage have their y coordinate
                     # bit-masked.
-                    result[yy][xx] = (producer_storage[yy & 1][xx] +
-                                      producer_storage[(yy + 1) & 1][xx] +
-                                      producer_storage[yy & 1][xx + 1] +
-                                      producer_storage[(yy + 1) & 1][xx + 1])
+                    result[yy][xx] = (
+                        producer_storage[yy & 1][xx]
+                        + producer_storage[(yy + 1) & 1][xx]
+                        + producer_storage[yy & 1][xx + 1]
+                        + producer_storage[(yy + 1) & 1][xx + 1]
+                    )
 
     # We can do even better, by leaving the storage outermost, but
     # moving the computation into the innermost loop:
@@ -367,10 +385,12 @@ def main():
         producer = hl.Func("producer_store_root_compute_x")
         consumer = hl.Func("consumer_store_root_compute_x")
         producer[x, y] = hl.sqrt(x * y)
-        consumer[x, y] = (producer[x, y] +
-                          producer[x, y + 1] +
-                          producer[x + 1, y] +
-                          producer[x + 1, y + 1])
+        consumer[x, y] = (
+            producer[x, y]
+            + producer[x, y + 1]
+            + producer[x + 1, y]
+            + producer[x + 1, y + 1]
+        )
 
         # Store outermost, compute innermost.
         producer.store_root().compute_at(consumer, x)
@@ -406,10 +426,12 @@ def main():
 
                 producer_storage[(yy + 1) & 1][xx + 1] = math.sqrt((xx + 1) * (yy + 1))
 
-                result[yy][xx] = (producer_storage[yy & 1][xx] +
-                                  producer_storage[(yy + 1) & 1][xx] +
-                                  producer_storage[yy & 1][xx + 1] +
-                                  producer_storage[(yy + 1) & 1][xx + 1])
+                result[yy][xx] = (
+                    producer_storage[yy & 1][xx]
+                    + producer_storage[(yy + 1) & 1][xx]
+                    + producer_storage[yy & 1][xx + 1]
+                    + producer_storage[(yy + 1) & 1][xx + 1]
+                )
 
         print("Pseudo-code for the schedule:")
         consumer.print_loop_nest()
@@ -450,10 +472,12 @@ def main():
         print("=" * 50)
         producer, consumer = hl.Func("producer_tile"), hl.Func("consumer_tile")
         producer[x, y] = hl.sqrt(x * y)
-        consumer[x, y] = (producer[x, y] +
-                          producer[x, y + 1] +
-                          producer[x + 1, y] +
-                          producer[x + 1, y + 1])
+        consumer[x, y] = (
+            producer[x, y]
+            + producer[x, y + 1]
+            + producer[x + 1, y]
+            + producer[x + 1, y + 1]
+        )
 
         # Tile the consumer using 2x2 tiles.
         x_outer, y_outer = hl.Var("x_outer"), hl.Var("y_outer")
@@ -473,9 +497,11 @@ def main():
         producer.trace_stores()
         consumer.trace_stores()
 
-        print("\nEvaluating:"
-              "consumer.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2)"
-              "producer.compute_at(consumer, x_outer)")
+        print(
+            "\nEvaluating:"
+            "consumer.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2)"
+            "producer.compute_at(consumer, x_outer)"
+        )
         consumer.realize([4, 4])
 
         # Reading the log, you should see that producer and consumer
@@ -503,10 +529,12 @@ def main():
                     for x_inner in range(2):
                         xx = x_base + x_inner
                         yy = y_base + y_inner
-                        result[yy][xx] = (producer_storage[yy - y_base][xx - x_base] +
-                                          producer_storage[yy - y_base + 1][xx - x_base] +
-                                          producer_storage[yy - y_base][xx - x_base + 1] +
-                                          producer_storage[yy - y_base + 1][xx - x_base + 1])
+                        result[yy][xx] = (
+                            producer_storage[yy - y_base][xx - x_base]
+                            + producer_storage[yy - y_base + 1][xx - x_base]
+                            + producer_storage[yy - y_base][xx - x_base + 1]
+                            + producer_storage[yy - y_base + 1][xx - x_base + 1]
+                        )
 
         print("Pseudo-code for the schedule:")
         consumer.print_loop_nest()
@@ -527,10 +555,12 @@ def main():
         producer = hl.Func("producer_mixed")
         consumer = hl.Func("consumer_mixed")
         producer[x, y] = hl.sqrt(x * y)
-        consumer[x, y] = (producer[x, y] +
-                          producer[x, y + 1] +
-                          producer[x + 1, y] +
-                          producer[x + 1, y + 1])
+        consumer[x, y] = (
+            producer[x, y]
+            + producer[x, y + 1]
+            + producer[x + 1, y]
+            + producer[x + 1, y + 1]
+        )
 
         # Split the y coordinate of the consumer into strips of 16 scanlines:
         yo, yi = hl.Var("yo"), hl.Var("yi")
@@ -593,10 +623,12 @@ def main():
                         # If you're on x86, Halide generates SSE code for this
                         # part:
                         xx = [x_base + 0, x_base + 1, x_base + 2, x_base + 3]
-                        vec = [math.sqrt(xx[0] * py),
-                               math.sqrt(xx[1] * py),
-                               math.sqrt(xx[2] * py),
-                               math.sqrt(xx[3] * py)]
+                        vec = [
+                            math.sqrt(xx[0] * py),
+                            math.sqrt(xx[1] * py),
+                            math.sqrt(xx[2] * py),
+                            math.sqrt(xx[3] * py),
+                        ]
                         producer_storage[py & 1][xx[0]] = vec[0]
                         producer_storage[py & 1][xx[1]] = vec[1]
                         producer_storage[py & 1][xx[2]] = vec[2]
@@ -608,22 +640,30 @@ def main():
                     # Again, Halide's equivalent here uses SSE.
                     xx = [x_base, x_base + 1, x_base + 2, x_base + 3]
                     vec = [
-                        (producer_storage[yy & 1][xx[0]] +
-                         producer_storage[(yy + 1) & 1][xx[0]] +
-                         producer_storage[yy & 1][xx[0] + 1] +
-                         producer_storage[(yy + 1) & 1][xx[0] + 1]),
-                        (producer_storage[yy & 1][xx[1]] +
-                         producer_storage[(yy + 1) & 1][xx[1]] +
-                         producer_storage[yy & 1][xx[1] + 1] +
-                         producer_storage[(yy + 1) & 1][xx[1] + 1]),
-                        (producer_storage[yy & 1][xx[2]] +
-                         producer_storage[(yy + 1) & 1][xx[2]] +
-                         producer_storage[yy & 1][xx[2] + 1] +
-                         producer_storage[(yy + 1) & 1][xx[2] + 1]),
-                        (producer_storage[yy & 1][xx[3]] +
-                         producer_storage[(yy + 1) & 1][xx[3]] +
-                         producer_storage[yy & 1][xx[3] + 1] +
-                         producer_storage[(yy + 1) & 1][xx[3] + 1])
+                        (
+                            producer_storage[yy & 1][xx[0]]
+                            + producer_storage[(yy + 1) & 1][xx[0]]
+                            + producer_storage[yy & 1][xx[0] + 1]
+                            + producer_storage[(yy + 1) & 1][xx[0] + 1]
+                        ),
+                        (
+                            producer_storage[yy & 1][xx[1]]
+                            + producer_storage[(yy + 1) & 1][xx[1]]
+                            + producer_storage[yy & 1][xx[1] + 1]
+                            + producer_storage[(yy + 1) & 1][xx[1] + 1]
+                        ),
+                        (
+                            producer_storage[yy & 1][xx[2]]
+                            + producer_storage[(yy + 1) & 1][xx[2]]
+                            + producer_storage[yy & 1][xx[2] + 1]
+                            + producer_storage[(yy + 1) & 1][xx[2] + 1]
+                        ),
+                        (
+                            producer_storage[yy & 1][xx[3]]
+                            + producer_storage[(yy + 1) & 1][xx[3]]
+                            + producer_storage[yy & 1][xx[3] + 1]
+                            + producer_storage[(yy + 1) & 1][xx[3] + 1]
+                        ),
                     ]
 
                     py_result[yy][xx[0]] = vec[0]
@@ -644,9 +684,14 @@ def main():
             for xx in range(800):
                 error = halide_result[xx, yy] - py_result[yy][xx]
                 # It's floating-point math, so we'll allow some slop:
-                assert abs(error) <= 0.001, \
-                    "halide_result(%d, %d) = %f instead of %f" % (
-                        xx, yy, halide_result[xx, yy], py_result[yy][xx])
+                assert (
+                    abs(error) <= 0.001
+                ), "halide_result(%d, %d) = %f instead of %f" % (
+                    xx,
+                    yy,
+                    halide_result[xx, yy],
+                    py_result[yy][xx],
+                )
 
     # This stuff is hard. We ended up in a three-way trade-off
     # between memory bandwidth, redundant work, and

@@ -43,13 +43,15 @@ def main():
 
         # Blur it horizontally:
         blur_x = hl.Func("blur_x")
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 *
-                           input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (
+            input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]
+        ) / 4
 
         # Blur it vertically:
         blur_y = hl.Func("blur_y")
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 *
-                           blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (
+            blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]
+        ) / 4
 
         # Convert back to 8-bit.
         output = hl.Func("output")
@@ -84,8 +86,7 @@ def main():
         # over a domain shifted inwards by one pixel, we won't be
         # asking the Halide routine to read out of bounds. We saw how
         # to do this in the previous lesson:
-        result = hl.Buffer(hl.UInt(8),
-                           [input.width() - 2, input.height() - 2, 3])
+        result = hl.Buffer(hl.UInt(8), [input.width() - 2, input.height() - 2, 3])
         result.set_min([1, 1])
         output.realize(result)
 
@@ -142,13 +143,15 @@ def main():
 
         # Blur it horizontally:
         blur_x = hl.Func("blur_x")
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 *
-                           input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (
+            input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]
+        ) / 4
 
         # Blur it vertically:
         blur_y = hl.Func("blur_y")
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 *
-                           blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (
+            blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]
+        ) / 4
 
         # Convert back to 8-bit.
         output = hl.Func("output")

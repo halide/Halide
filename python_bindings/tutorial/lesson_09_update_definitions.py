@@ -91,8 +91,8 @@ def main():
         # before the next one begins. Let's trace the loads and
         # stores for a simpler example:
         g = hl.Func("g")
-        g[x, y] = x + y    # Pure definition
-        g[2, 1] = 42       # First update definition
+        g[x, y] = x + y  # Pure definition
+        g[2, 1] = 42  # First update definition
         g[x, 0] = g[x, 1]  # Second update definition
 
         g.trace_loads()
@@ -160,9 +160,14 @@ def main():
         # Check the results match:
         for yy in range(100):
             for xx in range(100):
-                assert halide_result[xx, yy] == py_result[yy][xx], \
-                    "halide_result(%d, %d) = %d instead of %d" % (
-                        xx, yy, halide_result[xx, yy], py_result[yy][xx])
+                assert (
+                    halide_result[xx, yy] == py_result[yy][xx]
+                ), "halide_result(%d, %d) = %d instead of %d" % (
+                    xx,
+                    yy,
+                    halide_result[xx, yy],
+                    py_result[yy][xx],
+                )
 
     # Now we'll examine a real-world use for an update definition:
     # computing a histogram.
@@ -199,9 +204,13 @@ def main():
 
         # Check the answers agree:
         for xx in range(256):
-            assert py_result[xx] == halide_result[xx], \
-                "halide_result(%d) = %d instead of %d" % (
-                    xx, halide_result[xx], py_result[xx])
+            assert (
+                py_result[xx] == halide_result[xx]
+            ), "halide_result(%d) = %d instead of %d" % (
+                xx,
+                halide_result[xx],
+                py_result[xx],
+            )
 
     # Scheduling update steps
     if True:
@@ -268,9 +277,14 @@ def main():
         # Check the Python and Halide results match:
         for yy in range(16):
             for xx in range(16):
-                assert halide_result[xx, yy] == py_result[yy][xx], \
-                    "halide_result(%d, %d) = %d instead of %d" % (
-                        xx, yy, halide_result[xx, yy], py_result[yy][xx])
+                assert (
+                    halide_result[xx, yy] == py_result[yy][xx]
+                ), "halide_result(%d, %d) = %d instead of %d" % (
+                    xx,
+                    yy,
+                    halide_result[xx, yy],
+                    py_result[yy][xx],
+                )
 
     # That covers how to schedule the variables within a hl.Func that
     # uses update steps, but what about producer-consumer
@@ -301,9 +315,13 @@ def main():
 
         # Check the results match
         for xx in range(10):
-            assert halide_result[xx] == py_result[xx], \
-                "halide_result(%d) = %d instead of %d" % (
-                    xx, halide_result[xx], py_result[xx])
+            assert (
+                halide_result[xx] == py_result[xx]
+            ), "halide_result(%d) = %d instead of %d" % (
+                xx,
+                halide_result[xx],
+                py_result[xx],
+            )
 
         # For all other compute_at/store_at options, the reduction
         # gets placed where you would expect, somewhere in the loop
@@ -359,9 +377,13 @@ def main():
 
             # Check the results match
             for xx in range(10):
-                assert halide_result[xx] == py_result[xx], \
-                    "halide_result(%d) = %d instead of %d" % (
-                        xx, halide_result[xx], py_result[xx])
+                assert (
+                    halide_result[xx] == py_result[xx]
+                ), "halide_result(%d) = %d instead of %d" % (
+                    xx,
+                    halide_result[xx],
+                    py_result[xx],
+                )
 
         if True:
             # Case 2: The consumer references the producer in the update step only
@@ -401,9 +423,13 @@ def main():
 
             # Check the results match
             for xx in range(10):
-                assert halide_result[xx] == py_result[xx], \
-                    "halide_result(%d) = %d instead of %d" % (
-                        xx, halide_result[xx], py_result[xx])
+                assert (
+                    halide_result[xx] == py_result[xx]
+                ), "halide_result(%d) = %d instead of %d" % (
+                    xx,
+                    halide_result[xx],
+                    py_result[xx],
+                )
 
         if True:
             # Case 3: The consumer references the producer in
@@ -440,9 +466,13 @@ def main():
 
             # Check the results match
             for xx in range(10):
-                assert halide_result[xx] == py_result[xx], \
-                    "halide_result(%d) = %d instead of %d" % (
-                        xx, halide_result[xx], py_result[xx])
+                assert (
+                    halide_result[xx] == py_result[xx]
+                ), "halide_result(%d) = %d instead of %d" % (
+                    xx,
+                    halide_result[xx],
+                    py_result[xx],
+                )
 
         if True:
             # Case 4: The consumer references the producer in
@@ -467,7 +497,11 @@ def main():
             # those instead:
 
             # Attempt 2:
-            producer_wrapper_1, producer_wrapper_2, consumer_2 = hl.Func(), hl.Func(), hl.Func()
+            producer_wrapper_1, producer_wrapper_2, consumer_2 = (
+                hl.Func(),
+                hl.Func(),
+                hl.Func(),
+            )
             producer_wrapper_1[x, y] = producer[x, y]
             producer_wrapper_2[x, y] = producer[x, y]
 
@@ -505,9 +539,14 @@ def main():
             # Check the results match
             for yy in range(10):
                 for xx in range(10):
-                    assert halide_result[xx, yy] == py_result[yy][xx], \
-                        "halide_result(%d, %d) = %d instead of %d" % (
-                            xx, yy, halide_result[xx, yy], py_result[yy][xx])
+                    assert (
+                        halide_result[xx, yy] == py_result[yy][xx]
+                    ), "halide_result(%d, %d) = %d instead of %d" % (
+                        xx,
+                        yy,
+                        halide_result[xx, yy],
+                        py_result[yy][xx],
+                    )
 
         if True:
             # Case 5: Scheduling a producer under a reduction domain
@@ -551,9 +590,13 @@ def main():
 
             # Check the results match
             for xx in range(10):
-                assert halide_result[xx] == py_result[xx], \
-                    "halide_result(%d) = %d instead of %d" % (
-                        xx, halide_result[xx], py_result[xx])
+                assert (
+                    halide_result[xx] == py_result[xx]
+                ), "halide_result(%d) = %d instead of %d" % (
+                    xx,
+                    halide_result[xx],
+                    py_result[xx],
+                )
 
     # A real-world example of a reduction inside a producer-consumer chain.
     if True:
@@ -608,9 +651,14 @@ def main():
         # Check the results match
         for yy in range(input.height()):
             for xx in range(input.width()):
-                assert halide_result[xx, yy] == py_result[xx, yy], \
-                    "halide_result(%d, %d) = %d instead of %d" % (
-                        xx, yy, halide_result[xx, yy], py_result[xx, yy])
+                assert (
+                    halide_result[xx, yy] == py_result[xx, yy]
+                ), "halide_result(%d, %d) = %d instead of %d" % (
+                    xx,
+                    yy,
+                    halide_result[xx, yy],
+                    py_result[xx, yy],
+                )
 
     # Reduction helpers.
     if True:
@@ -646,12 +694,20 @@ def main():
 
         # Check they all match.
         for xx in range(10):
-            assert halide_result_1[xx] == py_result[xx], \
-                "halide_result_1(%d) = %d instead of %d" % (
-                    xx, halide_result_1[xx], py_result[xx])
-            assert halide_result_2[xx] == py_result[xx], \
-                "halide_result_2(%d) = %d instead of %d" % (
-                    xx, halide_result_2[xx], py_result[xx])
+            assert (
+                halide_result_1[xx] == py_result[xx]
+            ), "halide_result_1(%d) = %d instead of %d" % (
+                xx,
+                halide_result_1[xx],
+                py_result[xx],
+            )
+            assert (
+                halide_result_2[xx] == py_result[xx]
+            ), "halide_result_2(%d) = %d instead of %d" % (
+                xx,
+                halide_result_2[xx],
+                py_result[xx],
+            )
 
     print("Success!")
     return 0

@@ -39,9 +39,11 @@ def main():
     # indexed by c.
     c = hl.Var("c")
     color_image = hl.Func()
+    # fmt: off
     color_image[x, y, c] = hl.select(c == 0, 245,  # Red value
                                      c == 1, 42,   # Green value
                                      132)          # Blue value
+    # fmt: on
 
     # Since this pattern appears quite often, Halide provides a
     # syntatic sugar to write the code above as the following,
@@ -216,7 +218,6 @@ def main():
         # can be converted to and from a tuple is one way to extend
         # Halide's type system with user-defined types.
         class Complex:
-
             def __init__(self, r, i=None):
                 if type(r) is float and type(i) is float:
                     self.real = hl.Expr(r)
@@ -234,8 +235,10 @@ def main():
 
             def __mul__(self, other):
                 "Complex multiplication"
-                return Complex(self.real * other.real - self.imag * other.imag,
-                               self.real * other.imag + self.imag * other.real)
+                return Complex(
+                    self.real * other.real - self.imag * other.imag,
+                    self.real * other.imag + self.imag * other.real,
+                )
 
             def __getitem__(self, idx):
                 return (self.real, self.imag)[idx]
@@ -267,7 +270,7 @@ def main():
 
         # The following line uses the complex multiplication and
         # addition we defined above.
-        mandelbrot[x, y, r] = (Complex(current * current) + initial)
+        mandelbrot[x, y, r] = Complex(current * current) + initial
 
         # We'll use another tuple reduction to compute the iteration
         # number where the value first escapes a circle of radius 4.
