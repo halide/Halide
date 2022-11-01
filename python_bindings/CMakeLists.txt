@@ -116,9 +116,11 @@ add_subdirectory(src)
 add_subdirectory(stub)
 
 if (WITH_TEST_PYTHON)
+    add_subdirectory(apps)
     add_subdirectory(test)
 endif ()
 
 if (WITH_TUTORIALS)
     add_subdirectory(tutorial)
 endif ()
+
