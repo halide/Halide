@@ -2393,6 +2393,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     for (const auto &arg : args) {
         symbol_table.pop(arg.name);
     }
+    storage_access_map.clear();
     builder.leave_block();
     builder.leave_function();
 }

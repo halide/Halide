@@ -277,6 +277,75 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
         << "    Allocated device buffer " << (void *)buf->device
         << " for buffer " << buf << "\n";
 
+    // retrieve the buffer from the region
+    VkBuffer *device_buffer = reinterpret_cast<VkBuffer *>(device_region->handle);
+    if (device_buffer == nullptr) {
+        error(user_context) << "Vulkan: Failed to retrieve device buffer for device memory!\n";
+        return halide_error_code_internal_error;
+    }
+
+    // create a command buffer
+    VkCommandBuffer command_buffer;
+    VkResult result = vk_create_command_buffer(user_context, ctx.allocator, ctx.command_pool, &command_buffer);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: vkCreateCommandBuffer returned: " << vk_get_error_name(result) << "\n";
+        return result;
+    }
+
+    // begin the command buffer
+    VkCommandBufferBeginInfo command_buffer_begin_info =
+    {
+        VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,  // struct type
+        nullptr,                                      // pointer to struct extending this
+        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,  // flags
+        nullptr                                       // pointer to parent command buffer
+    };
+
+    result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
+        return result;
+    }
+
+    // fill buffer with zero values
+    vkCmdFillBuffer(command_buffer, *device_buffer, 0, device_region->size, 0);
+    debug(user_context) << "    zeroing device_buffer=" << (void*)device_buffer 
+                        << " size=" << (uint32_t)device_region->size << "\n";
+
+    // end the command buffer
+    result = vkEndCommandBuffer(command_buffer);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
+        return result;
+    }
+
+    // submit the command buffer
+    VkSubmitInfo submit_info =
+        {
+            VK_STRUCTURE_TYPE_SUBMIT_INFO,  // struct type
+            nullptr,                        // pointer to struct extending this
+            0,                              // wait semaphore count
+            nullptr,                        // semaphores
+            nullptr,                        // pipeline stages where semaphore waits occur
+            1,                              // how many command buffers to execute
+            &command_buffer,                // the command buffers
+            0,                              // number of semaphores to signal
+            nullptr                         // the semaphores to signal
+        };
+
+    result = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
+        return result;
+    }
+
+    // wait for memset to finish
+    result = vkQueueWaitIdle(ctx.queue);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
+        return result;
+    }
+
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
