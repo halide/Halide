@@ -484,20 +484,29 @@ private:
                 add_all_vec(sel_op("vshr.u", "ushr", "lsr"), u_1 / 16);
 
                 // VSHRN    I       -       Shift Right Narrow
-                // LLVM15 emits UZP2 if the shift amount is half the width of the vector element.
-                const auto shrn_or_uzp2 = [&](int element_width, int shift_amt, int vector_width) {
+                // If the shift amount is half the width of the vector element,
+                // LLVM15 emits:
+                //              VSHRN for arm-32
+                //              UZP2 for aarch64 NEON
+                //              UZP1 for aarch64 SVE
+                const auto shrn_or_uzp = [&](int element_width, int shift_amt, int vector_width) -> string {
                     constexpr int simd_vector_bits = 128;
                     if (Halide::Internal::get_llvm_version() >= 150 &&
                         ((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
                         shift_amt == element_width / 2) {
-                        return "uzp2";
+                        return sel_op("vshrn.i", "uzp2", "uzp1");
                     }
-                    return "shrn";
+                    return sel_op("vshrn.i", "shrn", "shrn");
                 };
-                add_16_32_64_narrow(sel_op("vshrn.i", shrn_or_uzp2(bits, bits / 2, vf * 2)), narrow_i(i_1 >> (bits / 2)));
-                add_16_32_64_narrow(sel_op("vshrn.i", shrn_or_uzp2(bits, bits / 2, vf * 2)), narrow_u(u_1 >> (bits / 2)));
-
-                add_16_32_64_narrow(sel_op("vshrn.i", "shrn"), narrow_i(i_1 / 16));
+                if (string instr_name = shrn_or_uzp(bits, bits / 2, vf * 2); instr_name.find("uzp") != string::npos) {
+                    // UZP1 or UZP2
+                    add_16_32_64({{instr_name, bits / 2, narrow_lanes * 2}}, vf * 2, narrow_i(i_1 >> (bits / 2)));
+                    add_16_32_64({{instr_name, bits / 2, narrow_lanes * 2}}, vf * 2, narrow_u(u_1 >> (bits / 2)));
+                } else {
+                    // SHRN
+                    add_16_32_64_narrow(instr_name, narrow_i(i_1 >> (bits / 2)));
+                    add_16_32_64_narrow(instr_name, narrow_u(u_1 >> (bits / 2)));
+                }
                 add_16_32_64_narrow(sel_op("vshrn.i", "shrn"), narrow_u(u_1 / 16));
 
                 // VSLI     X       -       Shift Left and Insert
