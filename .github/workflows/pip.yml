@@ -19,6 +19,7 @@ env:
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
+  packages: read  #  to fetch packages (docker)
 
 jobs:
   pip-linux:
