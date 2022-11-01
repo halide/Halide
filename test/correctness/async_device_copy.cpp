@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     }
 
     if (get_jit_target_from_environment().has_feature(Target::Vulkan)) {
-        printf("Skipping test for Vulkan as it does not support copy_to_host/device() yet"
+        printf("[SKIP] Skipping test for Vulkan as it does not support copy_to_host/device() yet"
                " (halide_buffer_copy is unimplemented in that backend).\n");
         return 0;
     }
