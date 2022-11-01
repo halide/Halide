@@ -58,7 +58,7 @@ jobs:
           CIBW_BEFORE_ALL_LINUX: >
             cmake -G Ninja -S . -B build
             -DCMAKE_BUILD_TYPE=Release -DWITH_DOCS=NO -DWITH_PYTHON_BINDINGS=NO -DWITH_TESTS=NO
-            -DWITH_TUTORIALS=NO -DWITH_UTILS=NO &&
+            -DWITH_TUTORIALS=NO -DWITH_UTILS=NO -DWITH_PYTHON_STUBS=NO &&
             cmake --build build --target install
 
       - uses: actions/upload-artifact@v3
@@ -146,6 +146,7 @@ jobs:
           -DWITH_TESTS=NO
           -DWITH_TUTORIALS=NO
           -DWITH_UTILS=NO
+          -DWITH_PYTHON_STUBS=NO
           -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
 
       - name: Configure Halide
@@ -159,6 +160,7 @@ jobs:
           -DWITH_TESTS=NO
           -DWITH_TUTORIALS=NO
           -DWITH_UTILS=NO
+          -DWITH_PYTHON_STUBS=NO
           -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
 
       - name: Build Halide
