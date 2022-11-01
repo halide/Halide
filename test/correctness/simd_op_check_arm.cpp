@@ -576,14 +576,14 @@ private:
                 AddTestFunctor add_arm32_f32(*this, bits, vf, is_arm32() && bits == 32);
                 AddTestFunctor add_arm64(*this, bits, instr_lanes, vf, !is_arm32());
 
-                add({{sel_op("vabs.f", "fabs"), bits, force_vectorized_lanes}}, vf, abs(f_1));
+                add(sel_op("vabs.f", "fabs"), abs(f_1));
                 add(sel_op("vadd.f", "fadd"), f_1 + f_2);
                 add(sel_op("vsub.f", "fsub"), f_1 - f_2);
                 add(sel_op("vmul.f", "fmul"), f_1 * f_2);
                 add(sel_op("vdiv.f", "fdiv"), f_1 / f_2_clamped);
                 auto fneg_lanes = has_sve() ? force_vectorized_lanes : instr_lanes;
                 add({{sel_op("vneg.f", "fneg"), bits, fneg_lanes}}, vf, -f_1);
-                add({{sel_op("vsqrt.f", "fsqrt"), bits, force_vectorized_lanes}}, vf, sqrt(f_1_clamped));
+                add(sel_op("vsqrt.f", "fsqrt"), sqrt(f_1_clamped));
 
                 add_arm32_f32(is_vector ? "vceq.f" : "vcmp.f", select(f_1 == f_2, cast_f(1.0f), cast_f(2.0f)));
                 add_arm32_f32(is_vector ? "vcgt.f" : "vcmp.f", select(f_1 > f_2, cast_f(1.0f), cast_f(2.0f)));
@@ -600,10 +600,10 @@ private:
                 add_arm64("scvtf", cast_f(i_1));
                 add_arm64({{"fcvtzu", bits, force_vectorized_lanes}}, vf, cast(UInt(bits), f_1));
                 add_arm64({{"fcvtzs", bits, force_vectorized_lanes}}, vf, cast(Int(bits), f_1));
-                add_arm64({{"frintn", bits, force_vectorized_lanes}}, vf, round(f_1));
-                add_arm64({{"frintm", bits, force_vectorized_lanes}}, vf, floor(f_1));
-                add_arm64({{"frintp", bits, force_vectorized_lanes}}, vf, ceil(f_1));
-                add_arm64({{"frintz", bits, force_vectorized_lanes}}, vf, trunc(f_1));
+                add_arm64("frintn", round(f_1));
+                add_arm64("frintm", floor(f_1));
+                add_arm64("frintp", ceil(f_1));
+                add_arm64("frintz", trunc(f_1));
 
                 add_arm32_f32({{"vmax.f", bits, force_vectorized_lanes}}, vf, max(f_1, f_2));
                 add_arm32_f32({{"vmin.f", bits, force_vectorized_lanes}}, vf, min(f_1, f_2));
@@ -639,8 +639,8 @@ private:
                 // No corresponding instructions exists for is_nan, is_inf, is_finite.
                 // The instructions expected to be generated depends on CodeGen_LLVM::visit(const Call *op)
                 add_arm64("nan", is_vector ? sel_op("", "fcmge", "fcmuo") : "fcmp", is_nan(f_1));
-                add_arm64("inf", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
-                add_arm64("finite", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
+                add_arm64("inf", "fabs", is_inf(f_1));
+                add_arm64("finite", "fabs", is_inf(f_1));
             }
 
             if (bits == 16) {
