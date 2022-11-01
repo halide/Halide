@@ -50,6 +50,8 @@ int FindStmtCost::get_depth(const IRNode *node) const {
     auto it = stmt_cost.find(node);
     if (it == stmt_cost.end()) {
 
+        // TODO(marcos): on the next revision, make sure to further elaborate on
+        // the comment below, with full sentences.
         // sometimes, these constant values are created on the whim in
         // StmtToViz.cpp - return 1 to avoid crashing
         IRNodeType type = node->node_type;
@@ -113,6 +115,8 @@ int FindStmtCost::get_computation_cost(const IRNode *node, bool inclusive) const
     int cost = -1;
 
     if (it == stmt_cost.end()) {
+        // TODO(marcos): on the next revision, make sure to further elaborate on
+        // the comment below, with full sentences.
         // sometimes, these constant values are created on the whim in
         // StmtToViz.cpp - set cost_node to be fresh StmtCost to avoid crashing
         if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
