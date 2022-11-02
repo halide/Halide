@@ -157,8 +157,8 @@ MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &r
 #endif
     BlockEntry *block_entry = reserve_block_entry(user_context, request.properties, request.size, request.dedicated);
     if (block_entry == nullptr) {
-        StackBasicPrinter<256>(nullptr) << "BlockAllocator: Failed to allocate new empty block of requested size ("
-                                        << (int32_t)(request.size) << " bytes)!\n";
+        error(user_context) << "BlockAllocator: Failed to allocate new empty block of requested size ("
+                            << (int32_t)(request.size) << " bytes)!\n";
         return nullptr;
     }
 
@@ -173,8 +173,8 @@ MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &r
         size_t actual_size = constrain_requested_size(request.size);
         block_entry = create_block_entry(user_context, request.properties, actual_size, request.dedicated);
         if (block_entry == nullptr) {
-            StackBasicPrinter<256>(nullptr) << "BlockAllocator: Out of memory! Failed to allocate empty block of size ("
-                                            << (int32_t)(actual_size) << " bytes)!\n";
+            error(user_context) << "BlockAllocator: Out of memory! Failed to allocate empty block of size ("
+                                << (int32_t)(actual_size) << " bytes)!\n";
             return nullptr;
         }
 
@@ -366,7 +366,7 @@ void BlockAllocator::destroy_region_allocator(void *user_context, RegionAllocato
 BlockAllocator::BlockEntry *
 BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated) {
     if (config.maximum_block_count && (block_count() >= config.maximum_block_count)) {
-        debug(user_context) << "BlockAllocator: No free blocks found! Maximum block count reached ("
+        error(user_context) << "BlockAllocator: No free blocks found! Maximum block count reached ("
                             << (int32_t)(config.maximum_block_count) << ")!\n";
         return nullptr;
     }
