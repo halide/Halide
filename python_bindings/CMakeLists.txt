@@ -15,6 +15,7 @@ option(CMAKE_CXX_EXTENSIONS "Enable C++ vendor extensions (e.g. GNU)" OFF)
 # Duplicated options from parent project
 option(WITH_TESTS "Build tests" ON)
 option(WITH_TUTORIALS "Build tutorials" ON)
+option(WITH_PYTHON_STUBS "Build Python stubs" ON)
 
 # Enable/disable testing
 cmake_dependent_option(
@@ -113,7 +114,10 @@ endfunction()
 ##
 
 add_subdirectory(src)
-add_subdirectory(stub)
+
+if (WITH_PYTHON_STUBS)
+    add_subdirectory(stub)
+endif ()
 
 if (WITH_TEST_PYTHON)
     add_subdirectory(apps)
