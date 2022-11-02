@@ -3,8 +3,8 @@ from abc import ABC, abstractmethod
 from contextvars import ContextVar
 from enum import Enum
 from functools import total_ordering
-from .halide_ import *
-from .halide_ import _unique_name, _UnspecifiedType
+from halide.halide_ import *
+from halide.halide_ import _unique_name, _UnspecifiedType
 from inspect import isclass
 from typing import Any, Optional
 import builtins

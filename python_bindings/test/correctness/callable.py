@@ -1,8 +1,10 @@
 import halide as hl
 import numpy as np
 
-from simplepy_generator import SimplePy
-import simplecpp_pystub  # Needed for create_callable_from_generator("simplecpp") to work
+from halide.test.generators import (
+        simplecpp_pystub, 
+        simplepy_generator,
+)
 
 
 def test_callable():
@@ -179,7 +181,7 @@ if __name__ == "__main__":
 
     def via_simplepy(target, generator_params):
         with hl.GeneratorContext(target):
-            g = SimplePy(generator_params=generator_params)
+            g = simplepy_generator.SimplePy(generator_params=generator_params)
             return g.compile_to_callable()
 
     test_simple(via_simplecpp_pystub)

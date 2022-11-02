@@ -1,4 +1,4 @@
-import bitcpp, bitpy
+from halide.test.generators import (bitcpp, bitpy)
 import numpy as np
 
 

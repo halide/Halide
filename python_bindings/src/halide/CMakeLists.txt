@@ -37,18 +37,13 @@ set(python_sources
     imageio.py
     )
 
-# It is technically still possible for a user to override the LIBRARY_OUTPUT_DIRECTORY by setting
-# CMAKE_LIBRARY_OUTPUT_DIRECTORY_<CONFIG>, but they do so at their own peril. If a user needs to
-# do this, they should use the CMAKE_PROJECT_Halide_Python_INCLUDE_BEFORE variable to override it
-# just for this project, rather than globally, and they should ensure that the last path component
-# is `halide`. Otherwise, the tests will break.
 pybind11_add_module(Halide_Python MODULE ${native_sources})
 add_library(Halide::Python ALIAS Halide_Python)
 set_target_properties(
     Halide_Python
     PROPERTIES
     LIBRARY_OUTPUT_NAME halide_
-    LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>/halide"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
     EXPORT_NAME Python
 )
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)

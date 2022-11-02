@@ -2,7 +2,7 @@
 Simple blur.
 """
 
-from blur import blur
+import halide.apps.blur
 import halide.imageio
 import numpy as np
 import sys
@@ -30,7 +30,7 @@ def main():
     output_buf = np.empty(input_buf.shape, dtype=input_buf.dtype)
 
     tests = {
-        "Manual": blur,
+        "Manual": halide.apps.blur.blur,
     }
 
     for name, fn in tests.items():

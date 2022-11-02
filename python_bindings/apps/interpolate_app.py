@@ -2,8 +2,8 @@
 Shell for running Fast image interpolation using a pyramid.
 """
 
-from interpolate import interpolate
-from interpolate_Mullapudi2016 import interpolate_Mullapudi2016
+import halide.apps.interpolate
+import halide.apps.interpolate_Mullapudi2016
 import halide.imageio
 import numpy as np
 import sys
@@ -30,8 +30,8 @@ def main():
     output_buf = np.empty([3, h, w], dtype=input_buf.dtype)
 
     tests = {
-        "Manual": interpolate,
-        "Mullapudi2016": interpolate_Mullapudi2016,
+        "Manual": halide.apps.interpolate.interpolate,
+        "Mullapudi2016": halide.apps.interpolate_Mullapudi2016.interpolate_Mullapudi2016,
     }
 
     for name, fn in tests.items():

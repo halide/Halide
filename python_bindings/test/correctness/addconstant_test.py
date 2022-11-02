@@ -1,6 +1,11 @@
-import addconstantcpp, addconstantpy
-import addconstantcpp_with_offset_42, addconstantpy_with_offset_42
-import addconstantcpp_with_negative_offset, addconstantpy_with_negative_offset
+from halide.test.generators import (
+        addconstantcpp, 
+        addconstantpy,
+        addconstantcpp_with_offset_42,
+        addconstantpy_with_offset_42,
+        addconstantcpp_with_negative_offset,
+        addconstantpy_with_negative_offset
+)
 import numpy
 
 TESTS_AND_OFFSETS = [

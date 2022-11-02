@@ -1,6 +1,6 @@
 import numpy as np
 
-import multi_method_module
+from halide.test.generators import multi_method_module
 
 
 def test_simplecpp():

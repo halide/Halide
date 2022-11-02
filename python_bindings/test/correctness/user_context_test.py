@@ -1,5 +1,5 @@
 import array
-import user_context
+from halide.test.generators import user_context
 
 
 def test():

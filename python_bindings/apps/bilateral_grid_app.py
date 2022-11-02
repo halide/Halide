@@ -2,10 +2,10 @@
 Bilateral histogram.
 """
 
-from bilateral_grid import bilateral_grid
-from bilateral_grid_Adams2019 import bilateral_grid_Adams2019
-from bilateral_grid_Li2018 import bilateral_grid_Li2018
-from bilateral_grid_Mullapudi2016 import bilateral_grid_Mullapudi2016
+import halide.apps.bilateral_grid
+import halide.apps.bilateral_grid_Adams2019
+import halide.apps.bilateral_grid_Li2018
+import halide.apps.bilateral_grid_Mullapudi2016
 import halide.imageio
 import numpy as np
 import sys
@@ -32,8 +32,8 @@ def main():
     output_buf = np.empty(input_buf.shape, dtype=input_buf.dtype)
 
     tests = {
-        "Manual": bilateral_grid,
-        "Adams2019": bilateral_grid_Adams2019,
+        "Manual": halide.apps.bilateral_grid.bilateral_grid,
+        "Adams2019": halide.apps.bilateral_grid_Adams2019.bilateral_grid_Adams2019,
         #
         # TODO: Don't test the Li2018-autoscheduled version here;
         # it schedules the histogram stage with compute_root(),
@@ -41,7 +41,7 @@ def main():
         #
         # "Li2018": bilateral_grid_Li2018,
         #
-        "Mullapudi2016": bilateral_grid_Mullapudi2016,
+        "Mullapudi2016": halide.apps.bilateral_grid_Mullapudi2016.bilateral_grid_Mullapudi2016,
     }
 
     for name, fn in tests.items():

@@ -1,10 +1,11 @@
 import halide as hl
 
-import simplecpp_pystub
-import complexcpp_pystub
-
-from simplepy_generator import SimplePy
-from complexpy_generator import ComplexPy
+from halide.test.generators import (
+        simplecpp_pystub, 
+        complexcpp_pystub,
+        simplepy_generator,
+        complexpy_generator
+)
 
 
 def _realize_and_check(f, offset=0):
@@ -281,6 +282,6 @@ if __name__ == "__main__":
         test_simple(simplecpp_pystub)
         test_complex(complexcpp_pystub)
         test_complex(complexcpp_pystub, extra_input_name="foo_input")
-        test_simple(SimplePy)
-        test_complex(ComplexPy)
-        test_complex(ComplexPy, extra_input_name="foo_input")
+        test_simple(simplepy_generator.SimplePy)
+        test_complex(complexpy_generator.ComplexPy)
+        test_complex(complexpy_generator.ComplexPy, extra_input_name="foo_input")

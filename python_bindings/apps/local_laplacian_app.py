@@ -2,8 +2,8 @@
 Shell for running Local Laplacian.
 """
 
-from local_laplacian import local_laplacian
-from local_laplacian_Mullapudi2016 import local_laplacian_Mullapudi2016
+import halide.apps.local_laplacian
+import halide.apps.local_laplacian_Mullapudi2016
 import halide.imageio
 import numpy as np
 import sys
@@ -35,8 +35,8 @@ def main():
     output_buf = np.empty([3, h, w], dtype=input_buf.dtype)
 
     tests = {
-        "Manual": local_laplacian,
-        "Mullapudi2016": local_laplacian_Mullapudi2016,
+        "Manual": halide.apps.local_laplacian.local_laplacian,
+        "Mullapudi2016": halide.apps.local_laplacian_Mullapudi2016.local_laplacian_Mullapudi2016,
     }
 
     for name, fn in tests.items():
