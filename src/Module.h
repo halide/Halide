@@ -13,9 +13,6 @@
 
 #include "Argument.h"
 #include "Expr.h"
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-#include "ExternalCode.h"
-#endif
 #include "Function.h"  // for NameMangling
 #include "ModulusRemainder.h"
 
@@ -163,9 +160,6 @@ public:
     const std::vector<Internal::LoweredFunc> &functions() const;
     std::vector<Internal::LoweredFunc> &functions();
     const std::vector<Module> &submodules() const;
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    const std::vector<ExternalCode> &external_code() const;
-#endif
     // @}
 
     /** Return the function with the given name. If no such function
@@ -177,9 +171,6 @@ public:
     void append(const Buffer<void> &buffer);
     void append(const Internal::LoweredFunc &function);
     void append(const Module &module);
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    void append(const ExternalCode &external_code);
-#endif
     // @}
 
     /** Compile a halide Module to variety of outputs, depending on

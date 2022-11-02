@@ -1,5 +1,6 @@
 import halide as hl
 
+
 def test_rdom():
     x = hl.Var("x")
     y = hl.Var("y")
@@ -42,6 +43,7 @@ def test_rdom():
         pass
 
     return 0
+
 
 if __name__ == "__main__":
     test_rdom()

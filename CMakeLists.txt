@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22...3.23)
 project(Halide
-        VERSION 15.0.0
+        VERSION 16.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
@@ -95,6 +95,28 @@ endif()
 add_subdirectory(dependencies)
 
 ##
+# Declare options
+##
+
+# Declare these options after we include dependencies (since it declares Halide_ENABLE_RTTI etc)
+# but before we add any subdirectories, since any option you test before it is defined is
+# implicitly false the *first* time that the build file is processed, and there are some
+# out-of-order dependencies here (e.g, code in src/ eventually checks WITH_UTILS).
+# This is especially subtle since it means that some options can end up with different
+# values if you build a target as part of the initial CMake run, so (e.g.) a `make install`
+# from as totally clean build might neglect to install some pieces.
+
+option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_DOCS "Build documentation" OFF)
+option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
+cmake_dependent_option(
+    WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
+    "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
+)
+
+
+##
 # Add source directories
 ##
 
@@ -105,7 +127,6 @@ add_subdirectory(tools)
 # Add tests, tutorials, etc. if we're not being imported into another CMake project.
 ##
 
-option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
 if (WITH_TESTS)
     message(STATUS "Building tests enabled")
     add_subdirectory(test)
@@ -113,10 +134,6 @@ else ()
     message(STATUS "Building tests disabled")
 endif ()
 
-cmake_dependent_option(
-    WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
-    "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
-)
 if (WITH_PYTHON_BINDINGS)
     message(STATUS "Building Python bindings enabled")
     add_subdirectory(python_bindings)
@@ -124,7 +141,6 @@ else ()
     message(STATUS "Building Python bindings disabled")
 endif ()
 
-option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
 if (WITH_TUTORIALS)
     message(STATUS "Building tutorials enabled")
     add_subdirectory(tutorial)
@@ -132,7 +148,6 @@ else ()
     message(STATUS "Building tutorials disabled")
 endif ()
 
-option(WITH_DOCS "Build documentation" OFF)
 if (WITH_DOCS)
     message(STATUS "Building docs enabled")
     add_subdirectory(doc)
@@ -140,7 +155,6 @@ else ()
     message(STATUS "Building docs disabled")
 endif ()
 
-option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
 if (WITH_UTILS)
     message(STATUS "Building utils enabled")
     add_subdirectory(util)

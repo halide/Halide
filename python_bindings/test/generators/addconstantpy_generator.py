@@ -1,14 +1,15 @@
 import halide as hl
 
-x = hl.Var('x')
-y = hl.Var('y')
-z = hl.Var('z')
+x = hl.Var("x")
+y = hl.Var("y")
+z = hl.Var("z")
+
 
 @hl.alias(
-    addconstantpy_with_offset_42={'extra_int':42},
-    addconstantpy_with_negative_offset={'extra_int': -1}
+    addconstantpy_with_offset_42={"extra_int": 42},
+    addconstantpy_with_negative_offset={"extra_int": -1},
 )
-@hl.generator(name = "addconstantpy")
+@hl.generator(name="addconstantpy")
 class AddConstantGenerator:
     extra_int = hl.GeneratorParam(0)
 
@@ -34,6 +35,7 @@ class AddConstantGenerator:
     input_int64 = hl.InputBuffer(hl.Int(64), 1)
     input_float = hl.InputBuffer(hl.Float(32), 1)
     input_double = hl.InputBuffer(hl.Float(64), 1)
+    input_half = hl.InputBuffer(hl.Float(16), 1)
     input_2d = hl.InputBuffer(hl.Int(8), 2)
     input_3d = hl.InputBuffer(hl.Int(8), 3)
 
@@ -47,6 +49,7 @@ class AddConstantGenerator:
     output_int64 = hl.OutputBuffer(hl.Int(64), 1)
     output_float = hl.OutputBuffer(hl.Float(32), 1)
     output_double = hl.OutputBuffer(hl.Float(64), 1)
+    output_half = hl.OutputBuffer(hl.Float(16), 1)
     output_2d = hl.OutputBuffer(hl.Int(8), 2)
     output_3d = hl.OutputBuffer(hl.Int(8), 3)
 
@@ -65,9 +68,10 @@ class AddConstantGenerator:
         g.output_int64[x] = g.input_int64[x] + g.scalar_int64
         g.output_float[x] = g.input_float[x] + g.scalar_float
         g.output_double[x] = g.input_double[x] + g.scalar_double
+        g.output_half[x] = g.input_half[x] + hl.cast(hl.Float(16), g.scalar_float)
         g.output_2d[x, y] = g.input_2d[x, y] + g.scalar_int8
         g.output_3d[x, y, z] = g.input_3d[x, y, z] + g.scalar_int8 + g.extra_int
 
+
 if __name__ == "__main__":
     hl.main()
-

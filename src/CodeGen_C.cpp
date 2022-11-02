@@ -1756,20 +1756,6 @@ void CodeGen_C::compile(const Module &input) {
     stream << "\n";
 
     if (!is_header_or_extern_decl()) {
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-        // Emit any external-code blobs that are C++.
-        for (const ExternalCode &code_blob : input.external_code()) {
-            if (code_blob.is_c_plus_plus_source()) {
-                stream << "\n";
-                stream << "// Begin External Code: " << code_blob.name() << "\n";
-                stream.write((const char *)code_blob.contents().data(), code_blob.contents().size());
-                stream << "\n";
-                stream << "// End External Code: " << code_blob.name() << "\n";
-                stream << "\n";
-            }
-        }
-#endif
-
         add_vector_typedefs(type_info.vector_types_used);
 
         // Emit prototypes for all external and internal-only functions.

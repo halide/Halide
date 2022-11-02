@@ -214,6 +214,7 @@ public:
             scratch.update(i).specialize(inputs_[i].dim(0).stride() == 0);
             scratch.update(i).specialize_fail("Input dimension 0 must have stride 0 or 1.");
         }
+        scratch.update(input_count).unscheduled();  // constant zero
 
         const int slots = input_count * max_instructions_per_input;
         scratch

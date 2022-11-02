@@ -935,8 +935,8 @@ generators were imported (and hence won't be built). Otherwise, it will be set
 to false. This variable may be used to conditionally set properties on
 `<target>`.
 
-Please see [test/integration/xc](https://github.com/halide/Halide/tree/master/test/integration/xc) for a simple example
-and [apps/hannk](https://github.com/halide/Halide/tree/master/apps/hannk) for a complete app that uses it extensively.
+Please see [test/integration/xc](https://github.com/halide/Halide/tree/main/test/integration/xc) for a simple example
+and [apps/hannk](https://github.com/halide/Halide/tree/main/apps/hannk) for a complete app that uses it extensively.
 
 If `PYSTUB` is specified, then a Python Extension will be built that
 wraps the Generator with CPython glue to allow use of the Generator
@@ -1190,7 +1190,7 @@ without broader approval. Confine dependencies to the `dependencies/` subtree.
 Any variables that are specific to languages that are not enabled should, of
 course, be avoided. But of greater concern are variables that are easy to misuse
 or should not be overridden for our end-users. The following (non-exhaustive)
-list of variables shall not be used in code merged into master.
+list of variables shall not be used in code merged into main.
 
 | Variable                        | Reason                                        | Alternative                                                                                             |
 |---------------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------|

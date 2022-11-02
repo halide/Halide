@@ -37,20 +37,6 @@ public:
         return (*this)[0].as<T, Dims>();
     }
 
-    /** Construct a Realization that acts as a reference to some
-     * existing Buffers. The element type of the Buffers may not be
-     * const. */
-    template<typename T,
-             int Dims,
-             typename T2,
-             int Dims2,
-             typename... Args,
-             typename = typename std::enable_if<Internal::all_are_convertible<Buffer<void>, Args...>::value>::type>
-    HALIDE_ATTRIBUTE_DEPRECATED("Call Realization() with an explicit vector of Buffer<> instead.")
-    Realization(Buffer<T, Dims> &a, Buffer<T2, Dims2> &b, Args &&...args)
-        : Realization(std::vector<Buffer<void>>({a, b, args...})) {
-    }
-
     /** Construct a Realization that acts as a reference to a single
      * existing Buffer. The element type of the Buffer may not be
      * const. */
