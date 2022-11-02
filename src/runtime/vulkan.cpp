@@ -294,12 +294,12 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
 
     // begin the command buffer
     VkCommandBufferBeginInfo command_buffer_begin_info =
-    {
-        VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,  // struct type
-        nullptr,                                      // pointer to struct extending this
-        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,  // flags
-        nullptr                                       // pointer to parent command buffer
-    };
+        {
+            VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,  // struct type
+            nullptr,                                      // pointer to struct extending this
+            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,  // flags
+            nullptr                                       // pointer to parent command buffer
+        };
 
     result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
     if (result != VK_SUCCESS) {
@@ -309,7 +309,7 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
 
     // fill buffer with zero values
     vkCmdFillBuffer(command_buffer, *device_buffer, 0, device_region->size, 0);
-    debug(user_context) << "    zeroing device_buffer=" << (void*)device_buffer 
+    debug(user_context) << "    zeroing device_buffer=" << (void *)device_buffer
                         << " size=" << (uint32_t)device_region->size << "\n";
 
     // end the command buffer
