@@ -30,6 +30,7 @@ class NamedMDNode;
 class DataLayout;
 class BasicBlock;
 class GlobalVariable;
+class ElementCount;
 }  // namespace llvm
 
 #include <map>
@@ -491,6 +492,28 @@ protected:
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
+    /** Sub function of concat_vectors, specialized for scalable vector */
+    virtual llvm::Value *concat_scalable_vectors(llvm::Value *a, llvm::Value *b);
+
+    /** Equivalent of slice_vector, specialized for scalable vector */
+    virtual llvm::Value *slice_scalable_vector(llvm::Value *vec, int start, int extent);
+
+    /** Special simple case of slice_scalable_vector, which extends the vector lanes with undef padding*/
+    virtual llvm::Value *extend_scalable_vector(llvm::Value *vec, int extent);
+
+    /** Special simple case of slice_scalable_vector, where lanes[0, extent) are extracted*/
+    virtual llvm::Value *shorten_scalable_vector(llvm::Value *vec, int extent);
+
+    /** Extract a sub vector from a vector, all the elements in the sub vector must be in the src vector.
+     * Specialized for scalable vector */
+    llvm::Value *extract_scalable_vector(llvm::Value *vec, int start, int extract_size);
+
+    /** Insert a vector into the "start" position of a base vector.
+     * Specialized for scalable vector */
+    llvm::Value *insert_scalable_vector(llvm::Value *base_vec, llvm::Value *new_vec, int start);
+
+    llvm::Value *reverse_vector(llvm::Value *v);
+
     /** Create an LLVM shuffle vectors instruction. */
     virtual llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                          const std::vector<int> &indices);
@@ -531,6 +554,11 @@ protected:
     /** Emit atomic store instructions? */
     bool emit_atomic_stores;
 
+    /** Cache the result of target_vscale from architecture specific implementation
+     * as this is used on every Halide to LLVM type conversion.
+     */
+    int effective_vscale;
+
     /** Can we call this operation with float16 type?
         This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
     virtual bool supports_call_as_float16(const Call *op) const;
@@ -563,6 +591,10 @@ protected:
     llvm::Type *get_vector_type(llvm::Type *, int n,
                                 VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
     // @}
+
+    /** Get LLVM vector type which has the same element type as the given value */
+    llvm::Type *get_vector_type(llvm::Value *vec_or_scalar, int n,
+                                VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
 
     llvm::Constant *get_splat(int lanes, llvm::Constant *value,
                               VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
@@ -626,6 +658,16 @@ protected:
     bool use_llvm_vp_intrinsics;
     // @}
 
+    /** Return true if scalable vector, false if scalar or fixed sized vector */
+    bool is_scalable_vector(llvm::Value *v) const;
+
+    bool is_power_of_two(int x) const;
+    int next_power_of_two(int x) const;
+
+    /** A helper routine for generating folded vector reductions. */
+    template<typename Op>
+    bool try_to_fold_vector_reduce(const Expr &a, Expr b);
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
@@ -645,11 +687,6 @@ private:
 
     /** Use the LLVM large code model when this is set. */
     bool llvm_large_code_model;
-
-    /** Cache the result of target_vscale from architecture specific implementation
-     * as this is used on every Halide to LLVM type conversion.
-     */
-    int effective_vscale;
 
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
@@ -679,10 +716,6 @@ private:
 
     void init_codegen(const std::string &name, bool any_strict_float = false);
     std::unique_ptr<llvm::Module> finish_codegen();
-
-    /** A helper routine for generating folded vector reductions. */
-    template<typename Op>
-    bool try_to_fold_vector_reduce(const Expr &a, Expr b);
 
     /** Records the StructType for pointer values returned from
      * make_struct intrinsic. Required for opaque pointer support.

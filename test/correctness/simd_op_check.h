@@ -5,6 +5,7 @@
 #include "halide_test_dirs.h"
 #include "test_sharding.h"
 
+#include <cmath>
 #include <fstream>
 
 namespace Halide {
@@ -80,7 +81,6 @@ public:
                                   Target::AVX2, Target::AVX512,
                                   Target::FMA, Target::FMA4, Target::F16C,
                                   Target::VSX, Target::POWER_ARCH_2_07,
-                                  Target::ARMv7s, Target::NoNEON,
                                   Target::WasmSimd128}) {
             if (target.has_feature(f) != host_target.has_feature(f)) {
                 can_run_the_code = false;
@@ -195,6 +195,7 @@ public:
         // Include a scalar version
         Halide::Func f_scalar("scalar_" + name);
         f_scalar(x, y) = e;
+        f_scalar.compute_root();
 
         if (has_inline_reduction.result) {
             // If there's an inline reduction, we want to vectorize it
@@ -203,15 +204,17 @@ public:
             RVar rxi;
             Func g{has_inline_reduction.inline_reduction};
 
-            // Do the reduction separately in f_scalar
-            g.clone_in(f_scalar);
+            if (g.rvars().size() > 0) {  // Exclude update definition without reduction
+                // Do the reduction separately in f_scalar
+                g.clone_in(f_scalar);
 
-            g.compute_at(f, x)
-                .update()
-                .split(x, xo, xi, vector_width)
-                .atomic(true)
-                .vectorize(g.rvars()[0])
-                .vectorize(xi);
+                g.compute_at(f, x)
+                    .update()
+                    .split(x, xo, xi, vector_width)
+                    .atomic(true)
+                    .vectorize(g.rvars()[0])
+                    .vectorize(xi);
+            }
         }
 
         // The output to the pipeline is the maximum absolute difference as a double.
@@ -262,7 +265,7 @@ public:
             // kinds of bugs we're looking for are codegen bugs that
             // return the wrong value entirely, not floating point
             // accuracy differences between vectors and scalars.
-            if (e > 0.001) {
+            if (e > 0.001 || std::isnan(e)) {
                 error_msg << "The vector and scalar versions of " << name << " disagree. Maximum error: " << e << "\n";
 
                 std::string error_filename = output_directory + "error_" + name + ".s";
@@ -278,6 +281,8 @@ public:
                 }
 
                 error_file.close();
+            } else if (Internal::get_env_variable("HL_DEBUG_SIMDOPCHECK") == "1") {
+                error_msg << "Ran, e: " << e << "\n";
             }
         }
 
@@ -285,13 +290,7 @@ public:
     }
 
     void check(std::string op, int vector_width, Expr e) {
-        // Make a name for the test by uniquing then sanitizing the op name
-        std::string name = "op_" + op;
-        for (size_t i = 0; i < name.size(); i++) {
-            if (!isalnum(name[i])) name[i] = '_';
-        }
-
-        name += "_" + std::to_string(tasks.size());
+        std::string name = get_unique_test_name(op, tasks.size());
 
         // Bail out after generating the unique_name, so that names are
         // unique across different processes and don't depend on filter
@@ -300,6 +299,18 @@ public:
 
         tasks.emplace_back(Task{op, name, vector_width, e});
     }
+
+    std::string get_unique_test_name(const std::string &op, int id) {
+        // Make a name for the test by uniquing then sanitizing the op name
+        std::string name = "op_" + op;
+        for (size_t i = 0; i < name.size(); i++) {
+            if (!isalnum(name[i])) name[i] = '_';
+        }
+
+        name += "_" + std::to_string(id);
+        return name;
+    }
+
     virtual void add_tests() = 0;
     virtual void setup_images() {
         for (auto p : image_params) {

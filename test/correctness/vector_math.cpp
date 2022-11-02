@@ -481,6 +481,7 @@ bool test(int lanes, int seed) {
             if (verbose) printf("Absolute value\n");
             Func f14;
             f14(x, y) = cast<A>(abs(input(x, y)));
+            f14.vectorize(x, lanes);
             Buffer<A> im14 = f14.realize({W, H});
 
             for (int y = 0; y < H; y++) {
@@ -661,6 +662,7 @@ bool test(int lanes, int seed) {
             weight = cast(UInt(t.bits(), t.lanes()), max(0, weight));
         }
         f21(x, y) = lerp(input(x, y), input(x + 1, y), weight);
+        f21.vectorize(x, lanes);
         Buffer<A> im21 = f21.realize({W, H});
 
         for (int y = 0; y < H; y++) {

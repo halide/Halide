@@ -206,6 +206,13 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    // SVE2 enables ARMDotProd and ARMFp16
+    t1 = Target(Target::Linux, Target::ARM, 64, {Target::SVE2});
+    if (!t1.has_feature(Target::ARMDotProd) || !t1.has_feature(Target::ARMFp16)) {
+        printf("Failed for SVE2 to enalble ARMDotProd and ARMFp16\n");
+        return -1;
+    }
+
     printf("Success!\n");
     return 0;
 }

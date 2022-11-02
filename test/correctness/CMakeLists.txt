@@ -105,7 +105,6 @@ tests(GROUPS correctness
       float16_t_comparison.cpp
       float16_t_constants.cpp
       float16_t_image_type.cpp
-      float16_t_neon_op_check.cpp
       for_each_element.cpp
       force_onto_stack.cpp
       func_lifetime.cpp
@@ -266,6 +265,7 @@ tests(GROUPS correctness
       shifted_image.cpp
       side_effects.cpp
       simd_op_check.cpp
+      simd_op_check_arm.cpp
       simd_op_check_hvx.cpp
       simplified_away_embedded_image.cpp
       simplify.cpp

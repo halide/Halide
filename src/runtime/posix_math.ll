@@ -323,3 +323,29 @@ define weak_odr double @neg_inf_f64() nounwind uwtable readnone alwaysinline {
 define weak_odr double @nan_f64() nounwind uwtable readnone alwaysinline {
        ret double 0x7FF8000000000000
 }
+
+; In case scalable vector with un-natural vector size, LLVM doesn't auto-vectorize the above scalar version
+define weak_odr <vscale x 4 x float> @inf_f32nx4() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 4 x float> shufflevector (<vscale x 4 x float> insertelement (<vscale x 4 x float> undef, float 0x7FF0000000000000, i32 0), <vscale x 4 x float> undef, <vscale x 4 x i32> zeroinitializer)
+}
+
+define weak_odr <vscale x 4 x float> @neg_inf_f32nx4() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 4 x float> shufflevector (<vscale x 4 x float> insertelement (<vscale x 4 x float> undef, float 0xFFF0000000000000, i32 0), <vscale x 4 x float> undef, <vscale x 4 x i32> zeroinitializer)
+}
+
+define weak_odr <vscale x 4 x float> @nan_f32nx4() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 4 x float> shufflevector (<vscale x 4 x float> insertelement (<vscale x 4 x float> undef, float 0x7FF8000000000000, i32 0), <vscale x 4 x float> undef, <vscale x 4 x i32> zeroinitializer)
+}
+
+
+define weak_odr <vscale x 2 x double> @inf_f64nx2() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 2 x double> shufflevector (<vscale x 2 x double> insertelement (<vscale x 2 x double> undef, double 0x7FF0000000000000, i32 0), <vscale x 2 x double> undef, <vscale x 2 x i32> zeroinitializer)
+}
+
+define weak_odr <vscale x 2 x double> @neg_inf_f64nx2() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 2 x double> shufflevector (<vscale x 2 x double> insertelement (<vscale x 2 x double> undef, double 0xFFF0000000000000, i32 0), <vscale x 2 x double> undef, <vscale x 2 x i32> zeroinitializer)
+}
+
+define weak_odr <vscale x 2 x double> @nan_f64nx2() nounwind uwtable readnone alwaysinline {
+       ret <vscale x 2 x double> shufflevector (<vscale x 2 x double> insertelement (<vscale x 2 x double> undef, double 0x7FF8000000000000, i32 0), <vscale x 2 x double> undef, <vscale x 2 x i32> zeroinitializer)
+}

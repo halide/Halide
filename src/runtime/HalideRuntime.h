@@ -1191,6 +1191,10 @@ enum halide_error_code_t {
     /** An explicit storage bound provided is too small to store
      * all the values produced by the function. */
     halide_error_code_storage_bound_too_small = -45,
+
+    /** "vscale" value of Scalable Vector detected in runtime does not match
+     * the vscale value used in compilation. */
+    halide_error_code_vscale_invalid = -46,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1265,6 +1269,8 @@ extern int halide_error_device_dirty_with_no_device_support(void *user_context, 
 extern int halide_error_storage_bound_too_small(void *user_context, const char *func_name, const char *var_name,
                                                 int provided_size, int required_size);
 extern int halide_error_device_crop_failed(void *user_context);
+extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
+
 // @}
 
 /** Optional features a compilation Target can have.

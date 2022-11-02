@@ -291,4 +291,12 @@ WEAK int halide_error_device_crop_failed(void *user_context) {
     return halide_error_code_device_crop_failed;
 }
 
+WEAK int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale) {
+    error(user_context)
+        << "The function " << func_name
+        << " is compiled with the assumption that vscale of Scalable Vector is " << compiletime_vscale
+        << ". However, the detected runtime vscale is " << runtime_vscale << ".";
+    return halide_error_code_vscale_invalid;
+}
+
 }  // extern "C"
