@@ -1505,14 +1505,24 @@ int main(int argc, char **argv) {
     verify(input, output0, output1, output_scalar, output_array[0], output_array[1], untyped_output_buffer, tupled_output_buffer0, tupled_output_buffer1);
 
     check_metadata(*metadata_tester_metadata(), false);
-    if (!strcmp(metadata_tester_metadata()->name, "metadata_tester_metadata")) {
-        std::cerr << "Expected name metadata_tester_metadata\n";
+    if (strcmp(metadata_tester_metadata()->name, "metadata_tester")) {
+        std::cerr << "Expected name metadata_tester, got " << metadata_tester_metadata()->name << "\n";
         exit(-1);
     }
 
     check_metadata(*metadata_tester_ucon_metadata(), true);
-    if (!strcmp(metadata_tester_ucon_metadata()->name, "metadata_tester_ucon_metadata")) {
-        std::cerr << "Expected name metadata_tester_ucon_metadata\n";
+    if (strcmp(metadata_tester_ucon_metadata()->name, "metadata_tester_ucon")) {
+        std::cerr << "Expected name metadata_tester_ucon, got " << metadata_tester_ucon_metadata()->name << "\n";
+        exit(-1);
+    }
+
+    if (strcmp(metadata_tester_argv_signature(), "@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+        std::cerr << "Incorrect argv_signature for metadata_tester_argv_signature\n";
+        exit(-1);
+    }
+
+    if (strcmp(metadata_tester_ucon_argv_signature(), "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+        std::cerr << "Incorrect argv_signature for metadata_tester_ucon_argv_signature\n";
         exit(-1);
     }
 

@@ -3,6 +3,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <string>
 
 #include "argvcall.h"
 
@@ -36,6 +37,12 @@ int main(int argc, char **argv) {
         exit(-1);
     }
     verify(output, 1.2f, 3.4f);
+
+    std::string sig = argvcall_argv_signature();
+    if (sig != "ff#") {
+        fprintf(stderr, "Incorrect signature: %s\n", sig.c_str());
+        exit(-1);
+    }
 
     // verify that calling via the _argv entry point
     // also produces the correct result

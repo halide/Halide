@@ -2,6 +2,7 @@
 #include <atomic>
 #include <math.h>
 #include <stdio.h>
+#include <string>
 
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
@@ -69,6 +70,13 @@ int main(int argc, char **argv) {
 
     // verify that calling via the _argv entry point
     // also produces the correct result
+
+    std::string sig = user_context_argv_signature();
+    if (sig != "P@#") {
+        fprintf(stderr, "Incorrect signature: %s\n", sig.c_str());
+        exit(-1);
+    }
+
     const void *arg0 = context_pointer;
     void *args[3] = {&arg0, input.raw_buffer(), output.raw_buffer()};
     called_error = false;

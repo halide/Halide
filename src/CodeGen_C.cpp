@@ -1494,10 +1494,82 @@ void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
     forward_declared.insert(t.handle_type);
 }
 
+namespace {
+
+// Emit a string with one character per expected argument to the 'argv' call;
+// each character is used to indicate the type of the argument.
+// Scalar arguments are (mostly) borrowed from Python.
+// This is intended to provide a lightweight mechanism to write reusable marshal/unmarshal
+// code across language/processor/etc boundaries. (Note that while the existing
+// metadata provides equivalent information, it is also heavier-weight to process,
+// and hard to replicate from scratch; this, on the other hand, provides a convention
+// that can be constructed simply by inspection.
+//
+// !   bfloat16
+// e   float16
+// f   float32
+// d   float64
+// b   int8
+// h   int16
+// i   int32
+// q   int64
+// ?   bool
+// B   uint8
+// H   uint16
+// I   uint32
+// Q   uint64
+// P   void * / handle
+// @   halide_buffer_t * (as input)
+// #   halide_buffer_t * (as output)
+//
+char type_to_argv_signature_char(const halide_type_t &t) {
+
+#define HANDLE_CASE(CODE, BITS, CHAR)        \
+    case halide_type_t(CODE, BITS).as_u32(): \
+        return CHAR;
+
+    switch (t.element_of().as_u32()) {
+        HANDLE_CASE(halide_type_bfloat, 16, '!')  // not defined in Python or NumPy, so we just invent this
+        HANDLE_CASE(halide_type_float, 16, 'e')   // this is what NumPy uses
+        HANDLE_CASE(halide_type_float, 32, 'f')
+        HANDLE_CASE(halide_type_float, 64, 'd')
+        HANDLE_CASE(halide_type_int, 8, 'b')
+        HANDLE_CASE(halide_type_int, 16, 'h')
+        HANDLE_CASE(halide_type_int, 32, 'i')
+        HANDLE_CASE(halide_type_int, 64, 'q')
+        HANDLE_CASE(halide_type_uint, 1, '?')
+        HANDLE_CASE(halide_type_uint, 8, 'B')
+        HANDLE_CASE(halide_type_uint, 16, 'H')
+        HANDLE_CASE(halide_type_uint, 32, 'I')
+        HANDLE_CASE(halide_type_uint, 64, 'Q')
+        HANDLE_CASE(halide_type_handle, 64, 'P')
+    default:
+        internal_error << "Unsupported type\n";
+        return 0;
+    }
+
+#undef HANDLE_CASE
+}
+
+std::string argv_signature_string(const std::vector<LoweredArgument> &args) {
+    std::string s(args.size(), '*');
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer()) {
+            s[i] = args[i].is_input() ? '@' : '#';
+        } else {
+            s[i] = type_to_argv_signature_char(args[i].type);
+        }
+    }
+    return s;
+}
+
+}  // namespace
+
 void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
                                   const std::vector<LoweredArgument> &args) {
     if (is_header_or_extern_decl()) {
         stream << "\nHALIDE_FUNCTION_ATTRS\nint " << function_name << "_argv(void **args);\n";
+        stream << "\nHALIDE_FUNCTION_ATTRS\ninline const char *" << function_name << "_argv_signature() { return \"" << argv_signature_string(args) << "\"; }\n";
         return;
     }
 
