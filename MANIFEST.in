@@ -1,6 +1,6 @@
-graft python_bindings
-prune python_bindings/apps
-prune python_bindings/test
-prune python_bindings/tutorial
+graft python_bindings/halide
+prune python_bindings/halide/apps
+prune python_bindings/halide/test
+prune python_bindings/halide/tutorial
 prune python_bindings/stub
 include README_python.md

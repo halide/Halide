@@ -109,22 +109,28 @@ function(add_python_test)
 endfunction()
 
 
-##
-# Add our sources to this sub-tree.
-##
+# Copy our Python source files over so that we have a valid package in the binary directory.
+# TODO: When upgrading to CMake 3.23 or beyond, investigate the FILE_SET feature.
+function(make_py_src_to_binary_target python_sources target_name)
+    set(build_tree_pys "")
+    foreach (pysrc IN LISTS python_sources)
+        # TODO: CMake 3.22 still doesn't allow target-dependent genex in OUTPUT, but we can hack around this using a stamp
+        #   file. Fix this hack up if and when they ever improve this feature.
+        set(stamp_file "${CMAKE_CURRENT_BINARY_DIR}/.${pysrc}.stamp")
+        add_custom_command(
+            OUTPUT "${stamp_file}"
+            COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}" "${CMAKE_CURRENT_BINARY_DIR}/${pysrc}"
+            COMMAND ${CMAKE_COMMAND} -E touch "${stamp_file}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}"
+            VERBATIM
+        )
+        list(APPEND build_tree_pys "${stamp_file}")
+    endforeach ()
+    add_custom_target(${target_name} ALL DEPENDS ${build_tree_pys})
+endfunction ()
 
-add_subdirectory(src)
+add_subdirectory(halide)
 
 if (WITH_PYTHON_STUBS)
     add_subdirectory(stub)
 endif ()
-
-if (WITH_TEST_PYTHON)
-    add_subdirectory(apps)
-    add_subdirectory(test)
-endif ()
-
-if (WITH_TUTORIALS)
-    add_subdirectory(tutorial)
-endif ()
-

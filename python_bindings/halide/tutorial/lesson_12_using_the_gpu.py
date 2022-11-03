@@ -239,7 +239,7 @@ class MyPipeline:
 
 def main():
     # Load an input image.
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../../apps/images/rgb.png")
     input = hl.Buffer(halide.imageio.imread(image_path))
 
     # Allocated an image that will store the correct output

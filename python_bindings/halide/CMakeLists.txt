@@ -48,6 +48,17 @@ set_target_properties(
 )
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
+
+if (WITH_TEST_PYTHON)
+    add_subdirectory(apps)
+    add_subdirectory(test)
+endif ()
+
+if (WITH_TUTORIALS)
+    add_subdirectory(tutorial)
+endif ()
+
+
 # TODO: There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH
 #   on Windows. This workaround places a copy of Halide.dll (and any other dependencies) next to our Python module.
 #   Ref: https://stackoverflow.com/questions/59860465/pybind11-importerror-dll-not-found-when-trying-to-import-pyd-in-python-int
@@ -65,23 +76,7 @@ add_custom_command(
     VERBATIM
 )
 
-# Copy our Python source files over so that we have a valid package in the binary directory.
-# TODO: When upgrading to CMake 3.23 or beyond, investigate the FILE_SET feature.
-set(build_tree_pys "")
-foreach (pysrc IN LISTS python_sources)
-    # TODO: CMake 3.22 still doesn't allow target-dependent genex in OUTPUT, but we can hack around this using a stamp
-    #   file. Fix this hack up if and when they ever improve this feature.
-    set(stamp_file "${CMAKE_CURRENT_BINARY_DIR}/.${pysrc}.stamp")
-    add_custom_command(
-        OUTPUT "${stamp_file}"
-        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}" "$<TARGET_FILE_DIR:Halide_Python>/${pysrc}"
-        COMMAND ${CMAKE_COMMAND} -E touch "${stamp_file}"
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}"
-        VERBATIM
-    )
-    list(APPEND build_tree_pys "${stamp_file}")
-endforeach ()
-add_custom_target(Halide_Python_sources ALL DEPENDS ${build_tree_pys})
+make_py_src_to_binary_target("${python_sources}" Halide_Python_sources)
 add_dependencies(Halide_Python Halide_Python_sources)
 
 ##
@@ -99,6 +94,9 @@ install(DIRECTORY "$<TARGET_FILE_DIR:Halide_Python>/"
         COMPONENT Halide_Python
         FILES_MATCHING
         PATTERN "*.py"
+        PATTERN "*/apps" EXCLUDE
+        PATTERN "*/test" EXCLUDE
+        PATTERN "*/tutorial" EXCLUDE
         PATTERN "*/halide_" EXCLUDE
         PATTERN "*/CMakeFiles" EXCLUDE
         PATTERN "*/__pycache__" EXCLUDE)

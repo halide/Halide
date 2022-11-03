@@ -19,7 +19,7 @@ def main():
     # First we'll declare some Vars to use below.
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../../apps/images/rgb.png")
 
     # Now we'll express a multi-stage pipeline that blurs an image
     # first horizontally, and then vertically.

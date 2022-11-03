@@ -97,3 +97,12 @@ if(NOT MSVC)
                                      [ $(nm $<TARGET_FILE:pyext_multi_method_module> | grep ' T ' | grep PyInit_multi_method_module | wc -l) -eq 1 ]"
              VERBATIM)
 endif ()
+
+set(pygen_sources
+    addconstantpy_generator.py
+    complexpy_generator.py
+    bitpy_generator.py
+    simplepy_generator.py
+    )
+make_py_src_to_binary_target("${pygen_sources}" Halide_PyGen_sources)
+add_dependencies(PythonCorrectnessGenerators Halide_PyGen_sources)

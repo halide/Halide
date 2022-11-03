@@ -4,7 +4,7 @@ if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
 endif ()
 
 set(TEST_TMPDIR "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}>")
-set(TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../apps/images>")
+set(TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../../apps/images>")
 
 set(APPS
     bilateral_grid
@@ -51,7 +51,6 @@ foreach (app IN LISTS APPS)
         TEST_ARGS ${ARGS_${app}}
         LABEL python_apps
         DEPENDS ${DEPS}
-        PYTHONPATH "$<TARGET_FILE_DIR:app_ext_${app}>"
         ENVIRONMENT
         "TEST_TMPDIR=${TEST_TMPDIR}"
         "TEST_IMAGES_DIR=${TEST_IMAGES_DIR}"

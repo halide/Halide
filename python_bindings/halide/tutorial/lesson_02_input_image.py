@@ -18,7 +18,7 @@ def main():
     # brightens an image.
 
     # First we'll load the input image we wish to brighten.
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../../apps/images/rgb.png")
 
     # We create a hl.Buffer object to wrap the numpy array
     input = hl.Buffer(halide.imageio.imread(image_path))
