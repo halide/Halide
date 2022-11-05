@@ -3,7 +3,6 @@
 ##
 
 set(COMMON_DIR "${Halide_SOURCE_DIR}/src/autoschedulers/common")
-include_directories("${Halide_SOURCE_DIR}/src/autoschedulers/adams2019")
 
 function(add_adams2019_test NAME)
     set(options "")
@@ -59,6 +58,7 @@ add_executable(adams2019_retrain_cost_model
                ${COMMON_DIR}/Weights.cpp
                retrain_cost_model.cpp
                $<TARGET_OBJECTS:adams2019_weights_obj>)
+target_include_directories(adams2019_retrain_cost_model PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/adams2019")
 target_link_libraries(adams2019_retrain_cost_model PRIVATE ASLog adams2019_cost_model adams2019_train_cost_model Halide::Halide Halide::Plugin)
 
 ##
@@ -76,6 +76,7 @@ add_autoscheduler(NAME Adams2019
                   ${COMMON_DIR}/Weights.cpp
                   $<TARGET_OBJECTS:adams2019_weights_obj>)
 
+target_include_directories(Halide_Adams2019 PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/adams2019")
 target_link_libraries(Halide_Adams2019 PRIVATE ASLog ParamParser adams2019_cost_model adams2019_train_cost_model)
 
 ##
@@ -103,6 +104,7 @@ add_adams2019_test(adams2019_demo_apps_autoscheduler
 # =================================================================
 
 add_executable(adams2019_included_schedule_file.generator ${COMMON_DIR}/included_schedule_file_generator.cpp)
+target_include_directories(adams2019_included_schedule_file.generator PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/adams2019")
 target_link_libraries(adams2019_included_schedule_file.generator PRIVATE Halide::Generator)
 
 add_halide_library(adams2019_included_schedule_file FROM adams2019_included_schedule_file.generator
@@ -127,6 +129,7 @@ add_executable(adams2019_get_host_target ${COMMON_DIR}/get_host_target.cpp)
 target_link_libraries(adams2019_get_host_target PRIVATE Halide::Halide)
 
 add_executable(adams2019_weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp ${COMMON_DIR}/Weights.cpp)
+target_include_directories(adams2019_weightsdir_to_weightsfile PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/adams2019")
 target_link_libraries(adams2019_weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 
 # =================================================================
@@ -151,6 +154,7 @@ add_adams2019_test(adams2019_test_perfect_hash_map)
 ##
 
 add_executable(adams2019_test_function_dag ${COMMON_DIR}/test_function_dag.cpp FunctionDAG.cpp)
+target_include_directories(adams2019_test_function_dag PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/adams2019")
 target_link_libraries(adams2019_test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
 add_adams2019_test(adams2019_test_function_dag)
