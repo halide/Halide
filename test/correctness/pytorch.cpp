@@ -124,6 +124,9 @@ HALIDE_FUNCTION_ATTRS
 int test1_argv(void **args);
 
 HALIDE_FUNCTION_ATTRS
+inline const char *test1_argv_signature() { return "fi#"; }
+
+HALIDE_FUNCTION_ATTRS
 const struct halide_filter_metadata_t *test1_metadata();
 
 #ifdef __cplusplus
@@ -204,6 +207,9 @@ int test2(void const *__user_context, float _alpha, int32_t _beta, struct halide
 
 HALIDE_FUNCTION_ATTRS
 int test2_argv(void **args);
+
+HALIDE_FUNCTION_ATTRS
+inline const char *test2_argv_signature() { return "Pfi#"; }
 
 HALIDE_FUNCTION_ATTRS
 const struct halide_filter_metadata_t *test2_metadata();
