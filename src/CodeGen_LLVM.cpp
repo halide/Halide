@@ -2003,6 +2003,14 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, con
     inst->setMetadata("tbaa", tbaa);
 }
 
+void CodeGen_LLVM::function_does_not_access_memory(llvm::Function *fn) {
+#if LLVM_VERSION >= 160
+    fn->addFnAttr("memory(none)");
+#else
+    fn->addFnAttr(llvm::Attribute::ReadNone);
+#endif
+}
+
 void CodeGen_LLVM::visit(const Load *op) {
     // If the type should be stored as some other type, insert a reinterpret cast.
     Type storage_type = upgrade_type_for_storage(op->type);
@@ -2494,7 +2502,7 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
         value = codegen_dense_vector_load(op, vpred);
     } else if (use_llvm_vp_intrinsics && stride) {  // Case only handled by vector predication, otherwise must scalarize.
         Value *vpred = codegen(op->predicate);
-        Value *llvm_stride = codegen(stride);  // Not 1 (dense) as that was caught above.
+        Value *llvm_stride = codegen(stride);       // Not 1 (dense) as that was caught above.
         value = codegen_vector_load(op->type, op->name, ramp->base, op->image, op->param,
                                     op->alignment, vpred, true, llvm_stride);
     } else if (ramp && stride && stride->value == -1) {

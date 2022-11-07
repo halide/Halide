@@ -378,7 +378,7 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
 
     builder->restoreIP(here);
 
-    wrapper->addFnAttr(llvm::Attribute::ReadNone);
+    function_does_not_access_memory(wrapper);
     wrapper->addFnAttr(llvm::Attribute::NoUnwind);
 
     llvm::verifyFunction(*wrapper);
@@ -391,7 +391,7 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_RISCV(const Target &target) {
     return std::make_unique<CodeGen_RISCV>(target);
 }
 
-#else  // WITH_RISCV
+#else   // WITH_RISCV
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_RISCV(const Target &target) {
     user_error << "RISCV not enabled for this build of Halide.\n";

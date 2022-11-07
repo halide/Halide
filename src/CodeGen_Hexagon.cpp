@@ -1763,7 +1763,7 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
             fn = fn2;
         }
     }
-    fn->addFnAttr(llvm::Attribute::ReadNone);
+    function_does_not_access_memory(fn);
     fn->addFnAttr(llvm::Attribute::NoUnwind);
     return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
                                       fn, std::move(args));
@@ -1786,7 +1786,7 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
             fn = fn2;
         }
     }
-    fn->addFnAttr(llvm::Attribute::ReadNone);
+    function_does_not_access_memory(fn);
     fn->addFnAttr(llvm::Attribute::NoUnwind);
     return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
                                       fn, std::move(args));
@@ -2282,7 +2282,7 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
     return std::make_unique<CodeGen_Hexagon>(target);
 }
 
-#else  // WITH_HEXAGON
+#else   // WITH_HEXAGON
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
     user_error << "hexagon not enabled for this build of Halide.\n";

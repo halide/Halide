@@ -117,7 +117,7 @@ void CodeGen_PowerPC::init_module() {
         }
 
         auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
-        fn->addFnAttr(llvm::Attribute::ReadNone);
+        function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
@@ -199,7 +199,7 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_PowerPC(const Target &target) {
     return std::make_unique<CodeGen_PowerPC>(target);
 }
 
-#else  // WITH_POWERPC
+#else   // WITH_POWERPC
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_PowerPC(const Target &target) {
     user_error << "PowerPC not enabled for this build of Halide.\n";

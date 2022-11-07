@@ -135,7 +135,7 @@ void CodeGen_WebAssembly::init_module() {
         }
 
         auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
-        fn->addFnAttr(llvm::Attribute::ReadNone);
+        function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
@@ -360,7 +360,7 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_WebAssembly(const Target &target) {
     return std::make_unique<CodeGen_WebAssembly>(target);
 }
 
-#else  // WITH_WEBASSEMBLY
+#else   // WITH_WEBASSEMBLY
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_WebAssembly(const Target &target) {
     user_error << "WebAssembly not enabled for this build of Halide.\n";
