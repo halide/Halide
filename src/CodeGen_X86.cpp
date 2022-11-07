@@ -991,7 +991,7 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_X86(const Target &target) {
     return std::make_unique<CodeGen_X86>(target);
 }
 
-#else   // WITH_X86
+#else  // WITH_X86
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_X86(const Target &target) {
     user_error << "x86 not enabled for this build of Halide.\n";

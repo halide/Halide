@@ -1517,7 +1517,7 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_ARM(const Target &target) {
     return std::make_unique<CodeGen_ARM>(target);
 }
 
-#else   // WITH_ARM || WITH_AARCH64
+#else  // WITH_ARM || WITH_AARCH64
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_ARM(const Target &target) {
     user_error << "ARM not enabled for this build of Halide.\n";
