@@ -273,7 +273,6 @@ void _halide_buffer_to_string(char* dst, size_t n, const halide_buffer_t *buf) {
 } // namespace
 )INLINE_CODE";
 
-
 class TypeInfoGatherer : public IRGraphVisitor {
 private:
     using IRGraphVisitor::include;
@@ -1931,7 +1930,6 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
 
             // Return success.
             stream << get_indent() << "return 0;\n";
-
         }
 
         // Ensure we use open/close_scope, so that the cache doesn't try to linger
@@ -2094,7 +2092,6 @@ void CodeGen_C::open_scope() {
     stream << get_indent();
     indent++;
     stream << "{\n";
-
 }
 
 void CodeGen_C::close_scope(const std::string &comment) {
