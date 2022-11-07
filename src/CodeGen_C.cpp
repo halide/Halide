@@ -219,6 +219,61 @@ public:
 } // namespace
 )INLINE_CODE";
 
+const string post_halide_runtime_globals = R"INLINE_CODE(
+namespace {
+void _halide_buffer_to_string(char* dst, size_t n, const halide_buffer_t *buf) {
+    if (buf == nullptr) {
+        snprintf(dst, n, "nullptr");
+        return;
+    }
+
+    const char *type_code_name;
+    switch (buf->type.code) {
+    case halide_type_int:
+        type_code_name = "int";
+        break;
+    case halide_type_uint:
+        type_code_name = "uint";
+        break;
+    case halide_type_float:
+        type_code_name = "float";
+        break;
+    case halide_type_handle:
+        type_code_name = "handle";
+        break;
+    case halide_type_bfloat:
+        type_code_name = "bfloat";
+        break;
+    default:
+        type_code_name = "bad_type_code";
+        break;
+    }
+
+    // lexically longest i32 is -2147483648 (11 chars), so we need a worst-case of 11 * 3 + 8 = ~41 per dim
+    const size_t dims_size = buf->dimensions * 48 + 1;
+    char *dims = (char *)alloca(dims_size);
+    if (!dims) {
+        snprintf(dst, n, "<error>");
+        return;
+    }
+    dims[0] = 0;
+    char* start = dims;
+    size_t remaining = dims_size;
+    for (int i = 0; i < buf->dimensions; i++) {
+        snprintf(start, remaining, ", {%d, %d, %d}", buf->dim[i].min, buf->dim[i].extent, buf->dim[i].stride);
+        size_t here = strlen(start);
+        start += here;
+        remaining -= here;
+    }
+
+    snprintf(dst, n, "buffer(%llu, %p, %p, %llu, %s%d%s)",
+        (unsigned long long)buf->device, buf->device_interface, buf->host, (unsigned long long)buf->flags,
+        type_code_name, buf->type.bits, dims);
+}
+} // namespace
+)INLINE_CODE";
+
+
 class TypeInfoGatherer : public IRGraphVisitor {
 private:
     using IRGraphVisitor::include;
@@ -362,7 +417,8 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
             << headers
             << globals
             << halide_internal_runtime_header_HalideRuntime_h << "\n"
-            << halide_internal_initmod_inlined_c << "\n";
+            << halide_internal_initmod_inlined_c << "\n"
+            << post_halide_runtime_globals << "\n";
         stream << "\n";
     }
 
@@ -1850,8 +1906,8 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
     if (is_header_or_extern_decl()) {
         stream << ");\n";
     } else {
-        stream << ") {\n";
-        indent += 1;
+        stream << ") ";
+        open_scope();
 
         if (uses_gpu_for_loops) {
             stream << get_indent() << "halide_error("
@@ -1875,10 +1931,12 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
 
             // Return success.
             stream << get_indent() << "return 0;\n";
+
         }
 
-        indent -= 1;
-        stream << "}\n";
+        // Ensure we use open/close_scope, so that the cache doesn't try to linger
+        // across function boundaries for internal closures.
+        close_scope("");
     }
 
     if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
@@ -2036,6 +2094,7 @@ void CodeGen_C::open_scope() {
     stream << get_indent();
     indent++;
     stream << "{\n";
+
 }
 
 void CodeGen_C::close_scope(const std::string &comment) {
@@ -2508,24 +2567,32 @@ void CodeGen_C::visit(const Call *op) {
         string format_string = "";
         for (size_t i = 0; i < op->args.size(); i++) {
             Type t = op->args[i].type();
-            printf_args.push_back(print_expr(op->args[i]));
-            if (t.is_int()) {
-                format_string += "%lld";
-                printf_args[i] = "(long long)(" + printf_args[i] + ")";
-            } else if (t.is_uint()) {
-                format_string += "%llu";
-                printf_args[i] = "(long long unsigned)(" + printf_args[i] + ")";
-            } else if (t.is_float()) {
-                if (t.bits() == 32) {
-                    format_string += "%f";
-                } else {
-                    format_string += "%e";
-                }
-            } else if (op->args[i].as<StringImm>()) {
+            if (t == type_of<halide_buffer_t *>()) {
+                string buf_name = unique_name('b');
+                printf_args.push_back(buf_name);
+                stream << get_indent() << "char " << buf_name << "[1024];\n";
+                stream << get_indent() << "_halide_buffer_to_string(" << buf_name << ", 1024, " << print_expr(op->args[i]) << ");\n";
                 format_string += "%s";
             } else {
-                internal_assert(t.is_handle());
-                format_string += "%p";
+                printf_args.push_back(print_expr(op->args[i]));
+                if (t.is_int()) {
+                    format_string += "%lld";
+                    printf_args[i] = "(long long)(" + printf_args[i] + ")";
+                } else if (t.is_uint()) {
+                    format_string += "%llu";
+                    printf_args[i] = "(long long unsigned)(" + printf_args[i] + ")";
+                } else if (t.is_float()) {
+                    if (t.bits() == 32) {
+                        format_string += "%f";
+                    } else {
+                        format_string += "%e";
+                    }
+                } else if (op->args[i].as<StringImm>()) {
+                    format_string += "%s";
+                } else {
+                    internal_assert(t.is_handle());
+                    format_string += "%p";
+                }
             }
         }
         string buf_name = unique_name('b');
