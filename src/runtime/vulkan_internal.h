@@ -14,6 +14,9 @@
 
 #include "vulkan_interface.h"
 
+#ifndef DEBUG_RUNTIME
+#define DEBUG_RUNTIME
+#endif
 // --
 
 namespace Halide {
@@ -82,10 +85,11 @@ bool vk_validate_required_extension_support(void *user_context,
 
 // -- Command Pool
 VkResult vk_create_command_pool(void *user_context, VulkanMemoryAllocator *allocator, uint32_t queue_index, VkCommandPool *command_pool);
-VkResult vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool);
+void vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool);
 
 // -- Command Buffer
 VkResult vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool pool, VkCommandBuffer *command_buffer);
+void vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool, VkCommandBuffer command_buffer);
 
 VkResult vk_fill_command_buffer_with_dispatch_call(void *user_context,
                                                    VkDevice device,

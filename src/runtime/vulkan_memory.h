@@ -23,7 +23,7 @@ WEAK const VkAllocationCallbacks *custom_allocation_callbacks = nullptr;  // nul
 // Runtime configuration parameters to adjust the behaviour of the block allocator
 struct VulkanMemoryConfig {
     size_t minimum_block_size = 32 * 1024 * 1024;  // 32MB
-    size_t maximum_block_size = 0;                 //< zero means no contraint
+    size_t maximum_block_size = 0;                 //< zero means no constraint
     size_t maximum_block_count = 0;                //< zero means no constraint
 };
 WEAK VulkanMemoryConfig memory_allocator_config;
@@ -188,9 +188,11 @@ void *VulkanMemoryAllocator::map(void *user_context, MemoryRegion *region) {
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Mapping region ("
                    << "user_context=" << user_context << " "
-                   << "region=" << (void *)(region) << " "
                    << "device=" << (void *)(device) << " "
-                   << "physical_device=" << (void *)(physical_device) << ") ...\n";
+                   << "physical_device=" << (void *)(physical_device) << " "
+                   << "region=" << (void *)(region) << " "
+                   << "size=" << (uint32_t)region->size << " "
+                   << "offset=" << (uint32_t)region->offset << ") ...\n";
 #endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
@@ -228,9 +230,11 @@ void VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Unmapping region ("
                    << "user_context=" << user_context << " "
-                   << "region=" << (void *)(region) << " "
                    << "device=" << (void *)(device) << " "
-                   << "physical_device=" << (void *)(physical_device) << ") ...\n";
+                   << "physical_device=" << (void *)(physical_device) << " "
+                   << "region=" << (void *)(region) << " "
+                   << "size=" << (uint32_t)region->size << " "
+                   << "offset=" << (uint32_t)region->offset << ") ...\n";
 #endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
@@ -260,7 +264,9 @@ void VulkanMemoryAllocator::release(void *user_context, MemoryRegion *region) {
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Releasing region ("
                    << "user_context=" << user_context << " "
-                   << "region=" << (void *)(region) << ") ... \n";
+                   << "region=" << (void *)(region) << " "
+                   << "size=" << (uint32_t)region->size << " "
+                   << "offset=" << (uint32_t)region->offset << ") ...\n";
 #endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
@@ -272,7 +278,9 @@ void VulkanMemoryAllocator::reclaim(void *user_context, MemoryRegion *region) {
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Reclaiming region ("
                    << "user_context=" << user_context << " "
-                   << "region=" << (void *)(region) << ") ... \n";
+                   << "region=" << (void *)(region) << " "
+                   << "size=" << (uint32_t)region->size << " "
+                   << "offset=" << (uint32_t)region->offset << ") ...\n";
 #endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
@@ -293,7 +301,7 @@ bool VulkanMemoryAllocator::collect(void *user_context) {
 
 void VulkanMemoryAllocator::release(void *user_context) {
 #if defined(HL_VK_DEBUG_MEM)
-    debug(nullptr) << "VulkanMemoryAllocator: Releasing ("
+    debug(nullptr) << "VulkanMemoryAllocator: Releasing block allocator ("
                    << "user_context=" << user_context << ") ... \n";
 #endif
     halide_abort_if_false(user_context, device != nullptr);

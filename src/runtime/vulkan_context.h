@@ -86,7 +86,7 @@ namespace {
 
 // Initializes the instance (used by the default vk_create_context)
 int vk_create_instance(void *user_context, const StringTable &requested_layers, VkInstance *instance, const VkAllocationCallbacks *alloc_callbacks) {
-    debug(user_context) << "    vk_create_instance (user_context: " << user_context << ")\n";
+    debug(user_context) << " vk_create_instance (user_context: " << user_context << ")\n";
 
     StringTable required_instance_extensions;
     vk_get_required_instance_extensions(user_context, required_instance_extensions);
@@ -97,9 +97,9 @@ int vk_create_instance(void *user_context, const StringTable &requested_layers, 
     bool valid_instance = vk_validate_required_extension_support(user_context, required_instance_extensions, supported_instance_extensions);
     halide_abort_if_false(user_context, valid_instance);
 
-    debug(user_context) << "Vulkan: Found " << (uint32_t)required_instance_extensions.size() << " required extensions for instance!\n";
+    debug(user_context) << "  found " << (uint32_t)required_instance_extensions.size() << " required extensions for instance!\n";
     for (int n = 0; n < (int)required_instance_extensions.size(); ++n) {
-        debug(user_context) << "    extension: " << required_instance_extensions[n] << "\n";
+        debug(user_context) << "  extension: " << required_instance_extensions[n] << "\n";
     }
 
     // If we're running under Molten VK, we must enable the portability extension and create flags
@@ -219,7 +219,7 @@ int vk_select_device_for_context(void *user_context,
 
 int vk_create_device(void *user_context, const StringTable &requested_layers, VkInstance *instance, VkDevice *device, VkQueue *queue,
                      VkPhysicalDevice *physical_device, uint32_t *queue_family_index, const VkAllocationCallbacks *alloc_callbacks) {
-
+    debug(user_context) << " vk_create_device (user_context=" << user_context << ")\n";
     StringTable required_device_extensions;
     vk_get_required_device_extensions(user_context, required_device_extensions);
 
@@ -232,16 +232,16 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     bool valid_device = vk_validate_required_extension_support(user_context, required_device_extensions, supported_device_extensions);
     halide_abort_if_false(user_context, valid_device);
 
-    debug(user_context) << "Vulkan: Found " << (uint32_t)required_device_extensions.size() << " required extensions for device!\n";
+    debug(user_context) << "  found " << (uint32_t)required_device_extensions.size() << " required extensions for device!\n";
     for (int n = 0; n < (int)required_device_extensions.size(); ++n) {
-        debug(user_context) << "    required extension: " << required_device_extensions[n] << "\n";
+        debug(user_context) << "   required extension: " << required_device_extensions[n] << "\n";
     }
 
     // enable all available optional extensions
-    debug(user_context) << "Vulkan: Checking for " << (uint32_t)optional_device_extensions.size() << " optional extensions for device ...\n";
+    debug(user_context) << "  checking for " << (uint32_t)optional_device_extensions.size() << " optional extensions for device ...\n";
     for (int n = 0; n < (int)optional_device_extensions.size(); ++n) {
         if (supported_device_extensions.contains(optional_device_extensions[n])) {
-            debug(user_context) << "    optional extension: " << optional_device_extensions[n] << "\n";
+            debug(user_context) << "   optional extension: " << optional_device_extensions[n] << "\n";
             required_device_extensions.append(user_context, optional_device_extensions[n]);
         }
     }
@@ -262,11 +262,11 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     void *extended_features_ptr = nullptr;
     void *standard_features_ptr = nullptr;
 
-    debug(user_context) << "Vulkan: Querying for device features...\n";
+    debug(user_context) << "  querying for device features...\n";
     vkGetPhysicalDeviceFeatures(*physical_device, &device_features);
-    debug(user_context) << "Vulkan: Shader Float64 support: " << (device_features.shaderFloat64 ? "true" : "false") << "...\n";
-    debug(user_context) << "Vulkan: Shader Int64 support: " << (device_features.shaderInt64 ? "true" : "false") << "...\n";
-    debug(user_context) << "Vulkan: Shader Int16 support: " << (device_features.shaderInt16 ? "true" : "false") << "...\n";
+    debug(user_context) << "   shader float64 support: " << (device_features.shaderFloat64 ? "true" : "false") << "...\n";
+    debug(user_context) << "   shader int64 support: " << (device_features.shaderInt64 ? "true" : "false") << "...\n";
+    debug(user_context) << "   shader int16 support: " << (device_features.shaderInt16 ? "true" : "false") << "...\n";
 
     // If the instance runtime supports querying extended device features, request them
     VkPhysicalDeviceShaderFloat16Int8FeaturesKHR shader_f16_i8_ext = {
@@ -285,10 +285,10 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     }
 
     if (vkGetPhysicalDeviceFeatures2KHR) {
-        debug(user_context) << "Vulkan: Querying for extended device features...\n";
+        debug(user_context) << "  qerying for extended device features...\n";
         vkGetPhysicalDeviceFeatures2KHR(*physical_device, &device_features_ext);
-        debug(user_context) << "Vulkan: Shader Int8 support: " << (shader_f16_i8_ext.shaderInt8 ? "true" : "false") << "...\n";
-        debug(user_context) << "Vulkan: Shader Float16 support: " << (shader_f16_i8_ext.shaderFloat16 ? "true" : "false") << "...\n";
+        debug(user_context) << "   shader int8 support: " << (shader_f16_i8_ext.shaderInt8 ? "true" : "false") << "...\n";
+        debug(user_context) << "   shader float16 support: " << (shader_f16_i8_ext.shaderFloat16 ? "true" : "false") << "...\n";
         extended_features_ptr = (void *)(&device_features_ext);  // pass v1.1 extended features (which also contains the standard features)
     } else {
         standard_features_ptr = &device_features;  // pass v1.0 standard features
@@ -320,13 +320,13 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
                       VkInstance *instance, VkDevice *device, VkPhysicalDevice *physical_device,
                       VkCommandPool *command_pool, VkQueue *queue, uint32_t *queue_family_index) {
 
-    debug(user_context) << "    vk_create_context (user_context: " << user_context << ")\n";
+    debug(user_context) << " vk_create_context (user_context: " << user_context << ")\n";
 
     StringTable requested_layers;
     uint32_t requested_layer_count = vk_get_requested_layers(user_context, requested_layers);
-    debug(user_context) << "Vulkan: Requested " << requested_layer_count << " layers for instance!\n";
+    debug(user_context) << "  requested " << requested_layer_count << " layers for instance!\n";
     for (int n = 0; n < (int)requested_layer_count; ++n) {
-        debug(user_context) << "    layer: " << requested_layers[n] << "\n";
+        debug(user_context) << "   layer: " << requested_layers[n] << "\n";
     }
 
     const VkAllocationCallbacks *alloc_callbacks = halide_vulkan_get_allocation_callbacks(user_context);
