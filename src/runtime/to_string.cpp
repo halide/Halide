@@ -265,6 +265,9 @@ WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *t) {
     case halide_type_handle:
         code_name = "handle";
         break;
+    case halide_type_bfloat:
+        code_name = "bfloat";
+        break;
     default:
         code_name = "bad_type_code";
         break;
