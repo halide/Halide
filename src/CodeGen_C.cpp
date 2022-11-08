@@ -1850,8 +1850,8 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
     if (is_header_or_extern_decl()) {
         stream << ");\n";
     } else {
-        stream << ") {\n";
-        indent += 1;
+        stream << ") ";
+        open_scope();
 
         if (uses_gpu_for_loops) {
             stream << get_indent() << "halide_error("
@@ -1877,8 +1877,9 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
             stream << get_indent() << "return 0;\n";
         }
 
-        indent -= 1;
-        stream << "}\n";
+        // Ensure we use open/close_scope, so that the cache doesn't try to linger
+        // across function boundaries for internal closures.
+        close_scope("");
     }
 
     if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
