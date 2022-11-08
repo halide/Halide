@@ -2003,6 +2003,14 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, con
     inst->setMetadata("tbaa", tbaa);
 }
 
+void CodeGen_LLVM::function_does_not_access_memory(llvm::Function *fn) {
+#if LLVM_VERSION >= 160
+    fn->addFnAttr("memory(none)");
+#else
+    fn->addFnAttr(llvm::Attribute::ReadNone);
+#endif
+}
+
 void CodeGen_LLVM::visit(const Load *op) {
     // If the type should be stored as some other type, insert a reinterpret cast.
     Type storage_type = upgrade_type_for_storage(op->type);
