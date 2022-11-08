@@ -48,6 +48,7 @@ int main(int argc, char **argv) {
             // Metal does not support 64-bit integers.
             // neither does D3D12 under SM 5.1.
             if ((t.supports_device_api(DeviceAPI::Metal) ||
+                 t.supports_device_api(DeviceAPI::Vulkan) ||
                  t.supports_device_api(DeviceAPI::OpenGLCompute) ||
                  t.supports_device_api(DeviceAPI::D3D12Compute)) &&
                 types[i].bits() >= 64) {
