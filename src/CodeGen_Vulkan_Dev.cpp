@@ -115,7 +115,6 @@ protected:
 
         void reset();
 
-
         // Top-level function for adding kernels
         void add_kernel(const Stmt &s, const std::string &name, const std::vector<DeviceArgument> &args);
         void init_module();
@@ -649,7 +648,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mul *op) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Div): " << op->type << " ((" << op->a << ") / (" << op->b << "))\n";
     user_assert(!is_const_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
-    int bits = 0; 
+    int bits = 0;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         SpvId shift_amount_id = builder.declare_constant(Int(32), &bits);
         SpvId type_id = builder.declare_type(op->type);
@@ -664,7 +663,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
     } else {
         if (op->type.is_float()) {
             visit_binary_op(SpvOpFDiv, op->type, op->a, op->b);
-        } else if(op->type.is_uint()) {
+        } else if (op->type.is_uint()) {
             visit_binary_op(SpvOpUDiv, op->type, op->a, op->b);
         } else {
             internal_error << "Failed to find a suitable Div operator for type: " << op->type << "\n";
@@ -674,7 +673,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mod): " << op->type << " ((" << op->a << ") % (" << op->b << "))\n";
-    int bits = 0; 
+    int bits = 0;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         int bitwise_value = ((1 << bits) - 1);
         SpvId bitwise_value_id = builder.declare_constant(Int(32), &bitwise_value);
@@ -691,7 +690,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
         if (op->type.is_float()) {
             // SPIR-V FMod is strangely not what we want .. FRem does what we need
             visit_binary_op(SpvOpFRem, op->type, op->a, op->b);
-        } else if(op->type.is_uint()) {
+        } else if (op->type.is_uint()) {
             visit_binary_op(SpvOpUMod, op->type, op->a, op->b);
         } else {
             internal_error << "Failed to find a suitable Mod operator for type: " << op->type << "\n";
@@ -2417,7 +2416,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
                                                    const std::string &kernel_name,
                                                    const std::vector<DeviceArgument> &args) {
     debug(2) << "Adding Vulkan kernel " << kernel_name << "\n";
-    
+
     // Add function definition
     // TODO: can we use one of the function control annotations?
 
@@ -2426,7 +2425,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
 
     // Update the kernel index for the module
     kernel_index++;
-    
+
     // Declare the kernel function
     SpvId void_type_id = builder.declare_void_type();
     SpvId kernel_func_id = builder.add_function(kernel_name, void_type_id);

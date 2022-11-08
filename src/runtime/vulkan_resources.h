@@ -50,10 +50,10 @@ VkResult vk_create_command_pool(void *user_context, VulkanMemoryAllocator *alloc
 
     VkCommandPoolCreateInfo command_pool_info =
         {
-            VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,      // struct type
-            nullptr,                                         // pointer to struct extending this
-            VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,            // flags. Assume transient short-lived single-use command buffers
-            queue_index                                      // queue family index corresponding to the compute command queue
+            VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,  // struct type
+            nullptr,                                     // pointer to struct extending this
+            VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,        // flags. Assume transient short-lived single-use command buffers
+            queue_index                                  // queue family index corresponding to the compute command queue
         };
     return vkCreateCommandPool(allocator->current_device(), &command_pool_info, allocator->callbacks(), command_pool);
 }
@@ -898,7 +898,7 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
         void operator()(VulkanCompilationCacheEntry *cache_entry) {
             if (cache_entry != nullptr) {
                 if (cache_entry->shader_module) {
-                    debug(user_context) << "    destroying shader module " << (void*)cache_entry->shader_module << "\n";
+                    debug(user_context) << "    destroying shader module " << (void *)cache_entry->shader_module << "\n";
                     vkDestroyShaderModule(allocator->current_device(), cache_entry->shader_module, allocator->callbacks());
                     cache_entry->shader_module = {0};
                 }
@@ -932,7 +932,7 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
                     cache_entry->descriptor_set_layouts = nullptr;
                 }
                 if (cache_entry->pipeline_layout) {
-                    debug(user_context) << "    destroying pipeline layout " << (void*)cache_entry->pipeline_layout << "\n";
+                    debug(user_context) << "    destroying pipeline layout " << (void *)cache_entry->pipeline_layout << "\n";
                     vk_destroy_pipeline_layout(user_context, allocator, cache_entry->pipeline_layout);
                     cache_entry->pipeline_layout = {0};
                 }

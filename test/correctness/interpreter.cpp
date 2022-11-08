@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if(target.has_feature(Target::Vulkan)) {
+    if (target.has_feature(Target::Vulkan)) {
         printf("[SKIP] Skipping test for Vulkan (which doesn't support dynamically allocated shared mem)!\n");
         return 0;
     }

@@ -212,10 +212,10 @@ WEAK int halide_vulkan_device_release(void *user_context) {
     if (instance != nullptr) {
 
         vkQueueWaitIdle(queue);
-        if(command_pool == cached_command_pool) {
+        if (command_pool == cached_command_pool) {
             cached_command_pool = 0;
         }
-        if(reinterpret_cast<halide_vulkan_memory_allocator*>(allocator) == cached_allocator) {
+        if (reinterpret_cast<halide_vulkan_memory_allocator *>(allocator) == cached_allocator) {
             cached_allocator = nullptr;
         }
 
@@ -661,7 +661,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     } else {
         ctx.allocator->reclaim(user_context, staging_region);
     }
-    vk_destroy_command_buffer(user_context,  ctx.allocator, ctx.command_pool, command_buffer);
+    vk_destroy_command_buffer(user_context, ctx.allocator, ctx.command_pool, command_buffer);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -759,7 +759,7 @@ WEAK int halide_vulkan_run(void *user_context,
 
         //// 1. Create all descriptor set layouts
         for (uint32_t n = 0; n < cache_entry->entry_point_count; ++n) {
-            if(((void*)cache_entry->descriptor_set_layouts[n]) == nullptr) {
+            if (((void *)cache_entry->descriptor_set_layouts[n]) == nullptr) {
                 uint32_t uniform_buffer_count = cache_entry->entry_point_data[n].uniform_buffer_count;
                 uint32_t storage_buffer_count = cache_entry->entry_point_data[n].storage_buffer_count;
                 debug(user_context) << " creating descriptor set layout [" << n << "] " << cache_entry->entry_point_data[n].entry_point_name << "\n";
@@ -885,7 +885,7 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     //// 10. Cleanup
-    vk_destroy_command_buffer(user_context,  ctx.allocator, ctx.command_pool, command_buffer);
+    vk_destroy_command_buffer(user_context, ctx.allocator, ctx.command_pool, command_buffer);
     vkResetCommandPool(ctx.device, ctx.command_pool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 
 #ifdef DEBUG_RUNTIME

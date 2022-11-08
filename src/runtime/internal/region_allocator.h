@@ -213,15 +213,15 @@ BlockRegion *RegionAllocator::find_block_region(void *user_context, const Memory
 
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "RegionAllocator: conform_alignment ("
-                       << " request=" << (uint32_t)request.alignment 
-                       << " required=" << (uint32_t)block->memory.properties.alignment << ") =>"
-                       << " actual_alignment=" << (uint32_t)actual_alignment << "\n";
+                                        << " request=" << (uint32_t)request.alignment
+                                        << " required=" << (uint32_t)block->memory.properties.alignment << ") =>"
+                                        << " actual_alignment=" << (uint32_t)actual_alignment << "\n";
 
         StackBasicPrinter<256>(nullptr) << "RegionAllocator: aligned_size ("
-                       << " offset=" << (uint32_t)block_region->memory.offset 
-                       << " request_size=" << (uint32_t)request.size << " "
-                       << " actual_alignment=" << (uint32_t)actual_alignment  << ") =>" 
-                       << " actual_size=" << (uint32_t)actual_size << "\n";
+                                        << " offset=" << (uint32_t)block_region->memory.offset
+                                        << " request_size=" << (uint32_t)request.size << " "
+                                        << " actual_alignment=" << (uint32_t)actual_alignment << ") =>"
+                                        << " actual_size=" << (uint32_t)actual_size << "\n";
 #endif
 
         // is the adjusted size larger than the current region?
