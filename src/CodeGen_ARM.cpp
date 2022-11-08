@@ -758,7 +758,7 @@ void CodeGen_ARM::init_module() {
                 intrin_impl = get_llvm_intrin(ret_type, mangled_name, arg_types, scalars_are_vectors);
             }
 
-            intrin_impl->addFnAttr(llvm::Attribute::ReadNone);
+            function_does_not_access_memory(intrin_impl);
             intrin_impl->addFnAttr(llvm::Attribute::NoUnwind);
             declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
             if (intrin.flags & ArmIntrinsic::AllowUnsignedOp1) {

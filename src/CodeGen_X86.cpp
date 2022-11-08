@@ -288,7 +288,7 @@ void CodeGen_X86::init_module() {
 
         auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
         if ((i.flags & x86Intrinsic::AccessesMemory) == 0) {
-            fn->addFnAttr(llvm::Attribute::ReadNone);
+            function_does_not_access_memory(fn);
         }
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }

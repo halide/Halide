@@ -326,6 +326,10 @@ protected:
         return n;
     }
 
+    /** Add the appropriate function attribute to tell LLVM that the function
+     * doesn't access memory. */
+    void function_does_not_access_memory(llvm::Function *fn);
+
     using IRVisitor::visit;
 
     /** Generate code for various IR nodes. These can be overridden by
