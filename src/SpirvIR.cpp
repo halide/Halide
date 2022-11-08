@@ -970,6 +970,10 @@ SpvBuilder::SpvBuilder() {
 
 void SpvBuilder::reset() {
 
+    active_id = SpvInvalidId;
+    active_function = SpvFunction();
+    active_block = SpvBlock();
+
     kind_map.clear();
     type_map.clear();
     struct_map.clear();
@@ -984,10 +988,6 @@ void SpvBuilder::reset() {
     pointer_type_map.clear();
     variable_type_map.clear();
     function_type_map.clear();
-
-    active_id = SpvInvalidId;
-    active_block = SpvBlock();
-    active_function = SpvFunction();
 
     SpvId module_id = make_id(SpvModuleId);
     module = SpvModule::make(module_id);
