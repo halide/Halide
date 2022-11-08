@@ -211,6 +211,19 @@ BlockRegion *RegionAllocator::find_block_region(void *user_context, const Memory
         size_t actual_alignment = conform_alignment(request.alignment, block->memory.properties.alignment);
         size_t actual_size = aligned_size(block_region->memory.offset, request.size, actual_alignment);
 
+#ifdef DEBUG_INTERNAL
+        StackBasicPrinter<256>(nullptr) << "RegionAllocator: conform_alignment ("
+                       << " request=" << (uint32_t)request.alignment 
+                       << " required=" << (uint32_t)block->memory.properties.alignment << ") =>"
+                       << " actual_alignment=" << (uint32_t)actual_alignment << "\n";
+
+        StackBasicPrinter<256>(nullptr) << "RegionAllocator: aligned_size ("
+                       << " offset=" << (uint32_t)block_region->memory.offset 
+                       << " request_size=" << (uint32_t)request.size << " "
+                       << " actual_alignment=" << (uint32_t)actual_alignment  << ") =>" 
+                       << " actual_size=" << (uint32_t)actual_size << "\n";
+#endif
+
         // is the adjusted size larger than the current region?
         if (actual_size > block_region->memory.size) {
             continue;
@@ -278,7 +291,7 @@ BlockRegion *RegionAllocator::coalesce_block_regions(void *user_context, BlockRe
 }
 
 bool RegionAllocator::can_split(BlockRegion *block_region, size_t size) {
-    return (block_region && (block_region->memory.size > size));
+    return (block_region && (block_region->memory.size > size) && (block_region->memory.handle == nullptr));
 }
 
 BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion *block_region, size_t size, size_t alignment) {
@@ -343,6 +356,7 @@ BlockRegion *RegionAllocator::create_block_region(void *user_context, const Memo
                                     << "block_region=" << (void *)(block_region) << ") ...\n";
 #endif
 
+    block_region->memory.handle = nullptr;
     block_region->memory.offset = offset;
     block_region->memory.size = size;
     block_region->memory.properties = properties;
@@ -410,6 +424,7 @@ void RegionAllocator::alloc_block_region(void *user_context, BlockRegion *block_
         StackBasicPrinter<256>(nullptr) << "Allocating region ("
                                         << "block_ptr=" << (void *)block_region->block_ptr << " "
                                         << "block_region=" << (void *)block_region << " "
+                                        << "memory_offset=" << (uint32_t)(block_region->memory.offset) << " "
                                         << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
                                         << "block_reserved=" << (uint32_t)block->reserved << " "
                                         << ")\n";
@@ -421,6 +436,7 @@ void RegionAllocator::alloc_block_region(void *user_context, BlockRegion *block_
         StackBasicPrinter<256>(nullptr) << "Re-using region  ("
                                         << "block_ptr=" << (void *)block_region->block_ptr << " "
                                         << "block_region=" << (void *)block_region << " "
+                                        << "memory_offset=" << (uint32_t)(block_region->memory.offset) << " "
                                         << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
                                         << "block_reserved=" << (uint32_t)block->reserved << " "
                                         << ")\n";
