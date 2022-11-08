@@ -106,9 +106,15 @@ struct BlockRegion {
     BlockResource *block_ptr = nullptr;                         //< pointer to parent block resource
 };
 
+// Returns true if given byte alignment is a power of two
+ALWAYS_INLINE bool is_power_of_two_alignment(size_t x) {
+    return (x & (x - 1)) == 0;
+}
+
 // Returns an aligned byte offset to adjust the given offset based on alignment constraints
 // -- Alignment must be power of two!
 ALWAYS_INLINE size_t aligned_offset(size_t offset, size_t alignment) {
+    halide_abort_if_false(nullptr, is_power_of_two_alignment(alignment));
     return (offset + (alignment - 1)) & ~(alignment - 1);
 }
 
