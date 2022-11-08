@@ -20,8 +20,6 @@
 namespace Halide {
 namespace Internal {
 
-class CodeGen_LLVM;
-
 namespace {  // anonymous
 
 // --
@@ -115,6 +113,30 @@ protected:
         void visit(const Acquire *) override;
         void visit(const Atomic *) override;
 
+        void reset();
+
+
+        // Top-level function for adding kernels
+        void add_kernel(const Stmt &s, const std::string &name, const std::vector<DeviceArgument> &args);
+        void init_module();
+        void compile(std::vector<char> &binary);
+        void dump() const;
+
+        // Encode the descriptor sets into a sidecar which will be added
+        // as a header to the module prior to the actual SPIR-V binary
+        void encode_header(SpvBinary &spirv_header);
+
+        // Scalarize expressions
+        void scalarize(const Expr &e);
+        SpvId map_type_to_pair(const Type &t);
+
+        // Workgroup size
+        void reset_workgroup_size();
+        void declare_workgroup_size(SpvId kernel_func_id);
+        void declare_entry_point(const Stmt &s, SpvId kernel_func_id);
+        void declare_device_args(const Stmt &s, uint32_t entry_point_index, const std::string &kernel_name, const std::vector<DeviceArgument> &args);
+
+        // Common operator visitors
         void visit_unary_op(SpvOp op_code, Type t, const Expr &a);
         void visit_binary_op(SpvOp op_code, Type t, const Expr &a, const Expr &b);
         void visit_glsl_op(SpvId glsl_op_code, Type t, const std::vector<Expr> &args);
@@ -130,8 +152,12 @@ protected:
         SpvId cast_type(Type target_type, Type value_type, SpvId value_id);
         SpvId convert_to_bool(Type target_type, Type value_type, SpvId value_id);
 
-        using BuiltinMap = std::unordered_map<std::string, SpvId>;
+        // Returns Phi node inputs.
+        template<typename StmtOrExpr>
+        SpvFactory::BlockVariables emit_if_then_else(const Expr &condition, StmtOrExpr then_case, StmtOrExpr else_case);
 
+        // Map from Halide built-in names to extended GLSL intrinsics for SPIR-V
+        using BuiltinMap = std::unordered_map<std::string, SpvId>;
         const BuiltinMap glsl_builtin = {
             {"pow_f16", GLSLstd450Pow},
             {"pow_f32", GLSLstd450Pow},
@@ -187,22 +213,6 @@ protected:
         // The SPIRV-IR builder
         SpvBuilder builder;
 
-        // Top-level function for adding kernels
-        void add_kernel(const Stmt &s, const std::string &name, const std::vector<DeviceArgument> &args);
-        void init_module();
-        void compile(std::vector<char> &binary);
-        void dump() const;
-
-        // Scalarize expressions
-        void scalarize(const Expr &e);
-        SpvId map_type_to_pair(const Type &t);
-
-        // Workgroup size
-        void reset_workgroup_size();
-        void declare_workgroup_size(SpvId kernel_func_id);
-        void declare_entry_point(const Stmt &s, SpvId kernel_func_id);
-        void declare_device_args(const Stmt &s, uint32_t entry_point_index, const std::string &kernel_name, const std::vector<DeviceArgument> &args);
-
         // The scope contains both the symbol id and its storage class
         using SymbolIdStorageClassPair = std::pair<SpvId, SpvStorageClass>;
         using SymbolScope = Scope<SymbolIdStorageClassPair>;
@@ -228,16 +238,11 @@ protected:
         using DescriptorSetTable = std::vector<DescriptorSet>;
         DescriptorSetTable descriptor_set_table;
 
-        // Encode the descriptor sets into a sidecar which will be added
-        // as a header to the module prior to the actual SPIR-V binary
-        void encode_header(SpvBinary &spirv_header);
-
         // The workgroup size.  May vary between kernels.
         uint32_t workgroup_size[3];
 
-        // Returns Phi node inputs.
-        template<typename StmtOrExpr>
-        SpvFactory::BlockVariables emit_if_then_else(const Expr &condition, StmtOrExpr then_case, StmtOrExpr else_case);
+        // Current index of kernel for module
+        uint32_t kernel_index = 0;
 
     } emitter;
 
@@ -644,23 +649,53 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mul *op) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Div): " << op->type << " ((" << op->a << ") / (" << op->b << "))\n";
     user_assert(!is_const_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
-
-    if (op->type.is_float()) {
-        visit_binary_op(SpvOpFDiv, op->type, op->a, op->b);
-    } else {
-        Expr e = lower_int_uint_div(op->a, op->b);
+    int bits = 0; 
+    if (is_const_power_of_two_integer(op->b, &bits)) {
+        SpvId shift_amount_id = builder.declare_constant(Int(32), &bits);
+        SpvId type_id = builder.declare_type(op->type);
+        op->a.accept(this);
+        SpvId src_a_id = builder.current_id();
+        SpvId result_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::binary_op(SpvOpShiftRightArithmetic, type_id, result_id, src_a_id, shift_amount_id));
+        builder.update_id(result_id);
+    } else if (op->type.is_int()) {
+        Expr e = lower_euclidean_div(op->a, op->b);
         e.accept(this);
+    } else {
+        if (op->type.is_float()) {
+            visit_binary_op(SpvOpFDiv, op->type, op->a, op->b);
+        } else if(op->type.is_uint()) {
+            visit_binary_op(SpvOpUDiv, op->type, op->a, op->b);
+        } else {
+            internal_error << "Failed to find a suitable Div operator for type: " << op->type << "\n";
+        }
     }
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mod): " << op->type << " ((" << op->a << ") % (" << op->b << "))\n";
-    if (op->type.is_float()) {
-        // SPIR-V FMod is strangely not what we want .. FRem does what we need
-        visit_binary_op(SpvOpFRem, op->type, op->a, op->b);
-    } else {
-        Expr e = lower_int_uint_mod(op->a, op->b);
+    int bits = 0; 
+    if (is_const_power_of_two_integer(op->b, &bits)) {
+        int bitwise_value = ((1 << bits) - 1);
+        SpvId bitwise_value_id = builder.declare_constant(Int(32), &bitwise_value);
+        SpvId type_id = builder.declare_type(op->type);
+        op->a.accept(this);
+        SpvId src_a_id = builder.current_id();
+        SpvId result_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::binary_op(SpvOpBitwiseAnd, type_id, result_id, src_a_id, bitwise_value_id));
+        builder.update_id(result_id);
+    } else if (op->type.is_int()) {
+        Expr e = lower_euclidean_mod(op->a, op->b);
         e.accept(this);
+    } else {
+        if (op->type.is_float()) {
+            // SPIR-V FMod is strangely not what we want .. FRem does what we need
+            visit_binary_op(SpvOpFRem, op->type, op->a, op->b);
+        } else if(op->type.is_uint()) {
+            visit_binary_op(SpvOpUMod, op->type, op->a, op->b);
+        } else {
+            internal_error << "Failed to find a suitable Mod operator for type: " << op->type << "\n";
+        }
     }
 }
 
@@ -962,6 +997,13 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::IntrinsicOp::div_round_to_zero)) {
         internal_assert(op->args.size() == 2);
+        // See if we can rewrite it to something faster (e.g. a shift)
+        Expr e = lower_int_uint_div(op->args[0], op->args[1], /** round to zero */ true);
+        if (!e.as<Call>()) {
+            e.accept(this);
+            return;
+        }
+
         SpvOp op_code = SpvOpNop;
         if (op->type.is_float()) {
             op_code = SpvOpFDiv;
@@ -1538,7 +1580,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         builder.append(SpvFactory::integer_add(index_type_id, max_id, min_id, extent_id));
 
         // Declare loop var
-        const std::string loop_var_name = unique_name("_loop_idx");
+        const std::string loop_var_name = unique_name(std::string("k") + std::to_string(kernel_index) + "_loop_idx");
         debug(2) << "  loop_index=" << loop_var_name << " type=" << index_type << "\n";
         SpvId loop_var_id = builder.declare_variable(loop_var_name, index_var_type_id, storage_class);
         symbol_table.push(loop_var_name, {loop_var_id, storage_class});
@@ -1671,14 +1713,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
         int32_t size = op->constant_allocation_size();
         array_type_id = builder.declare_type(op->type, size);
         storage_class = SpvStorageClassWorkgroup;  // shared across workgroup
-        debug(2) << "Vulkan: Allocate " << op->name << "[" << (uint32_t)size << "] in shared memory on device in global scope\n";
+        debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << (uint32_t)size << " in shared memory on device in global scope\n";
+        std::string variable_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + op->name;
         SpvId ptr_type_id = builder.declare_pointer_type(array_type_id, storage_class);
-        variable_id = builder.declare_global_variable(op->name, ptr_type_id, storage_class);
+        variable_id = builder.declare_global_variable(variable_name, ptr_type_id, storage_class);
 
     } else {
 
         // Allocation is not a shared memory allocation, just make a local declaration.
-        debug(2) << "Vulkan: Allocate " << op->name << " on device in function scope\n";
         int32_t size = op->constant_allocation_size();
 
         // It must have a constant size.
@@ -1686,10 +1728,13 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
             << "Allocation " << op->name << " has a dynamic size. "
             << "Only fixed-size allocations are supported with Vulkan.";
 
+        debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << (uint32_t)size << " on device in function scope\n";
+
         array_type_id = builder.declare_type(op->type, size);
         storage_class = SpvStorageClassFunction;  // function scope
+        std::string variable_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + op->name;
         SpvId ptr_type_id = builder.declare_pointer_type(array_type_id, storage_class);
-        variable_id = builder.declare_variable(op->name, ptr_type_id, storage_class);
+        variable_id = builder.declare_variable(variable_name, ptr_type_id, storage_class);
     }
 
     StorageAccess access;
@@ -2032,9 +2077,19 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::join_vector(Type type, const SpvFactory
     return result_id;
 }
 
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::reset() {
+    kernel_index = 0;
+    builder.reset();
+    SymbolScope empty;
+    symbol_table.swap(empty);
+    storage_access_map.clear();
+    descriptor_set_table.clear();
+    reset_workgroup_size();
+}
+
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::init_module() {
 
-    builder.reset();
+    reset();
 
     // NOTE: Source language is irrelevant. We encode the binary directly
     builder.set_source_language(SpvSourceLanguageUnknown);
@@ -2222,7 +2277,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
     // Add a binding for a uniform buffer packed with all scalar args
     uint32_t binding_counter = 0;
     if (!param_struct_members.empty()) {
-        const std::string struct_name = std::string("_struct") + entry_point_name + std::string("_args");
+
+        const std::string struct_name = std::string("k") + std::to_string(kernel_index) + std::string("_args_struct");
         SpvId param_struct_type_id = builder.declare_struct(struct_name, param_struct_members);
 
         // Add a decoration describing the offset for each parameter struct member
@@ -2241,7 +2297,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
         builder.add_annotation(param_struct_type_id, SpvDecorationBlock);
 
         // Add a variable for the parameter pack
-        const std::string param_pack_var_name = std::string("_var") + entry_point_name + std::string("_args");
+        const std::string param_pack_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_args_var");
         SpvId param_pack_ptr_type_id = builder.declare_pointer_type(param_struct_type_id, SpvStorageClassUniform);
         SpvId param_pack_var_id = builder.declare_global_variable(param_pack_var_name, param_pack_ptr_type_id, SpvStorageClassUniform);
 
@@ -2293,13 +2349,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
 
             // Wrap the runtime array in a struct (required with SPIR-V buffer block semantics)
             SpvBuilder::StructMemberTypes struct_member_types = {runtime_arr_type_id};
-            const std::string struct_name = std::string("_struct") + entry_point_name + std::string("_b") + std::to_string(binding_counter);
+            const std::string struct_name = std::string("k") + std::to_string(kernel_index) + std::string("_buffer_block") + std::to_string(binding_counter);
             SpvId struct_type_id = builder.declare_struct(struct_name, struct_member_types);
 
             // Declare a pointer to the struct as a global variable
             SpvStorageClass storage_class = SpvStorageClassUniform;
             SpvId ptr_struct_type_id = builder.declare_pointer_type(struct_type_id, storage_class);
-            SpvId buffer_block_var_id = builder.declare_global_variable(arg.name, ptr_struct_type_id, storage_class);
+            const std::string buffer_block_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + arg.name;
+            SpvId buffer_block_var_id = builder.declare_global_variable(buffer_block_var_name, ptr_struct_type_id, storage_class);
 
             // Annotate the struct to indicate it's passed in a GLSL-style buffer block
             builder.add_annotation(struct_type_id, SpvDecorationBufferBlock);
@@ -2357,19 +2414,22 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::compile(std::vector<char> &module) {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
-                                                   const std::string &name,
+                                                   const std::string &kernel_name,
                                                    const std::vector<DeviceArgument> &args) {
-    debug(2) << "Adding Vulkan kernel " << name << "\n";
-
+    debug(2) << "Adding Vulkan kernel " << kernel_name << "\n";
+    
     // Add function definition
     // TODO: can we use one of the function control annotations?
 
     // We'll discover the workgroup size as we traverse the kernel
     reset_workgroup_size();
 
+    // Update the kernel index for the module
+    kernel_index++;
+    
     // Declare the kernel function
     SpvId void_type_id = builder.declare_void_type();
-    SpvId kernel_func_id = builder.add_function(name, void_type_id);
+    SpvId kernel_func_id = builder.add_function(kernel_name, void_type_id);
     SpvFunction kernel_func = builder.lookup_function(kernel_func_id);
     uint32_t entry_point_index = builder.current_module().entry_point_count();
     builder.enter_function(kernel_func);
@@ -2378,7 +2438,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     declare_entry_point(s, kernel_func_id);
 
     // Declare all parameters -- scalar args and device buffers
-    declare_device_args(s, entry_point_index, name, args);
+    declare_device_args(s, entry_point_index, kernel_name, args);
 
     // Traverse
     s.accept(this);
@@ -2393,9 +2453,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     for (const auto &arg : args) {
         symbol_table.pop(arg.name);
     }
-    storage_access_map.clear();
     builder.leave_block();
     builder.leave_function();
+    storage_access_map.clear();
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::dump() const {
