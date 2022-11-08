@@ -8,9 +8,13 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (target.os == Target::Windows &&
         (target.has_feature(Target::OpenCL) ||
-         target.has_feature(Target::Vulkan) ||
          target.has_feature(Target::D3D12Compute))) {
         printf("[SKIP] workaround for issue #5738\n");
+        return 0;
+    }
+
+    if(target.has_feature(Target::Vulkan)) {
+        printf("[SKIP] Skipping test for Vulkan (which doesn't support dynamically allocated shared mem)!\n");
         return 0;
     }
 
