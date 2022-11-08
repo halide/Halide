@@ -321,6 +321,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after vectorizing:", s);
 
     if (t.has_gpu_feature() ||
+        t.has_feature(Target::Vulkan) ||
         t.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
