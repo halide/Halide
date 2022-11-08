@@ -378,7 +378,7 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
 
     builder->restoreIP(here);
 
-    wrapper->addFnAttr(llvm::Attribute::ReadNone);
+    function_does_not_access_memory(wrapper);
     wrapper->addFnAttr(llvm::Attribute::NoUnwind);
 
     llvm::verifyFunction(*wrapper);
