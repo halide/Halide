@@ -326,7 +326,11 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_" << c_print_name(guard) << "\n"
                << "#define HALIDE_" << c_print_name(guard) << "\n"
+               << "\n"
                << "#include <stdint.h>\n"
+               << "#ifdef __cplusplus\n"
+               << "#include <tuple>\n"
+               << "#endif\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
                << "// to the Halide pipeline.\n"
@@ -1496,6 +1500,45 @@ void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
     forward_declared.insert(t.handle_type);
 }
 
+void CodeGen_C::emit_function_signature_struct(const std::string &function_name,
+                                               const std::vector<LoweredArgument> &args) {
+    internal_assert(!extern_c_open)
+        << "emit_function_signature_struct() must not be called from inside an extern \"C\" block";
+
+    stream << "\n";
+    stream << get_indent() << "struct " << function_name << "_ArgumentTypes {\n";
+    indent += 1;
+
+    stream << get_indent() << "struct InputBuffer {};\n";
+    stream << get_indent() << "struct OutputBuffer {};\n";
+
+    stream << get_indent() << "struct bfloat16_t {};\n";
+    stream << get_indent() << "struct float16_t {};\n";
+
+    stream << get_indent() << "using types = std::tuple<\n";
+    indent += 1;
+
+    const char *sep = "";
+    for (const auto &a : args) {
+        stream << sep;
+        auto t = type_to_c_type(a.type, false);
+        if (a.is_buffer()) {
+            stream << get_indent() << "std::tuple<" << (a.is_input() ? "InputBuffer" : "OutputBuffer")
+                   << ", " << t << ", std::integral_constant<int, " << (int)a.dimensions << ">>";
+        } else {
+            stream << get_indent() << t;
+        }
+        sep = ",\n";
+    }
+    stream << "\n";
+
+    indent -= 1;
+    stream << get_indent() << ">;\n";
+
+    indent -= 1;
+    stream << get_indent() << "};\n";
+}
+
 void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
                                   const std::vector<LoweredArgument> &args) {
     if (is_header_or_extern_decl()) {
@@ -1893,6 +1936,15 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
     if (f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the metadata.
         emit_metadata_getter(simple_name, args, metadata_name_map);
+    }
+
+    if (is_header_or_extern_decl() && f.linkage != LinkageType::Internal) {
+        set_name_mangling_mode(NameMangling::CPlusPlus);
+        emit_function_signature_struct(simple_name, args);
+        // Don't reset this: this is the last thing emitted in a header file,
+        // and resetting this will end up generating an extern "C" block
+        // with nothing inside, which is weird and undesirable.
+        // set_name_mangling_mode(name_mangling);
     }
 
     if (!namespaces.empty()) {

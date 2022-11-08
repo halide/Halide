@@ -9,6 +9,8 @@
 #include "metadata_tester.h"
 #include "metadata_tester_ucon.h"
 
+namespace {
+
 using namespace Halide::Runtime;
 
 const int kSize = 32;
@@ -1349,6 +1351,70 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
     }
 }
 
+template<typename ArgumentTypes>
+struct ArgSignatureBuilder {
+    using types = typename ArgumentTypes::types;
+    static constexpr int arg_count = std::tuple_size<types>();
+
+    char signature[arg_count + 1];
+
+    ArgSignatureBuilder() {
+        signature[arg_count] = 0;
+        fill<arg_count>();
+    }
+
+private:
+    template<typename>
+    struct is_tuple : std::false_type {};
+
+    template<typename... T>
+    struct is_tuple<std::tuple<T...>> : std::true_type {};
+
+    template<typename>
+    struct is_input_buffer : std::false_type {};
+
+    template<typename... T>
+    struct is_input_buffer<std::tuple<typename ArgumentTypes::InputBuffer, T...>> : std::true_type {};
+
+    template<typename>
+    struct is_output_buffer : std::false_type {};
+
+    template<typename... T>
+    struct is_output_buffer<std::tuple<typename ArgumentTypes::OutputBuffer, T...>> : std::true_type {};
+
+    template<typename T>
+    static constexpr char signature_for_type() {
+        if constexpr (is_input_buffer<T>::value) return '@';
+        if constexpr (is_output_buffer<T>::value) return '#';
+        if constexpr (std::is_same_v<T, typename ArgumentTypes::bfloat16_t>) return '!';
+        if constexpr (std::is_same_v<T, typename ArgumentTypes::float16_t>) return 'e';
+        if constexpr (std::is_same_v<T, float>) return 'f';
+        if constexpr (std::is_same_v<T, double>) return 'd';
+        if constexpr (std::is_same_v<T, int8_t>) return 'b';
+        if constexpr (std::is_same_v<T, int16_t>) return 'h';
+        if constexpr (std::is_same_v<T, int32_t>) return 'i';
+        if constexpr (std::is_same_v<T, int64_t>) return 'q';
+        if constexpr (std::is_same_v<T, bool>) return '?';
+        if constexpr (std::is_same_v<T, uint8_t>) return 'B';
+        if constexpr (std::is_same_v<T, uint16_t>) return 'H';
+        if constexpr (std::is_same_v<T, uint32_t>) return 'I';
+        if constexpr (std::is_same_v<T, uint64_t>) return 'Q';
+        if constexpr (std::is_pointer<T>::value) return 'P';
+        abort();
+    }
+
+    template<size_t N>
+    void fill() {
+        constexpr size_t i = N - 1;
+        signature[i] = signature_for_type<std::tuple_element_t<i, types>>();
+        if constexpr (i > 0) {
+            fill<i>();
+        }
+    }
+};
+
+}  // namespace
+
 int main(int argc, char **argv) {
     void *user_context = nullptr;
 
@@ -1505,14 +1571,26 @@ int main(int argc, char **argv) {
     verify(input, output0, output1, output_scalar, output_array[0], output_array[1], untyped_output_buffer, tupled_output_buffer0, tupled_output_buffer1);
 
     check_metadata(*metadata_tester_metadata(), false);
-    if (!strcmp(metadata_tester_metadata()->name, "metadata_tester_metadata")) {
-        std::cerr << "Expected name metadata_tester_metadata\n";
+    if (strcmp(metadata_tester_metadata()->name, "metadata_tester")) {
+        std::cerr << "Expected name metadata_tester, got " << metadata_tester_metadata()->name << "\n";
         exit(-1);
     }
 
     check_metadata(*metadata_tester_ucon_metadata(), true);
-    if (!strcmp(metadata_tester_ucon_metadata()->name, "metadata_tester_ucon_metadata")) {
-        std::cerr << "Expected name metadata_tester_ucon_metadata\n";
+    if (strcmp(metadata_tester_ucon_metadata()->name, "metadata_tester_ucon")) {
+        std::cerr << "Expected name metadata_tester_ucon, got " << metadata_tester_ucon_metadata()->name << "\n";
+        exit(-1);
+    }
+
+    ArgSignatureBuilder<metadata_tester_ArgumentTypes> sig;
+    if (strcmp(sig.signature, "@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+        std::cerr << "Incorrect signature for metadata_tester_ArgumentTypes: " << sig.signature << "\n";
+        exit(-1);
+    }
+
+    ArgSignatureBuilder<metadata_tester_ucon_ArgumentTypes> usig;
+    if (strcmp(usig.signature, "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+        std::cerr << "Incorrect signature for metadata_tester_ucon_ArgumentTypes: " << usig.signature << "\n";
         exit(-1);
     }
 

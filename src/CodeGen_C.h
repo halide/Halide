@@ -272,6 +272,8 @@ protected:
     void emit_metadata_getter(const std::string &function_name,
                               const std::vector<LoweredArgument> &args,
                               const MetadataNameMap &metadata_name_map);
+    void emit_function_signature_struct(const std::string &function_name,
+                                        const std::vector<LoweredArgument> &args);
 };
 
 }  // namespace Internal
