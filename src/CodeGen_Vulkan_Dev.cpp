@@ -654,7 +654,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
         op->a.accept(this);
         SpvId src_a_id = builder.current_id();
         SpvId result_id = builder.reserve_id(SpvResultId);
-        if(op->type.is_uint()) {
+        if (op->type.is_uint()) {
             builder.append(SpvFactory::binary_op(SpvOpShiftRightLogical, type_id, result_id, src_a_id, shift_amount_id));
         } else {
             builder.append(SpvFactory::binary_op(SpvOpShiftRightArithmetic, type_id, result_id, src_a_id, shift_amount_id));
@@ -662,7 +662,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
         builder.update_id(result_id);
     } else if (op->type.is_int()) {
         Expr e = lower_euclidean_div(op->a, op->b);
-        e.accept(this);        
+        e.accept(this);
     } else {
         if (op->type.is_float()) {
             visit_binary_op(SpvOpFDiv, op->type, op->a, op->b);
@@ -1021,7 +1021,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         SpvOp op_code = SpvOpNop;
         if (op->type.is_float()) {
-            op_code = SpvOpFRem; // NOTE: FRem matches the fmod we expect
+            op_code = SpvOpFRem;  // NOTE: FRem matches the fmod we expect
         } else if (op->type.is_int()) {
             op_code = SpvOpSMod;
         } else if (op->type.is_uint()) {
@@ -1121,10 +1121,10 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             SpvId src_b_id = builder.current_id();
 
             SpvId abs_a_id = builder.reserve_id(SpvResultId);
-            SpvFactory::Operands abs_operands = { src_a_id };
+            SpvFactory::Operands abs_operands = {src_a_id};
             builder.append(SpvFactory::extended(inst_set_id, GLSLstd450FAbs, type_id, abs_a_id, abs_operands));
 
-            SpvFactory::Operands pow_operands = { abs_a_id, src_b_id };
+            SpvFactory::Operands pow_operands = {abs_a_id, src_b_id};
             SpvId pow_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::extended(inst_set_id, GLSLstd450Pow, type_id, pow_id, pow_operands));
             builder.update_id(pow_id);
@@ -1133,7 +1133,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             SpvId zero_id = builder.declare_float_constant(op->type, 0.0);
             SpvId a_gt_zero_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::binary_op(SpvOpFOrdGreaterThan, type_id, a_gt_zero_id, src_a_id, zero_id));
-    
+
             // b % 2
             SpvId two_id = builder.declare_float_constant(op->type, 2.0);
             SpvId b_mod_two_id = builder.reserve_id(SpvResultId);
@@ -1148,7 +1148,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             SpvId b_mod_two_is_zero_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::binary_op(SpvOpFOrdEqual, type_id, b_mod_two_is_zero_id, b_mod_two_id, zero_id));
 
-            // -pow 
+            // -pow
             SpvId neg_pow_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::unary_op(SpvOpFNegate, type_id, neg_pow_id, pow_id));
 
