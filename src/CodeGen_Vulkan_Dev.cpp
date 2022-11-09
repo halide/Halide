@@ -12,6 +12,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Scope.h"
+#include "Simplify.h"
 #include "SpirvIR.h"
 #include "Target.h"
 
@@ -158,8 +159,6 @@ protected:
         // Map from Halide built-in names to extended GLSL intrinsics for SPIR-V
         using BuiltinMap = std::unordered_map<std::string, SpvId>;
         const BuiltinMap glsl_builtin = {
-            {"pow_f16", GLSLstd450Pow},
-            {"pow_f32", GLSLstd450Pow},
             {"acos_f16", GLSLstd450Acos},
             {"acos_f32", GLSLstd450Acos},
             {"acosh_f16", GLSLstd450Acosh},
@@ -649,17 +648,21 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Div): " << op->type << " ((" << op->a << ") / (" << op->b << "))\n";
     user_assert(!is_const_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
     int bits = 0;
-    if (is_const_power_of_two_integer(op->b, &bits)) {
-        SpvId shift_amount_id = builder.declare_constant(Int(32), &bits);
+    if (is_const_power_of_two_integer(op->b, &bits) && op->type.is_int_or_uint()) {
+        SpvId shift_amount_id = builder.declare_integer_constant(op->type.with_lanes(1), (int64_t)bits);
         SpvId type_id = builder.declare_type(op->type);
         op->a.accept(this);
         SpvId src_a_id = builder.current_id();
         SpvId result_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::binary_op(SpvOpShiftRightArithmetic, type_id, result_id, src_a_id, shift_amount_id));
+        if(op->type.is_uint()) {
+            builder.append(SpvFactory::binary_op(SpvOpShiftRightLogical, type_id, result_id, src_a_id, shift_amount_id));
+        } else {
+            builder.append(SpvFactory::binary_op(SpvOpShiftRightArithmetic, type_id, result_id, src_a_id, shift_amount_id));
+        }
         builder.update_id(result_id);
     } else if (op->type.is_int()) {
         Expr e = lower_euclidean_div(op->a, op->b);
-        e.accept(this);
+        e.accept(this);        
     } else {
         if (op->type.is_float()) {
             visit_binary_op(SpvOpFDiv, op->type, op->a, op->b);
@@ -674,9 +677,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mod): " << op->type << " ((" << op->a << ") % (" << op->b << "))\n";
     int bits = 0;
-    if (is_const_power_of_two_integer(op->b, &bits)) {
+    if (is_const_power_of_two_integer(op->b, &bits) && op->type.is_int_or_uint()) {
         int bitwise_value = ((1 << bits) - 1);
-        SpvId bitwise_value_id = builder.declare_constant(Int(32), &bitwise_value);
+        SpvId bitwise_value_id = builder.declare_integer_constant(op->type.with_lanes(1), (int64_t)bitwise_value);
         SpvId type_id = builder.declare_type(op->type);
         op->a.accept(this);
         SpvId src_a_id = builder.current_id();
@@ -1018,7 +1021,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         SpvOp op_code = SpvOpNop;
         if (op->type.is_float()) {
-            op_code = SpvOpFMod;
+            op_code = SpvOpFRem; // NOTE: FRem matches the fmod we expect
         } else if (op->type.is_int()) {
             op_code = SpvOpSMod;
         } else if (op->type.is_uint()) {
@@ -1033,7 +1036,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         if (op->type.is_uint()) {
             visit_binary_op(SpvOpShiftRightLogical, op->type, op->args[0], op->args[1]);
         } else {
-            visit_binary_op(SpvOpShiftRightArithmetic, op->type, op->args[0], op->args[1]);
+            Expr e = lower_signed_shift_right(op->args[0], op->args[1]);
+            e.accept(this);
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
@@ -1097,6 +1101,71 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             e.accept(this);
         } else {
             internal_error << "Unhandled intrinsic in Vulkan backend: " << op->name << "\n";
+        }
+
+    } else if (starts_with(op->name, "pow_f")) {
+        internal_assert(op->args.size() == 2);
+        if (can_prove(op->args[0] > 0)) {
+            visit_glsl_op(GLSLstd450Pow, op->type, op->args);
+        } else {
+            visit_glsl_op(GLSLstd450Pow, op->type, op->args);
+            SpvId type_id = builder.declare_type(op->type);
+            SpvId inst_set_id = builder.import_glsl_intrinsics();
+
+            Expr a = op->args[0];
+            a->accept(this);
+            SpvId src_a_id = builder.current_id();
+
+            Expr b = op->args[1];
+            b->accept(this);
+            SpvId src_b_id = builder.current_id();
+
+            SpvId abs_a_id = builder.reserve_id(SpvResultId);
+            SpvFactory::Operands abs_operands = { src_a_id };
+            builder.append(SpvFactory::extended(inst_set_id, GLSLstd450FAbs, type_id, abs_a_id, abs_operands));
+
+            SpvFactory::Operands pow_operands = { abs_a_id, src_b_id };
+            SpvId pow_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::extended(inst_set_id, GLSLstd450Pow, type_id, pow_id, pow_operands));
+            builder.update_id(pow_id);
+
+            // a > 0
+            SpvId zero_id = builder.declare_float_constant(op->type, 0.0);
+            SpvId a_gt_zero_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::binary_op(SpvOpFOrdGreaterThan, type_id, a_gt_zero_id, src_a_id, zero_id));
+    
+            // b % 2
+            SpvId two_id = builder.declare_float_constant(op->type, 2.0);
+            SpvId b_mod_two_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::binary_op(SpvOpFRem, type_id, b_mod_two_id, src_b_id, two_id));
+
+            // b % 2 == 1
+            SpvId one_id = builder.declare_float_constant(op->type, 1.0);
+            SpvId b_mod_two_is_one_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::binary_op(SpvOpFOrdEqual, type_id, b_mod_two_is_one_id, b_mod_two_id, one_id));
+
+            // b % 2 == 0
+            SpvId b_mod_two_is_zero_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::binary_op(SpvOpFOrdEqual, type_id, b_mod_two_is_zero_id, b_mod_two_id, zero_id));
+
+            // -pow 
+            SpvId neg_pow_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::unary_op(SpvOpFNegate, type_id, neg_pow_id, pow_id));
+
+            // a_var > 0 || b_var % 2 == 0
+            SpvId bool_type_id = builder.declare_type(Bool());
+            SpvId a_gt_zero_or_b_mod_two_is_zero_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::binary_op(SpvOpLogicalOr, bool_type_id, a_gt_zero_or_b_mod_two_is_zero_id, a_gt_zero_id, b_mod_two_is_zero_id));
+
+            // select(b_var % 2 == 1, -c_var, zero)
+            SpvId nan_id = builder.declare_float_constant(op->type, 0.0);
+            SpvId neg_pow_or_zero_result_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::select(type_id, neg_pow_or_zero_result_id, b_mod_two_is_one_id, neg_pow_id, nan_id));
+
+            // select(a_var > 0 || b_var % 2 == 0, pow_id, neg_pow_or_zero_result_id)
+            SpvId result_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::select(type_id, result_id, a_gt_zero_or_b_mod_two_is_zero_id, pow_id, neg_pow_or_zero_result_id));
+            builder.update_id(result_id);
         }
     } else if (starts_with(op->name, "fast_inverse_f")) {
         internal_assert(op->args.size() == 1);
@@ -2039,7 +2108,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_binary_op(SpvOp op_code, Type t, c
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_glsl_op(SpvId glsl_op_code, Type type, const std::vector<Expr> &args) {
-    uint32_t type_id = builder.declare_type(type);
+    SpvId type_id = builder.declare_type(type);
 
     SpvFactory::Operands operands;
     operands.reserve(args.size());

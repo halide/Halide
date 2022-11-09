@@ -390,6 +390,8 @@ public:
     SpvId declare_null_constant(const Type &type);
     SpvId declare_bool_constant(bool value);
     SpvId declare_string_constant(const std::string &str);
+    SpvId declare_integer_constant(const Type &type, int64_t value);
+    SpvId declare_float_constant(const Type &type, double value);
     SpvId declare_scalar_constant(const Type &type, const void *data);
     SpvId declare_vector_constant(const Type &type, const void *data);
     SpvId declare_access_chain(SpvId ptr_type_id, SpvId base_id, const Indices &indices);

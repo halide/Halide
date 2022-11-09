@@ -1815,6 +1815,58 @@ SpvId SpvBuilder::declare_scalar_constant_of_type(const Type &scalar_type, const
     return result_id;
 }
 
+SpvId SpvBuilder::declare_integer_constant(const Type &type, int64_t value) {
+    if (!type.is_int() || !type.is_scalar()) {
+        internal_error << "SPIRV: Invalid type provided for integer constant!" << type << "\n";
+        return SpvInvalidId;
+    }
+
+    SpvId result_id = SpvInvalidId;
+    if (type.is_int() && type.bits() == 8) {
+        int8_t data(value);
+        result_id = declare_scalar_constant_of_type<int8_t>(type, &data);
+    } else if (type.is_int() && type.bits() == 16) {
+        int16_t data(value);
+        result_id = declare_scalar_constant_of_type<int16_t>(type, &data);
+    } else if (type.is_int() && type.bits() == 32) {
+        int32_t data(value);
+        result_id = declare_scalar_constant_of_type<int32_t>(type, &data);
+    } else if (type.is_int() && type.bits() == 64) {
+        int64_t data(value);
+        result_id = declare_scalar_constant_of_type<int64_t>(type, &data);
+    } else {
+        user_error << "Unhandled constant integer data conversion from value type '" << type << "'!\n";
+    }
+    return result_id;
+}
+
+SpvId SpvBuilder::declare_float_constant(const Type &type, double value) {
+    if (!type.is_float() || !type.is_scalar()) {
+        internal_error << "SPIRV: Invalid type provided for float constant!" << type << "\n";
+        return SpvInvalidId;
+    }
+
+    SpvId result_id = SpvInvalidId;
+    if (type.is_float() && type.bits() == 16) {
+        if (type.is_bfloat()) {
+            bfloat16_t data(value);
+            result_id = declare_scalar_constant_of_type<bfloat16_t>(type, &data);
+        } else {
+            float16_t data(value);
+            result_id = declare_scalar_constant_of_type<float16_t>(type, &data);
+        }
+    } else if (type.is_float() && type.bits() == 32) {
+        float data(value);
+        result_id = declare_scalar_constant_of_type<float>(type, &data);
+    } else if (type.is_float() && type.bits() == 64) {
+        double data(value);
+        result_id = declare_scalar_constant_of_type<double>(type, &data);
+    } else {
+        user_error << "Unhandled constant float data conversion from value type '" << type << "'!\n";
+    }
+    return result_id;
+}
+
 SpvId SpvBuilder::declare_scalar_constant(const Type &scalar_type, const void *data) {
     if (scalar_type.lanes() != 1) {
         internal_error << "SPIRV: Invalid type provided for scalar constant!" << scalar_type << "\n";
