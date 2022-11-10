@@ -261,7 +261,16 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
         halide_debug_assert(user_context, buf->dim[i].stride >= 0);
     }
 
-    debug(user_context) << "    allocating " << *buf << "\n";
+    debug(user_context) << "    allocating buffer: "
+                        << "extents: " << buf->dim[0].extent << "x"
+                        << buf->dim[1].extent << "x" << buf->dim[2].extent << "x"
+                        << buf->dim[3].extent << " "
+                        << "strides: " << buf->dim[0].stride << "x"
+                        << buf->dim[1].stride << "x" << buf->dim[2].stride << "x"
+                        << buf->dim[3].stride << " "
+                        << "type: " << buf->type << " " 
+                        << "size_in_bytes: " << (uint64_t)size << " "
+                        << "(or " << (size * 1e-6f) << "MB)\n";
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
