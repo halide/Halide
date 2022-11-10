@@ -1,4 +1,5 @@
 #include "simd_op_check.h"
+
 #include "Halide.h"
 
 #include <stdarg.h>

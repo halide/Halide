@@ -338,7 +338,7 @@ public:
         return success;
     }
 
-    template <typename SIMDOpCheckT>
+    template<typename SIMDOpCheckT>
     static int main(int argc, char **argv) {
         Target host = get_host_target();
         Target hl_target = get_target_from_environment();
