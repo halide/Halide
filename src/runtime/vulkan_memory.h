@@ -5,7 +5,7 @@
 #include "vulkan_internal.h"
 
 // Uncomment to enable verbose memory allocation debugging
-// #define HL_VK_DEBUG_MEM 1
+#define HL_VK_DEBUG_MEM 1
 
 namespace Halide {
 namespace Runtime {
@@ -331,11 +331,6 @@ VulkanMemoryAllocator::default_config() {
 // --
 
 void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *block) {
-#if defined(HL_VK_DEBUG_MEM)
-    debug(nullptr) << "VulkanMemoryAllocator: Allocating block ("
-                   << "user_context=" << user_context << " "
-                   << "block=" << (void *)(block) << ") ... \n";
-#endif
     VulkanMemoryAllocator *instance = reinterpret_cast<VulkanMemoryAllocator *>(user_context);
     halide_abort_if_false(user_context, instance != nullptr);
     halide_abort_if_false(user_context, instance->device != nullptr);
@@ -344,7 +339,9 @@ void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *bloc
 
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Allocating block ("
-                   << "size=" << (uint32_t)block->size << ", "
+                   << "user_context=" << user_context << " "
+                   << "block=" << (void *)(block) << " "
+                   << "size=" << (uint64_t)block->size << ", "
                    << "dedicated=" << (block->dedicated ? "true" : "false") << " "
                    << "usage=" << halide_memory_usage_name(block->properties.usage) << " "
                    << "caching=" << halide_memory_caching_name(block->properties.caching) << " "
@@ -384,7 +381,7 @@ void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *bloc
         VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,  // struct type
         nullptr,                               // struct extending this
         0,                                     // create flags
-        block->size,                           // buffer size (in bytes)
+        0,                                     // buffer size (in bytes)
         usage_flags,                           // buffer usage flags
         VK_SHARING_MODE_EXCLUSIVE,             // sharing mode
         0, nullptr};
@@ -464,6 +461,7 @@ void VulkanMemoryAllocator::deallocate_block(void *user_context, MemoryBlock *bl
         instance->block_byte_count = 0;
     }
 
+    block->handle = nullptr;
     vk_host_free(nullptr, device_memory, instance->alloc_callbacks);
     device_memory = nullptr;
 }
