@@ -268,7 +268,7 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
                         << "strides: " << buf->dim[0].stride << "x"
                         << buf->dim[1].stride << "x" << buf->dim[2].stride << "x"
                         << buf->dim[3].stride << " "
-                        << "type: " << buf->type << " " 
+                        << "type: " << buf->type << " "
                         << "size_in_bytes: " << (uint64_t)size << " "
                         << "(or " << (size * 1e-6f) << "MB)\n";
 
