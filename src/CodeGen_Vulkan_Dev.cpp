@@ -578,7 +578,8 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(Type target_type, Type value_
         // Vulkan requires both value and target types to be unsigned for UConvert
         // so do the conversion to an equivalent unsigned type then bitcast this
         // result into the target type
-        Type unsigned_type = target_type.with_code(halide_type_uint).narrow();
+        Type unsigned_type = target_type.with_code(halide_type_uint);
+        unsigned_type = (unsigned_type.bits() > 8) ? unsigned_type.narrow() : unsigned_type;
         SpvId unsigned_type_id = builder.declare_type(unsigned_type);
         SpvId unsigned_value_id = builder.reserve_id(SpvResultId);
         result_id = builder.reserve_id(SpvResultId);
@@ -647,30 +648,15 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mul *op) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Div *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Div): " << op->type << " ((" << op->a << ") / (" << op->b << "))\n";
     user_assert(!is_const_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
-    int bits = 0;
-    if (is_const_power_of_two_integer(op->b, &bits) && op->type.is_int_or_uint()) {
-        SpvId shift_amount_id = builder.declare_integer_constant(op->type.with_lanes(1), (int64_t)bits);
-        SpvId type_id = builder.declare_type(op->type);
-        op->a.accept(this);
-        SpvId src_a_id = builder.current_id();
-        SpvId result_id = builder.reserve_id(SpvResultId);
-        if (op->type.is_uint()) {
-            builder.append(SpvFactory::binary_op(SpvOpShiftRightLogical, type_id, result_id, src_a_id, shift_amount_id));
-        } else {
-            builder.append(SpvFactory::binary_op(SpvOpShiftRightArithmetic, type_id, result_id, src_a_id, shift_amount_id));
-        }
-        builder.update_id(result_id);
-    } else if (op->type.is_int()) {
+    if (op->type.is_int()) {
         Expr e = lower_euclidean_div(op->a, op->b);
         e.accept(this);
+    } else if (op->type.is_uint()) {
+        visit_binary_op(SpvOpUDiv, op->type, op->a, op->b);
+    } else if (op->type.is_float()) {
+        visit_binary_op(SpvOpFDiv, op->type, op->a, op->b);
     } else {
-        if (op->type.is_float()) {
-            visit_binary_op(SpvOpFDiv, op->type, op->a, op->b);
-        } else if (op->type.is_uint()) {
-            visit_binary_op(SpvOpUDiv, op->type, op->a, op->b);
-        } else {
-            internal_error << "Failed to find a suitable Div operator for type: " << op->type << "\n";
-        }
+        internal_error << "Failed to find a suitable Div operator for type: " << op->type << "\n";
     }
 }
 
@@ -689,15 +675,13 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
     } else if (op->type.is_int()) {
         Expr e = lower_euclidean_mod(op->a, op->b);
         e.accept(this);
+    } else if (op->type.is_uint()) {
+        visit_binary_op(SpvOpUMod, op->type, op->a, op->b);
+    } else if (op->type.is_float()) {
+        // SPIR-V FMod is strangely not what we want .. FRem does what we need
+        visit_binary_op(SpvOpFRem, op->type, op->a, op->b);
     } else {
-        if (op->type.is_float()) {
-            // SPIR-V FMod is strangely not what we want .. FRem does what we need
-            visit_binary_op(SpvOpFRem, op->type, op->a, op->b);
-        } else if (op->type.is_uint()) {
-            visit_binary_op(SpvOpUMod, op->type, op->a, op->b);
-        } else {
-            internal_error << "Failed to find a suitable Mod operator for type: " << op->type << "\n";
-        }
+        internal_error << "Failed to find a suitable Mod operator for type: " << op->type << "\n";
     }
 }
 
