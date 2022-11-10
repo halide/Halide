@@ -230,7 +230,7 @@ BlockRegion *RegionAllocator::find_block_region(void *user_context, const Memory
         }
 
         // will the adjusted size fit within the remaining unallocated space?
-        if ((actual_size + block->reserved) < block->memory.size) {
+        if ((actual_size + block->reserved) <= block->memory.size) {
             result = block_region;  // best-fit!
             break;
         }

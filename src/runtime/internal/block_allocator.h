@@ -386,6 +386,7 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
 
     BlockResource *block = static_cast<BlockResource *>(block_entry->value);
     block->memory.size = size;
+    block->memory.handle = nullptr;
     block->memory.properties = properties;
     block->memory.dedicated = dedicated;
     block->reserved = 0;
@@ -439,6 +440,7 @@ void BlockAllocator::free_memory_block(void *user_context, BlockResource *block)
     halide_abort_if_false(user_context, allocators.block.deallocate != nullptr);
     MemoryBlock *memory_block = &(block->memory);
     allocators.block.deallocate(user_context, memory_block);
+    memory_block->handle = nullptr;
     block->reserved = 0;
     block->memory.size = 0;
 }
