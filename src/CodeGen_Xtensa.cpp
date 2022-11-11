@@ -10,6 +10,12 @@
 #include "Substitute.h"
 #include "XtensaOptimize.h"
 
+// 0 = off
+// 1 == outermost loops only
+// 2 == 2 outermost loop levels only
+// etc
+#define POOR_MANS_PROFILING_LOOP_LEVEL 0
+
 namespace Halide {
 namespace Internal {
 
@@ -182,10 +188,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
 }
 
 void CodeGen_Xtensa::add_vector_typedefs(const std::set<Type> &vector_types) {
-    if (!vector_types.empty()) {
-        const char *native_typedef_decl = R"INLINE_CODE(
-
-
+    stream << R"INLINE_CODE(
 #if defined(__XTENSA__)
 #include <xtensa/sim.h>
 #include <xtensa/tie/xt_ivpn.h>
@@ -197,6 +200,12 @@ inline int GetCycleCount() {
 }
 
 #endif
+)INLINE_CODE";
+
+    if (!vector_types.empty()) {
+        const char *native_typedef_decl = R"INLINE_CODE(
+
+
 #include <xtensa/tie/xt_ivpn.h>
 
 #define XCHAL_VISION_SIMD8 (XCHAL_VISION_SIMD16 * 2)
@@ -618,10 +627,10 @@ HALIDE_ALWAYS_INLINE void store_variable(const VectorType& a, void *base, int32_
 
 template <>
 HALIDE_ALWAYS_INLINE void store_variable<native_vector_u8, uint8_t, VECTOR_WIDTH_U8>(const native_vector_u8& a, void *base, int32_t offset, int32_t count) {
-	valign align = IVP_ZALIGN();
-	xb_vec2Nx8U* __restrict ptr  = (xb_vec2Nx8U*)((uint8_t*)base + offset);
-	IVP_SAV2NX8U_XP(a, align, ptr, count);
-	IVP_SAPOS2NX8U_FP(align, ptr);
+    valign align = IVP_ZALIGN();
+    xb_vec2Nx8U* __restrict ptr  = (xb_vec2Nx8U*)((uint8_t*)base + offset);
+    IVP_SAV2NX8U_XP(a, align, ptr, count);
+    IVP_SAPOS2NX8U_FP(align, ptr);
 }
 
 template <typename VectorType, typename OffsetType, typename BaseType, int Lanes>
@@ -1019,18 +1028,18 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u8 load<native_vector_u8,
 
 template<>
 HALIDE_ALWAYS_INLINE void store<native_vector_i8, int8_t, VECTOR_WIDTH_I8>(const native_vector_i8& a, void *base, int32_t offset) {
-	valign align = IVP_ZALIGN();
-	xb_vec2Nx8* __restrict ptr  = (xb_vec2Nx8*)((int8_t*)base + offset);
-	IVP_SA2NX8_IP(a, align, ptr);
-	IVP_SAPOS2NX8_FP(align, ptr);
+    valign align = IVP_ZALIGN();
+    xb_vec2Nx8* __restrict ptr  = (xb_vec2Nx8*)((int8_t*)base + offset);
+    IVP_SA2NX8_IP(a, align, ptr);
+    IVP_SAPOS2NX8_FP(align, ptr);
 }
 
 template<>
 HALIDE_ALWAYS_INLINE void store<native_vector_u8, uint8_t, VECTOR_WIDTH_U8>(const native_vector_u8& a, void *base, int32_t offset) {
-	valign align = IVP_ZALIGN();
-	xb_vec2Nx8U* __restrict ptr  = (xb_vec2Nx8U*)((uint8_t*)base + offset);
-	IVP_SA2NX8U_IP(a, align, ptr);
-	IVP_SAPOS2NX8U_FP(align, ptr);
+    valign align = IVP_ZALIGN();
+    xb_vec2Nx8U* __restrict ptr  = (xb_vec2Nx8U*)((uint8_t*)base + offset);
+    IVP_SA2NX8U_IP(a, align, ptr);
+    IVP_SAPOS2NX8U_FP(align, ptr);
 }
 
 template<>
@@ -1063,10 +1072,10 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u16 load<native_vector_u1
 
 template<>
 HALIDE_ALWAYS_INLINE void store<native_vector_u16, uint16_t, VECTOR_WIDTH_U16>(const native_vector_u16& a, void *base, int32_t offset) {
-	valign align = IVP_ZALIGN();
-	xb_vecNx16U* ptr  = (xb_vecNx16U*)((uint16_t*)base + offset);
-	IVP_SANX16U_IP(a, align, ptr);
-	IVP_SAPOSNX16U_FP(align, ptr);
+    valign align = IVP_ZALIGN();
+    xb_vecNx16U* ptr  = (xb_vecNx16U*)((uint16_t*)base + offset);
+    IVP_SANX16U_IP(a, align, ptr);
+    IVP_SAPOSNX16U_FP(align, ptr);
 }
 
 template<>
@@ -1213,18 +1222,18 @@ HALIDE_ALWAYS_INLINE void store_narrowing(const VectorType& a, void *base, int32
 
 template<>
 HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_i16, uint8_t, VECTOR_WIDTH_I16>(const native_vector_i16& a, void *base, int32_t offset) {
-	valign align = IVP_ZALIGN();
-	xb_vecNx8U* __restrict ptr  = (xb_vecNx8U*)((uint8_t*)base + offset);
-	IVP_SANX8U_IP(a, align, ptr);
-	IVP_SAPOSNX8U_FP(align, ptr);
+    valign align = IVP_ZALIGN();
+    xb_vecNx8U* __restrict ptr  = (xb_vecNx8U*)((uint8_t*)base + offset);
+    IVP_SANX8U_IP(a, align, ptr);
+    IVP_SAPOSNX8U_FP(align, ptr);
 }
 
 template<>
 HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_u16, uint8_t, VECTOR_WIDTH_U16>(const native_vector_u16& a, void *base, int32_t offset) {
-	valign align = IVP_ZALIGN();
-	xb_vecNx8U* __restrict ptr  = (xb_vecNx8U*)((uint8_t*)base + offset);
-	IVP_SANX8U_IP(a, align, ptr);
-	IVP_SAPOSNX8U_FP(align, ptr);
+    valign align = IVP_ZALIGN();
+    xb_vecNx8U* __restrict ptr  = (xb_vecNx8U*)((uint8_t*)base + offset);
+    IVP_SANX8U_IP(a, align, ptr);
+    IVP_SAPOSNX8U_FP(align, ptr);
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i16_x2 halide_xtensa_interleave_i16(const native_vector_i16& a, const native_vector_i16& b) {
@@ -1519,7 +1528,7 @@ HALIDE_ALWAYS_INLINE native_vector_i32_x2 halide_xtensa_sat_add_i32(const native
   xb_vecN_2x64w l1 = a.native_vector[1] * one;
   IVP_MULAN_2X32(l1, b.native_vector[1], one);
   return native_vector_i32_x2(native_vector_i32_x2::from_native_vector, IVP_PACKVN_2X64W(l0, zero), IVP_PACKVN_2X64W(l1, zero));
- 
+
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_pred_add_i16(const native_vector_i16& a, const native_mask_i16& p, const native_vector_i16& b, const native_vector_i16& c) {
@@ -2411,8 +2420,17 @@ class ScopedDmaInitializer {
             Type(Type::Float, 32, target.natural_vector_size<float>()),
         };
 
+        std::set<Type> predefined_vectors = {
+            Int(8, 4),
+            UInt(8, 4),
+            UInt(8, 8),
+        };
+
         std::set<Type> multiple_of_native_types;
         for (const auto &type : vector_types) {
+            if (predefined_vectors.count(type) > 0) {
+                continue;
+            }
             for (const auto &native_vector : native_vector_types) {
                 if ((native_vector.code() == type.code()) && (native_vector.bits() == type.bits()) && (type.lanes() > native_vector.lanes()) && (type.lanes() % native_vector.lanes() == 0)) {
                     stream << "using " << print_type(type) << " = MultipleOfNativeVector<" << print_type(native_vector) << ", " << type.lanes() / native_vector.lanes() << ">;\n";
@@ -2424,7 +2442,7 @@ class ScopedDmaInitializer {
 
         std::set<Type> filtered_vector_types;
         for (const auto &t : vector_types) {
-            if ((native_vector_types.count(t) > 0) || (multiple_of_native_types.count(t) > 0)) {
+            if ((native_vector_types.count(t) > 0) || (predefined_vectors.count(t) > 0) || (multiple_of_native_types.count(t) > 0)) {
                 continue;
             }
             filtered_vector_types.insert(t);
@@ -3502,15 +3520,18 @@ void CodeGen_Xtensa::visit(const For *op) {
             << "Can only emit serial or parallel for loops to C\n";
     }
 
-    // NOTE(vksnk): poor man's profiling below.
-    // if (current_loop_level == 1) {
-    //     open_scope();
-    //     stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
-    //     stream << get_indent() << "cycles_start = GetCycleCount();\n";
-    // }
-    // if (current_loop_level == 1) {
-    //     stream << get_indent() << "cycles_start = GetCycleCount();\n";
-    // }
+#if POOR_MANS_PROFILING_LOOP_LEVEL > 0
+    std::string n = op->name;
+    for (auto &c : n) {
+        if (c == '$' || c == '.') {
+            c = '_';
+        }
+    }
+    if (current_loop_level <= POOR_MANS_PROFILING_LOOP_LEVEL) {
+        open_scope();
+        stream << get_indent() << "const int cycles_start_" << n << " = GetCycleCount();\n";
+    }
+#endif
 
     stream << get_indent() << "for (int "
            << print_name(op->name)
@@ -3527,15 +3548,14 @@ void CodeGen_Xtensa::visit(const For *op) {
     op->body.accept(this);
 
     close_scope("for " + print_name(op->name));
-    // NOTE(vksnk): Second part of the poor man's profiling below.
-    // if (current_loop_level == 1) {
-    //     stream << get_indent() << "cycles_stop = GetCycleCount();\n";
-    //     stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
-    //     stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
-    // }
-    // if (current_loop_level == 1) {
-    //     close_scope("profiler" + print_name(op->name));
-    // }
+#if POOR_MANS_PROFILING_LOOP_LEVEL > 0
+    if (current_loop_level <= POOR_MANS_PROFILING_LOOP_LEVEL) {
+        stream << get_indent() << "const int cycles_stop_" << n << " = GetCycleCount();\n";
+        stream << get_indent() << "const int cycles_tot_" << n << " = cycles_stop_" << n << " - cycles_start_" << n << ";\n";
+        stream << get_indent() << "printf(\"@" << current_loop_level << ": " << op->name << ": %d\\n\", cycles_tot_" << n << ");\n";
+        close_scope("profiler" + print_name(op->name));
+    }
+#endif
     current_loop_level--;
 }
 
