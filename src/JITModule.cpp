@@ -161,8 +161,8 @@ JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &
     debug(2) << "JIT Compiling " << name << "\n";
 
     auto addr = JIT.lookup(name);
-    if (auto E = addr.takeError()) {
-        throw E;
+    if (!addr) {
+        internal_error << llvm::toString(addr.takeError()) << "\n";
     }
 
 #if LLVM_VERSION >= 150
@@ -193,7 +193,7 @@ public:
         llvm::orc::SymbolMap NewSymbols;
 
         llvm::orc::SymbolLookupSet LookupSetCopy;
-        for (auto &symbol : LookupSet) {
+        for (const auto &symbol : LookupSet) {
             std::string name = (*symbol.first).str();
 
             for (const auto &module : modules) {
@@ -260,8 +260,8 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     tm_builder.setCodeGenOptLevel(CodeGenOpt::Aggressive);
 
     auto tm = tm_builder.createTargetMachine();
-    if (auto E = tm.takeError()) {
-        throw E;
+    if (!tm) {
+        internal_error << llvm::toString(tm.takeError()) << "\n";
     }
 
     DataLayout target_data_layout(tm.get()->createDataLayout());
@@ -297,11 +297,11 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
                                   .setObjectLinkingLayerCreator(linkerBuilder)
                                   .create());
 
-    auto ctors = llvm::orc::getConstructors(*m.get());
+    auto ctors = llvm::orc::getConstructors(*m);
     llvm::orc::CtorDtorRunner ctorRunner(JIT->getMainJITDylib());
     ctorRunner.add(ctors);
 
-    auto dtors = llvm::orc::getDestructors(*m.get());
+    auto dtors = llvm::orc::getDestructors(*m);
     llvm::orc::CtorDtorRunner *dtorRunner = new llvm::orc::CtorDtorRunner(JIT->getMainJITDylib());
     dtorRunner->add(dtors);
 
@@ -311,10 +311,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     JIT->getMainJITDylib().addGenerator(std::make_unique<HalideJITGenerator>(dependencies));
 
     llvm::orc::ThreadSafeModule tsm(std::move(m), std::move(jit_module->context));
-    auto err = JIT->addIRModule(std::move(tsm));
-    if (err) {
-        throw err;
-    }
+    llvm::cantFail(JIT->addIRModule(std::move(tsm)));
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
@@ -336,11 +333,10 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         exports[requested_export] = compile_and_get_function(*JIT, requested_export);
     }
 
+    listeners.clear();
+
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
-    err = ctorRunner.run();
-    if (err) {
-        throw err;
-    }
+    llvm::cantFail(ctorRunner.run());
 
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
     jit_module->exports = exports;
