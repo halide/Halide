@@ -537,9 +537,7 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(Type target_type, Type value_
         } else if (target_type.is_bool()) {
             op_code = SpvOpSelect;
         } else if (target_type.is_int_or_uint()) {
-            if (target_type.bits() != value_type.bits()) {
-                op_code = SpvOpUConvert;  // UConvert is only allowed on differing component widths
-            }
+            op_code = SpvOpUConvert;
         }
     } else if (value_type.is_int()) {
         if (target_type.is_float()) {
@@ -547,9 +545,7 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(Type target_type, Type value_
         } else if (target_type.is_bool()) {
             op_code = SpvOpSelect;
         } else if (target_type.is_int_or_uint()) {
-            if (target_type.bits() != value_type.bits()) {
-                op_code = SpvOpSConvert;  // SConvert is only allowed on differing component widths
-            }
+            op_code = SpvOpSConvert;
         }
     }
 
@@ -575,16 +571,30 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(Type target_type, Type value_
     } else if (op_code == SpvOpSelect) {
         result_id = convert_to_bool(target_type, value_type, value_id);
     } else if (op_code == SpvOpUConvert && target_type.is_int()) {
-        // Vulkan requires both value and target types to be unsigned for UConvert
-        // so do the conversion to an equivalent unsigned type then bitcast this
+        // SPIR-V requires both value and target types to be unsigned and of 
+        // different component bit widths in order to be compatible with UConvert
+        // ... so do the conversion to an equivalent unsigned type then bitcast this
         // result into the target type
         Type unsigned_type = target_type.with_code(halide_type_uint);
-        unsigned_type = (unsigned_type.bits() > 8) ? unsigned_type.narrow() : unsigned_type;
-        SpvId unsigned_type_id = builder.declare_type(unsigned_type);
-        SpvId unsigned_value_id = builder.reserve_id(SpvResultId);
+        if(unsigned_type.bytes() != value_type.bytes()) {
+            SpvId unsigned_type_id = builder.declare_type(unsigned_type);
+            SpvId unsigned_value_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::convert(op_code, unsigned_type_id, unsigned_value_id, value_id));
+            value_id = unsigned_value_id;
+        }
         result_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::convert(op_code, unsigned_type_id, unsigned_value_id, value_id));
-        builder.append(SpvFactory::bitcast(target_type_id, result_id, unsigned_value_id));
+        builder.append(SpvFactory::bitcast(target_type_id, result_id, value_id));
+    } else if (op_code == SpvOpSConvert && target_type.is_uint()) {
+        // Same as above but for SConvert
+        Type signed_type = target_type.with_code(halide_type_int);
+        if(signed_type.bytes() != value_type.bytes()) {
+            SpvId signed_type_id = builder.declare_type(signed_type);
+            SpvId signed_value_id = builder.reserve_id(SpvResultId);
+            builder.append(SpvFactory::convert(op_code, signed_type_id, signed_value_id, value_id));
+            value_id = signed_value_id;
+        }
+        result_id = builder.reserve_id(SpvResultId);
+        builder.append(SpvFactory::bitcast(target_type_id, result_id, value_id));
     } else {
         result_id = builder.reserve_id(SpvResultId);
         builder.append(SpvFactory::convert(op_code, target_type_id, result_id, value_id));
