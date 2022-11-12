@@ -683,7 +683,6 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     return 0;
 }
 
-
 WEAK int halide_vulkan_device_crop(void *user_context,
                                    const struct halide_buffer_t *src,
                                    struct halide_buffer_t *dst) {
@@ -692,9 +691,9 @@ WEAK int halide_vulkan_device_crop(void *user_context,
 }
 
 WEAK int halide_vulkan_device_slice(void *user_context,
-                                   const struct halide_buffer_t *src,
-                                   int slice_dim, int slice_pos,
-                                   struct halide_buffer_t *dst) {
+                                    const struct halide_buffer_t *src,
+                                    int slice_dim, int slice_pos,
+                                    struct halide_buffer_t *dst) {
     const int64_t offset = calc_device_slice_byte_offset(src, slice_dim, slice_pos);
     return vk_device_crop_from_offset(user_context, src, offset, dst);
 }

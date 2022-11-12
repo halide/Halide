@@ -172,7 +172,7 @@ void RegionAllocator::release(void *user_context, MemoryRegion *memory_region) {
     BlockRegion *block_region = reinterpret_cast<BlockRegion *>(memory_region);
     halide_abort_if_false(user_context, block_region != nullptr);
     halide_abort_if_false(user_context, block_region->block_ptr == block);
-    if(block_region->usage_count > 0) {
+    if (block_region->usage_count > 0) {
         block_region->usage_count--;
     }
     release_block_region(user_context, block_region);
@@ -182,7 +182,7 @@ void RegionAllocator::reclaim(void *user_context, MemoryRegion *memory_region) {
     BlockRegion *block_region = reinterpret_cast<BlockRegion *>(memory_region);
     halide_abort_if_false(user_context, block_region != nullptr);
     halide_abort_if_false(user_context, block_region->block_ptr == block);
-    if(block_region->usage_count > 0) {
+    if (block_region->usage_count > 0) {
         block_region->usage_count--;
     }
     free_block_region(user_context, block_region);
@@ -397,7 +397,7 @@ void RegionAllocator::release_block_region(void *user_context, BlockRegion *bloc
                                     << "user_context=" << (void *)(user_context) << " "
                                     << "block_region=" << (void *)(block_region) << ") ...\n";
 #endif
-    if ((block_region->usage_count == 0) && 
+    if ((block_region->usage_count == 0) &&
         ((block_region->status == AllocationStatus::InUse) ||
          (block_region->status == AllocationStatus::Dedicated))) {
 
@@ -470,7 +470,7 @@ void RegionAllocator::free_block_region(void *user_context, BlockRegion *block_r
                                     << "user_context=" << (void *)(user_context) << " "
                                     << "block_region=" << (void *)(block_region) << " "
                                     << "status=" << (uint32_t)block_region->status << " "
-                                    << "usage_count="  << (uint32_t)block_region->usage_count << ") ...\n";
+                                    << "usage_count=" << (uint32_t)block_region->usage_count << ") ...\n";
 #endif
     if ((block_region->usage_count == 0) && (block_region->memory.handle != nullptr)) {
 #ifdef DEBUG_INTERNAL

@@ -571,12 +571,12 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(Type target_type, Type value_
     } else if (op_code == SpvOpSelect) {
         result_id = convert_to_bool(target_type, value_type, value_id);
     } else if (op_code == SpvOpUConvert && target_type.is_int()) {
-        // SPIR-V requires both value and target types to be unsigned and of 
+        // SPIR-V requires both value and target types to be unsigned and of
         // different component bit widths in order to be compatible with UConvert
         // ... so do the conversion to an equivalent unsigned type then bitcast this
         // result into the target type
         Type unsigned_type = target_type.with_code(halide_type_uint);
-        if(unsigned_type.bytes() != value_type.bytes()) {
+        if (unsigned_type.bytes() != value_type.bytes()) {
             SpvId unsigned_type_id = builder.declare_type(unsigned_type);
             SpvId unsigned_value_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::convert(op_code, unsigned_type_id, unsigned_value_id, value_id));
@@ -587,7 +587,7 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(Type target_type, Type value_
     } else if (op_code == SpvOpSConvert && target_type.is_uint()) {
         // Same as above but for SConvert
         Type signed_type = target_type.with_code(halide_type_int);
-        if(signed_type.bytes() != value_type.bytes()) {
+        if (signed_type.bytes() != value_type.bytes()) {
             SpvId signed_type_id = builder.declare_type(signed_type);
             SpvId signed_value_id = builder.reserve_id(SpvResultId);
             builder.append(SpvFactory::convert(op_code, signed_type_id, signed_value_id, value_id));

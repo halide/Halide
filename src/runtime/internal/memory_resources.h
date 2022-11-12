@@ -68,8 +68,8 @@ struct MemoryBlock {
 
 // Client-facing struct for specifying a range of a memory region (eg for crops)
 struct MemoryRange {
-    size_t head_offset = 0;       //< byte offset from start of region
-    size_t tail_offset = 0;       //< byte offset from end of region
+    size_t head_offset = 0;  //< byte offset from start of region
+    size_t tail_offset = 0;  //< byte offset from end of region
 };
 
 // Client-facing struct for exchanging memory region allocation requests

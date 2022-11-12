@@ -65,9 +65,9 @@ public:
 
     void *map(void *user_context, MemoryRegion *region);
     void unmap(void *user_context, MemoryRegion *region);
-    MemoryRegion* create_crop(void *user_context, MemoryRegion *region, uint64_t offset);
+    MemoryRegion *create_crop(void *user_context, MemoryRegion *region, uint64_t offset);
     void destroy_crop(void *user_context, MemoryRegion *region);
-    MemoryRegion* owner_of(void *user_context, MemoryRegion *region);
+    MemoryRegion *owner_of(void *user_context, MemoryRegion *region);
 
     VkDevice current_device() const {
         return this->device;
@@ -203,7 +203,7 @@ void *VulkanMemoryAllocator::map(void *user_context, MemoryRegion *region) {
     halide_abort_if_false(user_context, physical_device != nullptr);
     halide_abort_if_false(user_context, block_allocator != nullptr);
 
-    MemoryRegion* owner = owner_of(user_context, region);
+    MemoryRegion *owner = owner_of(user_context, region);
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
     if (region_allocator == nullptr) {
         error(nullptr) << "VulkanMemoryAllocator: Unable to map region! Invalid region allocator handle!\n";
@@ -249,7 +249,7 @@ void VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
 
-    MemoryRegion* owner = owner_of(user_context, region);
+    MemoryRegion *owner = owner_of(user_context, region);
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
     if (region_allocator == nullptr) {
         error(nullptr) << "VulkanMemoryAllocator: Unable to unmap region! Invalid region allocator handle!\n";
@@ -271,7 +271,7 @@ void VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
     vkUnmapMemory(device, *device_memory);
 }
 
-MemoryRegion* VulkanMemoryAllocator::create_crop(void *user_context, MemoryRegion *region, uint64_t offset) {
+MemoryRegion *VulkanMemoryAllocator::create_crop(void *user_context, MemoryRegion *region, uint64_t offset) {
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Cropping region ("
                    << "user_context=" << user_context << " "
@@ -285,7 +285,7 @@ MemoryRegion* VulkanMemoryAllocator::create_crop(void *user_context, MemoryRegio
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
 
-    MemoryRegion* owner = owner_of(user_context, region);
+    MemoryRegion *owner = owner_of(user_context, region);
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
     if (region_allocator == nullptr) {
         error(nullptr) << "VulkanMemoryAllocator: Unable to unmap region! Invalid region allocator handle!\n";
@@ -299,22 +299,21 @@ MemoryRegion* VulkanMemoryAllocator::create_crop(void *user_context, MemoryRegio
     const BlockAllocator::MemoryAllocators &allocators = block_allocator->current_allocators();
     halide_abort_if_false(user_context, allocators.system.allocate != nullptr);
     MemoryRegion *result = reinterpret_cast<MemoryRegion *>(
-        allocators.system.allocate(user_context, sizeof(MemoryRegion))
-    );
+        allocators.system.allocate(user_context, sizeof(MemoryRegion)));
 
     halide_abort_if_false(user_context, result != nullptr);
     memcpy(result, owner, sizeof(MemoryRegion));
 
     // point the handle to the owner of the allocated region, and update the head offset
     result->is_owner = false;
-    result->handle = (void*)owner;
+    result->handle = (void *)owner;
     result->range.head_offset = owner->range.head_offset + offset;
     return result;
 }
 
 void VulkanMemoryAllocator::destroy_crop(void *user_context, MemoryRegion *region) {
-    
-    MemoryRegion* owner = owner_of(user_context, region);
+
+    MemoryRegion *owner = owner_of(user_context, region);
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
     if (region_allocator == nullptr) {
         error(nullptr) << "VulkanMemoryAllocator: Unable to destroy crop region! Invalid region allocator handle!\n";
@@ -330,12 +329,12 @@ void VulkanMemoryAllocator::destroy_crop(void *user_context, MemoryRegion *regio
     allocators.system.deallocate(user_context, region);
 }
 
-MemoryRegion* VulkanMemoryAllocator::owner_of(void *user_context, MemoryRegion *region) {
-    if(region->is_owner) {
+MemoryRegion *VulkanMemoryAllocator::owner_of(void *user_context, MemoryRegion *region) {
+    if (region->is_owner) {
         return region;
     } else {
         // If this is a cropped region, use the handle to retrieve the owner of the allocation
-        return reinterpret_cast<MemoryRegion*>(region->handle);
+        return reinterpret_cast<MemoryRegion *>(region->handle);
     }
 }
 
