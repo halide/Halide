@@ -38,7 +38,7 @@ namespace {  // internalize
 // --------------------------------------------------------------------------
 void *vk_host_malloc(void *user_context, size_t size, size_t alignment, VkSystemAllocationScope scope, const VkAllocationCallbacks *callbacks = nullptr);
 void vk_host_free(void *user_context, void *ptr, const VkAllocationCallbacks *callbacks = nullptr);
-
+int vk_device_crop_from_offset(void *user_context, const struct halide_buffer_t *src, int64_t offset, struct halide_buffer_t *dst);
 VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context, VkDevice device, VkPhysicalDevice physical_device,
                                                   const VkAllocationCallbacks *alloc_callbacks);
 

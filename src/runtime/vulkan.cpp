@@ -100,11 +100,12 @@ WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *halide_b
 
     // get the allocated region for the device
     MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(halide_buffer->device);
-    if (ctx.allocator && device_region && device_region->handle) {
+    MemoryRegion *memory_region = ctx.allocator->owner_of(user_context, device_region);
+    if (ctx.allocator && memory_region && memory_region->handle) {
         if (halide_can_reuse_device_allocations(user_context)) {
-            ctx.allocator->release(user_context, device_region);
+            ctx.allocator->release(user_context, memory_region);
         } else {
-            ctx.allocator->reclaim(user_context, device_region);
+            ctx.allocator->reclaim(user_context, memory_region);
         }
     }
     halide_buffer->device = 0;
@@ -440,9 +441,10 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
 
     // get the allocated region for the device
     MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(halide_buffer->device);
+    MemoryRegion *memory_region = ctx.allocator->owner_of(user_context, device_region);
 
     // retrieve the buffer from the region
-    VkBuffer *device_buffer = reinterpret_cast<VkBuffer *>(device_region->handle);
+    VkBuffer *device_buffer = reinterpret_cast<VkBuffer *>(memory_region->handle);
     if (device_buffer == nullptr) {
         error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
         return halide_error_code_internal_error;
@@ -475,7 +477,7 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     copy_helper.src = (uint64_t)(staging_buffer);
     copy_helper.dst = (uint64_t)(device_buffer);
     uint64_t src_offset = copy_helper.src_begin;
-    uint64_t dst_offset = 0;
+    uint64_t dst_offset = device_region->range.head_offset;
     vk_do_multidimensional_copy(user_context, command_buffer, copy_helper, src_offset, dst_offset, halide_buffer->dimensions);
 
     // end the command buffer
@@ -578,9 +580,10 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 
     // get the allocated region for the device
     MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(halide_buffer->device);
+    MemoryRegion *memory_region = ctx.allocator->owner_of(user_context, device_region);
 
     // retrieve the buffer from the region
-    VkBuffer *device_buffer = reinterpret_cast<VkBuffer *>(device_region->handle);
+    VkBuffer *device_buffer = reinterpret_cast<VkBuffer *>(memory_region->handle);
     if (device_buffer == nullptr) {
         error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
         return halide_error_code_internal_error;
@@ -613,7 +616,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     uint64_t copy_dst = copy_helper.dst;
     copy_helper.src = (uint64_t)(device_buffer);
     copy_helper.dst = (uint64_t)(staging_buffer);
-    uint64_t src_offset = copy_helper.src_begin;
+    uint64_t src_offset = copy_helper.src_begin + device_region->range.head_offset;
     uint64_t dst_offset = 0;
     vk_do_multidimensional_copy(user_context, command_buffer, copy_helper, src_offset, dst_offset, halide_buffer->dimensions);
 
@@ -671,6 +674,52 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
         ctx.allocator->reclaim(user_context, staging_region);
     }
     vk_destroy_command_buffer(user_context, ctx.allocator, ctx.command_pool, command_buffer);
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+#endif
+
+    return 0;
+}
+
+
+WEAK int halide_vulkan_device_crop(void *user_context,
+                                   const struct halide_buffer_t *src,
+                                   struct halide_buffer_t *dst) {
+    const int64_t offset = calc_device_crop_byte_offset(src, dst);
+    return vk_device_crop_from_offset(user_context, src, offset, dst);
+}
+
+WEAK int halide_vulkan_device_slice(void *user_context,
+                                   const struct halide_buffer_t *src,
+                                   int slice_dim, int slice_pos,
+                                   struct halide_buffer_t *dst) {
+    const int64_t offset = calc_device_slice_byte_offset(src, slice_dim, slice_pos);
+    return vk_device_crop_from_offset(user_context, src, offset, dst);
+}
+
+WEAK int halide_vulkan_device_release_crop(void *user_context,
+                                           struct halide_buffer_t *halide_buffer) {
+
+    debug(user_context)
+        << "Vulkan: halide_vulkan_device_release_crop (user_context: " << user_context
+        << ", halide_buffer: " << halide_buffer << ")\n";
+
+    VulkanContext ctx(user_context);
+    if (ctx.error != VK_SUCCESS) {
+        return ctx.error;
+    }
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+
+    halide_abort_if_false(user_context, halide_buffer->device);
+
+    // get the allocated region for the device
+    MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(halide_buffer->device);
+    ctx.allocator->destroy_crop(user_context, device_region);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -1011,9 +1060,9 @@ WEAK halide_device_interface_impl_t vulkan_device_interface_impl = {
     halide_vulkan_device_and_host_malloc,
     halide_vulkan_device_and_host_free,
     halide_default_buffer_copy,
-    halide_default_device_crop,
-    halide_default_device_slice,
-    halide_default_device_release_crop,
+    halide_vulkan_device_crop,
+    halide_vulkan_device_slice,
+    halide_vulkan_device_release_crop,
     halide_vulkan_wrap_vk_buffer,
     halide_vulkan_detach_vk_buffer,
 };

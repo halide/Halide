@@ -58,12 +58,16 @@ public:
     MemoryRegion *reserve(void *user_context, MemoryRequest &request);
     void release(void *user_context, MemoryRegion *region);  //< unmark and cache the region for reuse
     void reclaim(void *user_context, MemoryRegion *region);  //< free the region and consolidate
+    void retain(void *user_context, MemoryRegion *region);   //< retain the region and increase its use count
     bool collect(void *user_context);                        //< returns true if any blocks were removed
     void release(void *user_context);
     void destroy(void *user_context);
 
     void *map(void *user_context, MemoryRegion *region);
     void unmap(void *user_context, MemoryRegion *region);
+    MemoryRegion* create_crop(void *user_context, MemoryRegion *region, uint64_t offset);
+    void destroy_crop(void *user_context, MemoryRegion *region);
+    MemoryRegion* owner_of(void *user_context, MemoryRegion *region);
 
     VkDevice current_device() const {
         return this->device;
@@ -191,14 +195,16 @@ void *VulkanMemoryAllocator::map(void *user_context, MemoryRegion *region) {
                    << "device=" << (void *)(device) << " "
                    << "physical_device=" << (void *)(physical_device) << " "
                    << "region=" << (void *)(region) << " "
-                   << "size=" << (uint32_t)region->size << " "
-                   << "offset=" << (uint32_t)region->offset << ") ...\n";
+                   << "region_size=" << (uint32_t)region->size << " "
+                   << "region_offset=" << (uint32_t)region->offset << " "
+                   << "crop_offset=" << (uint32_t)region->range.head_offset << ") ...\n";
 #endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
     halide_abort_if_false(user_context, block_allocator != nullptr);
 
-    RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, region);
+    MemoryRegion* owner = owner_of(user_context, region);
+    RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
     if (region_allocator == nullptr) {
         error(nullptr) << "VulkanMemoryAllocator: Unable to map region! Invalid region allocator handle!\n";
         return nullptr;
@@ -217,7 +223,10 @@ void *VulkanMemoryAllocator::map(void *user_context, MemoryRegion *region) {
     }
 
     uint8_t *mapped_ptr = nullptr;
-    VkResult result = vkMapMemory(device, *device_memory, region->offset, region->size, 0, (void **)(&mapped_ptr));
+    VkDeviceSize memory_offset = region->offset + region->range.head_offset;
+    VkDeviceSize memory_size = region->size - region->range.tail_offset - region->range.head_offset;
+    halide_abort_if_false(user_context, (region->size - region->range.tail_offset - region->range.head_offset) > 0);
+    VkResult result = vkMapMemory(device, *device_memory, memory_offset, memory_size, 0, (void **)(&mapped_ptr));
     if (result != VK_SUCCESS) {
         error(user_context) << "VulkanMemoryAllocator: Mapping region failed! vkMapMemory returned error code: " << vk_get_error_name(result) << "\n";
         return nullptr;
@@ -233,13 +242,15 @@ void VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
                    << "device=" << (void *)(device) << " "
                    << "physical_device=" << (void *)(physical_device) << " "
                    << "region=" << (void *)(region) << " "
-                   << "size=" << (uint32_t)region->size << " "
-                   << "offset=" << (uint32_t)region->offset << ") ...\n";
+                   << "region_size=" << (uint32_t)region->size << " "
+                   << "region_offset=" << (uint32_t)region->offset << " "
+                   << "crop_offset=" << (uint32_t)region->range.head_offset << ") ...\n";
 #endif
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
 
-    RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, region);
+    MemoryRegion* owner = owner_of(user_context, region);
+    RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
     if (region_allocator == nullptr) {
         error(nullptr) << "VulkanMemoryAllocator: Unable to unmap region! Invalid region allocator handle!\n";
         return;
@@ -258,6 +269,74 @@ void VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
     }
 
     vkUnmapMemory(device, *device_memory);
+}
+
+MemoryRegion* VulkanMemoryAllocator::create_crop(void *user_context, MemoryRegion *region, uint64_t offset) {
+#if defined(HL_VK_DEBUG_MEM)
+    debug(nullptr) << "VulkanMemoryAllocator: Cropping region ("
+                   << "user_context=" << user_context << " "
+                   << "device=" << (void *)(device) << " "
+                   << "physical_device=" << (void *)(physical_device) << " "
+                   << "region=" << (void *)(region) << " "
+                   << "region_size=" << (uint32_t)region->size << " "
+                   << "region_offset=" << (uint32_t)region->offset << " "
+                   << "crop_offset=" << (int64_t)offset << ") ...\n";
+#endif
+    halide_abort_if_false(user_context, device != nullptr);
+    halide_abort_if_false(user_context, physical_device != nullptr);
+
+    MemoryRegion* owner = owner_of(user_context, region);
+    RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
+    if (region_allocator == nullptr) {
+        error(nullptr) << "VulkanMemoryAllocator: Unable to unmap region! Invalid region allocator handle!\n";
+        return nullptr;
+    }
+
+    // increment usage count
+    region_allocator->retain(this, owner);
+
+    // create a new region to return, and copy all the other region's properties
+    const BlockAllocator::MemoryAllocators &allocators = block_allocator->current_allocators();
+    halide_abort_if_false(user_context, allocators.system.allocate != nullptr);
+    MemoryRegion *result = reinterpret_cast<MemoryRegion *>(
+        allocators.system.allocate(user_context, sizeof(MemoryRegion))
+    );
+
+    halide_abort_if_false(user_context, result != nullptr);
+    memcpy(result, owner, sizeof(MemoryRegion));
+
+    // point the handle to the owner of the allocated region, and update the head offset
+    result->is_owner = false;
+    result->handle = (void*)owner;
+    result->range.head_offset = owner->range.head_offset + offset;
+    return result;
+}
+
+void VulkanMemoryAllocator::destroy_crop(void *user_context, MemoryRegion *region) {
+    
+    MemoryRegion* owner = owner_of(user_context, region);
+    RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, owner);
+    if (region_allocator == nullptr) {
+        error(nullptr) << "VulkanMemoryAllocator: Unable to destroy crop region! Invalid region allocator handle!\n";
+        return;
+    }
+
+    // decrement usage count
+    region_allocator->release(this, owner);
+
+    // discard the copied region struct
+    const BlockAllocator::MemoryAllocators &allocators = block_allocator->current_allocators();
+    halide_abort_if_false(user_context, allocators.system.deallocate != nullptr);
+    allocators.system.deallocate(user_context, region);
+}
+
+MemoryRegion* VulkanMemoryAllocator::owner_of(void *user_context, MemoryRegion *region) {
+    if(region->is_owner) {
+        return region;
+    } else {
+        // If this is a cropped region, use the handle to retrieve the owner of the allocation
+        return reinterpret_cast<MemoryRegion*>(region->handle);
+    }
 }
 
 void VulkanMemoryAllocator::release(void *user_context, MemoryRegion *region) {
@@ -286,6 +365,17 @@ void VulkanMemoryAllocator::reclaim(void *user_context, MemoryRegion *region) {
     halide_abort_if_false(user_context, physical_device != nullptr);
 
     return block_allocator->reclaim(this, region);
+}
+
+void VulkanMemoryAllocator::retain(void *user_context, MemoryRegion *region) {
+#if defined(HL_VK_DEBUG_MEM)
+    debug(nullptr) << "VulkanMemoryAllocator: Retaining region ("
+                   << "user_context=" << user_context << " "
+                   << "region=" << (void *)(region) << " "
+                   << "size=" << (uint32_t)region->size << " "
+                   << "offset=" << (uint32_t)region->offset << ") ...\n";
+#endif
+    return block_allocator->retain(this, region);
 }
 
 bool VulkanMemoryAllocator::collect(void *user_context) {
@@ -641,6 +731,7 @@ void VulkanMemoryAllocator::allocate_region(void *user_context, MemoryRegion *re
     }
 
     region->handle = (void *)buffer;
+    region->is_owner = true;
     instance->region_byte_count += region->size;
     instance->region_count++;
 }

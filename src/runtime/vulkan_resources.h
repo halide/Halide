@@ -50,10 +50,10 @@ VkResult vk_create_command_pool(void *user_context, VulkanMemoryAllocator *alloc
 
     VkCommandPoolCreateInfo command_pool_info =
         {
-            VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,  // struct type
-            nullptr,                                     // pointer to struct extending this
-            VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,        // flags. Assume transient short-lived single-use command buffers
-            queue_index                                  // queue family index corresponding to the compute command queue
+            VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,      // struct type
+            nullptr,                                         // pointer to struct extending this
+            VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,            // flags. Assume transient short-lived single-use command buffers
+            queue_index                                      // queue family index corresponding to the compute command queue
         };
     return vkCreateCommandPool(allocator->current_device(), &command_pool_info, allocator->callbacks(), command_pool);
 }
@@ -465,18 +465,22 @@ VkResult vk_update_descriptor_set(void *user_context,
 
             // get the allocated region for the buffer
             MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(((halide_buffer_t *)args[i])->device);
+            MemoryRegion *owner = allocator->owner_of(user_context, device_region);
 
             // retrieve the buffer from the region
-            VkBuffer *device_buffer = reinterpret_cast<VkBuffer *>(device_region->handle);
+            VkBuffer *device_buffer = reinterpret_cast<VkBuffer *>(owner->handle);
             if (device_buffer == nullptr) {
                 error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
                 return VK_ERROR_INITIALIZATION_FAILED;
             }
 
+            VkDeviceSize range_offset = device_region->range.head_offset;
+            VkDeviceSize range_size = device_region->size - device_region->range.head_offset - device_region->range.tail_offset;
+            halide_abort_if_false(user_context, (device_region->size - device_region->range.head_offset - device_region->range.tail_offset) > 0);
             VkDescriptorBufferInfo device_buffer_info = {
                 *device_buffer,  // the buffer
-                0,               // offset
-                VK_WHOLE_SIZE    // range
+                range_offset,    // range offset
+                range_size       // range size
             };
             descriptor_buffer_info.append(user_context, &device_buffer_info);
             VkDescriptorBufferInfo *device_buffer_entry = (VkDescriptorBufferInfo *)descriptor_buffer_info.back();
@@ -771,7 +775,7 @@ VulkanEntryPointData *vk_decode_entry_point_data(void *user_context, VulkanMemor
         uint32_t padded_string_length = module_ptr[idx++];
         const char *entry_point_name = (const char *)(module_ptr + idx);
 
-        debug(user_context) << "    [" << n << "] "
+        debug(user_context) << "  [" << n << "] "
                             << "uniform_buffer_count=" << uniform_buffer_count << " "
                             << "storage_buffer_count=" << storage_buffer_count << " "
                             << "entry_point_name_length=" << padded_string_length << " "
@@ -898,7 +902,7 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
         void operator()(VulkanCompilationCacheEntry *cache_entry) {
             if (cache_entry != nullptr) {
                 if (cache_entry->shader_module) {
-                    debug(user_context) << "    destroying shader module " << (void *)cache_entry->shader_module << "\n";
+                    debug(user_context) << " . destroying shader module " << (void*)cache_entry->shader_module << "\n";
                     vkDestroyShaderModule(allocator->current_device(), cache_entry->shader_module, allocator->callbacks());
                     cache_entry->shader_module = {0};
                 }
@@ -924,7 +928,7 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
                 }
                 if (cache_entry->descriptor_set_layouts) {
                     for (uint32_t n = 0; n < cache_entry->entry_point_count; n++) {
-                        debug(user_context) << "    destroying descriptor set layout [" << n << "] " << cache_entry->entry_point_data[n].entry_point_name << "\n";
+                        debug(user_context) << "  destroying descriptor set layout [" << n << "] " << cache_entry->entry_point_data[n].entry_point_name << "\n";
                         vk_destroy_descriptor_set_layout(user_context, allocator, cache_entry->descriptor_set_layouts[n]);
                         cache_entry->descriptor_set_layouts[n] = {0};
                     }
@@ -932,7 +936,7 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
                     cache_entry->descriptor_set_layouts = nullptr;
                 }
                 if (cache_entry->pipeline_layout) {
-                    debug(user_context) << "    destroying pipeline layout " << (void *)cache_entry->pipeline_layout << "\n";
+                    debug(user_context) << "  destroying pipeline layout " << (void*)cache_entry->pipeline_layout << "\n";
                     vk_destroy_pipeline_layout(user_context, allocator, cache_entry->pipeline_layout);
                     cache_entry->pipeline_layout = {0};
                 }
@@ -986,6 +990,48 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
             }
         }
     }
+    return 0;
+}
+
+int vk_device_crop_from_offset(void *user_context,
+                              const struct halide_buffer_t *src,
+                              int64_t offset,
+                              struct halide_buffer_t *dst) {
+
+    VulkanContext ctx(user_context);
+    if (ctx.error != VK_SUCCESS) {
+        return ctx.error;
+    }
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+
+    halide_abort_if_false(user_context, src->device);
+    if(offset < 0) {
+        error(user_context) << "Vulkan: Invalid offset for device crop!\n";
+        return halide_error_code_internal_error;
+    }
+
+    // get the allocated region for the device
+    MemoryRegion *device_region = reinterpret_cast<MemoryRegion *>(src->device);
+
+    // create the croppeg region from the allocated region
+    MemoryRegion *cropped_region = ctx.allocator->create_crop(user_context, device_region, (uint64_t)offset);
+    if ((cropped_region == nullptr) || (cropped_region->handle == nullptr)) {
+        error(user_context) << "Vulkan: Failed to crop region!\n";
+        return halide_error_code_internal_error;
+    }
+
+    // update the destination to the cropped region
+    dst->device = (uint64_t)cropped_region;
+    dst->device_interface = src->device_interface;
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+#endif
+
     return 0;
 }
 
