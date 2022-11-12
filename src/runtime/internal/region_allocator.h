@@ -49,6 +49,7 @@ public:
     MemoryRegion *reserve(void *user_context, const MemoryRequest &request);
     void release(void *user_context, MemoryRegion *memory_region);  //< unmark and cache the region for reuse
     void reclaim(void *user_context, MemoryRegion *memory_region);  //< free the region and consolidate
+    void retain(void *user_context, MemoryRegion *memory_region);   //< retain the region and increase usage count
     bool collect(void *user_context);                               //< returns true if any blocks were removed
     void release(void *user_context);
     void destroy(void *user_context);
@@ -163,6 +164,7 @@ MemoryRegion *RegionAllocator::reserve(void *user_context, const MemoryRequest &
     }
 
     alloc_block_region(user_context, block_region);
+    block_region->usage_count = 1;
     return reinterpret_cast<MemoryRegion *>(block_region);
 }
 
@@ -170,6 +172,9 @@ void RegionAllocator::release(void *user_context, MemoryRegion *memory_region) {
     BlockRegion *block_region = reinterpret_cast<BlockRegion *>(memory_region);
     halide_abort_if_false(user_context, block_region != nullptr);
     halide_abort_if_false(user_context, block_region->block_ptr == block);
+    if(block_region->usage_count > 0) {
+        block_region->usage_count--;
+    }
     release_block_region(user_context, block_region);
 }
 
@@ -177,10 +182,20 @@ void RegionAllocator::reclaim(void *user_context, MemoryRegion *memory_region) {
     BlockRegion *block_region = reinterpret_cast<BlockRegion *>(memory_region);
     halide_abort_if_false(user_context, block_region != nullptr);
     halide_abort_if_false(user_context, block_region->block_ptr == block);
+    if(block_region->usage_count > 0) {
+        block_region->usage_count--;
+    }
     free_block_region(user_context, block_region);
     if (can_coalesce(block_region)) {
         block_region = coalesce_block_regions(user_context, block_region);
     }
+}
+
+void RegionAllocator::retain(void *user_context, MemoryRegion *memory_region) {
+    BlockRegion *block_region = reinterpret_cast<BlockRegion *>(memory_region);
+    halide_abort_if_false(user_context, block_region != nullptr);
+    halide_abort_if_false(user_context, block_region->block_ptr == block);
+    block_region->usage_count++;
 }
 
 RegionAllocator *RegionAllocator::find_allocator(void *user_context, MemoryRegion *memory_region) {
@@ -363,6 +378,7 @@ BlockRegion *RegionAllocator::create_block_region(void *user_context, const Memo
     block_region->memory.dedicated = dedicated;
     block_region->status = AllocationStatus::Available;
     block_region->block_ptr = block;
+    block_region->usage_count = 0;
 
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "Creating region ("
@@ -381,9 +397,9 @@ void RegionAllocator::release_block_region(void *user_context, BlockRegion *bloc
                                     << "user_context=" << (void *)(user_context) << " "
                                     << "block_region=" << (void *)(block_region) << ") ...\n";
 #endif
-
-    if ((block_region->status == AllocationStatus::InUse) ||
-        (block_region->status == AllocationStatus::Dedicated)) {
+    if ((block_region->usage_count == 0) && 
+        ((block_region->status == AllocationStatus::InUse) ||
+         (block_region->status == AllocationStatus::Dedicated))) {
 
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "Releasing region ("
@@ -406,6 +422,7 @@ void RegionAllocator::destroy_block_region(void *user_context, BlockRegion *bloc
                                     << "block_region=" << (void *)(block_region) << ") ...\n";
 #endif
 
+    block_region->usage_count = 0;
     free_block_region(user_context, block_region);
     arena->reclaim(user_context, block_region);
 }
@@ -419,6 +436,7 @@ void RegionAllocator::alloc_block_region(void *user_context, BlockRegion *block_
     MemoryRegion *memory_region = &(block_region->memory);
     if (memory_region->handle == nullptr) {
         allocators.region.allocate(user_context, memory_region);
+        memory_region->is_owner = true;
 
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "Allocating region ("
@@ -450,10 +468,11 @@ void RegionAllocator::free_block_region(void *user_context, BlockRegion *block_r
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "RegionAllocator: Freeing block region ("
                                     << "user_context=" << (void *)(user_context) << " "
-                                    << "block_region=" << (void *)(block_region) << ") ...\n";
+                                    << "block_region=" << (void *)(block_region) << " "
+                                    << "status=" << (uint32_t)block_region->status << " "
+                                    << "usage_count="  << (uint32_t)block_region->usage_count << ") ...\n";
 #endif
-    if ((block_region->status == AllocationStatus::InUse) ||
-        (block_region->status == AllocationStatus::Dedicated)) {
+    if ((block_region->usage_count == 0) && (block_region->memory.handle != nullptr)) {
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "Freeing region ("
                                         << "block_ptr=" << (void *)block_region->block_ptr << " "
@@ -470,6 +489,7 @@ void RegionAllocator::free_block_region(void *user_context, BlockRegion *block_r
         block_region->memory.offset = 0;
         block_region->memory.handle = nullptr;
     }
+    block_region->usage_count = 0;
     block_region->status = AllocationStatus::Available;
 }
 

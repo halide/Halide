@@ -91,6 +91,16 @@ int main(int argc, char **argv) {
         instance->reclaim(user_context, r1);
         halide_abort_if_false(user_context, allocated_region_memory == (1 * request.size));
 
+        MemoryRegion *r3 = instance->reserve(user_context, request);
+        halide_abort_if_false(user_context, r3 != nullptr);
+        halide_abort_if_false(user_context, allocated_block_memory == config.minimum_block_size);
+        halide_abort_if_false(user_context, allocated_region_memory == (2 * request.size));
+        instance->retain(user_context, r3);
+        halide_abort_if_false(user_context, allocated_region_memory == (2 * request.size));
+        instance->release(user_context, r3);
+        halide_abort_if_false(user_context, allocated_region_memory == (2 * request.size));
+        instance->reclaim(user_context, r3);
+
         instance->destroy(user_context);
         debug(user_context) << "Test : block_allocator::destroy ("
                             << "allocated_block_memory=" << int32_t(allocated_block_memory) << " "

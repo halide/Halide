@@ -55,6 +55,7 @@ public:
     MemoryRegion *reserve(void *user_context, const MemoryRequest &request);
     void release(void *user_context, MemoryRegion *region);  //< unmark and cache the region for reuse
     void reclaim(void *user_context, MemoryRegion *region);  //< free the region and consolidate
+    void retain(void *user_context, MemoryRegion *region);   //< retain the region and increase the usage count
     bool collect(void *user_context);                        //< returns true if any blocks were removed
     void release(void *user_context);
     void destroy(void *user_context);
@@ -204,6 +205,15 @@ void BlockAllocator::reclaim(void *user_context, MemoryRegion *memory_region) {
         return;
     }
     allocator->reclaim(user_context, memory_region);
+}
+
+void BlockAllocator::retain(void *user_context, MemoryRegion *memory_region) {
+    halide_abort_if_false(user_context, memory_region != nullptr);
+    RegionAllocator *allocator = RegionAllocator::find_allocator(user_context, memory_region);
+    if (allocator == nullptr) {
+        return;
+    }
+    allocator->retain(user_context, memory_region);
 }
 
 bool BlockAllocator::collect(void *user_context) {
