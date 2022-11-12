@@ -136,7 +136,7 @@ public:
     std::map<std::string, JITModule::Symbol> exports;
     std::unique_ptr<llvm::LLVMContext> context = std::make_unique<llvm::LLVMContext>();
     std::unique_ptr<llvm::orc::LLJIT> JIT = nullptr;
-    llvm::orc::CtorDtorRunner* dtorRunner = nullptr;
+    llvm::orc::CtorDtorRunner *dtorRunner = nullptr;
     std::vector<JITModule> dependencies;
     JITModule::Symbol entrypoint;
     JITModule::Symbol argv_entrypoint;
@@ -157,7 +157,7 @@ void destroy<JITModuleContents>(const JITModuleContents *f) {
 namespace {
 
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
-JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT& JIT, const string &name) {
+JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
 
     auto addr = JIT.lookup(name);
@@ -184,7 +184,8 @@ JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT& JIT, const string &
 class HalideJITGenerator : public llvm::orc::DefinitionGenerator {
 public:
     HalideJITGenerator(const std::vector<JITModule> &modules)
-    : modules(modules) {}
+        : modules(modules) {
+    }
 
     llvm::Error tryToGenerate(llvm::orc::LookupState &LS, llvm::orc::LookupKind K, llvm::orc::JITDylib &JD,
                               llvm::orc::JITDylibLookupFlags JDLookupFlags,
@@ -192,7 +193,7 @@ public:
         llvm::orc::SymbolMap NewSymbols;
 
         llvm::orc::SymbolLookupSet LookupSetCopy;
-        for (auto& symbol : LookupSet) {
+        for (auto &symbol : LookupSet) {
             std::string name = (*symbol.first).str();
 
             for (const auto &module : modules) {
@@ -282,26 +283,26 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     // Create LLJIT
     const auto compilerBuilder = [&](llvm::orc::JITTargetMachineBuilder /*jtmb*/)
-            -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
+        -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
         return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*tm));
     };
 
-    const auto linkerBuilder = [&](llvm::orc::ExecutionSession& session, const llvm::Triple&) {
+    const auto linkerBuilder = [&](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
         return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
     };
- 
+
     auto JIT = llvm::cantFail(llvm::orc::LLJITBuilder()
-                                    .setDataLayout(target_data_layout)
-                                    .setCompileFunctionCreator(compilerBuilder)
-                                    .setObjectLinkingLayerCreator(linkerBuilder)
-                                    .create());
+                                  .setDataLayout(target_data_layout)
+                                  .setCompileFunctionCreator(compilerBuilder)
+                                  .setObjectLinkingLayerCreator(linkerBuilder)
+                                  .create());
 
     auto ctors = llvm::orc::getConstructors(*m.get());
     llvm::orc::CtorDtorRunner ctorRunner(JIT->getMainJITDylib());
     ctorRunner.add(ctors);
 
     auto dtors = llvm::orc::getDestructors(*m.get());
-    llvm::orc::CtorDtorRunner* dtorRunner = new llvm::orc::CtorDtorRunner(JIT->getMainJITDylib());
+    llvm::orc::CtorDtorRunner *dtorRunner = new llvm::orc::CtorDtorRunner(JIT->getMainJITDylib());
     dtorRunner->add(dtors);
 
     // Resolve system symbols (like pthread, dl and others)
@@ -872,18 +873,18 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
         uint64_t arg_addr = llvm::cantFail(runtime.jit_module->JIT->lookup("halide_jit_module_argument"))
 #if LLVM_VERSION >= 150
-            .getValue();
+                                .getValue();
 #else
-            .getAddress();
+                                .getAddress();
 #endif
         internal_assert(arg_addr != 0);
         *((void **)arg_addr) = runtime.jit_module.get();
 
         uint64_t fun_addr = llvm::cantFail(runtime.jit_module->JIT->lookup("halide_jit_module_adjust_ref_count"))
 #if LLVM_VERSION >= 150
-            .getValue();
+                                .getValue();
 #else
-            .getAddress();
+                                .getAddress();
 #endif
         internal_assert(fun_addr != 0);
         *(void (**)(void *arg, int32_t count))fun_addr = &adjust_module_ref_count;
