@@ -192,7 +192,6 @@ public:
                               const llvm::orc::SymbolLookupSet &LookupSet) override {
         llvm::orc::SymbolMap NewSymbols;
 
-        llvm::orc::SymbolLookupSet LookupSetCopy;
         for (const auto &symbol : LookupSet) {
             std::string name = (*symbol.first).str();
 
@@ -206,8 +205,9 @@ public:
                 }
             }
         }
-        if (NewSymbols.empty())
+        if (NewSymbols.empty()) {
             return llvm::Error::success();
+        }
 
         return JD.define(llvm::orc::absoluteSymbols(std::move(NewSymbols)));
     }
@@ -282,7 +282,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     // listeners.push_back(llvm::createOProfileJITEventListener());
 
     // Create LLJIT
-    const auto compilerBuilder = [&](llvm::orc::JITTargetMachineBuilder /*jtmb*/)
+    const auto compilerBuilder = [&tm](llvm::orc::JITTargetMachineBuilder /*jtmb*/)
         -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
         return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*tm));
     };
@@ -307,8 +307,17 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     // Resolve system symbols (like pthread, dl and others)
     JIT->getMainJITDylib().addGenerator(llvm::cantFail(llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(target_data_layout.getGlobalPrefix())));
-    // Resolve internal symbol dependencies
-    JIT->getMainJITDylib().addGenerator(std::make_unique<HalideJITGenerator>(dependencies));
+
+    // Resolve symbol dependencies.
+    llvm::orc::SymbolMap NewSymbols;
+    auto symbolStringPool = JIT->getExecutionSession().getExecutorProcessControl().getSymbolStringPool();
+    for (const auto &module : dependencies) {
+        for (auto const &iter : module.exports()) {
+            orc::SymbolStringPtr name = symbolStringPool->intern(iter.first);
+            NewSymbols.insert({name, llvm::JITEvaluatedSymbol::fromPointer(iter.second.address)});
+        }
+    }
+    llvm::cantFail(JIT->getMainJITDylib().define(llvm::orc::absoluteSymbols(std::move(NewSymbols))));
 
     llvm::orc::ThreadSafeModule tsm(std::move(m), std::move(jit_module->context));
     llvm::cantFail(JIT->addIRModule(std::move(tsm)));
