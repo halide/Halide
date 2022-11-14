@@ -181,41 +181,6 @@ JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &
     return symbol;
 }
 
-class HalideJITGenerator : public llvm::orc::DefinitionGenerator {
-public:
-    HalideJITGenerator(const std::vector<JITModule> &modules)
-        : modules(modules) {
-    }
-
-    llvm::Error tryToGenerate(llvm::orc::LookupState &LS, llvm::orc::LookupKind K, llvm::orc::JITDylib &JD,
-                              llvm::orc::JITDylibLookupFlags JDLookupFlags,
-                              const llvm::orc::SymbolLookupSet &LookupSet) override {
-        llvm::orc::SymbolMap NewSymbols;
-
-        for (const auto &symbol : LookupSet) {
-            std::string name = (*symbol.first).str();
-
-            for (const auto &module : modules) {
-                std::map<std::string, JITModule::Symbol>::const_iterator iter = module.exports().find(name);
-                if (iter == module.exports().end() && starts_with(name, "_")) {
-                    iter = module.exports().find(name.substr(1));
-                }
-                if (iter != module.exports().end()) {
-                    NewSymbols.insert({symbol.first, llvm::JITEvaluatedSymbol::fromPointer(iter->second.address)});
-                }
-            }
-        }
-        if (NewSymbols.empty()) {
-            return llvm::Error::success();
-        }
-
-        return JD.define(llvm::orc::absoluteSymbols(std::move(NewSymbols)));
-    }
-
-private:
-    std::vector<JITModule> modules;
-};
-
 }  // namespace
 
 JITModule::JITModule() {
@@ -282,12 +247,12 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     // listeners.push_back(llvm::createOProfileJITEventListener());
 
     // Create LLJIT
-    const auto compilerBuilder = [&tm](llvm::orc::JITTargetMachineBuilder /*jtmb*/)
+    const auto compilerBuilder = [&](const llvm::orc::JITTargetMachineBuilder & /*jtmb*/)
         -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
         return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*tm));
     };
 
-    const auto linkerBuilder = [&](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
+    const auto linkerBuilder = [](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
         return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
     };
 
@@ -314,7 +279,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     for (const auto &module : dependencies) {
         for (auto const &iter : module.exports()) {
             orc::SymbolStringPtr name = symbolStringPool->intern(iter.first);
-            NewSymbols.insert({name, llvm::JITEvaluatedSymbol::fromPointer(iter.second.address)});
+            if (!NewSymbols.count(name)) {
+                NewSymbols.insert({name, llvm::JITEvaluatedSymbol::fromPointer(iter.second.address)});
+            }
         }
     }
     llvm::cantFail(JIT->getMainJITDylib().define(llvm::orc::absoluteSymbols(std::move(NewSymbols))));
