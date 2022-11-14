@@ -257,10 +257,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     llvm::orc::JITTargetMachineBuilder tm_builder(llvm::Triple(m->getTargetTriple()));
     tm_builder.setOptions(options);
     tm_builder.setCodeGenOptLevel(CodeGenOpt::Aggressive);
-    // Workaround for "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
-    if (target.arch == Target::Arch::X86 && target.bits == 32) {
-        tm_builder.setRelocationModel(llvm::Reloc::Static);
-    }
+    tm_builder.setCodeModel(llvm::CodeModel::Medium);
 
     auto tm = tm_builder.createTargetMachine();
     internal_assert(tm) << llvm::toString(tm.takeError()) << "\n";
