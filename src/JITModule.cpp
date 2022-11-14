@@ -161,9 +161,7 @@ JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &
     debug(2) << "JIT Compiling " << name << "\n";
 
     auto addr = JIT.lookup(name);
-    if (!addr) {
-        internal_error << llvm::toString(addr.takeError()) << "\n";
-    }
+    internal_assert(addr) << llvm::toString(addr.takeError()) << "\n";
 
 #if LLVM_VERSION >= 150
     void *f = (void *)addr->getValue();
@@ -259,11 +257,13 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     llvm::orc::JITTargetMachineBuilder tm_builder(llvm::Triple(m->getTargetTriple()));
     tm_builder.setOptions(options);
     tm_builder.setCodeGenOptLevel(CodeGenOpt::Aggressive);
+    // Workaround for "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
+    if (target.arch == Target::Arch::X86 && target.bits == 32) {
+        tm_builder.setRelocationModel(llvm::Reloc::Static);
+    }
 
     auto tm = tm_builder.createTargetMachine();
-    if (!tm) {
-        internal_error << llvm::toString(tm.takeError()) << "\n";
-    }
+    internal_assert(tm) << llvm::toString(tm.takeError()) << "\n";
 
     DataLayout target_data_layout(tm.get()->createDataLayout());
     if (initial_module_data_layout != target_data_layout) {
