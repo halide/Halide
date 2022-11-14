@@ -181,6 +181,42 @@ JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &
     return symbol;
 }
 
+class HalideJITGenerator : public llvm::orc::DefinitionGenerator {
+public:
+    HalideJITGenerator(const std::vector<JITModule> &modules)
+        : modules(modules) {
+    }
+
+    llvm::Error tryToGenerate(llvm::orc::LookupState &LS, llvm::orc::LookupKind K, llvm::orc::JITDylib &JD,
+                              llvm::orc::JITDylibLookupFlags JDLookupFlags,
+                              const llvm::orc::SymbolLookupSet &LookupSet) override {
+        llvm::orc::SymbolMap NewSymbols;
+
+        for (const auto &symbol : LookupSet) {
+            std::string name = (*symbol.first).str();
+
+            for (const auto &module : modules) {
+                std::map<std::string, JITModule::Symbol>::const_iterator iter = module.exports().find(name);
+                if (iter == module.exports().end() && starts_with(name, "_")) {
+                    iter = module.exports().find(name.substr(1));
+                }
+                if (iter != module.exports().end()) {
+                    NewSymbols.insert({symbol.first, llvm::JITEvaluatedSymbol::fromPointer(iter->second.address)});
+                    break;
+                }
+            }
+        }
+        if (NewSymbols.empty()) {
+            return llvm::Error::success();
+        }
+
+        return JD.define(llvm::orc::absoluteSymbols(std::move(NewSymbols)));
+    }
+
+private:
+    std::vector<JITModule> modules;
+};
+
 }  // namespace
 
 JITModule::JITModule() {
@@ -272,6 +308,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 
     // Resolve system symbols (like pthread, dl and others)
     JIT->getMainJITDylib().addGenerator(llvm::cantFail(llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(target_data_layout.getGlobalPrefix())));
+
+    // For undefined symbols resolving
+    JIT->getMainJITDylib().addGenerator(std::make_unique<HalideJITGenerator>(dependencies));
 
     // Resolve symbol dependencies.
     llvm::orc::SymbolMap NewSymbols;
