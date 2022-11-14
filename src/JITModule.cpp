@@ -179,6 +179,58 @@ JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &
     return symbol;
 }
 
+// Expand LLVM's search for symbols to include code contained in a set of JITModule.
+class HalideJITMemoryManager : public SectionMemoryManager {
+    std::vector<JITModule> modules;
+    std::vector<std::pair<uint8_t *, size_t>> code_pages;
+
+public:
+    HalideJITMemoryManager(const std::vector<JITModule> &modules)
+        : modules(modules) {
+    }
+
+    uint64_t getSymbolAddress(const std::string &name) override {
+        for (const auto &module : modules) {
+            std::map<std::string, JITModule::Symbol>::const_iterator iter = module.exports().find(name);
+            if (iter == module.exports().end() && starts_with(name, "_")) {
+                iter = module.exports().find(name.substr(1));
+            }
+            if (iter != module.exports().end()) {
+                return (uint64_t)iter->second.address;
+            }
+        }
+        uint64_t result = SectionMemoryManager::getSymbolAddress(name);
+#if defined(__GNUC__) && defined(__i386__)
+        // This is a workaround for an odd corner case (cross-compiling + testing
+        // Python bindings x86-32 on an x86-64 system): __udivdi3 is a helper function
+        // that GCC uses to do u64/u64 division on 32-bit systems; it's usually included
+        // by the linker on these systems as needed. When we JIT, LLVM will include references
+        // to this call; MCJIT fixes up these references by doing (roughly) dlopen(NULL)
+        // to look up the symbol. For normal JIT tests, this works fine, as dlopen(NULL)
+        // finds the test executable, which has the right lookups to locate it inside libHalide.so.
+        // If, however, we are running a JIT-via-Python test, dlopen(NULL) returns the
+        // CPython executable... which apparently *doesn't* include this as an exported
+        // function, so the lookup fails and crashiness ensues. So our workaround here is
+        // a bit icky, but expedient: check for this name if we can't find it elsewhere,
+        // and if so, return the one we know should be present. (Obviously, if other runtime
+        // helper functions of this sort crop up in the future, this should be expanded
+        // into a "builtins map".)
+        if (result == 0 && name == "__udivdi3") {
+            result = (uint64_t)&__udivdi3;
+        }
+#endif
+        internal_assert(result != 0)
+            << "HalideJITMemoryManager: unable to find address for " << name << "\n";
+        return result;
+    }
+
+    uint8_t *allocateCodeSection(uintptr_t size, unsigned alignment, unsigned section_id, StringRef section_name) override {
+        uint8_t *result = SectionMemoryManager::allocateCodeSection(size, alignment, section_id, section_name);
+        code_pages.emplace_back(result, size);
+        return result;
+    }
+};
+
 class HalideJITGenerator : public llvm::orc::DefinitionGenerator {
 public:
     HalideJITGenerator(const std::vector<JITModule> &modules)
@@ -257,7 +309,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     llvm::orc::JITTargetMachineBuilder tm_builder(llvm::Triple(m->getTargetTriple()));
     tm_builder.setOptions(options);
     tm_builder.setCodeGenOptLevel(CodeGenOpt::Aggressive);
-    tm_builder.setCodeModel(llvm::CodeModel::Medium);
+    if (target.arch == Target::Arch::RISCV) {
+        tm_builder.setCodeModel(llvm::CodeModel::Medium);
+    }
 
     auto tm = tm_builder.createTargetMachine();
     internal_assert(tm) << llvm::toString(tm.takeError()) << "\n";
@@ -285,9 +339,19 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*tm));
     };
 
-    const auto linkerBuilder = [](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
-        return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
-    };
+    llvm::orc::LLJITBuilderState::ObjectLinkingLayerCreator linkerBuilder;
+    if (target.arch == Target::Arch::X86 && target.bits == 32) {
+        // Fallback to RTDyld-based linking to workaround "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32).
+        linkerBuilder = [&](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
+            return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&]() {
+                return std::make_unique<HalideJITMemoryManager>(dependencies);
+            });
+        };
+    } else {
+        linkerBuilder = [](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
+            return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
+        };
+    }
 
     auto JIT = llvm::cantFail(llvm::orc::LLJITBuilder()
                                   .setDataLayout(target_data_layout)
