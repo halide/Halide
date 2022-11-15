@@ -203,7 +203,7 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
 
 // -- Copy Buffer
 int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buffer,
-                                const device_copy &c, uint64_t src_offset, uint64_t dst_offset, 
+                                const device_copy &c, uint64_t src_offset, uint64_t dst_offset,
                                 int d, bool from_host, bool to_host);
 
 // --------------------------------------------------------------------------

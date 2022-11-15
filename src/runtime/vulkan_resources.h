@@ -959,13 +959,13 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
 // --------------------------------------------------------------------------
 
 int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buffer,
-                                const device_copy &c, uint64_t src_offset, uint64_t dst_offset, 
+                                const device_copy &c, uint64_t src_offset, uint64_t dst_offset,
                                 int d, bool from_host, bool to_host) {
     if (d == 0) {
 
-        if((!from_host && to_host) || 
-           (from_host && !to_host) || 
-           (!from_host && !to_host) ) {
+        if ((!from_host && to_host) ||
+            (from_host && !to_host) ||
+            (!from_host && !to_host)) {
 
             VkBufferCopy buffer_copy = {
                 c.src_begin + src_offset,  // srcOffset
@@ -981,7 +981,7 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
             }
 
             vkCmdCopyBuffer(command_buffer, *src_buffer, *dst_buffer, 1, &buffer_copy);
-        
+
         } else if ((c.dst + dst_offset) != (c.src + src_offset)) {
             // Could reach here if a user called directly into the
             // Vulkan API for a device->host copy on a source buffer
@@ -993,9 +993,9 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
         // device_buffer_utils.h does not do so either.
         uint64_t src_off = 0, dst_off = 0;
         for (uint64_t i = 0; i < c.extent[d - 1]; i++) {
-            int err = vk_do_multidimensional_copy(user_context, command_buffer, c, 
-                                                  src_offset + src_off, 
-                                                  dst_offset + dst_off, 
+            int err = vk_do_multidimensional_copy(user_context, command_buffer, c,
+                                                  src_offset + src_off,
+                                                  dst_offset + dst_off,
                                                   d - 1, from_host, to_host);
             dst_off += c.dst_stride_bytes[d - 1];
             src_off += c.src_stride_bytes[d - 1];

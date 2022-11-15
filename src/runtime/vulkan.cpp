@@ -482,9 +482,9 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     uint64_t dst_offset = device_region->range.head_offset;
 
     // enqueue the copy operation, using the allocated buffers
-    vk_do_multidimensional_copy(user_context, command_buffer, copy_helper, 
-                                src_offset, dst_offset, 
-                                halide_buffer->dimensions, 
+    vk_do_multidimensional_copy(user_context, command_buffer, copy_helper,
+                                src_offset, dst_offset,
+                                halide_buffer->dimensions,
                                 from_host, to_host);
 
     // end the command buffer
@@ -629,9 +629,9 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     uint64_t dst_offset = 0;
 
     // enqueue the copy operation, using the allocated buffers
-    vk_do_multidimensional_copy(user_context, command_buffer, copy_helper, 
-                                src_offset, dst_offset, 
-                                halide_buffer->dimensions, 
+    vk_do_multidimensional_copy(user_context, command_buffer, copy_helper,
+                                src_offset, dst_offset,
+                                halide_buffer->dimensions,
                                 from_host, to_host);
 
     // end the command buffer
@@ -698,8 +698,8 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 }
 
 WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *src,
-                                  const struct halide_device_interface_t *dst_device_interface,
-                                  struct halide_buffer_t *dst) {
+                                   const struct halide_device_interface_t *dst_device_interface,
+                                   struct halide_buffer_t *dst) {
     if (dst->dimensions > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return halide_error_code_device_buffer_copy_failed;
@@ -750,7 +750,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
         MemoryRegion *staging_region = nullptr;
         MemoryRegion *src_buffer_region = nullptr;
         MemoryRegion *dst_buffer_region = nullptr;
-        
+
         //// wait until the queue is done with the command buffer
         VkResult wait_result = vkQueueWaitIdle(ctx.queue);
         if (wait_result != VK_SUCCESS) {
@@ -767,7 +767,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             dst_buffer_region = reinterpret_cast<MemoryRegion *>(dst->device);
 
         } else if (!from_host && to_host) {
-            // Device to Host 
+            // Device to Host
             debug(user_context) << " buffer copy from: device to: host\n";
 
             // Need to make sure all reads and writes to/from source are complete.
@@ -789,7 +789,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             dst_buffer_region = staging_region;
 
         } else if (from_host && !to_host) {
-            // Host to Device 
+            // Host to Device
             debug(user_context) << " buffer copy from: host to: device\n";
 
             // Need to make sure all reads and writes to/from destination are complete.
@@ -818,7 +818,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             copy_helper.dst = (uint64_t)(stage_host_ptr);
             copy_memory(copy_helper, user_context);
             copy_helper.dst = copy_dst_ptr;
-            
+
             // unmap the pointer
             ctx.allocator->unmap(user_context, staging_region);
 
@@ -831,7 +831,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
             copy_memory(copy_helper, user_context);
             return 0;
         }
-        
+
         if (src_buffer_region == nullptr) {
             error(user_context) << "Vulkan: Failed to retrieve source buffer for device memory!\n";
             return halide_error_code_internal_error;
@@ -879,18 +879,18 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
         copy_helper.dst = (uint64_t)(dst_device_buffer);
         uint64_t src_offset = copy_helper.src_begin + src_buffer_region->range.head_offset;
         uint64_t dst_offset = dst_buffer_region->range.head_offset;
-        if(!from_host && !to_host) {
+        if (!from_host && !to_host) {
             src_offset = src_buffer_region->range.head_offset;
             dst_offset = dst_buffer_region->range.head_offset;
         }
 
-        debug(user_context) << " src region=" << (void*)src_memory_region << " buffer=" << (void*)src_device_buffer << " crop_offset=" << (uint64_t)src_buffer_region->range.head_offset << " copy_offset=" << src_offset << "\n";
-        debug(user_context) << " dst region=" << (void*)dst_memory_region << " buffer=" << (void*)dst_device_buffer << " crop_offset=" << (uint64_t)dst_buffer_region->range.head_offset << " copy_offset=" << dst_offset << "\n";
+        debug(user_context) << " src region=" << (void *)src_memory_region << " buffer=" << (void *)src_device_buffer << " crop_offset=" << (uint64_t)src_buffer_region->range.head_offset << " copy_offset=" << src_offset << "\n";
+        debug(user_context) << " dst region=" << (void *)dst_memory_region << " buffer=" << (void *)dst_device_buffer << " crop_offset=" << (uint64_t)dst_buffer_region->range.head_offset << " copy_offset=" << dst_offset << "\n";
 
         // enqueue the copy operation, using the allocated buffers
-        vk_do_multidimensional_copy(user_context, command_buffer, copy_helper, 
-                                    src_offset, dst_offset, 
-                                    src->dimensions, 
+        vk_do_multidimensional_copy(user_context, command_buffer, copy_helper,
+                                    src_offset, dst_offset,
+                                    src->dimensions,
                                     from_host, to_host);
 
         // end the command buffer
@@ -942,10 +942,9 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
 
             // unmap the pointer and reclaim the staging region
             ctx.allocator->unmap(user_context, staging_region);
-    
         }
 
-        if(staging_region) {
+        if (staging_region) {
             if (halide_can_reuse_device_allocations(user_context)) {
                 ctx.allocator->release(user_context, staging_region);
             } else {
@@ -954,7 +953,7 @@ WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *s
         }
 
         vk_destroy_command_buffer(user_context, ctx.allocator, ctx.command_pool, command_buffer);
-    
+
 #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
         debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
