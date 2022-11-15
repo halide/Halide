@@ -6,6 +6,7 @@
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Vulkan_Dev.h"
+#include "CSE.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "FindIntrinsics.h"
@@ -682,12 +683,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
         SpvId result_id = builder.reserve_id(SpvResultId);
         builder.append(SpvFactory::binary_op(SpvOpBitwiseAnd, type_id, result_id, src_a_id, bitwise_value_id));
         builder.update_id(result_id);
-    } else if (op->type.is_int()) {
-        Expr e = lower_euclidean_mod(op->a, op->b);
-        e.accept(this);
-    } else if (op->type.is_uint()) {
-        visit_binary_op(SpvOpUMod, op->type, op->a, op->b);
-    } else if (op->type.is_float()) {
+   } else if (op->type.is_int() || op->type.is_uint()) {
+        // Just exploit the Euclidean identity
+        Expr zero = make_zero(op->type);
+        Expr equiv = select(op->a == zero, zero,
+                            op->a - (op->a / op->b) * op->b);
+        equiv = common_subexpression_elimination(equiv);
+        equiv.accept(this);
+     } else if (op->type.is_float()) {
         // SPIR-V FMod is strangely not what we want .. FRem does what we need
         visit_binary_op(SpvOpFRem, op->type, op->a, op->b);
     } else {
@@ -1027,7 +1030,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
 
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        if (op->type.is_uint()) {
+        if (op->type.is_uint() || (op->args[1].type().is_uint())) {
             visit_binary_op(SpvOpShiftRightLogical, op->type, op->args[0], op->args[1]);
         } else {
             Expr e = lower_signed_shift_right(op->args[0], op->args[1]);
@@ -1035,7 +1038,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        if (op->type.is_uint()) {
+        if (op->type.is_uint() || (op->args[1].type().is_uint())) {
             visit_binary_op(SpvOpShiftLeftLogical, op->type, op->args[0], op->args[1]);
         } else {
             Expr e = lower_signed_shift_left(op->args[0], op->args[1]);
