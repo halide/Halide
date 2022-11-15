@@ -3,10 +3,10 @@
 #include <sstream>
 #include <unordered_set>
 
+#include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Vulkan_Dev.h"
-#include "CSE.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "FindIntrinsics.h"
@@ -683,14 +683,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
         SpvId result_id = builder.reserve_id(SpvResultId);
         builder.append(SpvFactory::binary_op(SpvOpBitwiseAnd, type_id, result_id, src_a_id, bitwise_value_id));
         builder.update_id(result_id);
-   } else if (op->type.is_int() || op->type.is_uint()) {
+    } else if (op->type.is_int() || op->type.is_uint()) {
         // Just exploit the Euclidean identity
         Expr zero = make_zero(op->type);
         Expr equiv = select(op->a == zero, zero,
                             op->a - (op->a / op->b) * op->b);
         equiv = common_subexpression_elimination(equiv);
         equiv.accept(this);
-     } else if (op->type.is_float()) {
+    } else if (op->type.is_float()) {
         // SPIR-V FMod is strangely not what we want .. FRem does what we need
         visit_binary_op(SpvOpFRem, op->type, op->a, op->b);
     } else {
