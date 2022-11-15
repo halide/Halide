@@ -959,30 +959,44 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
 // --------------------------------------------------------------------------
 
 int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buffer,
-                                const device_copy &c, uint64_t src_offset, uint64_t dst_offset, int d) {
+                                const device_copy &c, uint64_t src_offset, uint64_t dst_offset, 
+                                int d, bool from_host, bool to_host) {
     if (d == 0) {
 
-        VkBufferCopy buffer_copy = {
-            c.src_begin + src_offset,  // srcOffset
-            dst_offset,                // dstOffset
-            c.chunk_size               // size
-        };
+        if((!from_host && to_host) || 
+           (from_host && !to_host) || 
+           (!from_host && !to_host) ) {
 
-        VkBuffer *src_buffer = reinterpret_cast<VkBuffer *>(c.src);
-        VkBuffer *dst_buffer = reinterpret_cast<VkBuffer *>(c.dst);
-        if (!src_buffer || !dst_buffer) {
-            error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
-            return -1;
+            VkBufferCopy buffer_copy = {
+                c.src_begin + src_offset,  // srcOffset
+                dst_offset,                // dstOffset
+                c.chunk_size               // size
+            };
+
+            VkBuffer *src_buffer = reinterpret_cast<VkBuffer *>(c.src);
+            VkBuffer *dst_buffer = reinterpret_cast<VkBuffer *>(c.dst);
+            if (!src_buffer || !dst_buffer) {
+                error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
+                return -1;
+            }
+
+            vkCmdCopyBuffer(command_buffer, *src_buffer, *dst_buffer, 1, &buffer_copy);
+        
+        } else if ((c.dst + dst_offset) != (c.src + src_offset)) {
+            // Could reach here if a user called directly into the
+            // Vulkan API for a device->host copy on a source buffer
+            // with device_dirty = false.
+            memcpy((void *)(c.dst + dst_offset), (void *)(c.src + src_offset), c.chunk_size);
         }
-
-        vkCmdCopyBuffer(command_buffer, *src_buffer, *dst_buffer, 1, &buffer_copy);
-
     } else {
         // TODO: deal with negative strides. Currently the code in
         // device_buffer_utils.h does not do so either.
         uint64_t src_off = 0, dst_off = 0;
         for (uint64_t i = 0; i < c.extent[d - 1]; i++) {
-            int err = vk_do_multidimensional_copy(user_context, command_buffer, c, src_offset + src_off, dst_offset + dst_off, d - 1);
+            int err = vk_do_multidimensional_copy(user_context, command_buffer, c, 
+                                                  src_offset + src_off, 
+                                                  dst_offset + dst_off, 
+                                                  d - 1, from_host, to_host);
             dst_off += c.dst_stride_bytes[d - 1];
             src_off += c.src_stride_bytes[d - 1];
             if (err) {

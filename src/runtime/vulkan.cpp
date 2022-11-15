@@ -473,12 +473,19 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
         return result;
     }
 
-    // enqueue the copy operation, using the allocated buffers
+    // define the src and dst config
+    bool from_host = true;
+    bool to_host = false;
     copy_helper.src = (uint64_t)(staging_buffer);
     copy_helper.dst = (uint64_t)(device_buffer);
     uint64_t src_offset = copy_helper.src_begin;
     uint64_t dst_offset = device_region->range.head_offset;
-    vk_do_multidimensional_copy(user_context, command_buffer, copy_helper, src_offset, dst_offset, halide_buffer->dimensions);
+
+    // enqueue the copy operation, using the allocated buffers
+    vk_do_multidimensional_copy(user_context, command_buffer, copy_helper, 
+                                src_offset, dst_offset, 
+                                halide_buffer->dimensions, 
+                                from_host, to_host);
 
     // end the command buffer
     result = vkEndCommandBuffer(command_buffer);
@@ -612,13 +619,20 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
         return result;
     }
 
-    // enqueue the copy operation, using the allocated buffers
+    // define the src and dst config
+    bool from_host = false;
+    bool to_host = true;
     uint64_t copy_dst = copy_helper.dst;
     copy_helper.src = (uint64_t)(device_buffer);
     copy_helper.dst = (uint64_t)(staging_buffer);
     uint64_t src_offset = copy_helper.src_begin + device_region->range.head_offset;
     uint64_t dst_offset = 0;
-    vk_do_multidimensional_copy(user_context, command_buffer, copy_helper, src_offset, dst_offset, halide_buffer->dimensions);
+
+    // enqueue the copy operation, using the allocated buffers
+    vk_do_multidimensional_copy(user_context, command_buffer, copy_helper, 
+                                src_offset, dst_offset, 
+                                halide_buffer->dimensions, 
+                                from_host, to_host);
 
     // end the command buffer
     result = vkEndCommandBuffer(command_buffer);
@@ -681,6 +695,273 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 #endif
 
     return 0;
+}
+
+WEAK int halide_vulkan_buffer_copy(void *user_context, struct halide_buffer_t *src,
+                                  const struct halide_device_interface_t *dst_device_interface,
+                                  struct halide_buffer_t *dst) {
+    if (dst->dimensions > MAX_COPY_DIMS) {
+        error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
+
+    // We only handle copies to Vulkan buffers or to host
+    if (dst_device_interface != nullptr && dst_device_interface != &vulkan_device_interface) {
+        error(user_context) << "halide_vulkan_buffer_copy: only handle copies to metal buffers or to host\n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
+
+    if ((src->device_dirty() || src->host == nullptr) && src->device_interface != &vulkan_device_interface) {
+        halide_debug_assert(user_context, dst_device_interface == &vulkan_device_interface);
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    bool from_host = (src->device_interface != &vulkan_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != nullptr);
+    bool to_host = !dst_device_interface;
+
+    if (!(from_host || src->device)) {
+        error(user_context) << "halide_vulkan_buffer_copy: invalid copy source\n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
+    if (!(to_host || dst->device)) {
+        error(user_context) << "halide_vulkan_buffer_copy: invalid copy destination\n";
+        return halide_error_code_device_buffer_copy_failed;
+    }
+
+    device_copy copy_helper = make_buffer_copy(src, from_host, dst, to_host);
+
+    int err = 0;
+    {
+        VulkanContext ctx(user_context);
+        if (ctx.error != VK_SUCCESS) {
+            return ctx.error;
+        }
+
+        debug(user_context)
+            << "halide_vulkan_buffer_copy (user_context: " << user_context
+            << ", src: " << src << ", dst: " << dst << ")\n";
+
+#ifdef DEBUG_RUNTIME
+        uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+        MemoryRegion *staging_region = nullptr;
+        MemoryRegion *src_buffer_region = nullptr;
+        MemoryRegion *dst_buffer_region = nullptr;
+        
+        //// wait until the queue is done with the command buffer
+        VkResult wait_result = vkQueueWaitIdle(ctx.queue);
+        if (wait_result != VK_SUCCESS) {
+            error(user_context) << "vkQueueWaitIdle returned " << vk_get_error_name(wait_result) << "\n";
+            return wait_result;
+        }
+
+        if (!from_host && !to_host) {
+            // Device only case
+            debug(user_context) << " buffer copy from: device to: device\n";
+
+            // get the buffer regions for the device
+            src_buffer_region = reinterpret_cast<MemoryRegion *>(src->device);
+            dst_buffer_region = reinterpret_cast<MemoryRegion *>(dst->device);
+
+        } else if (!from_host && to_host) {
+            // Device to Host 
+            debug(user_context) << " buffer copy from: device to: host\n";
+
+            // Need to make sure all reads and writes to/from source are complete.
+            MemoryRequest request = {0};
+            request.size = src->size_in_bytes();
+            request.properties.usage = MemoryUsage::TransferSrc;
+            request.properties.caching = MemoryCaching::UncachedCoherent;
+            request.properties.visibility = MemoryVisibility::DeviceToHost;
+
+            // allocate a new region
+            staging_region = ctx.allocator->reserve(user_context, request);
+            if ((staging_region == nullptr) || (staging_region->handle == nullptr)) {
+                error(user_context) << "Vulkan: Failed to allocate device memory!\n";
+                return -1;
+            }
+
+            // use the staging region and buffer from the copy destination
+            src_buffer_region = reinterpret_cast<MemoryRegion *>(src->device);
+            dst_buffer_region = staging_region;
+
+        } else if (from_host && !to_host) {
+            // Host to Device 
+            debug(user_context) << " buffer copy from: host to: device\n";
+
+            // Need to make sure all reads and writes to/from destination are complete.
+            MemoryRequest request = {0};
+            request.size = src->size_in_bytes();
+            request.properties.usage = MemoryUsage::TransferSrc;
+            request.properties.caching = MemoryCaching::UncachedCoherent;
+            request.properties.visibility = MemoryVisibility::HostToDevice;
+
+            // allocate a new region
+            staging_region = ctx.allocator->reserve(user_context, request);
+            if ((staging_region == nullptr) || (staging_region->handle == nullptr)) {
+                error(user_context) << "Vulkan: Failed to allocate device memory!\n";
+                return -1;
+            }
+
+            // map the region to a host ptr
+            uint8_t *stage_host_ptr = (uint8_t *)ctx.allocator->map(user_context, staging_region);
+            if (stage_host_ptr == nullptr) {
+                error(user_context) << "Vulkan: Failed to map host pointer to device memory!\n";
+                return halide_error_code_internal_error;
+            }
+
+            // copy to the (host-visible/coherent) staging buffer, then restore the dst pointer
+            uint64_t copy_dst_ptr = copy_helper.dst;
+            copy_helper.dst = (uint64_t)(stage_host_ptr);
+            copy_memory(copy_helper, user_context);
+            copy_helper.dst = copy_dst_ptr;
+            
+            // unmap the pointer
+            ctx.allocator->unmap(user_context, staging_region);
+
+            // use the staging region and buffer from the copy source
+            src_buffer_region = staging_region;
+            dst_buffer_region = reinterpret_cast<MemoryRegion *>(dst->device);
+
+        } else if (from_host && to_host) {
+            debug(user_context) << " buffer copy from: host to: host\n";
+            copy_memory(copy_helper, user_context);
+            return 0;
+        }
+        
+        if (src_buffer_region == nullptr) {
+            error(user_context) << "Vulkan: Failed to retrieve source buffer for device memory!\n";
+            return halide_error_code_internal_error;
+        }
+
+        if (dst_buffer_region == nullptr) {
+            error(user_context) << "Vulkan: Failed to retrieve destination buffer for device memory!\n";
+            return halide_error_code_internal_error;
+        }
+
+        // get the owning memory region (that holds the allocation)
+        MemoryRegion *src_memory_region = ctx.allocator->owner_of(user_context, src_buffer_region);
+        MemoryRegion *dst_memory_region = ctx.allocator->owner_of(user_context, dst_buffer_region);
+
+        // retrieve the buffers from the owning allocation region
+        VkBuffer *src_device_buffer = reinterpret_cast<VkBuffer *>(src_memory_region->handle);
+        VkBuffer *dst_device_buffer = reinterpret_cast<VkBuffer *>(dst_memory_region->handle);
+
+        // create a command buffer
+        VkCommandBuffer command_buffer;
+        VkResult result = vk_create_command_buffer(user_context, ctx.allocator, ctx.command_pool, &command_buffer);
+        if (result != VK_SUCCESS) {
+            error(user_context) << "vk_create_command_buffer returned: " << vk_get_error_name(result) << "\n";
+            return -1;
+        }
+
+        // begin the command buffer
+        VkCommandBufferBeginInfo command_buffer_begin_info =
+            {
+                VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,  // struct type
+                nullptr,                                      // pointer to struct extending this
+                VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,  // flags
+                nullptr                                       // pointer to parent command buffer
+            };
+
+        result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+        if (result != VK_SUCCESS) {
+            error(user_context) << "vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
+            return result;
+        }
+
+        // define the src and dst config
+        uint64_t copy_dst = copy_helper.dst;
+        copy_helper.src = (uint64_t)(src_device_buffer);
+        copy_helper.dst = (uint64_t)(dst_device_buffer);
+        uint64_t src_offset = copy_helper.src_begin + src_buffer_region->range.head_offset;
+        uint64_t dst_offset = dst_buffer_region->range.head_offset;
+        if(!from_host && !to_host) {
+            src_offset = src_buffer_region->range.head_offset;
+            dst_offset = dst_buffer_region->range.head_offset;
+        }
+
+        debug(user_context) << " src region=" << (void*)src_memory_region << " buffer=" << (void*)src_device_buffer << " crop_offset=" << (uint64_t)src_buffer_region->range.head_offset << " copy_offset=" << src_offset << "\n";
+        debug(user_context) << " dst region=" << (void*)dst_memory_region << " buffer=" << (void*)dst_device_buffer << " crop_offset=" << (uint64_t)dst_buffer_region->range.head_offset << " copy_offset=" << dst_offset << "\n";
+
+        // enqueue the copy operation, using the allocated buffers
+        vk_do_multidimensional_copy(user_context, command_buffer, copy_helper, 
+                                    src_offset, dst_offset, 
+                                    src->dimensions, 
+                                    from_host, to_host);
+
+        // end the command buffer
+        result = vkEndCommandBuffer(command_buffer);
+        if (result != VK_SUCCESS) {
+            error(user_context) << "vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
+            return result;
+        }
+
+        //// submit the command buffer to our command queue
+        VkSubmitInfo submit_info =
+            {
+                VK_STRUCTURE_TYPE_SUBMIT_INFO,  // struct type
+                nullptr,                        // pointer to struct extending this
+                0,                              // wait semaphore count
+                nullptr,                        // semaphores
+                nullptr,                        // pipeline stages where semaphore waits occur
+                1,                              // how many command buffers to execute
+                &command_buffer,                // the command buffers
+                0,                              // number of semaphores to signal
+                nullptr                         // the semaphores to signal
+            };
+
+        result = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
+        if (result != VK_SUCCESS) {
+            error(user_context) << "vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
+            return result;
+        }
+
+        //// wait until the queue is done with the command buffer
+        result = vkQueueWaitIdle(ctx.queue);
+        if (result != VK_SUCCESS) {
+            error(user_context) << "vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
+            return result;
+        }
+
+        if (!from_host && to_host) {
+            // map the staging region to a host ptr
+            uint8_t *stage_host_ptr = (uint8_t *)ctx.allocator->map(user_context, staging_region);
+            if (stage_host_ptr == nullptr) {
+                error(user_context) << "Vulkan: Failed to map host pointer to device memory!\n";
+                return halide_error_code_internal_error;
+            }
+
+            // copy to the (host-visible/coherent) staging buffer
+            copy_helper.dst = copy_dst;
+            copy_helper.src = (uint64_t)(stage_host_ptr);
+            copy_memory(copy_helper, user_context);
+
+            // unmap the pointer and reclaim the staging region
+            ctx.allocator->unmap(user_context, staging_region);
+    
+        }
+
+        if(staging_region) {
+            if (halide_can_reuse_device_allocations(user_context)) {
+                ctx.allocator->release(user_context, staging_region);
+            } else {
+                ctx.allocator->reclaim(user_context, staging_region);
+            }
+        }
+
+        vk_destroy_command_buffer(user_context, ctx.allocator, ctx.command_pool, command_buffer);
+    
+#ifdef DEBUG_RUNTIME
+        uint64_t t_after = halide_current_time_ns(user_context);
+        debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+#endif
+    }
+
+    return err;
 }
 
 WEAK int halide_vulkan_device_crop(void *user_context,
@@ -1058,7 +1339,7 @@ WEAK halide_device_interface_impl_t vulkan_device_interface_impl = {
     halide_vulkan_copy_to_device,
     halide_vulkan_device_and_host_malloc,
     halide_vulkan_device_and_host_free,
-    halide_default_buffer_copy,
+    halide_vulkan_buffer_copy,
     halide_vulkan_device_crop,
     halide_vulkan_device_slice,
     halide_vulkan_device_release_crop,
