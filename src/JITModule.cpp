@@ -128,7 +128,8 @@ public:
 
     ~JITModuleContents() {
         if (JIT != nullptr) {
-            llvm::cantFail(dtorRunner->run());
+            auto err = dtorRunner->run();
+            internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
             delete dtorRunner;
         }
     }
@@ -373,7 +374,11 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     // For undefined symbols resolving
     JIT->getMainJITDylib().addGenerator(std::make_unique<HalideJITGenerator>(dependencies));
 
-    // Resolve symbol dependencies.
+    llvm::orc::ThreadSafeModule tsm(std::move(m), std::move(jit_module->context));
+    auto err = JIT->addIRModule(std::move(tsm));
+    internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
+
+    // Resolve symbol dependencies. Required for correctness_c_function test
     llvm::orc::SymbolMap NewSymbols;
     auto symbolStringPool = JIT->getExecutionSession().getExecutorProcessControl().getSymbolStringPool();
     for (const auto &module : dependencies) {
@@ -384,10 +389,8 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
             }
         }
     }
-    llvm::cantFail(JIT->getMainJITDylib().define(llvm::orc::absoluteSymbols(std::move(NewSymbols))));
-
-    llvm::orc::ThreadSafeModule tsm(std::move(m), std::move(jit_module->context));
-    llvm::cantFail(JIT->addIRModule(std::move(tsm)));
+    err = JIT->getMainJITDylib().define(llvm::orc::absoluteSymbols(std::move(NewSymbols)));
+    internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
@@ -412,7 +415,8 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     listeners.clear();
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
-    llvm::cantFail(ctorRunner.run());
+    err = ctorRunner.run();
+    internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
     jit_module->exports = exports;
