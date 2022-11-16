@@ -675,13 +675,17 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Mod *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(Mod): " << op->type << " ((" << op->a << ") % (" << op->b << "))\n";
     int bits = 0;
     if (is_const_power_of_two_integer(op->b, &bits) && op->type.is_int_or_uint()) {
-        int bitwise_value = ((1 << bits) - 1);
-        SpvId bitwise_value_id = builder.declare_integer_constant(op->type.with_lanes(1), (int64_t)bitwise_value);
-        SpvId type_id = builder.declare_type(op->type);
         op->a.accept(this);
         SpvId src_a_id = builder.current_id();
+
+        int bitwise_value = ((1 << bits) - 1);
+        Expr expr = make_const(op->type, bitwise_value);
+        expr.accept(this);
+        SpvId src_b_id = builder.current_id();
+
+        SpvId type_id = builder.declare_type(op->type);
         SpvId result_id = builder.reserve_id(SpvResultId);
-        builder.append(SpvFactory::binary_op(SpvOpBitwiseAnd, type_id, result_id, src_a_id, bitwise_value_id));
+        builder.append(SpvFactory::binary_op(SpvOpBitwiseAnd, type_id, result_id, src_a_id, src_b_id));
         builder.update_id(result_id);
     } else if (op->type.is_int() || op->type.is_uint()) {
         // Just exploit the Euclidean identity
