@@ -6,10 +6,10 @@
 #include <map>
 #include <string>
 
-#include "metadata_tester.h"
 #include "metadata_tester.function_info.h"
-#include "metadata_tester_ucon.h"
+#include "metadata_tester.h"
 #include "metadata_tester_ucon.function_info.h"
+#include "metadata_tester_ucon.h"
 
 namespace {
 

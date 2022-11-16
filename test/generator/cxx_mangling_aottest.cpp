@@ -6,8 +6,8 @@
 #include <string.h>
 #include <string>
 
-#include "cxx_mangling.h"
 #include "cxx_mangling.function_info.h"
+#include "cxx_mangling.h"
 #ifdef TEST_CUDA
 #include "cxx_mangling_gpu.h"
 #endif

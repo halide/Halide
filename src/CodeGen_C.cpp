@@ -1790,8 +1790,8 @@ void CodeGen_C::emit_constexpr_metadata(const std::string &function_name,
         const auto name = map_name(arg.name);
 
         stream << get_indent() << "{\"" << name << "\", " << kind_names[arg.kind] << ", " << (int)arg.dimensions
-                << ", halide_type_t{" << type_code_names[arg.type.code()] << ", " << (int)arg.type.bits()
-                << ", " << (int)arg.type.lanes() << "}},\n";
+               << ", halide_type_t{" << type_code_names[arg.type.code()] << ", " << (int)arg.type.bits()
+               << ", " << (int)arg.type.lanes() << "}},\n";
     }
     indent -= 1;
     stream << get_indent() << "}};\n";
