@@ -1104,69 +1104,26 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
             internal_error << "Unhandled intrinsic in Vulkan backend: " << op->name << "\n";
         }
 
-    } else if (starts_with(op->name, "pow_f")) {
+    } else if (op->call_type == Call::PureExtern && starts_with(op->name, "pow_f")) {
         internal_assert(op->args.size() == 2);
         if (can_prove(op->args[0] > 0)) {
             visit_glsl_op(GLSLstd450Pow, op->type, op->args);
         } else {
-            visit_glsl_op(GLSLstd450Pow, op->type, op->args);
-            SpvId type_id = builder.declare_type(op->type);
-            SpvId inst_set_id = builder.import_glsl_intrinsics();
-
-            Expr a = op->args[0];
-            a->accept(this);
-            SpvId src_a_id = builder.current_id();
-
-            Expr b = op->args[1];
-            b->accept(this);
-            SpvId src_b_id = builder.current_id();
-
-            SpvId abs_a_id = builder.reserve_id(SpvResultId);
-            SpvFactory::Operands abs_operands = {src_a_id};
-            builder.append(SpvFactory::extended(inst_set_id, GLSLstd450FAbs, type_id, abs_a_id, abs_operands));
-
-            SpvFactory::Operands pow_operands = {abs_a_id, src_b_id};
-            SpvId pow_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::extended(inst_set_id, GLSLstd450Pow, type_id, pow_id, pow_operands));
-            builder.update_id(pow_id);
-
-            // a > 0
-            SpvId zero_id = builder.declare_float_constant(op->type, 0.0);
-            SpvId a_gt_zero_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::binary_op(SpvOpFOrdGreaterThan, type_id, a_gt_zero_id, src_a_id, zero_id));
-
-            // b % 2
-            SpvId two_id = builder.declare_float_constant(op->type, 2.0);
-            SpvId b_mod_two_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::binary_op(SpvOpFRem, type_id, b_mod_two_id, src_b_id, two_id));
-
-            // b % 2 == 1
-            SpvId one_id = builder.declare_float_constant(op->type, 1.0);
-            SpvId b_mod_two_is_one_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::binary_op(SpvOpFOrdEqual, type_id, b_mod_two_is_one_id, b_mod_two_id, one_id));
-
-            // b % 2 == 0
-            SpvId b_mod_two_is_zero_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::binary_op(SpvOpFOrdEqual, type_id, b_mod_two_is_zero_id, b_mod_two_id, zero_id));
-
-            // -pow
-            SpvId neg_pow_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::unary_op(SpvOpFNegate, type_id, neg_pow_id, pow_id));
-
-            // a_var > 0 || b_var % 2 == 0
-            SpvId bool_type_id = builder.declare_type(Bool());
-            SpvId a_gt_zero_or_b_mod_two_is_zero_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::binary_op(SpvOpLogicalOr, bool_type_id, a_gt_zero_or_b_mod_two_is_zero_id, a_gt_zero_id, b_mod_two_is_zero_id));
-
-            // select(b_var % 2 == 1, -c_var, zero)
-            SpvId nan_id = builder.declare_float_constant(op->type, 0.0);
-            SpvId neg_pow_or_zero_result_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::select(type_id, neg_pow_or_zero_result_id, b_mod_two_is_one_id, neg_pow_id, nan_id));
-
-            // select(a_var > 0 || b_var % 2 == 0, pow_id, neg_pow_or_zero_result_id)
-            SpvId result_id = builder.reserve_id(SpvResultId);
-            builder.append(SpvFactory::select(type_id, result_id, a_gt_zero_or_b_mod_two_is_zero_id, pow_id, neg_pow_or_zero_result_id));
-            builder.update_id(result_id);
+            Expr x = op->args[0];
+            Expr y = op->args[1];
+            Halide::Expr abs_x_pow_y = Internal::halide_exp(Internal::halide_log(abs(x)) * y);
+            Halide::Expr nan_expr = Call::make(x.type(), "nan_f32", {}, Call::PureExtern);
+            Expr iy = floor(y);
+            Expr one = make_one(x.type());
+            Expr zero = make_zero(x.type());
+            Expr e = select(x > 0, abs_x_pow_y,        // Strictly positive x
+                            y == 0.0f, one,            // x^0 == 1
+                            x == 0.0f, zero,           // 0^y == 0
+                            y != iy, nan_expr,         // negative x to a non-integer power
+                            iy % 2 == 0, abs_x_pow_y,  // negative x to an even power
+                            -abs_x_pow_y);             // negative x to an odd power
+            e = common_subexpression_elimination(e);
+            e.accept(this);
         }
     } else if (starts_with(op->name, "fast_inverse_f")) {
         internal_assert(op->args.size() == 1);
