@@ -1,3 +1,4 @@
+#include <array>
 #include <iostream>
 #include <limits>
 
@@ -321,6 +322,16 @@ public:
 CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
       extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false), using_vector_typedefs(false) {
+
+    if (output_kind == CPlusPlusFunctionInfoHeader) {
+        // If it's a header, emit an include guard.
+        stream << "#ifndef HALIDE_FUNCTION_INFO_" << c_print_name(guard) << "\n"
+               << "#define HALIDE_FUNCTION_INFO_" << c_print_name(guard) << "\n"
+               << "\n"
+               << "#include \"HalideRuntime.h\"\n"
+               << "\n";
+        return;
+    }
 
     if (is_header()) {
         // If it's a header, emit an include guard.
@@ -1736,6 +1747,60 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
     stream << "}\n";
 }
 
+void CodeGen_C::emit_constexpr_metadata(const std::string &function_name,
+                                        const std::vector<LoweredArgument> &args,
+                                        const MetadataNameMap &metadata_name_map) {
+    internal_assert(!extern_c_open)
+        << "emit_constexpr_metadata() must not be called from inside an extern \"C\" block";
+
+    if (!is_header()) {
+        return;
+    }
+
+    auto map_name = [&metadata_name_map](const std::string &from) -> std::string {
+        auto it = metadata_name_map.find(from);
+        return it == metadata_name_map.end() ? from : it->second;
+    };
+
+    static const std::array<const char *, 3> kind_names = {
+        "::HalideFunctionInfo::InputScalar",
+        "::HalideFunctionInfo::InputBuffer",
+        "::HalideFunctionInfo::OutputBuffer",
+    };
+
+    static const std::array<const char *, 5> type_code_names = {
+        "halide_type_int",
+        "halide_type_uint",
+        "halide_type_float",
+        "halide_type_handle",
+        "halide_type_bfloat",
+    };
+
+    stream << "inline constexpr std::array<::HalideFunctionInfo::ArgumentInfo, " << args.size() << "> "
+           << function_name << "_argument_info() {\n";
+
+    indent += 1;
+
+    stream << get_indent() << "return {{\n";
+    indent += 1;
+    for (const auto &arg : args) {
+        internal_assert(arg.kind < kind_names.size());
+        internal_assert(arg.type.code() < type_code_names.size());
+
+        const auto name = map_name(arg.name);
+
+        stream << get_indent() << "{\"" << name << "\", " << kind_names[arg.kind] << ", " << (int)arg.dimensions
+                << ", halide_type_t{" << type_code_names[arg.type.code()] << ", " << (int)arg.type.bits()
+                << ", " << (int)arg.type.lanes() << "}},\n";
+    }
+    indent -= 1;
+    stream << get_indent() << "}};\n";
+    indent -= 1;
+    internal_assert(indent == 0);
+
+    stream << "}\n";
+}
+
 void CodeGen_C::compile(const Module &input) {
     TypeInfoGatherer type_info;
     for (const auto &f : input.functions()) {
@@ -1749,13 +1814,15 @@ void CodeGen_C::compile(const Module &input) {
 
     // Forward-declare all the types we need; this needs to happen before
     // we emit function prototypes, since those may need the types.
-    stream << "\n";
-    for (const auto &f : input.functions()) {
-        for (const auto &arg : f.args) {
-            forward_declare_type_if_needed(arg.type);
+    if (output_kind != CPlusPlusFunctionInfoHeader) {
+        stream << "\n";
+        for (const auto &f : input.functions()) {
+            for (const auto &arg : f.args) {
+                forward_declare_type_if_needed(arg.type);
+            }
         }
+        stream << "\n";
     }
-    stream << "\n";
 
     if (!is_header_or_extern_decl()) {
         add_vector_typedefs(type_info.vector_types_used);
@@ -1809,7 +1876,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
 
     NameMangling name_mangling = f.name_mangling;
     if (name_mangling == NameMangling::Default) {
-        name_mangling = (target.has_feature(Target::CPlusPlusMangling) ? NameMangling::CPlusPlus : NameMangling::C);
+        name_mangling = (target.has_feature(Target::CPlusPlusMangling) || output_kind == CPlusPlusFunctionInfoHeader ? NameMangling::CPlusPlus : NameMangling::C);
     }
 
     set_name_mangling_mode(name_mangling);
@@ -1827,72 +1894,78 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
         stream << "\n";
     }
 
-    // Emit the function prototype
-    if (f.linkage == LinkageType::Internal) {
-        // If the function isn't public, mark it static.
-        stream << "static ";
-    }
-    stream << "HALIDE_FUNCTION_ATTRS\n";
-    stream << "int " << simple_name << "(";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            stream << "struct halide_buffer_t *"
-                   << print_name(args[i].name)
-                   << "_buffer";
+    if (output_kind != CPlusPlusFunctionInfoHeader) {
+        // Emit the function prototype
+        if (f.linkage == LinkageType::Internal) {
+            // If the function isn't public, mark it static.
+            stream << "static ";
+        }
+        stream << "HALIDE_FUNCTION_ATTRS\n";
+        stream << "int " << simple_name << "(";
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].is_buffer()) {
+                stream << "struct halide_buffer_t *"
+                       << print_name(args[i].name)
+                       << "_buffer";
+            } else {
+                stream << print_type(args[i].type, AppendSpace)
+                       << print_name(args[i].name);
+            }
+
+            if (i < args.size() - 1) {
+                stream << ", ";
+            }
+        }
+
+        if (is_header_or_extern_decl()) {
+            stream << ");\n";
         } else {
-            stream << print_type(args[i].type, AppendSpace)
-                   << print_name(args[i].name);
+            stream << ") ";
+            open_scope();
+
+            if (uses_gpu_for_loops) {
+                stream << get_indent() << "halide_error("
+                       << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
+                       << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
+                       << "this function will always fail at runtime\");\n";
+                stream << get_indent() << "return halide_error_code_device_malloc_failed;\n";
+            } else {
+                // Emit a local user_context we can pass in all cases, either
+                // aliasing __user_context or nullptr.
+                stream << get_indent() << "void * const _ucon = "
+                       << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
+                       << ";\n";
+
+                // Always declare it unused, since this could be a generated closure that doesn't
+                // use _ucon at all, regardless of NoAsserts.
+                stream << get_indent() << "halide_maybe_unused(_ucon);\n";
+
+                // Emit the body
+                print(f.body);
+
+                // Return success.
+                stream << get_indent() << "return 0;\n";
+                cache.clear();
+            }
+
+            // Ensure we use open/close_scope, so that the cache doesn't try to linger
+            // across function boundaries for internal closures.
+            close_scope("");
         }
 
-        if (i < args.size() - 1) {
-            stream << ", ";
+        if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
+            // Emit the argv version
+            emit_argv_wrapper(simple_name, args);
         }
-    }
 
-    if (is_header_or_extern_decl()) {
-        stream << ");\n";
+        if (f.linkage == LinkageType::ExternalPlusMetadata) {
+            // Emit the metadata.
+            emit_metadata_getter(simple_name, args, metadata_name_map);
+        }
     } else {
-        stream << ") ";
-        open_scope();
-
-        if (uses_gpu_for_loops) {
-            stream << get_indent() << "halide_error("
-                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
-                   << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
-                   << "this function will always fail at runtime\");\n";
-            stream << get_indent() << "return halide_error_code_device_malloc_failed;\n";
-        } else {
-            // Emit a local user_context we can pass in all cases, either
-            // aliasing __user_context or nullptr.
-            stream << get_indent() << "void * const _ucon = "
-                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
-                   << ";\n";
-
-            // Always declare it unused, since this could be a generated closure that doesn't
-            // use _ucon at all, regardless of NoAsserts.
-            stream << get_indent() << "halide_maybe_unused(_ucon);\n";
-
-            // Emit the body
-            print(f.body);
-
-            // Return success.
-            stream << get_indent() << "return 0;\n";
-            cache.clear();
+        if (f.linkage != LinkageType::Internal) {
+            emit_constexpr_metadata(simple_name, args, metadata_name_map);
         }
-
-        // Ensure we use open/close_scope, so that the cache doesn't try to linger
-        // across function boundaries for internal closures.
-        close_scope("");
-    }
-
-    if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
-        // Emit the argv version
-        emit_argv_wrapper(simple_name, args);
-    }
-
-    if (f.linkage == LinkageType::ExternalPlusMetadata) {
-        // Emit the metadata.
-        emit_metadata_getter(simple_name, args, metadata_name_map);
     }
 
     if (!namespaces.empty()) {

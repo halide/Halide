@@ -182,11 +182,12 @@ void test_compile_to_everything(Func j, bool do_object) {
         return j.compile_to_module(args, name, target);
     };
     std::map<OutputFileType, std::string> outputs = {
-        {OutputFileType::assembly, filename_prefix + ".s"},                        // IsMulti
-        {OutputFileType::bitcode, filename_prefix + ".bc"},                        // IsMulti
-        {OutputFileType::c_header, filename_prefix + ".h"},                        // IsSingle
-        {OutputFileType::c_source, filename_prefix + ".halide_generated.cpp"},     // IsSingle
-        {OutputFileType::compiler_log, filename_prefix + ".halide_compiler_log"},  // IsSingle
+        {OutputFileType::assembly, filename_prefix + ".s"},                              // IsMulti
+        {OutputFileType::bitcode, filename_prefix + ".bc"},                              // IsMulti
+        {OutputFileType::c_header, filename_prefix + ".h"},                              // IsSingle
+        {OutputFileType::c_function_info_header, filename_prefix + ".function_info.h"},  // IsSingle
+        {OutputFileType::c_source, filename_prefix + ".halide_generated.cpp"},           // IsSingle
+        {OutputFileType::compiler_log, filename_prefix + ".halide_compiler_log"},        // IsSingle
         // Note: compile_multitarget() doesn't produce cpp_stub output,
         // even if you pass this in.
         // {OutputFileType::cpp_stub, filename_prefix + ".stub.h"},  // IsSingle

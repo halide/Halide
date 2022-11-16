@@ -196,6 +196,7 @@ void define_enums(py::module &m) {
         .value("assembly", OutputFileType::assembly)
         .value("bitcode", OutputFileType::bitcode)
         .value("c_header", OutputFileType::c_header)
+        .value("c_function_info_header", OutputFileType::c_function_info_header)
         .value("c_source", OutputFileType::c_source)
         .value("cpp_stub", OutputFileType::cpp_stub)
         .value("featurization", OutputFileType::featurization)

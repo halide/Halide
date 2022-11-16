@@ -26,6 +26,7 @@ struct Target;
 enum class OutputFileType {
     assembly,
     bitcode,
+    c_function_info_header,
     c_header,
     c_source,
     compiler_log,
