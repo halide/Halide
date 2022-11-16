@@ -774,9 +774,18 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Min *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const EQ *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(EQ): " << op->type << " (" << op->a << ") == (" << op->b << ")\n";
-    visit_binary_op(op->type.is_float() ? SpvOpFOrdEqual : SpvOpIEqual, op->type, op->a, op->b);
+    if (op->a.type() != op->b.type()) {
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const EQ *op): Mismatched operand types: " << op->a.type() << " != " << op->b.type() << "\n";
+    }
+    SpvOp op_code = SpvOpNop;
+    if (op->a.type().is_float()) {
+        op_code = SpvOpFOrdEqual;
+    } else {
+        op_code = SpvOpIEqual;
+    }
+    Type bool_type = UInt(1, op->type.lanes());
+    visit_binary_op(op_code, bool_type, op->a, op->b);
     if (!op->type.is_bool()) {
-        Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
         SpvId result_id = cast_type(op->type, bool_type, current_id);
         builder.update_id(result_id);
@@ -785,7 +794,17 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const EQ *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const NE *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(NE): " << op->type << " (" << op->a << ") != (" << op->b << ")\n";
-    visit_binary_op(op->type.is_float() ? SpvOpFOrdNotEqual : SpvOpINotEqual, op->type, op->a, op->b);
+    if (op->a.type() != op->b.type()) {
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const NE *op): Mismatched operand types: " << op->a.type() << " != " << op->b.type() << "\n";
+    }
+    SpvOp op_code = SpvOpNop;
+    if (op->a.type().is_float()) {
+        op_code = SpvOpFOrdNotEqual;
+    } else {
+        op_code = SpvOpINotEqual;
+    }
+    Type bool_type = UInt(1, op->type.lanes());
+    visit_binary_op(op_code, bool_type, op->a, op->b);
     if (!op->type.is_bool()) {
         Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
@@ -796,6 +815,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const NE *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LT *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(LT): " << op->type << " (" << op->a << ") < (" << op->b << ")\n";
+    if (op->a.type() != op->b.type()) {
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LT *op): Mismatched operand types: " << op->a.type() << " != " << op->b.type() << "\n";
+    }
     SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
         op_code = SpvOpFOrdLessThan;
@@ -806,7 +828,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LT *op) {
     } else {
         internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LT *op): unhandled type: " << op->a.type() << "\n";
     }
-    visit_binary_op(op_code, op->type, op->a, op->b);
+    Type bool_type = UInt(1, op->type.lanes());
+    visit_binary_op(op_code, bool_type, op->a, op->b);
     if (!op->type.is_bool()) {
         Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
@@ -817,6 +840,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LT *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(LE): " << op->type << " (" << op->a << ") <= (" << op->b << ")\n";
+    if (op->a.type() != op->b.type()) {
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op): Mismatched operand types: " << op->a.type() << " != " << op->b.type() << "\n";
+    }
     SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
         op_code = SpvOpFOrdLessThanEqual;
@@ -827,7 +853,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op) {
     } else {
         internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op): unhandled type: " << op->a.type() << "\n";
     }
-    visit_binary_op(op_code, op->type, op->a, op->b);
+    Type bool_type = UInt(1, op->type.lanes());
+    visit_binary_op(op_code, bool_type, op->a, op->b);
     if (!op->type.is_bool()) {
         Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
@@ -838,6 +865,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GT *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(GT): " << op->type << " (" << op->a << ") > (" << op->b << ")\n";
+    if (op->a.type() != op->b.type()) {
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GT *op): Mismatched operand types: " << op->a.type() << " != " << op->b.type() << "\n";
+    }
     SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
         op_code = SpvOpFOrdGreaterThan;
@@ -848,7 +878,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GT *op) {
     } else {
         internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GT *op): unhandled type: " << op->a.type() << "\n";
     }
-    visit_binary_op(op_code, op->type, op->a, op->b);
+    Type bool_type = UInt(1, op->type.lanes());
+    visit_binary_op(op_code, bool_type, op->a, op->b);
     if (!op->type.is_bool()) {
         Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
@@ -859,6 +890,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GT *op) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GE *op) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(GE): " << op->type << " (" << op->a << ") >= (" << op->b << ")\n";
+    if (op->a.type() != op->b.type()) {
+        internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const LE *op): Mismatched operand types: " << op->a.type() << " != " << op->b.type() << "\n";
+    }
     SpvOp op_code = SpvOpNop;
     if (op->a.type().is_float()) {
         op_code = SpvOpFOrdGreaterThanEqual;
@@ -869,7 +903,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GE *op) {
     } else {
         internal_error << "CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const GE *op): unhandled type: " << op->a.type() << "\n";
     }
-    visit_binary_op(op_code, op->type, op->a, op->b);
+    Type bool_type = UInt(1, op->type.lanes());
+    visit_binary_op(op_code, bool_type, op->a, op->b);
     if (!op->type.is_bool()) {
         Type bool_type = UInt(1, op->type.lanes());
         SpvId current_id = builder.current_id();
