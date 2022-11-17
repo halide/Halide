@@ -64,6 +64,9 @@ private:
     // Search through allocated block regions (Best-Fit)
     BlockRegion *find_block_region(void *user_context, const MemoryRequest &request);
 
+    // Returns true if block region is unused and available
+    bool is_available(BlockRegion *region);
+
     // Returns true if neighbouring block regions to the given region can be coalesced into one
     bool can_coalesce(BlockRegion *region);
 
@@ -253,21 +256,51 @@ BlockRegion *RegionAllocator::find_block_region(void *user_context, const Memory
     return result;
 }
 
-bool RegionAllocator::can_coalesce(BlockRegion *block_region) {
+bool RegionAllocator::is_available(BlockRegion *block_region) {
     if (block_region == nullptr) {
         return false;
     }
-    if (block_region->prev_ptr && (block_region->prev_ptr->status == AllocationStatus::Available)) {
+    if (block_region->usage_count > 0) {
+        return false;
+    }
+    if (block_region->status != AllocationStatus::Available) {
+        return false;
+    }
+    return true;
+}
+
+bool RegionAllocator::can_coalesce(BlockRegion *block_region) {
+    if (!is_available(block_region)) {
+        return false;
+    }
+    if (is_available(block_region->prev_ptr)) {
         return true;
     }
-    if (block_region->next_ptr && (block_region->next_ptr->status == AllocationStatus::Available)) {
+    if (is_available(block_region->next_ptr)) {
         return true;
     }
     return false;
 }
 
 BlockRegion *RegionAllocator::coalesce_block_regions(void *user_context, BlockRegion *block_region) {
-    if (block_region->prev_ptr && (block_region->prev_ptr->status == AllocationStatus::Available)) {
+
+    if ((block_region->usage_count == 0) && (block_region->memory.handle != nullptr)) {
+#ifdef DEBUG_INTERNAL
+        StackBasicPrinter<256>(nullptr) << "Freeing region ("
+                                        << "block_ptr=" << (void *)block_region->block_ptr << " "
+                                        << "block_region=" << (void *)block_region << " "
+                                        << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
+                                        << "block_reserved=" << (uint32_t)block->reserved << " "
+                                        << ")\n";
+#endif
+        halide_abort_if_false(user_context, allocators.region.deallocate != nullptr);
+        MemoryRegion *memory_region = &(block_region->memory);
+        allocators.region.deallocate(user_context, memory_region);
+        block->reserved -= block_region->memory.size;
+        block_region->memory.handle = nullptr;
+    }
+
+    if (is_available(block_region->prev_ptr)) {
         BlockRegion *prev_region = block_region->prev_ptr;
 
 #ifdef DEBUG_INTERNAL
@@ -285,7 +318,7 @@ BlockRegion *RegionAllocator::coalesce_block_regions(void *user_context, BlockRe
         block_region = prev_region;
     }
 
-    if (block_region->next_ptr && (block_region->next_ptr->status == AllocationStatus::Available)) {
+    if (is_available(block_region->next_ptr)) {
         BlockRegion *next_region = block_region->next_ptr;
 
 #ifdef DEBUG_INTERNAL
@@ -397,9 +430,15 @@ void RegionAllocator::release_block_region(void *user_context, BlockRegion *bloc
                                     << "user_context=" << (void *)(user_context) << " "
                                     << "block_region=" << (void *)(block_region) << ") ...\n";
 #endif
-    if ((block_region->usage_count == 0) &&
-        ((block_region->status == AllocationStatus::InUse) ||
-         (block_region->status == AllocationStatus::Dedicated))) {
+    if (block_region == nullptr) {
+        return;
+    }
+
+    if (block_region->usage_count > 0) {
+        return;
+    }
+
+    if (!is_available(block_region)) {
 
 #ifdef DEBUG_INTERNAL
         StackBasicPrinter<256>(nullptr) << "Releasing region ("
@@ -518,21 +557,19 @@ bool RegionAllocator::collect(void *user_context) {
 
     bool result = false;
     for (BlockRegion *block_region = block->regions; block_region != nullptr; block_region = block_region->next_ptr) {
-        if (block_region->status == AllocationStatus::Available) {
-            if (can_coalesce(block_region)) {
+        if (can_coalesce(block_region)) {
 
 #ifdef DEBUG_INTERNAL
-                count++;
-                StackBasicPrinter<256>(nullptr) << "    collecting region ("
-                                                << "block_ptr=" << (void *)block_region->block_ptr << " "
-                                                << "block_region=" << (void *)block_region << " "
-                                                << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
-                                                << "block_reserved=" << (uint32_t)block->reserved << " "
-                                                << ")\n";
+            count++;
+            StackBasicPrinter<256>(nullptr) << "    collecting region ("
+                                            << "block_ptr=" << (void *)block_region->block_ptr << " "
+                                            << "block_region=" << (void *)block_region << " "
+                                            << "memory_size=" << (uint32_t)(block_region->memory.size) << " "
+                                            << "block_reserved=" << (uint32_t)block->reserved << " "
+                                            << ")\n";
 #endif
-                block_region = coalesce_block_regions(user_context, block_region);
-                result = true;
-            }
+            block_region = coalesce_block_regions(user_context, block_region);
+            result = true;
         }
     }
 

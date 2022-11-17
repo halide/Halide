@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
         halide_abort_if_false(user_context, allocated_system_memory == 0);
     }
 
-    // stress test
+    // allocation stress test
     {
         BlockAllocator::Config config = {0};
         config.minimum_block_size = 1024;
@@ -149,6 +149,57 @@ int main(int argc, char **argv) {
             instance->reclaim(user_context, region);
         }
         halide_abort_if_false(user_context, allocated_region_memory == 0);
+
+        pointers.destroy(user_context);
+        instance->destroy(user_context);
+        halide_abort_if_false(user_context, allocated_block_memory == 0);
+
+        BlockAllocator::destroy(user_context, instance);
+        halide_abort_if_false(user_context, allocated_system_memory == 0);
+    }
+
+    // reuse stress test
+    {
+        BlockAllocator::Config config = {0};
+        config.minimum_block_size = 1024;
+
+        BlockAllocator::MemoryAllocators allocators = {system_allocator, block_allocator, region_allocator};
+        BlockAllocator *instance = BlockAllocator::create(user_context, config, allocators);
+
+        MemoryRequest request = {0};
+        request.size = sizeof(int);
+        request.alignment = sizeof(int);
+        request.properties.visibility = MemoryVisibility::DefaultVisibility;
+        request.properties.caching = MemoryCaching::DefaultCaching;
+        request.properties.usage = MemoryUsage::DefaultUsage;
+
+        size_t total_allocation_size = 0;
+        static size_t test_allocations = 1000;
+        PointerTable pointers(user_context, test_allocations, system_allocator);
+        for (size_t n = 0; n < test_allocations; ++n) {
+            size_t count = n % 32;
+            count = count > 1 ? count : 1;
+            request.size = count * sizeof(int);
+            total_allocation_size += request.size;
+            MemoryRegion *region = instance->reserve(user_context, request);
+            pointers.append(user_context, region);
+        }
+
+        for (size_t n = 0; n < pointers.size(); ++n) {
+            MemoryRegion *region = static_cast<MemoryRegion *>(pointers[n]);
+            instance->release(user_context, region); // release but don't destroy
+        }
+        pointers.clear(user_context);
+        halide_abort_if_false(user_context, allocated_region_memory >= total_allocation_size);
+
+        // reallocate and reuse
+        for (size_t n = 0; n < test_allocations; ++n) {
+            size_t count = n % 32;
+            count = count > 1 ? count : 1;
+            request.size = count * sizeof(int);
+            MemoryRegion *region = instance->reserve(user_context, request);
+            pointers.append(user_context, region);
+        }
 
         pointers.destroy(user_context);
         instance->destroy(user_context);
