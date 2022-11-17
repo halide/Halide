@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
 
         for (size_t n = 0; n < pointers.size(); ++n) {
             MemoryRegion *region = static_cast<MemoryRegion *>(pointers[n]);
-            instance->release(user_context, region); // release but don't destroy
+            instance->release(user_context, region);  // release but don't destroy
         }
         pointers.clear(user_context);
         halide_abort_if_false(user_context, allocated_region_memory >= total_allocation_size);
