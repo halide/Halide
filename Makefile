@@ -768,6 +768,8 @@ RUNTIME_CPP_COMPONENTS = \
   fake_get_symbol \
   fake_thread_pool \
   float16_t \
+  fopen_32 \
+  fopen_64 \
   force_include_types \
   fuchsia_clock \
   fuchsia_host_cpu_count \
