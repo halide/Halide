@@ -232,42 +232,6 @@ public:
     }
 };
 
-class HalideJITGenerator : public llvm::orc::DefinitionGenerator {
-public:
-    HalideJITGenerator(const std::vector<JITModule> &modules)
-        : modules(modules) {
-    }
-
-    llvm::Error tryToGenerate(llvm::orc::LookupState &LS, llvm::orc::LookupKind K, llvm::orc::JITDylib &JD,
-                              llvm::orc::JITDylibLookupFlags JDLookupFlags,
-                              const llvm::orc::SymbolLookupSet &LookupSet) override {
-        llvm::orc::SymbolMap NewSymbols;
-
-        for (const auto &symbol : LookupSet) {
-            std::string name = (*symbol.first).str();
-
-            for (const auto &module : modules) {
-                std::map<std::string, JITModule::Symbol>::const_iterator iter = module.exports().find(name);
-                if (iter == module.exports().end() && starts_with(name, "_")) {
-                    iter = module.exports().find(name.substr(1));
-                }
-                if (iter != module.exports().end()) {
-                    NewSymbols.insert({symbol.first, llvm::JITEvaluatedSymbol::fromPointer(iter->second.address)});
-                    break;
-                }
-            }
-        }
-        if (NewSymbols.empty()) {
-            return llvm::Error::success();
-        }
-
-        return JD.define(llvm::orc::absoluteSymbols(std::move(NewSymbols)));
-    }
-
-private:
-    std::vector<JITModule> modules;
-};
-
 }  // namespace
 
 JITModule::JITModule() {
@@ -371,25 +335,27 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     // Resolve system symbols (like pthread, dl and others)
     JIT->getMainJITDylib().addGenerator(llvm::cantFail(llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(target_data_layout.getGlobalPrefix())));
 
-    // For undefined symbols resolving
-    JIT->getMainJITDylib().addGenerator(std::make_unique<HalideJITGenerator>(dependencies));
-
     llvm::orc::ThreadSafeModule tsm(std::move(m), std::move(jit_module->context));
     auto err = JIT->addIRModule(std::move(tsm));
     internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
-    // Resolve symbol dependencies. Required for correctness_c_function test
+    // Resolve symbol dependencies
     llvm::orc::SymbolMap NewSymbols;
     auto symbolStringPool = JIT->getExecutionSession().getExecutorProcessControl().getSymbolStringPool();
     for (const auto &module : dependencies) {
         for (auto const &iter : module.exports()) {
             orc::SymbolStringPtr name = symbolStringPool->intern(iter.first);
+            orc::SymbolStringPtr _name = symbolStringPool->intern("_" + iter.first);
+            auto symbol = llvm::JITEvaluatedSymbol::fromPointer(iter.second.address);
             if (!NewSymbols.count(name)) {
-                NewSymbols.insert({name, llvm::JITEvaluatedSymbol::fromPointer(iter.second.address)});
+                NewSymbols.insert({name, symbol});
+            }
+            if (!NewSymbols.count(_name)) {
+                NewSymbols.insert({_name, symbol});
             }
         }
     }
-    err = JIT->getMainJITDylib().define(llvm::orc::absoluteSymbols(std::move(NewSymbols)));
+    err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(NewSymbols)));
     internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
     // Retrieve function pointers from the compiled module (which also
