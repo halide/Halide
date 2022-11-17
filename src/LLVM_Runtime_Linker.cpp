@@ -90,8 +90,8 @@ DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(fake_get_symbol)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(float16_t)
-DECLARE_CPP_INITMOD(fopen_32)
-DECLARE_CPP_INITMOD(fopen_64)
+DECLARE_CPP_INITMOD(fopen)
+DECLARE_CPP_INITMOD(fopen_lfs)
 DECLARE_CPP_INITMOD(force_include_types)
 DECLARE_CPP_INITMOD(fuchsia_clock)
 DECLARE_CPP_INITMOD(fuchsia_host_cpu_count)
@@ -767,7 +767,7 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     modules.push_back(get_initmod_cache(c, bits_64, debug));
     modules.push_back(get_initmod_to_string(c, bits_64, debug));
     modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
-    modules.push_back(get_initmod_fopen_32(c, bits_64, debug));
+    modules.push_back(get_initmod_fopen(c, bits_64, debug));
     modules.push_back(get_initmod_device_interface(c, bits_64, debug));
     modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
     modules.push_back(get_initmod_float16_t(c, bits_64, debug));
@@ -998,11 +998,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
             }
 
-            // Prefer using fopen64() on Linux systems.
+            // Prefer using fopen_lfs on Linux systems, which calls fopen64() to ensure LFS support.
             if (t.os == Target::Linux) {
-                modules.push_back(get_initmod_fopen_64(c, bits_64, debug));
+                modules.push_back(get_initmod_fopen_lfs(c, bits_64, debug));
             } else {
-                modules.push_back(get_initmod_fopen_32(c, bits_64, debug));
+                modules.push_back(get_initmod_fopen(c, bits_64, debug));
             }
 
             modules.push_back(get_initmod_allocation_cache(c, bits_64, debug));
