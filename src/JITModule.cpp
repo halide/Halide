@@ -289,15 +289,6 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
                        << target_data_layout.getStringRepresentation() << ")\n";
     }
 
-    // Do any target-specific initialization
-    std::vector<llvm::JITEventListener *> listeners;
-
-    if (target.arch == Target::X86) {
-        listeners.push_back(llvm::JITEventListener::createIntelJITEventListener());
-    }
-    // TODO: If this ever works in LLVM, this would allow profiling of JIT code with symbols with oprofile.
-    // listeners.push_back(llvm::createOProfileJITEventListener());
-
     // Create LLJIT
     const auto compilerBuilder = [&](const llvm::orc::JITTargetMachineBuilder & /*jtmb*/)
         -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
@@ -377,8 +368,6 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     for (const auto &requested_export : requested_exports) {
         exports[requested_export] = compile_and_get_function(*JIT, requested_export);
     }
-
-    listeners.clear();
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
     err = ctorRunner.run();
