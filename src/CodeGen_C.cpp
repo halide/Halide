@@ -78,6 +78,8 @@ const string globals = R"INLINE_CODE(
 extern "C" {
 int64_t halide_current_time_ns(void *ctx);
 void halide_profiler_pipeline_end(void *, void *);
+struct halide_buffer_t;
+char *halide_buffer_to_string(char *, char *, const halide_buffer_t *);
 }
 
 #ifdef _WIN32
@@ -1851,8 +1853,8 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
     if (is_header_or_extern_decl()) {
         stream << ");\n";
     } else {
-        stream << ") {\n";
-        indent += 1;
+        stream << ") ";
+        open_scope();
 
         if (uses_gpu_for_loops) {
             stream << get_indent() << "halide_error("
@@ -1876,10 +1878,12 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
 
             // Return success.
             stream << get_indent() << "return 0;\n";
+            cache.clear();
         }
 
-        indent -= 1;
-        stream << "}\n";
+        // Ensure we use open/close_scope, so that the cache doesn't try to linger
+        // across function boundaries for internal closures.
+        close_scope("");
     }
 
     if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
@@ -2545,24 +2549,35 @@ void CodeGen_C::visit(const Call *op) {
         string format_string = "";
         for (size_t i = 0; i < op->args.size(); i++) {
             Type t = op->args[i].type();
-            printf_args.push_back(print_expr(op->args[i]));
-            if (t.is_int()) {
-                format_string += "%lld";
-                printf_args[i] = "(long long)(" + printf_args[i] + ")";
-            } else if (t.is_uint()) {
-                format_string += "%llu";
-                printf_args[i] = "(long long unsigned)(" + printf_args[i] + ")";
-            } else if (t.is_float()) {
-                if (t.bits() == 32) {
-                    format_string += "%f";
-                } else {
-                    format_string += "%e";
-                }
-            } else if (op->args[i].as<StringImm>()) {
+            if (t == type_of<halide_buffer_t *>()) {
+                string buf_name = unique_name('b');
+                printf_args.push_back(buf_name);
+                // In Codegen_LLVM, we use 512 as a guesstimate for halide_buffer_t space:
+                // Not a strict upper bound (there isn't one), but ought to be enough for most buffers.
+                constexpr int buf_size = 512;
+                stream << get_indent() << "char " << buf_name << "[" << buf_size << "];\n";
+                stream << get_indent() << "halide_buffer_to_string(" << buf_name << ", " << buf_name << " + " << buf_size << ", " << print_expr(op->args[i]) << ");\n";
                 format_string += "%s";
             } else {
-                internal_assert(t.is_handle());
-                format_string += "%p";
+                printf_args.push_back(print_expr(op->args[i]));
+                if (t.is_int()) {
+                    format_string += "%lld";
+                    printf_args[i] = "(long long)(" + printf_args[i] + ")";
+                } else if (t.is_uint()) {
+                    format_string += "%llu";
+                    printf_args[i] = "(long long unsigned)(" + printf_args[i] + ")";
+                } else if (t.is_float()) {
+                    if (t.bits() == 32) {
+                        format_string += "%f";
+                    } else {
+                        format_string += "%e";
+                    }
+                } else if (op->args[i].as<StringImm>()) {
+                    format_string += "%s";
+                } else {
+                    internal_assert(t.is_handle());
+                    format_string += "%p";
+                }
             }
         }
         string buf_name = unique_name('b');

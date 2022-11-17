@@ -19,6 +19,7 @@ env:
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
+  packages: read  #  to fetch packages (docker)
 
 jobs:
   pip-linux:
@@ -35,19 +36,19 @@ jobs:
       - uses: actions/checkout@v3.1.0
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2.0.0
+        uses: docker/login-action@v2.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v2.1.0
         with:
           platforms: all
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.10.2
+        uses: pypa/cibuildwheel@v2.11.2
         env:
           CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
           CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux*"
@@ -57,7 +58,7 @@ jobs:
           CIBW_BEFORE_ALL_LINUX: >
             cmake -G Ninja -S . -B build
             -DCMAKE_BUILD_TYPE=Release -DWITH_DOCS=NO -DWITH_PYTHON_BINDINGS=NO -DWITH_TESTS=NO
-            -DWITH_TUTORIALS=NO -DWITH_UTILS=NO &&
+            -DWITH_TUTORIALS=NO -DWITH_UTILS=NO -DWITH_PYTHON_STUBS=NO &&
             cmake --build build --target install
 
       - uses: actions/upload-artifact@v3
@@ -145,6 +146,7 @@ jobs:
           -DWITH_TESTS=NO
           -DWITH_TUTORIALS=NO
           -DWITH_UTILS=NO
+          -DWITH_PYTHON_STUBS=NO
           -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
 
       - name: Configure Halide
@@ -158,6 +160,7 @@ jobs:
           -DWITH_TESTS=NO
           -DWITH_TUTORIALS=NO
           -DWITH_UTILS=NO
+          -DWITH_PYTHON_STUBS=NO
           -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
 
       - name: Build Halide

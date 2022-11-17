@@ -1,5 +1,10 @@
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+    message(WARNING "Python apps are skipped under WASM.")
+    return()
+endif ()
+
 set(TEST_TMPDIR "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}>")
-set(TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../../apps/images>")
+set(TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../apps/images>")
 
 set(APPS
     bilateral_grid
