@@ -130,14 +130,13 @@ public:
         if (JIT != nullptr) {
             auto err = dtorRunner->run();
             internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
-            delete dtorRunner;
         }
     }
 
     std::map<std::string, JITModule::Symbol> exports;
     std::unique_ptr<llvm::LLVMContext> context = std::make_unique<llvm::LLVMContext>();
     std::unique_ptr<llvm::orc::LLJIT> JIT = nullptr;
-    llvm::orc::CtorDtorRunner *dtorRunner = nullptr;
+    std::unique_ptr<llvm::orc::CtorDtorRunner> dtorRunner = nullptr;
     std::vector<JITModule> dependencies;
     JITModule::Symbol entrypoint;
     JITModule::Symbol argv_entrypoint;
@@ -296,8 +295,11 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     };
 
     llvm::orc::LLJITBuilderState::ObjectLinkingLayerCreator linkerBuilder;
-    if (target.arch == Target::Arch::X86 && target.bits == 32) {
-        // Fallback to RTDyld-based linking to workaround "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32).
+    if ((target.arch == Target::Arch::X86 && target.bits == 32) ||
+        (target.arch == Target::Arch::ARM && target.bits == 32)) {
+        // Fallback to RTDyld-based linking to workaround errors:
+        // i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
+        // ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
         linkerBuilder = [&](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
             return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&]() {
                 return std::make_unique<HalideJITMemoryManager>(dependencies);
@@ -320,33 +322,35 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     ctorRunner.add(ctors);
 
     auto dtors = llvm::orc::getDestructors(*m);
-    llvm::orc::CtorDtorRunner *dtorRunner = new llvm::orc::CtorDtorRunner(JIT->getMainJITDylib());
+    auto dtorRunner = std::make_unique<llvm::orc::CtorDtorRunner>(JIT->getMainJITDylib());
     dtorRunner->add(dtors);
 
     // Resolve system symbols (like pthread, dl and others)
-    JIT->getMainJITDylib().addGenerator(llvm::cantFail(llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(target_data_layout.getGlobalPrefix())));
+    auto gen = llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(target_data_layout.getGlobalPrefix());
+    internal_assert(gen) << llvm::toString(gen.takeError()) << "\n";
+    JIT->getMainJITDylib().addGenerator(std::move(gen.get()));
 
     llvm::orc::ThreadSafeModule tsm(std::move(m), std::move(jit_module->context));
     auto err = JIT->addIRModule(std::move(tsm));
     internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
     // Resolve symbol dependencies
-    llvm::orc::SymbolMap NewSymbols;
+    llvm::orc::SymbolMap newSymbols;
     auto symbolStringPool = JIT->getExecutionSession().getExecutorProcessControl().getSymbolStringPool();
     for (const auto &module : dependencies) {
         for (auto const &iter : module.exports()) {
             orc::SymbolStringPtr name = symbolStringPool->intern(iter.first);
             orc::SymbolStringPtr _name = symbolStringPool->intern("_" + iter.first);
             auto symbol = llvm::JITEvaluatedSymbol::fromPointer(iter.second.address);
-            if (!NewSymbols.count(name)) {
-                NewSymbols.insert({name, symbol});
+            if (!newSymbols.count(name)) {
+                newSymbols.insert({name, symbol});
             }
-            if (!NewSymbols.count(_name)) {
-                NewSymbols.insert({_name, symbol});
+            if (!newSymbols.count(_name)) {
+                newSymbols.insert({_name, symbol});
             }
         }
     }
-    err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(NewSymbols)));
+    err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(newSymbols)));
     internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
     // Retrieve function pointers from the compiled module (which also
@@ -369,14 +373,13 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         exports[requested_export] = compile_and_get_function(*JIT, requested_export);
     }
 
-    // TODO: I don't think this is necessary, we shouldn't have any static constructors
     err = ctorRunner.run();
     internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
     jit_module->exports = exports;
     jit_module->JIT = std::move(JIT);
-    jit_module->dtorRunner = dtorRunner;
+    jit_module->dtorRunner = std::move(dtorRunner);
     jit_module->dependencies = dependencies;
     jit_module->entrypoint = entrypoint;
     jit_module->argv_entrypoint = argv_entrypoint;
