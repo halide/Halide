@@ -17,7 +17,6 @@ The following is a non-comprehensive list of known limitations:
       extensions to WGSL will allow them to be implemented more efficiently.
     * 64-bit integers and floats will likely remain unsupported until WGSL gains
       extensions to support them.
--   Dynamic gpu_tile sizes are not yet supported.
 -   Wrapping native device buffer handles is not yet implemented.
 
 In addition to these functional limitations, the performance of the WebGPU

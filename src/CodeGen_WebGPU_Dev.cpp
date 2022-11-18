@@ -1,5 +1,6 @@
 #include <cmath>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -94,7 +95,7 @@ protected:
         string kernel_name;
         std::unordered_set<string> buffers;
         std::unordered_set<string> buffers_with_emulated_accesses;
-        const Allocate *workgroup_array = nullptr;
+        std::unordered_map<string, const Allocate *> workgroup_allocations;
     };
 
     std::ostringstream src_stream;
@@ -175,10 +176,11 @@ void CodeGen_WebGPU_Dev::init_module() {
 
     // Create pipeline-overridable constants for the workgroup size and
     // workgroup array size.
-    src_stream << "override wgsize_x : u32;\n"
+    src_stream << "\n"
+               << "override wgsize_x : u32;\n"
                << "override wgsize_y : u32;\n"
                << "override wgsize_z : u32;\n"
-               << "override workgroup_mem_bytes : u32;\n";
+               << "override workgroup_mem_bytes : u32;\n\n";
 }
 
 vector<char> CodeGen_WebGPU_Dev::compile_to_src() {
@@ -212,8 +214,7 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_name(const string &name) {
 
     // Prefix storage buffer and workgroup variable names with the kernel name
     // to avoid collisions.
-    if (buffers.count(name) ||
-        (workgroup_array && workgroup_array->name == name)) {
+    if (buffers.count(name) || workgroup_allocations.count(name)) {
         new_name = kernel_name + new_name;
     }
 
@@ -375,6 +376,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 
     open_scope();
 
+    stream << get_indent() << "_ = workgroup_mem_bytes;\n";
+
     // Redeclare non-buffer arguments at function scope.
     for (const DeviceArgument &arg : args) {
         if (!arg.is_buffer) {
@@ -389,18 +392,18 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 
     close_scope("shader " + name);
 
-    if (workgroup_array) {
-        std::stringstream ss;
-        if (is_const(workgroup_array->extents[0])) {
-            ss << workgroup_array->extents[0];
+    for (auto [name, alloc] : workgroup_allocations) {
+        std::stringstream length;
+        if (is_const(alloc->extents[0])) {
+            length << alloc->extents[0];
         } else {
-            ss << "workgroup_mem_bytes / " << workgroup_array->type.bytes();
+            length << "workgroup_mem_bytes / " << alloc->type.bytes();
         }
-        stream << "var<workgroup> " << print_name(workgroup_array->name)
-               << " : array<" << print_type(workgroup_array->type) << ", "
-               << ss.str() << ">;\n";
+        stream << "var<workgroup> " << print_name(name)
+               << " : array<" << print_type(alloc->type) << ", "
+               << length.str() << ">;\n";
     }
-    workgroup_array = nullptr;
+    workgroup_allocations.clear();
 
     for (const auto &arg : args) {
         // Remove buffer arguments from allocation scope and the buffer list.
@@ -413,8 +416,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
     if (op->memory_type == MemoryType::GPUShared) {
-        internal_assert(workgroup_array == nullptr);
-        workgroup_array = op;
+        internal_assert(!workgroup_allocations.count(op->name));
+        workgroup_allocations.insert({op->name, op});
         op->body.accept(this);
     } else {
         open_scope();
@@ -611,7 +614,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Evaluate *op) {
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Free *op) {
-    if (workgroup_array && workgroup_array->name == op->name) {
+    if (workgroup_allocations.count(op->name)) {
         return;
     } else {
         // Should have been freed internally
@@ -664,8 +667,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
     Type alloc_type = result_type;
     if (allocations.contains(op->name)) {
         alloc_type = allocations.get(op->name).type;
-    } else if (workgroup_array && workgroup_array->name == op->name) {
-        alloc_type = workgroup_array->type;
+    } else if (workgroup_allocations.count(op->name)) {
+        alloc_type = workgroup_allocations.at(op->name)->type;
     }
 
     const int bits = result_type.bits();
@@ -806,8 +809,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
     Type alloc_type = value_type;
     if (allocations.contains(op->name)) {
         alloc_type = allocations.get(op->name).type;
-    } else if (workgroup_array && workgroup_array->name == op->name) {
-        alloc_type = workgroup_array->type;
+    } else if (workgroup_allocations.count(op->name)) {
+        alloc_type = workgroup_allocations.at(op->name)->type;
     }
 
     // Cast a value to the store type if necessary,
