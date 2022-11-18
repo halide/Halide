@@ -809,3 +809,12 @@ def generator(name:str=""):
         return new_cls
 
     return generator_impl
+
+def funcs(names:str) -> tuple(Func):
+    """Given a space-delimited string, create a Func for each substring and return as a tuple."""
+    return (Func(n) for n in names.split(' '))
+
+
+def vars(names:str) -> tuple(Var):
+    """Given a space-delimited string, create a Var for each substring and return as a tuple."""
+    return (Var(n) for n in names.split(' '))

@@ -53,7 +53,7 @@ endif ()
 # Create options for including or excluding LLVM backends.
 ##
 
-set(active_components mcjit bitwriter linker passes)
+set(active_components orcjit bitwriter linker passes)
 set(known_components AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
 
 foreach (comp IN LISTS known_components)

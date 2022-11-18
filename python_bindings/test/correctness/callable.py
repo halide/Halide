@@ -4,14 +4,15 @@ import numpy as np
 from simplepy_generator import SimplePy
 import simplecpp_pystub  # Needed for create_callable_from_generator("simplecpp") to work
 
+
 def test_callable():
     p_int16 = hl.Param(hl.Int(16), 42)
     p_float = hl.Param(hl.Float(32), 1.0)
     p_img = hl.ImageParam(hl.UInt(8), 2)
 
-    x = hl.Var('x')
-    y = hl.Var('y')
-    f = hl.Func('f')
+    x = hl.Var("x")
+    y = hl.Var("y")
+    f = hl.Func("f")
 
     f[x, y] = p_img[x, y] + hl.u8(p_int16 / p_float)
 
@@ -23,7 +24,7 @@ def test_callable():
             in1[i, j] = i + j * 10
             in2[i, j] = i * 10 + j
 
-    c = f.compile_to_callable([p_img, p_int16, p_float]);
+    c = f.compile_to_callable([p_img, p_int16, p_float])
 
     out1 = hl.Buffer(hl.UInt(8), [10, 10])
     c(in1, 42, 1.0, out1)
@@ -57,6 +58,7 @@ def test_callable():
     assert in1.dim(0).extent() == 10
     assert in1.dim(1).extent() == 10
 
+
 def test_simple(callable_factory):
     x, y = hl.Var(), hl.Var()
     target = hl.get_jit_target_from_environment()
@@ -68,7 +70,7 @@ def test_simple(callable_factory):
 
     b_out = hl.Buffer(hl.Float(32), [2, 2])
 
-    def _check(offset = 0):
+    def _check(offset=0):
         assert b_out[0, 0] == float_in + offset + 123
         assert b_out[0, 1] == float_in + offset + 123
         assert b_out[1, 0] == float_in + offset + 123
@@ -113,33 +115,33 @@ def test_simple(callable_factory):
         # too many positional args
         simple(b_in, float_in, 4, b_out)
     except hl.HalideError as e:
-        assert 'Expected at most 3 positional arguments, but saw 4.' in str(e)
+        assert "Expected at most 3 positional arguments, but saw 4." in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # too few positional args
         simple(b_in)
     except hl.HalideError as e:
-        assert 'Expected exactly 3 positional arguments, but saw 1.' in str(e)
+        assert "Expected exactly 3 positional arguments, but saw 1." in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
         simple(hl.f32(3.141592), "happy", b_out)
     except hl.HalideError as e:
-        assert 'is not an instance of' in str(e)
+        assert "is not an instance of" in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # Inputs that can't be converted to what the receiver needs (named)
         simple(b_in, float_in, simple_output="bogus")
     except hl.HalideError as e:
-        assert 'is not an instance of' in str(e)
+        assert "is not an instance of" in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # Bad keyword argument
@@ -147,23 +149,27 @@ def test_simple(callable_factory):
     except hl.HalideError as e:
         assert "Unknown argument 'funk_input' specified via keyword." in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # too few keyword args
         simple(float_arg=float_in, simple_output=b_out)
     except hl.HalideError as e:
-        assert 'Argument buffer_input was not specified by either positional or keyword argument.' in str(e)
+        assert (
+            "Argument buffer_input was not specified by either positional or keyword argument."
+            in str(e)
+        )
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # Arg specified by pos + kw
         simple(b_in, buffer_input=b_in, float_arg=float_in, simple_output=b_out)
     except hl.HalideError as e:
-        assert 'Argument buffer_input specified multiple times.' in str(e)
+        assert "Argument buffer_input specified multiple times." in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
+
 
 if __name__ == "__main__":
     # test_callable()

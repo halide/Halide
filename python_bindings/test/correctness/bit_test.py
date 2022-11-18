@@ -24,6 +24,7 @@ def test(fn):
     for i in range(0, 4):
         assert output_bools[i] == ((i & 1) != 0)
 
+
 if __name__ == "__main__":
     test(bitcpp.bitcpp)
     test(bitpy.bitpy)

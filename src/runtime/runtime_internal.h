@@ -99,9 +99,18 @@ void *memcpy(void *s1, const void *s2, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
 int memcmp(const void *s1, const void *s2, size_t n);
 void *memset(void *s, int val, size_t n);
+
+// No: don't call fopen() directly; some platforms may want to require
+// use of other calls instead, so you should bottleneck all calls to fopen()
+// to halide_fopen() instead, which allows for link-time overriding.
+//
 // Use fopen+fileno+fclose instead of open+close - the value of the
 // flags passed to open are different on every platform
-void *fopen(const char *, const char *);
+//
+// void *fopen(const char *, const char *);
+
+WEAK_INLINE void *halide_fopen(const char *filename, const char *type);
+
 int fileno(void *);
 int fclose(void *);
 int close(int);

@@ -326,6 +326,10 @@ protected:
         return n;
     }
 
+    /** Add the appropriate function attribute to tell LLVM that the function
+     * doesn't access memory. */
+    void function_does_not_access_memory(llvm::Function *fn);
+
     using IRVisitor::visit;
 
     /** Generate code for various IR nodes. These can be overridden by
@@ -606,11 +610,19 @@ protected:
                                            MaskVariant mask, llvm::Value *a, llvm::Value *b,
                                            const char *cmp_op);
 
+    struct VPResultType {
+        llvm::Type *type;
+        std::optional<size_t> mangle_index;
+        VPResultType(llvm::Type *type, std::optional<size_t> mangle_index = std::nullopt)
+            : type(type), mangle_index(mangle_index) {
+        }
+    };
+
     /** Generate an intrisic call if use_llvm_vp_intrinsics is true
      * and length is greater than 1. If generated, assigns result
      * of vp intrinsic to value and returns true if it an instuction
      * is generated, otherwise returns false. */
-    bool try_vector_predication_intrinsic(const std::string &name, llvm::Type *llvm_result_type,
+    bool try_vector_predication_intrinsic(const std::string &name, VPResultType result_type,
                                           int32_t length, MaskVariant mask, std::vector<VPArg> args);
 
     /** Controls use of vector predicated intrinsics for vector operations.
