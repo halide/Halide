@@ -833,8 +833,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
         //  var old = atomicLoad(&out[i / 2u]);
         //  while (true) {
         //    let mask = ((old >> shift) ^ bitcast<u32>(value)) & 0xFFFFu;
-        //    let new = old ^ (mask << shift);
-        //    let result = atomicCompareExchangeWeak(&out[i / 2u], old, new);
+        //    let newval = old ^ (mask << shift);
+        //    let result = atomicCompareExchangeWeak(&out[i / 2u], old, newval);
         //    if (result.exchanged) {
         //      break;
         //    }
@@ -850,11 +850,11 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
         stream << get_indent() << "  let mask = ((" << old << " >> "
                << shift << ") ^ bitcast<u32>(" << value << ")) & "
                << std::to_string((1 << bits) - 1) << "u;\n";
-        stream << get_indent() << "  let new = " << old << " ^ (mask << "
+        stream << get_indent() << "  let newval = " << old << " ^ (mask << "
                << shift << ");\n";
         stream << get_indent() << "  let result = atomicCompareExchangeWeak(&"
                << name << "[" << idx << " / " << elements << "], "
-               << old << ", new);\n";
+               << old << ", newval);\n";
         stream << get_indent() << "  if (result.exchanged) { break; }\n";
         stream << get_indent() << "  " << old << " = result.old_value;\n";
         stream << get_indent() << "}\n";
