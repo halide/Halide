@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     }
 
     if (call_counter2 != 32 * 32) {
-        printf("C function my_func2 was called %d times instead of %d\n", call_counter, 32 * 32);
+        printf("C function my_func2 was called %d times instead of %d\n", call_counter2, 32 * 32);
         return -1;
     }
 
