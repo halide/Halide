@@ -203,7 +203,7 @@ halide_define_aot_test(cxx_mangling
                        ENABLE_IF NOT ${USING_WASM}
                        FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
                        FEATURES c_plus_plus_name_mangling
-                       EXTRA_OUTPUTS C_FUNCTION_INFO_HEADER)
+                       EXTRA_OUTPUTS FUNCTION_INFO_HEADER)
 if (TARGET cxx_mangling)
     target_link_libraries(cxx_mangling INTERFACE cxx_mangling_externs)
     if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
@@ -335,13 +335,13 @@ set(metadata_tester_params
 halide_define_aot_test(metadata_tester
                        EXTRA_LIBS metadata_tester_ucon
                        PARAMS ${metadata_tester_params}
-                       EXTRA_OUTPUTS C_FUNCTION_INFO_HEADER)
+                       EXTRA_OUTPUTS FUNCTION_INFO_HEADER)
 add_halide_library(metadata_tester_ucon
                    FROM metadata_tester.generator
                    GENERATOR metadata_tester
                    FEATURES user_context
                    PARAMS ${metadata_tester_params}
-                   C_FUNCTION_INFO_HEADER metadata_tester_ucon_path)
+                   FUNCTION_INFO_HEADER metadata_tester_ucon_path)
 
 # msan_aottest.cpp
 # msan_generator.cpp

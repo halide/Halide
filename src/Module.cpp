@@ -34,12 +34,12 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
     std::map<OutputFileType, const OutputInfo> ext = {
         {OutputFileType::assembly, {"assembly", ".s", IsMulti}},
         {OutputFileType::bitcode, {"bitcode", ".bc", IsMulti}},
-        {OutputFileType::c_function_info_header, {"c_function_info_header", ".function_info.h", IsSingle}},
         {OutputFileType::c_header, {"c_header", ".h", IsSingle}},
         {OutputFileType::c_source, {"c_source", ".halide_generated.cpp", IsSingle}},
         {OutputFileType::compiler_log, {"compiler_log", ".halide_compiler_log", IsSingle}},
         {OutputFileType::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
         {OutputFileType::featurization, {"featurization", ".featurization", IsMulti}},
+        {OutputFileType::function_info_header, {"function_info_header", ".function_info.h", IsSingle}},
         {OutputFileType::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
         {OutputFileType::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
         {OutputFileType::python_extension, {"python_extension", ".py.cpp", IsSingle}},
@@ -599,13 +599,13 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
         }
     }
-    if (contains(output_files, OutputFileType::c_function_info_header)) {
-        debug(1) << "Module.compile(): c_function_info_header " << output_files.at(OutputFileType::c_function_info_header) << "\n";
-        std::ofstream file(output_files.at(OutputFileType::c_function_info_header));
+    if (contains(output_files, OutputFileType::function_info_header)) {
+        debug(1) << "Module.compile(): function_info_header " << output_files.at(OutputFileType::function_info_header) << "\n";
+        std::ofstream file(output_files.at(OutputFileType::function_info_header));
         Internal::CodeGen_C cg(file,
                                target(),
                                Internal::CodeGen_C::CPlusPlusFunctionInfoHeader,
-                               output_files.at(OutputFileType::c_function_info_header));
+                               output_files.at(OutputFileType::function_info_header));
         cg.compile(*this);
     }
     if (contains(output_files, OutputFileType::c_header)) {
@@ -859,7 +859,7 @@ void compile_multitarget(const std::string &fn_name,
             sub_out.erase(OutputFileType::registration);
             sub_out.erase(OutputFileType::schedule);
             sub_out.erase(OutputFileType::c_header);
-            sub_out.erase(OutputFileType::c_function_info_header);
+            sub_out.erase(OutputFileType::function_info_header);
             if (contains(sub_out, OutputFileType::compiler_log)) {
                 sub_out[OutputFileType::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(OutputFileType::compiler_log), suffix, target);
             }
@@ -961,11 +961,11 @@ void compile_multitarget(const std::string &fn_name,
         header_module.compile(header_out);
     }
 
-    if (contains(output_files, OutputFileType::c_function_info_header)) {
+    if (contains(output_files, OutputFileType::function_info_header)) {
         Module header_module(fn_name, base_target);
         header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
-        std::map<OutputFileType, std::string> header_out = {{OutputFileType::c_function_info_header, output_files.at(OutputFileType::c_function_info_header)}};
-        debug(1) << "compile_multitarget: c_function_info_header " << header_out.at(OutputFileType::c_function_info_header) << "\n";
+        std::map<OutputFileType, std::string> header_out = {{OutputFileType::function_info_header, output_files.at(OutputFileType::function_info_header)}};
+        debug(1) << "compile_multitarget: function_info_header " << header_out.at(OutputFileType::function_info_header) << "\n";
         header_module.compile(header_out);
     }
 

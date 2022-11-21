@@ -182,25 +182,25 @@ void test_compile_to_everything(Func j, bool do_object) {
         return j.compile_to_module(args, name, target);
     };
     std::map<OutputFileType, std::string> outputs = {
-        {OutputFileType::assembly, filename_prefix + ".s"},                              // IsMulti
-        {OutputFileType::bitcode, filename_prefix + ".bc"},                              // IsMulti
-        {OutputFileType::c_header, filename_prefix + ".h"},                              // IsSingle
-        {OutputFileType::c_function_info_header, filename_prefix + ".function_info.h"},  // IsSingle
-        {OutputFileType::c_source, filename_prefix + ".halide_generated.cpp"},           // IsSingle
-        {OutputFileType::compiler_log, filename_prefix + ".halide_compiler_log"},        // IsSingle
+        {OutputFileType::assembly, filename_prefix + ".s"},                        // IsMulti
+        {OutputFileType::bitcode, filename_prefix + ".bc"},                        // IsMulti
+        {OutputFileType::c_header, filename_prefix + ".h"},                        // IsSingle
+        {OutputFileType::c_source, filename_prefix + ".halide_generated.cpp"},     // IsSingle
+        {OutputFileType::compiler_log, filename_prefix + ".halide_compiler_log"},  // IsSingle
         // Note: compile_multitarget() doesn't produce cpp_stub output,
         // even if you pass this in.
         // {OutputFileType::cpp_stub, filename_prefix + ".stub.h"},  // IsSingle
-        {OutputFileType::featurization, filename_prefix + ".featurization"},    // IsMulti
-        {OutputFileType::llvm_assembly, filename_prefix + ".ll"},               // IsMulti
-        {OutputFileType::object, filename_prefix + o},                          // IsMulti
-        {OutputFileType::python_extension, filename_prefix + ".py.cpp"},        // IsSingle
-        {OutputFileType::pytorch_wrapper, filename_prefix + ".pytorch.h"},      // IsSingle
-        {OutputFileType::registration, filename_prefix + ".registration.cpp"},  // IsSingle
-        {OutputFileType::schedule, filename_prefix + ".schedule.h"},            // IsSingle
-        {OutputFileType::static_library, filename_prefix + a},                  // IsSingle
-        {OutputFileType::stmt, filename_prefix + ".stmt"},                      // IsMulti
-        {OutputFileType::stmt_html, filename_prefix + ".stmt.html"},            // IsMulti
+        {OutputFileType::featurization, filename_prefix + ".featurization"},           // IsMulti
+        {OutputFileType::function_info_header, filename_prefix + ".function_info.h"},  // IsSingle
+        {OutputFileType::llvm_assembly, filename_prefix + ".ll"},                      // IsMulti
+        {OutputFileType::object, filename_prefix + o},                                 // IsMulti
+        {OutputFileType::python_extension, filename_prefix + ".py.cpp"},               // IsSingle
+        {OutputFileType::pytorch_wrapper, filename_prefix + ".pytorch.h"},             // IsSingle
+        {OutputFileType::registration, filename_prefix + ".registration.cpp"},         // IsSingle
+        {OutputFileType::schedule, filename_prefix + ".schedule.h"},                   // IsSingle
+        {OutputFileType::static_library, filename_prefix + a},                         // IsSingle
+        {OutputFileType::stmt, filename_prefix + ".stmt"},                             // IsMulti
+        {OutputFileType::stmt_html, filename_prefix + ".stmt.html"},                   // IsMulti
     };
     if (do_object) {
         outputs.erase(OutputFileType::static_library);

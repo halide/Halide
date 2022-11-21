@@ -26,12 +26,12 @@ struct Target;
 enum class OutputFileType {
     assembly,
     bitcode,
-    c_function_info_header,
     c_header,
     c_source,
     compiler_log,
     cpp_stub,
     featurization,
+    function_info_header,
     llvm_assembly,
     object,
     python_extension,

@@ -186,9 +186,9 @@ function(add_halide_library TARGET)
     set(extra_output_names
         ASSEMBLY
         BITCODE
-        C_FUNCTION_INFO_HEADER
         COMPILER_LOG
         FEATURIZATION
+        FUNCTION_INFO_HEADER
         LLVM_ASSEMBLY
         PYTHON_EXTENSION
         PYTORCH_WRAPPER
@@ -200,9 +200,9 @@ function(add_halide_library TARGET)
     # "hash table" of extra outputs to extensions
     set(ASSEMBLY_extension ".s")
     set(BITCODE_extension ".bc")
-    set(C_FUNCTION_INFO_HEADER_extension ".function_info.h")
     set(COMPILER_LOG_extension ".halide_compiler_log")
     set(FEATURIZATION_extension ".featurization")
+    set(FUNCTION_INFO_HEADER_EXTENSION ".function_info.h")
     set(LLVM_ASSEMBLY_extension ".ll")
     set(PYTHON_EXTENSION_extension ".py.cpp")
     set(PYTORCH_WRAPPER_extension ".pytorch.h")
