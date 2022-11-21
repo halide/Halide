@@ -258,6 +258,8 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
     WGPURequiredLimits requestedLimits{.nextInChain = nullptr};
     memset(&requestedLimits.limits, 0xFF, sizeof(WGPULimits));
 
+    // TODO: Enable for Emscripten when wgpuAdapterGetLimits is supported.
+#ifdef WITH_DAWN_NATIVE
     WGPUSupportedLimits supportedLimits{.nextInChain = nullptr};
     if (!wgpuAdapterGetLimits(adapter, &supportedLimits)) {
         debug(user_context) << "wgpuAdapterGetLimits failed\n";
@@ -270,6 +272,7 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
         requestedLimits.limits.maxComputeWorkgroupStorageSize =
             supportedLimits.limits.maxComputeWorkgroupStorageSize;
     }
+#endif
 
     WGPUDeviceDescriptor desc = {
         .nextInChain = nullptr,
