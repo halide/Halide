@@ -71,6 +71,9 @@ protected:
         std::string print_reinterpret(Type type, const Expr &e) override;
         std::string print_extern_call(const Call *op) override;
         std::string print_assignment(Type t, const std::string &rhs) override;
+        std::string print_const(Type t, const std::string &rhs);
+        std::string print_assignment_or_const(Type t, const std::string &rhs,
+                                              bool const_expr);
 
         void visit(const Allocate *op) override;
         void visit(const And *op) override;
@@ -540,7 +543,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Div *op) {
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const IntImm *op) {
-    print_assignment(op->type, std::to_string(op->value));
+    print_const(op->type, std::to_string(op->value));
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const UIntImm *op) {
@@ -551,7 +554,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const UIntImm *op) {
             id = "false";
         }
     } else {
-        print_assignment(op->type, std::to_string(op->value) + "u");
+        print_const(op->type, std::to_string(op->value) + "u");
     }
 }
 
@@ -906,11 +909,21 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
 
 string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_assignment(
     Type t, const std::string &rhs) {
+    return print_assignment_or_const(t, rhs, false);
+}
+
+string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_const(
+    Type t, const std::string &rhs) {
+    return print_assignment_or_const(t, rhs, true);
+}
+
+string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_assignment_or_const(
+    Type t, const std::string &rhs, bool const_expr) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        stream << get_indent() << "let " << id << " : " << print_type(t)
-               << " = " << rhs << ";\n";
+        stream << get_indent() << (const_expr ? "const" : "let") << " " << id
+               << " : " << print_type(t) << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
