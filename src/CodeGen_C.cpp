@@ -222,7 +222,7 @@ public:
 } // namespace
 )INLINE_CODE";
 
-const char * const constexpr_argument_info_docs = R"INLINE_CODE(
+const char *const constexpr_argument_info_docs = R"INLINE_CODE(
 /**
  * This function returns a constexpr array of information about a Halide-generated
  * function's argument signature (e.g., number of arguments, type of each, etc).
@@ -1794,8 +1794,6 @@ void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
     internal_assert(!extern_c_open)
         << "emit_constexpr_function_info() must not be called from inside an extern \"C\" block";
 
-debug(0) << "emit_constexpr_function_info f.name is "<<function_name<<" is_header "<<(int)is_header()<<"\n";
-
     if (!is_header()) {
         return;
     }
@@ -1906,7 +1904,6 @@ void CodeGen_C::compile(const Module &input) {
 }
 
 void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_name_map) {
-debug(0) << "f.name is "<<f.name<<"\n";
     // Don't put non-external function declarations in headers.
     if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
         return;
@@ -2009,7 +2006,6 @@ debug(0) << "f.name is "<<f.name<<"\n";
             emit_metadata_getter(simple_name, args, metadata_name_map);
         }
     } else {
-debug(0) << "HI THERE f.name is "<<f.name<<" "<<(int)f.linkage<<"\n";
         if (f.linkage != LinkageType::Internal) {
             emit_constexpr_function_info(simple_name, args, metadata_name_map);
         }
