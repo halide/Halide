@@ -18,8 +18,16 @@ You'll need to configure Halide and enable the cmake option TARGET_VULKAN.
 For example, on Linux & OSX:
 
 ```
-% cmake -G Ninja -DTARGET_VULKAN=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=$LLVM_ROOT/lib/cmake/llvm -S . -B build
-% cmake --build build
+% cmake -G Ninja -DTARGET_VULKAN=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=$LLVM_ROOT/lib/cmake/llvm 
+% cmake --build build --config Release
+```
+
+On Windows, you may need to specify the location of the Vulkan SDK if the paths aren't resolved by CMake automatically.  For example (assuming the Vulkan SDK is installed in the default path):
+
+```
+C:\> cmake -G Ninja -DTARGET_VULKAN=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=$LLVM_ROOT/lib/cmake/llvm -DVulkan_LIBRARY=C:\VulkanSDK\1.3.231.1\Lib\vulkan-1.lib -DVulkan_INCLUDE_DIR=C:\VulkanSDK\1.3.231.1\Include\vulkan -S . -B build
+C:\> cmake --build build --config Release
+
 ```
 
 # Vulkan Runtime Environment:
@@ -38,6 +46,11 @@ for your platform. Vulkan support should be included.
 
 ## Windows 
 
+To build Halide AOT generators, you'll need the Vulkan SDK (specifically the Vulkan loader library and headers):
+https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe
+
+For Vulkan device drivers, consult the appropriate hardware vendor for your device.  A few common ones are listed below.
+
 AMD:
 https://www.amd.com/en/technologies/vulkan
 
@@ -50,8 +63,9 @@ https://www.intel.com/content/www/us/en/download-center/home.html
 
 ## Linux 
 
-On Ubuntu Linux, proprietary drivers can be installed via 'apt' using 
-PPA's for each vendor.
+On Ubuntu Linux v22.04, the vulkan runtime is distributed in the `vulkan-tools` package. For earlier versions of Ubuntu (eg v20.x or v18.x) the contents of the `vulkan-tools` package was distributed as `vulkan-utils` so use this package instead.
+
+Proprietary drivers can be installed via 'apt' using PPA's for each vendor. Examples for AMD and NVIDIA are provided below.
 
 For AMD on Ubuntu v22.04:
 ```
@@ -69,8 +83,6 @@ $ sudo apt upgrade
 # - replace ### with latest driver release (eg 515)
 $ sudo apt install nvidia-driver-### nvidia-settings vulkan vulkan-tools
 ```
-
-For earlier versions of Ubuntu (eg v20.x or v18.x) the contents of the `vulkan-tools` package was distributed as `vulkan-utils` so use this package instead.
 
 Note that only valid drivers for your system should be installed since there's been 
 reports of the Vulkan loader segfaulting just by having a non-supported driver present. 
