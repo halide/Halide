@@ -110,7 +110,7 @@ WEAK bool ends_with(const char *filename, const char *suffix) {
 struct ScopedFile {
     void *f;
     ALWAYS_INLINE ScopedFile(const char *filename, const char *mode) {
-        f = fopen(filename, mode);
+        f = halide_fopen(filename, mode);
     }
     ALWAYS_INLINE ~ScopedFile() {
         if (f) {

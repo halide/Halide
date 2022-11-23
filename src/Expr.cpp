@@ -92,10 +92,10 @@ bool is_parallel(ForType for_type) {
 Range::Range(const Expr &min_in, const Expr &extent_in)
     : min(lossless_cast(Int(32), min_in)), extent(lossless_cast(Int(32), extent_in)) {
     if (min_in.defined() && !min.defined()) {
-        user_error << "Min cannot be losslessly cast to an int32: " << min_in;
+        user_error << "Range min is not representable as an int32: " << min_in;
     }
     if (extent_in.defined() && !extent.defined()) {
-        user_error << "Extent cannot be losslessly cast to an int32: " << extent_in;
+        user_error << "Range extent is not representable as an int32: " << extent_in;
     }
 }
 

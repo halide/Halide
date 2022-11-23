@@ -265,8 +265,11 @@ tests(GROUPS correctness
       shift_by_unsigned_negated.cpp
       shifted_image.cpp
       side_effects.cpp
-      simd_op_check.cpp
+      simd_op_check_arm.cpp
       simd_op_check_hvx.cpp
+      simd_op_check_powerpc.cpp
+      simd_op_check_wasm.cpp
+      simd_op_check_x86.cpp
       simplified_away_embedded_image.cpp
       simplify.cpp
       skip_stages.cpp

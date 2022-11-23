@@ -18,6 +18,8 @@ set(RUNTIME_CPP
     fake_get_symbol
     fake_thread_pool
     float16_t
+    fopen
+    fopen_lfs
     force_include_types
     fuchsia_clock
     fuchsia_host_cpu_count
