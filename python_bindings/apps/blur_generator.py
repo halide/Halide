@@ -3,10 +3,10 @@ Simple blur.
 """
 
 import halide as hl
-from enum import Enum
+import enum
 
 
-class BlurGPUSchedule(Enum):
+class BlurGPUSchedule(enum.Enum):
     # Fully inlining schedule.
     Inline = 0
     # Schedule caching intermedia result of blur_x.
