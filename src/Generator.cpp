@@ -1,4 +1,3 @@
-
 #include <atomic>
 #include <cmath>
 #include <condition_variable>
