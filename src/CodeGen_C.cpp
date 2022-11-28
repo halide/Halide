@@ -3500,10 +3500,10 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
 /**
  * This function returns a constexpr array of information about a Halide-generated
  * function's argument signature (e.g., number of arguments, type of each, etc).
- * Technically this is a subset of the information provided by the existing _metadata
- * function, except that (as a constexpr data structure), meaning one can process
- * it at compile time if one so chooses. (This can be quite useful for producing
- * e.g. automatic call wrappers, etc.).
+ * While this is a subset of the information provided by the existing _metadata
+ * function, it has the distinct advantage of allowing one to use the information
+ * it at compile time (rather than runtime). This can be quite useful for producing
+ * e.g. automatic call wrappers, etc.
  *
  * For instance, to compute the number of Buffers in a Function, one could do something
  * like:
