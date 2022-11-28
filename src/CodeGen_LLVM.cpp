@@ -5238,7 +5238,7 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, VPR
     }
     args.push_back(ConstantInt::get(i32_t, length));
 
-    value = call_intrin(llvm_result_type, length, full_name, args, is_scalable, is_reduction);
+    value = call_intrin(llvm_result_type, length, full_name, args, is_reduction);
     llvm::CallInst *call = dyn_cast<llvm::CallInst>(value);
     for (size_t i = 0; i < vp_args.size(); i++) {
         if (vp_args[i].alignment != 0) {
