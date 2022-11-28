@@ -3,6 +3,5 @@ if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
     return()
 endif ()
 
-add_subdirectory(apps)
 add_subdirectory(correctness)
 add_subdirectory(generators)

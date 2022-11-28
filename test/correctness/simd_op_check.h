@@ -22,6 +22,13 @@ struct Task {
 
 class SimdOpCheckTest {
 public:
+    static constexpr int max_i8 = 127;
+    static constexpr int max_i16 = 32767;
+    static constexpr int max_i32 = 0x7fffffff;
+    static constexpr int max_u8 = 255;
+    static constexpr int max_u16 = 65535;
+    const Expr max_u32 = UInt(32).max();
+
     std::string filter{"*"};
     std::string output_directory{Internal::get_test_tmp_dir()};
     std::vector<Task> tasks;
@@ -329,6 +336,50 @@ public:
         }
 
         return success;
+    }
+
+    template<typename SIMDOpCheckT>
+    static int main(int argc, char **argv) {
+        Target host = get_host_target();
+        Target hl_target = get_target_from_environment();
+        printf("host is:      %s\n", host.to_string().c_str());
+        printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
+
+        SIMDOpCheckT test(hl_target);
+
+        if (argc > 1) {
+            test.filter = argv[1];
+        }
+
+        if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
+            test.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
+        }
+
+        const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
+        std::cout << "simd_op_check test seed: " << seed << "\n";
+        test.set_seed(seed);
+
+        if (argc > 2) {
+            // Don't forget: if you want to run the standard tests to a specific output
+            // directory, you'll need to invoke with the first arg enclosed
+            // in quotes (to avoid it being wildcard-expanded by the shell):
+            //
+            //    correctness_simd_op_check "*" /path/to/output
+            //
+            test.output_directory = argv[2];
+        }
+
+        bool success = test.test_all();
+
+        // Compile a runtime for this target, for use in the static test.
+        compile_standalone_runtime(test.output_directory + "simd_op_check_runtime.o", test.target);
+
+        if (!success) {
+            return -1;
+        }
+
+        printf("Success!\n");
+        return 0;
     }
 
 private:

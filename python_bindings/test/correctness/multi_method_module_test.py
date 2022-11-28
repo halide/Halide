@@ -2,6 +2,7 @@ import numpy as np
 
 import multi_method_module
 
+
 def test_simplecpp():
     buffer_input = np.ndarray([2, 2], dtype=np.uint8)
     buffer_input[0, 0] = 123
@@ -20,25 +21,27 @@ def test_simplecpp():
     assert simple_output[1, 0] == 3.5 + 123
     assert simple_output[1, 1] == 3.5 + 123
 
+
 def test_user_context():
     output = bytearray("\0\0\0\0", "ascii")
-    multi_method_module.user_context(None, ord('q'), output)
+    multi_method_module.user_context(None, ord("q"), output)
     assert output == bytearray("qqqq", "ascii")
 
+
 def test_aot_call_failure_throws_exception():
-    buffer_input = np.zeros([2, 2], dtype=np.float32) # wrong type
+    buffer_input = np.zeros([2, 2], dtype=np.float32)  # wrong type
     float_arg = 3.5
     simple_output = np.zeros([2, 2], dtype=np.float32)
 
     try:
         multi_method_module.simplecpp(buffer_input, float_arg, simple_output)
     except RuntimeError as e:
-        assert 'Halide Runtime Error: -3' in str(e), str(e)
+        assert "Halide Runtime Error: -3" in str(e), str(e)
     else:
-        assert False, 'Did not see expected exception, saw: ' + str(e)
+        assert False, "Did not see expected exception, saw: " + str(e)
+
 
 if __name__ == "__main__":
     test_simplecpp()
     test_user_context()
     test_aot_call_failure_throws_exception()
-

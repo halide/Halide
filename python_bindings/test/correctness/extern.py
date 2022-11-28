@@ -33,28 +33,25 @@ def test_extern():
     try:
         sort_func.compile_jit()
     except hl.HalideError:
-        assert 'cannot be converted to a bool' in str(e)
+        assert "cannot be converted to a bool" in str(e)
     else:
-        assert False, 'Did not see expected exception!'
-
+        assert False, "Did not see expected exception!"
 
     import ctypes
+
     sort_lib = ctypes.CDLL("the_sort_function.so")
     print(sort_lib.the_sort_func)
 
     try:
         sort_func.compile_jit()
     except hl.HalideError:
-        assert 'cannot be converted to a bool' in str(e)
+        assert "cannot be converted to a bool" in str(e)
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     lib_path = "the_sort_function.so"
-    #lib_path = "/home/rodrigob/code/references/" \
-    #           "Halide_master/python_bindings/tests/the_sort_function.nohere.so"
     load_error = load_library_into_llvm(lib_path)
     assert load_error == False
-
 
     sort_func.compile_jit()
 
@@ -65,6 +62,7 @@ def test_extern():
     assert np.isclose(expected_result, output_data)
 
     return
+
 
 if __name__ == "__main__":
 

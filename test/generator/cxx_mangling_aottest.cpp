@@ -6,6 +6,7 @@
 #include <string.h>
 #include <string>
 
+#include "cxx_mangling.function_info.h"
 #include "cxx_mangling.h"
 #ifdef TEST_CUDA
 #include "cxx_mangling_gpu.h"
@@ -43,6 +44,8 @@ int main(int argc, char **argv) {
     assert(m->version == halide_filter_metadata_t::VERSION);
     printf("Name is: %s\n", m->name);
     assert(strcmp(m->name, "cxx_mangling") == 0);
+
+    static_assert(HalideTest::AnotherNamespace::cxx_mangling_argument_info().at(21).name == "output");
 
     int ptr_arg = 42;
     int *int_ptr = &ptr_arg;
