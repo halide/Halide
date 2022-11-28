@@ -1,10 +1,10 @@
-from contextlib import contextmanager
+import contextlib
 import halide as hl
 import sys
-from io import StringIO
+import io
 
 # redirect_stdout() requires Python3, alas
-@contextmanager
+@contextlib.contextmanager
 def _redirect_stdout(out):
     old_out = sys.stdout
     sys.stdout = out
@@ -21,7 +21,7 @@ def test_print_expr():
         hl.cast(hl.UInt(8), x), "is what", "the", 1, "and", hl.f32(3.1415), "saw"
     )
     buf = hl.Buffer(hl.UInt(8), [1])
-    output = StringIO()
+    output = io.StringIO()
     with _redirect_stdout(output):
         f.realize(buf)
         expected = "0 is what the 1 and 3.141500 saw\n"
@@ -34,7 +34,7 @@ def test_print_when():
     f = hl.Func("f")
     f[x] = hl.print_when(x == 3, hl.cast(hl.UInt(8), x * x), "is result at", x)
     buf = hl.Buffer(hl.UInt(8), [10])
-    output = StringIO()
+    output = io.StringIO()
     with _redirect_stdout(output):
         f.realize(buf)
         expected = "9 is result at 3\n"

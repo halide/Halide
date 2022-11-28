@@ -9,7 +9,7 @@ from bilateral_grid_Mullapudi2016 import bilateral_grid_Mullapudi2016
 import halide.imageio
 import numpy as np
 import sys
-from timeit import Timer
+import timeit
 
 
 def main():
@@ -46,7 +46,7 @@ def main():
 
     for name, fn in tests.items():
         print("Running %s... " % name, end="")
-        t = Timer(lambda: fn(input_buf, r_sigma, output_buf))
+        t = timeit.Timer(lambda: fn(input_buf, r_sigma, output_buf))
         avg_time_sec = t.timeit(number=timing_iterations) / timing_iterations
         print("time: %fms" % (avg_time_sec * 1e3))
 

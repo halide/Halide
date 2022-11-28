@@ -1,6 +1,6 @@
 import numpy as np
 
-import multi_method_module
+from multi_method_module import simplecpp, user_context
 
 
 def test_simplecpp():
@@ -14,7 +14,7 @@ def test_simplecpp():
 
     simple_output = np.ndarray([2, 2], dtype=np.float32)
 
-    multi_method_module.simplecpp(buffer_input, float_arg, simple_output)
+    simplecpp(buffer_input, float_arg, simple_output)
 
     assert simple_output[0, 0] == 3.5 + 123
     assert simple_output[0, 1] == 3.5 + 123
@@ -24,7 +24,7 @@ def test_simplecpp():
 
 def test_user_context():
     output = bytearray("\0\0\0\0", "ascii")
-    multi_method_module.user_context(None, ord("q"), output)
+    user_context(None, ord("q"), output)
     assert output == bytearray("qqqq", "ascii")
 
 
@@ -34,7 +34,7 @@ def test_aot_call_failure_throws_exception():
     simple_output = np.zeros([2, 2], dtype=np.float32)
 
     try:
-        multi_method_module.simplecpp(buffer_input, float_arg, simple_output)
+        simplecpp(buffer_input, float_arg, simple_output)
     except RuntimeError as e:
         assert "Halide Runtime Error: -3" in str(e), str(e)
     else:
