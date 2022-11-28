@@ -812,10 +812,11 @@ add_halide_library(<target> FROM <generator-target>
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
                    [HEADER OUTVAR]
+                   [FUNCTION_INFO_HEADER OUTVAR]
                    [<extra-output> OUTVAR])
 
-extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | CPP_STUB
-             | FEATURIZATION | LLVM_ASSEMBLY | PYTHON_EXTENSION
+extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | FEATURIZATION
+             | LLVM_ASSEMBLY | PYTHON_EXTENSION
              | PYTORCH_WRAPPER | SCHEDULE | STMT | STMT_HTML
 ```
 
@@ -888,6 +889,16 @@ If `HEADER` is set, the path (relative to `CMAKE_CURRENT_BINARY_DIR`) to the
 generated `.h` header file will be set in `OUTVAR`. This can be used with
 `install(FILES)` to conveniently deploy the generated header along with your
 library.
+
+If `FUNCTION_INFO_HEADER` is set, the path (relative to
+`CMAKE_CURRENT_BINARY_DIR`) to the generated `.function_info.h` header file
+will be set in `OUTVAR`. This produces a file that contains `constexpr`
+descriptions of information about the generated functions (e.g., argument
+type and information). It is generated separately from the normal `HEADER`
+file because `HEADER` is intended to work with basic `extern "C"` linkage,
+while `FUNCTION_INFO_HEADER` requires C++17 or later to use effectively.
+(This can be quite useful for advanced usages, such as producing automatic
+call wrappers, etc.) Examples of usage can be found in the generated file.
 
 Lastly, each of the `extra-output` arguments directly correspond to an extra
 output (via `-e`) from the generator. The value `OUTVAR` names a variable into

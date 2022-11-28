@@ -1,15 +1,18 @@
-import addconstantcpp, addconstantpy
-import addconstantcpp_with_offset_42, addconstantpy_with_offset_42
-import addconstantcpp_with_negative_offset, addconstantpy_with_negative_offset
+from addconstantcpp import addconstantcpp
+from addconstantpy import addconstantpy
+from addconstantcpp_with_offset_42 import addconstantcpp_with_offset_42
+from addconstantpy_with_offset_42 import addconstantpy_with_offset_42
+from addconstantcpp_with_negative_offset import addconstantcpp_with_negative_offset
+from addconstantpy_with_negative_offset import addconstantpy_with_negative_offset
 import numpy
 
 TESTS_AND_OFFSETS = [
-    (addconstantcpp.addconstantcpp, 0),
-    (addconstantpy.addconstantpy, 0),
-    (addconstantcpp_with_offset_42.addconstantcpp_with_offset_42, 42),
-    (addconstantpy_with_offset_42.addconstantpy_with_offset_42, 42),
-    (addconstantcpp_with_negative_offset.addconstantcpp_with_negative_offset, -1),
-    (addconstantpy_with_negative_offset.addconstantpy_with_negative_offset, -1),
+    (addconstantcpp, 0),
+    (addconstantpy, 0),
+    (addconstantcpp_with_offset_42, 42),
+    (addconstantpy_with_offset_42, 42),
+    (addconstantcpp_with_negative_offset, -1),
+    (addconstantpy_with_negative_offset, -1),
 ]
 
 ERROR_THRESHOLD = 0.0001
