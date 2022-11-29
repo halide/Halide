@@ -1677,6 +1677,7 @@ void CodeGen_LLVM::visit(const EQ *op) {
         codegen(EQ::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
+    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
@@ -1697,6 +1698,7 @@ void CodeGen_LLVM::visit(const NE *op) {
         codegen(NE::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
+    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
@@ -1717,6 +1719,7 @@ void CodeGen_LLVM::visit(const LT *op) {
         codegen(LT::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
+    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
@@ -1741,6 +1744,7 @@ void CodeGen_LLVM::visit(const LE *op) {
         codegen(LE::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
+    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
@@ -1765,6 +1769,7 @@ void CodeGen_LLVM::visit(const GT *op) {
         codegen(GT::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
+    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
@@ -1790,6 +1795,7 @@ void CodeGen_LLVM::visit(const GE *op) {
         codegen(GE::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
+    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
