@@ -486,6 +486,9 @@ CodeGen_C::~CodeGen_C() {
     }
 }
 
+void CodeGen_C::add_platform_headers() {
+}
+
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
     if (!vector_types.empty()) {
         // MSVC has a limit of ~16k for string literals, so split
@@ -1846,6 +1849,8 @@ void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
 }
 
 void CodeGen_C::compile(const Module &input) {
+    add_platform_headers();
+
     TypeInfoGatherer type_info;
     for (const auto &f : input.functions()) {
         if (f.body.defined()) {

@@ -31,6 +31,7 @@ protected:
     std::string print_type(Type t, CodeGen_C::AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
     std::string print_xtensa_call(const Call *op);
 
+    void add_platform_headers() override;
     void add_vector_typedefs(const std::set<Type> &vector_types) override;
 
     void visit(const Mul *) override;
