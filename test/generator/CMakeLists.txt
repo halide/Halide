@@ -332,9 +332,12 @@ set(metadata_tester_params
     array_outputs8.size=2
     array_outputs9.size=2)
 
+# Note that metadata_tester (but not metadata_tester_ucon) is built as "multitarget" to verify that
+# the metadata names are correctly emitted.
 halide_define_aot_test(metadata_tester
                        EXTRA_LIBS metadata_tester_ucon
                        PARAMS ${metadata_tester_params}
+                       GEN_TARGET cmake-no_bounds_query cmake
                        EXTRA_OUTPUTS FUNCTION_INFO_HEADER)
 add_halide_library(metadata_tester_ucon
                    FROM metadata_tester.generator
