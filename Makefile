@@ -1523,7 +1523,7 @@ METADATA_TESTER_GENERATOR_ARGS=\
 # the metadata names are correctly emitted.
 $(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g metadata_tester -f metadata_tester -e static_library,c_header,function_info_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime,$(TARGET)-no_runtime-no_bounds_query $(METADATA_TESTER_GENERATOR_ARGS)
+	$(CURDIR)/$< -g metadata_tester -f metadata_tester -e static_library,c_header,registration,function_info_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime,$(TARGET)-no_runtime-no_bounds_query $(METADATA_TESTER_GENERATOR_ARGS)
 
 # c_source output doesn't work properly with multitarget output
 $(FILTERS_DIR)/metadata_tester.halide_generated.cpp: $(BIN_DIR)/metadata_tester.generator
