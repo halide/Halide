@@ -115,8 +115,8 @@ protected:
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
     virtual std::string print_name(const std::string &);
 
-    /** Add platform speciefic headers. Needed for Xtensa */
-    virtual void add_platform_headers();
+    /** Add platform specific prologue */
+    virtual void add_platform_prologue();
 
     /** Add typedefs for vector types. Not needed for OpenCL, might
      * use different syntax for other C-like languages. */

@@ -63,7 +63,7 @@ public:
     bool uses_dma = false;
 };
 
-void CodeGen_Xtensa::add_platform_headers() {
+void CodeGen_Xtensa::add_platform_prologue() {
     const char *headers = R"INLINE_CODE(
 
 #define XCHAL_VISION_SIMD8 (XCHAL_VISION_SIMD16 * 2)
