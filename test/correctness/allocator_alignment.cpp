@@ -94,11 +94,11 @@ void run_test(Target t) {
 int main(int argc, char **argv) {
     const Target t = get_jit_target_from_environment();
 
-    printf("Testing default allocator... ");
-    run_test(t.without_feature(Target::AlignedAlloc));
+    printf("Testing with malloc()... ");
+    run_test(t.with_feature(Target::NoAlignedAlloc));
 
-    printf("Testing aligned allocator... ");
-    run_test(t.with_feature(Target::AlignedAlloc));
+    printf("Testing with aligned_alloc()... ");
+    run_test(t.without_feature(Target::NoAlignedAlloc));
 
     printf("Success!\n");
 }

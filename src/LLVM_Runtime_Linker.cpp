@@ -818,7 +818,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
     bool bits_64 = (t.bits == 64);
     bool debug = t.has_feature(Target::Debug);
     bool tsan = t.has_feature(Target::TSAN);
-    bool aligned_alloc = t.has_feature(Target::AlignedAlloc);
+    bool aligned_alloc = !t.has_feature(Target::NoAlignedAlloc);
 
     vector<std::unique_ptr<llvm::Module>> modules;
 
