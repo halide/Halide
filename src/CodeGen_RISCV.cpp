@@ -228,6 +228,9 @@ void CodeGen_RISCV::init_module() {
                     if ((intrin.ret_type.relative_scale * bit_width_scale * intrin.ret_type.type.bits()) > 64) {
                         break;
                     }
+                    if (intrin.riscv_name[0] == 'v' && !ret_type.is_vector()) {
+                        break;
+                    }
 
                     for (const auto &arg_type : intrin.arg_types) {
                         if (arg_type.type_pattern == IntrinsicArgPattern::Undefined) {
