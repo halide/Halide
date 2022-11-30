@@ -1677,16 +1677,15 @@ void CodeGen_LLVM::visit(const EQ *op) {
         codegen(EQ::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
-    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "oeq")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "oeq")) {
             value = builder->CreateFCmpOEQ(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "eq")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "eq")) {
             value = builder->CreateICmpEQ(a, b);
         }
     }
@@ -1698,16 +1697,15 @@ void CodeGen_LLVM::visit(const NE *op) {
         codegen(NE::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
-    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "one")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "one")) {
             value = builder->CreateFCmpONE(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "ne")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "ne")) {
             value = builder->CreateICmpNE(a, b);
         }
     }
@@ -1719,20 +1717,19 @@ void CodeGen_LLVM::visit(const LT *op) {
         codegen(LT::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
-    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "olt")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "olt")) {
             value = builder->CreateFCmpOLT(a, b);
         }
     } else if (t.is_int()) {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "slt")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "slt")) {
             value = builder->CreateICmpSLT(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "ult")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "ult")) {
             value = builder->CreateICmpULT(a, b);
         }
     }
@@ -1744,20 +1741,19 @@ void CodeGen_LLVM::visit(const LE *op) {
         codegen(LE::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
-    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "ole")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "ole")) {
             value = builder->CreateFCmpOLE(a, b);
         }
     } else if (t.is_int()) {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "sle")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "sle")) {
             value = builder->CreateICmpSLE(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "ule")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "ule")) {
             value = builder->CreateICmpULE(a, b);
         }
     }
@@ -1769,21 +1765,20 @@ void CodeGen_LLVM::visit(const GT *op) {
         codegen(GT::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
-    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
 
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "ogt")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "ogt")) {
             value = builder->CreateFCmpOGT(a, b);
         }
     } else if (t.is_int()) {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "sgt")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "sgt")) {
             value = builder->CreateICmpSGT(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "ugt")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "ugt")) {
             value = builder->CreateICmpUGT(a, b);
         }
     }
@@ -1795,20 +1790,19 @@ void CodeGen_LLVM::visit(const GE *op) {
         codegen(GE::make(cast(t, op->a), cast(t, op->b)));
         return;
     }
-    t = UInt(1, t.lanes());
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "oge")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "oge")) {
             value = builder->CreateFCmpOGE(a, b);
         }
     } else if (t.is_int()) {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "sge")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "sge")) {
             value = builder->CreateICmpSGE(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "uge")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", UInt(1, t.lanes()), AllEnabledMask(), a, b, "uge")) {
             value = builder->CreateICmpUGE(a, b);
         }
     }
