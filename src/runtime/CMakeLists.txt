@@ -1,6 +1,7 @@
 # Keep these lists in alphabetical order.
 set(RUNTIME_CPP
     aarch64_cpu_features
+    aligned_alloc_allocator
     alignment_128
     alignment_32
     alignment_64
@@ -81,8 +82,8 @@ set(RUNTIME_CPP
     wasm_cpu_features
     windows_clock
     windows_cuda
-    windows_d3d12compute_x86
     windows_d3d12compute_arm
+    windows_d3d12compute_x86
     windows_get_symbol
     windows_io
     windows_opencl

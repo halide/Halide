@@ -77,6 +77,7 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 DECLARE_CPP_INITMOD(alignment_128)
 DECLARE_CPP_INITMOD(alignment_32)
 DECLARE_CPP_INITMOD(alignment_64)
+DECLARE_CPP_INITMOD(aligned_alloc_allocator)
 DECLARE_CPP_INITMOD(allocation_cache)
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
@@ -817,6 +818,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
     bool bits_64 = (t.bits == 64);
     bool debug = t.has_feature(Target::Debug);
     bool tsan = t.has_feature(Target::TSAN);
+    bool aligned_alloc = t.has_feature(Target::AlignedAlloc);
 
     vector<std::unique_ptr<llvm::Module>> modules;
 
@@ -824,7 +826,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
             // OS-dependent modules
             if (t.os == Target::Linux) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                if (aligned_alloc) {
+                    modules.push_back(get_initmod_aligned_alloc_allocator(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 if (t.arch == Target::X86) {
@@ -842,7 +848,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::WebAssemblyRuntime) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                if (aligned_alloc) {
+                    modules.push_back(get_initmod_aligned_alloc_allocator(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
@@ -857,7 +867,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_fake_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                if (aligned_alloc) {
+                    modules.push_back(get_initmod_aligned_alloc_allocator(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
@@ -872,7 +886,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
             } else if (t.os == Target::Android) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                if (aligned_alloc) {
+                    modules.push_back(get_initmod_aligned_alloc_allocator(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 if (t.arch == Target::ARM) {
@@ -890,7 +908,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                if (aligned_alloc) {
+                    modules.push_back(get_initmod_aligned_alloc_allocator(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_windows_clock(c, bits_64, debug));
@@ -903,7 +925,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_windows_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::IOS) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                if (aligned_alloc) {
+                    modules.push_back(get_initmod_aligned_alloc_allocator(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
@@ -916,6 +942,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
             } else if (t.os == Target::QuRT) {
+                // QuRT ignores aligned_alloc and always uses its own allocator
                 modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_qurt_yield(c, bits_64, debug));
                 if (tsan) {
@@ -934,7 +961,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::Fuchsia) {
-                modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                if (aligned_alloc) {
+                    modules.push_back(get_initmod_aligned_alloc_allocator(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_fuchsia_clock(c, bits_64, debug));

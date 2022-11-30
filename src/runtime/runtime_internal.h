@@ -201,6 +201,11 @@ void halide_thread_yield();
 
 }  // extern "C"
 
+template<typename T>
+ALWAYS_INLINE T align_up(T p, size_t alignment) {
+    return (p + alignment - 1) & ~(alignment - 1);
+}
+
 namespace {
 template<typename T>
 ALWAYS_INLINE void swap(T &a, T &b) {

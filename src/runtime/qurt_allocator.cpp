@@ -12,10 +12,10 @@ namespace Internal {
 
 WEAK void *aligned_malloc(size_t alignment, size_t size) {
     // We also need to align the size of the buffer.
-    size = (size + alignment - 1) & ~(alignment - 1);
+    size = align_up(size, alignment);
 
     // Allocate enough space for aligning the pointer we return.
-    void *orig = malloc(size + alignment);
+    void *orig = malloc(size + alignment * 2);
     if (orig == nullptr) {
         // Will result in a failed assertion and a call to halide_error
         return nullptr;
