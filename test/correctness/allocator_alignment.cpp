@@ -32,7 +32,7 @@ void run_test(Target t) {
 
             out_(x, y) = u32_sat(copy(x, y) + offset_);
 
-            copy.compute_root().vectorize(x, natural_vector_size<uint32_t>());
+            copy.compute_root().store_in(MemoryType::Heap).vectorize(x, natural_vector_size<uint32_t>());
             out_.vectorize(x, natural_vector_size<uint32_t>());
         }
     };
