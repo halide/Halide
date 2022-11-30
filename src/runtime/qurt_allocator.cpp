@@ -19,8 +19,8 @@ WEAK void *aligned_malloc(size_t alignment, size_t user_size) {
     // We can save a bit of space by special-casing allocations < alignment
     // in size, which we can always fit entirely into 2*alignment.
     const size_t requested_size = (aligned_size <= alignment) ?
-                                  (alignment * 2) :
-                                  (aligned_size + sizeof(void *) + alignment - 1);
+                                      (alignment * 2) :
+                                      (aligned_size + sizeof(void *) + alignment - 1);
 
     // malloc() and friends must return a pointer aligned to at least
     // alignof(std::max_align_t); we can't reasonably check that in
