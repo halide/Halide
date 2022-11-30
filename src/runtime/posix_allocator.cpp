@@ -11,7 +11,26 @@ extern void free(void *);
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
     // Allocate enough space for aligning the pointer we return.
     const size_t alignment = halide_malloc_alignment();
-    void *orig = malloc(x + alignment);
+
+    // All bets are off if alignment is smaller than a pointer.
+    halide_debug_assert(user_context, alignment >= sizeof(void *));
+
+    // Always round allocations up to alignment size,
+    // so that all allocators follow the behavior of aligned_alloc() and
+    // return aligned pointer *and* aligned length.
+    const size_t aligned_size = align_up(user_size, alignment);
+
+    // We can save a bit of space by special-casing allocations < alignment
+    // in size, which we can always fit entirely into 2*alignment.
+    const size_t requested_size = (aligned_size <= alignment) ?
+                                  (alignment * 2) :
+                                  (aligned_size + sizeof(void *) + alignment - 1);
+
+    // malloc() and friends must return a pointer aligned to at least
+    // alignof(std::max_align_t); we can't reasonably check that in
+    // the runtime, but we can realistically assume it's at least
+    // 8-aligned.
+    void *orig = malloc(requested_size);
     if (orig == nullptr) {
         // Will result in a failed assertion and a call to halide_error
         return nullptr;
