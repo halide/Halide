@@ -633,15 +633,6 @@ HALIDE_ALWAYS_INLINE void store_variable<native_vector_u8, uint8_t, VECTOR_WIDTH
     IVP_SAPOS2NX8U_FP(align, ptr);
 }
 
-template <typename VectorType, typename OffsetType, typename BaseType, int Lanes, bool isTCM>
-HALIDE_ALWAYS_INLINE VectorType gather_load(const void *base, const OffsetType& offset){
-  if (isTCM) {
-    return gather_load_default<VectorType, OffsetType, BaseType, Lanes>(base, offset);
-  } else {
-    return gather_load_tcm<VectorType, OffsetType, BaseType, Lanes>(base, offset);
-  }
-}
-
 template <typename VectorType, typename OffsetType, typename BaseType, int Lanes>
 HALIDE_ALWAYS_INLINE void store_scatter(const VectorType& a, void *base, const OffsetType& offset) {
     BaseType __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[Lanes];
@@ -2360,8 +2351,8 @@ HALIDE_ALWAYS_INLINE native_vector_f32_x2 halide_xtensa_concat_from_native(const
     return native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a, b);
 }
 
-template <typename VectorType, typename OffsetType, typename BaseType, int Lanes>
-HALIDE_ALWAYS_INLINE VectorType gather_load_default(const void *base, const OffsetType& offset) {
+template <typename VectorType, typename OffsetType, typename BaseType, int Lanes, bool IsTCM>
+HALIDE_ALWAYS_INLINE VectorType gather_load(const void *base, const OffsetType& offset) {
     BaseType __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[Lanes];
     int offsets[Lanes];
     store<OffsetType, int32_t, Lanes>(offset, &offsets[0], 0);
@@ -2372,13 +2363,8 @@ HALIDE_ALWAYS_INLINE VectorType gather_load_default(const void *base, const Offs
     return *((VectorType *)tmp);
 }
 
-template <typename VectorType, typename OffsetType, typename BaseType, int Lanes>
-HALIDE_ALWAYS_INLINE VectorType gather_load_tcm(const void *base, const OffsetType& offset) {
-    return gather_load_default<VectorType, OffsetType, BaseType, Lanes>(base, offset);
-}
-
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i8 gather_load_tcm<native_vector_i8, native_vector_i32_x4, int8_t, VECTOR_WIDTH_U8>(const void *base, const native_vector_i32_x4& offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i8 gather_load<native_vector_i8, native_vector_i32_x4, int8_t, VECTOR_WIDTH_U8, true>(const void *base, const native_vector_i32_x4& offset) {
   auto addresses1 = native_vector_i32_x2(native_vector_i32_x2::from_native_vector, offset.native_vector[0], offset.native_vector[1]);
   auto output1 = IVP_GATHERDNX8S(
     IVP_GATHERANX8S(
@@ -2400,7 +2386,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i8 gather_load_tcm<native
 }
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u8 gather_load_tcm<native_vector_u8, native_vector_i32_x4, uint8_t, VECTOR_WIDTH_U8>(const void *base, const native_vector_i32_x4& offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u8 gather_load<native_vector_u8, native_vector_i32_x4, uint8_t, VECTOR_WIDTH_U8, true>(const void *base, const native_vector_i32_x4& offset) {
   auto addresses1 = native_vector_i32_x2(native_vector_i32_x2::from_native_vector, offset.native_vector[0], offset.native_vector[1]);
   auto output1 = IVP_GATHERDNX8U(
     IVP_GATHERANX8U(
@@ -2422,7 +2408,8 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u8 gather_load_tcm<native
 }
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i16 gather_load_tcm<native_vector_i16, native_vector_i32_x2, int16_t, VECTOR_WIDTH_U16>(const void *base, const native_vector_i32_x2& offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i16 gather_load<native_vector_i16, native_vector_i32_x2, int16_t, VECTOR_WIDTH_U16, true>(const void *base, const native_vector_i32_x2& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
   return IVP_GATHERDNX16(
     IVP_GATHERANX16(
       (const int16_t*) base,
@@ -2432,7 +2419,8 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i16 gather_load_tcm<nativ
 }
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u16 gather_load_tcm<native_vector_u16, native_vector_i32_x2, uint16_t, VECTOR_WIDTH_U16>(const void *base, const native_vector_i32_x2& offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u16 gather_load<native_vector_u16, native_vector_i32_x2, uint16_t, VECTOR_WIDTH_U16, true>(const void *base, const native_vector_i32_x2& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
   return IVP_GATHERDNX16U(
     IVP_GATHERANX16U(
       (const uint16_t*) base,
@@ -2442,7 +2430,8 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u16 gather_load_tcm<nativ
 }
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i32 gather_load_tcm<native_vector_i32, native_vector_i32, int32_t, VECTOR_WIDTH_I32>(const void *base, const native_vector_i32& offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i32 gather_load<native_vector_i32, native_vector_i32, int32_t, VECTOR_WIDTH_I32, true>(const void *base, const native_vector_i32& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
   return IVP_GATHERDN_2X32(
     IVP_GATHERAN_2X32(
       (const int32_t*) base,
@@ -2452,7 +2441,8 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i32 gather_load_tcm<nativ
 }
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u32 gather_load_tcm<native_vector_u32, native_vector_i32, uint32_t, VECTOR_WIDTH_I32>(const void *base, const native_vector_i32& offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u32 gather_load<native_vector_u32, native_vector_i32, uint32_t, VECTOR_WIDTH_I32, true>(const void *base, const native_vector_i32& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
   return IVP_GATHERDN_2X32U(
     IVP_GATHERAN_2X32U(
       (const uint32_t*) base,
@@ -2462,7 +2452,8 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u32 gather_load_tcm<nativ
 }
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 gather_load_tcm<native_vector_f32, native_vector_i32, float, VECTOR_WIDTH_F32>(const void *base, const native_vector_i32& offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 gather_load<native_vector_f32, native_vector_i32, float, VECTOR_WIDTH_F32, true>(const void *base, const native_vector_i32& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
   return IVP_GATHERDN_2XF32(
     IVP_GATHERAN_2XF32(
       (const float*) base,
