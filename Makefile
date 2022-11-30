@@ -1518,10 +1518,17 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	array_outputs8.size=2 \
 	array_outputs9.size=2
 
-# metadata_tester is built with and without user-context
+# metadata_tester is built with and without user-context.
+# Also note that metadata_tester (but not metadata_tester_ucon) is built as "multitarget" to verify that
+# the metadata names are correctly emitted.
 $(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g metadata_tester -f metadata_tester $(GEN_AOT_OUTPUTS),function_info_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
+	$(CURDIR)/$< -g metadata_tester -f metadata_tester -e static_library,c_header,registration,function_info_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime,$(TARGET)-no_runtime-no_bounds_query $(METADATA_TESTER_GENERATOR_ARGS)
+
+# c_source output doesn't work properly with multitarget output
+$(FILTERS_DIR)/metadata_tester.halide_generated.cpp: $(BIN_DIR)/metadata_tester.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g metadata_tester -f metadata_tester -e c_source -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
 
 $(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(@D)

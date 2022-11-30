@@ -139,7 +139,7 @@ class Module {
     Internal::IntrusivePtr<Internal::ModuleContents> contents;
 
 public:
-    Module(const std::string &name, const Target &target);
+    Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map = {});
 
     /** Get the target this module has been lowered for. */
     const Target &target() const;
