@@ -992,12 +992,12 @@ private:
                               {mutate(op->vectors[0]), op->slice_begin() / 4}, Call::PureExtern);
         } else if (op->type.is_int_or_uint() && (op->type.bits() == 8) && (op->type.lanes() == 64)) {
             if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 192)) {
-                bool is_extract_of_0_3 = true;
+                bool is_extract_0_of_3 = true;
                 for (int ix = 0; ix < (int)op->indices.size(); ix++) {
-                    is_extract_of_0_3 = is_extract_of_0_3 && (op->indices[ix] == 3 * ix);
+                    is_extract_0_of_3 = is_extract_0_of_3 && (op->indices[ix] == 3 * ix);
                 }
 
-                if (is_extract_of_0_3) {
+                if (is_extract_0_of_3) {
                     Expr op_vector = mutate(op->vectors[0]);
                     vector<Expr> args = {op_vector};
                     const Shuffle *maybe_shuffle = op_vector.as<Shuffle>();
