@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -37,6 +38,20 @@
 
 #ifndef HALIDE_RUNTIME_BUFFER_CHECK_INDICES
 #define HALIDE_RUNTIME_BUFFER_CHECK_INDICES 0
+#endif
+
+// Unfortunately, not all C++17 runtimes support aligned_alloc
+// (it may depends on OS/SDK version); this is provided as an opt-out
+// if you are compiling on a platform that doesn't provide a (good)
+// implementation.
+#ifndef HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
+#ifdef _MSC_VER
+// MSVC doesn't implement aligned_alloc(), even in C++17 mode, and
+// has stated they probably never will, so, always default it off here.
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+#else
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 1
+#endif
 #endif
 
 namespace Halide {
@@ -803,6 +818,35 @@ public:
      * owned memory. */
     void allocate(void *(*allocate_fn)(size_t) = nullptr,
                   void (*deallocate_fn)(void *) = nullptr) {
+        // Drop any existing allocation
+        deallocate();
+
+        // Conservatively align images to 128 bytes. This is enough
+        // alignment for all the platforms we might use. Also ensure that the allocation
+        // is such that the logical size is an integral multiple of 128 bytes (or a bit more).
+        constexpr size_t alignment = 128;
+
+        const auto align_up = [=](size_t value) -> size_t {
+            return (value + alignment - 1) & ~(alignment - 1);
+        };
+
+        size_t size = align_up(size_in_bytes());
+
+#if HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
+        // Only use aligned_alloc() if no custom allocators are specified.
+        if (!allocate_fn && !deallocate_fn) {
+            // As a practical matter, sizeof(AllocationHeader) is going to be no more than 16 bytes
+            // on any supported platform, so we will just overallocate by 'alignment'
+            // so that the user storage also starts at an aligned point. This is a bit
+            // wasteful, but probably not a big deal.
+            static_assert(sizeof(AllocationHeader) <= alignment);
+            void *alloc_storage = std::aligned_alloc(alignment, size + alignment);
+            assert((uintptr_t)alloc_storage == align_up((uintptr_t)alloc_storage));
+            alloc = new (alloc_storage) AllocationHeader(free);
+            buf.host = (uint8_t *)((uintptr_t)alloc_storage + alignment);
+            return;
+        }
+#endif
         if (!allocate_fn) {
             allocate_fn = malloc;
         }
@@ -810,18 +854,26 @@ public:
             deallocate_fn = free;
         }
 
-        // Drop any existing allocation
-        deallocate();
+        static_assert(sizeof(AllocationHeader) <= alignment);
 
-        // Conservatively align images to 128 bytes. This is enough
-        // alignment for all the platforms we might use.
-        size_t size = size_in_bytes();
-        const size_t alignment = 128;
-        size = (size + alignment - 1) & ~(alignment - 1);
-        void *alloc_storage = allocate_fn(size + sizeof(AllocationHeader) + alignment - 1);
+        // malloc() and friends must return a pointer aligned to at least alignof(std::max_align_t);
+        // make sure this is OK for AllocationHeader, since it always goes at the start
+        static_assert(alignof(AllocationHeader) <= alignof(std::max_align_t));
+
+        // If the size requested is smaller than alignment,
+        // we can save a bit of space by recognizing that AllocationHeader + size
+        // will always fit into (alignment*2) space, with room for the user pointer
+        // to be properly aligned. (This generally means that for allocations in the range 4-128
+        // we end up calling malloc(256) rather than malloc(271)), at least on 64-bit systems,
+        // which is slightly kinder to the malloc implementation. (Generally speaking,
+        // allocating buffers with those small sizes should be rare, but still...)
+        const size_t requested_size = (size <= alignment) ?
+                                          (alignment * 2) :
+                                          (size + sizeof(AllocationHeader) + alignment - 1);
+        void *alloc_storage = allocate_fn(requested_size);
         alloc = new (alloc_storage) AllocationHeader(deallocate_fn);
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
-        buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
+        buf.host = (uint8_t *)align_up((uintptr_t)unaligned_ptr);
     }
 
     /** Drop reference to any owned host or device memory, possibly
