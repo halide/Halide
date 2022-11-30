@@ -10,18 +10,30 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-WEAK void *aligned_malloc(size_t alignment, size_t size) {
-    // We also need to align the size of the buffer.
-    size = align_up(size, alignment);
+WEAK void *aligned_malloc(size_t alignment, size_t user_size) {
+    // Always round allocations up to alignment size,
+    // so that all allocators follow the behavior of aligned_alloc() and
+    // return aligned pointer *and* aligned length.
+    const size_t aligned_size = align_up(user_size, alignment);
 
-    // Allocate enough space for aligning the pointer we return.
-    void *orig = malloc(size + alignment);
+    // We can save a bit of space by special-casing allocations < alignment
+    // in size, which we can always fit entirely into 2*alignment.
+    const size_t requested_size = (aligned_size <= alignment) ?
+                                  (alignment * 2) :
+                                  (aligned_size + sizeof(void *) + alignment - 1);
+
+    // malloc() and friends must return a pointer aligned to at least
+    // alignof(std::max_align_t); we can't reasonably check that in
+    // the runtime, but we can realistically assume it's at least
+    // 8-aligned.
+    void *orig = malloc(requested_size);
     if (orig == nullptr) {
         // Will result in a failed assertion and a call to halide_error
         return nullptr;
     }
+
     // We want to store the original pointer prior to the pointer we return.
-    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void *) - 1) & ~(alignment - 1));
+    void *ptr = (void *)align_up((uintptr_t)orig + sizeof(void *), alignment);
     ((void **)ptr)[-1] = orig;
     return ptr;
 }

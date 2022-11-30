@@ -8,7 +8,7 @@ extern "C" {
 extern void *malloc(size_t);
 extern void free(void *);
 
-WEAK void *halide_default_malloc(void *user_context, size_t x) {
+WEAK void *halide_default_malloc(void *user_context, size_t user_size) {
     // Allocate enough space for aligning the pointer we return.
     const size_t alignment = halide_malloc_alignment();
 
