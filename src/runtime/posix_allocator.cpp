@@ -24,7 +24,7 @@ WEAK void *halide_default_malloc(void *user_context, size_t user_size) {
     // in size, which we can always fit entirely into 2*alignment.
     const size_t requested_size = (aligned_size <= alignment) ?
                                       (alignment * 2) :
-                                      (aligned_size + alignment - 1);
+                                      (aligned_size + alignment);
 
     // malloc() and friends must return a pointer aligned to at least
     // alignof(std::max_align_t); we can't reasonably check that in
