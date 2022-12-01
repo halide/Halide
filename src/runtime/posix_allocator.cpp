@@ -19,12 +19,7 @@ WEAK void *halide_default_malloc(void *user_context, size_t user_size) {
     // so that all allocators follow the behavior of aligned_alloc() and
     // return aligned pointer *and* aligned length.
     const size_t aligned_size = align_up(user_size, alignment);
-
-    // We can save a bit of space by special-casing allocations < alignment
-    // in size, which we can always fit entirely into 2*alignment.
-    const size_t requested_size = (aligned_size <= alignment) ?
-                                      (alignment * 2) :
-                                      (aligned_size + alignment);
+    const size_t requested_size = (aligned_size + alignment);
 
     // malloc() and friends must return a pointer aligned to at least
     // alignof(std::max_align_t); we can't reasonably check that in
