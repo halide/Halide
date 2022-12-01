@@ -870,7 +870,7 @@ public:
         // allocating buffers with those small sizes should be rare, but still...)
         const size_t requested_size = (size <= alignment) ?
                                           (alignment * 2) :
-                                          (size + sizeof(AllocationHeader) + alignment - 1);
+                                          (size + sizeof(AllocationHeader) + alignment);
         void *alloc_storage = allocate_fn(requested_size);
         alloc = new (alloc_storage) AllocationHeader(deallocate_fn);
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
