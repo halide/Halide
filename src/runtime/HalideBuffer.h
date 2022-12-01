@@ -846,6 +846,7 @@ public:
             buf.host = (uint8_t *)((uintptr_t)alloc_storage + alignment);
             return;
         }
+        // else fall thru
 #endif
         if (!allocate_fn) {
             allocate_fn = malloc;
