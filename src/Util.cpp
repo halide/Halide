@@ -661,9 +661,19 @@ size_t get_compiler_stack_size() {
 
 namespace Internal {
 
-#ifdef HALIDE_INTERNAL_USING_ASAN
-// nothing
+#if defined(HALIDE_INTERNAL_USING_ASAN) || defined(__ANDROID__)
+// If we are compiling under ASAN,  we will get a zillion warnings about
+// ASAN not supporting makecontext/swapcontext and the possibility of
+// false positives.
+//
+// If we are building for Android, well, it apparently doesn't provide
+// makecontext() / swapcontext(), despite being posixy
+#define MAKECONTEXT_OK 0
 #else
+#define MAKECONTEXT_OK 1
+#endif
+
+#if MAKECONTEXT_OK
 namespace {
 // We can't reliably pass arguments through makecontext, because
 // the calling convention involves an invalid function pointer
@@ -722,10 +732,7 @@ void run_with_large_stack(const std::function<void()> &action) {
 #else
     // On posixy systems we have makecontext / swapcontext
 
-#ifdef HALIDE_INTERNAL_USING_ASAN
-    // ... unless we are compiling under ASAN, in which case we
-    // will get a zillion warnings about ASAN not supporting makecontext/swapcontext
-    // and the possibility of false positives. Just skip the extra stack space, I guess?
+#if !MAKECONTEXT_OK
     action();
     return;
 #else
