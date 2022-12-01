@@ -830,7 +830,7 @@ public:
             return (value + alignment - 1) & ~(alignment - 1);
         };
 
-        size_t size = align_up(size_in_bytes());
+        size_t size = size_in_bytes();
 
 #if HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
         // Only use aligned_alloc() if no custom allocators are specified.
@@ -840,7 +840,7 @@ public:
             // so that the user storage also starts at an aligned point. This is a bit
             // wasteful, but probably not a big deal.
             static_assert(sizeof(AllocationHeader) <= alignment);
-            void *alloc_storage = std::aligned_alloc(alignment, size + alignment);
+            void *alloc_storage = std::aligned_alloc(alignment, align_up(size) + alignment);
             assert((uintptr_t)alloc_storage == align_up((uintptr_t)alloc_storage));
             alloc = new (alloc_storage) AllocationHeader(free);
             buf.host = (uint8_t *)((uintptr_t)alloc_storage + alignment);
@@ -868,9 +868,7 @@ public:
         // we end up calling malloc(256) rather than malloc(271)), at least on 64-bit systems,
         // which is slightly kinder to the malloc implementation. (Generally speaking,
         // allocating buffers with those small sizes should be rare, but still...)
-        const size_t requested_size = (size <= alignment) ?
-                                          (alignment * 2) :
-                                          (size + sizeof(AllocationHeader) + alignment);
+        const size_t requested_size = align_up(size + sizeof(AllocationHeader) + alignment - sizeof(std::max_align_t));
         void *alloc_storage = allocate_fn(requested_size);
         alloc = new (alloc_storage) AllocationHeader(deallocate_fn);
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
