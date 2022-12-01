@@ -861,13 +861,6 @@ public:
         // make sure this is OK for AllocationHeader, since it always goes at the start
         static_assert(alignof(AllocationHeader) <= alignof(std::max_align_t));
 
-        // If the size requested is smaller than alignment,
-        // we can save a bit of space by recognizing that AllocationHeader + size
-        // will always fit into (alignment*2) space, with room for the user pointer
-        // to be properly aligned. (This generally means that for allocations in the range 4-128
-        // we end up calling malloc(256) rather than malloc(271)), at least on 64-bit systems,
-        // which is slightly kinder to the malloc implementation. (Generally speaking,
-        // allocating buffers with those small sizes should be rare, but still...)
         const size_t requested_size = align_up(size + sizeof(AllocationHeader) + alignment - sizeof(std::max_align_t));
         void *alloc_storage = allocate_fn(requested_size);
         alloc = new (alloc_storage) AllocationHeader(deallocate_fn);
