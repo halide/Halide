@@ -672,6 +672,7 @@ gengen
      bugs and/or degenerate cases don't stall build systems. Defaults to 900
      (=15 minutes). Specify 0 to allow ~infinite time.
 
+ -v  If nonzero, log the path to all generated files to stdout.
 )INLINE_CODE";
 
     std::map<std::string, std::string> flags_info = {
@@ -683,6 +684,7 @@ gengen
         {"-o", ""},
         {"-p", ""},
         {"-r", ""},
+        {"-v", "0"},
         {"-t", "900"},  // 15 minutes
     };
 
@@ -727,6 +729,10 @@ gengen
 
     const auto &d_val = flags_info["-d"];
     user_assert(d_val == "1" || d_val == "0") << "-d must be 0 or 1\n"
+                                              << kUsage;
+
+    const auto &v_val = flags_info["-v"];
+    user_assert(v_val == "1" || v_val == "0") << "-v must be 0 or 1\n"
                                               << kUsage;
 
     const std::vector<std::string> generator_names = generator_factory_provider.enumerate();
@@ -838,6 +844,8 @@ gengen
     args.build_mode = (d_val == "1") ? ExecuteGeneratorArgs::Gradient : ExecuteGeneratorArgs::Default;
     args.create_generator = create_generator;
     // args.generator_params is already set
+    // If true, log the path of all output files to stdout.
+    args.log_outputs = (v_val == "1");
 
     // Allow quick-n-dirty use of compiler logging via HL_DEBUG_COMPILER_LOGGER env var
     const bool do_compiler_logging = args.output_types.count(OutputFileType::compiler_log) ||
@@ -1108,6 +1116,11 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                            gen->build_module(function_name);
             };
             compile_multitarget(args.function_name, output_files, args.targets, args.suffixes, module_factory, args.compiler_logger_factory);
+            if (args.log_outputs) {
+                for (const auto &o : output_files) {
+                    std::cout << "Generated file: " << o.second << "\n";
+                }
+            }
         }
     }
 }

@@ -3934,6 +3934,9 @@ struct ExecuteGeneratorArgs {
 
     // Compiler Logger to use, for diagnostic work. If null, don't do any logging.
     CompilerLoggerFactory compiler_logger_factory = nullptr;
+
+    // If true, log the path of all output files to stdout.
+    bool log_outputs = false;
 };
 
 /**

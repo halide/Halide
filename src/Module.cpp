@@ -359,10 +359,11 @@ LoweredFunc::LoweredFunc(const std::string &name,
 
 using namespace Halide::Internal;
 
-Module::Module(const std::string &name, const Target &target)
+Module::Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map)
     : contents(new Internal::ModuleContents) {
     contents->name = name;
     contents->target = target;
+    contents->metadata_name_map = metadata_name_map;
 }
 
 void Module::set_auto_scheduler_results(const AutoSchedulerResults &auto_scheduler_results) {
@@ -808,6 +809,7 @@ void compile_multitarget(const std::string &fn_name,
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
+    MetadataNameMap metadata_name_map;
 
     for (size_t i = 0; i < targets.size(); ++i) {
         const Target &target = targets[i];
@@ -867,6 +869,9 @@ void compile_multitarget(const std::string &fn_name,
             sub_module.compile(sub_out);
             const auto *r = sub_module.get_auto_scheduler_results();
             auto_scheduler_results.push_back(r ? *r : AutoSchedulerResults());
+            if (target == base_target) {
+                metadata_name_map = sub_module.get_metadata_name_map();
+            }
         }
 
         uint64_t cur_target_features[kFeaturesWordCount] = {0};
@@ -941,7 +946,7 @@ void compile_multitarget(const std::string &fn_name,
                                     .with_feature(Target::NoBoundsQuery)
                                     .without_feature(Target::NoAsserts);
 
-        Module wrapper_module(fn_name, wrapper_target);
+        Module wrapper_module(fn_name, wrapper_target, metadata_name_map);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
         std::string wrapper_path = contains(output_files, OutputFileType::static_library) ?
