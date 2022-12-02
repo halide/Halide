@@ -422,6 +422,7 @@ struct MultipleOfNativeVector {
 using uint1x96_t = MultipleOfNativeVector<uint1x32_t, 3>;
 using uint1x256_t = MultipleOfNativeVector<uint1x64_t, 4>;
 using int8x128_t = MultipleOfNativeVector<int8x64_t, 2>;
+using int8x192_t = MultipleOfNativeVector<int8x64_t, 3>;
 using int8x256_t = MultipleOfNativeVector<int8x64_t, 4>;
 using uint8x128_t = MultipleOfNativeVector<uint8x64_t, 2>;
 using uint8x192_t = MultipleOfNativeVector<uint8x64_t, 3>;
@@ -434,7 +435,9 @@ using int16x128_t = MultipleOfNativeVector<int16x32_t, 4>;
 using uint16x128_t = MultipleOfNativeVector<uint16x32_t, 4>;
 using int24x128_t = MultipleOfNativeVector<int24x64_t, 2>;
 using int32x32_t = MultipleOfNativeVector<int32x16_t, 2>;
+using int32x48_t = MultipleOfNativeVector<int32x16_t, 3>;
 using uint32x32_t = MultipleOfNativeVector<uint32x16_t, 2>;
+using uint32x48_t = MultipleOfNativeVector<uint32x16_t, 3>;
 using int32x64_t = MultipleOfNativeVector<int32x16_t, 4>;
 using uint32x64_t = MultipleOfNativeVector<uint32x16_t, 4>;
 using int32x96_t = MultipleOfNativeVector<int32x16_t, 6>;
@@ -447,6 +450,7 @@ using int32x256_t = MultipleOfNativeVector<int32x16_t, 16>;
 using int48x64_t = MultipleOfNativeVector<int48x32_t, 2>;
 using int64x32_t = MultipleOfNativeVector<int64x16_t, 2>;
 using float32x32_t = MultipleOfNativeVector<float32x16_t, 2>;
+using float32x48_t = MultipleOfNativeVector<float32x16_t, 3>;
 using float32x64_t = MultipleOfNativeVector<float32x16_t, 4>;
 #elif XCHAL_VISION_TYPE == 8
 using uint1x192_t = MultipleOfNativeVector<uint1x64_t, 3>;
@@ -499,6 +503,7 @@ using float32x128_t = MultipleOfNativeVector<float32x32_t, 4>;
 #endif
 
 using native_vector_i8_x2 = MultipleOfNativeVector<native_vector_i8, 2>;
+using native_vector_i8_x3 = MultipleOfNativeVector<native_vector_i8, 3>;
 using native_vector_i8_x4 = MultipleOfNativeVector<native_vector_i8, 4>;
 
 using native_vector_u8_x2 = MultipleOfNativeVector<native_vector_u8, 2>;
@@ -669,18 +674,6 @@ HALIDE_ALWAYS_INLINE void store_variable<native_vector_u8, uint8_t, VECTOR_WIDTH
     xb_vec2Nx8U* __restrict ptr  = (xb_vec2Nx8U*)((uint8_t*)base + offset);
     IVP_SAV2NX8U_XP(a, align, ptr, count);
     IVP_SAPOS2NX8U_FP(align, ptr);
-}
-
-template <typename VectorType, typename OffsetType, typename BaseType, int Lanes>
-HALIDE_ALWAYS_INLINE VectorType gather_load(const void *base, const OffsetType& offset) {
-    BaseType __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[Lanes];
-    int offsets[Lanes];
-    store<OffsetType, int32_t, Lanes>(offset, &offsets[0], 0);
-    for (int i = 0; i < Lanes; i++) {
-        tmp[i] = ((const BaseType*)base)[offsets[i]];
-    }
-
-    return *((VectorType *)tmp);
 }
 
 template <typename VectorType, typename OffsetType, typename BaseType, int Lanes>
@@ -1435,6 +1428,19 @@ HALIDE_ALWAYS_INLINE native_vector_u8 halide_xtensa_extract_0_of_3_u8(const nati
   return halide_xtensa_extract_0_of_3_u8(a.native_vector[0], a.native_vector[1], a.native_vector[2]);
 }
 
+HALIDE_ALWAYS_INLINE native_vector_i8 halide_xtensa_extract_0_of_3_i8(const native_vector_i8& a0, const native_vector_i8& a1, const native_vector_i8& a2) {
+  // TODO(aelphy): there is likely a better way to do it.
+  native_vector_i8 vR, vG, vB, vRG0, vRG1;
+  IVP_DSEL2NX8I(vB, vRG0, a1, a0, IVP_DSELI_8B_DEINTERLEAVE_C3_STEP_0);
+  IVP_DSEL2NX8I_H(vB, vRG1, a2, a1, IVP_DSELI_8B_DEINTERLEAVE_C3_STEP_1);
+  IVP_DSEL2NX8I (vG,vR, vRG1,vRG0, IVP_DSELI_8B_DEINTERLEAVE_1);
+  return vR;
+}
+
+HALIDE_ALWAYS_INLINE native_vector_i8 halide_xtensa_extract_0_of_3_i8(const native_vector_i8_x3& a) {
+  return halide_xtensa_extract_0_of_3_i8(a.native_vector[0], a.native_vector[1], a.native_vector[2]);
+}
+
 HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_deinterleave_even_i16(const native_vector_i16_x2& a) {
   return  IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0);
 }
@@ -1472,11 +1478,89 @@ HALIDE_ALWAYS_INLINE native_vector_u16_x2 halide_xtensa_deinterleave_even_u16(co
       halide_xtensa_deinterleave_even_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[2], a.native_vector[3])));
 }
 
+HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_deinterleave_even_f32(const native_vector_f32_x2& a) {
+  return  IVP_SELN_2XF32I(a.native_vector[1], a.native_vector[0], IVP_SELI_32B_EXTRACT_1_OF_2_OFF_0);
+}
+
+HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_deinterleave_odd_f32(const native_vector_f32_x2& a) {
+  return  IVP_SELN_2XF32I(a.native_vector[1], a.native_vector[0], IVP_SELI_32B_EXTRACT_1_OF_2_OFF_1);
+}
+
+HALIDE_ALWAYS_INLINE native_vector_f32_x2 halide_xtensa_deinterleave_even_f32(const native_vector_f32_x4& a) {
+  return native_vector_f32_x2(
+      native_vector_f32_x2::from_native_vector,
+      halide_xtensa_deinterleave_even_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+      halide_xtensa_deinterleave_even_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[2], a.native_vector[3])));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_f32_x2 halide_xtensa_deinterleave_odd_f32(const native_vector_f32_x4& a) {
+  return native_vector_f32_x2(
+      native_vector_f32_x2::from_native_vector,
+      halide_xtensa_deinterleave_odd_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+      halide_xtensa_deinterleave_odd_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[2], a.native_vector[3])));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_extract_0_of_4_f32(const native_vector_f32_x4& a) {
+  return halide_xtensa_deinterleave_even_f32(
+          native_vector_f32_x2(native_vector_f32_x2::from_native_vector,
+          halide_xtensa_deinterleave_even_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_even_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_extract_1_of_4_f32(const native_vector_f32_x4& a) {
+  return halide_xtensa_deinterleave_even_f32(
+          native_vector_f32_x2(native_vector_f32_x2::from_native_vector,
+          halide_xtensa_deinterleave_odd_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_odd_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_extract_2_of_4_f32(const native_vector_f32_x4& a) {
+  return halide_xtensa_deinterleave_odd_f32(
+          native_vector_f32_x2(native_vector_f32_x2::from_native_vector,
+          halide_xtensa_deinterleave_even_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_even_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_extract_3_of_4_f32(const native_vector_f32_x4& a) {
+  return halide_xtensa_deinterleave_odd_f32(
+          native_vector_f32_x2(native_vector_f32_x2::from_native_vector,
+          halide_xtensa_deinterleave_odd_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_odd_f32(native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
+}
+
 HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_extract_0_of_4_i16(const native_vector_i16_x4& a) {
   return halide_xtensa_deinterleave_even_i16(
           native_vector_i16_x2(native_vector_i16_x2::from_native_vector,
           halide_xtensa_deinterleave_even_i16(native_vector_i16_x2(native_vector_i16_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
           halide_xtensa_deinterleave_even_i16(native_vector_i16_x2(native_vector_i16_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_extract_1_of_4_i16(const native_vector_i16_x4& a) {
+  return halide_xtensa_deinterleave_even_i16(
+          native_vector_i16_x2(native_vector_i16_x2::from_native_vector,
+          halide_xtensa_deinterleave_odd_i16(native_vector_i16_x2(native_vector_i16_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_odd_i16(native_vector_i16_x2(native_vector_i16_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_extract_2_of_4_i16(const native_vector_i16_x4& a) {
+  return halide_xtensa_deinterleave_odd_i16(
+          native_vector_i16_x2(native_vector_i16_x2::from_native_vector,
+          halide_xtensa_deinterleave_even_i16(native_vector_i16_x2(native_vector_i16_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_even_i16(native_vector_i16_x2(native_vector_i16_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_extract_3_of_4_i16(const native_vector_i16_x4& a) {
+  return halide_xtensa_deinterleave_odd_i16(
+          native_vector_i16_x2(native_vector_i16_x2::from_native_vector,
+          halide_xtensa_deinterleave_odd_i16(native_vector_i16_x2(native_vector_i16_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_odd_i16(native_vector_i16_x2(native_vector_i16_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
         ));
 }
 
@@ -2401,6 +2485,117 @@ HALIDE_ALWAYS_INLINE native_vector_f32_x2 halide_xtensa_concat_from_native(const
     return native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a, b);
 }
 
+template <typename VectorType, typename OffsetType, typename BaseType, int Lanes, bool IsTCM>
+HALIDE_ALWAYS_INLINE VectorType gather_load(const void *base, const OffsetType& offset) {
+    BaseType __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[Lanes];
+    int offsets[Lanes];
+    store<OffsetType, int32_t, Lanes>(offset, &offsets[0], 0);
+    for (int i = 0; i < Lanes; i++) {
+        tmp[i] = ((const BaseType*)base)[offsets[i]];
+    }
+
+    return *((VectorType *)tmp);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i8 gather_load<native_vector_i8, native_vector_i32_x4, int8_t, VECTOR_WIDTH_U8, true>(const void *base, const native_vector_i32_x4& offset) {
+  auto addresses1 = native_vector_i32_x2(native_vector_i32_x2::from_native_vector, offset.native_vector[0], offset.native_vector[1]);
+  auto output1 = IVP_GATHERDNX8S(
+    IVP_GATHERANX8S(
+      (const int8_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(addresses1)
+    )
+  );
+
+  auto addresses2 = native_vector_i32_x2(native_vector_i32_x2::from_native_vector, offset.native_vector[2], offset.native_vector[3]);
+  auto output2 = IVP_GATHERDNX8S(
+    IVP_GATHERANX8S(
+      (const int8_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(addresses2)
+    )
+  );
+
+  // NOTE(aelphy): the intrinsic for gathering 8-bit elements extends them to 16-bit, and the conversion back to 8-bit is needed
+  return convert<native_vector_i8, native_vector_i16_x2>(native_vector_i16_x2(native_vector_i16_x2::from_native_vector, output1, output2));
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u8 gather_load<native_vector_u8, native_vector_i32_x4, uint8_t, VECTOR_WIDTH_U8, true>(const void *base, const native_vector_i32_x4& offset) {
+  auto addresses1 = native_vector_i32_x2(native_vector_i32_x2::from_native_vector, offset.native_vector[0], offset.native_vector[1]);
+  auto output1 = IVP_GATHERDNX8U(
+    IVP_GATHERANX8U(
+      (const uint8_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(addresses1)
+    )
+  );
+
+  auto addresses2 = native_vector_i32_x2(native_vector_i32_x2::from_native_vector, offset.native_vector[2], offset.native_vector[3]);
+  auto output2 = IVP_GATHERDNX8U(
+    IVP_GATHERANX8U(
+      (const uint8_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(addresses2)
+    )
+  );
+
+  // NOTE(aelphy): the intrinsic for gathering 8-bit elements extends them to 16-bit, and the conversion back to 8-bit is needed
+  return convert<native_vector_u8, native_vector_u16_x2>(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, output1, output2));
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i16 gather_load<native_vector_i16, native_vector_i32_x2, int16_t, VECTOR_WIDTH_U16, true>(const void *base, const native_vector_i32_x2& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  return IVP_GATHERDNX16(
+    IVP_GATHERANX16(
+      (const int16_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(offset) << 1
+    )
+  );
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u16 gather_load<native_vector_u16, native_vector_i32_x2, uint16_t, VECTOR_WIDTH_U16, true>(const void *base, const native_vector_i32_x2& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  return IVP_GATHERDNX16U(
+    IVP_GATHERANX16U(
+      (const uint16_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(offset) << 1
+    )
+  );
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i32 gather_load<native_vector_i32, native_vector_i32, int32_t, VECTOR_WIDTH_I32, true>(const void *base, const native_vector_i32& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  return IVP_GATHERDN_2X32(
+    IVP_GATHERAN_2X32(
+      (const int32_t*) base,
+      xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(offset) << 2
+    )
+  );
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u32 gather_load<native_vector_u32, native_vector_i32, uint32_t, VECTOR_WIDTH_I32, true>(const void *base, const native_vector_i32& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  return IVP_GATHERDN_2X32U(
+    IVP_GATHERAN_2X32U(
+      (const uint32_t*) base,
+      xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(offset) << 2
+    )
+  );
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 gather_load<native_vector_f32, native_vector_i32, float, VECTOR_WIDTH_F32, true>(const void *base, const native_vector_i32& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  return IVP_GATHERDN_2XF32(
+    IVP_GATHERAN_2XF32(
+      (const float*) base,
+      xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(offset) << 2
+    )
+  );
+}
+
 )INLINE_CODE";
 
         // Fix: on at least one config (our arm32 buildbot running gcc 5.4),
@@ -3106,10 +3301,16 @@ void CodeGen_Xtensa::visit(const Load *op) {
         //         << id_index_base << ", " << id_index_stride << ")";
         // } else {
         string id_index = print_expr(op->index);
+        bool is_tcm = true;
+        if (heap_allocations.contains(name)) {
+            is_tcm = false;
+        }
+
         rhs << "gather_load<" << print_type(t) << ", "
             << print_type(Int(32, t.lanes())) << ", "
-            << print_type(t.element_of()) << ", " << t.lanes()
-            << ">(" << name << ", " << id_index << ")";
+            << print_type(t.element_of()) << ", "
+            << t.lanes() << ", " << is_tcm << ">("
+            << name << ", " << id_index << ")";
         // }
     } else {
         string id_index = print_expr(op->index);
@@ -3615,9 +3816,9 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
             call.accept(this);
             return;
         }
-        if (op->is_slice() && (op->slice_begin() < 1) && (op->slice_stride() == 4) && ((int)op->indices.size() == op->vectors[0].type().lanes() / 4)) {
+        if (op->is_slice() && (op->slice_begin() >= 0 && op->slice_begin() < 4) && (op->slice_stride() == 4) && ((int)op->indices.size() == op->vectors[0].type().lanes() / 4)) {
             string type_suffix = suffix_for_type(op->type);
-            string function_name = std::string("halide_xtensa_extract_0_of_4");
+            string function_name = std::string("halide_xtensa_extract_" + std::to_string(op->slice_begin()) + "_of_4");
             Expr call = Call::make(op->type, function_name + type_suffix,
                                    {op->vectors[0]}, Call::PureExtern);
             call.accept(this);
@@ -3784,9 +3985,6 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         string free_function = op->free_function.empty() ?
                                    (op->memory_type != MemoryType::VTCM ? "halide_free" : "halide_tcm_free") :
                                    op->free_function;
-
-        if (op->memory_type != MemoryType::VTCM) {
-        }
 
         stream << get_indent();
         stream << "HalideFreeHelper " << op_name << "_free(_ucon, "

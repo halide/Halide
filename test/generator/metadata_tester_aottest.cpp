@@ -1583,27 +1583,23 @@ int main(int argc, char **argv) {
 
     constexpr auto sig = compute_signature(metadata_tester_argument_info());
     if (strcmp(&sig[0], "@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+        // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
         std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &sig[0] << "\n";
         exit(-1);
     }
 
     constexpr auto usig = compute_signature(metadata_tester_ucon_argument_info());
     if (strcmp(&usig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+        // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
         std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &usig[0] << "\n";
         exit(-1);
     }
 
     constexpr size_t count = count_buffers(metadata_tester_argument_info());
-    if (count != 58) {
-        std::cerr << "Incorrect buffer count for metadata_tester_argument_info(): " << count << "\n";
-        exit(-1);
-    }
+    static_assert(count == 58, "Incorrect buffer count for metadata_tester_argument_info");
 
     constexpr size_t ucount = count_buffers(metadata_tester_ucon_argument_info());
-    if (ucount != 58) {
-        std::cerr << "Incorrect buffer count for metadata_tester_ucon_argument_info(): " << ucount << "\n";
-        exit(-1);
-    }
+    static_assert(ucount == 58, "Incorrect buffer count for metadata_tester_ucon_argument_info");
 
     std::cout << "Success!\n";
     return 0;
