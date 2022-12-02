@@ -49,6 +49,9 @@
 // MSVC doesn't implement aligned_alloc(), even in C++17 mode, and
 // has stated they probably never will, so, always default it off here.
 #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+#elif defined(__ANDROID_API__) && __ANDROID_API__ < 28
+// Android doesn't provide aligned_alloc until API 28
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
 #else
 #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 1
 #endif
