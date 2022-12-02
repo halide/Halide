@@ -63,6 +63,46 @@ public:
     bool uses_dma = false;
 };
 
+void CodeGen_Xtensa::add_platform_prologue() {
+    const char *headers = R"INLINE_CODE(
+
+#define XCHAL_VISION_SIMD8 (XCHAL_VISION_SIMD16 * 2)
+
+// TODO(vksnk): this is disabled by default, because iDMA is not part of cstub
+// so we need to get git repo compiling with xt-tools first (b/173159625)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern void *halide_tcm_malloc(void *user_context, size_t x);
+extern void halide_tcm_free(void *user_context, void *ptr);
+extern int halide_init_dma();
+extern int32_t halide_xtensa_copy_1d(void* dst, int32_t dst_base, void* src, int32_t src_base, int extent, int item_size);
+extern int32_t halide_xtensa_wait_for_copy(int32_t id);
+extern int halide_release_dma();
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+class ScopedDmaInitializer {
+ public:
+  ScopedDmaInitializer() {
+    int status = halide_init_dma();
+    (void)status;
+  }
+
+  ~ScopedDmaInitializer() {
+    halide_release_dma();
+  }
+};
+
+)INLINE_CODE";
+
+    stream << headers;
+}
+
 void CodeGen_Xtensa::compile(const Module &module) {
     CodeGen_C::compile(module);
 }
@@ -207,8 +247,6 @@ inline int GetCycleCount() {
 
 
 #include <xtensa/tie/xt_ivpn.h>
-
-#define XCHAL_VISION_SIMD8 (XCHAL_VISION_SIMD16 * 2)
 
 #define HALIDE_MAYBE_UNUSED __attribute__ ((unused))
 
@@ -2557,36 +2595,6 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 gather_load<native_ve
     )
   );
 }
-
-// TODO(vksnk): this is disabled by default, because iDMA is not part of cstub
-// so we need to get git repo compiling with xt-tools first (b/173159625)
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-extern void *halide_tcm_malloc(void *user_context, size_t x);
-extern void halide_tcm_free(void *user_context, void *ptr);
-extern int halide_init_dma();
-extern int32_t halide_xtensa_copy_1d(void* dst, int32_t dst_base, void* src, int32_t src_base, int extent, int item_size);
-extern int32_t halide_xtensa_wait_for_copy(int32_t id);
-extern int halide_release_dma();
-
-#ifdef __cplusplus
-}  // extern "C"
-#endif
-
-class ScopedDmaInitializer {
- public:
-  ScopedDmaInitializer() {
-    int status = halide_init_dma();
-    (void)status;
-  }
-
-  ~ScopedDmaInitializer() {
-    halide_release_dma();
-  }
-};
 
 )INLINE_CODE";
 
