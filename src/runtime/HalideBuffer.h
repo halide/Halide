@@ -864,7 +864,9 @@ public:
         // make sure this is OK for AllocationHeader, since it always goes at the start
         static_assert(alignof(AllocationHeader) <= alignof(std::max_align_t));
 
-        const size_t requested_size = align_up(size + sizeof(AllocationHeader) + alignment);
+        const size_t requested_size = align_up(size + alignment +
+                                               std::max(0, (int)sizeof(AllocationHeader) -
+                                                               (int)sizeof(std::max_align_t)));
         void *alloc_storage = allocate_fn(requested_size);
         alloc = new (alloc_storage) AllocationHeader(deallocate_fn);
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
