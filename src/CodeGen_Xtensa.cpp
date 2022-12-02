@@ -634,18 +634,6 @@ HALIDE_ALWAYS_INLINE void store_variable<native_vector_u8, uint8_t, VECTOR_WIDTH
 }
 
 template <typename VectorType, typename OffsetType, typename BaseType, int Lanes>
-HALIDE_ALWAYS_INLINE VectorType gather_load(const void *base, const OffsetType& offset) {
-    BaseType __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[Lanes];
-    int offsets[Lanes];
-    store<OffsetType, int32_t, Lanes>(offset, &offsets[0], 0);
-    for (int i = 0; i < Lanes; i++) {
-        tmp[i] = ((const BaseType*)base)[offsets[i]];
-    }
-
-    return *((VectorType *)tmp);
-}
-
-template <typename VectorType, typename OffsetType, typename BaseType, int Lanes>
 HALIDE_ALWAYS_INLINE void store_scatter(const VectorType& a, void *base, const OffsetType& offset) {
     BaseType __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[Lanes];
     aligned_store<VectorType, BaseType, Lanes>(a, &tmp[0], 0);
@@ -2441,6 +2429,117 @@ HALIDE_ALWAYS_INLINE native_vector_f32_x2 halide_xtensa_concat_from_native(const
     return native_vector_f32_x2(native_vector_f32_x2::from_native_vector, a, b);
 }
 
+template <typename VectorType, typename OffsetType, typename BaseType, int Lanes, bool IsTCM>
+HALIDE_ALWAYS_INLINE VectorType gather_load(const void *base, const OffsetType& offset) {
+    BaseType __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[Lanes];
+    int offsets[Lanes];
+    store<OffsetType, int32_t, Lanes>(offset, &offsets[0], 0);
+    for (int i = 0; i < Lanes; i++) {
+        tmp[i] = ((const BaseType*)base)[offsets[i]];
+    }
+
+    return *((VectorType *)tmp);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i8 gather_load<native_vector_i8, native_vector_i32_x4, int8_t, VECTOR_WIDTH_U8, true>(const void *base, const native_vector_i32_x4& offset) {
+  auto addresses1 = native_vector_i32_x2(native_vector_i32_x2::from_native_vector, offset.native_vector[0], offset.native_vector[1]);
+  auto output1 = IVP_GATHERDNX8S(
+    IVP_GATHERANX8S(
+      (const int8_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(addresses1)
+    )
+  );
+
+  auto addresses2 = native_vector_i32_x2(native_vector_i32_x2::from_native_vector, offset.native_vector[2], offset.native_vector[3]);
+  auto output2 = IVP_GATHERDNX8S(
+    IVP_GATHERANX8S(
+      (const int8_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(addresses2)
+    )
+  );
+
+  // NOTE(aelphy): the intrinsic for gathering 8-bit elements extends them to 16-bit, and the conversion back to 8-bit is needed
+  return convert<native_vector_i8, native_vector_i16_x2>(native_vector_i16_x2(native_vector_i16_x2::from_native_vector, output1, output2));
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u8 gather_load<native_vector_u8, native_vector_i32_x4, uint8_t, VECTOR_WIDTH_U8, true>(const void *base, const native_vector_i32_x4& offset) {
+  auto addresses1 = native_vector_i32_x2(native_vector_i32_x2::from_native_vector, offset.native_vector[0], offset.native_vector[1]);
+  auto output1 = IVP_GATHERDNX8U(
+    IVP_GATHERANX8U(
+      (const uint8_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(addresses1)
+    )
+  );
+
+  auto addresses2 = native_vector_i32_x2(native_vector_i32_x2::from_native_vector, offset.native_vector[2], offset.native_vector[3]);
+  auto output2 = IVP_GATHERDNX8U(
+    IVP_GATHERANX8U(
+      (const uint8_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(addresses2)
+    )
+  );
+
+  // NOTE(aelphy): the intrinsic for gathering 8-bit elements extends them to 16-bit, and the conversion back to 8-bit is needed
+  return convert<native_vector_u8, native_vector_u16_x2>(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, output1, output2));
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i16 gather_load<native_vector_i16, native_vector_i32_x2, int16_t, VECTOR_WIDTH_U16, true>(const void *base, const native_vector_i32_x2& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  return IVP_GATHERDNX16(
+    IVP_GATHERANX16(
+      (const int16_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(offset) << 1
+    )
+  );
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u16 gather_load<native_vector_u16, native_vector_i32_x2, uint16_t, VECTOR_WIDTH_U16, true>(const void *base, const native_vector_i32_x2& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  return IVP_GATHERDNX16U(
+    IVP_GATHERANX16U(
+      (const uint16_t*) base,
+      convert<native_vector_u16, native_vector_i32_x2>(offset) << 1
+    )
+  );
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i32 gather_load<native_vector_i32, native_vector_i32, int32_t, VECTOR_WIDTH_I32, true>(const void *base, const native_vector_i32& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  return IVP_GATHERDN_2X32(
+    IVP_GATHERAN_2X32(
+      (const int32_t*) base,
+      xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(offset) << 2
+    )
+  );
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u32 gather_load<native_vector_u32, native_vector_i32, uint32_t, VECTOR_WIDTH_I32, true>(const void *base, const native_vector_i32& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  return IVP_GATHERDN_2X32U(
+    IVP_GATHERAN_2X32U(
+      (const uint32_t*) base,
+      xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(offset) << 2
+    )
+  );
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 gather_load<native_vector_f32, native_vector_i32, float, VECTOR_WIDTH_F32, true>(const void *base, const native_vector_i32& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  return IVP_GATHERDN_2XF32(
+    IVP_GATHERAN_2XF32(
+      (const float*) base,
+      xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(offset) << 2
+    )
+  );
+}
+
 // TODO(vksnk): this is disabled by default, because iDMA is not part of cstub
 // so we need to get git repo compiling with xt-tools first (b/173159625)
 
@@ -3176,10 +3275,16 @@ void CodeGen_Xtensa::visit(const Load *op) {
         //         << id_index_base << ", " << id_index_stride << ")";
         // } else {
         string id_index = print_expr(op->index);
+        bool is_tcm = true;
+        if (heap_allocations.contains(name)) {
+            is_tcm = false;
+        }
+
         rhs << "gather_load<" << print_type(t) << ", "
             << print_type(Int(32, t.lanes())) << ", "
-            << print_type(t.element_of()) << ", " << t.lanes()
-            << ">(" << name << ", " << id_index << ")";
+            << print_type(t.element_of()) << ", "
+            << t.lanes() << ", " << is_tcm << ">("
+            << name << ", " << id_index << ")";
         // }
     } else {
         string id_index = print_expr(op->index);
