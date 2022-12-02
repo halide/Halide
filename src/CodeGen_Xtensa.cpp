@@ -384,6 +384,7 @@ struct MultipleOfNativeVector {
 using uint1x96_t = MultipleOfNativeVector<uint1x32_t, 3>;
 using uint1x256_t = MultipleOfNativeVector<uint1x64_t, 4>;
 using int8x128_t = MultipleOfNativeVector<int8x64_t, 2>;
+using int8x192_t = MultipleOfNativeVector<int8x64_t, 3>;
 using int8x256_t = MultipleOfNativeVector<int8x64_t, 4>;
 using uint8x128_t = MultipleOfNativeVector<uint8x64_t, 2>;
 using uint8x192_t = MultipleOfNativeVector<uint8x64_t, 3>;
@@ -396,7 +397,9 @@ using int16x128_t = MultipleOfNativeVector<int16x32_t, 4>;
 using uint16x128_t = MultipleOfNativeVector<uint16x32_t, 4>;
 using int24x128_t = MultipleOfNativeVector<int24x64_t, 2>;
 using int32x32_t = MultipleOfNativeVector<int32x16_t, 2>;
+using int32x48_t = MultipleOfNativeVector<int32x16_t, 3>;
 using uint32x32_t = MultipleOfNativeVector<uint32x16_t, 2>;
+using uint32x48_t = MultipleOfNativeVector<uint32x16_t, 3>;
 using int32x64_t = MultipleOfNativeVector<int32x16_t, 4>;
 using uint32x64_t = MultipleOfNativeVector<uint32x16_t, 4>;
 using int32x96_t = MultipleOfNativeVector<int32x16_t, 6>;
@@ -409,6 +412,7 @@ using int32x256_t = MultipleOfNativeVector<int32x16_t, 16>;
 using int48x64_t = MultipleOfNativeVector<int48x32_t, 2>;
 using int64x32_t = MultipleOfNativeVector<int64x16_t, 2>;
 using float32x32_t = MultipleOfNativeVector<float32x16_t, 2>;
+using float32x48_t = MultipleOfNativeVector<float32x16_t, 3>;
 using float32x64_t = MultipleOfNativeVector<float32x16_t, 4>;
 #elif XCHAL_VISION_TYPE == 8
 using uint1x192_t = MultipleOfNativeVector<uint1x64_t, 3>;
@@ -461,6 +465,7 @@ using float32x128_t = MultipleOfNativeVector<float32x32_t, 4>;
 #endif
 
 using native_vector_i8_x2 = MultipleOfNativeVector<native_vector_i8, 2>;
+using native_vector_i8_x3 = MultipleOfNativeVector<native_vector_i8, 3>;
 using native_vector_i8_x4 = MultipleOfNativeVector<native_vector_i8, 4>;
 
 using native_vector_u8_x2 = MultipleOfNativeVector<native_vector_u8, 2>;
@@ -1383,6 +1388,19 @@ HALIDE_ALWAYS_INLINE native_vector_u8 halide_xtensa_extract_0_of_3_u8(const nati
 
 HALIDE_ALWAYS_INLINE native_vector_u8 halide_xtensa_extract_0_of_3_u8(const native_vector_u8_x3& a) {
   return halide_xtensa_extract_0_of_3_u8(a.native_vector[0], a.native_vector[1], a.native_vector[2]);
+}
+
+HALIDE_ALWAYS_INLINE native_vector_i8 halide_xtensa_extract_0_of_3_i8(const native_vector_i8& a0, const native_vector_i8& a1, const native_vector_i8& a2) {
+  // TODO(aelphy): there is likely a better way to do it.
+  native_vector_i8 vR, vG, vB, vRG0, vRG1;
+  IVP_DSEL2NX8I(vB, vRG0, a1, a0, IVP_DSELI_8B_DEINTERLEAVE_C3_STEP_0);
+  IVP_DSEL2NX8I_H(vB, vRG1, a2, a1, IVP_DSELI_8B_DEINTERLEAVE_C3_STEP_1);
+  IVP_DSEL2NX8I (vG,vR, vRG1,vRG0, IVP_DSELI_8B_DEINTERLEAVE_1);
+  return vR;
+}
+
+HALIDE_ALWAYS_INLINE native_vector_i8 halide_xtensa_extract_0_of_3_i8(const native_vector_i8_x3& a) {
+  return halide_xtensa_extract_0_of_3_i8(a.native_vector[0], a.native_vector[1], a.native_vector[2]);
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_deinterleave_even_i16(const native_vector_i16_x2& a) {
