@@ -16,6 +16,13 @@
 #include <memory>
 #include <vector>
 
+#ifdef __APPLE__
+#include <AvailabilityVersions.h>
+#include <TargetConditionals.h>
+#else
+#error
+#endif
+
 #if defined(__has_feature)
 #if __has_feature(memory_sanitizer)
 #include <sanitizer/msan_interface.h>
@@ -45,6 +52,7 @@
 // if you are compiling on a platform that doesn't provide a (good)
 // implementation.
 #ifndef HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
+
 #ifdef _MSC_VER
 // MSVC doesn't implement aligned_alloc(), even in C++17 mode, and
 // has stated they probably never will, so, always default it off here.
@@ -52,10 +60,18 @@
 #elif defined(__ANDROID_API__) && __ANDROID_API__ < 28
 // Android doesn't provide aligned_alloc until API 28
 #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+#elif defined(TARGET_OS_OSX) && (__MAC_OS_X_VERSION_MAX_ALLOWED < __MAC_10_15)
+// macOS doesn't provide aligned_alloc until 10.15
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+#elif (defined(TARGET_IPHONE_SIMULATOR) || defined(TARGET_OS_IPHONE) || defined(TARGET_OS_MACCATALYST)) && (__IPHONE_OS_VERSION_MAX_ALLOWED < 101500)
+// iOS doesn't provide aligned_alloc until 14.0
+#define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
 #else
+// Assume it's ok everywhere else
 #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 1
 #endif
-#endif
+
+#endif  // HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
 
 namespace Halide {
 namespace Runtime {
