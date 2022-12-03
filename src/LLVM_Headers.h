@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 130
+#if LLVM_VERSION >= 140
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 13.0 or newer"
+#error "Compiling Halide requires LLVM 14.0 or newer"
 #endif
 
 // No msvc warnings from llvm headers please
@@ -35,9 +35,9 @@
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/JITEventListener.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
+#include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h>
+#include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/IR/Constant.h>
 #include <llvm/IR/Constants.h>
@@ -47,6 +47,7 @@
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
 #ifdef WITH_HEXAGON
@@ -62,6 +63,7 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
 #include <llvm/MC/MCTargetOptions.h>
+#include <llvm/MC/TargetRegistry.h>
 #include <llvm/Object/ArchiveWriter.h>
 #include <llvm/Object/ObjectFile.h>
 #include <llvm/Passes/PassBuilder.h>
@@ -73,11 +75,6 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/FormattedStream.h>
-#if LLVM_VERSION >= 140
-#include <llvm/MC/TargetRegistry.h>
-#else
-#include <llvm/Support/TargetRegistry.h>
-#endif
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/TypeSize.h>
 #include <llvm/Support/raw_os_ostream.h>

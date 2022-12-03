@@ -15,6 +15,7 @@ option(CMAKE_CXX_EXTENSIONS "Enable C++ vendor extensions (e.g. GNU)" OFF)
 # Duplicated options from parent project
 option(WITH_TESTS "Build tests" ON)
 option(WITH_TUTORIALS "Build tutorials" ON)
+option(WITH_PYTHON_STUBS "Build Python stubs" ON)
 
 # Enable/disable testing
 cmake_dependent_option(
@@ -35,6 +36,9 @@ set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
 # part, so only requesting Module avoids failures when Embed is not
 # available, as is the case in the manylinux Docker images.
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
+if (Python3_VERSION VERSION_LESS "3.8")
+    message(FATAL_ERROR "Halide requires Python v3.8 or later, but found ${Python3_VERSION}.")
+endif ()
 
 if (PYBIND11_USE_FETCHCONTENT)
     include(FetchContent)
@@ -74,7 +78,7 @@ if (Halide_ASAN_ENABLED)
 endif ()
 
 function(add_python_test)
-    cmake_parse_arguments(ARG "" "FILE;LABEL" "PYTHONPATH;ENVIRONMENT" ${ARGN})
+    cmake_parse_arguments(ARG "" "FILE;LABEL" "PYTHONPATH;ENVIRONMENT;TEST_ARGS" ${ARGN})
 
     list(PREPEND ARG_PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
     list(TRANSFORM ARG_PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
@@ -93,7 +97,7 @@ function(add_python_test)
 
     add_test(
         NAME "${test_name}"
-        COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>"
+        COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>" ${ARG_TEST_ARGS}
     )
     set_tests_properties(
         "${test_name}"
@@ -110,12 +114,17 @@ endfunction()
 ##
 
 add_subdirectory(src)
-add_subdirectory(stub)
+
+if (WITH_PYTHON_STUBS)
+    add_subdirectory(stub)
+endif ()
 
 if (WITH_TEST_PYTHON)
+    add_subdirectory(apps)
     add_subdirectory(test)
 endif ()
 
 if (WITH_TUTORIALS)
     add_subdirectory(tutorial)
 endif ()
+

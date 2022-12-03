@@ -5,15 +5,21 @@
 function(halide_define_aot_test NAME)
     set(options OMIT_DEFAULT_GENERATOR)
     set(oneValueArgs FUNCTION_NAME)
-    set(multiValueArgs GEN_DEPS EXTRA_LIBS ENABLE_IF FEATURES PARAMS GEN_TARGET GROUPS)
+    set(multiValueArgs GEN_DEPS EXTRA_LIBS ENABLE_IF FEATURES PARAMS GEN_TARGET GROUPS EXTRA_OUTPUTS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
         return()
     endif ()
 
-    add_executable("${NAME}.generator" "${NAME}_generator.cpp")
-    target_link_libraries("${NAME}.generator" PRIVATE Halide::Generator ${args_GEN_DEPS})
+    set(EXTRA_OUTPUTS "")
+    foreach (EO IN LISTS args_EXTRA_OUTPUTS)
+        list(APPEND EXTRA_OUTPUTS ${EO} ${EO}_PATH_OUT)
+    endforeach()
+
+    add_halide_generator("${NAME}.generator"
+                         SOURCES "${NAME}_generator.cpp"
+                         LINK_LIBRARIES ${args_GEN_DEPS})
 
     set(TARGET "generator_aot_${NAME}")
     set(DEPS ${args_EXTRA_LIBS})
@@ -23,7 +29,8 @@ function(halide_define_aot_test NAME)
                            PARAMS "${args_PARAMS}"
                            TARGETS "${args_GEN_TARGET}"
                            FUNCTION_NAME "${args_FUNCTION_NAME}"
-                           FEATURES "${args_FEATURES}")
+                           FEATURES "${args_FEATURES}"
+                           ${EXTRA_OUTPUTS})
         list(APPEND DEPS ${NAME} ${NAME}.runtime)
     endif ()
 
@@ -132,6 +139,7 @@ halide_define_aot_test(argvcall)
 halide_define_aot_test(async_parallel
                        # Requires threading support, not yet available for wasm tests
                        ENABLE_IF NOT ${USING_WASM}
+                       FEATURES user_context
                        GROUPS multithreaded)
 
 # autograd_aottest.cpp
@@ -194,7 +202,8 @@ halide_define_aot_test(cxx_mangling
                        # Needs extra deps / build rules
                        ENABLE_IF NOT ${USING_WASM}
                        FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
-                       FEATURES c_plus_plus_name_mangling)
+                       FEATURES c_plus_plus_name_mangling
+                       EXTRA_OUTPUTS FUNCTION_INFO_HEADER)
 if (TARGET cxx_mangling)
     target_link_libraries(cxx_mangling INTERFACE cxx_mangling_externs)
     if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
@@ -323,14 +332,27 @@ set(metadata_tester_params
     array_outputs8.size=2
     array_outputs9.size=2)
 
+# Note that metadata_tester (but not metadata_tester_ucon) is built as "multitarget" to verify that
+# the metadata names are correctly emitted.
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+    # wasm doesn't support multitargets
+    # TODO: currently, Halide_CMAKE_TARGET == Halide_HOST_TARGET when building for Emscripten; we should fix this
+    set(MDT_TARGETS ${Halide_TARGET})
+else()
+    set(MDT_TARGETS cmake-no_bounds_query cmake)
+endif()
+
 halide_define_aot_test(metadata_tester
                        EXTRA_LIBS metadata_tester_ucon
-                       PARAMS ${metadata_tester_params})
+                       PARAMS ${metadata_tester_params}
+                       GEN_TARGET ${MDT_TARGETS}
+                       EXTRA_OUTPUTS FUNCTION_INFO_HEADER)
 add_halide_library(metadata_tester_ucon
                    FROM metadata_tester.generator
                    GENERATOR metadata_tester
                    FEATURES user_context
-                   PARAMS ${metadata_tester_params})
+                   PARAMS ${metadata_tester_params}
+                   FUNCTION_INFO_HEADER metadata_tester_ucon_path)
 
 # msan_aottest.cpp
 # msan_generator.cpp

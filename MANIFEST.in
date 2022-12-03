@@ -1,0 +1,6 @@
+graft python_bindings
+prune python_bindings/apps
+prune python_bindings/test
+prune python_bindings/tutorial
+prune python_bindings/stub
+include README_python.md

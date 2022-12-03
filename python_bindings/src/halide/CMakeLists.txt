@@ -11,13 +11,13 @@ set(native_sources
     PyExternFuncArgument.cpp
     PyFunc.cpp
     PyFuncRef.cpp
+    PyGenerator.cpp
     PyHalide.cpp
     PyImageParam.cpp
     PyInlineReductions.cpp
     PyIROperator.cpp
     PyLambda.cpp
     PyLoopLevel.cpp
-    PyMachineParams.cpp
     PyModule.cpp
     PyParam.cpp
     PyPipeline.cpp
@@ -33,6 +33,8 @@ list(TRANSFORM native_sources PREPEND "halide_/")
 
 set(python_sources
     __init__.py
+    _generator_helpers.py
+    imageio.py
     )
 
 # It is technically still possible for a user to override the LIBRARY_OUTPUT_DIRECTORY by setting

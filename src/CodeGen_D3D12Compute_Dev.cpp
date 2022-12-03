@@ -378,6 +378,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
         // directly.
         stream << "pow(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
+    } else if (op->is_intrinsic(Call::round)) {
+        // HLSL's round intrinsic has the correct semantics for our rounding.
+        print_assignment(op->type, "round(" + print_expr(op->args[0]) + ")");
     } else {
         CodeGen_GPU_C::visit(op);
     }
@@ -1311,7 +1314,6 @@ void CodeGen_D3D12Compute_Dev::init_module() {
         << "#define abs_f32     abs    \n"
         << "#define floor_f32   floor  \n"
         << "#define ceil_f32    ceil   \n"
-        << "#define round_f32   round  \n"
         << "#define trunc_f32   trunc  \n"
         // pow() in HLSL has the same semantics as C if
         // x > 0.  Otherwise, we need to emulate C

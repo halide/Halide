@@ -562,6 +562,10 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
+
+        // Round a floating point value to nearest integer, with ties going to even
+        round,
+
         rounding_halving_add,
         rounding_mul_shift_right,
         rounding_shift_left,
@@ -583,6 +587,15 @@ struct Call : public ExprNode<Call> {
         undef,
         unreachable,
         unsafe_promise_clamped,
+
+        // One-sided variants of widening_add, widening_mul, and widening_sub.
+        // arg[0] + widen(arg[1])
+        widen_right_add,
+        // arg[0] * widen(arg[1])
+        widen_right_mul,
+        // arg[0] - widen(arg[1])
+        widen_right_sub,
+
         widening_add,
         widening_mul,
         widening_shift_left,

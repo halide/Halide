@@ -322,6 +322,15 @@ Stmt remove_promises(const Stmt &s);
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);
 
+template<typename T>
+struct is_printable_arg {
+    static constexpr bool value = std::is_convertible<T, const char *>::value ||
+                                  std::is_convertible<T, Halide::Expr>::value;
+};
+
+template<typename... Args>
+struct all_are_printable_args : meta_and<is_printable_arg<Args>...> {};
+
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
@@ -341,6 +350,13 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &arg
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
+
+/** Compute a + widen(b). */
+Expr widen_right_add(Expr a, Expr b);
+/** Compute a * widen(b). */
+Expr widen_right_mul(Expr a, Expr b);
+/** Compute a - widen(b). */
+Expr widen_right_sub(Expr a, Expr b);
 
 /** Compute widen(a) + widen(b). */
 Expr widening_add(Expr a, Expr b);
@@ -1020,10 +1036,12 @@ Expr floor(Expr x);
 Expr ceil(Expr x);
 
 /** Return the whole number closest to a floating-point expression. If the
- * argument is not floating-point, it is cast to Float(32). The return value
- * is still in floating point, despite being a whole number. On ties, we
- * follow IEEE754 conventions and round to the nearest even number. Vectorizes
- * cleanly. */
+ * argument is not floating-point, it is cast to Float(32). The return value is
+ * still in floating point, despite being a whole number. On ties, we round
+ * towards the nearest even integer. Note that this is not the same as
+ * std::round in C, which rounds away from zero. On platforms without a native
+ * instruction for this, it is emulated, and may be more expensive than
+ * cast<int>(x + 0.5f) or similar. */
 Expr round(Expr x);
 
 /** Return the integer part of a floating-point expression. If the argument is

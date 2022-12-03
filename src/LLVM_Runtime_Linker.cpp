@@ -76,12 +76,11 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 // Universal CPP Initmods. Please keep sorted alphabetically.
 DECLARE_CPP_INITMOD(alignment_128)
 DECLARE_CPP_INITMOD(alignment_32)
-DECLARE_CPP_INITMOD(allocation_cache)
 DECLARE_CPP_INITMOD(alignment_64)
+DECLARE_CPP_INITMOD(allocation_cache)
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
-DECLARE_CPP_INITMOD(halide_buffer_t)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(can_use_target)
 DECLARE_CPP_INITMOD(cuda)
@@ -91,12 +90,17 @@ DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(fake_get_symbol)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(float16_t)
+DECLARE_CPP_INITMOD(fopen)
+DECLARE_CPP_INITMOD(fopen_lfs)
 DECLARE_CPP_INITMOD(force_include_types)
 DECLARE_CPP_INITMOD(fuchsia_clock)
 DECLARE_CPP_INITMOD(fuchsia_host_cpu_count)
 DECLARE_CPP_INITMOD(fuchsia_yield)
 DECLARE_CPP_INITMOD(gpu_device_selection)
+DECLARE_CPP_INITMOD(halide_buffer_t)
+DECLARE_CPP_INITMOD(hexagon_cache_allocator)
 DECLARE_CPP_INITMOD(hexagon_dma)
+DECLARE_CPP_INITMOD(hexagon_dma_pool)
 DECLARE_CPP_INITMOD(hexagon_host)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(linux_clock)
@@ -107,9 +111,9 @@ DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(msan)
 DECLARE_CPP_INITMOD(msan_stubs)
 DECLARE_CPP_INITMOD(opencl)
-DECLARE_CPP_INITMOD(openglcompute)
 DECLARE_CPP_INITMOD(opengl_egl_context)
 DECLARE_CPP_INITMOD(opengl_glx_context)
+DECLARE_CPP_INITMOD(openglcompute)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
@@ -123,21 +127,19 @@ DECLARE_CPP_INITMOD(posix_io)
 DECLARE_CPP_INITMOD(posix_print)
 DECLARE_CPP_INITMOD(posix_threads)
 DECLARE_CPP_INITMOD(posix_threads_tsan)
+DECLARE_CPP_INITMOD(posix_timer_profiler)
 DECLARE_CPP_INITMOD(prefetch)
 DECLARE_CPP_INITMOD(profiler)
-DECLARE_CPP_INITMOD(timer_profiler)
-DECLARE_CPP_INITMOD(posix_timer_profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(pseudostack)
 DECLARE_CPP_INITMOD(qurt_allocator)
-DECLARE_CPP_INITMOD(hexagon_cache_allocator)
-DECLARE_CPP_INITMOD(hexagon_dma_pool)
 DECLARE_CPP_INITMOD(qurt_hvx)
 DECLARE_CPP_INITMOD(qurt_hvx_vtcm)
 DECLARE_CPP_INITMOD(qurt_threads)
 DECLARE_CPP_INITMOD(qurt_threads_tsan)
 DECLARE_CPP_INITMOD(qurt_yield)
 DECLARE_CPP_INITMOD(runtime_api)
+DECLARE_CPP_INITMOD(timer_profiler)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
@@ -294,20 +296,12 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             } else if (target.os == Target::IOS) {
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::Windows) {
-#if LLVM_VERSION >= 140
                 // For 32-bit MSVC targets, alignment of f80 values is 16 bytes (see https://reviews.llvm.org/D115942)
                 if (!target.has_feature(Target::JIT)) {
                     return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32-a:0:32-S32");
                 } else {
                     return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32-a:0:32-S32");
                 }
-#else
-                if (!target.has_feature(Target::JIT)) {
-                    return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
-                } else {
-                    return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
-                }
-#endif
             } else {
                 // Linux/Android
                 return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:32-n8:16:32-S128");
@@ -360,25 +354,21 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             "e-m:e-p:32:32:32-a:0-n16:32-i64:64:64-i32:32:32-i16:16:16-i1:8:8"
             "-f32:32:32-f64:64:64-v32:32:32-v64:64:64-v512:512:512-v1024:1024:1024-v2048:2048:2048");
     } else if (target.arch == Target::WebAssembly) {
-#if LLVM_VERSION >= 140
         if (target.bits == 32) {
             return llvm::DataLayout("e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20");
         } else {
             return llvm::DataLayout("e-m:e-p:64:64-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20");
         }
-#else
-        if (target.bits == 32) {
-            return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32:64-S128");
-        } else {
-            return llvm::DataLayout("e-m:e-p:64:64-i64:64-n32:64-S128");
-        }
-#endif
     } else if (target.arch == Target::RISCV) {
         // TODO: Valdidate this data layout is correct for RISCV. Assumption is it is like MIPS.
         if (target.bits == 32) {
             return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32-S128");
         } else {
+#if LLVM_VERSION >= 160
+            return llvm::DataLayout("e-m:e-p:64:64-i64:64-i128:128-n32:64-S128");
+#else
             return llvm::DataLayout("e-m:e-p:64:64-i64:64-i128:128-n64-S128");
+#endif
         }
     } else {
         internal_error << "Bad target arch: " << target.arch << "\n";
@@ -781,6 +771,7 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     modules.push_back(get_initmod_cache(c, bits_64, debug));
     modules.push_back(get_initmod_to_string(c, bits_64, debug));
     modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
+    modules.push_back(get_initmod_fopen(c, bits_64, debug));
     modules.push_back(get_initmod_device_interface(c, bits_64, debug));
     modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
     modules.push_back(get_initmod_float16_t(c, bits_64, debug));
@@ -1011,6 +1002,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
             }
 
+            // Prefer using fopen_lfs on Linux systems, which calls fopen64() to ensure LFS support.
+            if (t.os == Target::Linux) {
+                modules.push_back(get_initmod_fopen_lfs(c, bits_64, debug));
+            } else {
+                modules.push_back(get_initmod_fopen(c, bits_64, debug));
+            }
+
             modules.push_back(get_initmod_allocation_cache(c, bits_64, debug));
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
@@ -1034,7 +1032,18 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
             }
 
-            if (t.has_feature(Target::MSAN)) {
+#ifdef HALIDE_INTERNAL_USING_MSAN
+            // If we are building a JIT shared runtime (ie, we are jitting),
+            // and we are compiling with MSAN enabled (detected via preprocessor),
+            // we should always use the real MSAN stubs, even if the Target::MSan
+            // feature has been cleared (because JITModule::make_module() clears it).
+            const bool use_real_msan_runtime = t.has_feature(Target::MSAN) ||
+                                               module_type == ModuleJITShared;
+#else
+            const bool use_real_msan_runtime = t.has_feature(Target::MSAN);
+#endif
+
+            if (use_real_msan_runtime) {
                 modules.push_back(get_initmod_msan(c, bits_64, debug));
             } else {
                 modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));

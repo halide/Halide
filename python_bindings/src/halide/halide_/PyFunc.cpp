@@ -80,14 +80,37 @@ py::object realization_to_object(const Realization &r) {
     return to_python_tuple(r);
 }
 
+py::object evaluate_impl(const py::object &expr, bool may_gpu) {
+    Tuple t = to_halide_tuple(expr);
+    Func f("evaluate_func_" + std::to_string(t.size()));
+    f() = t;
+    if (may_gpu) {
+        Internal::schedule_scalar(f);
+    }
+
+    std::optional<Realization> r;
+    {
+        py::gil_scoped_release release;
+
+        r = f.realize();
+    }
+    if (r->size() == 1) {
+        return buffer_getitem_operator((*r)[0], {});
+    } else {
+        py::tuple result(r->size());
+        for (size_t i = 0; i < r->size(); i++) {
+            result[i] = buffer_getitem_operator((*r)[i], {});
+        }
+        return result;
+    }
+}
+
 }  // namespace
 
 void define_func(py::module &m) {
     define_func_ref(m);
     define_var_or_rvar(m);
     define_loop_level(m);
-
-    // TODO: add ParamMap support.
 
     // Deliberately not supported, because they don't seem to make sense for Python:
     // - set_custom_allocator()
@@ -162,22 +185,6 @@ void define_func(py::module &m) {
             })
             .def("defined", &Func::defined)
             .def("outputs", &Func::outputs)
-
-            .def("output_type", [](Func &f) {
-                // HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; call Func::type() instead.")
-                PyErr_WarnEx(PyExc_DeprecationWarning,
-                             "Func.output_type() is deprecated; use Func.type() instead.",
-                             1);
-                return f.type();
-            })
-
-            .def("output_types", [](Func &f) {
-                // HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; call Func::types() instead.")
-                PyErr_WarnEx(PyExc_DeprecationWarning,
-                             "Func.output_types() is deprecated; use Func.types() instead.",
-                             1);
-                return f.types();
-            })
 
             .def("type", &Func::type)
             .def("types", &Func::types)
@@ -380,6 +387,18 @@ void define_func(py::module &m) {
     add_schedule_methods(func_class);
 
     define_stage(m);
+
+    m.def(
+        "evaluate", [](const py::object &expr) -> py::object {
+            return evaluate_impl(expr, false);
+        },
+        py::arg("expr"));
+
+    m.def(
+        "evaluate_may_gpu", [](const py::object &expr) -> py::object {
+            return evaluate_impl(expr, true);
+        },
+        py::arg("expr"));
 }
 
 }  // namespace PythonBindings

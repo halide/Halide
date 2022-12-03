@@ -234,12 +234,6 @@ define weak_odr <8 x i16> @saturating_narrow_i32x8_to_u16x8(<8 x i32> %x) nounwi
   ret <8 x i16> %3
 }
 
-; single to double-precision floating point (only needed for LLVM_VERSION == 13)
-define weak_odr <4 x double> @float_to_double(<4 x float> %x) nounwind alwaysinline {
-  %1 = fpext <4 x float> %x to <4 x double>
-  ret <4 x double> %1
-}
-
 ; Integer to integer extension
 
 ; i8 -> i16
@@ -307,6 +301,4 @@ define weak_odr <4 x i64> @extend_u32x4_to_u64x4(<4 x i32> %x) nounwind alwaysin
   %5 = shufflevector <2 x i64> %3, <2 x i64> %4, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
   ret <4 x i64> %5
 }
-
-
 

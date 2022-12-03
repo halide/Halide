@@ -11,13 +11,11 @@
 #include "PyExpr.h"
 #include "PyExternFuncArgument.h"
 #include "PyFunc.h"
+#include "PyGenerator.h"
 #include "PyIROperator.h"
 #include "PyImageParam.h"
 #include "PyInlineReductions.h"
 #include "PyLambda.h"
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-#include "PyMachineParams.h"
-#endif
 #include "PyModule.h"
 #include "PyParam.h"
 #include "PyPipeline.h"
@@ -55,9 +53,6 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_extern_func_argument(m);
     define_var(m);
     define_rdom(m);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    define_machine_params(m);
-#endif
     define_module(m);
     define_callable(m);
     define_func(m);
@@ -69,6 +64,7 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_image_param(m);
     define_type(m);
     define_derivative(m);
+    define_generator(m);
 
     // There is no PyUtil yet, so just put this here
     m.def("load_plugin", &Halide::load_plugin, py::arg("lib_name"));
@@ -97,6 +93,22 @@ Expr double_to_expr_check(double v) {
             0);
     }
     return Expr(f);
+}
+
+std::vector<Expr> collect_print_args(const py::args &args) {
+    std::vector<Expr> v;
+    v.reserve(args.size());
+    for (size_t i = 0; i < args.size(); ++i) {
+        // No way to see if a cast will work: just have to try
+        // and fail. Normally we don't want string to be convertible
+        // to Expr, but in this unusual case we do.
+        try {
+            v.emplace_back(args[i].cast<std::string>());
+        } catch (...) {
+            v.push_back(args[i].cast<Expr>());
+        }
+    }
+    return v;
 }
 
 }  // namespace PythonBindings
