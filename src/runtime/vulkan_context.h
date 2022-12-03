@@ -84,6 +84,49 @@ public:
 
 namespace {
 
+int vk_find_compute_capability(void *user_context, int *major, int *minor) {
+    debug(user_context) << " vk_find_compute_capability (user_context: " << user_context << ")\n";
+
+    VkInstance instance = nullptr;
+    VkDevice device = nullptr;
+    VkPhysicalDevice physical_device = nullptr;
+    uint32_t queue_family_index = 0;
+
+    StringTable requested_layers;
+    vk_get_requested_layers(user_context, requested_layers);
+
+    const VkAllocationCallbacks *alloc_callbacks = halide_vulkan_get_allocation_callbacks(user_context);
+    int status = vk_create_instance(user_context, requested_layers, &instance, alloc_callbacks);
+    if (status != halide_error_code_success) {
+        debug(user_context) << "  no valid vulkan runtime was found ...\n";
+        *major = 0;
+        *minor = 0;
+        return 0;
+    }
+
+    if (vkCreateDevice == nullptr) {
+        vk_load_vulkan_functions(instance);
+    }
+
+    status = vk_select_device_for_context(user_context, &instance, &device, &physical_device, &queue_family_index);
+    if (status != halide_error_code_success) {
+        debug(user_context) << "  no valid vulkan device was found ...\n";
+        *major = 0;
+        *minor = 0;
+        return 0;
+    }
+
+    VkPhysicalDeviceProperties device_properties = {0};
+    debug(user_context) << "  querying for device properties ...\n";
+    vkGetPhysicalDeviceProperties(physical_device, &device_properties);
+    *major = VK_API_VERSION_MAJOR(device_properties.apiVersion);
+    *minor = VK_API_VERSION_MINOR(device_properties.apiVersion);
+    debug(user_context) << "  found device compute capability v" << *major << "." << *minor << " ...\n";
+
+    vk_destroy_instance(user_context, instance, alloc_callbacks);
+    return 0;
+}
+
 // Initializes the instance (used by the default vk_create_context)
 int vk_create_instance(void *user_context, const StringTable &requested_layers, VkInstance *instance, const VkAllocationCallbacks *alloc_callbacks) {
     debug(user_context) << " vk_create_instance (user_context: " << user_context << ")\n";
@@ -118,7 +161,7 @@ int vk_create_instance(void *user_context, const StringTable &requested_layers, 
         VK_MAKE_API_VERSION(0, 1, 0, 0),                                                           // app version
         "Halide",                                                                                  // engine name
         VK_MAKE_API_VERSION(0, HALIDE_VERSION_MAJOR, HALIDE_VERSION_MINOR, HALIDE_VERSION_PATCH),  // engine version
-        VK_API_VERSION_1_0};
+        VK_API_VERSION_1_3};                                                                       // FIXME: only use the minimum capability necessary
 
     VkInstanceCreateInfo create_info = {
         VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -135,6 +178,12 @@ int vk_create_instance(void *user_context, const StringTable &requested_layers, 
         return halide_error_code_incompatible_device_interface;
     }
 
+    return halide_error_code_success;
+}
+
+int vk_destroy_instance(void *user_context, VkInstance instance, const VkAllocationCallbacks *alloc_callbacks) {
+    debug(user_context) << " vk_destroy_instance (user_context: " << user_context << ")\n";
+    vkDestroyInstance(instance, alloc_callbacks);
     return halide_error_code_success;
 }
 

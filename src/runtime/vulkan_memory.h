@@ -470,7 +470,7 @@ void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *bloc
         VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,  // struct type
         nullptr,                               // struct extending this
         0,                                     // create flags
-        0,                                     // buffer size (in bytes)
+        sizeof(uint32_t),                      // buffer size (in bytes)
         usage_flags,                           // buffer usage flags
         VK_SHARING_MODE_EXCLUSIVE,             // sharing mode
         0, nullptr};

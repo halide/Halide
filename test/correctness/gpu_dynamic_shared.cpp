@@ -10,14 +10,20 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (t.has_feature(Target::Vulkan)) {
-        printf("[SKIP] Skipping test for Vulkan, as it does not support dynamically-sized shared memory\n");
-        return 0;
-    }
-
     if (t.has_feature(Target::OpenGLCompute)) {
         printf("[SKIP] Skipping test for OpenGLCompute, as it does not support dynamically-sized shared memory\n");
         return 0;
+    }
+
+    if (t.has_feature(Target::Vulkan)) {
+        const auto *interface = get_device_interface_for_device_api(DeviceAPI::Vulkan);
+        assert(interface->compute_capability != nullptr);
+        int major, minor;
+        int err = interface->compute_capability(nullptr, &major, &minor);
+        if (err != 0 || (major == 1 && minor < 2)) {
+            printf("[SKIP] Vulkan %d.%d is less than required 1.2.\n", major, minor);
+            return 0;
+        }
     }
 
     // Check dynamic allocations per-block and per-thread into both

@@ -1311,8 +1311,8 @@ void SpvBuilder::add_struct_annotation(SpvId struct_type_id, uint32_t member_ind
 }
 
 void SpvBuilder::add_execution_mode_local_size(SpvId func_id,
-                                               uint32_t local_size_x, 
-                                               uint32_t local_size_y, 
+                                               uint32_t local_size_x,
+                                               uint32_t local_size_y,
                                                uint32_t local_size_z) {
 
     local_size_x = std::max(local_size_x, (uint32_t)1);
@@ -1324,8 +1324,8 @@ void SpvBuilder::add_execution_mode_local_size(SpvId func_id,
 }
 
 void SpvBuilder::add_execution_mode_local_size_id(SpvId func_id,
-                                                  SpvId local_size_x_id, 
-                                                  SpvId local_size_y_id, 
+                                                  SpvId local_size_x_id,
+                                                  SpvId local_size_y_id,
                                                   SpvId local_size_z_id) {
 
     SpvInstruction exec_mode_inst = SpvFactory::exec_mode_local_size(func_id, local_size_x_id, local_size_y_id, local_size_z_id);
@@ -1863,7 +1863,7 @@ SpvId SpvBuilder::declare_specialization_constant_of_type(const Type &scalar_typ
              << "data=" << stringify_constant(value) << "\n";
 
     SpvInstruction inst = SpvFactory::specialization_constant(result_id, type_id, scalar_type.bytes(), &value, value_type);
-    module.add_type(inst); // NOTE: Needs to be declared in the type section in order to be used with other type definitions
+    module.add_type(inst);  // NOTE: Needs to be declared in the type section in order to be used with other type definitions
     return result_id;
 }
 
@@ -2516,11 +2516,9 @@ SpvInstruction SpvFactory::exec_mode_local_size_id(SpvId function_id, SpvId loca
     inst.add_immediates({
         {SpvExecutionModeLocalSizeId, SpvIntegerLiteral},
     });
-    inst.add_operands({
-        local_size_x_id, 
-        local_size_y_id, 
-        local_size_z_id
-    });
+    inst.add_operands({local_size_x_id,
+                       local_size_y_id,
+                       local_size_z_id});
     return inst;
 }
 

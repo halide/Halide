@@ -71,6 +71,17 @@ typedef uint32_t VkBool32;
 typedef uint64_t VkDeviceSize;
 typedef uint32_t VkSampleMask;
 
+// Provided by VK_VERSION_1_0
+#define VK_API_VERSION_MAJOR(version) (((uint32_t)(version) >> 22) & 0x7FU)
+#define VK_API_VERSION_MINOR(version) (((uint32_t)(version) >> 12) & 0x3FFU)
+#define VK_API_VERSION_PATCH(version) ((uint32_t)(version)&0xFFFU)
+#define VK_MAKE_API_VERSION(variant, major, minor, patch) \
+    ((((uint32_t)(variant)) << 29) | (((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
+#define VK_API_VERSION_1_0 VK_MAKE_API_VERSION(0, 1, 0, 0)
+#define VK_API_VERSION_1_1 VK_MAKE_API_VERSION(0, 1, 1, 0)
+#define VK_API_VERSION_1_2 VK_MAKE_API_VERSION(0, 1, 2, 0)
+#define VK_API_VERSION_1_3 VK_MAKE_API_VERSION(0, 1, 3, 0)
+
 #define VK_DEFINE_HANDLE(object) typedef struct object##_T *(object);
 #define VK_DEFINE_NON_DISPATCHABLE_HANDLE(object) typedef uint64_t object;
 

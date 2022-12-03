@@ -387,7 +387,7 @@ public:
     SpvId declare_type(const Type &type, uint32_t array_size = 1);
     SpvId declare_pointer_type(const Type &type, SpvStorageClass storage_class);
     SpvId declare_pointer_type(SpvId type_id, SpvStorageClass storage_class);
-    SpvId declare_constant(const Type &type, const void *data, bool is_specialization=false);
+    SpvId declare_constant(const Type &type, const void *data, bool is_specialization = false);
     SpvId declare_null_constant(const Type &type);
     SpvId declare_bool_constant(bool value);
     SpvId declare_string_constant(const std::string &str);
@@ -413,7 +413,7 @@ public:
     SpvId add_runtime_array(SpvId base_type_id);
     SpvId add_pointer_type(const Type &type, SpvStorageClass storage_class);
     SpvId add_pointer_type(SpvId base_type_id, SpvStorageClass storage_class);
-    SpvId add_constant(const Type &type, const void *data, bool is_specialization=false);
+    SpvId add_constant(const Type &type, const void *data, bool is_specialization = false);
     SpvId add_function_type(SpvId return_type_id, const ParamTypes &param_type_ids);
     SpvId add_function(const std::string &name, SpvId return_type, const ParamTypes &param_types = {});
     SpvId add_instruction(SpvInstruction val);
@@ -591,9 +591,9 @@ protected:
 
     ConstantKey make_bool_constant_key(bool value) const;
     ConstantKey make_string_constant_key(const std::string &value) const;
-    ConstantKey make_constant_key(uint8_t code, uint8_t bits, int lanes, size_t bytes, const void *data, bool is_specialization=false) const;
-    ConstantKey make_constant_key(const Type &type, const void *data, bool is_specialization=false) const;
-    SpvId lookup_constant(const Type &type, const void *data, bool is_specialization=false) const;
+    ConstantKey make_constant_key(uint8_t code, uint8_t bits, int lanes, size_t bytes, const void *data, bool is_specialization = false) const;
+    ConstantKey make_constant_key(const Type &type, const void *data, bool is_specialization = false) const;
+    SpvId lookup_constant(const Type &type, const void *data, bool is_specialization = false) const;
 
     ConstantKey make_null_constant_key(const Type &type) const;
     SpvId lookup_null_constant(const Type &type) const;
@@ -671,7 +671,7 @@ struct SpvFactory {
     static SpvInstruction entry_point(SpvId exec_model, SpvId func_id, const std::string &name, const Variables &variables);
     static SpvInstruction memory_model(SpvAddressingModel addressing_model, SpvMemoryModel memory_model);
     static SpvInstruction exec_mode_local_size(SpvId function_id, uint32_t local_size_size_x, uint32_t local_size_size_y, uint32_t local_size_size_z);
-    static SpvInstruction exec_mode_local_size_id(SpvId function_id, SpvId local_size_x_id, SpvId local_size_y_id, SpvId local_size_z_id); // only avail in 1.2
+    static SpvInstruction exec_mode_local_size_id(SpvId function_id, SpvId local_size_x_id, SpvId local_size_y_id, SpvId local_size_z_id);  // only avail in 1.2
     static SpvInstruction memory_barrier(SpvId memory_scope_id, SpvId semantics_mask_id);
     static SpvInstruction control_barrier(SpvId execution_scope_id, SpvId memory_scope_id, SpvId semantics_mask_id);
     static SpvInstruction bitwise_not(SpvId type_id, SpvId result_id, SpvId src_id);

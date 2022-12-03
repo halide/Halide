@@ -11,24 +11,58 @@ namespace Runtime {
 namespace Internal {
 namespace Vulkan {
 
-// Compilation cache for compiled shader modules
-struct VulkanEntryPointData {
+// Defines the specialization constants used for dynamically overiding the dispatch size
+struct VulkanWorkgroupSizeBinding {
+    uint32_t constant_id[3] = {0};  // zero if unused
+};
+
+// Data used to override specialization constants for dynamic dispatching
+struct VulkanDispatchData {
+    uint32_t global_size[3] = {0};  // aka blocks
+    uint32_t local_size[3] = {0};   // aka threads
+    uint32_t shared_mem_bytes = 0;
+    VulkanWorkgroupSizeBinding local_size_binding = {};
+};
+
+// Specialization constant binding information
+struct VulkanSpecializationConstant {
+    uint32_t constant_id = 0;
+    uint32_t type_size = 0;
+    const char *constant_name = nullptr;
+};
+
+// Shared memory allocation variable information
+struct VulkanSharedMemoryAllocation {
+    uint32_t constant_id = 0;  // specialization constant to override allocation array size (or zero if unused)
+    uint32_t type_size = 0;
+    uint32_t array_size = 0;
+    const char *variable_name = nullptr;
+};
+
+// Entry point metadata for shader modules
+struct VulkanShaderBinding {
     const char *entry_point_name = nullptr;
+    VulkanDispatchData dispatch_data = {};
     VkDescriptorPool descriptor_pool = {0};
     VkDescriptorSet descriptor_set = {0};
     VkPipeline compute_pipeline = {0};
     uint32_t uniform_buffer_count = 0;
     uint32_t storage_buffer_count = 0;
+    uint32_t specialization_constants_count = 0;
+    uint32_t shared_memory_allocations_count = 0;
+    VulkanSpecializationConstant *specialization_constants = nullptr;
+    VulkanSharedMemoryAllocation *shared_memory_allocations = nullptr;
     uint32_t bindings_count = 0;
     MemoryRegion *args_region = nullptr;
 };
 
+// Compilation cache for compiled shader modules
 struct VulkanCompilationCacheEntry {
     VkShaderModule shader_module = {0};
     VkDescriptorSetLayout *descriptor_set_layouts = nullptr;
     VkPipelineLayout pipeline_layout = {0};
-    uint32_t entry_point_count = 0;
-    VulkanEntryPointData *entry_point_data = nullptr;
+    uint32_t shader_count = 0;
+    VulkanShaderBinding *shader_bindings = nullptr;
 };
 
 WEAK Halide::Internal::GPUCompilationCache<VkDevice, VulkanCompilationCacheEntry *> compilation_cache;
@@ -139,7 +173,7 @@ VkResult vk_fill_command_buffer_with_dispatch_call(void *user_context,
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, compute_pipeline);
     vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout,
                             descriptor_set_index, 1, &descriptor_set, 0, nullptr);
-    vkCmdDispatch(command_buffer, blocksX, blocksY, blocksZ);  // TODO: make sure this is right!
+    vkCmdDispatch(command_buffer, blocksX, blocksY, blocksZ);
 
     result = vkEndCommandBuffer(command_buffer);
     if (result != VK_SUCCESS) {
@@ -667,6 +701,7 @@ VkResult vk_create_compute_pipeline(void *user_context,
                                     const char *pipeline_name,
                                     VkShaderModule shader_module,
                                     VkPipelineLayout pipeline_layout,
+                                    VkSpecializationInfo *specialization_info,
                                     VkPipeline *compute_pipeline) {
 
 #ifdef DEBUG_RUNTIME
@@ -691,7 +726,7 @@ VkResult vk_create_compute_pipeline(void *user_context,
                 VK_SHADER_STAGE_COMPUTE_BIT,                          // compute stage shader
                 shader_module,                                        // shader module
                 pipeline_name,                                        // entry point name
-                nullptr                                               // pointer to VkSpecializationInfo struct
+                specialization_info,                                  // pointer to VkSpecializationInfo struct
             },
             pipeline_layout,  // pipeline layout
             0,                // base pipeline handle for derived pipeline
@@ -705,6 +740,145 @@ VkResult vk_create_compute_pipeline(void *user_context,
     }
 
     return VK_SUCCESS;
+}
+
+VkResult vk_setup_compute_pipeline(void *user_context,
+                                   VulkanMemoryAllocator *allocator,
+                                   VulkanShaderBinding *shader_bindings,
+                                   VulkanDispatchData *dispatch_data,
+                                   VkShaderModule shader_module,
+                                   VkPipelineLayout pipeline_layout,
+                                   VkPipeline *compute_pipeline) {
+
+#ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << " vk_setup_compute_pipeline (user_context: " << user_context << ", "
+        << "entry_point_name: '" << shader_bindings->entry_point_name << "', "
+        << "allocator: " << (void *)allocator << ", "
+        << "device: " << (void *)allocator->current_device() << ", "
+        << "shader_bindings: " << (void *)shader_bindings << ", "
+        << "shader_module: " << (void *)shader_module << ", "
+        << "pipeline_layout: " << (void *)pipeline_layout << ")\n";
+#endif
+    halide_abort_if_false(user_context, allocator != nullptr);
+    halide_abort_if_false(user_context, shader_bindings != nullptr);
+    halide_abort_if_false(user_context, dispatch_data != nullptr);
+
+    VkResult result = VK_SUCCESS;
+    const char *entry_point_name = shader_bindings->entry_point_name;
+
+    uint32_t dispatch_constant_index = 0;
+    uint32_t dispatch_constant_ids[4] = {0, 0, 0, 0};
+    uint32_t dispatch_constant_values[4] = {0, 0, 0, 0};
+
+    // locate the mapping for overriding any dynamic shared memory allocation sizes
+    if (shader_bindings->shared_memory_allocations_count && dispatch_data->shared_mem_bytes) {
+
+        uint32_t shared_mem_constant_id = 0;
+        uint32_t static_shared_mem_bytes = 0;
+        uint32_t shared_mem_type_size = 0;
+
+        for (uint32_t sm = 0; sm < shader_bindings->shared_memory_allocations_count; sm++) {
+            VulkanSharedMemoryAllocation *allocation = &(shader_bindings->shared_memory_allocations[sm]);
+            if (allocation->constant_id == 0) {
+                // static fixed-size allocation
+                static_shared_mem_bytes += allocation->type_size * allocation->array_size;
+            } else {
+                // dynamic allocation
+                if (shared_mem_constant_id > 0) {
+                    error(user_context) << "Vulkan: Multiple dynamic shared memory allocations found! Only one is suported!!\n";
+                    break;
+                }
+                shared_mem_constant_id = allocation->constant_id;
+                shared_mem_type_size = allocation->type_size;
+            }
+        }
+        uint32_t shared_mem_bytes_avail = (dispatch_data->shared_mem_bytes - static_shared_mem_bytes);
+        debug(user_context) << "  pipeline uses " << static_shared_mem_bytes << " bytes of static shared memory\n";
+        debug(user_context) << "  dispatch requests " << dispatch_data->shared_mem_bytes << " bytes of shared memory\n";
+        debug(user_context) << "  dynamic shared memory " << shared_mem_bytes_avail << " bytes available\n";
+
+        // setup the dynamic array size
+        if ((shared_mem_constant_id > 0) && (shared_mem_bytes_avail > 0)) {
+            uint32_t dynamic_array_size = (uint32_t)shared_mem_bytes_avail / shared_mem_type_size;
+            debug(user_context) << "  setting shared memory to " << (uint32_t)dynamic_array_size << " elements "
+                                << "(or " << (uint32_t)shared_mem_bytes_avail << " bytes)\n";
+
+            // save the shared mem specialization constant in the first slot
+            dispatch_constant_ids[dispatch_constant_index] = shared_mem_constant_id;
+            dispatch_constant_values[dispatch_constant_index] = dynamic_array_size;
+            dispatch_constant_index++;
+        }
+    }
+
+    // locate the mapping for overriding any dynamic workgroup local sizes
+    if (shader_bindings->dispatch_data.local_size_binding.constant_id[0] != 0) {
+        for (uint32_t dim = 0; dim < 3; dim++) {
+            dispatch_constant_ids[dispatch_constant_index] = shader_bindings->dispatch_data.local_size_binding.constant_id[dim];
+            dispatch_constant_values[dispatch_constant_index] = dispatch_data->local_size[dim];
+            dispatch_constant_index++;
+        }
+    }
+
+    // verify the specialization constants actually exist
+    for (uint32_t dc = 0; dc < dispatch_constant_index; dc++) {
+        const uint32_t invalid_index = uint32_t(-1);
+        uint32_t found_index = invalid_index;
+        for (uint32_t sc = 0; sc < shader_bindings->specialization_constants_count; sc++) {
+            if (shader_bindings->specialization_constants[sc].constant_id == dispatch_constant_ids[dc]) {
+                debug(user_context) << "  binding specialization constant [" << dispatch_constant_ids[dc] << "] "
+                                    << "'" << shader_bindings->specialization_constants[sc].constant_name << "' "
+                                    << " => " << dispatch_constant_values[dc] << "\n";
+                found_index = sc;
+                break;
+            }
+        }
+        halide_abort_if_false(user_context, found_index != invalid_index);
+    }
+
+    // Prepare specialization mapping for all dispatch constants
+    uint32_t dispatch_constant_count = 0;
+    VkSpecializationMapEntry specialization_map_entries[4];
+    memset(specialization_map_entries, 0, 4 * sizeof(VkSpecializationMapEntry));
+    for (uint32_t dc = 0; dc < dispatch_constant_index && dc < 4; dc++) {
+        specialization_map_entries[dc].constantID = dispatch_constant_ids[dc];
+        specialization_map_entries[dc].size = sizeof(uint32_t);
+        specialization_map_entries[dc].offset = dc * sizeof(uint32_t);
+        dispatch_constant_count++;
+    }
+
+    if (dispatch_constant_count > 0) {
+
+        // Prepare specialization info block for the shader stage
+        VkSpecializationInfo specialization_info{};
+        specialization_info.dataSize = dispatch_constant_count * sizeof(uint32_t);
+        specialization_info.mapEntryCount = dispatch_constant_count;
+        specialization_info.pMapEntries = specialization_map_entries;
+        specialization_info.pData = dispatch_constant_values;
+
+        // Recreate the pipeline with the requested shared memory allocation
+        if (shader_bindings->compute_pipeline) {
+            vk_destroy_compute_pipeline(user_context, allocator, shader_bindings->compute_pipeline);
+            shader_bindings->compute_pipeline = {0};
+        }
+
+        result = vk_create_compute_pipeline(user_context, allocator, entry_point_name, shader_module, pipeline_layout, &specialization_info, &(shader_bindings->compute_pipeline));
+        if (result != VK_SUCCESS) {
+            error(user_context) << "vk_create_compute_pipeline() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
+        }
+
+    } else {
+
+        // Construct and re-use the fixed pipeline
+        if (shader_bindings->compute_pipeline == 0) {
+            result = vk_create_compute_pipeline(user_context, allocator, entry_point_name, shader_module, pipeline_layout, nullptr, &(shader_bindings->compute_pipeline));
+            if (result != VK_SUCCESS) {
+                error(user_context) << "vk_create_compute_pipeline() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
+            }
+        }
+    }
+
+    return result;
 }
 
 VkResult vk_destroy_compute_pipeline(void *user_context,
@@ -723,10 +897,10 @@ VkResult vk_destroy_compute_pipeline(void *user_context,
 
 // --------------------------------------------------------------------------
 
-VulkanEntryPointData *vk_decode_entry_point_data(void *user_context, VulkanMemoryAllocator *allocator, const uint32_t *module_ptr, uint32_t module_size) {
+VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryAllocator *allocator, const uint32_t *module_ptr, uint32_t module_size) {
 #ifdef DEBUG_RUNTIME
     debug(user_context)
-        << " vk_decode_entry_point_data (user_context: " << user_context << ", "
+        << " vk_decode_shader_bindings (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
         << "module_ptr: " << (void *)module_ptr << ", "
         << "module_size: " << module_size << ")\n";
@@ -734,57 +908,197 @@ VulkanEntryPointData *vk_decode_entry_point_data(void *user_context, VulkanMemor
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
     halide_debug_assert(user_context, module_ptr != nullptr);
-    halide_debug_assert(user_context, module_size >= (2 * sizeof(uint32_t)));
 
     // Decode the sidecar for the module that lists the descriptor sets
-    // corresponding to each entry point contained in the module
+    // corresponding to each entry point contained in the module.
+    //
+    // Construct a shader binding for each entry point that defines all
+    // the buffers, constants, shared memory, and workgroup sizes
+    // that are required for execution.
+    //
+    // Like the SPIR-V code module, each entry is one word (1x uint32_t).
+    // Variable length sections are prefixed with their length (ie number of entries).
     //
     // [0] Header word count (total length of header)
     // [1] Number of descriptor sets
     // ... For each descriptor set ...
-    // ... [0] Number of uniform buffers for this descriptor set
-    // ... [1] Number of storage buffers for this descriptor set
-    // ... [2] Length of entry point name (padded to nearest word size)
-    // ... [X] Entry point string data
+    // ... [0] Length of entry point name (padded to nearest word size)
+    // ....... [*] Entry point string data (padded with null chars)
+    // ... [1] Number of uniform buffers for this descriptor set
+    // ... [2] Number of storage buffers for this descriptor set
+    // ... [3] Number of specialization constants for this descriptor set
+    // ....... For each specialization constant ...
+    // ....... [0] Length of constant name string (padded to nearest word size)
+    // ........... [*] Constant name string data (padded with null chars)
+    // ....... [1] Constant id (as used in VkSpecializationMapEntry for binding)
+    // ....... [2] Size of data type (in bytes)
+    // ... [4] Number of shared memory allocations for this descriptor set
+    // ....... For each allocation ...
+    // ....... [0] Length of variable name string (padded to nearest word size)
+    // ........... [*] Variable name string data (padded with null chars)
+    // ....... [1] Constant id to use for overriding array size (zero if it is not bound to a specialization constant)
+    // ....... [2] Size of data type (in bytes)
+    // ....... [3] Size of array (ie element count)
+    // ... [4] Dynamic workgroup dimensions bound to specialization constants
+    // ....... [0] Constant id to use for local_size_x (zero if it was statically declared and not bound to a specialization constant)
+    // ....... [1] Constant id to use for local_size_y
+    // ....... [2] Constant id ot use for local_size_z
     //
     // NOTE: See CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header() for the encoding
     //
+    // Both vk_decode_shader_bindings() and vk_compile_shader_module() will
+    // need to be updated if the header encoding ever changes!
     //
+    halide_debug_assert(user_context, module_size >= (2 * sizeof(uint32_t)));
     uint32_t module_entries = module_size / sizeof(uint32_t);
     uint32_t idx = 1;  // skip past the header_word_count
-    uint32_t entry_point_count = module_ptr[idx++];
-    if (entry_point_count < 1) {
+    uint32_t shader_count = module_ptr[idx++];
+    if (shader_count < 1) {
         return nullptr;  // no descriptors
     }
 
-    // allocate an array of entry point data
+    // allocate an array of shader bindings (one for each entry point in the module)
     VkSystemAllocationScope alloc_scope = VkSystemAllocationScope::VK_SYSTEM_ALLOCATION_SCOPE_OBJECT;
-    size_t entry_point_data_size = entry_point_count * sizeof(VulkanEntryPointData);
-    VulkanEntryPointData *entry_point_data = (VulkanEntryPointData *)vk_host_malloc(user_context, entry_point_data_size, 0, alloc_scope, allocator->callbacks());
-    if (entry_point_data == nullptr) {
-        error(user_context) << "Vulkan: Failed to allocate entry_point_data! Out of memory!\n";
+    size_t shader_bindings_size = shader_count * sizeof(VulkanShaderBinding);
+    VulkanShaderBinding *shader_bindings = (VulkanShaderBinding *)vk_host_malloc(user_context, shader_bindings_size, 0, alloc_scope, allocator->callbacks());
+    if (shader_bindings == nullptr) {
+        error(user_context) << "Vulkan: Failed to allocate shader_bindings! Out of memory!\n";
         return nullptr;
     }
-    memset(entry_point_data, 0, entry_point_data_size);
+    memset(shader_bindings, 0, shader_bindings_size);
 
-    // decode and fill in each entry point
-    for (uint32_t n = 0; (n < entry_point_count) && (idx < module_entries); n++) {
-        halide_debug_assert(user_context, (idx + 4) < module_entries);
+    // decode and fill in the shader binding for each entry point
+    for (uint32_t n = 0; (n < shader_count) && (idx < module_entries); n++) {
+        halide_debug_assert(user_context, (idx + 8) < module_entries);  // should be at least 8 entries
+
+        // [0] Length of entry point name (padded to nearest word size)
+        uint32_t entry_point_name_length = module_ptr[idx++];
+
+        // [*] Entry point string data (padded with null chars)
+        const char *entry_point_name = (const char *)(module_ptr + idx);  // NOTE: module owns string data
+        idx += entry_point_name_length;                                   // skip past string data
+
+        // [1] Number of uniform buffers for this descriptor set
         uint32_t uniform_buffer_count = module_ptr[idx++];
+
+        // [2] Number of storage buffers for this descriptor set
         uint32_t storage_buffer_count = module_ptr[idx++];
-        uint32_t padded_string_length = module_ptr[idx++];
-        const char *entry_point_name = (const char *)(module_ptr + idx);
+
+        // [3] Number of specialization constants for this descriptor set
+        uint32_t specialization_constants_count = module_ptr[idx++];
+
+        // Decode all specialization constants
+        VulkanSpecializationConstant *specialization_constants = nullptr;
+        if (specialization_constants_count > 0) {
+
+            // Allocate an array to store the decoded specialization constant data
+            size_t specialization_constants_size = specialization_constants_count * sizeof(VulkanSpecializationConstant);
+            specialization_constants = (VulkanSpecializationConstant *)vk_host_malloc(user_context, specialization_constants_size, 0, alloc_scope, allocator->callbacks());
+            if (specialization_constants == nullptr) {
+                error(user_context) << "Vulkan: Failed to allocate specialization_constants! Out of memory!\n";
+                return nullptr;
+            }
+            memset(specialization_constants, 0, specialization_constants_size);
+
+            // For each specialization constant ...
+            for (uint32_t sc = 0; sc < specialization_constants_count; sc++) {
+                halide_debug_assert(user_context, (idx + 4) < module_entries);  // should be at least 4 entries
+
+                // [0] Length of constant name string (padded to nearest word size)
+                uint32_t constant_name_length = module_ptr[idx++];
+
+                // [*] Constant name string data (padded with null chars)
+                const char *constant_name = (const char *)(module_ptr + idx);
+                specialization_constants[sc].constant_name = constant_name;  // NOTE: module owns string data
+                idx += constant_name_length;                                 // skip past string data
+
+                // [1] Constant id (as used in VkSpecializationMapEntry for binding)
+                specialization_constants[sc].constant_id = module_ptr[idx++];
+
+                // [2] Size of data type (in bytes)
+                specialization_constants[sc].type_size = module_ptr[idx++];
+            }
+        }
+
+        // [4] Number of shared memory allocations for this descriptor set
+        uint32_t shared_memory_allocations_count = module_ptr[idx++];  // [3]
+
+        // Decode all shared memory allocations ...
+        VulkanSharedMemoryAllocation *shared_memory_allocations = nullptr;
+        if (shared_memory_allocations_count > 0) {
+
+            // Allocate an array to store the decoded shared memory allocation data
+            size_t shared_memory_allocations_size = shared_memory_allocations_count * sizeof(VulkanSharedMemoryAllocation);
+            shared_memory_allocations = (VulkanSharedMemoryAllocation *)vk_host_malloc(user_context, shared_memory_allocations_size, 0, alloc_scope, allocator->callbacks());
+            if (shared_memory_allocations == nullptr) {
+                error(user_context) << "Vulkan: Failed to allocate shared_memory_allocations! Out of memory!\n";
+                return nullptr;
+            }
+            memset(shared_memory_allocations, 0, shared_memory_allocations_size);
+
+            // For each shared memory allocation ...
+            for (uint32_t sm = 0; sm < shared_memory_allocations_count && (idx < module_entries); sm++) {
+                halide_debug_assert(user_context, (idx + 4) < module_entries);  // should be at least 4 entries
+
+                // [0] Length of variable name string (padded to nearest word size)
+                uint32_t variable_name_length = module_ptr[idx++];
+
+                // [*] Variable name string data (padded with null chars)
+                const char *variable_name = (const char *)(module_ptr + idx);
+                shared_memory_allocations[sm].variable_name = variable_name;  // NOTE: module owns string data
+                idx += variable_name_length;                                  // skip past string data
+
+                // [1] Constant id to use for overriding array size
+                shared_memory_allocations[sm].constant_id = module_ptr[idx++];
+
+                // [2] Size of data type (in bytes)
+                shared_memory_allocations[sm].type_size = module_ptr[idx++];
+
+                // [3] Size of array (ie element count)
+                shared_memory_allocations[sm].array_size = module_ptr[idx++];
+            }
+        }
+
+        // [4] Dynamic workgroup dimensions bound to specialization constants
+        halide_debug_assert(user_context, (idx + 3) < module_entries);  // should be at least 3 entries
+        for (uint32_t dim = 0; dim < 3 && (idx < module_entries); dim++) {
+            shader_bindings[n].dispatch_data.local_size_binding.constant_id[dim] = module_ptr[idx++];
+        }
 
         debug(user_context) << "  [" << n << "] "
-                            << "uniform_buffer_count=" << uniform_buffer_count << " "
-                            << "storage_buffer_count=" << storage_buffer_count << " "
-                            << "entry_point_name_length=" << padded_string_length << " "
-                            << "entry_point_name: " << (const char *)entry_point_name << "\n";
+                            << "entry_point_name='" << (const char *)entry_point_name << "'\n";
 
-        entry_point_data[n].entry_point_name = entry_point_name;  // NOTE: module owns string data
-        entry_point_data[n].uniform_buffer_count = uniform_buffer_count;
-        entry_point_data[n].storage_buffer_count = storage_buffer_count;
-        idx += (padded_string_length / sizeof(uint32_t));  // skip past string data
+        debug(user_context) << "  uniform_buffer_count=" << uniform_buffer_count << "\n"
+                            << "  storage_buffer_count=" << storage_buffer_count << "\n";
+
+        debug(user_context) << "  specialization_constants_count=" << specialization_constants_count << "\n";
+        for (uint32_t sc = 0; sc < specialization_constants_count; sc++) {
+            debug(user_context) << "   [" << sc << "] "
+                                << "constant_name='" << (const char *)specialization_constants[sc].constant_name << "' "
+                                << "constant_id=" << specialization_constants[sc].constant_id << " "
+                                << "type_size=" << specialization_constants[sc].type_size << "\n";
+        }
+
+        debug(user_context) << "  shared_memory_allocations_count=" << shared_memory_allocations_count << "\n";
+        for (uint32_t sm = 0; sm < shared_memory_allocations_count; sm++) {
+            debug(user_context) << "   [" << sm << "] "
+                                << "variable_name='" << (const char *)shared_memory_allocations[sm].variable_name << "' "
+                                << "constant_id=" << shared_memory_allocations[sm].constant_id << " "
+                                << "type_size=" << shared_memory_allocations[sm].type_size << " "
+                                << "array_size=" << shared_memory_allocations[sm].array_size << "\n";
+        }
+        debug(user_context) << "  local_size_binding=[";
+        for (uint32_t dim = 0; dim < 3 && (idx < module_entries); dim++) {
+            debug(user_context) << shader_bindings[n].dispatch_data.local_size_binding.constant_id[dim] << " ";
+        }
+        debug(user_context) << "]\n";
+        shader_bindings[n].entry_point_name = entry_point_name;  // NOTE: module owns string data
+        shader_bindings[n].uniform_buffer_count = uniform_buffer_count;
+        shader_bindings[n].storage_buffer_count = storage_buffer_count;
+        shader_bindings[n].specialization_constants_count = specialization_constants_count;
+        shader_bindings[n].specialization_constants = specialization_constants;
+        shader_bindings[n].shared_memory_allocations_count = shared_memory_allocations_count;
+        shader_bindings[n].shared_memory_allocations = shared_memory_allocations;
     }
 
 #ifdef DEBUG_RUNTIME
@@ -792,7 +1106,7 @@ VulkanEntryPointData *vk_decode_entry_point_data(void *user_context, VulkanMemor
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
 
-    return entry_point_data;
+    return shader_bindings;
 }
 
 VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
@@ -815,7 +1129,7 @@ VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, Vulkan
     halide_debug_assert(user_context, module_size >= (2 * sizeof(uint32_t)));
 
     uint32_t header_word_count = module_ptr[0];
-    uint32_t entry_point_count = module_ptr[1];
+    uint32_t shader_count = module_ptr[1];
     uint32_t header_size = header_word_count * sizeof(uint32_t);
 
     // skip past the preamble header to the start of the SPIR-V binary
@@ -848,27 +1162,27 @@ VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, Vulkan
     memset(cache_entry, 0, sizeof(VulkanCompilationCacheEntry));
 
     // decode the entry point data and save it in the cache entry
-    cache_entry->entry_point_data = vk_decode_entry_point_data(user_context, allocator, module_ptr, module_size);
-    if (cache_entry->entry_point_data != nullptr) {
-        cache_entry->entry_point_count = entry_point_count;
+    cache_entry->shader_bindings = vk_decode_shader_bindings(user_context, allocator, module_ptr, module_size);
+    if (cache_entry->shader_bindings != nullptr) {
+        cache_entry->shader_count = shader_count;
     }
 
     VkResult result = vkCreateShaderModule(allocator->current_device(), &shader_info, allocator->callbacks(), &cache_entry->shader_module);
     if ((result != VK_SUCCESS)) {
         error(user_context) << "Vulkan: vkCreateShaderModule Failed! Error returned: " << vk_get_error_name(result) << "\n";
-        vk_host_free(user_context, cache_entry->entry_point_data, allocator->callbacks());
+        vk_host_free(user_context, cache_entry->shader_bindings, allocator->callbacks());
         vk_host_free(user_context, cache_entry, allocator->callbacks());
         return nullptr;
     }
 
     // allocate an array for storing the descriptor set layouts
-    if (cache_entry->entry_point_count) {
-        cache_entry->descriptor_set_layouts = (VkDescriptorSetLayout *)vk_host_malloc(user_context, cache_entry->entry_point_count * sizeof(VkDescriptorSetLayout), 0, alloc_scope, allocator->callbacks());
+    if (cache_entry->shader_count) {
+        cache_entry->descriptor_set_layouts = (VkDescriptorSetLayout *)vk_host_malloc(user_context, cache_entry->shader_count * sizeof(VkDescriptorSetLayout), 0, alloc_scope, allocator->callbacks());
         if (cache_entry->descriptor_set_layouts == nullptr) {
             error(user_context) << "Vulkan: Failed to allocate descriptor set layouts for cache entry! Out of memory!\n";
             return nullptr;
         }
-        memset(cache_entry->descriptor_set_layouts, 0, cache_entry->entry_point_count * sizeof(VkDescriptorSetLayout));
+        memset(cache_entry->descriptor_set_layouts, 0, cache_entry->shader_count * sizeof(VkDescriptorSetLayout));
     }
 
 #ifdef DEBUG_RUNTIME
@@ -906,29 +1220,37 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
                     vkDestroyShaderModule(allocator->current_device(), cache_entry->shader_module, allocator->callbacks());
                     cache_entry->shader_module = {0};
                 }
-                if (cache_entry->entry_point_data) {
-                    for (uint32_t n = 0; n < cache_entry->entry_point_count; n++) {
-                        if (cache_entry->entry_point_data[n].args_region) {
-                            vk_destroy_scalar_uniform_buffer(user_context, allocator, cache_entry->entry_point_data[n].args_region);
-                            cache_entry->entry_point_data[n].args_region = nullptr;
+                if (cache_entry->shader_bindings) {
+                    for (uint32_t n = 0; n < cache_entry->shader_count; n++) {
+                        if (cache_entry->shader_bindings[n].args_region) {
+                            vk_destroy_scalar_uniform_buffer(user_context, allocator, cache_entry->shader_bindings[n].args_region);
+                            cache_entry->shader_bindings[n].args_region = nullptr;
                         }
-                        if (cache_entry->entry_point_data[n].descriptor_pool) {
-                            vk_destroy_descriptor_pool(user_context, allocator, cache_entry->entry_point_data[n].descriptor_pool);
-                            cache_entry->entry_point_data[n].descriptor_pool = {0};
+                        if (cache_entry->shader_bindings[n].descriptor_pool) {
+                            vk_destroy_descriptor_pool(user_context, allocator, cache_entry->shader_bindings[n].descriptor_pool);
+                            cache_entry->shader_bindings[n].descriptor_pool = {0};
                         }
-                        if (cache_entry->entry_point_data[n].compute_pipeline) {
-                            vk_destroy_compute_pipeline(user_context, allocator, cache_entry->entry_point_data[n].compute_pipeline);
-                            cache_entry->entry_point_data[n].compute_pipeline = {0};
+                        if (cache_entry->shader_bindings[n].compute_pipeline) {
+                            vk_destroy_compute_pipeline(user_context, allocator, cache_entry->shader_bindings[n].compute_pipeline);
+                            cache_entry->shader_bindings[n].compute_pipeline = {0};
+                        }
+                        if (cache_entry->shader_bindings[n].specialization_constants) {
+                            vk_host_free(user_context, cache_entry->shader_bindings[n].specialization_constants, allocator->callbacks());
+                            cache_entry->shader_bindings[n].specialization_constants = nullptr;
+                        }
+                        if (cache_entry->shader_bindings[n].shared_memory_allocations) {
+                            vk_host_free(user_context, cache_entry->shader_bindings[n].shared_memory_allocations, allocator->callbacks());
+                            cache_entry->shader_bindings[n].shared_memory_allocations = nullptr;
                         }
                     }
 
-                    vk_host_free(user_context, cache_entry->entry_point_data, allocator->callbacks());
-                    cache_entry->entry_point_data = nullptr;
-                    cache_entry->entry_point_count = 0;
+                    vk_host_free(user_context, cache_entry->shader_bindings, allocator->callbacks());
+                    cache_entry->shader_bindings = nullptr;
+                    cache_entry->shader_count = 0;
                 }
                 if (cache_entry->descriptor_set_layouts) {
-                    for (uint32_t n = 0; n < cache_entry->entry_point_count; n++) {
-                        debug(user_context) << "  destroying descriptor set layout [" << n << "] " << cache_entry->entry_point_data[n].entry_point_name << "\n";
+                    for (uint32_t n = 0; n < cache_entry->shader_count; n++) {
+                        debug(user_context) << "  destroying descriptor set layout [" << n << "] " << cache_entry->shader_bindings[n].entry_point_name << "\n";
                         vk_destroy_descriptor_set_layout(user_context, allocator, cache_entry->descriptor_set_layouts[n]);
                         cache_entry->descriptor_set_layouts[n] = {0};
                     }

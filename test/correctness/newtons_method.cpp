@@ -10,8 +10,14 @@ using namespace Halide;
 template<typename T>
 int find_pi() {
     // Skip test if data type is not supported by the target.
+    Type type = type_of<T>();
     Target target = get_jit_target_from_environment();
-    if (!target.supports_type(type_of<T>())) {
+    if (!target.supports_type(type)) {
+        return 0;
+    }
+
+    // Vulkan lacks trig functions for 64-bit floats ... skip
+    if (target.has_feature(Target::Vulkan) && (type.is_float() && type.bits() > 32)) {
         return 0;
     }
 

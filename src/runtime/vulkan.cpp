@@ -120,6 +120,11 @@ WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *halide_b
     return 0;
 }
 
+WEAK int halide_vulkan_compute_capability(void *user_context, int *major, int *minor) {
+    debug(user_context) << " halide_vulkan_compute_capability (user_context: " << user_context << ")\n";
+    return vk_find_compute_capability(user_context, major, minor);
+}
+
 WEAK int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr, const char *src, int size) {
     debug(user_context)
         << "halide_vulkan_init_kernels (user_context: " << user_context
@@ -1041,17 +1046,19 @@ WEAK int halide_vulkan_run(void *user_context,
     // if used more than once.
     //
     // 1. Lookup the shader module cache entry in the compilation cache
-    //    1a. If shader module doesn't exist yet, then lookup invokes compile
+    //    --- If shader module doesn't exist yet, then lookup invokes compile
+    //    1a. Locate the correct entry point for the kernel (code modules may contain multiple entry points)
     // 2. If the rest of the cache entry is uninitialized, then create new objects:
     //    2a. Create a descriptor set layout
-    //    2b. Create the buffer for the scalar params
-    //    2c. Create a pipeline layout
-    //    2d. Create a compute pipeline
-    //    2e. Create a descriptor set
+    //    2b. Create a pipeline layout
+    //    2c. Create a compute pipeline
+    //    --- Apply specializations to pipeline for shared memory or workgroup sizes
+    //    2d. Create a descriptor set
     //    --- The above can be cached between invocations ---
-    // 3. Set bindings for buffers in the descriptor set
-    //    3a. Copy args into uniform buffer
-    //    3b. Update buffer bindings for descriptor set
+    // 3. Set bindings for buffers and args in the descriptor set
+    //    3a. Create the buffer for the scalar params
+    //    3b. Copy args into uniform buffer
+    //    3c. Update buffer bindings for descriptor set
     // 4. Create a command buffer from the command pool
     // 5. Fill the command buffer with a dispatch call
     //    7a. Bind the compute pipeline
@@ -1059,13 +1066,11 @@ WEAK int halide_vulkan_run(void *user_context,
     //    7c. Add a dispatch to the command buffer
     //    7d. End the command buffer
     // 6. Submit the command buffer to our command queue
-    // --- The following isn't best practice, but it's in line
-    //     with what we do in Metal etc. ---
+    // --- The following isn't the most efficient, but it's what we do in Metal etc. ---
     // 7. Wait until the queue is done with the command buffer
     // 8. Cleanup all temporary objects
 
-    //// 3. Create a compute pipeline
-    // Get the shader module
+    // 1. Get the shader module cache entry
     VulkanCompilationCacheEntry *cache_entry = nullptr;
     bool found = compilation_cache.lookup(ctx.device, state_ptr, cache_entry);
     halide_abort_if_false(user_context, found);
@@ -1074,11 +1079,11 @@ WEAK int halide_vulkan_run(void *user_context,
         return halide_error_code_internal_error;
     }
 
-    // 3a. Locate the correct entry point from the cache
+    // 1a. Locate the correct entry point from the cache
     bool found_entry_point = false;
     uint32_t entry_point_index = 0;
-    for (uint32_t n = 0; n < cache_entry->entry_point_count; ++n) {
-        if (strstr(cache_entry->entry_point_data[n].entry_point_name, entry_name) != nullptr) {
+    for (uint32_t n = 0; n < cache_entry->shader_count; ++n) {
+        if (strstr(cache_entry->shader_bindings[n].entry_point_name, entry_name) != nullptr) {
             entry_point_index = n;
             found_entry_point = true;
         }
@@ -1088,18 +1093,19 @@ WEAK int halide_vulkan_run(void *user_context,
         return halide_error_code_internal_error;
     }
     debug(user_context) << " found entry point ["
-                        << (entry_point_index + 1) << " of " << cache_entry->entry_point_count
+                        << (entry_point_index + 1) << " of " << cache_entry->shader_count
                         << "] '" << entry_name << "'\n";
 
+    // 2. Create objects for execution
     halide_abort_if_false(user_context, cache_entry->descriptor_set_layouts != nullptr);
     if (cache_entry->pipeline_layout == 0) {
 
-        //// 1. Create all descriptor set layouts
-        for (uint32_t n = 0; n < cache_entry->entry_point_count; ++n) {
+        // 2a. Create all descriptor set layouts
+        for (uint32_t n = 0; n < cache_entry->shader_count; ++n) {
             if (((void *)cache_entry->descriptor_set_layouts[n]) == nullptr) {
-                uint32_t uniform_buffer_count = cache_entry->entry_point_data[n].uniform_buffer_count;
-                uint32_t storage_buffer_count = cache_entry->entry_point_data[n].storage_buffer_count;
-                debug(user_context) << " creating descriptor set layout [" << n << "] " << cache_entry->entry_point_data[n].entry_point_name << "\n";
+                uint32_t uniform_buffer_count = cache_entry->shader_bindings[n].uniform_buffer_count;
+                uint32_t storage_buffer_count = cache_entry->shader_bindings[n].storage_buffer_count;
+                debug(user_context) << " creating descriptor set layout [" << n << "] " << cache_entry->shader_bindings[n].entry_point_name << "\n";
                 VkResult result = vk_create_descriptor_set_layout(user_context, ctx.allocator, uniform_buffer_count, storage_buffer_count, &(cache_entry->descriptor_set_layouts[n]));
                 if (result != VK_SUCCESS) {
                     error(user_context) << "vk_create_descriptor_set_layout() failed! Unable to create shader module! Error: " << vk_get_error_name(result) << "\n";
@@ -1108,85 +1114,93 @@ WEAK int halide_vulkan_run(void *user_context,
             }
         }
 
-        ///// 2. Create the pipeline layout
-        VkResult result = vk_create_pipeline_layout(user_context, ctx.allocator, cache_entry->entry_point_count, cache_entry->descriptor_set_layouts, &(cache_entry->pipeline_layout));
+        // 2b. Create the pipeline layout
+        VkResult result = vk_create_pipeline_layout(user_context, ctx.allocator, cache_entry->shader_count, cache_entry->descriptor_set_layouts, &(cache_entry->pipeline_layout));
         if (result != VK_SUCCESS) {
             error(user_context) << "vk_create_pipeline_layout() failed! Unable to create shader module! Error: " << vk_get_error_name(result) << "\n";
             return halide_error_code_internal_error;
         }
     }
 
-    VulkanEntryPointData *entry_point_data = (cache_entry->entry_point_data + entry_point_index);
-    halide_abort_if_false(user_context, entry_point_data != nullptr);
+    VulkanShaderBinding *shader_bindings = (cache_entry->shader_bindings + entry_point_index);
+    halide_abort_if_false(user_context, shader_bindings != nullptr);
 
-    //// 1a. Create a buffer for the scalar parameters
-    if ((entry_point_data->args_region == nullptr) && entry_point_data->uniform_buffer_count) {
-        size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context, arg_sizes, args, arg_is_buffer);
-        if (scalar_buffer_size > 0) {
-            entry_point_data->args_region = vk_create_scalar_uniform_buffer(user_context, ctx.allocator, scalar_buffer_size);
-            if (entry_point_data->args_region == nullptr) {
-                error(user_context) << "vk_create_scalar_uniform_buffer() failed! Unable to create shader module!\n";
-                return halide_error_code_internal_error;
-            }
-        }
+    VulkanDispatchData dispatch_data = {};
+    dispatch_data.shared_mem_bytes = shared_mem_bytes;
+    dispatch_data.global_size[0] = blocksX;
+    dispatch_data.global_size[1] = blocksY;
+    dispatch_data.global_size[2] = blocksZ;
+    dispatch_data.local_size[0] = threadsX;
+    dispatch_data.local_size[1] = threadsY;
+    dispatch_data.local_size[2] = threadsZ;
+
+    // 2c. Setup the compute pipeline (eg override any specializations for shared mem or workgroup size)
+    VkResult result = vk_setup_compute_pipeline(user_context, ctx.allocator, shader_bindings, &dispatch_data, cache_entry->shader_module, cache_entry->pipeline_layout, &(shader_bindings->compute_pipeline));
+    if (result != VK_SUCCESS) {
+        error(user_context) << "vk_setup_compute_pipeline() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
+        return halide_error_code_internal_error;
     }
 
-    // Construct the pipeline
-    if (entry_point_data->compute_pipeline == 0) {
-        VkResult result = vk_create_compute_pipeline(user_context, ctx.allocator, entry_name, cache_entry->shader_module, cache_entry->pipeline_layout, &(entry_point_data->compute_pipeline));
-        if (result != VK_SUCCESS) {
-            error(user_context) << "vk_create_compute_pipeline() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
-            return halide_error_code_internal_error;
-        }
-    }
-
-    //// 4. Create a descriptor set
-    if (entry_point_data->descriptor_set == 0) {
+    // 2d. Create a descriptor set
+    if (shader_bindings->descriptor_set == 0) {
 
         // Construct a descriptor pool
         //
         // NOTE: while this could be re-used across multiple pipelines, we only know the storage requirements of this kernel's
         //       inputs and outputs ... so create a pool specific to the number of buffers known at this time
 
-        uint32_t uniform_buffer_count = entry_point_data->uniform_buffer_count;
-        uint32_t storage_buffer_count = entry_point_data->storage_buffer_count;
-        VkResult result = vk_create_descriptor_pool(user_context, ctx.allocator, uniform_buffer_count, storage_buffer_count, &(entry_point_data->descriptor_pool));
+        uint32_t uniform_buffer_count = shader_bindings->uniform_buffer_count;
+        uint32_t storage_buffer_count = shader_bindings->storage_buffer_count;
+        VkResult result = vk_create_descriptor_pool(user_context, ctx.allocator, uniform_buffer_count, storage_buffer_count, &(shader_bindings->descriptor_pool));
         if (result != VK_SUCCESS) {
             error(user_context) << "vk_create_descriptor_pool() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
             return result;
         }
 
         // Create the descriptor set
-        result = vk_create_descriptor_set(user_context, ctx.allocator, cache_entry->descriptor_set_layouts[entry_point_index], entry_point_data->descriptor_pool, &(entry_point_data->descriptor_set));
+        result = vk_create_descriptor_set(user_context, ctx.allocator, cache_entry->descriptor_set_layouts[entry_point_index], shader_bindings->descriptor_pool, &(shader_bindings->descriptor_set));
         if (result != VK_SUCCESS) {
             error(user_context) << "vk_create_descriptor_pool() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
             return result;
         }
     }
 
-    //// 5. Update uniform args and bindings for buffers in the descriptor set
+    // 3a. Create a buffer for the scalar parameters
+    if ((shader_bindings->args_region == nullptr) && shader_bindings->uniform_buffer_count) {
+        size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context, arg_sizes, args, arg_is_buffer);
+        if (scalar_buffer_size > 0) {
+            shader_bindings->args_region = vk_create_scalar_uniform_buffer(user_context, ctx.allocator, scalar_buffer_size);
+            if (shader_bindings->args_region == nullptr) {
+                error(user_context) << "vk_create_scalar_uniform_buffer() failed! Unable to create shader module!\n";
+                return halide_error_code_internal_error;
+            }
+        }
+    }
+
+    // 3b. Update uniform buffer with scalar parameters
     VkBuffer *args_buffer = nullptr;
-    if ((entry_point_data->args_region != nullptr) && entry_point_data->uniform_buffer_count) {
-        VkResult result = vk_update_scalar_uniform_buffer(user_context, ctx.allocator, entry_point_data->args_region, arg_sizes, args, arg_is_buffer);
+    if ((shader_bindings->args_region != nullptr) && shader_bindings->uniform_buffer_count) {
+        VkResult result = vk_update_scalar_uniform_buffer(user_context, ctx.allocator, shader_bindings->args_region, arg_sizes, args, arg_is_buffer);
         if (result != VK_SUCCESS) {
             debug(user_context) << "vk_update_scalar_uniform_buffer() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
             return result;
         }
 
-        args_buffer = reinterpret_cast<VkBuffer *>(entry_point_data->args_region->handle);
+        args_buffer = reinterpret_cast<VkBuffer *>(shader_bindings->args_region->handle);
         if (args_buffer == nullptr) {
             error(user_context) << "Vulkan: Failed to retrieve scalar args buffer for device memory!\n";
             return halide_error_code_internal_error;
         }
     }
 
-    VkResult result = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, entry_point_data->uniform_buffer_count, entry_point_data->storage_buffer_count, arg_sizes, args, arg_is_buffer, entry_point_data->descriptor_set);
+    // 3c. Update buffer bindings for descriptor set
+    result = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, shader_bindings->uniform_buffer_count, shader_bindings->storage_buffer_count, arg_sizes, args, arg_is_buffer, shader_bindings->descriptor_set);
     if (result != VK_SUCCESS) {
         debug(user_context) << "vk_update_descriptor_set() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
         return result;
     }
 
-    //// 6. Create a command buffer from the command pool
+    // 4. Create a command buffer from the command pool
     VkCommandBuffer command_buffer;
     result = vk_create_command_buffer(user_context, ctx.allocator, ctx.command_pool, &command_buffer);
     if (result != VK_SUCCESS) {
@@ -1194,12 +1208,12 @@ WEAK int halide_vulkan_run(void *user_context,
         return result;
     }
 
-    //// 7. Begin the command buffer
+    // 5. Fill the command buffer
     result = vk_fill_command_buffer_with_dispatch_call(user_context,
                                                        ctx.device, command_buffer,
-                                                       entry_point_data->compute_pipeline,
+                                                       shader_bindings->compute_pipeline,
                                                        cache_entry->pipeline_layout,
-                                                       entry_point_data->descriptor_set,
+                                                       shader_bindings->descriptor_set,
                                                        entry_point_index,
                                                        blocksX, blocksY, blocksZ);
     if (result != VK_SUCCESS) {
@@ -1207,21 +1221,21 @@ WEAK int halide_vulkan_run(void *user_context,
         return result;
     }
 
-    //// 8. Submit the command buffer to our command queue
+    // 6. Submit the command buffer to our command queue
     result = vk_submit_command_buffer(user_context, ctx.queue, command_buffer);
     if (result != VK_SUCCESS) {
         debug(user_context) << "vk_submit_command_buffer() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
         return result;
     }
 
-    //// 9. Wait until the queue is done with the command buffer
+    // 7. Wait until the queue is done with the command buffer
     result = vkQueueWaitIdle(ctx.queue);
     if (result != VK_SUCCESS) {
         debug(user_context) << "vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
-    //// 10. Cleanup
+    // 8. Cleanup
     vk_destroy_command_buffer(user_context, ctx.allocator, ctx.command_pool, command_buffer);
     vkResetCommandPool(ctx.device, ctx.command_pool, VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
 
@@ -1361,7 +1375,7 @@ WEAK halide_device_interface_t vulkan_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
-    nullptr,  // target capabilities.
+    halide_vulkan_compute_capability,
     &vulkan_device_interface_impl};
 
 // --------------------------------------------------------------------------

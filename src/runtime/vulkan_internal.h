@@ -26,7 +26,7 @@ namespace Vulkan {
 
 // Declarations
 class VulkanMemoryAllocator;
-struct VulkanEntryPointData;
+struct VulkanShaderBinding;
 struct VulkanCompilationCacheEntry;
 
 // --------------------------------------------------------------------------
@@ -47,6 +47,7 @@ int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *alloc
 // --------------------------------------------------------------------------
 // Context
 // --------------------------------------------------------------------------
+
 int vk_create_context(
     void *user_context,
     VulkanMemoryAllocator **allocator,
@@ -56,7 +57,10 @@ int vk_create_context(
     VkCommandPool *command_pool,
     VkQueue *queue, uint32_t *queue_family_index);
 
+int vk_find_compute_capability(void *user_context, int *major, int *minor);
+
 int vk_create_instance(void *user_context, const StringTable &requested_layers, VkInstance *instance, const VkAllocationCallbacks *alloc_callbacks);
+int vk_destroy_instance(void *user_context, VkInstance instance, const VkAllocationCallbacks *alloc_callbacks);
 
 int vk_select_device_for_context(void *user_context,
                                  VkInstance *instance, VkDevice *device,
@@ -186,15 +190,23 @@ VkResult vk_create_compute_pipeline(void *user_context,
                                     const char *pipeline_name,
                                     VkShaderModule shader_module,
                                     VkPipelineLayout pipeline_layout,
+                                    VkSpecializationInfo *specialization_info,
                                     VkPipeline *compute_pipeline);
+
+VkResult vk_setup_compute_pipeline(void *user_context,
+                                   VulkanMemoryAllocator *allocator,
+                                   VulkanShaderBinding *shader_bindings,
+                                   VkShaderModule shader_module,
+                                   VkPipelineLayout pipeline_layout,
+                                   VkPipeline *compute_pipeline);
 
 VkResult vk_destroy_compute_pipeline(void *user_context,
                                      VulkanMemoryAllocator *allocator,
                                      VkPipeline compute_pipeline);
 
 // -- Shader Module
-VulkanEntryPointData *vk_decode_entry_point_data(void *user_context, VulkanMemoryAllocator *allocator,
-                                                 const uint32_t *module_ptr, uint32_t module_size);
+VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryAllocator *allocator,
+                                               const uint32_t *module_ptr, uint32_t module_size);
 
 VulkanCompilationCacheEntry *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
                                                       const char *src, int size);

@@ -64,7 +64,7 @@ protected:
     class SPIRV_Emitter : public IRVisitor {
 
     public:
-        SPIRV_Emitter() = default;
+        SPIRV_Emitter(Target t);
 
         using IRVisitor::visit;
 
@@ -133,6 +133,8 @@ protected:
 
         // Workgroup size
         void reset_workgroup_size();
+        void find_workgroup_size(const Stmt &s);
+
         void declare_workgroup_size(SpvId kernel_func_id);
         void declare_entry_point(const Stmt &s, SpvId kernel_func_id);
         void declare_device_args(const Stmt &s, uint32_t entry_point_index, const std::string &kernel_name, const std::vector<DeviceArgument> &args);
@@ -221,11 +223,35 @@ protected:
         // Map from a variable ID to its corresponding storage type definition
         struct StorageAccess {
             SpvStorageClass storage_class = SpvStorageClassMax;
+            uint32_t storage_array_size = 0;  // zero if not an array
             SpvId storage_type_id = SpvInvalidId;
             Type storage_type;
         };
         using StorageAccessMap = std::unordered_map<SpvId, StorageAccess>;
         StorageAccessMap storage_access_map;
+
+        // Defines the binding information for a specialization constant
+        // that is exported by the module and can be overriden at runtime
+        struct SpecializationBinding {
+            SpvId constant_id = 0;
+            uint32_t type_size = 0;
+            std::string constant_name;
+        };
+        using SpecializationConstants = std::vector<SpecializationBinding>;
+
+        // Defines a shared memory allocation
+        struct SharedMemoryAllocation {
+            SpvId constant_id = 0;  // specialization constant to dynamically adjust array size (zero if not used)
+            uint32_t array_size = 0;
+            uint32_t type_size = 0;
+            std::string variable_name;
+        };
+        using SharedMemoryUsage = std::vector<SharedMemoryAllocation>;
+
+        // Defines the specialization constants used for dynamically overiding the dispatch size
+        struct WorkgroupSizeBinding {
+            SpvId local_size_constant_id[3] = {0, 0, 0};  // zero if unused
+        };
 
         // Keep track of the descriptor sets so we can add a sidecar to the
         // module indicating which descriptor set to use for each entry point
@@ -233,6 +259,9 @@ protected:
             std::string entry_point_name;
             uint32_t uniform_buffer_count = 0;
             uint32_t storage_buffer_count = 0;
+            SpecializationConstants specialization_constants;
+            SharedMemoryUsage shared_memory_usage;
+            WorkgroupSizeBinding workgroup_size_binding;
         };
         using DescriptorSetTable = std::vector<DescriptorSet>;
         DescriptorSetTable descriptor_set_table;
@@ -242,6 +271,9 @@ protected:
 
         // Current index of kernel for module
         uint32_t kernel_index = 0;
+
+        // Target for codegen
+        Target target;
 
     } emitter;
 
@@ -340,6 +372,58 @@ private:
         lanes = op->value.type().lanes();
     }
 };
+
+struct FindWorkGroupSize : public IRVisitor {
+    using IRVisitor::visit;
+    void visit(const For *loop) override {
+        if (!CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
+            return loop->body.accept(this);
+        }
+
+        if ((loop->for_type == ForType::GPUBlock) ||
+            (loop->for_type == ForType::GPUThread)) {
+
+            // This should always be true at this point in codegen
+            internal_assert(is_const_zero(loop->min));
+
+            // Save & validate the workgroup size
+            int index = thread_loop_workgroup_index(loop->name);
+            if (index >= 0) {
+                const IntImm *literal = loop->extent.as<IntImm>();
+                if (literal != nullptr) {
+                    uint32_t new_wg_size = literal->value;
+                    user_assert(workgroup_size[index] == 0 || workgroup_size[index] == new_wg_size)
+                        << "Vulkan requires all kernels have the same workgroup size, "
+                        << "but two different sizes were encountered: "
+                        << workgroup_size[index] << " and "
+                        << new_wg_size << " in dimension " << index << "\n";
+                    workgroup_size[index] = new_wg_size;
+                }
+            }
+            debug(4) << "Thread group size for index " << index << " is " << workgroup_size[index] << "\n";
+        }
+        loop->body.accept(this);
+    }
+
+    int thread_loop_workgroup_index(const std::string &name) {
+        std::string ids[] = {".__thread_id_x",
+                             ".__thread_id_y",
+                             ".__thread_id_z"};
+        for (size_t i = 0; i < sizeof(ids) / sizeof(std::string); i++) {
+            if (ends_with(name, ids[i])) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    uint32_t workgroup_size[3] = {0, 0, 0};
+};
+
+CodeGen_Vulkan_Dev::SPIRV_Emitter::SPIRV_Emitter(Target t)
+    : IRVisitor(), target(t) {
+    // Empty
+}
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(const Expr &e) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::scalarize(): " << (Expr)e << "\n";
@@ -1565,18 +1649,6 @@ std::pair<std::string, uint32_t> simt_intrinsic(const std::string &name) {
     return {"", -1};
 }
 
-int thread_loop_workgroup_index(const std::string &name) {
-    std::string ids[] = {".__thread_id_x",
-                         ".__thread_id_y",
-                         ".__thread_id_z"};
-    for (size_t i = 0; i < sizeof(ids) / sizeof(std::string); i++) {
-        if (ends_with(name, ids[i])) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 }  // anonymous namespace
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
@@ -1586,21 +1658,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         internal_assert((op->for_type == ForType::GPUBlock) ||
                         (op->for_type == ForType::GPUThread))
             << "kernel loops must be either gpu block or gpu thread\n";
+
         // This should always be true at this point in codegen
         internal_assert(is_const_zero(op->min));
-
-        // Save & validate the workgroup size
-        int idx = thread_loop_workgroup_index(op->name);
-        if (idx >= 0) {
-            const IntImm *wsize = op->extent.as<IntImm>();
-            user_assert(wsize != nullptr) << "Vulkan requires statically-known workgroup size.\n";
-            uint32_t new_wsize = wsize->value;
-            user_assert(workgroup_size[idx] == 0 || workgroup_size[idx] == new_wsize) << "Vulkan requires all kernels have the same workgroup size, but two different ones "
-                                                                                         "were encountered "
-                                                                                      << workgroup_size[idx] << " and " << new_wsize << " in dimension " << idx << "\n";
-            workgroup_size[idx] = new_wsize;
-        }
-
         auto intrinsic = simt_intrinsic(op->name);
 
         // Intrinsics are inserted when adding the kernel
@@ -1764,34 +1824,69 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
     SpvId storage_type_id = builder.declare_type(op->type);
     SpvId array_type_id = SpvInvalidId;
     SpvId variable_id = SpvInvalidId;
+    uint32_t array_size = 0;
+
     SpvStorageClass storage_class = SpvStorageClassGeneric;
     if (op->memory_type == MemoryType::GPUShared) {
-        // Allocation of shared memory must be declared at global scope
-        user_assert(op->extents.size() == 1 && is_const(op->extents[0]))
-            << "Allocation " << op->name << " has a dynamic size. "
-            << "Only fixed-size allocations are supported with Vulkan.";
 
-        int32_t size = op->constant_allocation_size();
-        array_type_id = builder.declare_type(op->type, size);
+        // Allocation of shared memory must be declared at global scope
         storage_class = SpvStorageClassWorkgroup;  // shared across workgroup
-        debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << (uint32_t)size << " in shared memory on device in global scope\n";
         std::string variable_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + op->name;
+        uint32_t type_size = op->type.bytes();
+        uint32_t constant_id = 0;
+
+        // static fixed size allocation
+        if (op->extents.size() == 1 && is_const(op->extents[0])) {
+            array_size = op->constant_allocation_size();
+            array_type_id = builder.declare_type(op->type, array_size);
+            builder.add_symbol(variable_name + "_array_type", array_type_id, builder.current_module().id());
+            debug(2) << "Vulkan: Allocate (fixed-size) " << op->name << " type=" << op->type << " array_size=" << (uint32_t)array_size << " in shared memory on device in global scope\n";
+
+        } else {
+            // dynamic allocation with unknown size at compile time ...
+
+            // declare the array size as a specialization constant (which will get overridden at runtime)
+            Type array_size_type = UInt(32);
+            array_size = std::max(workgroup_size[0], uint32_t(1));  // use one item per workgroup as an initial guess
+            SpvId array_size_id = builder.declare_specialization_constant(array_size_type, &array_size);
+            array_type_id = builder.add_array_with_default_size(storage_type_id, array_size_id);
+            builder.add_symbol(variable_name + "_array_type", array_type_id, builder.current_module().id());
+
+            debug(2) << "Vulkan: Allocate (dynamic size) " << op->name << " type=" << op->type << " default_size=" << (uint32_t)array_size << " in shared memory on device in global scope\n";
+
+            // bind the specialization constant to the next slot
+            std::string constant_name = variable_name + "_array_size";
+            constant_id = (uint32_t)(descriptor_set_table.back().specialization_constants.size() + 1);
+            SpvBuilder::Literals spec_id = {constant_id};
+            builder.add_annotation(array_size_id, SpvDecorationSpecId, spec_id);
+            builder.add_symbol(constant_name, array_size_id, builder.current_module().id());
+
+            // update the descriptor set with the specialization binding
+            SpecializationBinding spec_binding = {constant_id, (uint32_t)array_size_type.bytes(), constant_name};
+            descriptor_set_table.back().specialization_constants.push_back(spec_binding);
+        }
+
+        // add the shared memory allocation to the descriptor set
+        SharedMemoryAllocation shared_mem_allocation = {constant_id, array_size, type_size, variable_name};
+        descriptor_set_table.back().shared_memory_usage.push_back(shared_mem_allocation);
+
+        // declare the variable
         SpvId ptr_type_id = builder.declare_pointer_type(array_type_id, storage_class);
         variable_id = builder.declare_global_variable(variable_name, ptr_type_id, storage_class);
 
     } else {
 
         // Allocation is not a shared memory allocation, just make a local declaration.
-        int32_t size = op->constant_allocation_size();
+        array_size = op->constant_allocation_size();
 
         // It must have a constant size.
-        user_assert(size > 0)
+        user_assert(array_size > 0)
             << "Allocation " << op->name << " has a dynamic size. "
-            << "Only fixed-size allocations are supported with Vulkan.";
+            << "Only fixed-size local allocations are supported with Vulkan.";
 
-        debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << (uint32_t)size << " on device in function scope\n";
+        debug(2) << "Vulkan: Allocate " << op->name << " type=" << op->type << " size=" << (uint32_t)array_size << " on device in function scope\n";
 
-        array_type_id = builder.declare_type(op->type, size);
+        array_type_id = builder.declare_type(op->type, array_size);
         storage_class = SpvStorageClassFunction;  // function scope
         std::string variable_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + op->name;
         SpvId ptr_type_id = builder.declare_pointer_type(array_type_id, storage_class);
@@ -1800,6 +1895,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Allocate *op) {
 
     StorageAccess access;
     access.storage_class = storage_class;
+    access.storage_array_size = array_size;
     access.storage_type_id = storage_type_id;
     access.storage_type = op->type;
     storage_access_map[variable_id] = access;
@@ -2152,6 +2248,14 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::init_module() {
 
     reset();
 
+    if (target.has_feature(Target::VulkanV13)) {
+        // Encode to SPIR-V v1.2 to allow dynamic dispatching (if needed)
+        builder.set_version_format(0x00010200);
+    } else {
+        // Encode to SPIR-V v1.0 (which is the only format supported by Vulkan v1.0)
+        builder.set_version_format(0x00010000);
+    }
+
     // NOTE: Source language is irrelevant. We encode the binary directly
     builder.set_source_language(SpvSourceLanguageUnknown);
 
@@ -2167,51 +2271,155 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::init_module() {
     // NOTE: Extensions are handled in finalize
 }
 
+namespace {
+
+std::vector<char> encode_header_string(const std::string &str) {
+    uint32_t padded_word_count = (str.length() / 4) + 1;  // add an extra entry to ensure strings are terminated
+    uint32_t padded_str_length = padded_word_count * 4;
+    std::vector<char> encoded_string(padded_str_length, '\0');
+    for (uint32_t c = 0; c < str.length(); c++) {
+        encoded_string[c] = str[c];
+    }
+    return encoded_string;
+}
+
+}  // namespace
+
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header(SpvBinary &spirv_header) {
     debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::encode_header\n";
 
     // Encode a sidecar for the module that lists the descriptor sets
-    // corresponding to each entry point contained in the module
+    // corresponding to each entry point contained in the module.
+    //
+    // This metadata will be used at runtime to define the shader bindings
+    // needed for all buffers, constants, shared memory, and workgroup sizes
+    // that are required for execution.
+    //
+    // Like the SPIR-V code module, each entry is one word (1x uint32_t).
+    // Variable length sections are prefixed with their length (ie number of entries).
     //
     // [0] Header word count (total length of header)
     // [1] Number of descriptor sets
     // ... For each descriptor set ...
-    // ... [0] Number of uniform buffers for this descriptor set
-    // ... [1] Number of storage buffers for this descriptor set
-    // ... [2] Length of entry point name (padded to nearest word size)
-    // ... [X] Entry point string data
+    // ... [0] Length of entry point name (padded to nearest word size)
+    // ....... [*] Entry point string data (padded with null chars)
+    // ... [1] Number of uniform buffers for this descriptor set
+    // ... [2] Number of storage buffers for this descriptor set
+    // ... [3] Number of specialization constants for this descriptor set
+    // ....... For each specialization constant ...
+    // ....... [0] Length of constant name string (padded to nearest word size)
+    // ........... [*] Constant name string data (padded with null chars)
+    // ....... [1] Constant id (as used in VkSpecializationMapEntry for binding)
+    // ....... [2] Size of data type (in bytes)
+    // ... [4] Number of shared memory allocations for this descriptor set
+    // ....... For each allocation ...
+    // ....... [0] Length of variable name string (padded to nearest word size)
+    // ........... [*] Variable name string data (padded with null chars)
+    // ....... [1] Constant id to use for overriding array size (zero if it is not bound to a specialization constant)
+    // ....... [2] Size of data type (in bytes)
+    // ....... [3] Size of array (ie element count)
+    // ... [4] Dynamic workgroup dimensions bound to specialization constants
+    // ....... [0] Constant id to use for local_size_x (zero if it was statically declared and not bound to a specialization constant)
+    // ....... [1] Constant id to use for local_size_y
+    // ....... [2] Constant id ot use for local_size_z
     //
-
-    // NOTE: The Vulkan runtime consumes this header prior to compiling.
+    // NOTE: Halide's Vulkan runtime consumes this header prior to compiling.
     //
-    // Both vk_decode_entry_point_data() and vk_compile_shader_module() will
+    // Both vk_decode_shader_bindings() and vk_compile_shader_module() will
     // need to be updated if the header encoding ever changes!
     //
     uint32_t index = 0;
     spirv_header.push_back(descriptor_set_table.size());
     for (const DescriptorSet &ds : descriptor_set_table) {
-        std::vector<char> padded_name;
-        uint32_t padded_word_count = (ds.entry_point_name.length() + 3) / 4;
-        uint32_t padded_str_length = padded_word_count * 4;
-        padded_name.reserve(padded_str_length);
-        padded_name.insert(padded_name.begin(), ds.entry_point_name.c_str(), (ds.entry_point_name.c_str() + ds.entry_point_name.length()));
-        uint32_t padding = (padded_str_length - ds.entry_point_name.length());
-        for (uint32_t i = 0; i < padding; ++i) {
-            padded_name.push_back('\0');
-        }
+
+        // encode the entry point name into an array of chars (padded to the next word entry)
+        std::vector<char> entry_point_name = encode_header_string(ds.entry_point_name);
+        uint32_t entry_point_name_entries = (uint32_t)(entry_point_name.size() / sizeof(uint32_t));
 
         debug(2) << "    [" << index << "] "
                  << "uniform_buffer_count=" << ds.uniform_buffer_count << " "
                  << "storage_buffer_count=" << ds.storage_buffer_count << " "
-                 << "entry_point_name_length=" << padded_str_length << " "
-                 << "entry_point_name_size=" << padded_name.size() << " "
-                 << "entry_point_name: " << (const char *)padded_name.data() << "\n";
+                 << "entry_point_name_size=" << entry_point_name.size() << " "
+                 << "entry_point_name: " << (const char *)entry_point_name.data() << "\n";
 
+        // [0] Length of entry point name (padded to nearest word size)
+        spirv_header.push_back(entry_point_name_entries);
+
+        // [*] Entry point string data (padded with null chars)
+        spirv_header.insert(spirv_header.end(), (const uint32_t *)entry_point_name.data(), (const uint32_t *)(entry_point_name.data() + entry_point_name.size()));
+
+        // [1] Number of uniform buffers for this descriptor set
         spirv_header.push_back(ds.uniform_buffer_count);
+
+        // [2] Number of storage buffers for this descriptor set
         spirv_header.push_back(ds.storage_buffer_count);
-        spirv_header.push_back(padded_str_length);
-        internal_assert(padded_name.size() == padded_str_length);
-        spirv_header.insert(spirv_header.end(), (const uint32_t *)padded_name.data(), (const uint32_t *)(padded_name.data() + padded_name.size()));
+
+        // [3] Number of specialization constants for this descriptor set
+        spirv_header.push_back((uint32_t)ds.specialization_constants.size());
+        debug(2) << "     specialization_count=" << (uint32_t)ds.specialization_constants.size() << "\n";
+
+        // For each specialization constant ...
+        for (const SpecializationBinding &spec_binding : ds.specialization_constants) {
+
+            // encode the constant name into an array of chars (padded to the next word entry)
+            std::vector<char> constant_name = encode_header_string(spec_binding.constant_name);
+            uint32_t constant_name_entries = (uint32_t)(constant_name.size() / sizeof(uint32_t));
+
+            debug(2) << "     [" << spec_binding.constant_id << "] "
+                     << "constant_name=" << (const char *)constant_name.data() << " "
+                     << "type_size=" << spec_binding.type_size << "\n";
+
+            // [0] Length of constant name string (padded to nearest word size)
+            spirv_header.push_back(constant_name_entries);
+
+            // [*] Constant name string data (padded with null chars)
+            spirv_header.insert(spirv_header.end(), (const uint32_t *)constant_name.data(), (const uint32_t *)(constant_name.data() + constant_name.size()));
+
+            // [1] Constant id (as used in VkSpecializationMapEntry for binding)
+            spirv_header.push_back(spec_binding.constant_id);
+
+            // [2] Size of data type (in bytes)
+            spirv_header.push_back(spec_binding.type_size);
+        }
+
+        // [4] Number of shared memory allocations for this descriptor set
+        spirv_header.push_back((uint32_t)ds.shared_memory_usage.size());
+        debug(2) << "     shared_memory_allocations=" << (uint32_t)ds.shared_memory_usage.size() << "\n";
+
+        // For each allocation ...
+        uint32_t shm_index = 0;
+        for (const SharedMemoryAllocation &shared_mem_alloc : ds.shared_memory_usage) {
+
+            // encode the variable name into an array of chars (padded to the next word entry)
+            std::vector<char> variable_name = encode_header_string(shared_mem_alloc.variable_name);
+            uint32_t variable_name_entries = (uint32_t)(variable_name.size() / sizeof(uint32_t));
+
+            debug(2) << "     [" << shm_index++ << "] "
+                     << "variable_name=" << (const char *)variable_name.data() << " "
+                     << "constant_id=" << shared_mem_alloc.constant_id << " "
+                     << "type_size=" << shared_mem_alloc.type_size << " "
+                     << "array_size=" << shared_mem_alloc.array_size << "\n";
+
+            // [0] Length of variable name string (padded to nearest word size)
+            spirv_header.push_back(variable_name_entries);
+
+            // [*] Variable name string data (padded with null chars)
+            spirv_header.insert(spirv_header.end(), (const uint32_t *)variable_name.data(), (const uint32_t *)(variable_name.data() + variable_name.size()));
+
+            // [1] Constant id to use for overriding array size (zero if it is not bound to a specialization constant)
+            spirv_header.push_back(shared_mem_alloc.constant_id);
+
+            // [2] Size of data type (in bytes)
+            spirv_header.push_back(shared_mem_alloc.type_size);
+
+            // [3] Size of array (ie element count)
+            spirv_header.push_back(shared_mem_alloc.array_size);
+        }
+
+        // [4] Dynamic workgroup dimensions bound to specialization constants
+        spirv_header.push_back(ds.workgroup_size_binding.local_size_constant_id[0]);
+        spirv_header.push_back(ds.workgroup_size_binding.local_size_constant_id[1]);
+        spirv_header.push_back(ds.workgroup_size_binding.local_size_constant_id[2]);
         ++index;
     }
     uint32_t header_word_count = spirv_header.size();
@@ -2224,14 +2432,78 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::reset_workgroup_size() {
     workgroup_size[2] = 0;
 }
 
-void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_workgroup_size(SpvId kernel_func_id) {
-    workgroup_size[0] = std::max(workgroup_size[0], (uint32_t)1);
-    workgroup_size[1] = std::max(workgroup_size[1], (uint32_t)1);
-    workgroup_size[2] = std::max(workgroup_size[2], (uint32_t)1);
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::find_workgroup_size(const Stmt &s) {
+    reset_workgroup_size();
+    FindWorkGroupSize fwgs;
+    s.accept(&fwgs);
 
-    // Add workgroup size to execution mode
-    SpvInstruction exec_mode_inst = SpvFactory::exec_mode_local_size(kernel_func_id, workgroup_size[0], workgroup_size[1], workgroup_size[2]);
-    builder.current_module().add_execution_mode(exec_mode_inst);
+    workgroup_size[0] = fwgs.workgroup_size[0];
+    workgroup_size[1] = fwgs.workgroup_size[1];
+    workgroup_size[2] = fwgs.workgroup_size[2];
+}
+
+void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_workgroup_size(SpvId kernel_func_id) {
+
+    if (workgroup_size[0] == 0) {
+
+        // workgroup size is dynamic ...
+        if (!target.has_feature(Target::VulkanV13)) {
+            user_error << "Vulkan: Dynamic workgroup sizes require Vulkan v1.3+ support! "
+                       << "Either enable the target feature, or adjust the pipeline's schedule "
+                       << "to use static workgroup sizes!";
+        }
+
+        // declare the workgroup local size as a specialization constant (which will get overridden at runtime)
+        Type local_size_type = UInt(32);
+
+        uint32_t local_size_x = std::max(workgroup_size[0], (uint32_t)1);  // use a minimum of 1 for the default value
+        uint32_t local_size_y = std::max(workgroup_size[1], (uint32_t)1);
+        uint32_t local_size_z = std::max(workgroup_size[2], (uint32_t)1);
+
+        SpvId local_size_x_id = builder.declare_specialization_constant(local_size_type, &local_size_x);
+        SpvId local_size_y_id = builder.declare_specialization_constant(local_size_type, &local_size_y);
+        SpvId local_size_z_id = builder.declare_specialization_constant(local_size_type, &local_size_z);
+
+        SpvId local_size_ids[3] = {
+            local_size_x_id,
+            local_size_y_id,
+            local_size_z_id};
+
+        const char *local_size_names[3] = {
+            "__thread_id_x",
+            "__thread_id_y",
+            "__thread_id_z"};
+
+        debug(1) << "Vulkan: Using dynamic workgroup local size with default of [" << local_size_x << ", " << local_size_y << ", " << local_size_z << "]...\n";
+
+        // annotate each local size with a corresponding specialization constant
+        for (uint32_t dim = 0; dim < 3; dim++) {
+            SpvId constant_id = (uint32_t)(descriptor_set_table.back().specialization_constants.size() + 1);
+            SpvBuilder::Literals spec_id = {constant_id};
+            builder.add_annotation(local_size_ids[dim], SpvDecorationSpecId, spec_id);
+            builder.add_symbol(local_size_names[dim], local_size_ids[dim], builder.current_module().id());
+            SpecializationBinding spec_binding = {constant_id, (uint32_t)sizeof(uint32_t), local_size_names[dim]};
+            descriptor_set_table.back().specialization_constants.push_back(spec_binding);
+            descriptor_set_table.back().workgroup_size_binding.local_size_constant_id[dim] = constant_id;
+        }
+
+        // Add workgroup size to execution mode
+        SpvInstruction exec_mode_inst = SpvFactory::exec_mode_local_size_id(kernel_func_id, local_size_x_id, local_size_y_id, local_size_z_id);
+        builder.current_module().add_execution_mode(exec_mode_inst);
+
+    } else {
+
+        // workgroup size is static ...
+        workgroup_size[0] = std::max(workgroup_size[0], (uint32_t)1);
+        workgroup_size[1] = std::max(workgroup_size[1], (uint32_t)1);
+        workgroup_size[2] = std::max(workgroup_size[2], (uint32_t)1);
+
+        debug(1) << "Vulkan: Using static workgroup local size [" << workgroup_size[0] << ", " << workgroup_size[1] << ", " << workgroup_size[2] << "]...\n";
+
+        // Add workgroup size to execution mode
+        SpvInstruction exec_mode_inst = SpvFactory::exec_mode_local_size(kernel_func_id, workgroup_size[0], workgroup_size[1], workgroup_size[2]);
+        builder.current_module().add_execution_mode(exec_mode_inst);
+    }
 }
 
 namespace {
@@ -2456,9 +2728,42 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::compile(std::vector<char> &module) {
     SpvBinary spirv_header;
     encode_header(spirv_header);
 
-    // Finalize and encode the SPIR-V IR into a compliant binary
-    SpvBinary spirv_binary;
+    // Finalize the SPIR-V module
     builder.finalize();
+
+    // Validate the SPIR-V for the target
+    if (builder.is_capability_required(SpvCapabilityInt8) && !target.has_feature(Target::VulkanInt8)) {
+        user_error << "Vulkan: Code requires 8-bit integer support (which is not enabled in the target features)! "
+                   << "Either enable the target feature, or adjust the algorithm to avoid using this data type!";
+    }
+
+    if (builder.is_capability_required(SpvCapabilityInt16) && !target.has_feature(Target::VulkanInt16)) {
+        user_error << "Vulkan: Code requires 16-bit integer support (which is not enabled in the target features)! "
+                   << "Either enable the target feature, or adjust the algorithm to avoid using this data type!";
+    }
+
+    if (builder.is_capability_required(SpvCapabilityInt64) && !target.has_feature(Target::VulkanInt64)) {
+        user_error << "Vulkan: Code requires 64-bit integer support (which is not enabled in the target features)! "
+                   << "Either enable the target feature, or adjust the algorithm to avoid using this data type!";
+    }
+
+    if (builder.is_capability_required(SpvCapabilityInt64) && !target.has_feature(Target::VulkanInt64)) {
+        user_error << "Vulkan: Code requires 64-bit integer support (which is not enabled in the target features)! "
+                   << "Either enable the target feature, or adjust the algorithm to avoid using this data type!";
+    }
+
+    if (builder.is_capability_required(SpvCapabilityFloat16) && !target.has_feature(Target::VulkanFloat16)) {
+        user_error << "Vulkan: Code requires 16-bit floating-point support (which is not enabled in the target features)! "
+                   << "Either enable the target feature, or adjust the algorithm to avoid using this data type!";
+    }
+
+    if (builder.is_capability_required(SpvCapabilityFloat64) && !target.has_feature(Target::VulkanFloat64)) {
+        user_error << "Vulkan: Code requires 16-bit floating-point support (which is not enabled in the target features)! "
+                   << "Either enable the target feature, or adjust the algorithm to avoid using this data type!";
+    }
+
+    // Encode the SPIR-V into a compliant binary
+    SpvBinary spirv_binary;
     builder.encode(spirv_binary);
 
     size_t header_bytes = spirv_header.size() * sizeof(uint32_t);
@@ -2482,8 +2787,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     // Add function definition
     // TODO: can we use one of the function control annotations?
 
-    // We'll discover the workgroup size as we traverse the kernel
-    reset_workgroup_size();
+    // Discover the workgroup size
+    find_workgroup_size(s);
 
     // Update the kernel index for the module
     kernel_index++;
@@ -2507,7 +2812,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
     // Insert return statement end delimiter
     kernel_func.tail_block().add_instruction(SpvFactory::return_stmt());
 
-    // Declare the workgroup size now that we've traversed the kernel
+    // Declare the workgroup size for the kernel
     declare_workgroup_size(kernel_func_id);
 
     // Pop scope
@@ -2524,7 +2829,9 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::dump() const {
     std::cerr << builder.current_module();
 }
 
-CodeGen_Vulkan_Dev::CodeGen_Vulkan_Dev(Target t) {
+CodeGen_Vulkan_Dev::CodeGen_Vulkan_Dev(Target t)
+    : emitter(t) {
+    // Empty
 }
 
 void CodeGen_Vulkan_Dev::init_module() {
