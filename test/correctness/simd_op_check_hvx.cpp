@@ -290,8 +290,18 @@ public:
         check("vdelta(v*,v*)", hvx_width / 2, in_u32(3 * x / 2));
         check("vdelta(v*,v*)", hvx_width * 3, in_u16(x * 3));
         check("vdelta(v*,v*)", hvx_width * 3, in_u8(x * 3));
-        check("vdelta(v*,v*)", hvx_width * 4, in_u16(x * 4));
-        check("vdelta(v*,v*)", hvx_width * 4, in_u8(x * 4));
+
+        if (Halide::Internal::get_llvm_version() >= 160) {
+            // As of commit 073d5e5945c4, this pattern doesn't generate vdelta,
+            // but does emit vrdelta, which the author claims is superior codegen
+            // for this case.
+            check("vrdelta(v*,v*)", hvx_width * 4, in_u16(x * 4));
+            check("vrdelta(v*,v*)", hvx_width * 4, in_u8(x * 4));
+        } else {
+            abort();
+            check("vdelta(v*,v*)", hvx_width * 4, in_u16(x * 4));
+            check("vdelta(v*,v*)", hvx_width * 4, in_u8(x * 4));
+        }
 
         check("vlut32(v*.b,v*.b,r*)", hvx_width / 1, in_u8(u8_1));
         check("vlut32(v*.b,v*.b,r*)", hvx_width / 1, in_u8(clamp(u16_1, 0, 63)));
