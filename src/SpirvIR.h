@@ -23,8 +23,8 @@
 #include "IntrusivePtr.h"
 #include "Type.h"
 
-#include <spirv/1.0/GLSL.std.450.h>  // GLSL extended instructions for common intrinsics
-#include <spirv/1.0/spirv.h>         // Use v1.0 spec as the minimal viable version (for maximum compatiblity)
+#include <spirv/1.6/GLSL.std.450.h>  // GLSL extended instructions for common intrinsics
+#include <spirv/1.6/spirv.h>         // Use v1.6 headers but only use the minimal viable format version (for maximum compatiblity)
 
 namespace Halide {
 namespace Internal {
@@ -296,6 +296,7 @@ public:
     void require_capability(SpvCapability val);
     void require_extension(const std::string &val);
 
+    void set_version_format(uint32_t version);
     void set_source_language(SpvSourceLanguage val);
     void set_addressing_model(SpvAddressingModel val);
     void set_memory_model(SpvMemoryModel val);
@@ -386,7 +387,7 @@ public:
     SpvId declare_type(const Type &type, uint32_t array_size = 1);
     SpvId declare_pointer_type(const Type &type, SpvStorageClass storage_class);
     SpvId declare_pointer_type(SpvId type_id, SpvStorageClass storage_class);
-    SpvId declare_constant(const Type &type, const void *data);
+    SpvId declare_constant(const Type &type, const void *data, bool is_specialization=false);
     SpvId declare_null_constant(const Type &type);
     SpvId declare_bool_constant(bool value);
     SpvId declare_string_constant(const std::string &str);
@@ -394,6 +395,7 @@ public:
     SpvId declare_float_constant(const Type &type, double value);
     SpvId declare_scalar_constant(const Type &type, const void *data);
     SpvId declare_vector_constant(const Type &type, const void *data);
+    SpvId declare_specialization_constant(const Type &type, const void *data);
     SpvId declare_access_chain(SpvId ptr_type_id, SpvId base_id, const Indices &indices);
     SpvId declare_pointer_access_chain(SpvId ptr_type_id, SpvId base_id, SpvId element_id, const Indices &indices);
     SpvId declare_function_type(SpvId return_type, const ParamTypes &param_types = {});
@@ -407,10 +409,11 @@ public:
     // number of checks and the caller must insure that duplicates aren't created
     SpvId add_type(const Type &type, uint32_t array_size = 1);
     SpvId add_struct(const std::string &name, const StructMemberTypes &member_types);
+    SpvId add_array_with_default_size(SpvId base_type_id, SpvId array_size_id);
     SpvId add_runtime_array(SpvId base_type_id);
     SpvId add_pointer_type(const Type &type, SpvStorageClass storage_class);
     SpvId add_pointer_type(SpvId base_type_id, SpvStorageClass storage_class);
-    SpvId add_constant(const Type &type, const void *data);
+    SpvId add_constant(const Type &type, const void *data, bool is_specialization=false);
     SpvId add_function_type(SpvId return_type_id, const ParamTypes &param_type_ids);
     SpvId add_function(const std::string &name, SpvId return_type, const ParamTypes &param_types = {});
     SpvId add_instruction(SpvInstruction val);
@@ -422,7 +425,14 @@ public:
     void add_entry_point(SpvId func_id, SpvExecutionModel exec_model,
                          const Variables &variables = {});
 
-    void add_execution_mode_local_size(SpvId entry_point_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z);
+    // Define the execution mode with a fixed local size for the workgroup (using literal values)
+    void add_execution_mode_local_size(SpvId entry_point_id, uint32_t local_size_x, uint32_t local_size_y, uint32_t local_size_z);
+
+    // Same as above but uses id's for the local size (to allow specialization constants to be used)
+    void add_execution_mode_local_size_id(SpvId entry_point_id, SpvId local_size_x, SpvId local_size_y, SpvId local_size_z);
+
+    // Assigns a specific SPIR-V version format for output (needed for compatibility)
+    void set_version_format(uint32_t version);
 
     // Assigns a specific source language hint to the module
     void set_source_language(SpvSourceLanguage val);
@@ -574,13 +584,16 @@ protected:
     SpvId declare_scalar_constant_of_type(const Type &scalar_type, const T *data);
 
     template<typename T>
+    SpvId declare_specialization_constant_of_type(const Type &scalar_type, const T *data);
+
+    template<typename T>
     SpvBuilder::Components declare_constants_for_each_lane(Type type, const void *data);
 
     ConstantKey make_bool_constant_key(bool value) const;
     ConstantKey make_string_constant_key(const std::string &value) const;
-    ConstantKey make_constant_key(uint8_t code, uint8_t bits, int lanes, size_t bytes, const void *data) const;
-    ConstantKey make_constant_key(const Type &type, const void *data) const;
-    SpvId lookup_constant(const Type &type, const void *data) const;
+    ConstantKey make_constant_key(uint8_t code, uint8_t bits, int lanes, size_t bytes, const void *data, bool is_specialization=false) const;
+    ConstantKey make_constant_key(const Type &type, const void *data, bool is_specialization=false) const;
+    SpvId lookup_constant(const Type &type, const void *data, bool is_specialization=false) const;
 
     ConstantKey make_null_constant_key(const Type &type) const;
     SpvId lookup_null_constant(const Type &type) const;
@@ -649,6 +662,7 @@ struct SpvFactory {
     static SpvInstruction bool_constant(SpvId result_id, SpvId type_id, bool value);
     static SpvInstruction string_constant(SpvId result_id, const std::string &value);
     static SpvInstruction composite_constant(SpvId result_id, SpvId type_id, const Components &components);
+    static SpvInstruction specialization_constant(SpvId result_id, SpvId type_id, size_t bytes, const void *data, SpvValueType value_type);
     static SpvInstruction variable(SpvId result_id, SpvId result_type_id, uint32_t storage_class, SpvId initializer_id = SpvInvalidId);
     static SpvInstruction function(SpvId return_type_id, SpvId func_id, uint32_t control_mask, SpvId func_type_id);
     static SpvInstruction function_parameter(SpvId param_type_id, SpvId param_id);
@@ -656,7 +670,8 @@ struct SpvFactory {
     static SpvInstruction return_stmt(SpvId return_value_id = SpvInvalidId);
     static SpvInstruction entry_point(SpvId exec_model, SpvId func_id, const std::string &name, const Variables &variables);
     static SpvInstruction memory_model(SpvAddressingModel addressing_model, SpvMemoryModel memory_model);
-    static SpvInstruction exec_mode_local_size(SpvId function_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z);
+    static SpvInstruction exec_mode_local_size(SpvId function_id, uint32_t local_size_size_x, uint32_t local_size_size_y, uint32_t local_size_size_z);
+    static SpvInstruction exec_mode_local_size_id(SpvId function_id, SpvId local_size_x_id, SpvId local_size_y_id, SpvId local_size_z_id); // only avail in 1.2
     static SpvInstruction memory_barrier(SpvId memory_scope_id, SpvId semantics_mask_id);
     static SpvInstruction control_barrier(SpvId execution_scope_id, SpvId memory_scope_id, SpvId semantics_mask_id);
     static SpvInstruction bitwise_not(SpvId type_id, SpvId result_id, SpvId src_id);

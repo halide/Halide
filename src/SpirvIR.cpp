@@ -664,6 +664,11 @@ void SpvModule::set_binding_count(SpvId val) {
     contents->binding_count = val;
 }
 
+void SpvModule::set_version_format(uint32_t val) {
+    check_defined();
+    contents->version_format = val;
+}
+
 void SpvModule::set_source_language(SpvSourceLanguage val) {
     check_defined();
     contents->source_language = val;
@@ -1180,10 +1185,10 @@ SpvId SpvBuilder::declare_function(const std::string &name, SpvId function_type)
     return add_function(name, function_type);
 }
 
-SpvId SpvBuilder::declare_constant(const Type &type, const void *data) {
-    SpvId result_id = lookup_constant(type, data);
+SpvId SpvBuilder::declare_constant(const Type &type, const void *data, bool is_specialization) {
+    SpvId result_id = lookup_constant(type, data, is_specialization);
     if (result_id == SpvInvalidId) {
-        result_id = add_constant(type, data);
+        result_id = add_constant(type, data, is_specialization);
     }
     return result_id;
 }
@@ -1306,13 +1311,24 @@ void SpvBuilder::add_struct_annotation(SpvId struct_type_id, uint32_t member_ind
 }
 
 void SpvBuilder::add_execution_mode_local_size(SpvId func_id,
-                                               uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z) {
+                                               uint32_t local_size_x, 
+                                               uint32_t local_size_y, 
+                                               uint32_t local_size_z) {
 
-    wg_size_x = std::max(wg_size_x, (uint32_t)1);
-    wg_size_y = std::max(wg_size_y, (uint32_t)1);
-    wg_size_z = std::max(wg_size_z, (uint32_t)1);
+    local_size_x = std::max(local_size_x, (uint32_t)1);
+    local_size_y = std::max(local_size_y, (uint32_t)1);
+    local_size_z = std::max(local_size_z, (uint32_t)1);
 
-    SpvInstruction exec_mode_inst = SpvFactory::exec_mode_local_size(func_id, wg_size_x, wg_size_y, wg_size_z);
+    SpvInstruction exec_mode_inst = SpvFactory::exec_mode_local_size(func_id, local_size_x, local_size_y, local_size_z);
+    module.add_execution_mode(exec_mode_inst);
+}
+
+void SpvBuilder::add_execution_mode_local_size_id(SpvId func_id,
+                                                  SpvId local_size_x_id, 
+                                                  SpvId local_size_y_id, 
+                                                  SpvId local_size_z_id) {
+
+    SpvInstruction exec_mode_inst = SpvFactory::exec_mode_local_size(func_id, local_size_x_id, local_size_y_id, local_size_z_id);
     module.add_execution_mode(exec_mode_inst);
 }
 
@@ -1407,6 +1423,10 @@ void SpvBuilder::update_id(SpvId id) {
 
 SpvModule SpvBuilder::current_module() const {
     return module;
+}
+
+void SpvBuilder::set_version_format(uint32_t val) {
+    module.set_version_format(val);
 }
 
 void SpvBuilder::set_source_language(SpvSourceLanguage val) {
@@ -1683,11 +1703,12 @@ SpvId SpvBuilder::add_pointer_type(SpvId base_type_id, SpvStorageClass storage_c
     return pointer_type_id;
 }
 
-SpvBuilder::ConstantKey SpvBuilder::make_constant_key(uint8_t code, uint8_t bits, int lanes, size_t bytes, const void *data) const {
+SpvBuilder::ConstantKey SpvBuilder::make_constant_key(uint8_t code, uint8_t bits, int lanes, size_t bytes, const void *data, bool is_specialization) const {
     ConstantKey key = hash_splitmix64(code);
     key = hash_combine(key, bits);
     key = hash_combine(key, lanes);
     key = hash_combine(key, bytes);
+    key = hash_combine(key, is_specialization ? uint64_t(-1) : uint64_t(1));
 
     if (data != nullptr) {
         const int8_t *ptr = reinterpret_bits<const int8_t *>(data);
@@ -1698,8 +1719,8 @@ SpvBuilder::ConstantKey SpvBuilder::make_constant_key(uint8_t code, uint8_t bits
     return key;
 }
 
-SpvBuilder::ConstantKey SpvBuilder::make_constant_key(const Type &type, const void *data) const {
-    return make_constant_key(type.code(), type.bits(), type.lanes(), type.bytes(), data);
+SpvBuilder::ConstantKey SpvBuilder::make_constant_key(const Type &type, const void *data, bool is_specialization) const {
+    return make_constant_key(type.code(), type.bits(), type.lanes(), type.bytes(), data, is_specialization);
 }
 
 SpvBuilder::ConstantKey SpvBuilder::make_bool_constant_key(bool value) const {
@@ -1812,6 +1833,37 @@ SpvId SpvBuilder::declare_scalar_constant_of_type(const Type &scalar_type, const
     SpvInstruction inst = SpvFactory::constant(result_id, type_id, scalar_type.bytes(), &value, value_type);
     module.add_constant(inst);
     constant_map[constant_key] = result_id;
+    return result_id;
+}
+
+template<typename T>
+SpvId SpvBuilder::declare_specialization_constant_of_type(const Type &scalar_type, const T *data) {
+
+    SpvId result_id = SpvInvalidId;
+    SpvValueType value_type = SpvInvalidValueType;
+    // TODO: Add bools?
+    if (scalar_type.is_float()) {
+        result_id = make_id(SpvFloatConstantId);
+        value_type = SpvFloatData;
+    } else if (scalar_type.is_int_or_uint()) {
+        result_id = make_id(SpvIntConstantId);
+        value_type = SpvIntegerData;
+    } else {
+        internal_error << "SPIRV: Unsupported type for specialization constant: " << scalar_type << "\n";
+        return SpvInvalidId;
+    }
+
+    T value = T(0);
+    assign_constant<T>(&value, data);
+    SpvId type_id = add_type(scalar_type);
+
+    debug(3) << "    declare_specialization_constant_of_type: "
+             << "%" << result_id << " "
+             << "type=" << scalar_type << " "
+             << "data=" << stringify_constant(value) << "\n";
+
+    SpvInstruction inst = SpvFactory::specialization_constant(result_id, type_id, scalar_type.bytes(), &value, value_type);
+    module.add_type(inst); // NOTE: Needs to be declared in the type section in order to be used with other type definitions
     return result_id;
 }
 
@@ -1988,8 +2040,48 @@ SpvId SpvBuilder::declare_vector_constant(const Type &type, const void *data) {
     return result_id;
 }
 
-SpvId SpvBuilder::lookup_constant(const Type &type, const void *data) const {
-    ConstantKey key = make_constant_key(type, data);
+SpvId SpvBuilder::declare_specialization_constant(const Type &scalar_type, const void *data) {
+    if (scalar_type.lanes() != 1) {
+        internal_error << "SPIRV: Invalid type provided for scalar constant!" << scalar_type << "\n";
+        return SpvInvalidId;
+    }
+
+    SpvId result_id = SpvInvalidId;
+    if (scalar_type.is_int() && scalar_type.bits() == 8) {
+        result_id = declare_specialization_constant_of_type<int8_t>(scalar_type, reinterpret_cast<const int8_t *>(data));
+    } else if (scalar_type.is_int() && scalar_type.bits() == 16) {
+        result_id = declare_specialization_constant_of_type<int16_t>(scalar_type, reinterpret_cast<const int16_t *>(data));
+    } else if (scalar_type.is_int() && scalar_type.bits() == 32) {
+        result_id = declare_specialization_constant_of_type<int32_t>(scalar_type, reinterpret_cast<const int32_t *>(data));
+    } else if (scalar_type.is_int() && scalar_type.bits() == 64) {
+        result_id = declare_specialization_constant_of_type<int64_t>(scalar_type, reinterpret_cast<const int64_t *>(data));
+    } else if (scalar_type.is_uint() && scalar_type.bits() == 8) {
+        result_id = declare_specialization_constant_of_type<uint8_t>(scalar_type, reinterpret_cast<const uint8_t *>(data));
+    } else if (scalar_type.is_uint() && scalar_type.bits() == 16) {
+        result_id = declare_specialization_constant_of_type<uint16_t>(scalar_type, reinterpret_cast<const uint16_t *>(data));
+    } else if (scalar_type.is_uint() && scalar_type.bits() == 32) {
+        result_id = declare_specialization_constant_of_type<uint32_t>(scalar_type, reinterpret_cast<const uint32_t *>(data));
+    } else if (scalar_type.is_uint() && scalar_type.bits() == 64) {
+        result_id = declare_specialization_constant_of_type<uint64_t>(scalar_type, reinterpret_cast<const uint64_t *>(data));
+    } else if (scalar_type.is_float() && scalar_type.bits() == 16) {
+        if (scalar_type.is_bfloat()) {
+            result_id = declare_specialization_constant_of_type<bfloat16_t>(scalar_type, reinterpret_cast<const bfloat16_t *>(data));
+        } else {
+            result_id = declare_specialization_constant_of_type<float16_t>(scalar_type, reinterpret_cast<const float16_t *>(data));
+        }
+    } else if (scalar_type.is_float() && scalar_type.bits() == 32) {
+        result_id = declare_specialization_constant_of_type<float>(scalar_type, reinterpret_cast<const float *>(data));
+    } else if (scalar_type.is_float() && scalar_type.bits() == 64) {
+        result_id = declare_specialization_constant_of_type<double>(scalar_type, reinterpret_cast<const double *>(data));
+    } else {
+        user_error << "Unhandled constant data conversion from value type '" << scalar_type << "'!\n";
+    }
+    internal_assert(result_id != SpvInvalidId) << "Failed to declare specialization constant of type '" << scalar_type << "'!\n";
+    return result_id;
+}
+
+SpvId SpvBuilder::lookup_constant(const Type &type, const void *data, bool is_specialization) const {
+    ConstantKey key = make_constant_key(type, data, is_specialization);
     ConstantMap::const_iterator it = constant_map.find(key);
     if (it != constant_map.end()) {
         return it->second;
@@ -1997,15 +2089,17 @@ SpvId SpvBuilder::lookup_constant(const Type &type, const void *data) const {
     return SpvInvalidId;
 }
 
-SpvId SpvBuilder::add_constant(const Type &type, const void *data) {
+SpvId SpvBuilder::add_constant(const Type &type, const void *data, bool is_specialization) {
 
-    ConstantKey key = make_constant_key(type, data);
+    ConstantKey key = make_constant_key(type, data, is_specialization);
     ConstantMap::const_iterator it = constant_map.find(key);
     if (it != constant_map.end()) {
         return it->second;
     }
 
-    if (type.lanes() == 1) {
+    if (is_specialization) {
+        return declare_specialization_constant(type, data);
+    } else if (type.lanes() == 1) {
         return declare_scalar_constant(type, data);
     } else {
         return declare_vector_constant(type, data);
@@ -2065,6 +2159,13 @@ SpvId SpvBuilder::add_runtime_array(SpvId base_type_id) {
     SpvInstruction inst = SpvFactory::runtime_array_type(runtime_array_id, base_type_id);
     module.add_type(inst);
     return runtime_array_id;
+}
+
+SpvId SpvBuilder::add_array_with_default_size(SpvId base_type_id, SpvId array_size_id) {
+    SpvId array_id = make_id(SpvArrayTypeId);
+    SpvInstruction inst = SpvFactory::array_type(array_id, base_type_id, array_size_id);
+    module.add_type(inst);
+    return array_id;
 }
 
 bool SpvBuilder::is_pointer_type(SpvId id) const {
@@ -2332,6 +2433,14 @@ SpvInstruction SpvFactory::composite_constant(SpvId result_id, SpvId type_id, co
     return inst;
 }
 
+SpvInstruction SpvFactory::specialization_constant(SpvId result_id, SpvId type_id, size_t bytes, const void *data, SpvValueType value_type) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpSpecConstant);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_data(bytes, data, value_type);
+    return inst;
+}
+
 SpvInstruction SpvFactory::variable(SpvId result_id, SpvId result_type_id, uint32_t storage_class, SpvId initializer_id) {
     SpvInstruction inst = SpvInstruction::make(SpvOpVariable);
     inst.set_type_id(result_type_id);
@@ -2389,14 +2498,28 @@ SpvInstruction SpvFactory::memory_model(SpvAddressingModel addressing_model, Spv
     return inst;
 }
 
-SpvInstruction SpvFactory::exec_mode_local_size(SpvId function_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z) {
+SpvInstruction SpvFactory::exec_mode_local_size(SpvId function_id, uint32_t local_size_x, uint32_t local_size_y, uint32_t local_size_z) {
     SpvInstruction inst = SpvInstruction::make(SpvOpExecutionMode);
     inst.add_operand(function_id);
     inst.add_immediates({
         {SpvExecutionModeLocalSize, SpvIntegerLiteral},
-        {wg_size_x, SpvIntegerLiteral},
-        {wg_size_y, SpvIntegerLiteral},
-        {wg_size_z, SpvIntegerLiteral},
+        {local_size_x, SpvIntegerLiteral},
+        {local_size_y, SpvIntegerLiteral},
+        {local_size_z, SpvIntegerLiteral},
+    });
+    return inst;
+}
+
+SpvInstruction SpvFactory::exec_mode_local_size_id(SpvId function_id, SpvId local_size_x_id, SpvId local_size_y_id, SpvId local_size_z_id) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpExecutionModeId);
+    inst.add_operand(function_id);
+    inst.add_immediates({
+        {SpvExecutionModeLocalSizeId, SpvIntegerLiteral},
+    });
+    inst.add_operands({
+        local_size_x_id, 
+        local_size_y_id, 
+        local_size_z_id
     });
     return inst;
 }
