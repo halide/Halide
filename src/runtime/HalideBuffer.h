@@ -19,8 +19,6 @@
 #ifdef __APPLE__
 #include <AvailabilityVersions.h>
 #include <TargetConditionals.h>
-#else
-#error
 #endif
 
 #if defined(__has_feature)
