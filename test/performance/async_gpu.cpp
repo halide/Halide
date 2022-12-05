@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
         printf("[SKIP] Skipping test for Vulkan. Async performance needs to be improved before this test will pass.\n");
         return 0;
     }
-    
+
     if (!target.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
