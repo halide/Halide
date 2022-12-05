@@ -245,7 +245,8 @@ halide_define_aot_test(float16_t)
 # gpu_multi_context_threaded_aottest.cpp
 # gpu_multi_context_threaded_generator.cpp
 # (Doesn't build/link properly under wasm, and isn't useful there anyway)
-if (NOT Halide_TARGET MATCHES "wasm")
+# (Vulkan doesn't build/link properly and adding custom context creation is too much effort)
+if ((NOT Halide_TARGET MATCHES "wasm") AND (NOT Halide_TARGET MATCHES "vulkan"))
     halide_define_aot_test(gpu_multi_context_threaded
                            OMIT_DEFAULT_GENERATOR
                            EXTRA_LIBS
