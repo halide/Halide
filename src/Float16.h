@@ -44,10 +44,12 @@ struct float16_t {
      * positive zero.*/
     float16_t() = default;
 
-    #ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
     /** Construct a float16_t from compiler's built-in _Float16 type. */
-    explicit float16_t(_Float16 value) { data = *(uint16_t *)&value; }
-    #endif
+    explicit float16_t(_Float16 value) {
+        data = *(uint16_t *)&value;
+    }
+#endif
 
     /// @}
 
@@ -59,10 +61,12 @@ struct float16_t {
     /** Cast to int */
     explicit operator int() const;
 
-    #ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
     /** Cast to compiler's built-in _Float16 type. */
-    explicit operator _Float16() const { return *(const _Float16 *)&data; }
-    #endif
+    explicit operator _Float16() const {
+        return *(const _Float16 *)&data;
+    }
+#endif
 
     /** Get a new float16_t that represents a special value */
     // @{
