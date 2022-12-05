@@ -38,6 +38,20 @@ struct float16_t {
      * positive zero.*/
     float16_t() = default;
 
+    #if defined(__is_identifier)
+    #if !__is_identifier(_Float16)
+    /** Construct a float16_t from compiler's built-in _Float16 type. */
+    float16_t(_Float16 value) { f.data = *(uint16_t *)&value; }
+    #endif
+    #endif
+
+    #if defined(__is_identifier)
+    #if !__is_identifier(__fp16)
+    /** Construct a float16_t from compiler's built-in __fp16 type. */
+    float16_t(__fp16 value) { f.data = *(uint16_t *)&value; }
+    #endif
+    #endif
+
     /// @}
 
     // Use explicit to avoid accidently raising the precision
@@ -47,6 +61,20 @@ struct float16_t {
     explicit operator double() const;
     /** Cast to int */
     explicit operator int() const;
+
+    #if defined(__is_identifier)
+    #if !__is_identifier(_Float16)
+    /** Cast to compiler's built-in _Float16 type. */
+    operator _Float16() const { return *(_Float16 *)&f.data; }
+    #endif
+    #endif
+
+    #if defined(__is_identifier)
+    #if !__is_identifier(__fp16)
+    /** Cast to compiler's built-in __fp16 type. */
+    operator __fp16() const { return *(__fp16 *)&f.data; }
+    #endif
+    #endif
 
     /** Get a new float16_t that represents a special value */
     // @{
@@ -165,6 +193,11 @@ struct bfloat16_t {
      * positive zero.*/
     bfloat16_t() = default;
 
+    #if defined(__is_identifier)
+    #if !__is_identifier(__bf16)
+    bfloat16(__bf16 value) { f.data = *(uint16_t *)&value; }
+    #endif
+    #endif
     /// @}
 
     // Use explicit to avoid accidently raising the precision
@@ -174,6 +207,13 @@ struct bfloat16_t {
     explicit operator double() const;
     /** Cast to int */
     explicit operator int() const;
+
+    #if defined(__is_identifier)
+    #if !__is_identifier(__bf16)
+    /** Cast to compiler's built-in __bf16 type. */
+    operator __bf16() const { return *(__bf16 *)&f.data; }
+    #endif
+    #endif
 
     /** Get a new bfloat16_t that represents a special value */
     // @{
