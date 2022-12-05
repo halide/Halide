@@ -205,7 +205,7 @@ All correctness tests are now passing on tested configs for Linux & Windows usin
 
 MacOS passes most tests but encounters internal MoltenVK code translation issues for wide vectors, and ambiguously function calls.
 
-Most of the Python app and correctness tests are failing, but are being investigated now.
+Python apps, tutorials and correctness tests are now passing, but the AOT cases are skipped since the runtime environment needs to be customized to locate the platform specific Vulkan loader library.
 
 Android platform support is currently being worked on.
 
