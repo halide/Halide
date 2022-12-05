@@ -219,6 +219,7 @@ typedef uint16_t common_uint16x32_t __attribute__((ext_vector_type(32)));
 typedef int32_t common_int32x16_t __attribute__((ext_vector_type(16)));
 typedef uint32_t common_uint32x16_t __attribute__((ext_vector_type(16)));
 
+using float16_t = xb_f16;
 using native_vector_i8 = xb_vec2Nx8;
 using native_vector_u8 = xb_vec2Nx8U;
 using native_mask_i8 = vbool2N;
@@ -230,6 +231,7 @@ using native_vector_i32 = xb_vecN_2x32v;
 using native_vector_u32 = xb_vecN_2x32Uv;
 using native_mask_i32 = vboolN_2;
 using native_vector_i48 = xb_vecNx48;
+using native_vector_f16 = xb_vecNxf16;
 using native_vector_f32 = xb_vecN_2xf32;
 using native_vector_i64 = xb_vecN_2x64w;
 
@@ -451,6 +453,7 @@ using float32x128_t = MultipleOfNativeVector<float32x32_t, 4>;
 #define VECTOR_WIDTH_U8 64
 #define VECTOR_WIDTH_I16 32
 #define VECTOR_WIDTH_U16 32
+#define VECTOR_WIDTH_F16 32
 #define VECTOR_WIDTH_I32 16
 #define VECTOR_WIDTH_U32 16
 #define VECTOR_WIDTH_F32 16
@@ -2218,6 +2221,28 @@ HALIDE_ALWAYS_INLINE native_vector_f32_x2 convert<native_vector_f32_x2, native_v
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i32 convert<native_vector_i32, native_vector_f32>(const native_vector_f32& src) {
   return IVP_TRUNCN_2XF32(src, 0);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE native_vector_f32_x2 convert<native_vector_f32_x2, native_vector_f16>(const native_vector_f16& src) {
+    native_vector_f32_x2 output;
+
+    IVP_DSELN_2XF32I(
+      output.native_vector[1],
+      output.native_vector[0],
+      IVP_CVTF32NXF16_1(src),
+      IVP_CVTF32NXF16_0(src),
+      IVP_DSELI_INTERLEAVE_2);
+
+    return output;
+}
+
+template<>
+HALIDE_ALWAYS_INLINE native_vector_f16 convert<native_vector_f16, native_vector_f32_x2>(const native_vector_f32_x2& src) {
+    return IVP_SELNXF16I(
+      IVP_CVTF16N_2XF32_0(src.native_vector[1]),
+      IVP_CVTF16N_2XF32_0(src.native_vector[0]),
+      IVP_SELI_EXTRACT_1_OF_2_OFF_0);
 }
 
 template<>
