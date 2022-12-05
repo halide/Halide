@@ -1,6 +1,6 @@
 import halide as hl
-from io import StringIO
-from contextlib import redirect_stdout
+import io
+import contextlib
 
 
 def test_warnings():
@@ -17,8 +17,8 @@ def test_warnings():
         "the function is scheduled inline.\n"
     )
 
-    buffer = StringIO()
-    with redirect_stdout(buffer):
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
         g.realize([16])
 
     buffer.seek(0)

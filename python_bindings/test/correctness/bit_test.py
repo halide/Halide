@@ -1,4 +1,5 @@
-import bitcpp, bitpy
+from bitcpp import bitcpp
+from bitpy import bitpy
 import numpy as np
 
 
@@ -26,5 +27,5 @@ def test(fn):
 
 
 if __name__ == "__main__":
-    test(bitcpp.bitcpp)
-    test(bitpy.bitpy)
+    test(bitcpp)
+    test(bitpy)
