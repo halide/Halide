@@ -5,15 +5,21 @@
 function(halide_define_aot_test NAME)
     set(options OMIT_DEFAULT_GENERATOR)
     set(oneValueArgs FUNCTION_NAME)
-    set(multiValueArgs GEN_DEPS EXTRA_LIBS ENABLE_IF FEATURES PARAMS GEN_TARGET)
+    set(multiValueArgs GEN_DEPS EXTRA_LIBS ENABLE_IF FEATURES PARAMS GEN_TARGET GROUPS EXTRA_OUTPUTS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
         return()
     endif ()
 
-    add_executable("${NAME}.generator" "${NAME}_generator.cpp")
-    target_link_libraries("${NAME}.generator" PRIVATE Halide::Generator ${args_GEN_DEPS})
+    set(EXTRA_OUTPUTS "")
+    foreach (EO IN LISTS args_EXTRA_OUTPUTS)
+        list(APPEND EXTRA_OUTPUTS ${EO} ${EO}_PATH_OUT)
+    endforeach()
+
+    add_halide_generator("${NAME}.generator"
+                         SOURCES "${NAME}_generator.cpp"
+                         LINK_LIBRARIES ${args_GEN_DEPS})
 
     set(TARGET "generator_aot_${NAME}")
     set(DEPS ${args_EXTRA_LIBS})
@@ -23,7 +29,8 @@ function(halide_define_aot_test NAME)
                            PARAMS "${args_PARAMS}"
                            TARGETS "${args_GEN_TARGET}"
                            FUNCTION_NAME "${args_FUNCTION_NAME}"
-                           FEATURES "${args_FEATURES}")
+                           FEATURES "${args_FEATURES}"
+                           ${EXTRA_OUTPUTS})
         list(APPEND DEPS ${NAME} ${NAME}.runtime)
     endif ()
 
@@ -37,12 +44,14 @@ function(halide_define_aot_test NAME)
                             "${Halide_SOURCE_DIR}/tools"
                             "${CMAKE_CURRENT_BINARY_DIR}")
 
-        add_wasm_halide_test("${TARGET}" GROUPS generator)
+        add_wasm_halide_test("${TARGET}" GROUPS generator "${args_GROUPS}")
     else ()
         add_executable("${TARGET}" "${NAME}_aottest.cpp")
-        target_include_directories("${TARGET}" PRIVATE
+        target_include_directories(
+            "${TARGET}" PRIVATE
             "${Halide_SOURCE_DIR}/test/common"
-            "${Halide_SOURCE_DIR}/tools")
+            "${Halide_SOURCE_DIR}/tools"
+        )
         if (NOT args_OMIT_DEFAULT_GENERATOR)
             target_link_libraries(${TARGET} PRIVATE ${NAME})
         endif ()
@@ -60,44 +69,9 @@ function(halide_define_aot_test NAME)
         if ("${Halide_TARGET}" MATCHES "cuda")
             target_compile_definitions("${TARGET}" PRIVATE TEST_CUDA)
         endif ()
-        add_halide_test("${TARGET}" GROUPS generator)
+        add_halide_test("${TARGET}" GROUPS generator "${args_GROUPS}")
     endif ()
 endfunction()
-
-##
-# Define a nontrivial dependency for external_code.generator
-##
-
-# external_code_extern.cpp
-set(EXTERNAL_CPP "${CMAKE_CURRENT_SOURCE_DIR}/external_code_extern.cpp")
-
-set(EC32 "external_code_extern_bitcode_32")
-add_custom_command(OUTPUT "${EC32}.bc"
-                   COMMAND clang -O3 -c -m32 -target le32-unknown-nacl-unknown -emit-llvm "$<SHELL_PATH:${EXTERNAL_CPP}>" -o "${EC32}.bc"
-                   DEPENDS "${EXTERNAL_CPP}"
-                   VERBATIM)
-add_custom_command(OUTPUT "${EC32}.cpp"
-                   COMMAND binary2cpp external_code_extern_bitcode_32 < "${EC32}.bc" > "${EC32}.cpp"
-                   DEPENDS "${EC32}.bc" binary2cpp
-                   VERBATIM)
-
-set(EC64 "external_code_extern_bitcode_64")
-add_custom_command(OUTPUT "${EC64}.bc"
-                   COMMAND clang -O3 -c -m64 -target le64-unknown-unknown-unknown -emit-llvm "$<SHELL_PATH:${EXTERNAL_CPP}>" -o "${EC64}.bc"
-                   DEPENDS "${EXTERNAL_CPP}" binary2cpp
-                   VERBATIM)
-add_custom_command(OUTPUT "${EC64}.cpp"
-                   COMMAND binary2cpp external_code_extern_bitcode_64 < "${EC64}.bc" > "${EC64}.cpp"
-                   DEPENDS "${EC64}.bc" binary2cpp
-                   VERBATIM)
-
-set(ECCPP "external_code_extern_cpp_source")
-add_custom_command(OUTPUT "${ECCPP}.cpp"
-                   COMMAND binary2cpp external_code_extern_cpp_source < "$<SHELL_PATH:${EXTERNAL_CPP}>" > "${ECCPP}.cpp"
-                   DEPENDS "${EXTERNAL_CPP}" binary2cpp
-                   VERBATIM)
-
-add_library(external_code_generator_deps OBJECT "${EC32}.cpp" "${EC64}.cpp" "${ECCPP}.cpp")
 
 ##
 # Some tests are not available when compiling for WASM.
@@ -115,7 +89,7 @@ if (NOT ${USING_WASM})
 endif ()
 
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-    include(AddCudaToTarget)
+    find_package(CUDAToolkit REQUIRED)
 endif ()
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
     find_package(OpenCL REQUIRED)
@@ -130,7 +104,7 @@ endif ()
 # acquire_release_generator.cpp
 halide_define_aot_test(acquire_release)
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-    add_cuda_to_target(generator_aot_acquire_release PRIVATE)
+    target_link_libraries(generator_aot_acquire_release PRIVATE CUDA::cuda_driver CUDA::cudart)
 endif ()
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
     target_link_libraries(generator_aot_acquire_release PRIVATE OpenCL::OpenCL)
@@ -144,10 +118,17 @@ endif ()
 
 # alias_aottest.cpp
 # alias_generator.cpp
-halide_define_aot_test(alias EXTRA_LIBS alias_with_offset_42)
-add_halide_library(alias_with_offset_42
-                   FROM alias.generator
-                   GENERATOR alias_with_offset_42)
+set(ALIAS_LIBS alias_with_offset_42 alias_Adams2019 alias_Li2018 alias_Mullapudi2016)
+halide_define_aot_test(alias EXTRA_LIBS ${ALIAS_LIBS})
+foreach (LIB IN LISTS ALIAS_LIBS)
+    # We don't really need all the plugins at once here --
+    # It's just easier to specify them all (and adds a test that loading
+    # multiple plugins works)
+    add_halide_library(${LIB}
+                       FROM alias.generator
+                       GENERATOR ${LIB}
+                       PLUGINS Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016)
+endforeach ()
 
 # argvcall_aottest.cpp
 # argvcall_generator.cpp
@@ -157,11 +138,14 @@ halide_define_aot_test(argvcall)
 # async_parallel_generator.cpp
 halide_define_aot_test(async_parallel
                        # Requires threading support, not yet available for wasm tests
-                       ENABLE_IF NOT ${USING_WASM})
+                       ENABLE_IF NOT ${USING_WASM}
+                       FEATURES user_context
+                       GROUPS multithreaded)
 
 # autograd_aottest.cpp
 # autograd_generator.cpp
-halide_define_aot_test(autograd ENABLE_IF TARGET Halide::Mullapudi2016 AND NOT ${USING_WASM})
+halide_define_aot_test(autograd ENABLE_IF TARGET Halide::Mullapudi2016 AND NOT ${USING_WASM}
+                       GROUPS multithreaded)
 if (TARGET generator_aot_autograd)
     add_halide_library(autograd_grad
                        GRADIENT_DESCENT
@@ -170,6 +154,10 @@ if (TARGET generator_aot_autograd)
                        AUTOSCHEDULER Halide::Mullapudi2016)
     target_link_libraries(generator_aot_autograd PRIVATE autograd_grad)
 endif ()
+
+# abstractgeneratortest_aottest.cpp
+# abstractgeneratortest_generator.cpp
+halide_define_aot_test(abstractgeneratortest)
 
 # bit_operations_aottest.cpp
 # bit_operations_generator.cpp
@@ -182,10 +170,6 @@ halide_define_aot_test(blur2x2)
 # buffer_copy_aottest.cpp
 # buffer_copy_generator.cpp
 halide_define_aot_test(buffer_copy)
-
-# buildmethod_aottest.cpp
-# buildmethod_generator.cpp
-halide_define_aot_test(buildmethod)
 
 # can_use_target_aottest.cpp
 # can_use_target_generator.cpp
@@ -218,7 +202,8 @@ halide_define_aot_test(cxx_mangling
                        # Needs extra deps / build rules
                        ENABLE_IF NOT ${USING_WASM}
                        FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
-                       FEATURES c_plus_plus_name_mangling)
+                       FEATURES c_plus_plus_name_mangling
+                       EXTRA_OUTPUTS FUNCTION_INFO_HEADER)
 if (TARGET cxx_mangling)
     target_link_libraries(cxx_mangling INTERFACE cxx_mangling_externs)
     if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
@@ -249,15 +234,13 @@ halide_define_aot_test(error_codes)
 
 # example_aottest.cpp
 # example_generator.cpp
-halide_define_aot_test(example)
+halide_define_aot_test(example
+                       GROUPS multithreaded)
 
 # extern_output_aottest.cpp
 # extern_output_generator.cpp
-halide_define_aot_test(extern_output)
-
-# external_code_aottest.cpp
-# external_code_generator.cpp
-halide_define_aot_test(external_code GEN_DEPS external_code_generator_deps)
+halide_define_aot_test(extern_output
+                       GROUPS multithreaded)
 
 # float16_t_aottest.cpp
 # float16_t_generator.cpp
@@ -267,23 +250,23 @@ halide_define_aot_test(float16_t)
 # gpu_multi_context_threaded_generator.cpp
 # (Doesn't build/link properly under wasm, and isn't useful there anyway)
 if (NOT Halide_TARGET MATCHES "wasm")
-  halide_define_aot_test(gpu_multi_context_threaded
-                         OMIT_DEFAULT_GENERATOR
-                         EXTRA_LIBS
-                         gpu_multi_context_threaded_add
-                         gpu_multi_context_threaded_mul)
+    halide_define_aot_test(gpu_multi_context_threaded
+                           OMIT_DEFAULT_GENERATOR
+                           EXTRA_LIBS
+                           gpu_multi_context_threaded_add
+                           gpu_multi_context_threaded_mul)
 
-  add_halide_library(gpu_multi_context_threaded_add FROM gpu_multi_context_threaded.generator
-                     FEATURES user_context)
-  add_halide_library(gpu_multi_context_threaded_mul FROM gpu_multi_context_threaded.generator
-                     FEATURES user_context)
+    add_halide_library(gpu_multi_context_threaded_add FROM gpu_multi_context_threaded.generator
+                       FEATURES user_context)
+    add_halide_library(gpu_multi_context_threaded_mul FROM gpu_multi_context_threaded.generator
+                       FEATURES user_context)
 
-  if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-      add_cuda_to_target(generator_aot_gpu_multi_context_threaded PRIVATE)
-  endif ()
-  if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
-      target_link_libraries(generator_aot_gpu_multi_context_threaded PRIVATE OpenCL::OpenCL)
-  endif ()
+    if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
+        target_link_libraries(generator_aot_gpu_multi_context_threaded PRIVATE CUDA::cuda_driver CUDA::cudart)
+    endif ()
+    if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
+        target_link_libraries(generator_aot_gpu_multi_context_threaded PRIVATE OpenCL::OpenCL)
+    endif ()
 endif ()
 
 # gpu_object_lifetime_aottest.cpp
@@ -304,24 +287,16 @@ halide_define_aot_test(image_from_array)
 
 # mandelbrot_aottest.cpp
 # mandelbrot_generator.cpp
-halide_define_aot_test(mandelbrot)
-
-# matlab_aottest.cpp
-# matlab_generator.cpp
-halide_define_aot_test(matlab
-                       # Needs matlab support. See https://github.com/halide/Halide/issues/2082
-                       ENABLE_IF NOT ${USING_WASM}
-                       FEATURES matlab)
-if (TARGET generator_aot_matlab)
-    set_target_properties(generator_aot_matlab PROPERTIES ENABLE_EXPORTS TRUE)
-endif ()
+halide_define_aot_test(mandelbrot
+                       GROUPS multithreaded)
 
 # memory_profiler_mandelbrot_aottest.cpp
 # memory_profiler_mandelbrot_generator.cpp
 halide_define_aot_test(memory_profiler_mandelbrot
                        # Requires profiler support (which requires threading), not yet available for wasm tests
                        ENABLE_IF NOT ${USING_WASM}
-                       FEATURES profile)
+                       FEATURES profile
+                       GROUPS multithreaded)
 
 # metadata_tester_aottest.cpp
 # metadata_tester_generator.cpp
@@ -357,25 +332,39 @@ set(metadata_tester_params
     array_outputs8.size=2
     array_outputs9.size=2)
 
+# Note that metadata_tester (but not metadata_tester_ucon) is built as "multitarget" to verify that
+# the metadata names are correctly emitted.
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+    # wasm doesn't support multitargets
+    # TODO: currently, Halide_CMAKE_TARGET == Halide_HOST_TARGET when building for Emscripten; we should fix this
+    set(MDT_TARGETS ${Halide_TARGET})
+else()
+    set(MDT_TARGETS cmake-no_bounds_query cmake)
+endif()
+
 halide_define_aot_test(metadata_tester
                        EXTRA_LIBS metadata_tester_ucon
-                       PARAMS ${metadata_tester_params})
+                       PARAMS ${metadata_tester_params}
+                       GEN_TARGET ${MDT_TARGETS}
+                       EXTRA_OUTPUTS FUNCTION_INFO_HEADER)
 add_halide_library(metadata_tester_ucon
                    FROM metadata_tester.generator
                    GENERATOR metadata_tester
                    FEATURES user_context
-                   PARAMS ${metadata_tester_params})
+                   PARAMS ${metadata_tester_params}
+                   FUNCTION_INFO_HEADER metadata_tester_ucon_path)
 
 # msan_aottest.cpp
 # msan_generator.cpp
-halide_define_aot_test(msan FEATURES msan)
+halide_define_aot_test(msan FEATURES msan
+                       GROUPS multithreaded)
 
 # (Doesn't build/link properly on windows / under wasm)
 if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows" AND NOT Halide_TARGET MATCHES "wasm")
-  # sanitizercoverage_aottest.cpp
-  # sanitizercoverage_generator.cpp
-  halide_define_aot_test(sanitizercoverage FEATURES sanitizer_coverage)
-endif()
+    # sanitizercoverage_aottest.cpp
+    # sanitizercoverage_generator.cpp
+    halide_define_aot_test(sanitizercoverage FEATURES sanitizer_coverage)
+endif ()
 
 # multitarget_aottest.cpp
 # multitarget_generator.cpp
@@ -412,7 +401,8 @@ halide_define_aot_test(output_assign)
 
 # pyramid_aottest.cpp
 # pyramid_generator.cpp
-halide_define_aot_test(pyramid PARAMS levels=10)
+halide_define_aot_test(pyramid PARAMS levels=10
+                       GROUPS multithreaded)
 
 # rdom_input_aottest.cpp
 # rdom_input_generator.cpp
@@ -445,15 +435,17 @@ halide_define_aot_test(tiled_blur EXTRA_LIBS blur2x2)
 
 # user_context_aottest.cpp
 # user_context_generator.cpp
-halide_define_aot_test(user_context FEATURES user_context)
+halide_define_aot_test(user_context FEATURES user_context
+                       GROUPS multithreaded)
 
 # user_context_insanity_aottest.cpp
 # user_context_insanity_generator.cpp
-halide_define_aot_test(user_context_insanity FEATURES user_context)
+halide_define_aot_test(user_context_insanity FEATURES user_context
+                       GROUPS multithreaded)
 
 # variable_num_threads_aottest.cpp
 # variable_num_threads_generator.cpp
 halide_define_aot_test(variable_num_threads
                        # Requires threading support, not yet available for wasm tests
-                       ENABLE_IF NOT ${USING_WASM})
-
+                       ENABLE_IF NOT ${USING_WASM}
+                       GROUPS multithreaded)

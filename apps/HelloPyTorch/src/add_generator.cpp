@@ -15,9 +15,9 @@ Func add_(const Input &input_a, const Input &input_b) {
 
 class AddGenerator : public Generator<AddGenerator> {
 public:
-    Input<Buffer<>> input_a{"input_a", 4};
-    Input<Buffer<>> input_b{"input_b", 4};
-    Output<Buffer<>> output{"output", 4};
+    Input<Buffer<void, 4>> input_a{"input_a"};
+    Input<Buffer<void, 4>> input_b{"input_b"};
+    Output<Buffer<void, 4>> output{"output"};
 
     void generate() {
         // Algorithm
@@ -30,7 +30,7 @@ public:
         output.set_estimates({{0, kEdge}, {0, kEdge}, {0, kEdge}, {0, kEdge}});
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             Var tx("tx"), xy("xy"), cn("cn"), allvars("allvars");
             if (get_target().has_gpu_feature()) {
                 output
@@ -52,12 +52,12 @@ public:
 
 class AddGradGenerator : public Generator<AddGradGenerator> {
 public:
-    Input<Buffer<>> input_a{"input_a", 4};
-    Input<Buffer<>> input_b{"input_b", 4};
-    Input<Buffer<>> d_output{"d_output", 4};
+    Input<Buffer<void, 4>> input_a{"input_a"};
+    Input<Buffer<void, 4>> input_b{"input_b"};
+    Input<Buffer<void, 4>> d_output{"d_output"};
 
-    Output<Buffer<>> d_input_a{"d_input_a", 4};
-    Output<Buffer<>> d_input_b{"d_input_b", 4};
+    Output<Buffer<void, 4>> d_input_a{"d_input_a"};
+    Output<Buffer<void, 4>> d_input_b{"d_input_b"};
 
     void generate() {
         // Algorithm
@@ -84,7 +84,7 @@ public:
         d_input_b.set_estimates({{0, kEdge}, {0, kEdge}, {0, kEdge}, {0, kEdge}});
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             Var tx("tx"), xy("xy"), cn("cn"), allvars("allvars");
 
             if (get_target().has_gpu_feature()) {

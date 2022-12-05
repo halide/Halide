@@ -33,23 +33,30 @@ public:
     /** Single-element realizations are implicitly castable to Buffers. */
     template<typename T, int Dims>
     operator Buffer<T, Dims>() const {
-        return images[0].as<T, Dims>();
+        // use our operator[] overload so that we get proper range-checking
+        return (*this)[0].as<T, Dims>();
     }
 
-    /** Construct a Realization that acts as a reference to some
-     * existing Buffers. The element type of the Buffers may not be
+    /** Construct a Realization that acts as a reference to a single
+     * existing Buffer. The element type of the Buffer may not be
      * const. */
-    template<typename T,
-             int Dims,
-             typename... Args,
-             typename = typename std::enable_if<Internal::all_are_convertible<Buffer<void>, Args...>::value>::type>
-    Realization(Buffer<T, Dims> &a, Args &&...args) {
-        images = std::vector<Buffer<void>>({a, args...});
-    }
+    // @{
+    explicit Realization(const Buffer<void> &e);
+    explicit Realization(Buffer<void> &&e);
+    // @}
 
     /** Construct a Realization that refers to the buffers in an
-     * existing vector of Buffer<> */
-    explicit Realization(std::vector<Buffer<void>> &e);
+     * existing vector of Buffer<>. The element type of the Buffer(s) may not be
+     * const */
+    // @{
+    explicit Realization(const std::vector<Buffer<void>> &e);
+    explicit Realization(std::vector<Buffer<void>> &&e);
+    // This ctor allows us to avoid ambiguity when the vector is specified as
+    // a braced literal, e.g. `Realization({first, second})`
+    explicit Realization(std::initializer_list<Buffer<void>> e)
+        : Realization(std::vector<Buffer<void>>{e}) {
+    }
+    // @}
 
     /** Call device_sync() for all Buffers in the Realization.
      * If one of the calls returns an error, subsequent Buffers won't have

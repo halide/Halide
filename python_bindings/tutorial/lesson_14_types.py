@@ -64,11 +64,11 @@ def main():
         # You can also query any defined hl.Func for the types it produces.
         f1 = hl.Func("f1")
         f1[x] = hl.cast(hl.UInt(8), x)
-        assert f1.output_types()[0] == hl.UInt(8)
+        assert f1.types()[0] == hl.UInt(8)
 
         f2 = hl.Func("f2")
         f2[x] = (x, hl.sin(x))
-        assert f2.output_types()[0] == hl.Int(32) and f2.output_types()[1] == hl.Float(32)
+        assert f2.types()[0] == hl.Int(32) and f2.types()[1] == hl.Float(32)
 
     # Type promotion rules.
     if True:

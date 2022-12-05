@@ -59,7 +59,7 @@ void *halide_opengl_get_proc_address(void *user_context, const char *name);
 /** This function creates an OpenGL context for use by the OpenGL backend.
  *
  *  You may have to implement this yourself as well. Halide only provides
-*   implementations for some platforms."
+ *   implementations for some platforms."
  */
 int halide_opengl_create_context(void *user_context);
 

@@ -33,6 +33,7 @@ public:
         CPlusPlusImplementation,
         CExternDecl,
         CPlusPlusExternDecl,
+        CPlusPlusFunctionInfoHeader,
     };
 
     /** Initialize a C code generator pointing at a particular output
@@ -65,7 +66,7 @@ protected:
 
     /** Emit a declaration. */
     // @{
-    virtual void compile(const LoweredFunc &func, const std::map<std::string, std::string> &metadata_name_map);
+    virtual void compile(const LoweredFunc &func, const MetadataNameMap &metadata_name_map);
     virtual void compile(const Buffer<> &buffer);
     // @}
 
@@ -133,7 +134,8 @@ protected:
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header() {
         return output_kind == CHeader ||
-               output_kind == CPlusPlusHeader;
+               output_kind == CPlusPlusHeader ||
+               output_kind == CPlusPlusFunctionInfoHeader;
     }
 
     /** Return true if only generating an interface, which may be extern "C" or C++ */
@@ -151,7 +153,8 @@ protected:
     bool is_c_plus_plus_interface() {
         return output_kind == CPlusPlusHeader ||
                output_kind == CPlusPlusImplementation ||
-               output_kind == CPlusPlusExternDecl;
+               output_kind == CPlusPlusExternDecl ||
+               output_kind == CPlusPlusFunctionInfoHeader;
     }
 
     /** Open a new C scope (i.e. throw in a brace, increase the indent) */
@@ -196,6 +199,7 @@ protected:
     void visit(const StringImm *) override;
     void visit(const FloatImm *) override;
     void visit(const Cast *) override;
+    void visit(const Reinterpret *) override;
     void visit(const Add *) override;
     void visit(const Sub *) override;
     void visit(const Mul *) override;
@@ -270,7 +274,10 @@ protected:
                            const std::vector<LoweredArgument> &args);
     void emit_metadata_getter(const std::string &function_name,
                               const std::vector<LoweredArgument> &args,
-                              const std::map<std::string, std::string> &metadata_name_map);
+                              const MetadataNameMap &metadata_name_map);
+    void emit_constexpr_function_info(const std::string &function_name,
+                                      const std::vector<LoweredArgument> &args,
+                                      const MetadataNameMap &metadata_name_map);
 };
 
 }  // namespace Internal

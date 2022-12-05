@@ -116,6 +116,16 @@ public:
         }
     }
 
+    void visit(const Reinterpret *op) override {
+        const Reinterpret *e = expr.as<Reinterpret>();
+        if (result && e && types_match(op->type, e->type)) {
+            expr = e->value;
+            op->value.accept(this);
+        } else {
+            result = false;
+        }
+    }
+
     void visit(const Variable *op) override {
         if (!result) {
             return;
@@ -374,6 +384,16 @@ class WithLanes : public IRMutator {
         }
     }
 
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic() && (op->type.lanes() != lanes)) {
+            auto new_args = mutate_with_changes(op->args).first;
+            return Call::make(with_lanes(op->type), op->name, new_args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
 public:
     WithLanes(int lanes)
         : lanes(lanes) {
@@ -432,6 +452,11 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
         // that the types of the values match, so use equal rather
         // than equal_helper.
         return equal(((const Cast &)a).value, ((const Cast &)b).value);
+    case IRNodeType::Reinterpret:
+        // While we know a and b have matching type, we don't know
+        // that the types of the values match, so use equal rather
+        // than equal_helper.
+        return equal(((const Reinterpret &)a).value, ((const Reinterpret &)b).value);
     case IRNodeType::Variable:
         return ((const Variable &)a).name == ((const Variable &)b).name;
     case IRNodeType::Add:

@@ -55,6 +55,7 @@ protected:
     void visit(const FloatImm *) override;
     void visit(const StringImm *) override;
     void visit(const Cast *op) override;
+    void visit(const Reinterpret *op) override;
     void visit(const Variable *op) override;
     void visit(const Add *op) override;
     void visit(const Sub *op) override;
@@ -739,7 +740,6 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                                    update_args, i);
                 }
 
-                int count = 0;
                 // Traverse the expressions in reverse order
                 for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
                     if (it->type().is_handle()) {
@@ -748,7 +748,6 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                     }
                     // Propagate adjoints
                     it->accept(this);
-                    count++;
                 }
             }
         }
@@ -834,6 +833,14 @@ void ReverseAccumulationVisitor::visit(const Cast *op) {
     } else {
         accumulate(op->value, make_zero(op->value.type()));
     }
+}
+
+void ReverseAccumulationVisitor::visit(const Reinterpret *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // bit manipulation -- has zero derivative.
+    accumulate(op->value, make_zero(op->type));
 }
 
 void ReverseAccumulationVisitor::visit(const Variable *op) {
@@ -1169,8 +1176,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[1], adjoint);
         } else if (op->is_intrinsic(Call::undef)) {
             // do nothing
-        } else if (op->is_intrinsic(Call::reinterpret) ||
-                   op->is_intrinsic(Call::bitwise_and) ||
+        } else if (op->is_intrinsic(Call::bitwise_and) ||
                    op->is_intrinsic(Call::bitwise_not) ||
                    op->is_intrinsic(Call::bitwise_or) ||
                    op->is_intrinsic(Call::bitwise_xor) ||
@@ -1808,7 +1814,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
         // If previous update has a different set of reduction variables,
         // don't merge
         const vector<ReductionVariable> &rvars =
-            func_to_update.update(update_id).get_schedule().rvars();
+            func_to_update.function().update(update_id).schedule().rvars();
         if (!merged_r.defined()) {
             return rvars.empty();
         }
@@ -1935,6 +1941,15 @@ Func Derivative::operator()(const Param<> &param) const {
     auto it = adjoints.find(FuncKey{param.name(), -1});
     if (it == adjoints.end()) {
         Internal::debug(1) << "Could not find Param " << param.name() << "\n";
+        return Func();
+    }
+    return it->second;
+}
+
+Func Derivative::operator()(const std::string &name) const {
+    auto it = adjoints.find(FuncKey{name, -1});
+    if (it == adjoints.end()) {
+        Internal::debug(1) << "Could not find name: " << name << "\n";
         return Func();
     }
     return it->second;

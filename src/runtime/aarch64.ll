@@ -64,7 +64,7 @@ declare <8 x half> @llvm.aarch64.neon.frsqrts.v8f16(<8 x half> %x, <8 x half> %y
 declare <4 x half> @llvm.aarch64.neon.frsqrts.v4f16(<4 x half> %x, <4 x half> %y) nounwind readnone;
 
 define weak_odr float @fast_inverse_f32(float %x) nounwind alwaysinline {
-       %vec = insertelement <2 x float> undef, float %x, i32 0
+       %vec = insertelement <2 x float> poison, float %x, i32 0
        %approx = tail call <2 x float> @fast_inverse_f32x2(<2 x float> %vec)
        %result = extractelement <2 x float> %approx, i32 0
        ret float %result
@@ -85,7 +85,7 @@ define weak_odr <4 x float> @fast_inverse_f32x4(<4 x float> %x) nounwind alwaysi
 }
 
 define weak_odr half @fast_inverse_f16(half %x) nounwind alwaysinline {
-       %vec = insertelement <4 x half> undef, half %x, i32 0
+       %vec = insertelement <4 x half> poison, half %x, i32 0
        %approx = tail call <4 x half> @fast_inverse_f16x4(<4 x half> %vec)
        %result = extractelement <4 x half> %approx, i32 0
        ret half %result
@@ -106,7 +106,7 @@ define weak_odr <8 x half> @fast_inverse_f16x8(<8 x half> %x) nounwind alwaysinl
 }
 
 define weak_odr float @fast_inverse_sqrt_f32(float %x) nounwind alwaysinline {
-       %vec = insertelement <2 x float> undef, float %x, i32 0
+       %vec = insertelement <2 x float> poison, float %x, i32 0
        %approx = tail call <2 x float> @fast_inverse_sqrt_f32x2(<2 x float> %vec)
        %result = extractelement <2 x float> %approx, i32 0
        ret float %result
@@ -129,7 +129,7 @@ define weak_odr <4 x float> @fast_inverse_sqrt_f32x4(<4 x float> %x) nounwind al
 }
 
 define weak_odr half @fast_inverse_sqrt_f16(half %x) nounwind alwaysinline {
-       %vec = insertelement <4 x half> undef, half %x, i32 0
+       %vec = insertelement <4 x half> poison, half %x, i32 0
        %approx = tail call <4 x half> @fast_inverse_sqrt_f16x4(<4 x half> %vec)
        %result = extractelement <4 x half> %approx, i32 0
        ret half %result

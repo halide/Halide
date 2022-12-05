@@ -12,11 +12,11 @@ $(GENERATOR_BIN)/hist.generator: hist_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/hist.a: $(GENERATOR_BIN)/hist.generator
 	@mkdir -p $(@D)
-	$< -g hist -f hist -o $(BIN)/$* target=$*-no_runtime auto_schedule=false
+	$< -g hist -f hist -o $(BIN)/$* target=$*-no_runtime
 
 $(BIN)/%/hist_auto_schedule.a: $(GENERATOR_BIN)/hist.generator
 	@mkdir -p $(@D)
-	$< -g hist -f hist_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
+	$< -g hist -f hist_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/hist.generator
 	@mkdir -p $(@D)

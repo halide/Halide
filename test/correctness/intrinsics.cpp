@@ -72,7 +72,6 @@ void check_intrinsics_over_range() {
                 {halving_add(a_expr, b_expr), (a + b) >> 1},
                 {rounding_halving_add(a_expr, b_expr), (a + b + 1) >> 1},
                 {halving_sub(a_expr, b_expr), (a - b) >> 1},
-                {rounding_halving_sub(a_expr, b_expr), (a - b + 1) >> 1},
             };
             for (const auto &p : intrinsics_with_reference_answer) {
                 Expr test = lower_intrinsics(p.first);
@@ -222,12 +221,6 @@ int main(int argc, char **argv) {
     check(u8((widening_add(u8x, u8y) + 1) / 2), rounding_halving_add(u8x, u8y));
     check((i32x + i32y + 1) / 2, rounding_halving_add(i32x, i32y));
 
-    check(i8((i16(i8x) - i8y + 1) / 2), rounding_halving_sub(i8x, i8y));
-    check(u8((u16(u8x) - u8y + 1) / 2), rounding_halving_sub(u8x, u8y));
-    check(i8((widening_sub(i8x, i8y) + 1) / 2), rounding_halving_sub(i8x, i8y));
-    check(u8((widening_sub(u8x, u8y) + 1) / 2), rounding_halving_sub(u8x, u8y));
-    check((i32x - i32y + 1) / 2, rounding_halving_sub(i32x, i32y));
-
     // Check absd
     check(abs(i16(i8x) - i16(i8y)), u16(absd(i8x, i8y)));
     check(abs(i16(u8x) - i16(u8y)), u16(absd(u8x, u8y)));
@@ -250,10 +243,10 @@ int main(int argc, char **argv) {
     check(narrow((u32(u16x) + 15) >> 4), rounding_halving_add(u16x, u16(14)) >> u16(3));
 
     // But not if the constant can't fit in the narrower type
-    check(narrow((u16(u8x) + 500) >> 4), narrow((u16(u8x) + 500) >> 4));
+    check(narrow((u16(u8x) + 500) >> 4), narrow((widen_right_add(cast<uint16_t>(500), u8x)) >> 4));
 
     check((u64(u32x) + 8) / 16, u64(rounding_shift_right(u32x, 4)));
-    check(u16(min((u64(u32x) + 8) / 16, 65535)), u16(min(rounding_shift_right(u32x, 4), 65535)));
+    check(u16(min((u64(u32x) + 8) / 16, 65535)), u16_sat(rounding_shift_right(u32x, 4)));
 
     // And with variable shifts.
     check(i8(widening_add(i8x, (i8(1) << u8y) / 2) >> u8y), rounding_shift_right(i8x, u8y));

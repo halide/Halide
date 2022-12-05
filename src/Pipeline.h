@@ -12,7 +12,6 @@
 #include <memory>
 #include <vector>
 
-#include "ExternalCode.h"
 #include "IROperator.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
@@ -25,36 +24,47 @@
 namespace Halide {
 
 struct Argument;
+class Callable;
 class Func;
 struct PipelineContents;
 
-/** A struct representing the machine parameters to generate the auto-scheduled
- * code for. */
-struct MachineParams {
-    /** Maximum level of parallelism avalaible. */
-    int parallelism;
-    /** Size of the last-level cache (in bytes). */
-    uint64_t last_level_cache_size;
-    /** Indicates how much more expensive is the cost of a load compared to
-     * the cost of an arithmetic operation at last level cache. */
-    float balance;
+/** Special the Autoscheduler to be used (if any), along with arbitrary
+ * additional arguments specific to the given Autoscheduler.
+ *
+ * The 'name' field specifies the type of Autoscheduler
+ * to be used (e.g. Adams2019, Mullapudi2016). If this is an empty string,
+ * no autoscheduling will be done; if not, it mustbe the name of a known Autoscheduler.
+ *
+ * At this time, well-known autoschedulers include:
+ *  "Mullapudi2016" -- heuristics-based; the first working autoscheduler; currently built in to libHalide
+ *                     see http://graphics.cs.cmu.edu/projects/halidesched/
+ *  "Adams2019"     -- aka "the ML autoscheduler"; currently located in apps/autoscheduler
+ *                     see https://halide-lang.org/papers/autoscheduler2019.html
+ *  "Li2018"        -- aka "the gradient autoscheduler"; currently located in apps/gradient_autoscheduler.
+ *                     see https://people.csail.mit.edu/tzumao/gradient_halide
+ *
+ * The key/value pairs in 'extra' are defined on a per-autoscheduler basis.
+ * An autoscheduler can have any number of required or optional keys.
+ */
+struct AutoschedulerParams {
+    std::string name;
+    std::map<std::string, std::string> extra;
 
-    explicit MachineParams(int parallelism, uint64_t llc, float balance)
-        : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {
+    AutoschedulerParams() = default;
+    /*not-explicit*/ AutoschedulerParams(const std::string &name)
+        : name(name) {
+    }
+    AutoschedulerParams(const std::string &name, const std::map<std::string, std::string> &extra)
+        : name(name), extra(extra) {
     }
 
-    /** Default machine parameters for generic CPU architecture. */
-    static MachineParams generic();
-
-    /** Convert the MachineParams into canonical string form. */
     std::string to_string() const;
-
-    /** Reconstruct a MachineParams from canonical string form. */
-    explicit MachineParams(const std::string &s);
 };
 
 namespace Internal {
 class IRMutator;
+struct JITCache;
+struct JITCallArgs;
 }  // namespace Internal
 
 /**
@@ -83,16 +93,15 @@ struct CustomLoweringPass {
 struct JITExtern;
 
 struct AutoSchedulerResults {
-    std::string scheduler_name;          // name of the autoscheduler used
-    Target target;                       // Target specified to the autoscheduler
-    std::string machine_params_string;   // MachineParams specified to the autoscheduler (in string form)
-    std::string schedule_source;         // The C++ source code of the generated schedule
-    std::vector<uint8_t> featurization;  // The featurization of the pipeline (if any)
+    Target target;                             // Target specified to the autoscheduler
+    AutoschedulerParams autoscheduler_params;  // The autoscheduler used, along with its params
+    std::string schedule_source;               // The C++ source code of the generated schedule
+    std::vector<uint8_t> featurization;        // The featurization of the pipeline (if any)
 };
 
 class Pipeline;
 
-using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const MachineParams &, AutoSchedulerResults *outputs)>;
+using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const AutoschedulerParams &, AutoSchedulerResults *outputs)>;
 
 /** A class representing a Halide pipeline. Constructed from the Func
  * or Funcs that it outputs. */
@@ -141,26 +150,28 @@ public:
 private:
     Internal::IntrusivePtr<PipelineContents> contents;
 
-    struct JITCallArgs;  // Opaque structure to optimize away dynamic allocation in this path.
-
     // For the three method below, precisely one of the first two args should be non-null
     void prepare_jit_call_arguments(RealizationArg &output, const Target &target, const ParamMap &param_map,
-                                    JITUserContext **user_context, bool is_bounds_inference, JITCallArgs &args_result);
+                                    JITUserContext **user_context, bool is_bounds_inference, Internal::JITCallArgs &args_result);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
     static std::map<std::string, AutoSchedulerFn> &get_autoscheduler_map();
 
-    static std::string &get_default_autoscheduler_name();
-
     static AutoSchedulerFn find_autoscheduler(const std::string &autoscheduler_name);
 
-    int call_jit_code(const Target &target, const JITCallArgs &args);
+    int call_jit_code(const Target &target, const Internal::JITCallArgs &args);
 
     // Get the value of contents->jit_target, but reality-check that the contents
     // sensibly match the value. Return Target() if not jitted.
     Target get_compiled_jit_target() const;
+
+    static Internal::JITCache compile_jit_cache(const Module &module,
+                                                std::vector<Argument> args,
+                                                const std::vector<Internal::Function> &outputs,
+                                                const std::map<std::string, JITExtern> &jit_externs,
+                                                const Target &target_arg);
 
 public:
     /** Make an undefined Pipeline object. */
@@ -179,32 +190,13 @@ public:
     /** Get the Funcs this pipeline outputs. */
     std::vector<Func> outputs() const;
 
-    /** Generate a schedule for the pipeline using the currently-default autoscheduler. */
-    AutoSchedulerResults auto_schedule(const Target &target,
-                                       const MachineParams &arch_params = MachineParams::generic());
-
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
-    AutoSchedulerResults auto_schedule(const std::string &autoscheduler_name,
-                                       const Target &target,
-                                       const MachineParams &arch_params = MachineParams::generic());
+    AutoSchedulerResults apply_autoscheduler(const Target &target,
+                                             const AutoschedulerParams &autoscheduler_params) const;
 
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */
     static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler);
-
-    /** Globally set the default autoscheduler method to use whenever
-     * autoscheduling any Pipeline when no name is specified. If the autoscheduler_name isn't in the
-     * current table of known autoschedulers, assert-fail.
-     *
-     * At this time, well-known autoschedulers include:
-     *  "Mullapudi2016" -- heuristics-based; the first working autoscheduler; currently built in to libHalide
-     *                     see http://graphics.cs.cmu.edu/projects/halidesched/
-     *  "Adams2019"     -- aka "the ML autoscheduler"; currently located in apps/autoscheduler
-     *                     see https://halide-lang.org/papers/autoscheduler2019.html
-     *  "Li2018"        -- aka "the gradient autoscheduler"; currently located in apps/gradient_autoscheduler.
-     *                     see https://people.csail.mit.edu/tzumao/gradient_halide
-     */
-    static void set_default_autoscheduler_name(const std::string &autoscheduler_name);
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */
@@ -349,27 +341,13 @@ public:
      */
     void compile_jit(const Target &target = get_jit_target_from_environment());
 
-    /** Deprecated variants of the above that use a void pointer
-     * instead of a JITUserContext pointer. */
-    // @{
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_error_handler(void (*handler)(void *, const char *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_allocator(void *(*malloc)(void *, size_t),
-                              void (*free)(void *, void *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_do_task(
-        int (*custom_do_task)(void *, int (*)(void *, int, uint8_t *),
-                              int, uint8_t *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_do_par_for(
-        int (*custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
-                                 int, uint8_t *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_print(void (*handler)(void *, const char *));
-    // @}
+    /** Eagerly jit compile the function to machine code and return a callable
+     * struct that behaves like a function pointer. The calling convention
+     * will exactly match that of an AOT-compiled version of this Func
+     * with the same Argument list.
+     */
+    Callable compile_to_callable(const std::vector<Argument> &args,
+                                 const Target &target = get_jit_target_from_environment());
 
     /** Install a set of external C functions or Funcs to satisfy
      * dependencies introduced by HalideExtern and define_extern
@@ -498,17 +476,20 @@ public:
      * with the remaining arguments, and return
      * halide_error_code_requirement_failed. Requirements are checked
      * in the order added. */
-    void add_requirement(const Expr &condition, std::vector<Expr> &error);
+    // @{
+    void add_requirement(const Expr &condition, const std::vector<Expr> &error_args);
+
+    template<typename... Args,
+             typename = typename std::enable_if<Internal::all_are_printable_args<Args...>::value>::type>
+    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
+        std::vector<Expr> collected_args;
+        Internal::collect_print_args(collected_args, std::forward<Args>(error_args)...);
+        add_requirement(condition, collected_args);
+    }
+    // @}
 
     /** Generate begin_pipeline and end_pipeline tracing calls for this pipeline. */
     void trace_pipeline();
-
-    template<typename... Args>
-    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...args) {
-        std::vector<Expr> collected_args;
-        Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
-        add_requirement(condition, collected_args);
-    }
 
 private:
     std::string generate_function_name() const;

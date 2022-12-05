@@ -7,9 +7,11 @@
 #include <utility>
 
 #include "Halide.h"
+#include "ParamParser.h"
 
 namespace Halide {
 namespace Internal {
+namespace Autoscheduler {
 
 using std::make_pair;
 using std::map;
@@ -19,6 +21,18 @@ using std::string;
 using std::vector;
 
 namespace {
+
+struct ArchParams {
+    /** Maximum level of parallelism avalaible. */
+    int parallelism = 16;
+
+    /** Size of the last-level cache (in bytes). */
+    uint64_t last_level_cache_size = 16 * 1024 * 1024;
+
+    /** Indicates how much more expensive is the cost of a load compared to
+     * the cost of an arithmetic operation at last level cache. */
+    float balance = 40;
+};
 
 // Substitute parameter estimates into the exprs describing the box bounds.
 void substitute_estimates_box(Box &box) {
@@ -1054,7 +1068,7 @@ struct Partitioner {
     const map<string, Box> &pipeline_bounds;
     // Parameters of the machine model that is used for estimating the cost of each
     // group in the pipeline.
-    const MachineParams &arch_params;
+    const ArchParams &arch_params;
     // Dependency analysis of the pipeline. This support queries on regions
     // accessed and computed for producing some regions of some functions.
     DependenceAnalysis &dep_analysis;
@@ -1065,7 +1079,7 @@ struct Partitioner {
     const vector<Function> &outputs;
 
     Partitioner(const map<string, Box> &_pipeline_bounds,
-                const MachineParams &_arch_params,
+                const ArchParams &_arch_params,
                 const vector<Function> &_outputs,
                 DependenceAnalysis &_dep_analysis,
                 RegionCosts &_costs);
@@ -1305,7 +1319,7 @@ void Partitioner::disp_pipeline_costs() {
 // Construct a partitioner and build the pipeline graph on which the grouping
 // algorithm operates.
 Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
-                         const MachineParams &_arch_params,
+                         const ArchParams &_arch_params,
                          const vector<Function> &_outputs,
                          DependenceAnalysis &_dep_analysis,
                          RegionCosts &_costs)
@@ -3166,7 +3180,7 @@ bool inline_unbounded(const vector<Function> &outputs,
 // outputs. This applies the schedules and returns a string representation of
 // the schedules. The target architecture is specified by 'target'.
 string generate_schedules(const vector<Function> &outputs, const Target &target,
-                          const MachineParams &arch_params) {
+                          const ArchParams &arch_params) {
     // Make an environment map which is used throughout the auto scheduling process.
     map<string, Function> env;
     for (const Function &f : outputs) {
@@ -3372,25 +3386,35 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 }
 
 struct Mullapudi2016 {
-    void operator()(const Pipeline &pipeline, const Target &target, const MachineParams &arch_params, AutoSchedulerResults *outputs) {
+    void operator()(const Pipeline &pipeline, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *outputs) {
+        internal_assert(params_in.name == "Mullapudi2016");
+
         AutoSchedulerResults results;
         results.target = target;
-        results.machine_params_string = arch_params.to_string();
+        results.autoscheduler_params = params_in;
 
-        results.scheduler_name = "Mullapudi2016";
         std::vector<Function> pipeline_outputs;
         for (const Func &f : pipeline.outputs()) {
             pipeline_outputs.push_back(f.function());
         }
-        results.schedule_source = generate_schedules(pipeline_outputs, target, arch_params);
-        // this autoscheduler has no featurization
 
-        *outputs = results;
+        ArchParams arch_params;
+        {
+            ParamParser parser(params_in.extra);
+            parser.parse("parallelism", &arch_params.parallelism);
+            parser.parse("last_level_cache_size", &arch_params.last_level_cache_size);
+            parser.parse("balance", &arch_params.balance);
+            parser.finish();
+        }
+        results.schedule_source = generate_schedules(pipeline_outputs, target, arch_params);
+        results.autoscheduler_params = params_in;
+        // this autoscheduler has no featurization
+        *outputs = std::move(results);
     }
 };
 
 REGISTER_AUTOSCHEDULER(Mullapudi2016)
 
+}  // namespace Autoscheduler
 }  // namespace Internal
-
 }  // namespace Halide

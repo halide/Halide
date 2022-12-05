@@ -1,13 +1,7 @@
 #include "Halide.h"
 #include <stdio.h>
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-extern "C" DLLEXPORT int flip_x(halide_buffer_t *in1, halide_buffer_t *in2, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int flip_x(halide_buffer_t *in1, halide_buffer_t *in2, halide_buffer_t *out) {
     int min = out->dim[0].min;
     int max = out->dim[0].min + out->dim[0].extent - 1;
 
@@ -31,7 +25,7 @@ extern "C" DLLEXPORT int flip_x(halide_buffer_t *in1, halide_buffer_t *in2, hali
         // We don't mutate the output buffer, because we can handle
         // any size output.
 
-        //printf("Bounds inference flip_x over [%d %d] requires [%d %d]\n", min, extent, flipped_min, extent);
+        // printf("Bounds inference flip_x over [%d %d] requires [%d %d]\n", min, extent, flipped_min, extent);
     } else {
         assert(in1->type == halide_type_of<uint8_t>());
         assert(in2->type == halide_type_of<int32_t>());

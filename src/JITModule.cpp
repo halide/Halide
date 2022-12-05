@@ -21,6 +21,7 @@
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
+#include "WasmExecutor.h"
 
 namespace Halide {
 namespace Internal {
@@ -126,15 +127,16 @@ public:
     JITModuleContents() = default;
 
     ~JITModuleContents() {
-        if (execution_engine != nullptr) {
-            execution_engine->runStaticConstructorsDestructors(true);
-            delete execution_engine;
+        if (JIT != nullptr) {
+            auto err = dtorRunner->run();
+            internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
         }
     }
 
     std::map<std::string, JITModule::Symbol> exports;
-    llvm::LLVMContext context;
-    ExecutionEngine *execution_engine = nullptr;
+    std::unique_ptr<llvm::LLVMContext> context = std::make_unique<llvm::LLVMContext>();
+    std::unique_ptr<llvm::orc::LLJIT> JIT = nullptr;
+    std::unique_ptr<llvm::orc::CtorDtorRunner> dtorRunner = nullptr;
     std::vector<JITModule> dependencies;
     JITModule::Symbol entrypoint;
     JITModule::Symbol argv_entrypoint;
@@ -155,11 +157,17 @@ void destroy<JITModuleContents>(const JITModuleContents *f) {
 namespace {
 
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
-JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
+JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
-    llvm::Function *fn = ee.FindFunctionNamed(name);
-    internal_assert(fn->getName() == name);
-    void *f = (void *)ee.getFunctionAddress(name);
+
+    auto addr = JIT.lookup(name);
+    internal_assert(addr) << llvm::toString(addr.takeError()) << "\n";
+
+#if LLVM_VERSION >= 150
+    void *f = (void *)addr->getValue();
+#else
+    void *f = (void *)addr->getAddress();
+#endif
     if (!f) {
         internal_error << "Compiling " << name << " returned nullptr\n";
     }
@@ -232,7 +240,7 @@ JITModule::JITModule() {
 JITModule::JITModule(const Module &m, const LoweredFunc &fn,
                      const std::vector<JITModule> &dependencies) {
     jit_module = new JITModuleContents();
-    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(m, jit_module->context));
+    std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(m, *jit_module->context));
     std::vector<JITModule> deps_with_runtime = dependencies;
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module.get(), m.target());
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
@@ -253,56 +261,97 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
     string error_string;
 
-    string mcpu;
-    string mattrs;
+    llvm::for_each(*m, set_function_attributes_from_halide_target_options);
+
     llvm::TargetOptions options;
-    get_target_options(*m, options, mcpu, mattrs);
+    get_target_options(*m, options);
 
     DataLayout initial_module_data_layout = m->getDataLayout();
     string module_name = m->getModuleIdentifier();
 
-    llvm::EngineBuilder engine_builder((std::move(m)));
-    engine_builder.setTargetOptions(options);
-    engine_builder.setErrorStr(&error_string);
-    engine_builder.setEngineKind(llvm::EngineKind::JIT);
-    HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
-    engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(memory_manager));
-
-    engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-    if (!mcpu.empty()) {
-        engine_builder.setMCPU(mcpu);
+    // Build TargetMachine
+    llvm::orc::JITTargetMachineBuilder tm_builder(llvm::Triple(m->getTargetTriple()));
+    tm_builder.setOptions(options);
+    tm_builder.setCodeGenOptLevel(CodeGenOpt::Aggressive);
+    if (target.arch == Target::Arch::RISCV) {
+        tm_builder.setCodeModel(llvm::CodeModel::Medium);
     }
-    std::vector<string> mattrs_array = {mattrs};
-    engine_builder.setMAttrs(mattrs_array);
 
-    TargetMachine *tm = engine_builder.selectTarget();
-    internal_assert(tm) << error_string << "\n";
-    DataLayout target_data_layout(tm->createDataLayout());
+    auto tm = tm_builder.createTargetMachine();
+    internal_assert(tm) << llvm::toString(tm.takeError()) << "\n";
+
+    DataLayout target_data_layout(tm.get()->createDataLayout());
     if (initial_module_data_layout != target_data_layout) {
         internal_error << "Warning: data layout mismatch between module ("
                        << initial_module_data_layout.getStringRepresentation()
                        << ") and what the execution engine expects ("
                        << target_data_layout.getStringRepresentation() << ")\n";
     }
-    ExecutionEngine *ee = engine_builder.create(tm);
 
-    if (!ee) {
-        std::cerr << error_string << "\n";
+    // Create LLJIT
+    const auto compilerBuilder = [&](const llvm::orc::JITTargetMachineBuilder & /*jtmb*/)
+        -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
+        return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*tm));
+    };
+
+    llvm::orc::LLJITBuilderState::ObjectLinkingLayerCreator linkerBuilder;
+    if ((target.arch == Target::Arch::X86 && target.bits == 32) ||
+        (target.arch == Target::Arch::ARM && target.bits == 32)) {
+        // Fallback to RTDyld-based linking to workaround errors:
+        // i386: "JIT session error: Unsupported i386 relocation:4" (R_386_PLT32)
+        // ARM 32bit: Unsupported target machine architecture in ELF object shared runtime-jitted-objectbuffer
+        linkerBuilder = [&](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
+            return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(session, [&]() {
+                return std::make_unique<HalideJITMemoryManager>(dependencies);
+            });
+        };
+    } else {
+        linkerBuilder = [](llvm::orc::ExecutionSession &session, const llvm::Triple &) {
+            return std::make_unique<llvm::orc::ObjectLinkingLayer>(session);
+        };
     }
-    internal_assert(ee) << "Couldn't create execution engine\n";
 
-    // Do any target-specific initialization
-    std::vector<llvm::JITEventListener *> listeners;
+    auto JIT = llvm::cantFail(llvm::orc::LLJITBuilder()
+                                  .setDataLayout(target_data_layout)
+                                  .setCompileFunctionCreator(compilerBuilder)
+                                  .setObjectLinkingLayerCreator(linkerBuilder)
+                                  .create());
 
-    if (target.arch == Target::X86) {
-        listeners.push_back(llvm::JITEventListener::createIntelJITEventListener());
+    auto ctors = llvm::orc::getConstructors(*m);
+    llvm::orc::CtorDtorRunner ctorRunner(JIT->getMainJITDylib());
+    ctorRunner.add(ctors);
+
+    auto dtors = llvm::orc::getDestructors(*m);
+    auto dtorRunner = std::make_unique<llvm::orc::CtorDtorRunner>(JIT->getMainJITDylib());
+    dtorRunner->add(dtors);
+
+    // Resolve system symbols (like pthread, dl and others)
+    auto gen = llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(target_data_layout.getGlobalPrefix());
+    internal_assert(gen) << llvm::toString(gen.takeError()) << "\n";
+    JIT->getMainJITDylib().addGenerator(std::move(gen.get()));
+
+    llvm::orc::ThreadSafeModule tsm(std::move(m), std::move(jit_module->context));
+    auto err = JIT->addIRModule(std::move(tsm));
+    internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
+
+    // Resolve symbol dependencies
+    llvm::orc::SymbolMap newSymbols;
+    auto symbolStringPool = JIT->getExecutionSession().getExecutorProcessControl().getSymbolStringPool();
+    for (const auto &module : dependencies) {
+        for (auto const &iter : module.exports()) {
+            orc::SymbolStringPtr name = symbolStringPool->intern(iter.first);
+            orc::SymbolStringPtr _name = symbolStringPool->intern("_" + iter.first);
+            auto symbol = llvm::JITEvaluatedSymbol::fromPointer(iter.second.address);
+            if (!newSymbols.count(name)) {
+                newSymbols.insert({name, symbol});
+            }
+            if (!newSymbols.count(_name)) {
+                newSymbols.insert({_name, symbol});
+            }
+        }
     }
-    // TODO: If this ever works in LLVM, this would allow profiling of JIT code with symbols with oprofile.
-    // listeners.push_back(llvm::createOProfileJITEventListener());
-
-    for (auto &listener : listeners) {
-        ee->RegisterJITEventListener(listener);
-    }
+    err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(newSymbols)));
+    internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
@@ -314,31 +363,23 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     Symbol entrypoint;
     Symbol argv_entrypoint;
     if (!function_name.empty()) {
-        entrypoint = compile_and_get_function(*ee, function_name);
+        entrypoint = compile_and_get_function(*JIT, function_name);
         exports[function_name] = entrypoint;
-        argv_entrypoint = compile_and_get_function(*ee, function_name + "_argv");
+        argv_entrypoint = compile_and_get_function(*JIT, function_name + "_argv");
         exports[function_name + "_argv"] = argv_entrypoint;
     }
 
     for (const auto &requested_export : requested_exports) {
-        exports[requested_export] = compile_and_get_function(*ee, requested_export);
+        exports[requested_export] = compile_and_get_function(*JIT, requested_export);
     }
 
-    debug(2) << "Finalizing object\n";
-    ee->finalizeObject();
-    // Do any target-specific post-compilation module meddling
-    for (auto &listener : listeners) {
-        ee->UnregisterJITEventListener(listener);
-        delete listener;
-    }
-    listeners.clear();
-
-    // TODO: I don't think this is necessary, we shouldn't have any static constructors
-    ee->runStaticConstructorsDestructors(false);
+    err = ctorRunner.run();
+    internal_assert(!err) << llvm::toString(std::move(err)) << "\n";
 
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
     jit_module->exports = exports;
-    jit_module->execution_engine = ee;
+    jit_module->JIT = std::move(JIT);
+    jit_module->dtorRunner = std::move(dtorRunner);
     jit_module->dependencies = dependencies;
     jit_module->entrypoint = entrypoint;
     jit_module->argv_entrypoint = argv_entrypoint;
@@ -366,7 +407,7 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg,
     }
 
     std::unique_ptr<llvm::Module> llvm_module = CodeGen_LLVM::compile_trampolines(
-        target, result.jit_module->context, suffix, extern_signatures);
+        target, *result.jit_module->context, suffix, extern_signatures);
 
     result.compile_module(std::move(llvm_module), /*function_name*/ "", target, deps, requested_exports);
 
@@ -399,8 +440,8 @@ JITModule::Symbol JITModule::entrypoint_symbol() const {
     return jit_module->entrypoint;
 }
 
-int (*JITModule::argv_function() const)(const void **) {
-    return (int (*)(const void **))jit_module->argv_entrypoint.address;
+int (*JITModule::argv_function() const)(const void *const *) {
+    return (int (*)(const void *const *))jit_module->argv_entrypoint.address;
 }
 
 JITModule::Symbol JITModule::argv_entrypoint_symbol() const {
@@ -465,7 +506,7 @@ void JITModule::reuse_device_allocations(bool b) const {
 }
 
 bool JITModule::compiled() const {
-    return jit_module->execution_engine != nullptr;
+    return jit_module->JIT != nullptr;
 }
 
 namespace {
@@ -764,7 +805,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         // This function is protected by a mutex so this is thread safe.
         auto module =
             get_initial_module_for_target(one_gpu,
-                                          &runtime.jit_module->context,
+                                          runtime.jit_module->context.get(),
                                           true,
                                           runtime_kind != MainShared);
         if (for_module) {
@@ -864,13 +905,21 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             }
         }
 
-        uint64_t arg_addr =
-            runtime.jit_module->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
-
+        uint64_t arg_addr = llvm::cantFail(runtime.jit_module->JIT->lookup("halide_jit_module_argument"))
+#if LLVM_VERSION >= 150
+                                .getValue();
+#else
+                                .getAddress();
+#endif
         internal_assert(arg_addr != 0);
         *((void **)arg_addr) = runtime.jit_module.get();
 
-        uint64_t fun_addr = runtime.jit_module->execution_engine->getGlobalValueAddress("halide_jit_module_adjust_ref_count");
+        uint64_t fun_addr = llvm::cantFail(runtime.jit_module->JIT->lookup("halide_jit_module_adjust_ref_count"))
+#if LLVM_VERSION >= 150
+                                .getValue();
+#else
+                                .getAddress();
+#endif
         internal_assert(fun_addr != 0);
         *(void (**)(void *arg, int32_t count))fun_addr = &adjust_module_ref_count;
     }
@@ -988,6 +1037,140 @@ void JITSharedRuntime::memoization_cache_evict(uint64_t eviction_key) {
 void JITSharedRuntime::reuse_device_allocations(bool b) {
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
     shared_runtimes(MainShared).reuse_device_allocations(b);
+}
+
+JITCache::JITCache(Target jit_target,
+                   std::vector<Argument> arguments,
+                   std::map<std::string, JITExtern> jit_externs,
+                   JITModule jit_module,
+                   WasmModule wasm_module)
+    : jit_target(jit_target),  // clang-tidy complains that this is "trivially copyable" and std::move shouldn't be here, grr
+      arguments(std::move(arguments)),
+      jit_externs(std::move(jit_externs)),
+      jit_module(std::move(jit_module)),
+      wasm_module(std::move(wasm_module)) {
+}
+
+Target JITCache::get_compiled_jit_target() const {
+    // This essentially is just a getter for contents->jit_target,
+    // but also reality-checks that the status of the jit_module and/or wasm_module
+    // match what we expect.
+    const bool has_wasm = wasm_module.contents.defined();
+    const bool has_native = jit_module.compiled();
+    if (jit_target.arch == Target::WebAssembly) {
+        internal_assert(has_wasm && !has_native);
+    } else if (!jit_target.has_unknowns()) {
+        internal_assert(!has_wasm && has_native);
+    } else {
+        internal_assert(!has_wasm && !has_native);
+    }
+    return jit_target;
+}
+
+int JITCache::call_jit_code(const Target &target, const void *const *args) {
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+    user_warning << "MSAN does not support JIT compilers of any sort, and will report "
+                    "false positives when used in conjunction with the Halide JIT. "
+                    "If you need to test with MSAN enabled, you must use ahead-of-time "
+                    "compilation for Halide code.";
+#endif
+#endif
+    if (target.arch == Target::WebAssembly) {
+        internal_assert(wasm_module.contents.defined());
+        return wasm_module.run(args);
+    } else {
+        auto argv_wrapper = jit_module.argv_function();
+        internal_assert(argv_wrapper != nullptr);
+        return argv_wrapper(args);
+    }
+}
+
+void JITCache::finish_profiling(JITUserContext *context) {
+    // If we're profiling, report runtimes and reset profiler stats.
+    if (jit_target.has_feature(Target::Profile) || jit_target.has_feature(Target::ProfileByTimer)) {
+        JITModule::Symbol report_sym = jit_module.find_symbol_by_name("halide_profiler_report");
+        JITModule::Symbol reset_sym = jit_module.find_symbol_by_name("halide_profiler_reset");
+        if (report_sym.address && reset_sym.address) {
+            void (*report_fn_ptr)(JITUserContext *) = (void (*)(JITUserContext *))(report_sym.address);
+            report_fn_ptr(context);
+
+            void (*reset_fn_ptr)() = (void (*)())(reset_sym.address);
+            reset_fn_ptr();
+        }
+    }
+}
+
+void JITErrorBuffer::concat(const char *message) {
+    size_t len = strlen(message);
+
+    if (len && message[len - 1] != '\n') {
+        // Claim some extra space for a newline.
+        len++;
+    }
+
+    // Atomically claim some space in the buffer
+    size_t old_end = end.fetch_add(len);
+
+    if (old_end + len >= MaxBufSize - 1) {
+        // Out of space
+        return;
+    }
+
+    for (size_t i = 0; i < len - 1; i++) {
+        buf[old_end + i] = message[i];
+    }
+    if (buf[old_end + len - 2] != '\n') {
+        buf[old_end + len - 1] = '\n';
+    }
+}
+
+std::string JITErrorBuffer::str() const {
+    return std::string(buf, end);
+}
+
+/*static*/ void JITErrorBuffer::handler(JITUserContext *ctx, const char *message) {
+    if (ctx && ctx->error_buffer) {
+        ctx->error_buffer->concat(message);
+    }
+}
+
+JITFuncCallContext::JITFuncCallContext(JITUserContext *context, const JITHandlers &pipeline_handlers)
+    : context(context) {
+    custom_error_handler = (context->handlers.custom_error != nullptr ||
+                            pipeline_handlers.custom_error != nullptr);
+    // Hook the error handler if not set
+    if (!custom_error_handler) {
+        context->handlers.custom_error = JITErrorBuffer::handler;
+    }
+
+    // Add the handlers stored in the pipeline for anything else
+    // not set, then for anything still not set, use the global
+    // active handlers.
+    JITSharedRuntime::populate_jit_handlers(context, pipeline_handlers);
+    context->error_buffer = &error_buffer;
+
+    debug(2) << "custom_print: " << (void *)context->handlers.custom_print << "\n"
+             << "custom_malloc: " << (void *)context->handlers.custom_malloc << "\n"
+             << "custom_free: " << (void *)context->handlers.custom_free << "\n"
+             << "custom_do_task: " << (void *)context->handlers.custom_do_task << "\n"
+             << "custom_do_par_for: " << (void *)context->handlers.custom_do_par_for << "\n"
+             << "custom_error: " << (void *)context->handlers.custom_error << "\n"
+             << "custom_trace: " << (void *)context->handlers.custom_trace << "\n";
+}
+
+void JITFuncCallContext::finalize(int exit_status) {
+    // Only report the errors if no custom error handler was installed
+    if (exit_status && !custom_error_handler) {
+        std::string output = error_buffer.str();
+        if (output.empty()) {
+            output = ("The pipeline returned exit status " +
+                      std::to_string(exit_status) +
+                      " but halide_error was never called.\n");
+        }
+        halide_runtime_error << output;
+        error_buffer.end = 0;
+    }
 }
 
 }  // namespace Internal

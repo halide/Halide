@@ -34,7 +34,9 @@ class GlobalVariable;
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "IRVisitor.h"
@@ -106,11 +108,21 @@ protected:
     virtual void end_func(const std::vector<LoweredArgument> &args);
     // @}
 
-    /** What should be passed as -mcpu, -mattrs, and related for
-     * compilation. The architecture-specific code generator should
-     * define these. */
+    /** What should be passed as -mcpu (warning: implies attrs!), -mattrs,
+     *  and related for compilation. The architecture-specific code generator
+     *  should define these.
+     *
+     *  `mcpu_target()` - target this specific CPU, in the sense of the allowed
+     *  ISA sets *and* the CPU-specific tuning/assembly instruction scheduling.
+     *
+     *  `mcpu_tune()` - expect that we will be running on this specific CPU,
+     *  so perform CPU-specific tuning/assembly instruction scheduling, *but*
+     *  DON'T sacrifice the portability, support running on other CPUs, only
+     *  make use of the ISAs that are enabled by `mcpu_target()`+`mattrs()`.
+     */
     // @{
-    virtual std::string mcpu() const = 0;
+    virtual std::string mcpu_target() const = 0;
+    virtual std::string mcpu_tune() const = 0;
     virtual std::string mattrs() const = 0;
     virtual std::string mabi() const;
     virtual bool use_soft_float_abi() const = 0;
@@ -125,6 +137,19 @@ protected:
 
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
+
+    /** Used to decide whether to break a vector up into multiple smaller
+     * operations. This is the largest size the architecture supports. */
+    virtual int maximum_vector_bits() const {
+        return native_vector_bits();
+    }
+    /** For architectures that have vscale vectors, return the constant vscale to use.
+     * Default of 0 means do not use vscale vectors. Generally will depend on
+     * the target flags and vector_bits settings.
+     */
+    virtual int target_vscale() const {
+        return 0;
+    }
 
     /** Return the type in which arithmetic should be done for the
      * given storage type. */
@@ -147,7 +172,6 @@ protected:
     llvm::MDNode *default_fp_math_md;
     llvm::MDNode *strict_fp_math_md;
     std::vector<LoweredArgument> current_function_args;
-    //@}
 
     /** The target we're generating code for */
     Halide::Target target;
@@ -158,9 +182,6 @@ protected:
      * module. This allows reuse of one CodeGen_LLVM object to compiled
      * multiple related modules (e.g. multiple device kernels). */
     virtual void init_module();
-
-    /** Add external_code entries to llvm module. */
-    void add_external_code(const Module &halide_module);
 
     /** Run all of llvm's optimization passes on the module. */
     void optimize_module();
@@ -197,9 +218,7 @@ protected:
         *scalar_value_t_type,
         *device_interface_t_type,
         *pseudostack_slot_t_type,
-        *semaphore_t_type,
-        *semaphore_acquire_t_type,
-        *parallel_task_t_type;
+        *semaphore_t_type;
 
     // @}
 
@@ -285,6 +304,13 @@ protected:
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
 
+    /** Return type string for LLVM vector type using LLVM IR intrinsic type mangling.
+     * E.g. ".nxv4i32" for a scalable vector of four 32-bit integers,
+     * or ".v4f32" for a fixed vector of four 32-bit floats.
+     * The dot is included in the result.
+     */
+    std::string mangle_llvm_vector_type(llvm::Type *type);
+
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
     llvm::Value *make_halide_type_t(const Type &);
 
@@ -300,6 +326,10 @@ protected:
         return n;
     }
 
+    /** Add the appropriate function attribute to tell LLVM that the function
+     * doesn't access memory. */
+    void function_does_not_access_memory(llvm::Function *fn);
+
     using IRVisitor::visit;
 
     /** Generate code for various IR nodes. These can be overridden by
@@ -311,6 +341,7 @@ protected:
     void visit(const FloatImm *) override;
     void visit(const StringImm *) override;
     void visit(const Cast *) override;
+    void visit(const Reinterpret *) override;
     void visit(const Variable *) override;
     void visit(const Add *) override;
     void visit(const Sub *) override;
@@ -373,6 +404,15 @@ protected:
     /** Get the llvm type equivalent to the given halide type in the
      * current context. */
     virtual llvm::Type *llvm_type_of(const Type &) const;
+
+    /** Get the llvm type equivalent to a given halide type. If
+     * effective_vscale is nonzero and the type is a vector type with lanes
+     * a multiple of effective_vscale, a scalable vector type is generated
+     * with total lanes divided by effective_vscale. That is a scalable
+     * vector intended to be used with a fixed vscale of effective_vscale.
+     */
+    llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t,
+                             int effective_vscale) const;
 
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */
@@ -440,10 +480,12 @@ protected:
                              const std::string &name, std::vector<Expr>);
     llvm::Value *call_intrin(const Type &t, int intrin_lanes,
                              llvm::Function *intrin, std::vector<Expr>);
-    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
-                             const std::string &name, std::vector<llvm::Value *>);
-    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
-                             llvm::Function *intrin, std::vector<llvm::Value *>);
+    llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
+                             const std::string &name, std::vector<llvm::Value *>,
+                             bool scalable_vector_result = false, bool is_reduction = false);
+    llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
+                             llvm::Function *intrin, std::vector<llvm::Value *>,
+                             bool is_reduction = false);
     // @}
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs
@@ -456,7 +498,7 @@ protected:
     /** Create an LLVM shuffle vectors instruction. */
     virtual llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                          const std::vector<int> &indices);
-    /** Shorthand for shuffling a vector with an undef vector. */
+    /** Shorthand for shuffling a single vector. */
     llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
 
     /** Go looking for a vector version of a runtime function. Will
@@ -497,6 +539,97 @@ protected:
         This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
     virtual bool supports_call_as_float16(const Call *op) const;
 
+    /** Ensure that a vector value is either fixed or vscale depending to match desired_type.
+     */
+    llvm::Value *normalize_fixed_scalable_vector_type(llvm::Type *desired_type, llvm::Value *result);
+
+    /** Convert an LLVM fixed vector value to the corresponding vscale vector value. */
+    llvm::Value *fixed_to_scalable_vector_type(llvm::Value *fixed);
+
+    /** Convert an LLVM vscale vector value to the corresponding fixed vector value. */
+    llvm::Value *scalable_to_fixed_vector_type(llvm::Value *scalable);
+
+    /** Get number of vector elements, taking into account scalable vectors. Returns 1 for scalars. */
+    int get_vector_num_elements(const llvm::Type *t);
+
+    /** Interface to abstract vector code generation as LLVM is now
+     * providing multiple options to express even simple vector
+     * operations. Specifically traditional fixed length vectors, vscale
+     * based variable length vectors, and the vector predicate based approach
+     * where an explict length is passed with each instruction.
+     */
+    // @{
+    enum class VectorTypeConstraint {
+        None,    /// Use default for current target.
+        Fixed,   /// Force use of fixed size vectors.
+        VScale,  /// For use of scalable vectors.
+    };
+    llvm::Type *get_vector_type(llvm::Type *, int n,
+                                VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
+    // @}
+
+    llvm::Constant *get_splat(int lanes, llvm::Constant *value,
+                              VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
+
+    /** Support for generating LLVM vector predication intrinsics
+     * ("@llvm.vp.*" and "@llvm.experimental.vp.*")
+     */
+    // @{
+    /** Struct to hold descriptor for an argument to a vector
+     *  predicated intrinsic. This includes the value, whether the
+     *  type of the argument should be mangled into the intrisic name
+     *  and if so, where, and the alignment for pointer arguments. */
+    struct VPArg {
+        llvm::Value *value;
+        // If provided, put argument's type into the intrinsic name via LLVM IR type mangling.
+        std::optional<size_t> mangle_index;
+        int alignment;
+        VPArg(llvm::Value *value, std::optional<size_t> mangle_index = std::nullopt, int32_t alignment = 0)
+            : value(value), mangle_index(mangle_index), alignment(alignment) {
+        }
+    };
+
+    /** Type indicating an intrinsic does not take a mask. */
+    struct NoMask {
+    };
+
+    /** Type indicating mask to use is all true -- all lanes enabled. */
+    struct AllEnabledMask {
+    };
+
+    /** Predication mask using the above two types for special cases
+     *   and an llvm::Value for the general one. */
+    using MaskVariant = std::variant<NoMask, AllEnabledMask, llvm::Value *>;
+
+    /** Generate a vector predicated comparison intrinsic call if
+     * use_llvm_vp_intrinsics is true and result_type is a vector
+     * type. If generated, assigns result of vp intrinsic to value and
+     * returns true if it an instuction is generated, otherwise
+     * returns false. */
+    bool try_vector_predication_comparison(const std::string &name, const Type &result_type,
+                                           MaskVariant mask, llvm::Value *a, llvm::Value *b,
+                                           const char *cmp_op);
+
+    struct VPResultType {
+        llvm::Type *type;
+        std::optional<size_t> mangle_index;
+        VPResultType(llvm::Type *type, std::optional<size_t> mangle_index = std::nullopt)
+            : type(type), mangle_index(mangle_index) {
+        }
+    };
+
+    /** Generate an intrisic call if use_llvm_vp_intrinsics is true
+     * and length is greater than 1. If generated, assigns result
+     * of vp intrinsic to value and returns true if it an instuction
+     * is generated, otherwise returns false. */
+    bool try_vector_predication_intrinsic(const std::string &name, VPResultType result_type,
+                                          int32_t length, MaskVariant mask, std::vector<VPArg> args);
+
+    /** Controls use of vector predicated intrinsics for vector operations.
+     * Will be set by certain backends (e.g. RISC V) to control codegen. */
+    bool use_llvm_vp_intrinsics;
+    // @}
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
@@ -517,6 +650,11 @@ private:
     /** Use the LLVM large code model when this is set. */
     bool llvm_large_code_model;
 
+    /** Cache the result of target_vscale from architecture specific implementation
+     * as this is used on every Halide to LLVM type conversion.
+     */
+    int effective_vscale;
+
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
      * as extern "C" linkage. Note that the return value is a function-returning-
@@ -524,7 +662,7 @@ private:
      */
     llvm::Function *embed_metadata_getter(const std::string &metadata_getter_name,
                                           const std::string &function_name, const std::vector<LoweredArgument> &args,
-                                          const std::map<std::string, std::string> &metadata_name_map);
+                                          const MetadataNameMap &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
@@ -533,9 +671,9 @@ private:
     llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name,
                                      bool result_in_argv, std::vector<bool> &arg_is_buffer);
 
-    llvm::Value *codegen_dense_vector_load(const Type &type, const std::string &name, const Expr &base,
-                                           const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
-                                           llvm::Value *vpred = nullptr, bool slice_to_native = true);
+    llvm::Value *codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
+                                     const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
+                                     llvm::Value *vpred = nullptr, bool slice_to_native = true, llvm::Value *stride = nullptr);
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
     virtual void codegen_predicated_load(const Load *op);

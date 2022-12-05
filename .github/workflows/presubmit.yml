@@ -9,17 +9,20 @@ on:
       - '**.c'
       - '**.cpp'
 
+permissions:
+  contents: read
+
 jobs:
   check_clang_format:
     name: Check clang-format
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
-      - uses: DoozyX/clang-format-lint-action@v0.12
+      - uses: DoozyX/clang-format-lint-action@v0.14
         with:
           source: '.'
           extensions: 'h,c,cpp'
-          clangFormatVersion: 12
+          clangFormatVersion: 14
   check_clang_tidy:
     name: Check clang-tidy
     runs-on: ubuntu-20.04
@@ -27,13 +30,17 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install clang-tidy
         run: |
+          # from apt.llvm.org
+          # wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+          sudo apt-add-repository "deb https://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-14 main"
           sudo apt-get update
-          sudo apt-get install llvm-12 clang-12 liblld-12-dev libclang-12-dev clang-tidy-12 ninja-build
+          sudo apt-get install llvm-14 clang-14 liblld-14-dev libclang-14-dev clang-tidy-14 ninja-build
       - name: Run clang-tidy
         run: |
-          export CC=clang-12
-          export CXX=clang++-12
-          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-12
+          export CC=clang-14
+          export CXX=clang++-14
+          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-14
           ./run-clang-tidy.sh
   check_cmake_file_lists:
     name: Check CMake file lists
@@ -43,10 +50,11 @@ jobs:
       - name: Run test sources check
         run: |
           shopt -s nullglob
-          (cd test/auto_schedule       && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
-          (cd test/correctness         && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
-          (cd test/error               && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
-          (cd test/generator           && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
-          (cd test/failing_with_issue  && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
-          (cd test/performance         && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
-          (cd test/warning             && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/autoschedulers/li2018        && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/autoschedulers/mullapudi2016 && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/correctness                  && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/error                        && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/generator                    && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/failing_with_issue           && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/performance                  && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/warning                      && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])

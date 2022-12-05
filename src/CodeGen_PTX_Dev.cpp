@@ -91,7 +91,8 @@ protected:
     // @}
 
     std::string march() const;
-    std::string mcpu() const override;
+    std::string mcpu_target() const override;
+    std::string mcpu_tune() const override;
     std::string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -153,7 +154,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Make our function
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
-    set_function_attributes_for_target(function, target);
+    set_function_attributes_from_halide_target_options(*function);
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -244,11 +245,13 @@ void CodeGen_PTX_Dev::init_module() {
         {"dp2a", Int(32), "dp2a_s32_u32", {Int(16, 4), UInt(8, 4), Int(32)}},
         {"dp2a", Int(32), "dp2a_u32_s32", {UInt(16, 4), Int(8, 4), Int(32)}},
         {"dp2a", UInt(32), "dp2a_u32_u32", {UInt(16, 4), UInt(8, 4), UInt(32)}},
+        {"round", Float(32), "llvm.rint.f32", {Float(32)}},
+        {"round", Float(64), "llvm.rint.f64", {Float(64)}},
     };
 
     for (auto &&i : ptx_intrins) {
         auto *fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
-        fn->addFnAttr(llvm::Attribute::ReadNone);
+        function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
@@ -268,11 +271,12 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
         builder->CreateCall(barrier0);
         value = ConstantInt::get(i32_t, 0);
-    } else if (op->name == "dp2a" || op->name == "dp4a") {
-        // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
-        value = call_overloaded_intrin(op->type, op->name, op->args);
-        internal_assert(value) << Expr(op) << "\n";
-    } else {
+        return;
+    }
+
+    // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
+    value = call_overloaded_intrin(op->type, op->name, op->args);
+    if (!value) {
         CodeGen_LLVM::visit(op);
     }
 }
@@ -542,9 +546,8 @@ string CodeGen_PTX_Dev::march() const {
     return "nvptx64";
 }
 
-string CodeGen_PTX_Dev::mcpu() const {
+string CodeGen_PTX_Dev::mcpu_target() const {
     if (target.has_feature(Target::CUDACapability86)) {
-        user_assert(LLVM_VERSION >= 130) << "The linked LLVM version does not support cuda compute capability 8.6\n";
         return "sm_86";
     } else if (target.has_feature(Target::CUDACapability80)) {
         return "sm_80";
@@ -565,6 +568,10 @@ string CodeGen_PTX_Dev::mcpu() const {
     } else {
         return "sm_20";
     }
+}
+
+string CodeGen_PTX_Dev::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
@@ -615,15 +622,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.HonorSignDependentRoundingFPMathOption = false;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-#if LLVM_VERSION >= 130
-    // nothing
-#else
-    options.StackAlignmentOverride = 0;
-#endif
 
     std::unique_ptr<TargetMachine>
         target_machine(llvm_target->createTargetMachine(triple.str(),
-                                                        mcpu(), mattrs(), options,
+                                                        mcpu_target(), mattrs(), options,
                                                         llvm::Reloc::PIC_,
                                                         llvm::CodeModel::Small,
                                                         CodeGenOpt::Aggressive));
@@ -636,22 +638,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     llvm::SmallString<8> outstr;
     raw_svector_ostream ostream(outstr);
     ostream.SetUnbuffered();
-
-    // NOTE: use of the "legacy" PassManager here is still required; it is deprecated
-    // for optimization, but is still the only complete API for codegen as of work-in-progress
-    // LLVM14. At the time of this comment (Dec 2021), there is no firm plan as to when codegen will
-    // be fully available in the new PassManager, so don't worry about this 'legacy'
-    // tag until there's any indication that the old APIs start breaking.
-    //
-    // See:
-    // https://lists.llvm.org/pipermail/llvm-dev/2021-April/150100.html
-    // https://releases.llvm.org/13.0.0/docs/ReleaseNotes.html#changes-to-the-llvm-ir
-    // https://groups.google.com/g/llvm-dev/c/HoS07gXx0p8
-    legacy::FunctionPassManager function_pass_manager(module.get());
-    legacy::PassManager module_pass_manager;
-
-    module_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
-    function_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
 
     // NVidia's libdevice library uses a __nvvm_reflect to choose
     // how to handle denormalized numbers. (The pass replaces calls
@@ -679,26 +665,67 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         }
     }
 
-    // At present, we default to *enabling* LLVM loop optimization,
-    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
-    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
-    // See https://github.com/halide/Halide/issues/4113 for more info.
-    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
-    // of the setting of DisableLLVMLoopOpt.)
-    const bool do_loop_opt = !target.has_feature(Target::DisableLLVMLoopOpt) ||
-                             target.has_feature(Target::EnableLLVMLoopOpt);
+    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
+    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
+    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
+    if (get_target().has_feature(Target::DisableLLVMLoopOpt)) {
+        user_warning << "halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15 "
+                        "(and will be removed in Halide 16). Halide 15 now defaults to disabling "
+                        "LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.\n";
+    }
+    const bool do_loop_opt = get_target().has_feature(Target::EnableLLVMLoopOpt);
 
-    PassManagerBuilder b;
-    b.OptLevel = 3;
-    b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = do_loop_opt;
-    b.SLPVectorize = true;
-    b.DisableUnrollLoops = !do_loop_opt;
+    // Define and run optimization pipeline with new pass manager
+    PipelineTuningOptions pto;
+    pto.LoopInterleaving = do_loop_opt;
+    pto.LoopVectorization = do_loop_opt;
+    pto.SLPVectorization = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
+    pto.LoopUnrolling = do_loop_opt;
+    pto.ForgetAllSCEVInLoopUnroll = true;
 
-    target_machine->adjustPassManager(b);
+    llvm::PassBuilder pb(target_machine.get(), pto);
 
-    b.populateFunctionPassManager(function_pass_manager);
-    b.populateModulePassManager(module_pass_manager);
+    bool debug_pass_manager = false;
+    // These analysis managers have to be declared in this order.
+    llvm::LoopAnalysisManager lam;
+    llvm::FunctionAnalysisManager fam;
+    llvm::CGSCCAnalysisManager cgam;
+    llvm::ModuleAnalysisManager mam;
+
+    // Register all the basic analyses with the managers.
+    pb.registerModuleAnalyses(mam);
+    pb.registerCGSCCAnalyses(cgam);
+    pb.registerFunctionAnalyses(fam);
+    pb.registerLoopAnalyses(lam);
+    pb.crossRegisterProxies(lam, fam, cgam, mam);
+    ModulePassManager mpm;
+
+    using OptimizationLevel = llvm::OptimizationLevel;
+    OptimizationLevel level = OptimizationLevel::O3;
+
+    target_machine->registerPassBuilderCallbacks(pb);
+
+    mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
+    mpm.run(*module, mam);
+
+    if (llvm::verifyModule(*module, &errs())) {
+        report_fatal_error("Transformation resulted in an invalid module\n");
+    }
+
+    // Optimization pipeline completed; run codegen pipeline
+
+    // NOTE: use of the "legacy" PassManager here is still required; it is deprecated
+    // for optimization, but is still the only complete API for codegen as of work-in-progress
+    // LLVM14. At the time of this comment (Dec 2021), there is no firm plan as to when codegen will
+    // be fully available in the new PassManager, so don't worry about this 'legacy'
+    // tag until there's any indication that the old APIs start breaking.
+    //
+    // See:
+    // https://lists.llvm.org/pipermail/llvm-dev/2021-April/150100.html
+    // https://releases.llvm.org/13.0.0/docs/ReleaseNotes.html#changes-to-the-llvm-ir
+    // https://groups.google.com/g/llvm-dev/c/HoS07gXx0p8
+    legacy::PassManager module_pass_manager;
+    module_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
 
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
@@ -709,18 +736,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
                                                     ::llvm::CGFT_AssemblyFile,
                                                     true);
-    if (fail) {
-        internal_error << "Failed to set up passes to emit PTX source\n";
-    }
-
-    // Run optimization passes
-    function_pass_manager.doInitialization();
-    for (auto &function : *module) {
-        function_pass_manager.run(function);
-    }
-    function_pass_manager.doFinalization();
+    internal_assert(!fail) << "Failed to set up passes to emit PTX source\n";
     module_pass_manager.run(*module);
 
+    // Codegen pipeline completed.
     if (debug::debug_level() >= 2) {
         dump();
     }
@@ -742,7 +761,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.write(buffer.data(), buffer.size());
         f.close();
 
-        string cmd = "ptxas --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
+        string cmd = "ptxas --gpu-name " + mcpu_target() + " " + ptx.pathname() + " -o " + sass.pathname();
         if (system(cmd.c_str()) == 0) {
             cmd = "nvdisasm " + sass.pathname();
             int ret = system(cmd.c_str());

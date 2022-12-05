@@ -207,7 +207,7 @@ WEAK halide_hexagon_handle_t shared_runtime = 0;
 // failing on errors).
 WEAK void write_shared_object(void *user_context, const char *path,
                               const uint8_t *code, uint64_t code_size) {
-    void *f = fopen(path, "wb");
+    void *f = halide_fopen(path, "wb");
     if (!f) {
         debug(user_context) << "    failed to write shared object to '" << path << "'\n";
         return;
@@ -753,6 +753,11 @@ WEAK uint64_t halide_hexagon_get_device_size(void *user_context, struct halide_b
     halide_abort_if_false(user_context, buf->device_interface == &hexagon_device_interface);
     ion_device_handle *handle = uint64_to_ptr<ion_device_handle>(buf->device);
     return handle->size;
+}
+
+WEAK void *halide_hexagon_get_module_state(void *user_context, void **host) {
+    halide_abort_if_false(user_context, host != nullptr);
+    return host[0];
 }
 
 WEAK int halide_hexagon_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {

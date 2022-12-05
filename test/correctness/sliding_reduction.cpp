@@ -3,14 +3,8 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int counter = 0;
-extern "C" DLLEXPORT int call_count(int x) {
+extern "C" HALIDE_EXPORT_SYMBOL int call_count(int x) {
     counter++;
     assert(counter > 0);
     return 99;
@@ -95,8 +89,8 @@ int main(int argc, char **argv) {
         f(x, y) = call_count(f(x, y));
 
         f.unroll(y, 2);
-        f.update(0);
-        f.update(1);
+        f.update(0).unscheduled();
+        f.update(1).unscheduled();
 
         Func g("g");
         g(x, y) = f(x, y) + f(x, y - 1) + f(x, y - 2);

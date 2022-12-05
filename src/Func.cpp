@@ -10,6 +10,7 @@
 #include "ApplySplit.h"
 #include "Argument.h"
 #include "Associativity.h"
+#include "Callable.h"
 #include "CodeGen_LLVM.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
@@ -57,6 +58,14 @@ std::string dump_dim_list(const vector<DimType> &dims) {
 
 Func::Func(const string &name)
     : func(unique_name(name)) {
+}
+
+Func::Func(const Type &required_type, int required_dims, const string &name)
+    : func({required_type}, required_dims, unique_name(name)) {
+}
+
+Func::Func(const std::vector<Type> &required_types, int required_dims, const string &name)
+    : func(required_types, required_dims, unique_name(name)) {
 }
 
 Func::Func()
@@ -188,13 +197,33 @@ void Func::define_extern(const std::string &function_name,
 }
 
 /** Get the types of the buffers returned by an extern definition. */
-const std::vector<Type> &Func::output_types() const {
-    return func.output_types();
+const Type &Func::type() const {
+    const auto &types = defined() ? func.output_types() : func.required_types();
+    if (types.empty()) {
+        user_error << "Can't call Func::type on Func \"" << name()
+                   << "\" because it is undefined or has no type requirements.\n";
+    } else if (types.size() > 1) {
+        user_error << "Can't call Func::type on Func \"" << name()
+                   << "\" because it returns a Tuple.\n";
+    }
+    return types[0];
+}
+
+const std::vector<Type> &Func::types() const {
+    const auto &types = defined() ? func.output_types() : func.required_types();
+    user_assert(!types.empty())
+        << "Can't call Func::types on Func \"" << name()
+        << "\" because it is undefined or has no type requirements.\n";
+    return types;
 }
 
 /** Get the number of outputs this function has. */
 int Func::outputs() const {
-    return func.outputs();
+    const auto &types = defined() ? func.output_types() : func.required_types();
+    user_assert(!types.empty())
+        << "Can't call Func::outputs on Func \"" << name()
+        << "\" because it is undefined or has no type requirements.\n";
+    return (int)types.size();
 }
 
 /** Get the name of the extern function called for an extern
@@ -204,10 +233,11 @@ const std::string &Func::extern_function_name() const {
 }
 
 int Func::dimensions() const {
-    if (!defined()) {
-        return 0;
-    }
-    return func.dimensions();
+    const int dims = defined() ? func.dimensions() : func.required_dimensions();
+    user_assert(dims != AnyDims)
+        << "Can't call Func::dimensions on Func \"" << name()
+        << "\" because it is undefined or has no dimension requirements.\n";
+    return dims;
 }
 
 FuncRef Func::operator()(vector<Var> args) const {
@@ -232,7 +262,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
         placeholder_pos = (int)(iter - args.begin());
         int i = 0;
         iter = args.erase(iter);
-        while ((int)args.size() < dimensions()) {
+        // It's important to use func.dimensions() here, *not* this->dimensions(),
+        // since the latter can return the Func's required dimensions rather than its actual dimensions.
+        while ((int)args.size() < func.dimensions()) {
             Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
@@ -240,9 +272,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
         }
     }
 
-    if (defined() && args.size() != (size_t)dimensions()) {
+    if (defined() && args.size() != (size_t)func.dimensions()) {
         user_error << "Func \"" << name() << "\" was called with "
-                   << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+                   << args.size() << " arguments, but was defined with " << func.dimensions() << "\n";
     }
 
     return {placeholder_pos, count};
@@ -263,7 +295,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
         placeholder_pos = (int)(iter - args.begin());
         int i = 0;
         iter = args.erase(iter);
-        while ((int)args.size() < dimensions()) {
+        // It's important to use func.dimensions() here, *not* this->dimensions(),
+        // since the latter can return the Func's required dimensions rather than its actual dimensions.
+        while ((int)args.size() < func.dimensions()) {
             Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
@@ -271,9 +305,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
         }
     }
 
-    if (defined() && args.size() != (size_t)dimensions()) {
+    if (defined() && args.size() != (size_t)func.dimensions()) {
         user_error << "Func \"" << name() << "\" was called with "
-                   << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+                   << args.size() << " arguments, but was defined with " << func.dimensions() << "\n";
     }
 
     return {placeholder_pos, count};
@@ -344,6 +378,7 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
 }  // namespace
 
 void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
+    definition.schedule().touched() = true;
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
     for (auto &dim : dims) {
@@ -407,6 +442,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
 }
 
 void Stage::set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api) {
+    definition.schedule().touched() = true;
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
     for (auto &dim : dims) {
@@ -662,11 +698,14 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
 }  // anonymous namespace
 
 Func Stage::rfactor(const RVar &r, const Var &v) {
+    definition.schedule().touched() = true;
     return rfactor({{r, v}});
 }
 
 Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
+
+    definition.schedule().touched() = true;
 
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
@@ -943,7 +982,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         }
 
         if (!prover_result.xs[i].var.empty()) {
-            Expr prev_val = Call::make(intm.output_types()[i], func_name,
+            Expr prev_val = Call::make(intm.types()[i], func_name,
                                        f_store_args, Call::CallType::Halide,
                                        FunctionPtr(), i);
             replacements.emplace(prover_result.xs[i].var, prev_val);
@@ -968,6 +1007,8 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     debug(4) << "In schedule for " << name() << ", split " << old << " into "
              << outer << " and " << inner << " with factor of " << factor << "\n";
     vector<Dim> &dims = definition.schedule().dims();
+
+    definition.schedule().touched() = true;
 
     // Check that the new names aren't already in the dims list.
     for (auto &dim : dims) {
@@ -1116,6 +1157,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
 }
 
 Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail) {
+    definition.schedule().touched() = true;
     if (old.is_rvar) {
         user_assert(outer.is_rvar) << "Can't split RVar " << old.name() << " into Var " << outer.name() << "\n";
         user_assert(inner.is_rvar) << "Can't split RVar " << old.name() << " into Var " << inner.name() << "\n";
@@ -1128,6 +1170,7 @@ Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVa
 }
 
 Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused) {
+    definition.schedule().touched() = true;
     if (!fused.is_rvar) {
         user_assert(!outer.is_rvar) << "Can't fuse Var " << fused.name()
                                     << " from RVar " << outer.name() << "\n";
@@ -1211,6 +1254,8 @@ protected:
 Stage Stage::specialize(const Expr &condition) {
     user_assert(condition.type().is_bool()) << "Argument passed to specialize must be of type bool\n";
 
+    definition.schedule().touched() = true;
+
     // The condition may not depend on Vars or RVars
     Internal::CheckForFreeVars check;
     condition.accept(&check);
@@ -1242,6 +1287,9 @@ void Stage::specialize_fail(const std::string &message) {
     const vector<Specialization> &specializations = definition.specializations();
     user_assert(specializations.empty() || specializations.back().failure_message.empty())
         << "Only one specialize_fail() may be defined per Stage.";
+
+    definition.schedule().touched() = true;
+
     (void)definition.add_specialization(const_true());
     Specialization &s = definition.specializations().back();
     s.failure_message = message;
@@ -1383,6 +1431,8 @@ void Stage::remove(const string &var) {
 }
 
 Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
+    definition.schedule().touched() = true;
+
     if (old_var.is_rvar) {
         user_assert(new_var.is_rvar)
             << "In schedule for " << name()
@@ -1472,11 +1522,13 @@ Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
 }
 
 Stage &Stage::allow_race_conditions() {
+    definition.schedule().touched() = true;
     definition.schedule().allow_race_conditions() = true;
     return *this;
 }
 
 Stage &Stage::atomic(bool override_associativity_test) {
+    definition.schedule().touched() = true;
     definition.schedule().atomic() = true;
     definition.schedule().override_atomic_associativity_test() = override_associativity_test;
     return *this;
@@ -1600,6 +1652,7 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
 }
 
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
+    definition.schedule().touched() = true;
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
@@ -1839,18 +1892,21 @@ Stage &Stage::hexagon(const VarOrRVar &x) {
 }
 
 Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    definition.schedule().touched() = true;
     PrefetchDirective prefetch = {f.name(), at.name(), from.name(), std::move(offset), strategy, Parameter()};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
 Stage &Stage::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    definition.schedule().touched() = true;
     PrefetchDirective prefetch = {param.name(), at.name(), from.name(), std::move(offset), strategy, param};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
 Stage &Stage::compute_with(LoopLevel loop_level, const map<string, LoopAlignStrategy> &align) {
+    definition.schedule().touched() = true;
     loop_level.lock();
     user_assert(!loop_level.is_inlined() && !loop_level.is_root())
         << "Undefined loop level to compute with\n";
@@ -1904,6 +1960,11 @@ Stage &Stage::compute_with(const Stage &s, const VarOrRVar &var, LoopAlignStrate
  * symbols were not understood. Works on OS X and Linux only. */
 std::string Stage::source_location() const {
     return definition.source_location();
+}
+
+void Stage::unscheduled() {
+    user_assert(!definition.schedule().touched()) << "Stage::unscheduled called on an update definition with a schedule\n";
+    definition.schedule().touched() = true;
 }
 
 void Func::invalidate_cache() {
@@ -2888,9 +2949,11 @@ Stage FuncRef::operator=(const FuncRef &e) {
     }
 }
 
+namespace {
+
 // Inject a suitable base-case definition given an update
 // definition. This is a helper for FuncRef::operator+= and co.
-Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Tuple &e) {
+Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const vector<Expr> &rhs, int init_val) {
     Func f(func);
 
     if (func.has_pure_definition()) {
@@ -2909,24 +2972,32 @@ Func define_base_case(const Internal::Function &func, const vector<Expr> &a, con
         }
     }
 
-    f(pure_args) = e;
+    const auto &required_types = func.required_types();
+    internal_assert(required_types.empty() || required_types.size() == rhs.size());
+
+    vector<Expr> init_values(rhs.size());
+    for (size_t i = 0; i < rhs.size(); ++i) {
+        // If we have required types, cast the init_val to that type instead of the rhs type
+        const Type &t = required_types.empty() ? rhs[i].type() : required_types[i];
+        init_values[i] = cast(t, init_val);
+    }
+
+    f(pure_args) = Tuple(init_values);
     return f;
 }
 
-Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Expr &e) {
-    return define_base_case(func, a, Tuple(e));
-}
+}  // namespace
 
 template<typename BinaryOp>
 Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
+    // Don't do this: we want to allow the RHS to be implicitly cast to the type of LHS.
+    // func.check_types(e);
+
     internal_assert(e.size() > 1);
 
-    vector<Expr> init_values(e.size());
-    for (int i = 0; i < (int)init_values.size(); ++i) {
-        init_values[i] = cast(e[i].type(), init_val);
-    }
-    vector<Expr> expanded_args = args_with_implicit_vars(e.as_vector());
-    FuncRef self_ref = define_base_case(func, expanded_args, Tuple(init_values))(expanded_args);
+    const vector<Expr> &rhs = e.as_vector();
+    const vector<Expr> expanded_args = args_with_implicit_vars(rhs);
+    FuncRef self_ref = define_base_case(func, expanded_args, rhs, init_val)(expanded_args);
 
     vector<Expr> values(e.size());
     for (int i = 0; i < (int)values.size(); ++i) {
@@ -2937,8 +3008,12 @@ Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
 
 template<typename BinaryOp>
 Stage FuncRef::func_ref_update(Expr e, int init_val) {
-    vector<Expr> expanded_args = args_with_implicit_vars({e});
-    FuncRef self_ref = define_base_case(func, expanded_args, cast(e.type(), init_val))(expanded_args);
+    // Don't do this: we want to allow the RHS to be implicitly cast to the type of LHS.
+    // func.check_types(e);
+
+    const vector<Expr> rhs = {e};
+    const vector<Expr> expanded_args = args_with_implicit_vars(rhs);
+    FuncRef self_ref = define_base_case(func, expanded_args, rhs, init_val)(expanded_args);
     return self_ref = BinaryOp()(Expr(self_ref), e);
 }
 
@@ -3130,26 +3205,25 @@ void Func::infer_input_bounds(JITUserContext *context,
         Buffer<> im(func.output_types()[i], nullptr, sizes);
         outputs[i] = std::move(im);
     }
-    Realization r(outputs);
+    Realization r(std::move(outputs));
     infer_input_bounds(context, r, target, param_map);
 }
 
 OutputImageParam Func::output_buffer() const {
-    user_assert(defined())
-        << "Can't access output buffer of undefined Func.\n";
-    user_assert(func.output_buffers().size() == 1)
+    const auto &ob = func.output_buffers();
+
+    user_assert(ob.size() == 1)
         << "Can't call Func::output_buffer on Func \"" << name()
         << "\" because it returns a Tuple.\n";
-    return OutputImageParam(func.output_buffers()[0], Argument::OutputBuffer, *this);
+    return OutputImageParam(ob[0], Argument::OutputBuffer, *this);
 }
 
 vector<OutputImageParam> Func::output_buffers() const {
-    user_assert(defined())
-        << "Can't access output buffers of undefined Func.\n";
+    const auto &ob = func.output_buffers();
 
-    vector<OutputImageParam> bufs(func.output_buffers().size());
+    vector<OutputImageParam> bufs(ob.size());
     for (size_t i = 0; i < bufs.size(); i++) {
-        bufs[i] = OutputImageParam(func.output_buffers()[i], Argument::OutputBuffer, *this);
+        bufs[i] = OutputImageParam(ob[i], Argument::OutputBuffer, *this);
     }
     return bufs;
 }
@@ -3282,33 +3356,6 @@ void set_handler(A &a, B b) {
 }
 }  // namespace
 
-// Deprecated setters for JIT handlers
-void Func::set_error_handler(void (*handler)(void *, const char *)) {
-    set_handler(jit_handlers().custom_error, handler);
-}
-
-void Func::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
-                                void (*cust_free)(void *, void *)) {
-    set_handler(jit_handlers().custom_malloc, cust_malloc);
-    set_handler(jit_handlers().custom_free, cust_free);
-}
-
-void Func::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
-    set_handler(jit_handlers().custom_do_par_for, cust_do_par_for);
-}
-
-void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
-    set_handler(jit_handlers().custom_do_task, cust_do_task);
-}
-
-void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *)) {
-    set_handler(jit_handlers().custom_trace, trace_fn);
-}
-
-void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
-    set_handler(jit_handlers().custom_print, cust_print);
-}
-
 void Func::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     pipeline().add_custom_lowering_pass(pass, std::move(deleter));
 }
@@ -3353,6 +3400,10 @@ void Func::infer_input_bounds(JITUserContext *context,
 
 void Func::compile_jit(const Target &target) {
     pipeline().compile_jit(target);
+}
+
+Callable Func::compile_to_callable(const std::vector<Argument> &args, const Target &target) {
+    return pipeline().compile_to_callable(args, target);
 }
 
 }  // namespace Halide

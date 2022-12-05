@@ -4,6 +4,7 @@
 #include "CodeGen_GPU_Dev.h"
 #include "Debug.h"
 #include "Deinterleave.h"
+#include "FindIntrinsics.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -102,7 +103,6 @@ protected:
         {"mix", "mix"},
         {"mod", "mod"},
         {"notEqual", "notEqual"},
-        {"round_f32", "roundEven"},
         {"sin_f32", "sin"},
         {"sinh_f32", "sinh"},
         {"sqrt_f32", "sqrt"},
@@ -421,6 +421,9 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
         // 'halide_printf'.
         print_assignment(op->type, print_expr(op->args[1]));
         return;
+    } else if (op->is_intrinsic(Call::round)) {
+        print_assignment(op->type, "roundEven(" + print_expr(op->args[0]) + ")");
+        return;
     } else if (op->name == "fast_inverse_f32") {
         print_expr(make_one(op->type) / op->args[0]);
         return;
@@ -466,6 +469,10 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
         print_assignment(op->type, print_expr(op->args[0]) + " / " + print_expr(op->args[1]));
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         print_assignment(op->type, print_expr(op->args[0]) + " % " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::saturating_cast)) {
+        Expr e = lower_intrinsic(op);
+        print_expr(e);
+        return;
     } else {
         auto it = builtin.find(op->name);
         if (it == builtin.end()) {
@@ -870,7 +877,7 @@ void CodeGen_OpenGLCompute_C::add_kernel(const Stmt &s,
         stream << "#version 430\n";
     }
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
-    stream << "#define halide_unused(x) (void)(x)\n";
+    stream << "#define halide_maybe_unused(x) (void)(x)\n";
 
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {

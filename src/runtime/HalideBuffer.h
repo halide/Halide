@@ -35,6 +35,10 @@
 #pragma GCC diagnostic ignored "-Warray-bounds"
 #endif
 
+#ifndef HALIDE_RUNTIME_BUFFER_CHECK_INDICES
+#define HALIDE_RUNTIME_BUFFER_CHECK_INDICES 0
+#endif
+
 namespace Halide {
 namespace Runtime {
 
@@ -1882,6 +1886,10 @@ private:
     HALIDE_ALWAYS_INLINE
         ptrdiff_t
         offset_of(int d, int first, Args... rest) const {
+#if HALIDE_RUNTIME_BUFFER_CHECK_INDICES
+        assert(first >= this->buf.dim[d].min);
+        assert(first < this->buf.dim[d].min + this->buf.dim[d].extent);
+#endif
         return offset_of(d + 1, rest...) + (ptrdiff_t)this->buf.dim[d].stride * (first - this->buf.dim[d].min);
     }
 
@@ -1905,6 +1913,10 @@ private:
     ptrdiff_t offset_of(const int *pos) const {
         ptrdiff_t offset = 0;
         for (int i = this->dimensions() - 1; i >= 0; i--) {
+#if HALIDE_RUNTIME_BUFFER_CHECK_INDICES
+            assert(pos[i] >= this->buf.dim[i].min);
+            assert(pos[i] < this->buf.dim[i].min + this->buf.dim[i].extent);
+#endif
             offset += (ptrdiff_t)this->buf.dim[i].stride * (pos[i] - this->buf.dim[i].min);
         }
         return offset;
@@ -2274,7 +2286,11 @@ private:
     template<typename Fn,
              typename = decltype(std::declval<Fn>()((const int *)nullptr))>
     static void for_each_element(int, int dims, const for_each_element_task_dim *t, Fn &&f, int check = 0) {
-        int *pos = (int *)HALIDE_ALLOCA(dims * sizeof(int));
+        const int size = dims * sizeof(int);
+        int *pos = (int *)HALIDE_ALLOCA(size);
+        // At least one version of GCC will (incorrectly) report that pos "may be used uninitialized".
+        // Add this memset to silence it.
+        memset(pos, 0, size);
         for_each_element_array(dims - 1, t, std::forward<Fn>(f), pos);
     }
 

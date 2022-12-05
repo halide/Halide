@@ -6,21 +6,21 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // powf() is a macro in some environments, so always wrap it
-extern "C" DLLEXPORT float pow_ref(float x, float y) {
+extern "C" HALIDE_EXPORT_SYMBOL float pow_ref(float x, float y) {
     return powf(x, y);
 }
 HalideExtern_2(float, pow_ref, float, float);
 
 int main(int argc, char **argv) {
-    Target target = get_jit_target_from_environment();
-    if (target.arch == Target::WebAssembly) {
+    Target host = get_host_target();
+    Target hl_target = get_target_from_environment();
+    Target hl_jit_target = get_jit_target_from_environment();
+    printf("host is:          %s\n", host.to_string().c_str());
+    printf("HL_TARGET is:     %s\n", hl_target.to_string().c_str());
+    printf("HL_JIT_TARGET is: %s\n", hl_jit_target.to_string().c_str());
+
+    if (hl_jit_target.arch == Target::WebAssembly) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
@@ -69,22 +69,22 @@ int main(int argc, char **argv) {
 
     int timing_N = timing_scratch.width() * timing_scratch.height() * 10;
     int correctness_N = fast_result.width() * fast_result.height();
-    fast_err(0) = sqrt(fast_err(0) / correctness_N);
-    faster_err(0) = sqrt(faster_err(0) / correctness_N);
+    fast_err() = sqrt(fast_err() / correctness_N);
+    faster_err() = sqrt(faster_err() / correctness_N);
 
     printf("powf: %f ns per pixel\n"
            "Halide's pow: %f ns per pixel (rms error = %0.10f)\n"
            "Halide's fast_pow: %f ns per pixel (rms error = %0.10f)\n",
            1000000 * t1 / timing_N,
-           1000000 * t2 / timing_N, fast_err(0),
-           1000000 * t3 / timing_N, faster_err(0));
+           1000000 * t2 / timing_N, fast_err(),
+           1000000 * t3 / timing_N, faster_err());
 
-    if (fast_err(0) > 0.000001) {
+    if (fast_err() > 0.000001) {
         printf("Error for pow too large\n");
         return -1;
     }
 
-    if (faster_err(0) > 0.0001) {
+    if (faster_err() > 0.0001) {
         printf("Error for fast_pow too large\n");
         return -1;
     }

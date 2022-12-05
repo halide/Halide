@@ -367,7 +367,7 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log("Lowering after bounding small allocations:", s);
 
-    if (t.has_feature(Target::Profile)) {
+    if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
         debug(1) << "Injecting profiling...\n";
         s = inject_profiling(s, pipeline_name);
         log("Lowering after injecting profiling:", s);
@@ -571,7 +571,7 @@ Module lower(const vector<Function> &output_funcs,
              const vector<Stmt> &requirements,
              bool trace_pipeline,
              const vector<IRMutator *> &custom_passes) {
-    Module result_module{extract_namespaces(pipeline_name), t};
+    Module result_module{strip_namespaces(pipeline_name), t};
     run_with_large_stack([&]() {
         lower_impl(output_funcs, pipeline_name, t, args, linkage_type, requirements, trace_pipeline, custom_passes, result_module);
     });

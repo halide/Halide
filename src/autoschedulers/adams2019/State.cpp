@@ -14,7 +14,7 @@ uint64_t State::structural_hash(int depth) const {
     return h;
 }
 
-void State::compute_featurization(const FunctionDAG &dag, const MachineParams &params,
+void State::compute_featurization(const FunctionDAG &dag, const Adams2019Params &params,
                                   StageMap<ScheduleFeatures> *features, const CachingOptions &cache_options) {
     StageMap<LoopNest::Sites> sites;
     sites.make_large(dag.nodes[0].stages[0].max_id);
@@ -54,10 +54,10 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 l = consumer_site.compute;
             }
             if (!l) {
-                if (aslog::aslog_level() > 0) {
-                    dump();
-                }
-                internal_error << e->producer->func.name() << " -> " << e->consumer->name << "\n";
+                std::ostringstream err;
+                dump(err);
+                err << e->producer->func.name() << " -> " << e->consumer->name << "\n";
+                internal_error << err.str();
             }
             if (loop) {
                 loop = deepest_common_ancestor(parent, l, loop);
@@ -93,7 +93,7 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
     }
 }
 
-void State::save_featurization(const FunctionDAG &dag, const MachineParams &params,
+void State::save_featurization(const FunctionDAG &dag, const Adams2019Params &params,
                                const CachingOptions &cache_options, std::ostream &out) {
     StageMap<ScheduleFeatures> features;
     compute_featurization(dag, params, &features, cache_options);
@@ -123,20 +123,20 @@ void State::save_featurization(const FunctionDAG &dag, const MachineParams &para
     }
 }
 
-bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params,
+bool State::calculate_cost(const FunctionDAG &dag, const Adams2019Params &params,
                            CostModel *cost_model, const CachingOptions &cache_options,
-                           int64_t memory_limit, bool verbose) {
+                           int verbosity) {
     StageMap<ScheduleFeatures> features;
     compute_featurization(dag, params, &features, cache_options);
 
     cost = 0.0f;
 
-    if (verbose) {
+    if (verbosity <= aslog::aslog_level()) {
         for (auto it = features.begin(); it != features.end(); it++) {
             const auto &stage = *(it.key());
             const auto &feat = it.value();
-            aslog(0) << "Schedule features for " << stage.stage.name() << "\n";
-            feat.dump();
+            aslog(verbosity) << "Schedule features for " << stage.stage.name() << "\n";
+            feat.dump(aslog(verbosity).get_ostream());
         }
     }
 
@@ -160,7 +160,7 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params,
     }
 
     // Apply the hard limit on memory use
-    if (memory_limit >= 0) {
+    if (params.memory_limit >= 0) {
         int64_t mem_used = (int64_t)features.begin().value().working_set_at_root;
         for (auto it = features.begin(); it != features.end(); it++) {
             if (it.key()->node->is_output ||
@@ -169,7 +169,7 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params,
                 mem_used -= it.value().bytes_at_production;
             }
         }
-        if (mem_used > memory_limit) {
+        if (mem_used > params.memory_limit) {
             cost = 1e50;
             return false;
         }
@@ -200,9 +200,8 @@ IntrusivePtr<State> State::make_child() const {
 
 // Generate the successor states to this state
 void State::generate_children(const FunctionDAG &dag,
-                              const MachineParams &params,
+                              const Adams2019Params &params,
                               CostModel *cost_model,
-                              int64_t memory_limit,
                               std::function<void(IntrusivePtr<State> &&)> &accept_child,
                               Cache *cache) const {
 
@@ -215,7 +214,7 @@ void State::generate_children(const FunctionDAG &dag,
     int next_node = num_decisions_made / 2;
     int phase = num_decisions_made % 2;
 
-    if (!may_subtile()) {
+    if (params.disable_subtiling) {
         // When emulating the older search space, we do all
         // parallelizing last, so that it is independent of the
         // tiling decisions.
@@ -235,7 +234,7 @@ void State::generate_children(const FunctionDAG &dag,
         // We don't need to schedule nodes that represent inputs,
         // and there are no other decisions to be made about them
         // at this time.
-        // aslog(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
+        // aslog(1) << "Skipping over scheduling input node: " << node->func.name() << "\n";
         auto child = make_child();
         child->num_decisions_made++;
         accept_child(std::move(child));
@@ -243,17 +242,19 @@ void State::generate_children(const FunctionDAG &dag,
     }
 
     if (!node->outgoing_edges.empty() && !root->calls(node)) {
-        aslog(0) << "In state:\n";
-        dump();
-        aslog(0) << node->func.name() << " is consumed by:\n";
+        std::ostringstream err;
+        err << "In state:\n";
+        dump(err);
+        err << node->func.name() << " is consumed by:\n";
         for (const auto *e : node->outgoing_edges) {
-            aslog(0) << e->consumer->name << "\n";
-            aslog(0) << "Which in turn consumes:\n";
+            err << e->consumer->name << "\n";
+            err << "Which in turn consumes:\n";
             for (const auto *e2 : e->consumer->incoming_edges) {
-                aslog(0) << "  " << e2->producer->func.name() << "\n";
+                err << "  " << e2->producer->func.name() << "\n";
             }
         }
-        internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << "\n";
+        err << "Pipeline so far doesn't use next Func: " << node->func.name() << "\n";
+        internal_error << err.str();
     }
 
     int num_children = 0;
@@ -269,7 +270,7 @@ void State::generate_children(const FunctionDAG &dag,
                 new_root->inline_func(node);
                 child->root = new_root;
                 child->num_decisions_made++;
-                if (child->calculate_cost(dag, params, cost_model, cache->options, memory_limit)) {
+                if (child->calculate_cost(dag, params, cost_model, cache->options)) {
                     num_children++;
                     accept_child(std::move(child));
                 }
@@ -351,7 +352,7 @@ void State::generate_children(const FunctionDAG &dag,
                 auto child = make_child();
                 child->root = std::move(n);
                 child->num_decisions_made++;
-                if (child->calculate_cost(dag, params, cost_model, cache->options, memory_limit)) {
+                if (child->calculate_cost(dag, params, cost_model, cache->options)) {
                     num_children++;
                     accept_child(std::move(child));
                 }
@@ -384,7 +385,7 @@ void State::generate_children(const FunctionDAG &dag,
         } else {
             internal_assert(pure_size);
 
-            if (cache->add_memoized_blocks(this, accept_child, node, num_children, dag, params, cost_model, memory_limit)) {
+            if (cache->add_memoized_blocks(this, accept_child, node, num_children, dag, params, cost_model)) {
                 return;  // successfully added cached states.
             }
 
@@ -472,7 +473,7 @@ void State::generate_children(const FunctionDAG &dag,
             }
 
             for (const auto &o : options) {
-                if (num_children >= 1 && (o.idle_core_wastage > 1.2 || !may_subtile())) {
+                if (num_children >= 1 && (o.idle_core_wastage > 1.2 || params.disable_subtiling)) {
                     // We have considered several options, and the
                     // remaining ones leave lots of cores idle.
                     break;
@@ -483,7 +484,7 @@ void State::generate_children(const FunctionDAG &dag,
                 new_root->copy_from(*root);
                 for (auto &c : new_root->children) {
                     if (c->node == node) {
-                        if (may_subtile()) {
+                        if (!params.disable_subtiling) {
                             c = c->parallelize_in_tiles(params, o.tiling, new_root);
                         } else {
                             // We're emulating the old
@@ -509,7 +510,7 @@ void State::generate_children(const FunctionDAG &dag,
                 }
                 child->root = new_root;
                 child->num_decisions_made++;
-                if (child->calculate_cost(dag, params, cost_model, cache->options, memory_limit)) {
+                if (child->calculate_cost(dag, params, cost_model, cache->options)) {
                     num_children++;
                     accept_child(std::move(child));
                     // Will early return if block caching is not enabled.
@@ -520,24 +521,24 @@ void State::generate_children(const FunctionDAG &dag,
     }
 
     if (num_children == 0) {
-        aslog(0) << "Warning: Found no legal way to schedule "
+        aslog(1) << "Warning: Found no legal way to schedule "
                  << node->func.name() << " in the following State:\n";
-        dump();
+        dump(aslog(1).get_ostream());
         // All our children died. Maybe other states have had
         // children. Carry on.
     }
 }
 
-void State::dump() const {
-    aslog(0) << "State with cost " << cost << ":\n";
-    root->dump("", nullptr);
-    aslog(0) << schedule_source;
+void State::dump(std::ostream &os) const {
+    os << "State with cost " << cost << ":\n";
+    root->dump(os, "", nullptr);
+    os << schedule_source;
 }
 
 // Apply the schedule represented by this state to a Halide
 // Pipeline. Also generate source code for the schedule for the
 // user to copy-paste to freeze this schedule as permanent artifact.
-void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) {
+void State::apply_schedule(const FunctionDAG &dag, const Adams2019Params &params) {
     StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
     root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr);
 
@@ -594,7 +595,6 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) 
         // Do all the reorders and pick which vars to
         // parallelize.
         vector<VarOrRVar> vars;
-        int64_t parallel_tasks = 1;
         vector<VarOrRVar> parallel_vars;
         bool any_parallel_vars = false, any_parallel_rvars = false;
         for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
@@ -606,7 +606,6 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) 
             }
             any_parallel_rvars |= it->var.is_rvar;
             any_parallel_vars |= !it->var.is_rvar;
-            parallel_tasks *= it->extent;
             parallel_vars.push_back(it->var);
         }
 

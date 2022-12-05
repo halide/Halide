@@ -2,7 +2,6 @@
 #include <sstream>
 #include <utility>
 
-#include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
@@ -50,17 +49,17 @@ public:
     }
 
 protected:
-    class CodeGen_Metal_C : public CodeGen_C {
+    class CodeGen_Metal_C : public CodeGen_GPU_C {
     public:
         CodeGen_Metal_C(std::ostream &s, const Target &t)
-            : CodeGen_C(s, t) {
+            : CodeGen_GPU_C(s, t) {
         }
         void add_kernel(const Stmt &stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
 
     protected:
-        using CodeGen_C::visit;
+        using CodeGen_GPU_C::visit;
         std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
         // Vectors in Metal come in two varieties, regular and packed.
         // For storage allocations and pointers used in address arithmetic,
@@ -92,6 +91,7 @@ protected:
         void visit(const Allocate *op) override;
         void visit(const Free *op) override;
         void visit(const Cast *op) override;
+        void visit(const VectorReduce *op) override;
         void visit(const Atomic *op) override;
     };
 
@@ -224,6 +224,20 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Min *op) {
     print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
 }
 
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const VectorReduce *op) {
+    if (op->op == VectorReduce::Add && op->type.is_float() && (op->type.lanes() == 1)) {
+        if (const Mul *maybe_mul = op->value.as<Mul>()) {
+            string a = print_expr(maybe_mul->a);
+            string b = print_expr(maybe_mul->b);
+            ostringstream rhs;
+            rhs << "dot(" << a << ", " << b << ")";
+            print_assignment(op->type, rhs.str());
+            return;
+        }
+    }
+    CodeGen_GPU_C::visit(op);
+}
+
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
@@ -267,7 +281,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
 
     } else {
         user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside Metal kernel\n";
-        CodeGen_C::visit(loop);
+        CodeGen_GPU_C::visit(loop);
     }
 }
 
@@ -321,7 +335,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
         stream << ");\n";
         print_assignment(op->type, "0");
     } else {
-        CodeGen_C::visit(op);
+        CodeGen_GPU_C::visit(op);
     }
 }
 
@@ -764,7 +778,6 @@ void CodeGen_Metal_Dev::init_module() {
                << "#define abs_f32 fabs\n"
                << "#define floor_f32 floor\n"
                << "#define ceil_f32 ceil\n"
-               << "#define round_f32 round\n"
                << "#define trunc_f32 trunc\n"
                << "#define pow_f32 pow\n"
                << "#define asin_f32 asin\n"
@@ -789,7 +802,7 @@ void CodeGen_Metal_Dev::init_module() {
                << "#endif\n"
                << "}\n";  // close namespace
 
-    src_stream << "#define halide_unused(x) (void)(x)\n";
+    src_stream << "#define halide_maybe_unused(x) (void)(x)\n";
 
     src_stream << "\n";
 

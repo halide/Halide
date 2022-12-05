@@ -7,6 +7,7 @@
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
+#include "FindIntrinsics.h"
 #include "Func.h"
 #include "IR.h"
 #include "IREquality.h"
@@ -241,6 +242,20 @@ private:
     void visit(const StringImm *op) override {
         TRACK_BOUNDS_INTERVAL;
         interval = Interval::single_point(op);
+    }
+
+    void visit(const Reinterpret *op) override {
+        TRACK_BOUNDS_INTERVAL;
+
+        Type t = op->type.element_of();
+
+        if (t.is_handle()) {
+            interval = Interval::everything();
+            return;
+        }
+
+        // Just use the bounds of the type
+        bounds_of_type(t);
     }
 
     void visit(const Cast *op) override {
@@ -1099,18 +1114,43 @@ private:
     void visit(const Call *op) override {
         TRACK_BOUNDS_INTERVAL;
         TRACK_BOUNDS_INFO("name:", op->name);
+
         // Tags are hints that don't affect the results of the expression,
         // and can be very deeply nested in the case of strict_float. The
         // bounds of this call are *always* exactly that of its first argument,
-        // so short circuit it here before checking for const_args. This is
-        // important because evaluating const_args for such a deeply nested case
-        // essentially becomes O(n^2) doing work that is unnecessary, making
-        // otherwise simple pipelines take several minutes to compile.
+        // so short circuit it here.
         if (op->is_tag()) {
             internal_assert(op->args.size() == 1);
             op->args[0].accept(this);
             return;
         }
+
+        // For call nodes, we want to only evaluate the bounds of each arg once, but
+        // lazily because for many functions we don't need them at all. This class
+        // helps avoid accidentally revisiting nodes.
+        class LazyArgBounds {
+            const vector<Expr> &args;
+            Bounds *visitor;
+            vector<Interval> intervals;
+
+        public:
+            LazyArgBounds(const vector<Expr> &args, Bounds *visitor)
+                : args(args), visitor(visitor) {
+            }
+
+            const Interval &get(int i) {
+                if (intervals.empty()) {
+                    intervals.resize(args.size(), Interval::nothing());
+                }
+                if (intervals[i].is_empty()) {
+                    args[i].accept(visitor);
+                    intervals[i] = visitor->interval;
+                }
+                return intervals[i];
+            }
+        };
+
+        LazyArgBounds arg_bounds(op->args, this);
 
         Type t = op->type.element_of();
 
@@ -1121,6 +1161,7 @@ private:
 
         if (!const_bound &&
             (op->call_type == Call::PureExtern ||
+             op->call_type == Call::PureIntrinsic ||
              op->call_type == Call::Image)) {
 
             // If the args are const we can return the call of those args
@@ -1128,15 +1169,11 @@ private:
             // call in two different places might produce different
             // results (e.g. during the update step of a reduction), so we
             // can't move around call nodes.
-            //
-            // Note: Only evaluate new_args if we know the call is a candidate;
-            // otherwise we can get n^2 evaluation time for deeply-nested
-            // Expr trees.
 
             std::vector<Expr> new_args(op->args.size());
             bool const_args = true;
             for (size_t i = 0; i < op->args.size() && const_args; i++) {
-                op->args[i].accept(this);
+                const Interval &interval = arg_bounds.get(i);
                 if (interval.is_single_point()) {
                     new_args[i] = interval.min;
                 } else {
@@ -1153,8 +1190,7 @@ private:
         }
 
         if (op->is_intrinsic(Call::abs)) {
-            op->args[0].accept(this);
-            Interval a = interval;
+            Interval a = arg_bounds.get(0);
             interval.min = make_zero(t);
             if (a.is_bounded()) {
                 if (equal(a.min, a.max)) {
@@ -1178,17 +1214,8 @@ private:
             } else {
                 // absd() for int types will always produce a uint result
                 internal_assert(t.is_uint());
-
-                Expr a = op->args[0];
-                Expr b = op->args[1];
-                internal_assert(a.type() == b.type());
-
-                a.accept(this);
-                Interval a_interval = interval;
-
-                b.accept(this);
-                Interval b_interval = interval;
-
+                Interval a_interval = arg_bounds.get(0);
+                Interval b_interval = arg_bounds.get(1);
                 if (a_interval.is_bounded() && b_interval.is_bounded()) {
                     interval.min = make_zero(t);
                     interval.max = max(absd(a_interval.max, b_interval.min), absd(a_interval.min, b_interval.max));
@@ -1196,15 +1223,19 @@ private:
                     bounds_of_type(t);
                 }
             }
+        } else if (op->is_intrinsic(Call::saturating_cast)) {
+            internal_assert(op->args.size() == 1);
+
+            Expr a = lower_saturating_cast(op->type, op->args[0]);
+            a.accept(this);
+            return;
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
             // Unlike an explicit clamp, we are also permitted to
             // assume the upper bound is greater than the lower bound.
-            op->args[1].accept(this);
-            Interval lower = interval;
-            op->args[2].accept(this);
-            Interval upper = interval;
-            op->args[0].accept(this);
+            Interval lower = arg_bounds.get(1);
+            Interval upper = arg_bounds.get(2);
+            interval = arg_bounds.get(0);
 
             if (op->is_intrinsic(Call::promise_clamped) &&
                 interval.is_single_point()) {
@@ -1236,11 +1267,9 @@ private:
 
             interval.min = Interval::make_max(interval.min, lower.min);
             interval.max = Interval::make_min(interval.max, upper.max);
-        } else if (Call::as_tag(op)) {
-            op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
             internal_assert(op->args.size() == 2);
-            op->args[1].accept(this);
+            interval = arg_bounds.get(1);
         } else if (op->is_intrinsic(Call::if_then_else)) {
             internal_assert(op->args.size() == 2 || op->args.size() == 3);
             // Probably more conservative than necessary
@@ -1249,17 +1278,15 @@ private:
             equivalent_select.accept(this);
         } else if (op->is_intrinsic(Call::require)) {
             internal_assert(op->args.size() == 3);
-            op->args[1].accept(this);
+            interval = arg_bounds.get(1);
         } else if (op->is_intrinsic(Call::shift_left) ||
                    op->is_intrinsic(Call::shift_right) ||
                    op->is_intrinsic(Call::bitwise_xor) ||
                    op->is_intrinsic(Call::bitwise_and) ||
                    op->is_intrinsic(Call::bitwise_or)) {
             Expr a = op->args[0], b = op->args[1];
-            a.accept(this);
-            Interval a_interval = interval;
-            b.accept(this);
-            Interval b_interval = interval;
+            Interval a_interval = arg_bounds.get(0);
+            Interval b_interval = arg_bounds.get(1);
             if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
                 interval = Interval::single_point(op);
             } else if (a_interval.is_single_point() && b_interval.is_single_point()) {
@@ -1417,8 +1444,7 @@ private:
             // In 2's complement bitwise not inverts the ordering of
             // the space, without causing overflow (unlike negation),
             // so bitwise not is monotonic decreasing.
-            op->args[0].accept(this);
-            Interval a_interval = interval;
+            Interval a_interval = arg_bounds.get(0);
             if (a_interval.is_single_point(op->args[0])) {
                 interval = Interval::single_point(op);
             } else if (a_interval.is_single_point()) {
@@ -1434,12 +1460,13 @@ private:
                     }
                 }
             }
-        } else if (op->args.size() == 1 && interval.is_bounded() &&
-                   (op->name == "ceil_f32" || op->name == "ceil_f64" ||
+        } else if (op->args.size() == 1 &&
+                   (op->is_intrinsic(Call::round) ||
+                    op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
-                    op->name == "round_f32" || op->name == "round_f64" ||
                     op->name == "exp_f32" || op->name == "exp_f64" ||
-                    op->name == "log_f32" || op->name == "log_f64")) {
+                    op->name == "log_f32" || op->name == "log_f64") &&
+                   (interval = arg_bounds.get(0)).is_bounded()) {
             // For monotonic, pure, single-argument functions, we can
             // make two calls for the min and the max.
             interval = Interval(
@@ -1469,23 +1496,30 @@ private:
             interval = Interval(min, max);
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(!op->args.empty());
-            op->args[0].accept(this);
+            interval = arg_bounds.get(0);
         } else if (op->is_intrinsic(Call::scatter_gather)) {
             // Take the union of the args
             Interval result = Interval::nothing();
-            for (const Expr &e : op->args) {
-                e.accept(this);
-                result.include(interval);
+            for (size_t i = 0; i < op->args.size(); i++) {
+                result.include(arg_bounds.get(i));
             }
             interval = result;
         } else if (op->is_intrinsic(Call::mux)) {
             // Take the union of all args but the first
             Interval result = Interval::nothing();
             for (size_t i = 1; i < op->args.size(); i++) {
-                op->args[i].accept(this);
-                result.include(interval);
+                result.include(arg_bounds.get(i));
             }
             interval = result;
+        } else if (op->is_intrinsic(Call::widen_right_add)) {
+            Expr add = Add::make(op->args[0], cast(op->args[0].type(), op->args[1]));
+            add.accept(this);
+        } else if (op->is_intrinsic(Call::widen_right_sub)) {
+            Expr sub = Sub::make(op->args[0], cast(op->args[0].type(), op->args[1]));
+            sub.accept(this);
+        } else if (op->is_intrinsic(Call::widen_right_mul)) {
+            Expr mul = Mul::make(op->args[0], cast(op->args[0].type(), op->args[1]));
+            mul.accept(this);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {
@@ -2640,7 +2674,7 @@ private:
     void visit(const IfThenElse *op) override {
         TRACK_BOXES_TOUCHED;
         op->condition.accept(this);
-        if (expr_uses_vars(op->condition, scope)) {
+        if (expr_uses_vars(op->condition, scope) || !is_pure(op->condition)) {
             // We need to simplify the condition to get it into a
             // canonical form (e.g. (a < b) instead of !(a >= b))
             vector<pair<Expr, Stmt>> cases;
@@ -3557,6 +3591,28 @@ void bounds_test() {
     Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
           u16(0), u16(255 * 2));
+
+    check(scope, saturating_cast<uint8_t>(clamp(x, 5, 10)), cast<uint8_t>(5), cast<uint8_t>(10));
+    {
+        scope.push("x", Interval(UInt(32).min(), UInt(32).max()));
+        check(scope, saturating_cast<int32_t>(max(cast<uint32_t>(x), cast<uint32_t>(5))), cast<int32_t>(5), Int(32).max());
+        scope.pop("x");
+    }
+    {
+        Expr z = Variable::make(Float(32), "z");
+        scope.push("z", Interval(cast<float>(-1), cast<float>(1)));
+        check(scope, saturating_cast<int32_t>(z), cast<int32_t>(-1), cast<int32_t>(1));
+        check(scope, saturating_cast<double>(z), cast<double>(-1), cast<double>(1));
+        check(scope, saturating_cast<float16_t>(z), cast<float16_t>(-1), cast<float16_t>(1));
+        check(scope, saturating_cast<uint8_t>(z), cast<uint8_t>(0), cast<uint8_t>(1));
+        scope.pop("z");
+    }
+    {
+        Expr z = Variable::make(UInt(32), "z");
+        scope.push("z", Interval(UInt(32).max(), UInt(32).max()));
+        check(scope, saturating_cast<int32_t>(z), Int(32).max(), Int(32).max());
+        scope.pop("z");
+    }
 
     {
         Scope<Interval> scope;

@@ -313,7 +313,7 @@ std::string extract_namespaces(const std::string &name, std::vector<std::string>
     return result;
 }
 
-std::string extract_namespaces(const std::string &name) {
+std::string strip_namespaces(const std::string &name) {
     std::vector<std::string> unused;
     return extract_namespaces(name, unused);
 }
@@ -661,6 +661,19 @@ size_t get_compiler_stack_size() {
 
 namespace Internal {
 
+#if defined(HALIDE_INTERNAL_USING_ASAN) || defined(__ANDROID__)
+// If we are compiling under ASAN,  we will get a zillion warnings about
+// ASAN not supporting makecontext/swapcontext and the possibility of
+// false positives.
+//
+// If we are building for Android, well, it apparently doesn't provide
+// makecontext() / swapcontext(), despite being posixy
+#define MAKECONTEXT_OK 0
+#else
+#define MAKECONTEXT_OK 1
+#endif
+
+#if MAKECONTEXT_OK
 namespace {
 // We can't reliably pass arguments through makecontext, because
 // the calling convention involves an invalid function pointer
@@ -668,6 +681,7 @@ namespace {
 // platforms, so we use a thread local to pass arguments.
 thread_local void *run_with_large_stack_arg = nullptr;
 }  // namespace
+#endif
 
 void run_with_large_stack(const std::function<void()> &action) {
     if (stack_size.size == 0) {
@@ -677,7 +691,6 @@ void run_with_large_stack(const std::function<void()> &action) {
     }
 
 #if _WIN32
-
     // Only exists for its address, which is used to compute remaining stack space.
     ULONG_PTR approx_stack_pos;
 
@@ -718,6 +731,11 @@ void run_with_large_stack(const std::function<void()> &action) {
     }
 #else
     // On posixy systems we have makecontext / swapcontext
+
+#if !MAKECONTEXT_OK
+    action();
+    return;
+#else
 
 #ifdef HALIDE_WITH_EXCEPTIONS
     struct Args {
@@ -782,6 +800,8 @@ void run_with_large_stack(const std::function<void()> &action) {
         std::rethrow_exception(args.exception);
     }
 #endif
+
+#endif  // not ADDRESS_SANITIZER
 
 #endif
 }

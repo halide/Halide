@@ -3,9 +3,11 @@
 
 #ifndef COMPILING_HALIDE_RUNTIME
 #ifdef __cplusplus
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <string_view>
 #else
 #include <stdbool.h>
 #include <stddef.h>
@@ -52,6 +54,24 @@ extern "C" {
 #endif
 #else
 #define HALIDE_MUST_USE_RESULT
+#endif
+#endif
+
+// Annotation for AOT and JIT calls -- if undefined, use no annotation.
+// To ensure that all results are checked, do something like
+//
+//    -DHALIDE_FUNCTION_ATTRS=HALIDE_MUST_USE_RESULT
+//
+// in your C++ compiler options
+#ifndef HALIDE_FUNCTION_ATTRS
+#define HALIDE_FUNCTION_ATTRS
+#endif
+
+#ifndef HALIDE_EXPORT_SYMBOL
+#ifdef _MSC_VER
+#define HALIDE_EXPORT_SYMBOL __declspec(dllexport)
+#else
+#define HALIDE_EXPORT_SYMBOL __attribute__((visibility("default")))
 #endif
 #endif
 
@@ -1071,12 +1091,8 @@ enum halide_error_code_t {
      * violates a Halide invariant. */
     halide_error_code_no_device_interface = -19,
 
-    /** An error occurred when attempting to initialize the Matlab
-     * runtime. */
-    halide_error_code_matlab_init_failed = -20,
-
-    /** The type of an mxArray did not match the expected type. */
-    halide_error_code_matlab_bad_param_type = -21,
+    /* unused = -20, */
+    /* unused = -21, */
 
     /** There is a bug in the Halide compiler. */
     halide_error_code_internal_error = -22,
@@ -1295,8 +1311,6 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
 
-    halide_target_feature_matlab,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
-
     halide_target_feature_profile,     ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
     halide_target_feature_no_runtime,  ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
@@ -1332,6 +1346,9 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hexagon_dma,            ///< Enable Hexagon DMA buffers.
     halide_target_feature_embed_bitcode,          ///< Emulate clang -fembed-bitcode flag.
     halide_target_feature_enable_llvm_loop_opt,   ///< Enable loop vectorization + unrolling in LLVM. Overrides halide_target_feature_disable_llvm_loop_opt. (Ignored for non-LLVM targets.)
+    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
+    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
+    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
     halide_target_feature_disable_llvm_loop_opt,  ///< Disable loop vectorization + unrolling in LLVM. (Ignored for non-LLVM targets.)
     halide_target_feature_wasm_simd128,           ///< Enable +simd128 instructions for WebAssembly codegen.
     halide_target_feature_wasm_signext,           ///< Enable +sign-ext instructions for WebAssembly codegen.
@@ -1347,6 +1364,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_rvv,                    ///< Enable RISCV "V" Vector Extension
     halide_target_feature_armv81a,                ///< Enable ARMv8.1-a instructions
     halide_target_feature_sanitizer_coverage,     ///< Enable hooks for SanitizerCoverage support.
+    halide_target_feature_profile_by_timer,       ///< Alternative to halide_target_feature_profile using timer interrupt for systems without threads or applicartions that need to avoid them.
+    halide_target_feature_spirv,                  ///< Enable SPIR-V code generation support.
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
@@ -1843,6 +1862,13 @@ extern struct halide_profiler_state *halide_profiler_get_state();
  * This function grabs the global profiler state's lock on entry. */
 extern struct halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
 
+/** Collects profiling information. Intended to be called from a timer
+ * interrupt handler if timer based profiling is being used.
+ *  State argument is acquired via halide_profiler_get_pipeline_state.
+ * prev_t argument is the previous time and can be used to set a more
+ * accurate time interval if desired. */
+extern int halide_profiler_sample(struct halide_profiler_state *s, uint64_t *prev_t);
+
 /** Reset profiler state cheaply. May leave threads running or some
  * memory allocated but all accumluated statistics are reset.
  * WARNING: Do NOT call this method while any halide pipeline is
@@ -1861,6 +1887,17 @@ void halide_profiler_shutdown();
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
+
+/** For timer based profiling, this routine starts the timer chain running.
+ * halide_get_profiler_state can be called to get the current timer interval.
+ */
+extern void halide_start_timer_chain();
+/** These routines are called to temporarily disable and then reenable
+ * timer interuppts for profiling */
+//@{
+extern void halide_disable_timer_interrupt();
+extern void halide_enable_timer_interrupt();
+//@}
 
 /// \name "Float16" functions
 /// These functions operate of bits (``uint16_t``) representing a half
@@ -2010,6 +2047,28 @@ template<>
 HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int64_t>() {
     return halide_type_t(halide_type_int, 64);
 }
+
+#ifndef COMPILING_HALIDE_RUNTIME
+
+// These structures are used by `function_info_header` files
+// (generated by passing `-e function_info_header` to a Generator).
+// The generated files contain documentation on the proper usage.
+namespace HalideFunctionInfo {
+
+enum ArgumentKind { InputScalar = 0,
+                    InputBuffer = 1,
+                    OutputBuffer = 2 };
+
+struct ArgumentInfo {
+    std::string_view name;
+    ArgumentKind kind;
+    int32_t dimensions;  // always zero for scalar arguments
+    halide_type_t type;
+};
+
+}  // namespace HalideFunctionInfo
+
+#endif  // COMPILING_HALIDE_RUNTIME
 
 #endif  // (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
 

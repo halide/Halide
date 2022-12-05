@@ -23,18 +23,18 @@
 #include "Target.h"
 
 #if WITH_WABT
-#include "wabt-src/src/binary-reader.h"
-#include "wabt-src/src/cast.h"
-#include "wabt-src/src/common.h"
-#include "wabt-src/src/error-formatter.h"
-#include "wabt-src/src/error.h"
-#include "wabt-src/src/feature.h"
-#include "wabt-src/src/interp/binary-reader-interp.h"
-#include "wabt-src/src/interp/interp-util.h"
-#include "wabt-src/src/interp/interp.h"
-#include "wabt-src/src/interp/istream.h"
-#include "wabt-src/src/result.h"
-#include "wabt-src/src/stream.h"
+#include "wabt/binary-reader.h"
+#include "wabt/cast.h"
+#include "wabt/common.h"
+#include "wabt/error-formatter.h"
+#include "wabt/error.h"
+#include "wabt/feature.h"
+#include "wabt/interp/binary-reader-interp.h"
+#include "wabt/interp/interp-util.h"
+#include "wabt/interp/interp.h"
+#include "wabt/interp/istream.h"
+#include "wabt/result.h"
+#include "wabt/stream.h"
 #endif
 
 // clang-format off
@@ -360,17 +360,10 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     // Note that we must restore it before using internal_error (and also on the non-error path).
     auto old_abort_handler = std::signal(SIGABRT, SIG_DFL);
 
-#if LLVM_VERSION >= 140
     if (!lld::wasm::link(lld_args, llvm::outs(), llvm::errs(), /*canExitEarly*/ false, /*disableOutput*/ false)) {
         std::signal(SIGABRT, old_abort_handler);
         internal_error << "lld::wasm::link failed\n";
     }
-#else
-    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
-        std::signal(SIGABRT, old_abort_handler);
-        internal_error << "lld::wasm::link failed\n";
-    }
-#endif
 
     std::signal(SIGABRT, old_abort_handler);
 
@@ -1842,7 +1835,9 @@ void wasm_jit_malloc_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
 
     size_t size = args[0]->Int32Value(context).ToChecked() + kExtraMallocSlop;
     wasm32_ptr_t p = v8_WasmMemoryObject_malloc(context, size);
-    if (p) { p += kExtraMallocSlop; }
+    if (p) {
+        p += kExtraMallocSlop;
+    }
     args.GetReturnValue().Set(load_scalar(context, p));
 }
 
@@ -1851,7 +1846,9 @@ void wasm_jit_free_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     HandleScope scope(isolate);
     Local<Context> context = isolate->GetCurrentContext();
     wasm32_ptr_t p = args[0]->Int32Value(context).ToChecked();
-    if (p) { p -= kExtraMallocSlop; }
+    if (p) {
+        p -= kExtraMallocSlop;
+    }
     v8_WasmMemoryObject_free(context, p);
 }
 
@@ -2116,7 +2113,7 @@ void add_extern_callbacks(const Local<Context> &context,
             continue;
         }
 
-        TrampolineFn trampoline_fn;
+        TrampolineFn trampoline_fn = nullptr;
         std::vector<ExternArgType> arg_types;
         if (!build_extern_arg_types(fn_name, jit_externs, trampolines, trampoline_fn, arg_types)) {
             internal_error << "Missing fn_name " << fn_name;
@@ -2280,22 +2277,28 @@ struct WasmModuleContents {
         const std::map<std::string, Halide::JITExtern> &jit_externs,
         const std::vector<JITModule> &extern_deps);
 
-    int run(const void **args);
+    int run(const void *const *args);
 
     ~WasmModuleContents() = default;
 };
 
+// clang-format off
 WasmModuleContents::WasmModuleContents(
     const Module &halide_module,
     const std::vector<Argument> &arguments,
     const std::string &fn_name,
     const std::map<std::string, Halide::JITExtern> &jit_externs,
     const std::vector<JITModule> &extern_deps)
-    : target(halide_module.target()),
-      arguments(arguments),
-      jit_externs(jit_externs),
-      extern_deps(extern_deps),
-      trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
+    : target(halide_module.target())
+      , arguments(arguments)
+      , jit_externs(jit_externs)
+      , extern_deps(extern_deps)
+      , trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps))
+#if WITH_WABT
+      , store(wabt::interp::Store(calc_features(halide_module.target())))
+#endif
+// clang-format on
+{
 
 #if WITH_WABT || WITH_V8
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";
@@ -2306,8 +2309,6 @@ WasmModuleContents::WasmModuleContents(
 
     // Compile halide into wasm bytecode.
     std::vector<char> final_wasm = compile_to_wasm(halide_module, fn_name);
-
-    store = wabt::interp::Store(calc_features(halide_module.target()));
 
     // Create a wabt Module for it.
     wabt::MemoryStream log_stream;
@@ -2513,7 +2514,7 @@ WasmModuleContents::WasmModuleContents(
 #endif
 }
 
-int WasmModuleContents::run(const void **args) {
+int WasmModuleContents::run(const void *const *args) {
 #if WITH_WABT
     const auto &module_desc = module->desc();
 
@@ -2722,7 +2723,7 @@ WasmModule WasmModule::compile(
 }
 
 /** Run generated previously compiled wasm code with a set of arguments. */
-int WasmModule::run(const void **args) {
+int WasmModule::run(const void *const *args) {
     internal_assert(contents.defined());
     return contents->run(args);
 }

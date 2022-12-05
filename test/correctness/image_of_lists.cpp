@@ -5,18 +5,12 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-extern "C" DLLEXPORT std::list<int> *list_create(int) {
+extern "C" HALIDE_EXPORT_SYMBOL std::list<int> *list_create(int) {
     return new std::list<int>();
 }
 HalideExtern_1(std::list<int> *, list_create, int);
 
-extern "C" DLLEXPORT std::list<int> *list_maybe_insert(std::list<int> *list, bool insert, int value) {
+extern "C" HALIDE_EXPORT_SYMBOL std::list<int> *list_maybe_insert(std::list<int> *list, bool insert, int value) {
     if (insert) {
         list->push_back(value);
     }
@@ -50,16 +44,16 @@ int main(int argc, char **argv) {
     // Inspect the results for correctness
     for (int i = 0; i < 100; i++) {
         std::list<int> *list = result(i);
-        //printf("Factors of %d: ", i);
+        // printf("Factors of %d: ", i);
         for (std::list<int>::iterator iter = list->begin(); iter != list->end(); iter++) {
             int factor = *iter;
             if (i % factor) {
                 printf("Error: %d is not a factor of %d\n", factor, i);
                 return -1;
             }
-            //printf("%d ", factor);
+            // printf("%d ", factor);
         }
-        //printf("\n");
+        // printf("\n");
         delete list;
     }
 

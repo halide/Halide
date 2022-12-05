@@ -1,8 +1,3 @@
-// Note that this deliberately does *not* include PyHalide.h,
-// or depend on any of the code in src: this is intended to be
-// a minimal, generic wrapper to expose an arbitrary Generator
-// for stub usage in Python.
-
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -24,9 +19,10 @@ namespace py = pybind11;
 namespace Halide {
 namespace PythonBindings {
 
+using Parameter = Internal::Parameter;
+using ArgInfoKind = Internal::ArgInfoKind;
+using ArgInfo = Internal::AbstractGenerator::ArgInfo;
 using GeneratorFactory = Internal::GeneratorFactory;
-using GeneratorParamsMap = Internal::GeneratorParamsMap;
-using Stub = Internal::GeneratorStub;
 using StubInput = Internal::StubInput;
 using StubInputBuffer = Internal::StubInputBuffer<void>;
 
@@ -36,21 +32,23 @@ namespace {
 // in case the Stub builder links in a separate copy of libHalide, rather
 // sharing the same halide.so that is built by default.
 void halide_python_error(JITUserContext *, const char *msg) {
-    throw Error(msg);
+    throw Halide::Error(msg);
 }
 
 void halide_python_print(JITUserContext *, const char *msg) {
+    py::gil_scoped_acquire acquire;
     py::print(msg, py::arg("end") = "");
 }
 
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
     void warning(const char *msg) override {
+        py::gil_scoped_acquire acquire;
         py::print(msg, py::arg("end") = "");
     }
 
     void error(const char *msg) override {
-        throw Error(msg);
+        throw Halide::Error(msg);
         // This method must not return!
     }
 };
@@ -63,6 +61,21 @@ void install_error_handlers(py::module &m) {
     handlers.custom_error = halide_python_error;
     handlers.custom_print = halide_python_print;
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
+
+    static py::object halide_error = py::module_::import("halide").attr("HalideError");
+    if (halide_error.is(py::none())) {
+        throw std::runtime_error("Could not find halide.HalideError");
+    }
+
+    py::register_exception_translator([](std::exception_ptr p) {  // NOLINT
+        try {
+            if (p) {
+                std::rethrow_exception(p);
+            }
+        } catch (const Error &e) {
+            PyErr_SetString(halide_error.ptr(), e.what());
+        }
+    });
 }
 
 // Anything that defines __getitem__ looks sequencelike to pybind,
@@ -71,127 +84,183 @@ bool is_real_sequence(const py::object &o) {
     return py::isinstance<py::sequence>(o) && py::hasattr(o, "__len__");
 }
 
-StubInput to_stub_input(const py::object &o) {
-    // Don't use isinstance: we want to get things that
-    // can be implicitly converted as well (eg ImageParam -> Func)
-    try {
-        return StubInput(StubInputBuffer(o.cast<Buffer<>>()));
-    } catch (...) {
-        // Not convertible to Buffer. Fall thru and try next.
+template<typename T>
+struct cast_error_string {
+    std::string operator()(const py::handle &h, const std::string &name) {
+        return "Unable to cast Input " + name + " to " + py::type_id<T>() + " from " + (std::string)py::str(py::type::handle_of(h));
     }
+};
 
-    try {
-        return StubInput(o.cast<Func>());
-    } catch (...) {
-        // Not convertible to Func. Fall thru and try next.
-    }
-
-    return StubInput(o.cast<Expr>());
+template<>
+std::string cast_error_string<Buffer<>>::operator()(const py::handle &h, const std::string &name) {
+    std::ostringstream o;
+    o << "Input " << name << " requires an ImageParam or Buffer argument when using call(), but saw " << (std::string)py::str(py::type::handle_of(h));
+    return o.str();
 }
 
-std::vector<StubInput> to_stub_inputs(const py::object &value) {
+template<>
+std::string cast_error_string<Func>::operator()(const py::handle &h, const std::string &name) {
+    std::ostringstream o;
+    o << "Input " << name << " requires a Func argument when using call(), but saw " << (std::string)py::str(py::type::handle_of(h));
+    return o.str();
+}
+
+template<>
+std::string cast_error_string<Expr>::operator()(const py::handle &h, const std::string &name) {
+    std::ostringstream o;
+    o << "Input " << name << " requires a Param (or scalar literal) argument when using call(), but saw " << (std::string)py::str(py::type::handle_of(h));
+    return o.str();
+}
+
+template<typename T>
+T cast_to(const py::handle &h, const std::string &name) {
+    // We want to ensure that the error thrown is one that will be translated
+    // to `hl.HalideError` in Python.
+    try {
+        return h.cast<T>();
+    } catch (const std::exception &e) {
+        throw Halide::Error(cast_error_string<T>()(h, name));
+    }
+}
+
+template<>
+Parameter cast_to(const py::handle &h, const std::string &name) {
+    auto b = cast_to<Buffer<>>(h, name);
+    Parameter p(b.type(), true, b.dimensions());
+    p.set_buffer(b);
+    return p;
+}
+
+template<typename T>
+std::vector<T> to_input_vector(const py::object &value, const std::string &name) {
+    std::vector<T> v;
     if (is_real_sequence(value)) {
-        std::vector<StubInput> v;
         for (const auto &o : py::reinterpret_borrow<py::sequence>(value)) {
-            v.push_back(to_stub_input(o));
+            v.push_back(cast_to<T>(o, name));
         }
-        return v;
     } else {
-        return {to_stub_input(value)};
+        v.push_back(cast_to<T>(value, name));
     }
+    return v;
 }
 
-py::object generate_impl(const GeneratorFactory &factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
-    Stub stub(context, [factory](const GeneratorContext &context) -> std::unique_ptr<Halide::Internal::GeneratorBase> {
-        return factory(context);
-    });
-    auto names = stub.get_names();
-    _halide_user_assert(!names.outputs.empty())
-        << "Generators that use build() (instead of generate()+Output<>) are not supported in the Python bindings.";
+py::object call_impl(const GeneratorFactory &factory,
+                     const py::args &args,
+                     const py::kwargs &kwargs) {
+    auto active_generator_context = py::module_::import("halide").attr("active_generator_context");
+    auto context = active_generator_context().cast<GeneratorContext>();
+    auto generator = factory(context);
 
-    // Inputs can be specified by either positional or named args,
-    // but may not be mixed. (i.e., if any inputs are specified as a named
-    // arg, they all must be specified that way; otherwise they must all be
-    // positional, in the order declared in the Generator.)
-    //
-    // GeneratorParams can only be specified by name, and are always optional.
-
-    std::map<std::string, std::vector<StubInput>> kw_inputs;
-    for (const auto &name : names.inputs) {
-        _halide_user_assert(kw_inputs.count(name) == 0);  // internal error
-        kw_inputs[name] = std::vector<StubInput>{};
-    }
-    size_t kw_inputs_specified = 0;
-
-    GeneratorParamsMap generator_params;
-
-    // Process the kwargs first.
-    for (auto kw : kwargs) {
-        // If the kwarg is the name of a known input, stick it in the input
-        // vector. If not, stick it in the GeneratorParamsMap (if it's invalid,
-        // an error will be reported further downstream).
-        std::string name = kw.first.cast<std::string>();
-        py::handle value = kw.second;
-        auto it = kw_inputs.find(name);
-        if (it != kw_inputs.end()) {
-            _halide_user_assert(it->second.empty())
-                << "Generator Input named '" << it->first << "' was specified more than once.";
-            it->second = to_stub_inputs(py::cast<py::object>(value));
-            kw_inputs_specified++;
-        } else {
-            if (py::isinstance<LoopLevel>(value)) {
-                generator_params[name] = value.cast<LoopLevel>();
+    // GeneratorParams are always specified as an optional named parameter
+    // called "generator_params", which is expected to be a python dict.
+    // If generatorparams are specified, do them first, before any Inputs.
+    if (kwargs.contains("generator_params")) {
+        py::handle h = kwargs["generator_params"];
+        _halide_user_assert(py::isinstance<py::dict>(h)) << "generator_params must be a dict";
+        py::dict gp = py::cast<py::dict>(h);
+        for (auto item : gp) {
+            const std::string gp_name = py::str(item.first).cast<std::string>();
+            const py::handle gp_value = item.second;
+            if (py::isinstance<LoopLevel>(gp_value)) {
+                // Note that while Python Generators don't support LoopLevels,
+                // C++ Generators do, and that's what we're calling here, so
+                // be sure to allow passing 'em in.
+                generator->set_generatorparam_value(gp_name, gp_value.cast<LoopLevel>());
+            } else if (py::isinstance<py::list>(gp_value)) {
+                // Convert [hl.UInt(8), hl.Int(16)] -> uint8,int16
+                std::string v;
+                for (auto t : gp_value) {
+                    if (!v.empty()) {
+                        v += ",";
+                    }
+                    v += py::str(t).cast<std::string>();
+                }
+                generator->set_generatorparam_value(gp_name, v);
             } else {
-                generator_params[name] = py::str(value).cast<std::string>();
+                generator->set_generatorparam_value(gp_name, py::str(gp_value).cast<std::string>());
             }
         }
     }
 
-    std::vector<std::vector<StubInput>> inputs;
-    inputs.reserve(names.inputs.size());
+    // Don't call arginfos() until after we have set all GeneratorParams.
 
-    if (args.empty()) {
-        // No arguments specified positionally, so they must all be via keywords.
-        _halide_user_assert(kw_inputs_specified == names.inputs.size())
-            << "Expected exactly " << names.inputs.size() << " keyword args for inputs, but saw " << kw_inputs_specified << ".";
-        for (const auto &name : names.inputs) {
-            inputs.push_back(std::move(kw_inputs[name]));
-        }
-    } else {
-        // Some positional arguments, so all inputs must be positional (and none via keyword).
-        _halide_user_assert(kw_inputs_specified == 0)
-            << "Cannot use both positional and keyword arguments for inputs.";
-        _halide_user_assert(args.size() == names.inputs.size())
-            << "Expected exactly " << names.inputs.size() << " positional args for inputs, but saw " << args.size() << ".";
-        for (auto arg : args) {
-            inputs.push_back(to_stub_inputs(py::cast<py::object>(arg)));
-        }
-    }
-
-    // Verify everything is there
-    _halide_user_assert(inputs.size() == names.inputs.size());
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        _halide_user_assert(!inputs[i].empty())
-            << "Generator Input named '" << names.inputs[i] << "' was not specified.";
-    }
-
-    const std::vector<std::vector<Func>> outputs = stub.generate(generator_params, inputs);
-
-    py::tuple py_outputs(outputs.size());
-    for (size_t i = 0; i < outputs.size(); i++) {
-        py::object o;
-        if (outputs[i].size() == 1) {
-            // convert list-of-1 into single element
-            o = py::cast(outputs[i][0]);
+    const auto arg_infos = generator->arginfos();
+    std::vector<ArgInfo> input_arguments, output_arguments;
+    std::map<std::string, ArgInfo> input_arguments_map;
+    std::set<std::string> inputs_seen;
+    for (const auto &a : arg_infos) {
+        if (a.dir == Internal::ArgInfoDirection::Input) {
+            input_arguments.push_back(a);
+            input_arguments_map[a.name] = a;
         } else {
-            o = py::cast(outputs[i]);
+            output_arguments.push_back(a);
         }
+    }
+
+    _halide_user_assert(args.size() <= input_arguments.size()) << "Generator '" << generator->name()
+                                                               << "' allows at most " << input_arguments.size()
+                                                               << " positional args, but " << args.size() << " were specified.";
+
+    const auto bind_one = [&generator](py::handle h, const ArgInfo &a) {
+        py::object o = py::cast<py::object>(h);
+        if (a.kind == ArgInfoKind::Buffer) {
+            generator->bind_input(a.name, to_input_vector<Parameter>(o, a.name));
+        } else if (a.kind == ArgInfoKind::Function) {
+            generator->bind_input(a.name, to_input_vector<Func>(o, a.name));
+        } else {
+            generator->bind_input(a.name, to_input_vector<Expr>(o, a.name));
+        }
+    };
+
+    for (size_t i = 0; i < args.size(); i++) {
+        const auto &a = input_arguments[i];
+        _halide_user_assert(inputs_seen.count(a.name) == 0) << "Input " << a.name << " specified multiple times.";
+        inputs_seen.insert(a.name);
+        bind_one(args[i], a);
+    }
+
+    for (auto kw : kwargs) {
+        const std::string name = kw.first.cast<std::string>();
+        const py::handle value = kw.second;
+
+        if (name == "generator_params") {
+            continue;
+        }
+
+        auto it = input_arguments_map.find(name);
+        _halide_user_assert(it != input_arguments_map.end()) << "Unknown input '" << name << "' specified via keyword argument.";
+        _halide_user_assert(inputs_seen.count(name) == 0) << "Input " << name << " specified multiple times.";
+        inputs_seen.insert(name);
+
+        const auto &a = it->second;
+        bind_one(value, a);
+    }
+
+    _halide_user_assert(inputs_seen.size() == input_arguments.size()) << "Generator '" << generator->name()
+                                                                      << "' requires " << input_arguments.size()
+                                                                      << " args, but " << inputs_seen.size() << " were specified.";
+
+    generator->build_pipeline();
+
+    const size_t outputs_size = output_arguments.size();
+    py::tuple py_outputs(outputs_size);
+    for (size_t i = 0; i < outputs_size; i++) {
+        std::vector<Func> outputs = generator->output_func(output_arguments[i].name);
+
+        py::object o;
         if (outputs.size() == 1) {
-            // bail early, return the single object rather than a dict
+            // convert list-of-1 into single element
+            o = py::cast(outputs[0]);
+        } else {
+            o = py::cast(outputs);
+        }
+        if (outputs_size == 1) {
+            // bail early, returning the single object rather than a dict
             return o;
         }
         py_outputs[i] = o;
     }
+
     // An explicit "std::move" is needed here because there's
     // an implicit tuple->object conversion that inhibits it otherwise.
     return std::move(py_outputs);
@@ -199,10 +268,9 @@ py::object generate_impl(const GeneratorFactory &factory, const GeneratorContext
 
 void pystub_init(pybind11::module &m, const GeneratorFactory &factory) {
     m.def(
-        "generate", [factory](const Halide::Target &target, const py::args &args, const py::kwargs &kwargs) -> py::object {
-            return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
-        },
-        py::arg("target"));
+        "call", [factory](const py::args &args, const py::kwargs &kwargs) -> py::object {
+            return call_impl(factory, args, kwargs);
+        });
 }
 
 }  // namespace

@@ -65,14 +65,6 @@ else
     echo Copying starting weights from ${START_WEIGHTS_FILE} to ${WEIGHTS}
 fi
 
-# We could add this unconditionally, but it's easier to wade thru
-# results if we only add if needed
-for F in disable_llvm_loop_opt; do
-    if [[ ! ${HL_TARGET} =~ .*${F}.* ]]; then
-        HL_TARGET="${HL_TARGET}-${F}"
-    fi
-done
-
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
 BATCH_SIZE=32
@@ -86,6 +78,8 @@ if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
         exit 1
     fi
 fi
+
+PLUGIN_EXT=so
 
 # Build a single featurization of the pipeline with a random schedule
 make_featurization() {
@@ -105,23 +99,22 @@ make_featurization() {
         dropout=1  # 1% chance of operating entirely greedily
         beam=1
     fi
-    HL_SEED=${SEED} \
-        HL_WEIGHTS_DIR=${WEIGHTS} \
-        HL_RANDOM_DROPOUT=${dropout} \
-        HL_BEAM_SIZE=${beam} \
-        HL_MACHINE_PARAMS=32,24000000,40 \
-        ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
+    ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
         -f ${FNAME} \
         -o ${D} \
         -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
         target=${HL_TARGET} \
-        auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
-        -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.so \
-        -s Adams2019 \
-          2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+        -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.${PLUGIN_EXT} \
+        autoscheduler=Adams2019 \
+        autoscheduler.parallelism=32 \
+        autoscheduler.beam_size=${beam} \
+        autoscheduler.random_dropout=${dropout} \
+        autoscheduler.random_dropout_seed=${SEED} \
+        autoscheduler.weights_path=${WEIGHTS} \
+            2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
 
     # We don't need image I/O for this purpose,

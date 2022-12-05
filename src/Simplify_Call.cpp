@@ -1,11 +1,13 @@
 #include "Simplify_Internal.h"
 
+#include "FindIntrinsics.h"
 #include "Simplify.h"
 
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
+#include <cfenv>
 #include <functional>
 #include <unordered_map>
 
@@ -132,7 +134,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // If we know the sign of this shift, change it to an unsigned shift.
         if (b_info.min_defined && b_info.min >= 0) {
             b = mutate(cast(b.type().with_code(halide_type_uint), b), nullptr);
-        } else if (b_info.max_defined && b_info.max <= 0) {
+        } else if (b.type().is_int() && b_info.max_defined && b_info.max <= 0) {
             result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
             b = mutate(cast(b.type().with_code(halide_type_uint), -b), nullptr);
         }
@@ -165,12 +167,14 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
         }
 
-        // Rewrite shifts with negated RHSes as shifts of the other direction.
-        if (const Sub *sub = b.as<Sub>()) {
-            if (is_const_zero(sub->a)) {
-                result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
-                b = sub->b;
-                return mutate(Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic), bounds);
+        // Rewrite shifts with signed negated RHSes as shifts of the other direction.
+        if (b.type().is_int()) {
+            if (const Sub *sub = b.as<Sub>()) {
+                if (is_const_zero(sub->a)) {
+                    result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
+                    b = sub->b;
+                    return mutate(Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic), bounds);
+                }
             }
         }
 
@@ -280,25 +284,6 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else {
             return a ^ b;
         }
-    } else if (op->is_intrinsic(Call::reinterpret)) {
-        Expr a = mutate(op->args[0], nullptr);
-
-        int64_t ia;
-        uint64_t ua;
-        bool vector = op->type.is_vector() || a.type().is_vector();
-        if (op->type == a.type()) {
-            return a;
-        } else if (const_int(a, &ia) && op->type.is_uint() && !vector) {
-            // int -> uint
-            return make_const(op->type, (uint64_t)ia);
-        } else if (const_uint(a, &ua) && op->type.is_int() && !vector) {
-            // uint -> int
-            return make_const(op->type, (int64_t)ua);
-        } else if (a.same_as(op->args[0])) {
-            return op;
-        } else {
-            return reinterpret(op->type, a);
-        }
     } else if (op->is_intrinsic(Call::abs)) {
         // Constant evaluate abs(x).
         ExprInfo a_bounds;
@@ -367,6 +352,21 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return op;
         } else {
             return absd(a, b);
+        }
+    } else if (op->is_intrinsic(Call::saturating_cast)) {
+        internal_assert(op->args.size() == 1);
+        ExprInfo a_bounds;
+        Expr a = mutate(op->args[0], &a_bounds);
+
+        // TODO(rootjalex): We could be intelligent about using a_bounds to remove saturating_casts;
+
+        if (is_const(a)) {
+            a = lower_saturating_cast(op->type, a);
+            return mutate(a, bounds);
+        } else if (!a.same_as(op->args[0])) {
+            return saturating_cast(op->type, a);
+        } else {
+            return op;
         }
     } else if (op->is_intrinsic(Call::stringify)) {
         // Eagerly concat constant arguments to a stringify.
@@ -633,7 +633,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else {
             return Call::make(op->type, Call::mux, mutated_args, Call::PureIntrinsic);
         }
-    } else if (op->call_type == Call::PureExtern) {
+    } else if (op->call_type == Call::PureExtern || op->call_type == Call::PureIntrinsic) {
         // TODO: This could probably be simplified into a single map-lookup
         // with a bit more cleverness; not sure if the reduced lookup time
         // would pay for itself (in comparison with the possible lost code clarity).
@@ -712,15 +712,19 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             // else fall thru
         }
 
-        // Handle all the PureExtern cases of float -> integerized-float
+        // Handle all the PureExtern/PureIntrinsic cases of float -> integerized-float
         {
             using FnType = double (*)(double);
             static const std::unordered_map<std::string, FnType>
                 pure_externs_truncation = {
                     {"ceil_f32", std::ceil},
                     {"floor_f32", std::floor},
-                    {"round_f32", std::nearbyint},
-                    {"trunc_f32", [](double a) -> double { return (a < 0 ? std::ceil(a) : std::floor(a)); }},
+                    {Call::get_intrinsic_name(Call::round), [](double a) -> double {
+                         std::fesetround(FE_TONEAREST);
+                         a = std::nearbyint(a);
+                         return a;
+                     }},
+                    {"trunc_f32", std::trunc},
                 };
             auto it = pure_externs_truncation.find(op->name);
             if (it != pure_externs_truncation.end()) {
@@ -731,7 +735,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 if (const double *f = as_const_float(arg)) {
                     auto fn = it->second;
                     return make_const(arg.type(), fn(*f));
-                } else if (call && call->call_type == Call::PureExtern &&
+                } else if (call && (call->call_type == Call::PureExtern || call->call_type == Call::PureIntrinsic) &&
                            (it = pure_externs_truncation.find(call->name)) != pure_externs_truncation.end()) {
                     // For any combination of these integer-valued functions, we can
                     // discard the outer function. For example, floor(ceil(x)) == ceil(x).
@@ -777,6 +781,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         debug(2) << "Simplifier: unhandled PureExtern: " << op->name;
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         clear_bounds_info(bounds);
+    } else if (op->is_intrinsic(Call::concat_bits) && op->args.size() == 1) {
+        return mutate(op->args[0], bounds);
     }
 
     // No else: we want to fall thru from the PureExtern clause.

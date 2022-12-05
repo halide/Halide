@@ -3,6 +3,7 @@
 
 #include "Halide.h"
 #include "halide_test_dirs.h"
+#include "test_sharding.h"
 
 #include <fstream>
 
@@ -21,6 +22,13 @@ struct Task {
 
 class SimdOpCheckTest {
 public:
+    static constexpr int max_i8 = 127;
+    static constexpr int max_i16 = 32767;
+    static constexpr int max_i32 = 0x7fffffff;
+    static constexpr int max_u8 = 255;
+    static constexpr int max_u16 = 65535;
+    const Expr max_u32 = UInt(32).max();
+
     std::string filter{"*"};
     std::string output_directory{Internal::get_test_tmp_dir()};
     std::vector<Task> tasks;
@@ -46,27 +54,19 @@ public:
     int W;
     int H;
 
+    using Sharder = Halide::Internal::Test::Sharder;
+
     SimdOpCheckTest(const Target t, int w, int h)
         : target(t), W(w), H(h) {
         target = target
                      .with_feature(Target::NoBoundsQuery)
                      .with_feature(Target::NoAsserts)
-                     .with_feature(Target::NoRuntime)
-                     .with_feature(Target::DisableLLVMLoopOpt);
-        num_threads = Internal::ThreadPool<void>::num_processors_online();
+                     .with_feature(Target::NoRuntime);
     }
     virtual ~SimdOpCheckTest() = default;
 
     void set_seed(int seed) {
         rng.seed(seed);
-    }
-
-    size_t get_num_threads() const {
-        return num_threads;
-    }
-
-    void set_num_threads(size_t n) {
-        num_threads = n;
     }
 
     virtual bool can_run_code() const {
@@ -321,17 +321,13 @@ public:
     virtual bool test_all() {
         /* First add some tests based on the target */
         add_tests();
-        Internal::ThreadPool<TestResult> pool(num_threads);
-        std::vector<std::future<TestResult>> futures;
-        for (const Task &task : tasks) {
-            futures.push_back(pool.async([this, task]() {
-                return check_one(task.op, task.name, task.vector_width, task.expr);
-            }));
-        }
 
+        Sharder sharder;
         bool success = true;
-        for (auto &f : futures) {
-            const TestResult &result = f.get();
+        for (size_t t = 0; t < tasks.size(); t++) {
+            if (!sharder.should_run(t)) continue;
+            const auto &task = tasks.at(t);
+            auto result = check_one(task.op, task.name, task.vector_width, task.expr);
             std::cout << result.op << "\n";
             if (!result.error_msg.empty()) {
                 std::cerr << result.error_msg;
@@ -342,9 +338,54 @@ public:
         return success;
     }
 
+    template<typename SIMDOpCheckT>
+    static int main(int argc, char **argv) {
+        Target host = get_host_target();
+        Target hl_target = get_target_from_environment();
+        printf("host is:      %s\n", host.to_string().c_str());
+        printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
+
+        SIMDOpCheckT test(hl_target);
+
+        if (argc > 1) {
+            test.filter = argv[1];
+        }
+
+        if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
+            test.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
+        }
+
+        const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
+        std::cout << "simd_op_check test seed: " << seed << "\n";
+        test.set_seed(seed);
+
+        if (argc > 2) {
+            // Don't forget: if you want to run the standard tests to a specific output
+            // directory, you'll need to invoke with the first arg enclosed
+            // in quotes (to avoid it being wildcard-expanded by the shell):
+            //
+            //    correctness_simd_op_check "*" /path/to/output
+            //
+            test.output_directory = argv[2];
+        }
+
+        bool success = test.test_all();
+
+        // Compile a runtime for this target, for use in the static test.
+        compile_standalone_runtime(test.output_directory + "simd_op_check_runtime.o", test.target);
+
+        if (!success) {
+            return -1;
+        }
+
+        printf("Success!\n");
+        return 0;
+    }
+
 private:
-    size_t num_threads;
     const Halide::Var x{"x"}, y{"y"};
 };
+
 }  // namespace Halide
+
 #endif  // SIMD_OP_CHECK_H

@@ -286,7 +286,7 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
             // Pull out the subinstructions. They're the low 13
             // bits of each half-word.
             uint32_t hi = (inst >> 16) & ((1 << 13) - 1);
-            //uint32_t lo = inst & ((1 << 13) - 1);
+            // uint32_t lo = inst & ((1 << 13) - 1);
 
             // We only understand the ones where hi starts with 010
             internal_assert((hi >> 10) == 2);
@@ -695,12 +695,6 @@ class InjectHexagonRpc : public IRMutator {
 
     Module &device_code;
 
-    Expr state_var(const std::string &name, Type type) {
-        return Let::make(name, state_var_ptr(name, type),
-                         Load::make(type_of<void *>(), name, 0,
-                                    Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
-    }
-
     Expr state_var_ptr(const std::string &name, Type type) {
         Expr &buf = state_bufs[name];
         if (!buf.defined()) {
@@ -712,7 +706,7 @@ class InjectHexagonRpc : public IRMutator {
     }
 
     Expr module_state() {
-        return state_var("hexagon_module_state", type_of<void *>());
+        return Call::make(type_of<void *>(), "halide_hexagon_get_module_state", {state_var_ptr("hexagon_module_state", type_of<void *>())}, Call::Extern);
     }
 
     Expr module_state_ptr() {
@@ -989,7 +983,6 @@ Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
         Target::HVX_v62,
         Target::HVX_v65,
         Target::HVX_v66,
-        Target::DisableLLVMLoopOpt,
     };
     for (Target::Feature i : shared_features) {
         if (host_target.has_feature(i)) {

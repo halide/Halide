@@ -20,15 +20,12 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
 
-# LLVM_PACKAGE_VERSION does not propagate to higher scopes
-set(Halide_LLVM_VERSION ${LLVM_PACKAGE_VERSION} CACHE INTERNAL "Provided LLVM version")
-
-if (LLVM_PACKAGE_VERSION VERSION_LESS 12.0)
-    message(FATAL_ERROR "LLVM version must be 12.0 or newer")
+if (LLVM_PACKAGE_VERSION VERSION_LESS 14.0)
+    message(FATAL_ERROR "LLVM version must be 14.0 or newer")
 endif ()
 
-if (LLVM_PACKAGE_VERSION VERSION_GREATER 15.0)
-    message(WARNING "Halide is not tested on LLVM versions beyond 15.0")
+if (LLVM_PACKAGE_VERSION VERSION_GREATER 16.0)
+    message(WARNING "Halide is not tested on LLVM versions beyond 16.0")
 endif ()
 
 set(Halide_LLVM_DEFS ${LLVM_DEFINITIONS} $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
@@ -56,7 +53,7 @@ endif ()
 # Create options for including or excluding LLVM backends.
 ##
 
-set(active_components mcjit bitwriter linker passes)
+set(active_components orcjit bitwriter linker passes)
 set(known_components AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
 
 foreach (comp IN LISTS known_components)
