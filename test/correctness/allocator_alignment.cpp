@@ -93,6 +93,10 @@ void run_test(Target t) {
 
 int main(int argc, char **argv) {
     const Target t = get_jit_target_from_environment();
+    if (t.arch == Target::WebAssembly) {
+        printf("[SKIP] This test is too slow for Wasm.\n");
+        return 0;
+    }
 
     printf("Testing with malloc()... ");
     run_test(t.with_feature(Target::NoAlignedAlloc));
