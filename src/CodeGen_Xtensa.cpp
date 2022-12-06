@@ -252,6 +252,8 @@ using int64x16_t = xb_vecN_2x64w;
 using uint1x16_t = vboolN_2;
 using uint1x32_t = vboolN;
 using uint1x64_t = vbool2N;
+using float16x16_t = xb_vecN_2xf16;
+using float16x32_t = xb_vecNxf16;
 using float32x16_t = xb_vecN_2xf32;
 #elif XCHAL_VISION_TYPE == 8
 using int8x128_t = xb_vec2Nx8;
@@ -269,6 +271,8 @@ using uint48x64_t = xb_vecNx48;
 using uint1x32_t = vboolN_2;
 using uint1x64_t = vboolN;
 using uint1x128_t = vbool2N;
+using float16x32_t = xb_vecN_2xf16;
+using float16x64_t = xb_vecNxf16;
 using float32x32_t = xb_vecN_2xf32;
 using int64x32_t = xb_vecN_2x64w;
 #endif
@@ -462,6 +466,7 @@ using float32x128_t = MultipleOfNativeVector<float32x32_t, 4>;
 #define VECTOR_WIDTH_U8 128
 #define VECTOR_WIDTH_I16 64
 #define VECTOR_WIDTH_U16 64
+#define VECTOR_WIDTH_F16 64
 #define VECTOR_WIDTH_I32 32
 #define VECTOR_WIDTH_U32 32
 #define VECTOR_WIDTH_F32 32
@@ -2636,7 +2641,7 @@ class ScopedDmaInitializer {
             Type(Type::Int, 48, target.natural_vector_size<int16_t>()),
             Type(Type::UInt, 48, target.natural_vector_size<uint16_t>()),
             Type(Type::Int, 64, target.natural_vector_size<int32_t>()),
-            Type(Type::Float, 16, target.natural_vector_size<int16_t>()),
+            Type(Type::Float, 16, target.natural_vector_size<float16_t>()),
             Type(Type::Float, 32, target.natural_vector_size<float>()),
         };
 
@@ -2644,7 +2649,7 @@ class ScopedDmaInitializer {
             Int(8, 4),
             UInt(8, 4),
             UInt(8, 8),
-        };
+            Float(16, 16)};
 
         std::set<Type> multiple_of_native_types;
         for (const auto &type : vector_types) {
@@ -3047,6 +3052,8 @@ void CodeGen_Xtensa::visit(const Select *op) {
             rhs << "IVP_MOVN_2X32T(" << true_val << ", " << false_val << ", " << cond << ")";
         } else if (is_native_xtensa_vector<uint32_t>(op->type, target)) {
             rhs << "IVP_MOVN_2X32UT(" << true_val << ", " << false_val << ", " << cond << ")";
+        } else if (is_native_xtensa_vector<float16_t>(op->type, target)) {
+            rhs << "IVP_MOVNXF16T(" << true_val << ", " << false_val << ", " << cond << ")";
         } else if (is_native_xtensa_vector<float>(op->type, target)) {
             rhs << "IVP_MOVN_2XF32T(" << true_val << ", " << false_val << ", " << cond << ")";
         } else {
@@ -3177,6 +3184,8 @@ void CodeGen_Xtensa::visit(const LT *op) {
         print_assignment(op->type, "IVP_LTN_2X32(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_LTUN_2X32U(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_OLTNXF16(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_OLTN_2XF32(" + sa + ", " + sb + ")");
     } else {
@@ -3200,6 +3209,8 @@ void CodeGen_Xtensa::visit(const GT *op) {
         print_assignment(op->type, "IVP_GTN_2X32(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_GTUN_2X32U(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_OGTNXF16(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_OGTN_2XF32(" + sa + ", " + sb + ")");
     } else {
