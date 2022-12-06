@@ -45,6 +45,13 @@
 #define HALIDE_RUNTIME_BUFFER_CHECK_INDICES 0
 #endif
 
+#ifndef HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT
+// Conservatively align buffer allocations to 128 bytes by default.
+// This is enough alignment for all the platforms currently in use.
+// Redefine this in your compiler settings if you desire more/less alignment.
+#define HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT 128
+#endif
+
 // Unfortunately, not all C++17 runtimes support aligned_alloc
 // (it may depends on OS/SDK version); this is provided as an opt-out
 // if you are compiling on a platform that doesn't provide a (good)
@@ -859,10 +866,10 @@ public:
         // Drop any existing allocation
         deallocate();
 
-        // Conservatively align images to 128 bytes. This is enough
+        // Conservatively align images to (usually) 128 bytes. This is enough
         // alignment for all the platforms we might use. Also ensure that the allocation
         // is such that the logical size is an integral multiple of 128 bytes (or a bit more).
-        constexpr size_t alignment = 128;
+        constexpr size_t alignment = HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT;
 
         const auto align_up = [=](size_t value) -> size_t {
             return (value + alignment - 1) & ~(alignment - 1);
