@@ -3,6 +3,19 @@
 
 #include "printer.h"
 
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+
+// Read into a global to avoid making a call to halide_malloc_alignment()
+// in every halide_malloc() call (halide_malloc_alignment() is required to
+// return the same value every time).
+WEAK size_t _alignment = (size_t) halide_malloc_alignment();
+
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
 extern "C" {
 
 // aligned_alloc() is part of C11, and thus part of C++17, at least in theory...
@@ -15,7 +28,7 @@ extern void *aligned_alloc(size_t alignment, size_t size);
 extern void free(void *);
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
-    const size_t alignment = halide_malloc_alignment();
+    const size_t alignment = Halide::Runtime::Internal::_alignment;
     // The size parameter for aligned_alloc() must be an integral multiple of alignment.
     const size_t aligned_size = align_up(x, alignment);
     return aligned_alloc(alignment, aligned_size);

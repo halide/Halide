@@ -9,7 +9,6 @@
 #include <set>
 #include <unordered_set>
 
-// TODO: apparently not part of the public Halide API. Should it be?
 extern "C" int halide_malloc_alignment();
 
 namespace hannk {
