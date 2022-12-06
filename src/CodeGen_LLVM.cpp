@@ -1681,11 +1681,11 @@ void CodeGen_LLVM::visit(const EQ *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "oeq")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "oeq")) {
             value = builder->CreateFCmpOEQ(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "eq")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "eq")) {
             value = builder->CreateICmpEQ(a, b);
         }
     }
@@ -1701,11 +1701,11 @@ void CodeGen_LLVM::visit(const NE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "one")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "one")) {
             value = builder->CreateFCmpONE(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "ne")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "ne")) {
             value = builder->CreateICmpNE(a, b);
         }
     }
@@ -1721,15 +1721,15 @@ void CodeGen_LLVM::visit(const LT *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "olt")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "olt")) {
             value = builder->CreateFCmpOLT(a, b);
         }
     } else if (t.is_int()) {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "slt")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "slt")) {
             value = builder->CreateICmpSLT(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "ult")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "ult")) {
             value = builder->CreateICmpULT(a, b);
         }
     }
@@ -1745,15 +1745,15 @@ void CodeGen_LLVM::visit(const LE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "ole")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "ole")) {
             value = builder->CreateFCmpOLE(a, b);
         }
     } else if (t.is_int()) {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "sle")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "sle")) {
             value = builder->CreateICmpSLE(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "ule")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "ule")) {
             value = builder->CreateICmpULE(a, b);
         }
     }
@@ -1770,15 +1770,15 @@ void CodeGen_LLVM::visit(const GT *op) {
     Value *b = codegen(op->b);
 
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "ogt")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "ogt")) {
             value = builder->CreateFCmpOGT(a, b);
         }
     } else if (t.is_int()) {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "sgt")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "sgt")) {
             value = builder->CreateICmpSGT(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "ugt")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "ugt")) {
             value = builder->CreateICmpUGT(a, b);
         }
     }
@@ -1794,15 +1794,15 @@ void CodeGen_LLVM::visit(const GE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        if (!try_vector_predication_comparison("llvm.vp.fcmp", t, AllEnabledMask(), a, b, "oge")) {
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "oge")) {
             value = builder->CreateFCmpOGE(a, b);
         }
     } else if (t.is_int()) {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "sge")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "sge")) {
             value = builder->CreateICmpSGE(a, b);
         }
     } else {
-        if (!try_vector_predication_comparison("llvm.vp.icmp", t, AllEnabledMask(), a, b, "uge")) {
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "uge")) {
             value = builder->CreateICmpUGE(a, b);
         }
     }
@@ -1853,7 +1853,7 @@ void CodeGen_LLVM::visit(const Select *op) {
     Value *a = codegen(op->true_value);
     Value *b = codegen(op->false_value);
     if (!try_vector_predication_intrinsic("llvm.vp.select", llvm_type_of(op->type), op->type.lanes(),
-                                          AllEnabledMask(), {VPArg(cmp), VPArg(a, 0), VPArg(b)})) {
+                                          NoMask(), {VPArg(cmp), VPArg(a, 0), VPArg(b)})) {
         value = builder->CreateSelect(cmp, a, b);
     }
 }
@@ -5262,8 +5262,10 @@ bool CodeGen_LLVM::try_vector_predication_comparison(const std::string &name, co
         return false;
     }
 
-    llvm::MDBuilder builder(*context);
-    llvm::Value *md_val = llvm::MetadataAsValue::get(*context, builder.createString(cmp_op));
+    internal_assert(result_type.is_bool()) << "Vector predicated comparisons must return bool type.\n";
+
+    llvm::MDBuilder md_builder(*context);
+    llvm::Value *md_val = llvm::MetadataAsValue::get(*context, md_builder.createString(cmp_op));
     return try_vector_predication_intrinsic(name, llvm_type_of(result_type), result_type.lanes(), mask,
                                             {VPArg(a, 0), VPArg(b), VPArg(md_val)});
 }
