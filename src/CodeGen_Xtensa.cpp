@@ -2251,6 +2251,21 @@ HALIDE_ALWAYS_INLINE native_vector_f16 convert<native_vector_f16, native_vector_
 }
 
 template<>
+HALIDE_ALWAYS_INLINE native_vector_f16 convert<native_vector_f16, native_vector_i32_x2>(const native_vector_i32_x2& src) {
+    return convert<native_vector_f16, native_vector_f32_x2>(
+      native_vector_f32_x2(
+        native_vector_f32_x2::from_native_vector,
+        IVP_FLOATN_2X32(src.native_vector[0], 0),
+        IVP_FLOATN_2X32(src.native_vector[1], 0)));
+}
+
+template<>
+HALIDE_ALWAYS_INLINE native_vector_i32_x2 convert<native_vector_i32_x2, native_vector_f16>(const native_vector_f16& src) {
+    native_vector_f32_x2 tmp = convert<native_vector_f32_x2, native_vector_f16>(src);
+    return convert<native_vector_i32_x2, native_vector_f32_x2>(tmp);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE native_vector_i32_x2 convert<native_vector_i32_x2, native_vector_f32_x2>(const native_vector_f32_x2& src) {
   return native_vector_i32_x2(native_vector_i32_x2::from_native_vector,
                   convert<native_vector_i32, native_vector_f32>(src.native_vector[0]),
