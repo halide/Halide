@@ -10,7 +10,7 @@ namespace Internal {
 // Read into a global to avoid making a call to halide_malloc_alignment()
 // in every halide_malloc() call (halide_malloc_alignment() is required to
 // return the same value every time).
-WEAK size_t _alignment = (size_t) halide_malloc_alignment();
+WEAK size_t _alignment = (size_t)halide_malloc_alignment();
 
 }  // namespace Internal
 }  // namespace Runtime
