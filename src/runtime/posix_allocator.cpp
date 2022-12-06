@@ -3,6 +3,19 @@
 
 #include "printer.h"
 
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+
+// Read into a global to avoid making a call to halide_malloc_alignment()
+// in every halide_malloc() call (halide_malloc_alignment() is required to
+// return the same value every time).
+WEAK size_t _alignment = (size_t)halide_malloc_alignment();
+
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
 extern "C" {
 
 extern void *malloc(size_t);
@@ -10,7 +23,7 @@ extern void free(void *);
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
     // Allocate enough space for aligning the pointer we return.
-    const size_t alignment = halide_malloc_alignment();
+    const size_t alignment = _alignment;
     void *orig = malloc(x + alignment);
     if (orig == nullptr) {
         // Will result in a failed assertion and a call to halide_error

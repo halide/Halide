@@ -114,6 +114,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_join_thread,
     (void *)&halide_load_library,
     (void *)&halide_malloc,
+    (void *)&halide_malloc_alignment,
     (void *)&halide_memoization_cache_cleanup,
     (void *)&halide_memoization_cache_evict,
     (void *)&halide_memoization_cache_lookup,

@@ -1,7 +1,6 @@
 #include "HalideRuntime.h"
 
 extern "C" {
-
 extern void *malloc(size_t);
 extern void free(void *);
 }
@@ -54,13 +53,18 @@ WEAK __attribute__((destructor)) void halide_allocator_cleanup() {
     }
 }
 
+// Read into a global to avoid making a call to halide_malloc_alignment()
+// in every halide_malloc() call (halide_malloc_alignment() is required to
+// return the same value every time).
+WEAK size_t _alignment = (size_t)halide_malloc_alignment();
+
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
     // Hexagon needs up to 128 byte alignment.
-    const size_t alignment = 128;
+    const size_t alignment = Halide::Runtime::Internal::_alignment;
 
     if (x <= buffer_size) {
         for (int i = 0; i < num_buffers; ++i) {

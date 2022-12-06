@@ -364,13 +364,15 @@ extern int halide_set_num_threads(int n);
  * halide_default_malloc/free.
  *
  * Note that halide_malloc must return a pointer aligned to the
- * maximum meaningful alignment for the platform for the purpose of
- * vector loads and stores. The default implementation uses 32-byte
- * alignment, which is safe for arm and x86. Additionally, it must be
- * safe to read at least 8 bytes before the start and beyond the
- * end.
+ * the value returned by halide_malloc_alignment().
+ *
+ * The default implementation of halide_malloc_alignment() will be chosen to be
+ * the maximum meaningful alignment for the platform for the purpose of
+ * vector loads and stores for a given architecture. You may override this
+ * function, but bear in mind that it must return the same value for every call.
  */
 //@{
+extern int halide_malloc_alignment();
 extern void *halide_malloc(void *user_context, size_t x);
 extern void halide_free(void *user_context, void *ptr);
 extern void *halide_default_malloc(void *user_context, size_t x);

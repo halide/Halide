@@ -195,7 +195,7 @@ struct halide_pseudostack_slot_t {
 WEAK void halide_use_jit_module();
 WEAK void halide_release_jit_module();
 
-WEAK_INLINE int halide_malloc_alignment();
+WEAK int halide_malloc_alignment();
 
 void halide_thread_yield();
 
