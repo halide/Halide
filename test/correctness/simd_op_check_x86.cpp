@@ -635,7 +635,7 @@ int main(int argc, char **argv) {
             // See above: don't test avx512 without extra features, the test
             // isn't yet set up to test it properly.
             // Target("x86-64-linux-sse41-avx-avx2-avx512"),
-            Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_knl"),
+            // Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_knl"),
             Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_skylake"),
             Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_skylake-avx512_cannonlake"),
             Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_sapphirerapids"),
