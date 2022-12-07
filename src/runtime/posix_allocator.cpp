@@ -7,12 +7,12 @@ extern void *malloc(size_t);
 extern void free(void *);
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
-    const size_t alignment = Halide::Runtime::Internal::_malloc_alignment();
-    return ::Halide::Runtime::Internal::_aligned_alloc(alignment, x);
+    const size_t alignment = ::halide_internal_malloc_alignment();
+    return ::halide_internal_aligned_alloc(alignment, x);
 }
 
 WEAK void halide_default_free(void *user_context, void *ptr) {
-    ::Halide::Runtime::Internal::_aligned_free(ptr);
+    ::halide_internal_aligned_free(ptr);
 }
 }
 

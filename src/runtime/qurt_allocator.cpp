@@ -27,7 +27,7 @@ WEAK void *mem_buf[num_buffers] = {
 
 WEAK __attribute__((destructor)) void halide_allocator_cleanup() {
     for (void *buf : mem_buf) {
-        ::Halide::Runtime::Internal::_aligned_free(buf);
+        ::halide_internal_aligned_free(buf);
     }
 }
 
@@ -36,20 +36,20 @@ WEAK __attribute__((destructor)) void halide_allocator_cleanup() {
 }  // namespace Halide
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
-    const size_t alignment = Halide::Runtime::Internal::_malloc_alignment();
+    const size_t alignment = ::halide_internal_malloc_alignment();
 
     if (x <= buffer_size) {
         for (int i = 0; i < num_buffers; ++i) {
             if (__sync_val_compare_and_swap(buf_is_used + i, 0, 1) == 0) {
                 if (mem_buf[i] == nullptr) {
-                    mem_buf[i] = ::Halide::Runtime::Internal::_aligned_alloc(alignment, buffer_size);
+                    mem_buf[i] = ::halide_internal_aligned_alloc(alignment, buffer_size);
                 }
                 return mem_buf[i];
             }
         }
     }
 
-    return ::Halide::Runtime::Internal::_aligned_alloc(alignment, x);
+    return ::halide_internal_aligned_alloc(alignment, x);
 }
 
 WEAK void halide_default_free(void *user_context, void *ptr) {
@@ -60,7 +60,7 @@ WEAK void halide_default_free(void *user_context, void *ptr) {
         }
     }
 
-    ::Halide::Runtime::Internal::_aligned_free(ptr);
+    ::halide_internal_aligned_free(ptr);
 }
 
 namespace Halide {

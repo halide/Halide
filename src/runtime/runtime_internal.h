@@ -195,6 +195,12 @@ struct halide_pseudostack_slot_t {
 WEAK void halide_use_jit_module();
 WEAK void halide_release_jit_module();
 
+// These are all intended to be inlined into other pieces of runtime code;
+// they are not intended to be called or replaced by user code.
+WEAK_INLINE int halide_internal_malloc_alignment();
+WEAK_INLINE void *halide_internal_aligned_alloc(size_t alignment, size_t size);
+WEAK_INLINE void halide_internal_aligned_free(void *ptr);
+
 void halide_thread_yield();
 
 }  // extern "C"
@@ -229,16 +235,18 @@ ALWAYS_INLINE T min(const T &a, const T &b) {
 
 }  // namespace
 
-// A namespace for runtime modules to store their internal state in.
-namespace Halide::Runtime::Internal {
-
-// These are all intended to be inlined into other pieces of runtime code;
-// they are not intended to be called or replaced by user code.
-WEAK_INLINE int _malloc_alignment();
-WEAK_INLINE void *_aligned_alloc(size_t alignment, size_t size);
-WEAK_INLINE void _aligned_free(void *ptr);
-
-}  // namespace Halide::Runtime::Internal
+// A namespace for runtime modules to store their internal state
+// in. Should not be for things communicated between runtime modules,
+// because it's possible for them to be compiled with different c++
+// name mangling due to mixing and matching target triples (this usually
+// only affects Windows builds).
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+// Empty
+}
+}  // namespace Runtime
+}  // namespace Halide
 using namespace Halide::Runtime::Internal;
 
 /** halide_abort_if_false() is a macro that calls halide_print if the supplied condition is

@@ -6,12 +6,8 @@ extern "C" {
 extern void *aligned_alloc(size_t alignment, size_t size);
 extern void free(void *);
 
-}  // extern "C"
-
-namespace Halide::Runtime::Internal {
-
 // An implementation of aligned_alloc() that is layered on top of aligned_alloc().
-WEAK_INLINE void *_aligned_alloc(size_t alignment, size_t size) {
+WEAK_INLINE void *halide_internal_aligned_alloc(size_t alignment, size_t size) {
     // Alignment must be a power of two and >= sizeof(void*)
     halide_debug_assert(nullptr, is_power_of_two(alignment) && alignment >= sizeof(void *));
 
@@ -19,8 +15,8 @@ WEAK_INLINE void *_aligned_alloc(size_t alignment, size_t size) {
     return ::aligned_alloc(alignment, aligned_size);
 }
 
-WEAK_INLINE void _aligned_free(void *ptr) {
+WEAK_INLINE void halide_internal_aligned_free(void *ptr) {
     ::free(ptr);
 }
 
-}  // namespace Halide::Runtime::Internal
+}  // extern "C"

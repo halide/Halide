@@ -903,7 +903,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 }
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
-                // Windows has its own special _aligned_alloc() implementation
+                // Windows has its own special halide_internal_aligned_alloc() implementation
                 modules.push_back(get_initmod_windows_aligned_alloc(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));

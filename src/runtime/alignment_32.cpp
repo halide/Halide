@@ -1,8 +1,8 @@
 #include "runtime_internal.h"
 
-namespace Halide::Runtime::Internal {
+extern "C" {
 
-WEAK_INLINE int _malloc_alignment() {
+WEAK_INLINE int halide_internal_malloc_alignment() {
     return 32;
 }
-}  // namespace Halide::Runtime::Internal
+}  // extern "C"
