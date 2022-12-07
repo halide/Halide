@@ -36,14 +36,14 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
         return parse_bitcode_file(sb, context, #mod);                                     \
     }
 
-#define DECLARE_NO_INITMOD(mod)                                                                        \
-    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool = false, bool = false) { \
-        user_error << "Halide was compiled without support for this target\n";                         \
-        return std::unique_ptr<llvm::Module>();                                                        \
-    }                                                                                                  \
-    std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {                        \
-        user_error << "Halide was compiled without support for this target\n";                         \
-        return std::unique_ptr<llvm::Module>();                                                        \
+#define DECLARE_NO_INITMOD(mod)                                                                                         \
+    [[maybe_unused]] std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool = false, bool = false) { \
+        user_error << "Halide was compiled without support for this target\n";                                          \
+        return std::unique_ptr<llvm::Module>();                                                                         \
+    }                                                                                                                   \
+    [[maybe_unused]] std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {                        \
+        user_error << "Halide was compiled without support for this target\n";                                          \
+        return std::unique_ptr<llvm::Module>();                                                                         \
     }
 
 #define DECLARE_CPP_INITMOD_LOOKUP(mod)                                                                     \
