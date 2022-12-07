@@ -1078,5 +1078,11 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
-    return SimdOpCheckTest::main<SimdOpCheckARM>(argc, argv);
+    return SimdOpCheckTest::main<SimdOpCheckARM>(
+        argc, argv,
+        {
+            Target("arm-32-linux"),
+            Target("arm-64-linux"),
+            Target("arm-64-linux-arm_dot_prod"),
+        });
 }

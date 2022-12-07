@@ -6,6 +6,7 @@
 #include "test_sharding.h"
 
 #include <fstream>
+#include <iostream>
 
 namespace Halide {
 struct TestResult {
@@ -322,13 +323,22 @@ public:
         /* First add some tests based on the target */
         add_tests();
 
+        // Remove irrelevant noise from output
+        const Target echo_target = target
+                                       .without_feature(Target::NoRuntime)
+                                       .without_feature(Target::NoAsserts)
+                                       .without_feature(Target::NoBoundsQuery);
+        const std::string echo_target_str = echo_target.to_string();
+
         Sharder sharder;
         bool success = true;
         for (size_t t = 0; t < tasks.size(); t++) {
             if (!sharder.should_run(t)) continue;
             const auto &task = tasks.at(t);
             auto result = check_one(task.op, task.name, task.vector_width, task.expr);
-            std::cout << result.op << "\n";
+            constexpr int tabstop = 32;
+            const int spaces = std::max(1, tabstop - (int)result.op.size());
+            std::cout << result.op << std::string(spaces, ' ') << "(" << echo_target_str << ")\n";
             if (!result.error_msg.empty()) {
                 std::cerr << result.error_msg;
                 success = false;
@@ -339,46 +349,47 @@ public:
     }
 
     template<typename SIMDOpCheckT>
-    static int main(int argc, char **argv) {
+    static int main(int argc, char **argv, const std::vector<Target> &targets_to_test) {
         Target host = get_host_target();
-        Target hl_target = get_target_from_environment();
-        printf("host is:      %s\n", host.to_string().c_str());
-        printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
-
-        SIMDOpCheckT test(hl_target);
-
-        if (argc > 1) {
-            test.filter = argv[1];
-        }
-
-        if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
-            test.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
-        }
+        std::cout << "host is:      " << host << "\n";
 
         const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
         std::cout << "simd_op_check test seed: " << seed << "\n";
-        test.set_seed(seed);
 
-        if (argc > 2) {
-            // Don't forget: if you want to run the standard tests to a specific output
-            // directory, you'll need to invoke with the first arg enclosed
-            // in quotes (to avoid it being wildcard-expanded by the shell):
-            //
-            //    correctness_simd_op_check "*" /path/to/output
-            //
-            test.output_directory = argv[2];
+        for (const auto &t : targets_to_test) {
+            SIMDOpCheckT test(t);
+
+            if (argc > 1) {
+                test.filter = argv[1];
+            }
+
+            if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
+                test.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
+            }
+
+            test.set_seed(seed);
+
+            if (argc > 2) {
+                // Don't forget: if you want to run the standard tests to a specific output
+                // directory, you'll need to invoke with the first arg enclosed
+                // in quotes (to avoid it being wildcard-expanded by the shell):
+                //
+                //    correctness_simd_op_check "*" /path/to/output
+                //
+                test.output_directory = argv[2];
+            }
+
+            bool success = test.test_all();
+
+            // Compile a runtime for this target, for use in the static test.
+            compile_standalone_runtime(test.output_directory + "simd_op_check_runtime.o", test.target);
+
+            if (!success) {
+                return -1;
+            }
         }
 
-        bool success = test.test_all();
-
-        // Compile a runtime for this target, for use in the static test.
-        compile_standalone_runtime(test.output_directory + "simd_op_check_runtime.o", test.target);
-
-        if (!success) {
-            return -1;
-        }
-
-        printf("Success!\n");
+        std::cout << "Success!\n";
         return 0;
     }
 
