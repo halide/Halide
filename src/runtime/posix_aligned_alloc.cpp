@@ -13,7 +13,7 @@ namespace Halide::Runtime::Internal {
 // An implementation of aligned_alloc() that is layered on top of malloc()/free().
 WEAK_INLINE void *_aligned_alloc(size_t alignment, size_t size) {
     // Alignment must be a power of two and >= sizeof(void*)
-    halide_debug_assert(nullptr, is_power_of_two(alignment) && alignment >= sizeof(void*));
+    halide_debug_assert(nullptr, is_power_of_two(alignment) && alignment >= sizeof(void *));
 
     // Allocate enough space for aligning the pointer we return.
     //
