@@ -318,6 +318,17 @@ int main(int argc, char **argv) {
         }
     }
 
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    {
+        float16_t f(1.0f16);
+        _Float16 f2 = (_Float16)f;
+        if (f2 != 1.0f16) {
+            printf("Roundtrip of 16-bit float via _Float16 failed.\n");
+            return -1;
+        }
+    }
+#endif
+
     printf("Success!\n");
     return 0;
 }
