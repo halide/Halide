@@ -72,12 +72,12 @@
 
 #elif defined(__APPLE__)
 
-    #if TARGET_OS_OSX && (__MAC_OS_X_VERSION_MAX_ALLOWED < __MAC_10_15)
+    #if TARGET_OS_OSX && (__MAC_OS_X_VERSION_MIN_REQUIRED < __MAC_10_15)
 
         // macOS doesn't provide aligned_alloc until 10.15
         #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
 
-    #elif TARGET_OS_IPHONE && (__IPHONE_OS_VERSION_MAX_ALLOWED < 101500)
+    #elif TARGET_OS_IPHONE && (__IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_14_0)
 
         // iOS doesn't provide aligned_alloc until 14.0
         #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
