@@ -529,6 +529,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
     {"spirv", Target::SPIRV},
+    {"no_aligned_alloc", Target::NoAlignedAlloc},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 

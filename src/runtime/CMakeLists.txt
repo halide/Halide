@@ -1,6 +1,7 @@
 # Keep these lists in alphabetical order.
 set(RUNTIME_CPP
     aarch64_cpu_features
+    aligned_alloc_aligned_alloc
     alignment_128
     alignment_32
     alignment_64
@@ -52,6 +53,7 @@ set(RUNTIME_CPP
     osx_host_cpu_count
     osx_opengl_context
     osx_yield
+    posix_aligned_alloc
     posix_allocator
     posix_clock
     posix_error_handler
@@ -79,10 +81,11 @@ set(RUNTIME_CPP
     trace_helper
     tracing
     wasm_cpu_features
+    windows_aligned_alloc
     windows_clock
     windows_cuda
-    windows_d3d12compute_x86
     windows_d3d12compute_arm
+    windows_d3d12compute_x86
     windows_get_symbol
     windows_io
     windows_opencl

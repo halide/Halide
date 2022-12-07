@@ -3,14 +3,17 @@
 #include "interpreter/transforms.h"
 #include "util/error_util.h"
 
+#include "HalideBuffer.h"  // for HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT
 #include "HalideRuntime.h"
 
 #include <map>
 #include <set>
 #include <unordered_set>
 
-// TODO: apparently not part of the public Halide API. Should it be?
-extern "C" int halide_malloc_alignment();
+// TODO: temporary, until https://github.com/halide/Halide/pull/7190 lands
+#ifndef HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT
+#define HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT 128
+#endif
 
 namespace hannk {
 
@@ -108,8 +111,10 @@ std::unique_ptr<char[]> allocate_tensors(const Op *root, const InterpreterOption
     // Feed this info to the allocation planner.
     // Let's assume that whatever alignment halide_malloc() needs is necessary here, too.
     // (Note that TFLite will complain if alignment is less than 64...)
+    // Let's assume that whatever alignment Halide::Runtime::Buffer needs is necessary here, too.
     constexpr int kTfLiteDefaultTensorAlignment = 64;
-    const size_t alignment = (size_t)std::max(halide_malloc_alignment(), kTfLiteDefaultTensorAlignment);
+    constexpr int kHalideBufferAlignment = HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT;
+    constexpr size_t alignment = (size_t)std::max(kHalideBufferAlignment, kTfLiteDefaultTensorAlignment);
     AllocationPlanner planner(alignment);
     for (auto &it : find_tensors.tensor_info) {
         auto &info = it.second;
