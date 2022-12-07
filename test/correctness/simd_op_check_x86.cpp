@@ -83,6 +83,11 @@ public:
             check("psubsw", 4 * w, i16_sat(i32(i16_1) - i32(i16_2)));
             check("paddusw", 4 * w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
             check("psubusw", 4 * w, u16(max(i32(u16_1) - i32(u16_2), 0)));
+
+            // unsigned absd is lowered as an or of saturating subtracts
+            check("psubusb", 16 * w, absd(u8_1, u8_2));
+            check("psubusw", 16 * w, absd(u16_1, u16_2));
+
             check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) / (256 * 256)));
             check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> cast<unsigned>(16)));
             check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> cast<int>(16)));
@@ -469,6 +474,12 @@ public:
                 check("vpabsb*" + suffix, 32 * m, abs(i8_1));
                 check("vpabsw*" + suffix, 16 * m, abs(i16_1));
                 check("vpabsd*" + suffix, 8 * m, abs(i32_1));
+
+                check("vpsubusb*" + suffix, 32 * m, absd(u8_1, u8_2));
+                check("vpsubusw*" + suffix, 16 * m, absd(u16_1, u16_2));
+                check("vpmaxsb*" + suffix, 32 * m, absd(i8_1, i8_2));
+                check("vpmaxsw*" + suffix, 16 * m, absd(i16_1, i16_2));
+                check("vpmaxsd*" + suffix, 8 * m, absd(i32_1, i32_2));
             };
 
             check_x86_fixed_point("ymm", 1);
