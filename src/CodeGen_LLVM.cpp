@@ -5146,22 +5146,33 @@ llvm::Constant *CodeGen_LLVM::get_splat(int lanes, llvm::Constant *value,
     return ConstantVector::getSplat(ec, value);
 }
 
-std::string CodeGen_LLVM::mangle_llvm_vector_type(llvm::Type *type) {
+std::string CodeGen_LLVM::mangle_llvm_type(llvm::Type *type) {
     std::string type_string = ".";
-    bool is_scalable = isa<llvm::ScalableVectorType>(type);
     llvm::ElementCount llvm_vector_ec;
-    if (is_scalable) {
+    if (isa<PointerType>(type)) {
+        const auto *vt = cast<llvm::PointerType>(type);
+        type_string = ".p" + std::to_string(vt->getAddressSpace());
+    } else if (isa<llvm::ScalableVectorType>(type)) {
         const auto *vt = cast<llvm::ScalableVectorType>(type);
         const char *type_designator = vt->getElementType()->isIntegerTy() ? "i" : "f";
         std::string bits_designator = std::to_string(vt->getScalarSizeInBits());
         llvm_vector_ec = vt->getElementCount();
         type_string = ".nxv" + std::to_string(vt->getMinNumElements()) + type_designator + bits_designator;
-    } else {
+    } else if (isa<llvm::FixedVectorType>(type)) {
         const auto *vt = cast<llvm::FixedVectorType>(type);
         const char *type_designator = vt->getElementType()->isIntegerTy() ? "i" : "f";
         std::string bits_designator = std::to_string(vt->getScalarSizeInBits());
         llvm_vector_ec = vt->getElementCount();
         type_string = ".v" + std::to_string(vt->getNumElements()) + type_designator + bits_designator;
+    } else if (type->isIntegerTy()) {
+        type_string = ".i" + std::to_string(type->getScalarSizeInBits());
+    } else if (type->isFloatTy()) {
+        type_string = ".f" + std::to_string(type->getScalarSizeInBits());
+    } else {
+        std::string type_name;
+        llvm::raw_string_ostream type_name_stream(type_name);
+        type->print(type_name_stream, true);
+        internal_error << "Attempt to mangle unknown LLVM type " << type_name << "\n";
     }
     return type_string;
 }
@@ -5205,19 +5216,11 @@ bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, VPR
         args.push_back(arg.value);
         if (arg.mangle_index) {
             llvm::Type *llvm_type = arg.value->getType();
-            if (isa<PointerType>(llvm_type)) {
-                mangled_types[arg.mangle_index.value()] = ".p0";
-            } else {
-                mangled_types[arg.mangle_index.value()] = mangle_llvm_vector_type(llvm_type);
-            }
+            mangled_types[arg.mangle_index.value()] = mangle_llvm_type(llvm_type);
         }
     }
     if (result_type.mangle_index) {
-        if (isa<PointerType>(llvm_result_type)) {
-            mangled_types[result_type.mangle_index.value()] = ".p0";
-        } else {
-            mangled_types[result_type.mangle_index.value()] = mangle_llvm_vector_type(llvm_result_type);
-        }
+        mangled_types[result_type.mangle_index.value()] = mangle_llvm_type(llvm_result_type);
     }
 
     std::string full_name = name;

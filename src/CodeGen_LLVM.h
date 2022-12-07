@@ -304,12 +304,13 @@ protected:
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
 
-    /** Return type string for LLVM vector type using LLVM IR intrinsic type mangling.
-     * E.g. ".nxv4i32" for a scalable vector of four 32-bit integers,
+    /** Return type string for LLVM type using LLVM IR intrinsic type mangling.
+     * E.g. ".i32 or ".f32" for scalars, ".p0" for pointers,
+     * ".nxv4i32" for a scalable vector of four 32-bit integers,
      * or ".v4f32" for a fixed vector of four 32-bit floats.
      * The dot is included in the result.
      */
-    std::string mangle_llvm_vector_type(llvm::Type *type);
+    std::string mangle_llvm_type(llvm::Type *type);
 
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
     llvm::Value *make_halide_type_t(const Type &);
