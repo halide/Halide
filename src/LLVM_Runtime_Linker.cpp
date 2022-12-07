@@ -345,9 +345,9 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         }
     } else if (target.arch == Target::POWERPC) {
         if (target.bits == 32) {
-            return llvm::DataLayout("e-m:e-i32:32-n32");
+            return llvm::DataLayout("E-m:e-p:32:32-i64:64-n32");
         } else {
-            return llvm::DataLayout("e-m:e-i64:64-n32:64");
+            return llvm::DataLayout("e-m:e-i64:64-n32:64-S128-v256:256:256-v512:512:512");
         }
     } else if (target.arch == Target::Hexagon) {
         return llvm::DataLayout(
@@ -360,7 +360,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             return llvm::DataLayout("e-m:e-p:64:64-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20");
         }
     } else if (target.arch == Target::RISCV) {
-        // TODO: Valdidate this data layout is correct for RISCV. Assumption is it is like MIPS.
+        // TODO: Validate this data layout is correct for RISCV. Assumption is it is like MIPS.
         if (target.bits == 32) {
             return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32-S128");
         } else {
