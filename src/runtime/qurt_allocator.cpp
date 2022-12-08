@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "runtime_internal.h"
 
 extern "C" {
 extern void *malloc(size_t);
@@ -8,6 +9,15 @@ extern void free(void *);
 namespace Halide {
 namespace Runtime {
 namespace Internal {
+
+ALWAYS_INLINE void *aligned_malloc(size_t alignment, size_t size) {
+    void *ptr = ::halide_internal_aligned_alloc(alignment, size);
+    return ptr;
+}
+
+ALWAYS_INLINE void aligned_free(void *ptr) {
+    ::halide_internal_aligned_free(ptr);
+}
 
 // We keep a small pool of small pre-allocated buffers for use by Halide
 // code; some kernels end up doing per-scanline allocations and frees,
@@ -27,7 +37,7 @@ WEAK void *mem_buf[num_buffers] = {
 
 WEAK __attribute__((destructor)) void halide_allocator_cleanup() {
     for (void *buf : mem_buf) {
-        ::halide_internal_aligned_free(buf);
+        aligned_free(buf);
     }
 }
 
@@ -42,14 +52,14 @@ WEAK void *halide_default_malloc(void *user_context, size_t x) {
         for (int i = 0; i < num_buffers; ++i) {
             if (__sync_val_compare_and_swap(buf_is_used + i, 0, 1) == 0) {
                 if (mem_buf[i] == nullptr) {
-                    mem_buf[i] = ::halide_internal_aligned_alloc(alignment, buffer_size);
+                    mem_buf[i] = aligned_malloc(alignment, buffer_size);
                 }
                 return mem_buf[i];
             }
         }
     }
 
-    return ::halide_internal_aligned_alloc(alignment, x);
+    return aligned_malloc(alignment, x);
 }
 
 WEAK void halide_default_free(void *user_context, void *ptr) {
@@ -60,7 +70,7 @@ WEAK void halide_default_free(void *user_context, void *ptr) {
         }
     }
 
-    ::halide_internal_aligned_free(ptr);
+    aligned_free(ptr);
 }
 
 namespace Halide {
