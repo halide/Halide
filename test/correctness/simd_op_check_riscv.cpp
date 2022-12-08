@@ -37,8 +37,7 @@ public:
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
         Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
 
-        // TODO: Not actually being generated at top-of-tree: https://github.com/halide/Halide/issues/7217
-        // check("vmseq.vv", target.natural_vector_size<uint8_t>(), select(u8_1 == u8_2, u8(1), u8(2)));
+        check("vmseq.vv", target.natural_vector_size<uint8_t>(), select(u8_1 == u8_2, u8(1), u8(2)));
     }
 
 private:
@@ -54,6 +53,7 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckRISCV>(
         argc, argv,
         {
-            Target("riscv-64-linux-rvv"),
+            Target("riscv-64-linux-rvv-vector_bits_128"),
+            Target("riscv-64-linux-rvv-vector_bits_512"),
         });
 }
