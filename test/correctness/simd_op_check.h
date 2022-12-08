@@ -71,10 +71,8 @@ public:
     }
 
     virtual bool can_run_code() const {
-        // Assume we are configured to run wasm if requested
-        // (we'll fail further downstream if not)
         if (target.arch == Target::WebAssembly) {
-            return true;
+            return Halide::Internal::WasmModule::can_jit_target(Target("wasm-32-wasmrt"));
         }
         // If we can (target matches host), run the error checking Halide::Func.
         Target host_target = get_host_target();
