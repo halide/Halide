@@ -84,12 +84,29 @@ public:
              target.os == host_target.os);
         // A bunch of feature flags also need to match between the
         // compiled code and the host in order to run the code.
-        for (Target::Feature f : {Target::SSE41, Target::AVX,
-                                  Target::AVX2, Target::AVX512,
-                                  Target::FMA, Target::FMA4, Target::F16C,
-                                  Target::VSX, Target::POWER_ARCH_2_07,
-                                  Target::ARMv7s, Target::NoNEON,
-                                  Target::WasmSimd128}) {
+        for (Target::Feature f : {
+                 Target::ARMDotProd,
+                 Target::ARMFp16,
+                 Target::ARMv7s,
+                 Target::ARMv81a,
+                 Target::AVX,
+                 Target::AVX2,
+                 Target::AVX512,
+                 Target::AVX512_Cannonlake,
+                 Target::AVX512_KNL,
+                 Target::AVX512_SapphireRapids,
+                 Target::AVX512_Skylake,
+                 Target::F16C,
+                 Target::FMA,
+                 Target::FMA4,
+                 Target::NoNEON,
+                 Target::POWER_ARCH_2_07,
+                 Target::RVV,
+                 Target::SSE41,
+                 Target::SVE,
+                 Target::SVE2,
+                 Target::VSX,
+             }) {
             if (target.has_feature(f) != host_target.has_feature(f)) {
                 can_run_the_code = false;
             }
@@ -115,7 +132,7 @@ public:
         bool found_it = false;
 
         std::ostringstream msg;
-        msg << op << " did not generate for target=" << target.to_string() << " vector_width=" << vector_width << ". Instead we got:\n";
+        msg << op << " did not generate for target=" << get_run_target().to_string() << " vector_width=" << vector_width << ". Instead we got:\n";
 
         std::string line;
         while (getline(asm_file, line)) {
@@ -170,6 +187,13 @@ public:
     // Check if a substring of str matches a pattern p.
     bool wildcard_search(const std::string &p, const std::string &str) const {
         return wildcard_match("*" + p + "*", str);
+    }
+
+    Target get_run_target() const {
+        return target
+            .without_feature(Target::NoRuntime)
+            .without_feature(Target::NoAsserts)
+            .without_feature(Target::NoBoundsQuery);
     }
 
     TestResult check_one(const std::string &op, const std::string &name, int vector_width, Expr e) {
@@ -232,10 +256,7 @@ public:
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
-            Target run_target = target
-                                    .without_feature(Target::NoRuntime)
-                                    .without_feature(Target::NoAsserts)
-                                    .without_feature(Target::NoBoundsQuery);
+            Target run_target = get_run_target();
 
             error.infer_input_bounds({}, run_target);
             // Fill the inputs with noise
@@ -324,11 +345,8 @@ public:
         add_tests();
 
         // Remove irrelevant noise from output
-        const Target echo_target = target
-                                       .without_feature(Target::NoRuntime)
-                                       .without_feature(Target::NoAsserts)
-                                       .without_feature(Target::NoBoundsQuery);
-        const std::string echo_target_str = echo_target.to_string();
+        const Target run_target = get_run_target();
+        const std::string run_target_str = run_target.to_string();
 
         Sharder sharder;
         bool success = true;
@@ -338,7 +356,7 @@ public:
             auto result = check_one(task.op, task.name, task.vector_width, task.expr);
             constexpr int tabstop = 32;
             const int spaces = std::max(1, tabstop - (int)result.op.size());
-            std::cout << result.op << std::string(spaces, ' ') << "(" << echo_target_str << ")\n";
+            std::cout << result.op << std::string(spaces, ' ') << "(" << run_target_str << ")\n";
             if (!result.error_msg.empty()) {
                 std::cerr << result.error_msg;
                 success = false;
