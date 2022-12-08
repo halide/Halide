@@ -35,14 +35,17 @@ public:
         // We are going to print only main function.
         msg << "Skipping non-main function definitions..."
             << "\n";
+        std::string sanitized_op = op;
+        sanitize(sanitized_op);
         bool inside_the_function = false;
         while (getline(cpp_file, line)) {
-            if (!inside_the_function && (line.find("int _op_" + op) != std::string::npos)) {
+            if (!inside_the_function && ((line.find("int _op_" + op) != std::string::npos) || (line.find("int _op_" + sanitized_op) != std::string::npos))) {
                 inside_the_function = true;
             }
             if (!inside_the_function) {
                 continue;
             }
+
             msg << line << "\n";
             // Check for the op in question
             found_it |= wildcard_search(op, line) && !wildcard_search("_" + op, line);
@@ -103,10 +106,10 @@ public:
         check("IVP_SLLIN_2X32", vector_width / 4, u32_1 * 4);
 
         // Casts.
-        // check("convert_to_int32x32_t_from_int16x32_t", vector_width / 2, i32(i16_1));// Failing
-        // check("convert_to_int16x16_t_from_int32x16_t", vector_width / 4, i16(i32_1));// Failing
-        // check("convert_to_uint32x32_t_from_uint16x32_t", vector_width / 2, u32(u16_1));// Failing
-        // check("convert_to_uint16x16_t_from_uint32x16_t", vector_width / 4, u16(u32_1));// Failing
+        check("convert<int32x32_t,int16x32_t>", vector_width / 2, i32(i16_1));
+        check("store_narrowing<int32x16_t, int16_t, 16>", vector_width / 4, i16(i32_1));
+        check("convert<uint32x32_t,uint16x32_t>", vector_width / 2, u32(u16_1));
+        check("store_narrowing<uint32x16_t, uint16_t, 16>", vector_width / 4, u16(u32_1));
 
         // Averaging instructions.
         check("IVP_AVGUNX16", vector_width / 2, u16((u32(u16_1) + u32(u16_2)) / 2));
