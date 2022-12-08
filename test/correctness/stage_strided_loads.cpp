@@ -8,8 +8,11 @@ class CheckForStridedLoads : public IRMutator {
 
     Expr visit(const Load *op) override {
         if (const Ramp *r = op->index.as<Ramp>()) {
-            found |= !is_const_one(r->stride);
-            dense_loads += op->name == "buf";
+            if (op->name == buf_name) {
+                bool dense = is_const_one(r->stride);
+                found |= !dense;
+                dense_loads += dense;
+            }
         }
         return IRMutator::visit(op);
     }
@@ -17,13 +20,25 @@ class CheckForStridedLoads : public IRMutator {
 public:
     bool found = false;
     int dense_loads = 0;
+    std::string buf_name;
 
-    void check(Func f, int desired_dense_loads) {
+    void check(Func f, int desired_dense_loads, std::string name = "buf") {
         found = false;
         dense_loads = 0;
+        buf_name = name;
         f.add_custom_lowering_pass(this, nullptr);
         f.compile_jit();
         assert(!found);
+        assert(dense_loads == desired_dense_loads);
+    }
+
+    void check_not(Func f, int desired_dense_loads, std::string name = "buf") {
+        found = false;
+        dense_loads = 0;
+        buf_name = name;
+        f.add_custom_lowering_pass(this, nullptr);
+        f.compile_jit();
+        assert(found);
         assert(dense_loads == desired_dense_loads);
     }
 } checker;
@@ -138,6 +153,48 @@ int main(int argc, char **argv) {
         g.compute_at(f, x).vectorize(x);
         h.compute_at(f, x).vectorize(x);
         checker.check(f, 2);
+    }
+
+    // We can always densify strided loads to internal allocations, because we
+    // can just pad the allocation.
+    {
+        Func f, g;
+        Var x;
+
+        f(x) = x;
+        g(x) = f(2 * x);
+        f.compute_at(g, x).vectorize(x);
+        g.vectorize(x, 8, TailStrategy::RoundUp);
+        checker.check(g, 1, f.name());
+    }
+
+    // Strides up to the the vector size are worth densifying. After that, it's better to just gather.
+    {
+        Func f;
+        Var x;
+        f(x) = buf(15 * x) + buf(15 * x + 14);
+        f.vectorize(x, 16, TailStrategy::RoundUp);
+
+        checker.check(f, 1);
+    }
+
+    {
+        Func f;
+        Var x;
+        f(x) = buf(16 * x) + buf(16 * x + 15);
+        f.vectorize(x, 16, TailStrategy::RoundUp);
+
+        checker.check_not(f, 0);
+    }
+
+    // Strided loads to external allocations are handled by doing a weird-sized
+    // dense load and then shuffling.
+    {
+        Func f;
+        Var x;
+        f(x) = buf(3 * x);
+        f.vectorize(x, 8, TailStrategy::RoundUp);
+        checker.check(f, 1);
     }
 
     return 0;
