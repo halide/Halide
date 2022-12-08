@@ -764,6 +764,7 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(std::move(extra_module));
     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+    modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
     modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
     modules.push_back(get_initmod_halide_buffer_t(c, bits_64, debug));
     modules.push_back(get_initmod_destructors(c, bits_64, debug));
