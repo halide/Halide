@@ -35,8 +35,7 @@ public:
         // We are going to print only main function.
         msg << "Skipping non-main function definitions..."
             << "\n";
-        std::string sanitized_op = op;
-        sanitize(sanitized_op);
+        std::string sanitized_op = sanitize(op);
         bool inside_the_function = false;
         while (getline(cpp_file, line)) {
             if (!inside_the_function && ((line.find("int _op_" + op) != std::string::npos) || (line.find("int _op_" + sanitized_op) != std::string::npos))) {
@@ -93,7 +92,7 @@ public:
 
         // Multiplications.
         check("IVP_MULNX16PACKL", vector_width / 2, i16_1 * i16_2);
-        check("IVP_PACKLN_2X64W", vector_width / 2, i32_1 * i32_2);
+        check("IVP_MULN_2X32", vector_width / 2, i32_1 * i32_2);
 
         // Shifts.
         check("IVP_SRLNX16", vector_width / 2, u16_1 >> u16_2);
