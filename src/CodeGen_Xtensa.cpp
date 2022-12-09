@@ -1486,6 +1486,13 @@ HALIDE_ALWAYS_INLINE native_vector_u16_x2 halide_xtensa_deinterleave_even_u16(co
       halide_xtensa_deinterleave_even_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[2], a.native_vector[3])));
 }
 
+HALIDE_ALWAYS_INLINE native_vector_u16_x2 halide_xtensa_deinterleave_odd_u16(const native_vector_u16_x4& a) {
+  return native_vector_u16_x2(
+      native_vector_u16_x2::from_native_vector,
+      halide_xtensa_deinterleave_odd_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+      halide_xtensa_deinterleave_odd_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[2], a.native_vector[3])));
+}
+
 HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_deinterleave_even_f32(const native_vector_f32_x2& a) {
   return  IVP_SELN_2XF32I(a.native_vector[1], a.native_vector[0], IVP_SELI_32B_EXTRACT_1_OF_2_OFF_0);
 }
