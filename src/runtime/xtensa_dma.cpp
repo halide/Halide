@@ -1,3 +1,6 @@
+#include "HalideRuntime.h"
+#include "runtime_internal.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -10,12 +13,8 @@ typedef __SIZE_TYPE__ size_t;
 extern void *tcm_alloc_on_bank(size_t size, unsigned char alignment, unsigned char bank);
 extern void tcm_free(void *ptr);
 
-// NOTE(vksnk): original definition has WEAK in front of it, but xtensa linker
-// doesn't seem to handle it correctly.
-int halide_malloc_alignment();
-
 void *halide_tcm_malloc(void *user_context, unsigned int x) {
-    const size_t alignment = halide_malloc_alignment();
+    const size_t alignment = ::halide_malloc_alignment();
     void *ptr = tcm_alloc_on_bank(x, alignment, /*bank=*/0);
     // Try to allocate on the second bank.
     if (!ptr) {
