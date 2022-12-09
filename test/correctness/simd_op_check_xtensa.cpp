@@ -35,14 +35,16 @@ public:
         // We are going to print only main function.
         msg << "Skipping non-main function definitions..."
             << "\n";
+        std::string sanitized_op = sanitize(op);
         bool inside_the_function = false;
         while (getline(cpp_file, line)) {
-            if (!inside_the_function && (line.find("int op_" + op) != std::string::npos)) {
+            if (!inside_the_function && ((line.find("int _op_" + op) != std::string::npos) || (line.find("int _op_" + sanitized_op) != std::string::npos))) {
                 inside_the_function = true;
             }
             if (!inside_the_function) {
                 continue;
             }
+
             msg << line << "\n";
             // Check for the op in question
             found_it |= wildcard_search(op, line) && !wildcard_search("_" + op, line);
@@ -79,34 +81,34 @@ public:
         int vector_width = 64;
 
         // 48-bit math
-        // check("halide_xtensa_widen_mul_i48", vector_width / 2, i32(i16_1) * i32(i16_2));
-        check("halide_xtensa_widen_mul_u48", vector_width / 2, u32(u16_1) * u32(u16_2));
-        check("halide_xtensa_widen_pair_mul_i48", vector_width / 2, i32(i16_1) * i32(i16_2) + i32(i16_3) * i32(i16_4));
-        check("IVP_MULUUPNX16", vector_width / 2, u32(u16_1) * u32(u16_2) + u32(u16_3) * u32(u16_4));
+        check("IVP_MULNX16", vector_width / 2, i32(i16_1) * i32(i16_2));
+        check("IVP_MULUUNX16", vector_width / 2, u32(u16_1) * u32(u16_2));
+        check("halide_xtensa_widen_pair_mul_i48", vector_width / 2, i48(i16_1) * i48(i16_2) + i48(i16_3) * i48(i16_4));
+        check("IVP_MULUUNX16", vector_width / 2, u32(u16_1) * u32(u16_2) + u32(u16_3) * u32(u16_4));
+        check("IVP_MULUUPNX16", vector_width / 2, i48(u16_1) * i48(u16_2) + i48(u16_3) * i48(u16_4));
 
-        // check("halide_xtensa_widen_add_i48", vector_width / 2, i32(i16_1) + i32(i16_2));
-        // check("halide_xtensa_widen_add_u48", vector_width / 2, u32(u16_1) + u32(u16_2));
+        check("halide_xtensa_widen_add_i48", vector_width / 2, i32(i16_1) + i32(i16_2));
+        check("halide_xtensa_widen_add_u48", vector_width / 2, u32(u16_1) + u32(u16_2));
 
         // Multiplications.
         check("IVP_MULNX16PACKL", vector_width / 2, i16_1 * i16_2);
-        check("IVP_PACKLN_2X64W", vector_width / 4, i32_1 * i32_2);
+        check("IVP_MULN_2X32", vector_width / 2, i32_1 * i32_2);
 
         // Shifts.
         check("IVP_SRLNX16", vector_width / 2, u16_1 >> u16_2);
-        check("IVP_SRLNX16", vector_width / 2, u16_1 / 4);
-        // Somehow there is an >> operator defined for these.
-        // check("uint32x16_t_shift_right", vector_width / 4, u32_1 >> u32_2);
-        check("IVP_SRLN_2X32", vector_width / 4, u32_1 / 4);
-        check("uint16x32_t_shift_left", vector_width / 2, u16_1 << u16_2);
-        check("uint16x32_t_shift_left", vector_width / 2, u16_1 * 4);
-        check("uint32x16_t_shift_left", vector_width / 4, u32_1 << u32_2);
-        check("uint32x16_t_shift_left", vector_width / 4, u32_1 * 4);
+        check("IVP_SRLINX16U", vector_width / 2, u16_1 / 4);
+        check("IVP_SRLN_2X32", vector_width / 4, u32_1 >> u32_2);
+        check("IVP_SRLIN_2X32", vector_width / 4, u32_1 / 4);
+        check("IVP_SLLNX16U", vector_width / 2, u16_1 << u16_2);
+        check("IVP_SLLINX16U", vector_width / 2, u16_1 * 4);
+        check("IVP_SLLN_2X32", vector_width / 4, u32_1 << u32_2);
+        check("IVP_SLLIN_2X32", vector_width / 4, u32_1 * 4);
 
         // Casts.
-        check("convert_to_int32x32_t_from_int16x32_t", vector_width / 2, i32(i16_1));
-        // check("convert_to_int16x16_t_from_int32x16_t", vector_width / 4, i16(i32_1));
-        check("convert_to_uint32x32_t_from_uint16x32_t", vector_width / 2, u32(u16_1));
-        // check("convert_to_uint16x16_t_from_uint32x16_t", vector_width / 4, u16(u32_1));
+        check("convert<int32x32_t,int16x32_t>", vector_width / 2, i32(i16_1));
+        check("store_narrowing<int32x16_t, int16_t, 16>", vector_width / 4, i16(i32_1));
+        check("convert<uint32x32_t,uint16x32_t>", vector_width / 2, u32(u16_1));
+        check("store_narrowing<uint32x16_t, uint16_t, 16>", vector_width / 4, u16(u32_1));
 
         // Averaging instructions.
         check("IVP_AVGUNX16", vector_width / 2, u16((u32(u16_1) + u32(u16_2)) / 2));
@@ -116,7 +118,7 @@ public:
 
         // Saturating arithmetic
         check("IVP_ADDSNX16", vector_width / 2, i16_sat(i32(i16_1) + i32(i16_2)));
-        // check("halide_xtensa_sat_add_i32", vector_width / 4, i32_sat(i64(i32_1) + i64(i32_2)));
+        check("halide_xtensa_sat_add_i32", vector_width / 4, i32_sat(i64(i32_1) + i64(i32_2)));
         check("IVP_SUBSNX16", vector_width / 2, i16_sat(i32(i16_1) - i32(i16_2)));
         check("IVP_ABSSUBNX16", vector_width / 2, absd(u16_1, u16_2));
         check("IVP_ABSSUBNX16", vector_width / 2, absd(i16_1, i16_2));
@@ -140,11 +142,11 @@ public:
         // These are not generated right now, because vectors are split now, so comment out for now.
         // Narrowing with shifting.
         // check("halide_xtensa_narrow_with_shift_i16", vector_width / 2, i16(i32_1 >> i32_2));
-        // check("halide_xtensa_narrow_with_shift_i16", vector_width / 2, i16(i32_1 / 4));
+        check("halide_xtensa_narrow_with_shift_i16", vector_width / 2, i16(i32_1 / 4));
         // check("halide_xtensa_narrow_with_shift_u16", vector_width / 2, u16(i32_1 >> i32_2));
-        // check("halide_xtensa_narrow_with_shift_u16", vector_width / 2, u16(i32_1 / 4));
+        check("halide_xtensa_narrow_with_shift_u16", vector_width / 2, u16(i32_1 / 4));
 
-        // check("IVP_AVGshouldhavefailedRNX16", vector_width / 2, i16((i32(i16_1) + i32(i16_2) + 1) / 2));
+        check("IVP_AVGRNX16", vector_width / 2, i16((i32(i16_1) + i32(i16_2) + 1) / 2));
     }
 
 private:

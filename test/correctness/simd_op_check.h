@@ -311,12 +311,18 @@ public:
         return {op, error_msg.str()};
     }
 
+    std::string sanitize(const std::string &s) {
+        std::string s_copy = s;
+        for (size_t i = 0; i < s.size(); i++) {
+            if (!isalnum(s[i])) s_copy[i] = '_';
+        }
+        return s_copy;
+    }
+
     void check(std::string op, int vector_width, Expr e) {
         // Make a name for the test by uniquing then sanitizing the op name
         std::string name = "op_" + op;
-        for (size_t i = 0; i < name.size(); i++) {
-            if (!isalnum(name[i])) name[i] = '_';
-        }
+        name = sanitize(name);
 
         name += "_" + std::to_string(tasks.size());
 
