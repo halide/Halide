@@ -6,6 +6,7 @@ tests(GROUPS correctness_multi_gpu
 tests(GROUPS correctness
       SOURCES
       align_bounds.cpp
+      allocator_alignment.cpp
       argmax.cpp
       async_device_copy.cpp
       autodiff.cpp

@@ -751,6 +751,7 @@ HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
 
 RUNTIME_CPP_COMPONENTS = \
   aarch64_cpu_features \
+  aligned_alloc_aligned_alloc \
   alignment_128 \
   alignment_32 \
   alignment_64 \
@@ -830,6 +831,7 @@ RUNTIME_CPP_COMPONENTS = \
   trace_helper \
   tracing \
   wasm_cpu_features \
+  windows_aligned_alloc \
   windows_clock \
   windows_cuda \
   windows_d3d12compute_arm \

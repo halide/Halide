@@ -162,6 +162,7 @@ struct Target {
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
         SPIRV = halide_target_feature_spirv,
+        NoAlignedAlloc = halide_target_feature_no_aligned_alloc,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
