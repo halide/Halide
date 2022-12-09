@@ -82,7 +82,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);
     if (constant_bytes > 0) {
         constant_bytes *= type.bytes();
-        stack_bytes = constant_bytes;
+        stack_bytes = constant_bytes + padding * type.bytes();
 
         if (stack_bytes > target.maximum_buffer_size()) {
             const string str_max_size = target.has_large_buffers() ? "2^63 - 1" : "2^31 - 1";
