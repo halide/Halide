@@ -51,10 +51,10 @@ typedef ptrdiff_t ssize_t;
 
 #ifdef __XTENSA__
 #define WEAK
-#define WEAK_INLINE __attribute__((always_inline))          // Note that WEAK_INLINE should *not* also be `inline`
+#define WEAK_INLINE __attribute__((always_inline))  // Note that WEAK_INLINE should *not* also be `inline`
 #else
 #define WEAK __attribute__((weak))
-#define WEAK_INLINE __attribute__((weak, always_inline))    // Note that WEAK_INLINE should *not* also be `inline`
+#define WEAK_INLINE __attribute__((weak, always_inline))  // Note that WEAK_INLINE should *not* also be `inline`
 #endif
 
 // Note that ALWAYS_INLINE should *always* also be `inline`.
