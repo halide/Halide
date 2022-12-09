@@ -69,6 +69,8 @@ public:
 
     Scope<const Allocate *> allocation_scope;
 
+    std::map<const IRNode *, const IRNode *> parent_scope;
+
 protected:
     void visit(const Load *op) override {
         debug(0) << "Considering load: " << Expr(op) << "\n";
@@ -108,6 +110,7 @@ protected:
             // providing the evidence we thought it did.
             IRVisitor::visit(op);
         } else {
+            parent_scope[op] = scope;
             ScopedValue<const IRNode *> bind(scope, op);
             IRVisitor::visit(op);
         }
@@ -116,17 +119,20 @@ protected:
     void visit(const IfThenElse *op) override {
         op->condition.accept(this);
         {
+            parent_scope[op->then_case.get()] = scope;
             ScopedValue<const IRNode *> bind(scope, op->then_case.get());
             op->then_case.accept(this);
         }
         if (op->else_case.defined()) {
+            parent_scope[op->else_case.get()] = scope;
             ScopedValue<const IRNode *> bind(scope, op->else_case.get());
             op->else_case.accept(this);
         }
     }
 
     void visit(const Allocate *op) override {
-        // Any loads from this buffer should be scoped to this allocate node.
+        // Provide a mapping from load nodes to paddable allocations they belong
+        // to.
         ScopedBinding<const Allocate *> bind(allocation_scope, op->name, op);
         IRVisitor::visit(op);
     }
@@ -248,6 +254,46 @@ Stmt stage_strided_loads(const Stmt &s) {
             }
         }
 
+        // Look for any loads we can densify because an overlapping load occurs
+        // in any parent scope.
+        for (auto load = v.rbegin(); load != v.rend(); load++) {
+            if (replacer.replacements.count(load->second[0])) {
+                continue;
+            }
+            int64_t min_offset = load->first;
+            int64_t max_offset = load->first;
+            const IRNode *scope = k.scope;
+            debug(0) << "Considering straggler: " << Expr(load->second[0]) << " in scope " << scope << "\n";
+            while (scope) {
+                const IRNode *parent = finder.parent_scope[scope];
+                auto parent_key = k;
+                parent_key.scope = parent;
+                debug(0) << "Hunting for evidence in parent scope " << scope << " -> " << parent << "\n";
+                auto it = finder.found_loads.find(parent_key);
+                if (it != finder.found_loads.end() && !it->second.empty()) {
+                    min_offset = std::min(it->second.begin()->first, min_offset);
+                    max_offset = std::max(it->second.rbegin()->first, max_offset);
+                }
+                scope = parent;
+            }
+
+            if (max_offset - min_offset < k.stride - 1) {
+                continue;
+            }
+            int64_t offset = std::max(load->first - (k.stride - 1), min_offset);
+            int lanes = k.lanes * k.stride;
+            Expr idx = Ramp::make(k.base + (int)offset, 1, lanes);
+            Type t = k.type.with_lanes(lanes);
+            const Load *op = load->second[0];
+            Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
+                                         const_true(lanes), op->alignment);
+            dense_load = common_subexpression_elimination(dense_load);
+            Expr shuf = Shuffle::make_slice(dense_load, load->first - offset, k.stride, k.lanes);
+            for (const Load *l : load->second) {
+                replacer.replacements.emplace(l, shuf);
+            }
+        }
+
         // Densify any remaining strided loads to internal allocations by
         // padding the allocation, and densify any remaining strided loads to
         // external allocations by doing a dense load at a trimmed size. We rely
@@ -257,17 +303,16 @@ Stmt stage_strided_loads(const Stmt &s) {
                 continue;
             }
 
-            if (k.allocation) {
+            int lanes = k.lanes * k.stride;
+
+            bool may_pad = k.allocation && !k.allocation->new_expr.defined();
+            if (may_pad) {
                 int padding = (int)(k.stride - 1);
                 auto p = replacer.padding.insert({k.allocation, padding});
                 if (!p.second) {
                     p.first->second = std::max(p.first->second, padding);
                 }
-            }
-
-            int lanes = k.lanes * k.stride;
-
-            if (!k.allocation) {
+            } else {
                 lanes -= k.stride - 1;
             }
 
@@ -284,6 +329,8 @@ Stmt stage_strided_loads(const Stmt &s) {
             }
         }
     }
+
+    // TODO: What about sharing a conditional solo with an unconditional pair
 
     return replacer.mutate(stmt);
 }
