@@ -417,6 +417,8 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
     internal_assert(body.defined()) << "Allocate of undefined\n";
     internal_assert(condition.defined()) << "Allocate with undefined condition\n";
     internal_assert(condition.type().is_bool()) << "Allocate condition is not boolean\n";
+    internal_assert(!(new_expr.defined() && padding))
+        << "Allocate nodes with custom new expressions may not have padding\n";
 
     Allocate *node = new Allocate;
     node->name = name;
