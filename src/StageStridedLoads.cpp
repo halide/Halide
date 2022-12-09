@@ -214,7 +214,7 @@ Stmt stage_strided_loads(const Stmt &s) {
             // We have a complete cluster of loads. Make a single dense load
             int lanes = k.lanes * k.stride;
             int64_t first_offset = load->first;
-            Expr idx = Ramp::make(k.base + (int)first_offset, 1, lanes);
+            Expr idx = Ramp::make(k.base + (int)first_offset, make_one(k.base.type()), lanes);
             Type t = k.type.with_lanes(lanes);
             const Load *op = load->second[0];
             Expr shared_load = Load::make(t, k.buf, idx, op->image, op->param,
@@ -242,7 +242,7 @@ Stmt stage_strided_loads(const Stmt &s) {
             }
             int lanes = k.lanes * k.stride;
             int64_t first_offset = load->first - delta;
-            Expr idx = Ramp::make(k.base + (int)first_offset, 1, lanes);
+            Expr idx = Ramp::make(k.base + (int)first_offset, make_one(k.base.type()), lanes);
             Type t = k.type.with_lanes(lanes);
             const Load *op = load->second[0];
             Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
@@ -280,7 +280,7 @@ Stmt stage_strided_loads(const Stmt &s) {
             }
             int64_t offset = std::max(load->first - (k.stride - 1), min_offset);
             int lanes = k.lanes * k.stride;
-            Expr idx = Ramp::make(k.base + (int)offset, 1, lanes);
+            Expr idx = Ramp::make(k.base + (int)offset, make_one(k.base.type()), lanes);
             Type t = k.type.with_lanes(lanes);
             const Load *op = load->second[0];
             Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
@@ -315,7 +315,7 @@ Stmt stage_strided_loads(const Stmt &s) {
             }
 
             int64_t first_offset = load->first;
-            Expr idx = Ramp::make(k.base + (int)first_offset, 1, lanes);
+            Expr idx = Ramp::make(k.base + (int)first_offset, make_one(k.base.type()), lanes);
             Type t = k.type.with_lanes(lanes);
             const Load *op = load->second[0];
             Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
