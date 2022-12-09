@@ -995,7 +995,7 @@ public:
                     tmp2(x, y) = select(x % 2 == 0, tmp1(x / 2), tmp1(x / 2 + 16));
                     tmp2.compute_root().vectorize(x, width / bits);
                     std::string op = "vst2." + std::to_string(bits);
-                    check(arm32 ? op : "st2"s, width / bits, tmp2(0, 0) + tmp2(0, 63));
+                    check(arm32 ? op : "st2", width / bits, tmp2(0, 0) + tmp2(0, 63));
                 }
             }
         }
