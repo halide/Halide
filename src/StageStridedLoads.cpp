@@ -73,10 +73,8 @@ public:
 
 protected:
     void visit(const Load *op) override {
-        debug(0) << "Considering load: " << Expr(op) << "\n";
         if (is_const_one(op->predicate)) {
             Expr idx = substitute_in_all_lets(simplify(common_subexpression_elimination(op->index)));
-            debug(0) << "Expanded idx = " << idx << "\n";
             if (const Ramp *r = idx.as<Ramp>()) {
                 const int64_t *stride_ptr = as_const_int(r->stride);
                 int64_t stride = stride_ptr ? *stride_ptr : 0;
@@ -88,13 +86,12 @@ protected:
                     base = base_add->a;
                     offset = *offset_ptr;
                 }
-                if (stride >= 2 && stride < r->lanes) {
+                if (stride >= 2 && stride < r->lanes && r->stride.type().is_scalar()) {
                     const IRNode *s = scope;
                     const Allocate *a = nullptr;
                     if (allocation_scope.contains(op->name)) {
                         a = allocation_scope.get(op->name);
                     }
-                    debug(0) << "Yep!\n";
                     found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
                 }
             }
@@ -150,7 +147,6 @@ protected:
     Expr visit(const Load *op) override {
         auto it = replacements.find(op);
         if (it != replacements.end()) {
-            debug(0) << "Replacing: " << Expr(op) << " with " << it->second << "\n";
             return mutate(it->second);
         } else {
             return IRMutator::visit(op);
@@ -263,12 +259,10 @@ Stmt stage_strided_loads(const Stmt &s) {
             int64_t min_offset = load->first;
             int64_t max_offset = load->first;
             const IRNode *scope = k.scope;
-            debug(0) << "Considering straggler: " << Expr(load->second[0]) << " in scope " << scope << "\n";
             while (scope) {
                 const IRNode *parent = finder.parent_scope[scope];
                 auto parent_key = k;
                 parent_key.scope = parent;
-                debug(0) << "Hunting for evidence in parent scope " << scope << " -> " << parent << "\n";
                 auto it = finder.found_loads.find(parent_key);
                 if (it != finder.found_loads.end() && !it->second.empty()) {
                     min_offset = std::min(it->second.begin()->first, min_offset);
