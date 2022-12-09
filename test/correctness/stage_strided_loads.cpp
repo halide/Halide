@@ -197,26 +197,28 @@ int main(int argc, char **argv) {
         checker.check(f, 1);
     }
 
-    // Ensure memoized allocations have appropriate padding to support overreads too
-
-    // Test out doing a transpose this way
-
     // Make a pair of unconditionally-executed loads, and check that a
-    // conditionally-executed load can share with it.
+    // conditionally-executed load can use it as evidence that a dense load in
+    // one direction or the other is safe to do.
     {
         Func f;
         Var x;
         f(x) = buf(2 * x) + buf(2 * x + 1);
-        RDom r(0, 1);
-        Param<bool> p;
-        r.where(p);
-        f(x) += buf(2 * x + 3) + r;
+        RDom r1(0, 1), r2(0, 1);
+        Param<bool> p1, p2;
+        r1.where(p1);
+        r2.where(p2);
+        f(x) += buf(2 * x + 3) + r1;
+        f(x) += buf(2 * x - 3) + r2;
 
         Func g;
         g(x) = f(x);
         g.vectorize(x, 8, TailStrategy::RoundUp);
-        f.compute_at(g, x).vectorize(x).update().vectorize(x);
-        g.compile_to_assembly("/dev/stdout", {buf, p}, Target{"host-no_asserts-no_runtime-no_bounds_query"});
+        f.compute_at(g, x).vectorize(x);
+        f.update(0).vectorize(x);
+        f.update(1).vectorize(x);
+
+        checker.check(g, 3);
     }
 
     return 0;
