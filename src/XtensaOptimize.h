@@ -36,6 +36,9 @@ template<>
 bool is_native_xtensa_vector<uint32_t>(const Type &t, const Target &target);
 
 template<>
+bool is_native_xtensa_vector<float16_t>(const Type &t, const Target &target);
+
+template<>
 bool is_native_xtensa_vector<float>(const Type &t, const Target &target);
 
 bool is_native_vector_type(const Type &t, const Target &target);

@@ -70,6 +70,12 @@ bool is_native_xtensa_vector<uint32_t>(const Type &t, const Target &target) {
 }
 
 template<>
+bool is_native_xtensa_vector<float16_t>(const Type &t, const Target &target) {
+    int vector_size = target.natural_vector_size<float16_t>();
+    return t.is_float() && (t.bits() == 16) && (t.lanes() == vector_size);
+}
+
+template<>
 bool is_native_xtensa_vector<float>(const Type &t, const Target &target) {
     int vector_size = target.natural_vector_size<float>();
     return t.is_float() && (t.bits() == 32) && (t.lanes() == vector_size);

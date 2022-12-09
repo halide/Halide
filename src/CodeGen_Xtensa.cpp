@@ -257,6 +257,7 @@ typedef uint16_t common_uint16x32_t __attribute__((ext_vector_type(32)));
 typedef int32_t common_int32x16_t __attribute__((ext_vector_type(16)));
 typedef uint32_t common_uint32x16_t __attribute__((ext_vector_type(16)));
 
+using float16_t = xb_f16;
 using native_vector_i8 = xb_vec2Nx8;
 using native_vector_u8 = xb_vec2Nx8U;
 using native_mask_i8 = vbool2N;
@@ -268,6 +269,7 @@ using native_vector_i32 = xb_vecN_2x32v;
 using native_vector_u32 = xb_vecN_2x32Uv;
 using native_mask_i32 = vboolN_2;
 using native_vector_i48 = xb_vecNx48;
+using native_vector_f16 = xb_vecNxf16;
 using native_vector_f32 = xb_vecN_2xf32;
 using native_vector_i64 = xb_vecN_2x64w;
 
@@ -288,6 +290,8 @@ using int64x16_t = xb_vecN_2x64w;
 using uint1x16_t = vboolN_2;
 using uint1x32_t = vboolN;
 using uint1x64_t = vbool2N;
+using float16x16_t = xb_vecN_2xf16;
+using float16x32_t = xb_vecNxf16;
 using float32x16_t = xb_vecN_2xf32;
 #elif XCHAL_VISION_TYPE == 8
 using int8x128_t = xb_vec2Nx8;
@@ -305,6 +309,8 @@ using uint48x64_t = xb_vecNx48;
 using uint1x32_t = vboolN_2;
 using uint1x64_t = vboolN;
 using uint1x128_t = vbool2N;
+using float16x32_t = xb_vecN_2xf16;
+using float16x64_t = xb_vecNxf16;
 using float32x32_t = xb_vecN_2xf32;
 using int64x32_t = xb_vecN_2x64w;
 #endif
@@ -489,6 +495,7 @@ using float32x128_t = MultipleOfNativeVector<float32x32_t, 4>;
 #define VECTOR_WIDTH_U8 64
 #define VECTOR_WIDTH_I16 32
 #define VECTOR_WIDTH_U16 32
+#define VECTOR_WIDTH_F16 32
 #define VECTOR_WIDTH_I32 16
 #define VECTOR_WIDTH_U32 16
 #define VECTOR_WIDTH_F32 16
@@ -497,6 +504,7 @@ using float32x128_t = MultipleOfNativeVector<float32x32_t, 4>;
 #define VECTOR_WIDTH_U8 128
 #define VECTOR_WIDTH_I16 64
 #define VECTOR_WIDTH_U16 64
+#define VECTOR_WIDTH_F16 64
 #define VECTOR_WIDTH_I32 32
 #define VECTOR_WIDTH_U32 32
 #define VECTOR_WIDTH_F32 32
@@ -2259,6 +2267,43 @@ HALIDE_ALWAYS_INLINE native_vector_i32 convert<native_vector_i32, native_vector_
 }
 
 template<>
+HALIDE_ALWAYS_INLINE native_vector_f32_x2 convert<native_vector_f32_x2, native_vector_f16>(const native_vector_f16& src) {
+    native_vector_f32_x2 output;
+
+    IVP_DSELN_2XF32I(
+      output.native_vector[1],
+      output.native_vector[0],
+      IVP_CVTF32NXF16_1(src),
+      IVP_CVTF32NXF16_0(src),
+      IVP_DSELI_INTERLEAVE_2);
+
+    return output;
+}
+
+template<>
+HALIDE_ALWAYS_INLINE native_vector_f16 convert<native_vector_f16, native_vector_f32_x2>(const native_vector_f32_x2& src) {
+    return IVP_SELNXF16I(
+      IVP_CVTF16N_2XF32_0(src.native_vector[1]),
+      IVP_CVTF16N_2XF32_0(src.native_vector[0]),
+      IVP_SELI_EXTRACT_1_OF_2_OFF_0);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE native_vector_f16 convert<native_vector_f16, native_vector_i32_x2>(const native_vector_i32_x2& src) {
+    return convert<native_vector_f16, native_vector_f32_x2>(
+      native_vector_f32_x2(
+        native_vector_f32_x2::from_native_vector,
+        IVP_FLOATN_2X32(src.native_vector[0], 0),
+        IVP_FLOATN_2X32(src.native_vector[1], 0)));
+}
+
+template<>
+HALIDE_ALWAYS_INLINE native_vector_i32_x2 convert<native_vector_i32_x2, native_vector_f16>(const native_vector_f16& src) {
+    native_vector_f32_x2 tmp = convert<native_vector_f32_x2, native_vector_f16>(src);
+    return convert<native_vector_i32_x2, native_vector_f32_x2>(tmp);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE native_vector_i32_x2 convert<native_vector_i32_x2, native_vector_f32_x2>(const native_vector_f32_x2& src) {
   return native_vector_i32_x2(native_vector_i32_x2::from_native_vector,
                   convert<native_vector_i32, native_vector_f32>(src.native_vector[0]),
@@ -2619,7 +2664,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 gather_load<native_ve
             Type(Type::Int, 48, target.natural_vector_size<int16_t>()),
             Type(Type::UInt, 48, target.natural_vector_size<uint16_t>()),
             Type(Type::Int, 64, target.natural_vector_size<int32_t>()),
-            Type(Type::Float, 16, target.natural_vector_size<int16_t>()),
+            Type(Type::Float, 16, target.natural_vector_size<float16_t>()),
             Type(Type::Float, 32, target.natural_vector_size<float>()),
         };
 
@@ -2627,7 +2672,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 gather_load<native_ve
             Int(8, 4),
             UInt(8, 4),
             UInt(8, 8),
-        };
+            Float(16, 16)};
 
         std::set<Type> multiple_of_native_types;
         for (const auto &type : vector_types) {
@@ -3030,6 +3075,8 @@ void CodeGen_Xtensa::visit(const Select *op) {
             rhs << "IVP_MOVN_2X32T(" << true_val << ", " << false_val << ", " << cond << ")";
         } else if (is_native_xtensa_vector<uint32_t>(op->type, target)) {
             rhs << "IVP_MOVN_2X32UT(" << true_val << ", " << false_val << ", " << cond << ")";
+        } else if (is_native_xtensa_vector<float16_t>(op->type, target)) {
+            rhs << "IVP_MOVNXF16T(" << true_val << ", " << false_val << ", " << cond << ")";
         } else if (is_native_xtensa_vector<float>(op->type, target)) {
             rhs << "IVP_MOVN_2XF32T(" << true_val << ", " << false_val << ", " << cond << ")";
         } else {
@@ -3160,6 +3207,8 @@ void CodeGen_Xtensa::visit(const LT *op) {
         print_assignment(op->type, "IVP_LTN_2X32(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_LTUN_2X32U(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_OLTNXF16(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_OLTN_2XF32(" + sa + ", " + sb + ")");
     } else {
@@ -3183,6 +3232,8 @@ void CodeGen_Xtensa::visit(const GT *op) {
         print_assignment(op->type, "IVP_GTN_2X32(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_GTUN_2X32U(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_OGTNXF16(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_OGTN_2XF32(" + sa + ", " + sb + ")");
     } else {
