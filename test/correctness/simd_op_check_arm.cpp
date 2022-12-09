@@ -548,9 +548,15 @@ public:
                         // If we're widening the type by a factor of four
                         // as well as reducing by a factor of four, we
                         // expect vpaddl followed by vpadal
-                        check(arm32 ? "vpaddl.s8" : "saddlp", 8, sum_(i32(in_i8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(i32(in_u8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(u32(in_u8(f * x + r))));
+                        if (target.has_feature(Target::ARMDotProd)) {
+                            check(arm32 ? "vpaddl.s8" : "sdot", 8, sum_(i32(in_i8(f * x + r))));
+                            check(arm32 ? "vpaddl.u8" : "udot", 8, sum_(i32(in_u8(f * x + r))));
+                            check(arm32 ? "vpaddl.u8" : "udot", 8, sum_(u32(in_u8(f * x + r))));
+                        } else {
+                            check(arm32 ? "vpaddl.s8" : "saddlp", 8, sum_(i32(in_i8(f * x + r))));
+                            check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(i32(in_u8(f * x + r))));
+                            check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(u32(in_u8(f * x + r))));
+                        }
                         check(arm32 ? "vpaddl.s16" : "saddlp", 4, sum_(i64(in_i16(f * x + r))));
                         check(arm32 ? "vpaddl.u16" : "uaddlp", 4, sum_(i64(in_u16(f * x + r))));
                         check(arm32 ? "vpaddl.u16" : "uaddlp", 4, sum_(u64(in_u16(f * x + r))));
@@ -558,9 +564,15 @@ public:
                         // Note that when going from u8 to i32 like this,
                         // the vpaddl is unsigned and the vpadal is a
                         // signed, because the intermediate type is u16
-                        check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i8(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u8(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(u32(in_u8(f * x + r))));
+                        if (target.has_feature(Target::ARMDotProd)) {
+                            check(arm32 ? "vpadal.s16" : "sdot", 8, sum_(i32(in_i8(f * x + r))));
+                            check(arm32 ? "vpadal.u16" : "udot", 8, sum_(i32(in_u8(f * x + r))));
+                            check(arm32 ? "vpadal.u16" : "udot", 8, sum_(u32(in_u8(f * x + r))));
+                        } else {
+                            check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i8(f * x + r))));
+                            check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u8(f * x + r))));
+                            check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(u32(in_u8(f * x + r))));
+                        }
                         check(arm32 ? "vpadal.s32" : "sadalp", 4, sum_(i64(in_i16(f * x + r))));
                         check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(i64(in_u16(f * x + r))));
                         check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(u64(in_u16(f * x + r))));
@@ -1078,5 +1090,11 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
-    return SimdOpCheckTest::main<SimdOpCheckARM>(argc, argv);
+    return SimdOpCheckTest::main<SimdOpCheckARM>(
+        argc, argv,
+        {
+            Target("arm-32-linux"),
+            Target("arm-64-linux"),
+            Target("arm-64-linux-arm_dot_prod"),
+        });
 }
