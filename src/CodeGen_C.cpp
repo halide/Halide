@@ -155,8 +155,9 @@ template<typename T>
 inline int halide_popcount(T a) {
     int bits_set = 0;
     while (a != 0) {
-        bits_set += a & 1;
-        a >>= 1;
+        bits_set += 1;
+        // NOTE(aelphy): remove least significant zeros and the first met one
+        a &= a - 1;
     }
     return bits_set;
 }
