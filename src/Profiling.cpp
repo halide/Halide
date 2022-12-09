@@ -68,7 +68,7 @@ class InjectProfiling : public IRMutator {
 public:
     map<string, int> indices;  // maps from func name -> index in buffer.
 
-    vector<int> stack;  // What produce nodes are we currently inside of.
+    vector<int> stack;         // What produce nodes are we currently inside of.
 
     string pipeline_name;
 
@@ -235,7 +235,8 @@ private:
             stmt = op;
         } else {
             stmt = Allocate::make(op->name, op->type, op->memory_type,
-                                  new_extents, condition, body, new_expr, op->free_function);
+                                  new_extents, condition, body, new_expr,
+                                  op->free_function, op->padding);
         }
 
         tasks.push_back(stmt);

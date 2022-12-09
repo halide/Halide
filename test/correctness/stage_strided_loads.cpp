@@ -197,6 +197,28 @@ int main(int argc, char **argv) {
         checker.check(f, 1);
     }
 
+    // Ensure memoized allocations have appropriate padding to support overreads too
+
+    // Test out doing a transpose this way
+
+    // Make a pair of unconditionally-executed loads, and check that a
+    // conditionally-executed load can share with it.
+    {
+        Func f;
+        Var x;
+        f(x) = buf(2 * x) + buf(2 * x + 1);
+        RDom r(0, 1);
+        Param<bool> p;
+        r.where(p);
+        f(x) += buf(2 * x + 3) + r;
+
+        Func g;
+        g(x) = f(x);
+        g.vectorize(x, 8, TailStrategy::RoundUp);
+        f.compute_at(g, x).vectorize(x).update().vectorize(x);
+        g.compile_to_assembly("/dev/stdout", {buf, p}, Target{"host-no_asserts-no_runtime-no_bounds_query"});
+    }
+
     return 0;
 }
 

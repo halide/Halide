@@ -171,8 +171,8 @@ struct Pattern {
         SwapOps01 = 1 << 1,         // Swap operands 0 and 1 prior to substitution.
         SwapOps12 = 1 << 2,         // Swap operands 1 and 2 prior to substitution.
 
-        DeinterleaveOp0 = 1 << 5,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
-        DeinterleaveOp1 = 1 << 6,  // Same as above, but for operand 1.
+        DeinterleaveOp0 = 1 << 5,   // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
+        DeinterleaveOp1 = 1 << 6,   // Same as above, but for operand 1.
         DeinterleaveOp2 = 1 << 7,
         DeinterleaveOps = DeinterleaveOp0 | DeinterleaveOp1 | DeinterleaveOp2,
 
@@ -1996,6 +1996,22 @@ class OptimizeShuffles : public IRMutator {
         return visit_let<Stmt>(op);
     }
 
+    set<string> allocations_to_pad;
+    Stmt visit(const Allocate *op) override {
+        Stmt s = IRMutator::visit(op);
+        if (allocations_to_pad.count(op->name)) {
+            op = s.as<Allocate>();
+            internal_assert(op);
+            int padding = 128 / op->type.bytes();  // One native vector
+            return Allocate::make(op->name, op->type, op->memory_type,
+                                  op->extents, op->condition,
+                                  op->body, op->new_expr, op->free_function,
+                                  std::max(op->padding, padding));
+        } else {
+            return s;
+        }
+    }
+
     Expr visit(const Load *op) override {
         if (!is_const_one(op->predicate)) {
             // TODO(psuriana): We shouldn't mess with predicated load for now.
@@ -2031,8 +2047,9 @@ class OptimizeShuffles : public IRMutator {
 
                     // Load all of the possible indices loaded from the
                     // LUT. Note that for clamped ramps, this loads up to 1
-                    // vector past the max. CodeGen_Hexagon::allocation_padding
-                    // returns a native vector size to account for this.
+                    // vector past the max, so we will add padding to the
+                    // allocation accordingly (if we're the one that made it).
+                    allocations_to_pad.insert(op->name);
                     Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
                                           Ramp::make(base, 1, const_extent),
                                           op->image, op->param, const_true(const_extent), alignment);

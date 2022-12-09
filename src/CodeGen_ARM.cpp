@@ -1092,9 +1092,9 @@ void CodeGen_ARM::visit(const Load *op) {
         return;
     }
 
-    // If the stride is in [-1, 4], we can deal with that using vanilla codegen
+    // If the stride is in [-1, 1], we can deal with that using vanilla codegen
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
-    if (stride && (-1 <= stride->value && stride->value <= 4)) {
+    if (stride && (-1 <= stride->value && stride->value <= 1)) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1517,7 +1517,7 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_ARM(const Target &target) {
     return std::make_unique<CodeGen_ARM>(target);
 }
 
-#else  // WITH_ARM || WITH_AARCH64
+#else   // WITH_ARM || WITH_AARCH64
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_ARM(const Target &target) {
     user_error << "ARM not enabled for this build of Halide.\n";

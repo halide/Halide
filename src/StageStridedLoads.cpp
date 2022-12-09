@@ -6,9 +6,8 @@
 #include "IRVisitor.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Substitute.h"
 #include "UniquifyVariableNames.h"
-
-// TODO: Pad allocations if necessary?
 
 namespace Halide {
 namespace Internal {
@@ -58,7 +57,7 @@ public:
             if (buf < other.buf) return true;
             if (buf > other.buf) return false;
 
-            return IRDeepCompare{}(base, other.base);
+            return graph_less_than(base, other.base);
         }
     };
     // Entry entry maps from an offset from the base to a vector of identical
@@ -72,8 +71,11 @@ public:
 
 protected:
     void visit(const Load *op) override {
+        debug(0) << "Considering load: " << Expr(op) << "\n";
         if (is_const_one(op->predicate)) {
-            if (const Ramp *r = op->index.as<Ramp>()) {
+            Expr idx = substitute_in_all_lets(simplify(common_subexpression_elimination(op->index)));
+            debug(0) << "Expanded idx = " << idx << "\n";
+            if (const Ramp *r = idx.as<Ramp>()) {
                 const int64_t *stride_ptr = as_const_int(r->stride);
                 int64_t stride = stride_ptr ? *stride_ptr : 0;
                 Expr base = r->base;
@@ -90,6 +92,7 @@ protected:
                     if (allocation_scope.contains(op->name)) {
                         a = allocation_scope.get(op->name);
                     }
+                    debug(0) << "Yep!\n";
                     found_loads[Key{op->name, base, stride, r->lanes, op->type, a, s}][offset].push_back(op);
                 }
             }
@@ -135,14 +138,31 @@ protected:
 class ReplaceStridedLoads : public IRMutator {
 public:
     std::map<const Load *, Expr> replacements;
+    std::map<const Allocate *, int> padding;
 
 protected:
     Expr visit(const Load *op) override {
         auto it = replacements.find(op);
         if (it != replacements.end()) {
+            debug(0) << "Replacing: " << Expr(op) << " with " << it->second << "\n";
             return mutate(it->second);
         } else {
             return IRMutator::visit(op);
+        }
+    }
+
+    Stmt visit(const Allocate *op) override {
+        auto it = padding.find(op);
+        Stmt s = IRMutator::visit(op);
+        if (it == padding.end()) {
+            return s;
+        } else {
+            op = s.as<Allocate>();
+            internal_assert(op);
+            return Allocate::make(op->name, op->type, op->memory_type,
+                                  op->extents, op->condition,
+                                  op->body, op->new_expr, op->free_function,
+                                  std::max(it->second, op->padding));
         }
     }
 
@@ -165,8 +185,6 @@ Stmt stage_strided_loads(const Stmt &s) {
     // really it's only going to find things inside the same loops and let
     // statements.
     s.accept(&finder);
-
-    std::map<const Allocate *, int> might_need_padding;
 
     for (const auto &l : finder.found_loads) {
         const FindStridedLoads::Key &k = l.first;
@@ -195,6 +213,7 @@ Stmt stage_strided_loads(const Stmt &s) {
             const Load *op = load->second[0];
             Expr shared_load = Load::make(t, k.buf, idx, op->image, op->param,
                                           const_true(lanes), op->alignment);
+            shared_load = common_subexpression_elimination(shared_load);
             for (; load != v.end() && load->first < first_offset + k.stride; load++) {
                 Expr shuf = Shuffle::make_slice(shared_load, load->first - first_offset, k.stride, k.lanes);
                 for (const Load *l : load->second) {
@@ -222,6 +241,7 @@ Stmt stage_strided_loads(const Stmt &s) {
             const Load *op = load->second[0];
             Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
                                          const_true(lanes), op->alignment - delta);
+            dense_load = common_subexpression_elimination(dense_load);
             Expr shuf = Shuffle::make_slice(dense_load, delta, k.stride, k.lanes);
             for (const Load *l : load->second) {
                 replacer.replacements.emplace(l, shuf);
@@ -239,7 +259,7 @@ Stmt stage_strided_loads(const Stmt &s) {
 
             if (k.allocation) {
                 int padding = (int)(k.stride - 1);
-                auto p = might_need_padding.insert({k.allocation, padding});
+                auto p = replacer.padding.insert({k.allocation, padding});
                 if (!p.second) {
                     p.first->second = std::max(p.first->second, padding);
                 }
@@ -255,17 +275,14 @@ Stmt stage_strided_loads(const Stmt &s) {
             Expr idx = Ramp::make(k.base + (int)first_offset, 1, lanes);
             Type t = k.type.with_lanes(lanes);
             const Load *op = load->second[0];
-            Expr shared_load = Load::make(t, k.buf, idx, op->image, op->param,
-                                          const_true(lanes), op->alignment);
-            Expr shuf = Shuffle::make_slice(shared_load, load->first - first_offset, k.stride, k.lanes);
+            Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
+                                         const_true(lanes), op->alignment);
+            dense_load = common_subexpression_elimination(dense_load);
+            Expr shuf = Shuffle::make_slice(dense_load, load->first - first_offset, k.stride, k.lanes);
             for (const Load *l : load->second) {
                 replacer.replacements.emplace(l, shuf);
             }
         }
-    }
-
-    for (auto p : might_need_padding) {
-        debug(0) << "Allocation: " << p.first->name << " needs " << p.second << " padding elements\n";
     }
 
     return replacer.mutate(stmt);
