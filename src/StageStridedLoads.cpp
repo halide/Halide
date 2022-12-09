@@ -86,6 +86,7 @@ protected:
                     base = base_add->a;
                     offset = *offset_ptr;
                 }
+                // TODO: handle nested ramps here?
                 if (stride >= 2 && stride < r->lanes && r->stride.type().is_scalar()) {
                     const IRNode *s = scope;
                     const Allocate *a = nullptr;
@@ -107,8 +108,9 @@ protected:
             // providing the evidence we thought it did.
             IRVisitor::visit(op);
         } else {
-            parent_scope[op] = scope;
-            ScopedValue<const IRNode *> bind(scope, op);
+            const IRNode *child_scope = op->body.get();
+            parent_scope[child_scope] = scope;
+            ScopedValue<const IRNode *> bind(scope, child_scope);
             IRVisitor::visit(op);
         }
     }
@@ -116,13 +118,15 @@ protected:
     void visit(const IfThenElse *op) override {
         op->condition.accept(this);
         {
-            parent_scope[op->then_case.get()] = scope;
-            ScopedValue<const IRNode *> bind(scope, op->then_case.get());
+            const IRNode *child_scope = op->then_case.get();
+            parent_scope[child_scope] = scope;
+            ScopedValue<const IRNode *> bind(scope, child_scope);
             op->then_case.accept(this);
         }
         if (op->else_case.defined()) {
-            parent_scope[op->else_case.get()] = scope;
-            ScopedValue<const IRNode *> bind(scope, op->else_case.get());
+            const IRNode *child_scope = op->else_case.get();
+            parent_scope[child_scope] = scope;
+            ScopedValue<const IRNode *> bind(scope, child_scope);
             op->else_case.accept(this);
         }
     }
