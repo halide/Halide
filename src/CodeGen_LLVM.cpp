@@ -2041,7 +2041,7 @@ void CodeGen_LLVM::visit(const Load *op) {
         llvm::Type *load_type = llvm_type_of(op->type.element_of());
         if (ramp && stride && stride->value == 1) {
             value = codegen_dense_vector_load(op);
-        } else if (ramp && stride && 2 <= stride->value && stride->value <= 4) {
+        } else if (false && ramp && stride && 2 <= stride->value && stride->value <= 4) {
             debug(0) << "WARNING: strided load made it to codegen: " << Expr(op) << "\n";
             // Try to rewrite strided loads as shuffles of dense loads,
             // aligned to the stride. This makes adjacent strided loads
