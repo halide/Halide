@@ -304,7 +304,7 @@ Stmt stage_strided_loads(const Stmt &s) {
         // padding the allocation, and densify any remaining strided loads to
         // external allocations by doing a dense load at a trimmed size. We rely
         // on codegen to do a good job at loading vectors of a funny size.
-        for (auto load = v.begin(); load != v.end(); load++) {
+        for (auto load = v.begin(); load != v.end(); load++) {  // NOLINT
             if (replacer.replacements.count(load->second[0])) {
                 continue;
             }
