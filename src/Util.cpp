@@ -566,7 +566,7 @@ bool sub_with_overflow(int bits, int64_t a, int64_t b, int64_t *result) {
         *result = 0;
         return false;
     } else {
-        *result = a + b;
+        *result = a - b;
         return true;
     }
 }
@@ -602,11 +602,11 @@ bool mul_with_overflow(int bits, int64_t a, int64_t b, int64_t *result) {
         return !flag;
     }
 #endif
-    if (sub_would_overflow(bits, a, b)) {
+    if (mul_would_overflow(bits, a, b)) {
         *result = 0;
         return false;
     } else {
-        *result = a + b;
+        *result = a * b;
         return true;
     }
 }
