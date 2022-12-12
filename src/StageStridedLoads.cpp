@@ -94,7 +94,9 @@ protected:
                     base = base_add->a;
                     offset = *offset_ptr;
                 }
-                // TODO: handle nested ramps here?
+                // TODO: We do not yet handle nested vectorization here for
+                // ramps which have not already collapsed. We could potentially
+                // handle more interesting types of shuffle than simple flat slices.
                 if (stride >= 2 && stride < r->lanes && r->stride.type().is_scalar()) {
                     const IRNode *s = scope;
                     const Allocate *a = nullptr;
@@ -204,8 +206,7 @@ Stmt stage_strided_loads(const Stmt &s) {
         const FindStridedLoads::Key &k = l.first;
         const std::map<int64_t, std::vector<const Load *>> &v = l.second;
 
-        // TODO: cluster the loads looking for groups with *relative* offsets between 0 and stride-1
-        // Consider f(2*x) + f(2*x + 1) + f(2*x + 2). What loads do we want?
+        // Find clusters of strided loads that can share the same dense load.
         for (auto load = v.begin(); load != v.end();) {
             // If there is any other load at the same base at an offset at least
             // stride-1 ahead, it's safe to do a big dense load. Note that we're
@@ -335,8 +336,6 @@ Stmt stage_strided_loads(const Stmt &s) {
             }
         }
     }
-
-    // TODO: What about sharing a conditional solo with an unconditional pair
 
     return replacer.mutate(stmt);
 }

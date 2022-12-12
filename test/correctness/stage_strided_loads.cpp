@@ -221,57 +221,16 @@ int main(int argc, char **argv) {
         checker.check(g, 3);
     }
 
+    // Make a case that uses nested vectorization.
+    {
+        Func f;
+        Var x, c;
+
+        f(c, x) = buf(2 * (2 * x + c));
+        f.vectorize(x, 8).bound(c, 0, 2).vectorize(c);
+        f.output_buffer().dim(1).set_stride(2);
+        checker.check(f, 1);
+    }
+
     return 0;
 }
-
-/* This branch (321)
-
-
- */
-
-/*
-main: 523
-        add     x12, x8, w11, sxtw #2
-        subs    x10, x10, #1
-        add     x13, x12, #24
-        mov     x14, x12
-        add     w11, w11, #8
-        ldur    q0, [x12, #8]
-        mov     v0.s[1], v0.s[2]
-        ld1     { v0.s }[2], [x13]
-        ld2     { v1.4s, v2.4s }, [x14], #32
-        ld2     { v1.4s, v2.4s }, [x12]
-        ld1     { v0.s }[3], [x14]
-        fadd    v1.4s, v1.4s, v2.4s
-        fadd    v0.4s, v0.4s, v1.4s
-        str     q0, [x9], #16
-
-*/
-
-/*
-  my change with shuffle hoisting (245):
-        ldp     q2, q3, [x10, #-16]
-        subs    x9, x9, #1
-        ldur    q0, [x10, #-12]
-        ldur    q1, [x10, #4]
-        add     x10, x10, #32
-        fadd    v2.4s, v0.4s, v2.4s
-        fadd    v3.4s, v1.4s, v3.4s
-        uzp2    v0.4s, v0.4s, v1.4s
-        uzp1    v1.4s, v2.4s, v3.4s
-        fadd    v0.4s, v0.4s, v1.4s
-        str     q0, [x8], #16
-*/
-
-/*
-my change with shuffle hoisting disabled (320)
-        sub     x11, x10, #12
-        subs    x9, x9, #1
-        ldp     q0, q1, [x10, #-16]
-        add     x10, x10, #32
-        ld2     { v2.4s, v3.4s }, [x11]
-        uzp1    v0.4s, v0.4s, v1.4s
-        fadd    v0.4s, v2.4s, v0.4s
-        fadd    v0.4s, v3.4s, v0.4s
-        str     q0, [x8], #16
-*/
