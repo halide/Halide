@@ -39,25 +39,33 @@ public:
 
         bool operator<(const Key &other) const {
             // Check fields in order of cost to compare
-            if (stride < other.stride) return true;
-            if (stride > other.stride) return false;
-
-            if (lanes < other.lanes) return true;
-            if (lanes > other.lanes) return false;
-
-            if (scope < other.scope) return true;
-            if (scope > other.scope) return false;
-
-            if (allocation < other.allocation) return true;
-            if (allocation > other.allocation) return false;
-
-            if (type < other.type) return true;
-            if (other.type < type) return false;
-
-            if (buf < other.buf) return true;
-            if (buf > other.buf) return false;
-
-            return graph_less_than(base, other.base);
+            if (stride < other.stride) {
+                return true;
+            } else if (stride > other.stride) {
+                return false;
+            } else if (lanes < other.lanes) {
+                return true;
+            } else if (lanes > other.lanes) {
+                return false;
+            } else if (scope < other.scope) {
+                return true;
+            } else if (scope > other.scope) {
+                return false;
+            } else if (allocation < other.allocation) {
+                return true;
+            } else if (allocation > other.allocation) {
+                return false;
+            } else if (type < other.type) {
+                return true;
+            } else if (other.type < type) {
+                return false;
+            } else if (buf < other.buf) {
+                return true;
+            } else if (buf > other.buf) {
+                return false;
+            } else {
+                return graph_less_than(base, other.base);
+            }
         }
     };
     // Entry entry maps from an offset from the base to a vector of identical
