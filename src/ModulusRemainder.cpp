@@ -375,9 +375,10 @@ int64_t lcm(int64_t a, int64_t b) {
     // Remove all of the common factors from one of the operands
     b /= gcd(a, b);
 
-    // Then multiply
+    // Then multiply. On overflow this will return zero, so ignore the overflow
+    // flag.
     int64_t result;
-    mul_with_overflow(64, a, b, &result);
+    (void)mul_with_overflow(64, a, b, &result);
     return result;
 }
 
