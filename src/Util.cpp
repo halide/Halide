@@ -523,7 +523,7 @@ bool add_would_overflow(int bits, int64_t a, int64_t b) {
 }
 
 bool add_with_overflow(int bits, int64_t a, int64_t b, int64_t *result) {
-#ifndef __MSC_VER
+#ifndef _MSC_VER
     if (bits == 64) {
         static_assert(sizeof(long long) == sizeof(int64_t));
         bool flag = __builtin_saddll_overflow(a, b, (long long *)result);
@@ -551,7 +551,7 @@ bool sub_would_overflow(int bits, int64_t a, int64_t b) {
 }
 
 bool sub_with_overflow(int bits, int64_t a, int64_t b, int64_t *result) {
-#ifndef __MSC_VER
+#ifndef _MSC_VER
     if (bits == 64) {
         static_assert(sizeof(long long) == sizeof(int64_t));
         bool flag = __builtin_ssubll_overflow(a, b, (long long *)result);
@@ -591,7 +591,7 @@ bool mul_would_overflow(int bits, int64_t a, int64_t b) {
 }
 
 bool mul_with_overflow(int bits, int64_t a, int64_t b, int64_t *result) {
-#ifndef __MSC_VER
+#ifndef _MSC_VER
     if (bits == 64) {
         static_assert(sizeof(long long) == sizeof(int64_t));
         bool flag = __builtin_smulll_overflow(a, b, (long long *)result);
