@@ -52,6 +52,9 @@
 #define HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT 128
 #endif
 
+static_assert(((HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT & (HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT - 1)) == 0),
+              "HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT must be a power of 2.");
+
 // Unfortunately, not all C++17 runtimes support aligned_alloc
 // (it may depends on OS/SDK version); this is provided as an opt-out
 // if you are compiling on a platform that doesn't provide a (good)
