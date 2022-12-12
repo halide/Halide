@@ -134,5 +134,16 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
-    return SimdOpCheckTest::main<SimdOpCheckPowerPC>(argc, argv);
+    return SimdOpCheckTest::main<SimdOpCheckPowerPC>(
+        argc, argv,
+        {
+            Target("powerpc-32-linux"),
+            Target("powerpc-32-linux-vsx"),
+            Target("powerpc-32-linux-power_arch_2_07"),
+            Target("powerpc-32-linux-power_arch_2_07-vsx"),
+            Target("powerpc-64-linux"),
+            Target("powerpc-64-linux-vsx"),
+            Target("powerpc-64-linux-power_arch_2_07"),
+            Target("powerpc-64-linux-power_arch_2_07-vsx"),
+        });
 }

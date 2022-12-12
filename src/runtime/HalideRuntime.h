@@ -367,9 +367,8 @@ extern int halide_set_num_threads(int n);
  * maximum meaningful alignment for the platform for the purpose of
  * vector loads and stores, *and* with an allocated size that is (at least)
  * an integral multiple of that same alignment. The default implementation
- * uses 32-byte alignment on arm and 64-byte alignment on x86.
- *
- * Additionally, it must be safe to read at least 8 bytes beyond the end.
+ * uses 32-byte alignment on arm and 64-byte alignment on x86. Additionally,
+ * it must be safe to read at least 8 bytes before the start and beyond the end.
  */
 //@{
 extern void *halide_malloc(void *user_context, size_t x);

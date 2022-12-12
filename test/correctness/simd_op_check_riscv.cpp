@@ -46,5 +46,14 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
-    return SimdOpCheckTest::main<SimdOpCheckRISCV>(argc, argv);
+    if (Halide::Internal::get_llvm_version() < 160) {
+        std::cout << "[SKIP] simd_op_check_riscv requires LLVM 16 or later.\n";
+        return 0;
+    }
+    return SimdOpCheckTest::main<SimdOpCheckRISCV>(
+        argc, argv,
+        {
+            Target("riscv-64-linux-rvv-vector_bits_128"),
+            Target("riscv-64-linux-rvv-vector_bits_512"),
+        });
 }
