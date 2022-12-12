@@ -995,7 +995,7 @@ public:
                     tmp2(x, y) = select(x % 2 == 0, tmp1(x / 2), tmp1(x / 2 + 16));
                     tmp2.compute_root().vectorize(x, width / bits);
                     std::string op = "vst2." + std::to_string(bits);
-                    check(arm32 ? op : "st2"s, width / bits, tmp2(0, 0) + tmp2(0, 63));
+                    check(arm32 ? op : "st2", width / bits, tmp2(0, 0) + tmp2(0, 63));
                 }
             }
         }
@@ -1013,7 +1013,7 @@ public:
                     tmp2(x, y) = select(x % 2 == 0, e * 3, e + 17);
                     tmp2.compute_root().vectorize(x, width / bits);
                     std::string op = "vst2." + std::to_string(bits);
-                    check(arm32 ? op : "st2"s, width / bits, tmp2(0, 0) + tmp2(0, 127));
+                    check(arm32 ? op : "st2", width / bits, tmp2(0, 0) + tmp2(0, 127));
                 }
             }
         }
@@ -1031,7 +1031,7 @@ public:
                                         tmp1(x / 3 + 32));
                     tmp2.compute_root().vectorize(x, width / bits);
                     std::string op = "vst3." + std::to_string(bits);
-                    check(arm32 ? op : "st3"s, width / bits, tmp2(0, 0) + tmp2(0, 127));
+                    check(arm32 ? op : "st3", width / bits, tmp2(0, 0) + tmp2(0, 127));
                 }
             }
         }
@@ -1050,7 +1050,7 @@ public:
                                         tmp1(x / 4 + 48));
                     tmp2.compute_root().vectorize(x, width / bits);
                     std::string op = "vst4." + std::to_string(bits);
-                    check(arm32 ? op : "st4"s, width / bits, tmp2(0, 0) + tmp2(0, 127));
+                    check(arm32 ? op : "st4", width / bits, tmp2(0, 0) + tmp2(0, 127));
                 }
             }
         }
