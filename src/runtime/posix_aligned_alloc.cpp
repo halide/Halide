@@ -3,6 +3,7 @@
 
 extern "C" {
 
+extern void *aligned_alloc(size_t alignment, size_t size);
 extern void *malloc(size_t);
 extern void free(void *);
 
@@ -10,7 +11,10 @@ extern void free(void *);
 WEAK_INLINE void *halide_internal_aligned_alloc(size_t alignment, size_t size) {
     // Alignment must be a power of two and >= sizeof(void*)
     halide_debug_assert(nullptr, is_power_of_two(alignment) && alignment >= sizeof(void *));
-
+#if 1
+    const size_t aligned_size = align_up(size, alignment);
+    return ::aligned_alloc(alignment, aligned_size);
+#else
     // Allocate enough space for aligning the pointer we return.
     //
     // Always round allocations up to alignment size,
@@ -34,10 +38,15 @@ WEAK_INLINE void *halide_internal_aligned_alloc(size_t alignment, size_t size) {
     void *ptr = (void *)align_up((uintptr_t)orig + sizeof(void *), alignment);
     ((void **)ptr)[-1] = orig;
     return ptr;
+#endif
 }
 
 WEAK_INLINE void halide_internal_aligned_free(void *ptr) {
+#if 1
+    ::free(ptr);
+#else
     ::free(((void **)ptr)[-1]);
+#endif
 }
 
 }  // extern "C"
