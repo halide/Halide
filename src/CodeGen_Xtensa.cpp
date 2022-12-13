@@ -79,11 +79,11 @@ extern "C" {
 
 extern void *halide_tcm_malloc(void *user_context, size_t x);
 extern void halide_tcm_free(void *user_context, void *ptr);
-extern int halide_init_dma(int channel_count);
-extern int32_t halide_xtensa_copy_1d(int32_t channel, void* dst, int32_t dst_base, void* src, int32_t src_base, int extent, int item_size);
-extern int32_t halide_xtensa_copy_2d(int32_t channel, void *dst, int32_t dst_base, int32_t dst_stride, void *src, int32_t src_base, int32_t src_stride, int extent0, int extent1, int item_size);
+extern int32_t halide_init_dma(int32_t channel_count);
+extern int32_t halide_xtensa_copy_1d(int32_t channel, void* dst, int32_t dst_base, void* src, int32_t src_base, int32_t extent, int32_t item_size);
+extern int32_t halide_xtensa_copy_2d(int32_t channel, void *dst, int32_t dst_base, int32_t dst_stride, void *src, int32_t src_base, int32_t src_stride, int32_t extent0, int32_t extent1, int32_t item_size);
 extern int32_t halide_xtensa_wait_for_copy(int32_t channel);
-extern int halide_release_dma();
+extern int32_t halide_release_dma();
 
 #ifdef __cplusplus
 }  // extern "C"

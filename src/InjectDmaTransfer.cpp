@@ -228,7 +228,7 @@ class InjectDmaTransferIntoProducer : public IRMutator {
             // If we couldn't compute the strides, we still will do a 2D
             // transaction, but set one of the extents to 1. This simplifies
             // runtime a lot.
-            dma_extents.push_back(1);
+            dma_extents.emplace_back(1);
             store_stride = 1;
             value_stride = 1;
         }
