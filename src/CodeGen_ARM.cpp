@@ -848,6 +848,9 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     Stmt body = f.body;
 
     if (target.os != Target::IOS && target.os != Target::OSX) {
+        // Substitute in strided loads to get vld2/3/4 emission. We don't do it
+        // on Apple silicon, because doing a dense load and then shuffling is
+        // actually faster.
         body = SubstituteInStridedLoads().mutate(body);
     }
 
