@@ -843,20 +843,17 @@ void CodeGen_ARM::init_module() {
 void CodeGen_ARM::compile_func(const LoweredFunc &f,
                                const string &simple_name,
                                const string &extern_name) {
-    CodeGen_Posix::begin_func(f.linkage, simple_name, extern_name, f.args);
 
-    Stmt body = f.body;
+    LoweredFunc func = f;
 
     if (target.os != Target::IOS && target.os != Target::OSX) {
         // Substitute in strided loads to get vld2/3/4 emission. We don't do it
         // on Apple silicon, because doing a dense load and then shuffling is
         // actually faster.
-        body = SubstituteInStridedLoads().mutate(body);
+        func.body = SubstituteInStridedLoads().mutate(func.body);
     }
 
-    body.accept(this);
-
-    CodeGen_Posix::end_func(f.args);
+    CodeGen_Posix::compile_func(func, simple_name, extern_name);
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
