@@ -194,7 +194,7 @@ int main(int argc, char **argv) {
         Var x;
         f(x) = buf(3 * x);
         f.vectorize(x, 8, TailStrategy::RoundUp);
-        checker.check(f, 1);
+        checker.check(f, 2);
     }
 
     // Make a pair of unconditionally-executed loads, and check that a
@@ -226,10 +226,36 @@ int main(int argc, char **argv) {
         Func f;
         Var x, c;
 
-        f(c, x) = buf(2 * (2 * x + c));
+        f(c, x) = buf(2 * (2 * x + c)) + buf(2 * (2 * x + c) + 1);
         f.vectorize(x, 8, TailStrategy::RoundUp).bound(c, 0, 2).vectorize(c);
         f.output_buffer().dim(1).set_stride(2);
         checker.check(f, 1);
+    }
+
+    // Do a variety of weird loads at weird sizes from an external buffer to
+    // test the behaviour that does two half-sized loads.
+    {
+        Buffer<float> data(1024);
+        Buffer<float> out(512);
+        for (int i = 0; i < 1024; i++) {
+            data(i) = i;
+        }
+        buf.set(data);
+        for (int size = 2; size <= 16; size += 2) {
+            for (int stride = 2; stride <= 8; stride++) {
+                Func f;
+                Var x;
+                f(x) = buf(stride * x);
+                f.vectorize(x, size);
+
+                Buffer<float> out = f.realize({1024 / stride});
+                for (int i = 0; i < out.width(); i++) {
+                    if (out(i) != data(stride * i)) {
+                        printf("out(%d) = %f instead of %f\n", i, out(i), data(stride * i));
+                    }
+                }
+            }
+        }
     }
 
     printf("Success!\n");

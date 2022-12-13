@@ -32,9 +32,10 @@ namespace Internal {
  * evidence is in the form of a load at the same base address with a different
  * constant offset. It also clusters groups of these loads so that they do the
  * same dense load and extract the appropriate slice of lanes. If it fails to
- * find any evidence, for loads from external buffers it just does a shorter
- * load, and for loads from internal allocations it adds padding to the
- * allocation explicitly, by setting the padding field on Allocate nodes.
+ * find any evidence, for loads from external buffers it does two overlapping
+ * half-sized dense loads and shuffles out the desired lanes, and for loads from
+ * internal allocations it adds padding to the allocation explicitly, by setting
+ * the padding field on Allocate nodes.
  */
 Stmt stage_strided_loads(const Stmt &s);
 

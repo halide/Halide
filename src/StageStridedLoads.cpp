@@ -313,26 +313,48 @@ Stmt stage_strided_loads(const Stmt &s) {
             int lanes = k.lanes * k.stride;
 
             bool may_pad = k.allocation && !k.allocation->new_expr.defined();
-            if (may_pad) {
-                int padding = (int)(k.stride - 1);
-                auto p = replacer.padding.insert({k.allocation, padding});
-                if (!p.second) {
-                    p.first->second = std::max(p.first->second, padding);
-                }
-            } else {
-                lanes -= k.stride - 1;
-            }
+            int delta = (int)(k.stride - 1);
 
-            int64_t first_offset = load->first;
-            Expr idx = Ramp::make(k.base + (int)first_offset, make_one(k.base.type()), lanes);
-            Type t = k.type.with_lanes(lanes);
-            const Load *op = load->second[0];
-            Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
-                                         const_true(lanes), op->alignment);
-            dense_load = common_subexpression_elimination(dense_load);
-            Expr shuf = Shuffle::make_slice(dense_load, load->first - first_offset, k.stride, k.lanes);
-            for (const Load *l : load->second) {
-                replacer.replacements.emplace(l, shuf);
+            if (may_pad) {
+                auto p = replacer.padding.insert({k.allocation, delta});
+                if (!p.second) {
+                    p.first->second = std::max(p.first->second, delta);
+                }
+
+                int64_t first_offset = load->first;
+                Expr idx = Ramp::make(k.base + (int)first_offset, make_one(k.base.type()), lanes);
+                Type t = k.type.with_lanes(lanes);
+                const Load *op = load->second[0];
+                Expr dense_load = Load::make(t, k.buf, idx, op->image, op->param,
+                                             const_true(lanes), op->alignment);
+                dense_load = common_subexpression_elimination(dense_load);
+                Expr shuf = Shuffle::make_slice(dense_load, load->first - first_offset, k.stride, k.lanes);
+                for (const Load *l : load->second) {
+                    replacer.replacements.emplace(l, shuf);
+                }
+
+            } else if (k.lanes % 2 == 0) {
+                // Do two overlapping half-sized dense loads and mush them together.
+                int64_t first_offset = load->first;
+                int half_lanes = lanes / 2;
+                internal_assert(delta <= half_lanes);
+                Expr idx1 = Ramp::make(k.base + (int)first_offset, make_one(k.base.type()), half_lanes);
+
+                Expr idx2 = Ramp::make(k.base + (int)first_offset + half_lanes - delta, make_one(k.base.type()), half_lanes);
+                Type t = k.type.with_lanes(half_lanes);
+                const Load *op = load->second[0];
+                Expr dense_load1 = Load::make(t, k.buf, idx1, op->image, op->param,
+                                              const_true(half_lanes), op->alignment);
+                Expr dense_load2 = Load::make(t, k.buf, idx2, op->image, op->param,
+                                              const_true(half_lanes), op->alignment + half_lanes - delta);
+                dense_load1 = common_subexpression_elimination(dense_load1);
+                dense_load2 = common_subexpression_elimination(dense_load2);
+                Expr shuf1 = Shuffle::make_slice(dense_load1, 0, k.stride, k.lanes / 2);
+                Expr shuf2 = Shuffle::make_slice(dense_load2, delta, k.stride, k.lanes / 2);
+                Expr shuf = Shuffle::make_concat({shuf1, shuf2});
+                for (const Load *l : load->second) {
+                    replacer.replacements.emplace(l, shuf);
+                }
             }
         }
     }
