@@ -596,8 +596,8 @@ public:
         }
     }
 
-    template<int... Indices>
-    static Vec shuffle(const Vec &a) {
+    template<int... Indices, typename InputVec>
+    static Vec shuffle(const InputVec &a) {
         static_assert(sizeof...(Indices) == Lanes, "shuffle() requires an exact match of lanes");
         Vec r = { a[Indices]... };
         return r;
@@ -1129,15 +1129,14 @@ public:
         }
     }
 
-    template<int... Indices>
-    static Vec shuffle(const Vec a) {
+    template<int... Indices, typename InputVec>
+    static Vec shuffle(const InputVec a) {
         static_assert(sizeof...(Indices) == Lanes, "shuffle() requires an exact match of lanes");
 #if __has_builtin(__builtin_shufflevector)
-        // Clang
+        // Exists in clang and gcc >= 12. Gcc's __builtin_shuffle can't
+        // be used, because it can't handle changing the number of vector
+        // lanes between input and output.
         return __builtin_shufflevector(a, a, Indices...);
-#elif __has_builtin(__builtin_shuffle) || defined(__GNUC__)
-        // GCC
-        return __builtin_shuffle(a, NativeVector<int, sizeof...(Indices)>{Indices...});
 #else
         Vec r = { a[Indices]... };
         return r;
