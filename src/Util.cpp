@@ -522,11 +522,53 @@ bool add_would_overflow(int bits, int64_t a, int64_t b) {
             (b < 0 && a < min_val - b));   // (a + b) < min_val, rewritten to avoid overflow
 }
 
+bool add_with_overflow(int bits, int64_t a, int64_t b, int64_t *result) {
+#ifndef _MSC_VER
+    if (bits == 64) {
+        static_assert(sizeof(long long) == sizeof(int64_t));
+        bool flag = __builtin_saddll_overflow(a, b, (long long *)result);
+        if (flag) {
+            // Overflowed 64 bits
+            *result = 0;
+        }
+        return !flag;
+    }
+#endif
+    if (add_would_overflow(bits, a, b)) {
+        *result = 0;
+        return false;
+    } else {
+        *result = a + b;
+        return true;
+    }
+}
+
 bool sub_would_overflow(int bits, int64_t a, int64_t b) {
     int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
     int64_t min_val = -max_val - 1;
     return ((b < 0 && a > max_val + b) ||  // (a - b) > max_val, rewritten to avoid overflow
             (b > 0 && a < min_val + b));   // (a - b) < min_val, rewritten to avoid overflow
+}
+
+bool sub_with_overflow(int bits, int64_t a, int64_t b, int64_t *result) {
+#ifndef _MSC_VER
+    if (bits == 64) {
+        static_assert(sizeof(long long) == sizeof(int64_t));
+        bool flag = __builtin_ssubll_overflow(a, b, (long long *)result);
+        if (flag) {
+            // Overflowed 64 bits
+            *result = 0;
+        }
+        return !flag;
+    }
+#endif
+    if (sub_would_overflow(bits, a, b)) {
+        *result = 0;
+        return false;
+    } else {
+        *result = a - b;
+        return true;
+    }
 }
 
 bool mul_would_overflow(int bits, int64_t a, int64_t b) {
@@ -545,6 +587,27 @@ bool mul_would_overflow(int bits, int64_t a, int64_t b) {
         // no 64-bit overflow occurs, and the third clause catches
         // 64-bit overflow.
         return ab < min_val || ab > max_val || (ab / a != b);
+    }
+}
+
+bool mul_with_overflow(int bits, int64_t a, int64_t b, int64_t *result) {
+#ifndef _MSC_VER
+    if (bits == 64) {
+        static_assert(sizeof(long long) == sizeof(int64_t));
+        bool flag = __builtin_smulll_overflow(a, b, (long long *)result);
+        if (flag) {
+            // Overflowed 64 bits
+            *result = 0;
+        }
+        return !flag;
+    }
+#endif
+    if (mul_would_overflow(bits, a, b)) {
+        *result = 0;
+        return false;
+    } else {
+        *result = a * b;
+        return true;
     }
 }
 
