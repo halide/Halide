@@ -108,6 +108,8 @@ class InjectDmaTransferIntoProducer : public IRMutator {
     std::vector<LoopVar> loop_vars;
     std::set<std::string> loops_to_be_removed;
     std::map<string, Expr> containing_lets;
+    // Index of the current DMA channel.
+    int index;
 
     Stmt visit(const For *op) override {
         debug(3) << "InjectDmaTransfer::for " << op->name << "\n";
@@ -145,24 +147,29 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         if (op->name != producer_name) {
             return IRMutator::visit(op);
         }
+
+        // Check if the destination is an output buffer in which case we can
+        // do a wait for completion later.
+        is_output_dma = op->param.defined();
         debug(3) << "InjectDmaTransfer::store " << op->name << "\n";
         debug(3) << loop_vars.size() << "\n";
-        // Only 1D, 2D and 3D DMA transfers are supported
-        debug(3) << "[begin] InjectDmaTransfer::store\n";
+
         const Load *maybe_load = op->value.as<Load>();
         if (const Call *maybe_call = op->value.as<Call>()) {
             if (maybe_call->is_intrinsic(Call::IntrinsicOp::strict_float)) {
                 maybe_load = maybe_call->args[0].as<Load>();
             }
         }
-        // Has to be direct load-to-store for now.
-        user_assert(maybe_load);
+        // Has to be a direct load-to-store for now.
+        user_assert(maybe_load) << "Only direct load-to-stores are supported in dma()";
 
         debug(3) << "InjectDmaTransfer::" << op->name << " " << maybe_load->name << "\n";
         debug(3) << op->index << "\n";
         debug(3) << maybe_load->index << "\n";
+
+        // Substitute in lets into indices of load and store to simplify a further
+        // analysis.
         Expr op_index = op->index;
-        // TODO: Is it a good idea? Maybe not.
         op_index = substitute_in_all_lets(op_index);
         op_index = substitute(containing_lets, op_index);
 
@@ -170,13 +177,13 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         value_index = substitute_in_all_lets(value_index);
         value_index = substitute(containing_lets, value_index);
 
+        // A vector to hold DMA extents.
+        std::vector<Expr> dma_extents;
+
         vector<Expr> store_strides;
         vector<Expr> value_strides;
-        debug(3) << op->index << "\n"
-                 << op_index << "\n";
-        debug(3) << maybe_load->index << "\n"
-                 << value_index << "\n";
 
+        // Compute strides for each of the loop vars.
         for (const auto &v : loop_vars) {
             Scope<Expr> local_scope;
             local_scope.push(v.name, 1);
@@ -185,40 +192,87 @@ class InjectDmaTransferIntoProducer : public IRMutator {
             store_strides.push_back(is_linear(op_index, local_scope));
             value_strides.push_back(is_linear(value_index, local_scope));
         }
-        Expr store_stride = store_strides.back();
-        Expr value_stride = value_strides.back();
 
-        const auto &v = loop_vars.back();
-        Expr var = Variable::make(op->index.type(), v.name);
-        loops_to_be_removed.insert(v.name);
-        Expr store_base = substitute(var, v.min, op_index);
-        Expr value_base = substitute(var, v.min, value_index);
+        // Use innermost loop var first.
+        const auto &v_inner = loop_vars.back();
+        Expr var = Variable::make(op->index.type(), v_inner.name);
+        // Use extent of the loop as one of the extents of DMA transactions.
+        dma_extents.push_back(v_inner.extent);
+        // This loop was replaced by DMA transfer, so remove the loop itself.
+        loops_to_be_removed.insert(v_inner.name);
+        // Substitute the min into the store/load base address.
+        Expr store_base = substitute(var, v_inner.min, op_index);
+        Expr value_base = substitute(var, v_inner.min, value_index);
 
+        Expr store_stride;
+        Expr value_stride;
+        // Hardware supports 2D transactions, so try to see if we can replace
+        // the next loop var. We only can do it if there are at least two loops
+        // and we were able to find the strides for corresponding loop var.
+        if ((loop_vars.size() > 1) && store_strides[loop_vars.size() - 2].defined() && value_strides[loop_vars.size() - 2].defined()) {
+            const auto &v_outer = loop_vars[loop_vars.size() - 2];
+            Expr var_outer = Variable::make(op->index.type(), v_outer.name);
+            // Remove the second loop as well.
+            loops_to_be_removed.insert(v_outer.name);
+
+            // Substitute another min.
+            store_base = substitute(var_outer, v_outer.min, store_base);
+            value_base = substitute(var_outer, v_outer.min, value_base);
+
+            dma_extents.push_back(v_outer.extent);
+
+            // Use the strides we computed before.
+            store_stride = store_strides[loop_vars.size() - 2];
+            value_stride = value_strides[loop_vars.size() - 2];
+        } else {
+            // If we couldn't compute the strides, we still will do a 2D
+            // transaction, but set one of the extents to 1. This simplifies
+            // runtime a lot.
+            dma_extents.push_back(1);
+            store_stride = 1;
+            value_stride = 1;
+        }
+
+        // Try to simplify the base adresses after substitions.
         store_base = simplify(store_base);
         value_base = simplify(value_base);
         debug(3) << ">>> " << store_base << "\n>>> "
-                 << value_base << "\n>>>" << v.extent << "\n";
+                 << value_base << "\n>>>" << v_inner.extent << "\n";
 
-        // TODO(vksnk): is using Intrinsic here correct?
-        Expr copy_call = Call::make(Int(32), "halide_xtensa_copy_1d",
-                                    {Variable::make(type_of<void *>(), op->name), store_base,
-                                     Variable::make(type_of<void *>(), maybe_load->name), value_base,
-                                     v.extent, op->value.type().bytes()},
+        Expr copy_call = Call::make(Int(32), "halide_xtensa_copy_2d",
+                                    {index,
+                                     Variable::make(type_of<void *>(), op->name), store_base, store_stride,
+                                     Variable::make(type_of<void *>(), maybe_load->name), value_base, value_stride,
+                                     dma_extents[0], dma_extents[1], op->value.type().bytes()},
                                     Call::Intrinsic);
+
+        if (is_output_dma) {
+            source_name = maybe_load->name;
+        }
+
         Stmt call_result_assert = AssertStmt::make(copy_call > 0, -1);
 
         return call_result_assert;
     }
 
 public:
-    InjectDmaTransferIntoProducer(const string &pn)
-        : producer_name(pn) {
+    InjectDmaTransferIntoProducer(const string &pn, int i)
+        : producer_name(pn), index(i) {
     }
+
+    // Are we writing to the output buffer?
+    bool is_output_dma = false;
+    // If yes store the name of the source.
+    std::string source_name;
 };
 
 class InjectDmaTransfer : public IRMutator {
     using IRMutator::visit;
     const std::map<std::string, Function> &env;
+    // Index to track current DMA channel to use.
+    int index = 0;
+    // Mapping from the function name to the assigned DMA channel.
+    std::map<std::string, int> function_name_to_index;
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
@@ -227,12 +281,26 @@ class InjectDmaTransfer : public IRMutator {
                 Function f = it->second;
                 if (f.schedule().dma()) {
                     Stmt body = mutate(op->body);
-                    body = InjectDmaTransferIntoProducer(op->name).mutate(body);
-                    // Add a wait in the end of the producer node for the case
-                    // when there any outstanding DMA transactions.
-                    Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy", {0}, Call::Intrinsic);
-                    Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
-                    body = Block::make(body, wait_is_done);
+                    // Assign a separate DMA channel for each of the buffers.
+                    if (function_name_to_index.find(op->name) == function_name_to_index.end()) {
+                        function_name_to_index[op->name] = index;
+                        index++;
+                    }
+                    auto injector = InjectDmaTransferIntoProducer(op->name, function_name_to_index[op->name]);
+                    body = injector.mutate(body);
+                    if (!injector.is_output_dma) {
+                        // Add a wait in the *end* of the producer node for the
+                        // case when there any outstanding DMA transactions.
+                        Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy",
+                                                      {function_name_to_index[op->name]}, Call::Intrinsic);
+                        Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
+                        body = Block::make(body, wait_is_done);
+                    } else {
+                        // For the output nodes collect all of the corresponding
+                        // producers, so we can add required waits in a separate
+                        // pass later.
+                        producers_to_wait[injector.source_name] = function_name_to_index[op->name];
+                    }
                     return ProducerConsumer::make_produce(op->name, body);
                 }
             }
@@ -244,10 +312,61 @@ public:
     InjectDmaTransfer(const std::map<std::string, Function> &e)
         : env(e) {
     }
+
+    std::map<std::string, int> producers_to_wait;
+};
+
+class InjectWaitsInProducers : public IRMutator {
+    using IRMutator::visit;
+    const std::map<std::string, int> &producers_to_wait;
+
+    Stmt visit(const ProducerConsumer *op) override {
+        if (op->is_producer) {
+            auto it = producers_to_wait.find(op->name);
+            if (it != producers_to_wait.end()) {
+                // Add a wait in the *beginning* of the producer node to make
+                // sure that everything is copied before starting production of
+                // the new lines.
+                Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy", {it->second}, Call::Intrinsic);
+                Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
+                Stmt body = mutate(op->body);
+                body = Block::make(wait_is_done, body);
+
+                return ProducerConsumer::make_produce(op->name, body);
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Allocate *op) override {
+        auto it = producers_to_wait.find(op->name);
+        if (it != producers_to_wait.end()) {
+            // Add a wait in the end of the allocate node to make sure that
+            // everything is copied before de-allocation.
+            Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy", {it->second}, Call::Intrinsic);
+            Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
+            Stmt body = mutate(op->body);
+            body = Block::make(body, wait_is_done);
+
+            return Allocate::make(op->name, op->type, op->memory_type,
+                                  op->extents, op->condition, body,
+                                  op->new_expr, op->free_function);
+        }
+
+        return IRMutator::visit(op);
+    }
+
+public:
+    InjectWaitsInProducers(const std::map<std::string, int> &pr)
+        : producers_to_wait(pr){}
+
+          ;
 };
 
 Stmt inject_dma_transfer(Stmt s, const std::map<std::string, Function> &env) {
-    s = InjectDmaTransfer(env).mutate(s);
+    auto inject_dma = InjectDmaTransfer(env);
+    s = inject_dma.mutate(s);
+    s = InjectWaitsInProducers(inject_dma.producers_to_wait).mutate(s);
     return s;
 }
 
