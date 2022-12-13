@@ -90,15 +90,19 @@ extern int32_t halide_release_dma();
 #endif
 
 class ScopedDmaInitializer {
+  bool is_valid_ = false;
  public:
   ScopedDmaInitializer(int channel_count) {
-    int status = halide_init_dma(channel_count);
-    (void)status;
+    is_valid_ = (halide_init_dma(channel_count) == 0);
   }
 
   ~ScopedDmaInitializer() {
-    halide_release_dma();
+    if (is_valid_) {
+      halide_release_dma();
+    }
   }
+
+  bool is_valid() { return is_valid_; }
 };
 
 )INLINE_CODE";
@@ -198,7 +202,13 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
             UsesDmaCopy uses_dma;
             body.accept(&uses_dma);
             if (uses_dma.uses_dma) {
-                stream << "ScopedDmaInitializer dma_initializer(" << uses_dma.max_channel_no + 1 << ");\n";
+                stream << get_indent() << "ScopedDmaInitializer dma_initializer(" << uses_dma.max_channel_no + 1 << ");\n";
+                stream << get_indent() << "if (!dma_initializer.is_valid()) {\n";
+                stream << get_indent() << "halide_error("
+                       << (have_user_context ? "__user_context" : "nullptr")
+                       << ", \"DMA initialization failed\");\n";
+                stream << get_indent() << "return halide_error_code_generic_error;\n";
+                stream << get_indent() << "}\n";
             }
             // stream << "printf(\"" << simple_name << "\\n\");";
             // Emit the body
