@@ -227,10 +227,12 @@ int main(int argc, char **argv) {
         Var x, c;
 
         f(c, x) = buf(2 * (2 * x + c));
-        f.vectorize(x, 8).bound(c, 0, 2).vectorize(c);
+        f.vectorize(x, 8, TailStrategy::RoundUp).bound(c, 0, 2).vectorize(c);
         f.output_buffer().dim(1).set_stride(2);
         checker.check(f, 1);
     }
+
+    printf("Success!\n");
 
     return 0;
 }
