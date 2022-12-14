@@ -90,11 +90,16 @@ extern int32_t halide_release_dma();
 #endif
 
 class ScopedDmaInitializer {
-  bool is_valid_ = false;
+  bool is_valid_;
  public:
   ScopedDmaInitializer(int channel_count) {
     is_valid_ = (halide_init_dma(channel_count) == 0);
   }
+
+  ScopedDmaInitializer() = delete;
+  ScopedDmaInitializer(const ScopedDmaInitializer&) = delete;
+  ScopedDmaInitializer& operator=(const ScopedDmaInitializer&) = delete;
+  ScopedDmaInitializer(ScopedDmaInitializer&&) = delete;
 
   ~ScopedDmaInitializer() {
     if (is_valid_) {
@@ -102,7 +107,7 @@ class ScopedDmaInitializer {
     }
   }
 
-  bool is_valid() { return is_valid_; }
+  bool is_valid() const { return is_valid_; }
 };
 
 )INLINE_CODE";
