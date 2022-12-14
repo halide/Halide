@@ -2080,6 +2080,66 @@ HALIDE_ALWAYS_INLINE auto cast(halide_type_t t, A &&a) noexcept -> CastOp<declty
     return {t, pattern_arg(a)};
 }
 
+template<typename Vec, typename Base, typename Stride, typename Lanes>
+struct SliceOp {
+    struct pattern_tag {};
+    Vec vec;
+    Base base;
+    Stride stride;
+    Lanes lanes;
+
+    static constexpr uint32_t binds = Vec::binds | Base::binds | Stride::binds | Lanes::binds;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Shuffle;
+    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static bool canonical = Vec::canonical && Base::canonical && Stride::canonical && Lanes::canonical;
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+        if (e.node_type != IRNodeType::Shuffle) {
+            return false;
+        }
+        const Shuffle &v = (const Shuffle &)e;
+        return v.vectors.size() == 1 &&
+               vec.template match<bound>(*v.vectors[0].get(), state) &&
+               base.template match<bound | bindings<Vec>::mask>(v.slice_begin(), state) &&
+               stride.template match<bound | bindings<Vec>::mask | bindings<Base>::mask>(v.slice_stride(), state) &&
+               lanes.template match<bound | bindings<Vec>::mask | bindings<Base>::mask | bindings<Stride>::mask>(v.type.lanes(), state);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
+        halide_scalar_value_t base_val, stride_val, lanes_val;
+        halide_type_t ty;
+        base.make_folded_const(base_val, ty, state);
+        int b = (int)base_val.u.i64;
+        stride.make_folded_const(stride_val, ty, state);
+        int s = (int)stride_val.u.i64;
+        lanes.make_folded_const(lanes_val, ty, state);
+        int l = (int)lanes_val.u.i64;
+        return Shuffle::make_slice(vec.make(state, type_hint), b, s, l);
+    }
+
+    constexpr static bool foldable = false;
+
+    HALIDE_ALWAYS_INLINE
+    SliceOp(Vec v, Base b, Stride s, Lanes l)
+        : vec(v), base(b), stride(s), lanes(l) {
+    }
+};
+
+template<typename Vec, typename Base, typename Stride, typename Lanes>
+std::ostream &operator<<(std::ostream &s, const SliceOp<Vec, Base, Stride, Lanes> &op) {
+    s << "slice(" << op.vec << ", " << op.base << ", " << op.stride << ", " << op.lanes << ")";
+    return s;
+}
+
+template<typename Vec, typename Base, typename Stride, typename Lanes>
+HALIDE_ALWAYS_INLINE auto slice(Vec vec, Base base, Stride stride, Lanes lanes) noexcept
+    -> SliceOp<decltype(pattern_arg(vec)), decltype(pattern_arg(base)), decltype(pattern_arg(stride)), decltype(pattern_arg(lanes))> {
+    return {pattern_arg(vec), pattern_arg(base), pattern_arg(stride), pattern_arg(lanes)};
+}
+
 template<typename A>
 struct Fold {
     struct pattern_tag {};

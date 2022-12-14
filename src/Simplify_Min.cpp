@@ -193,6 +193,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
              rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
 
+             rewrite(min(slice(x, c0, c1, c2), slice(y, c0, c1, c2)), slice(min(x, y), c0, c1, c2)) ||
+             rewrite(min(slice(x, c0, c1, c2), min(slice(y, c0, c1, c2), z)), min(slice(min(x, y), c0, c1, c2), z)) ||
+             rewrite(min(slice(x, c0, c1, c2), min(z, slice(y, c0, c1, c2))), min(slice(min(x, y), c0, c1, c2), z)) ||
              (no_overflow(op->type) &&
               (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
                rewrite(min(min(x, y) + c0, x), min(x, y) + c0, c0 < 0) ||
@@ -309,18 +312,6 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
             return mutate(rewrite.result, bounds);
         }
         // clang-format on
-    }
-
-    const Shuffle *shuffle_a = a.as<Shuffle>();
-    const Shuffle *shuffle_b = b.as<Shuffle>();
-    if (shuffle_a && shuffle_b &&
-        shuffle_a->is_slice() &&
-        shuffle_b->is_slice()) {
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return hoist_slice_vector<Min>(op);
-        } else {
-            return hoist_slice_vector<Min>(Min::make(a, b));
-        }
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {
