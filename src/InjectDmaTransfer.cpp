@@ -102,6 +102,7 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         std::string name;
         Expr min;
         Expr extent;
+        bool body_is_also_loop;
     };
 
     std::string producer_name;
@@ -113,7 +114,7 @@ class InjectDmaTransferIntoProducer : public IRMutator {
 
     Stmt visit(const For *op) override {
         debug(3) << "InjectDmaTransfer::for " << op->name << "\n";
-        loop_vars.push_back({op->name, op->min, op->extent});
+        loop_vars.push_back({op->name, op->min, op->extent, op->body.as<For>() != nullptr});
         Stmt mutated = IRMutator::visit(op);
         loop_vars.pop_back();
         if (loops_to_be_removed.count(op->name) > 0) {
@@ -209,7 +210,7 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         // Hardware supports 2D transactions, so try to see if we can replace
         // the next loop var. We only can do it if there are at least two loops
         // and we were able to find the strides for corresponding loop var.
-        if ((loop_vars.size() > 1) && store_strides[loop_vars.size() - 2].defined() && value_strides[loop_vars.size() - 2].defined()) {
+        if ((loop_vars.size() > 1) && store_strides[loop_vars.size() - 2].defined() && value_strides[loop_vars.size() - 2].defined() && loop_vars[loop_vars.size() - 2].body_is_also_loop) {
             const auto &v_outer = loop_vars[loop_vars.size() - 2];
             Expr var_outer = Variable::make(op->index.type(), v_outer.name);
             // Remove the second loop as well.
