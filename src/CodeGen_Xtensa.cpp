@@ -52,8 +52,9 @@ private:
 
 protected:
     void visit(const Call *op) override {
-        if (op->name == "halide_xtensa_copy_1d") {
+        if ((op->name == "halide_xtensa_copy_1d") || (op->name == "halide_xtensa_copy_2d")) {
             uses_dma = true;
+            max_channel_no = std::max<int>(max_channel_no, *as_const_int(op->args[0]));
         }
 
         IRGraphVisitor::visit(op);
@@ -61,6 +62,7 @@ protected:
 
 public:
     bool uses_dma = false;
+    int max_channel_no = 0;
 };
 
 void CodeGen_Xtensa::add_platform_prologue() {
@@ -77,25 +79,35 @@ extern "C" {
 
 extern void *halide_tcm_malloc(void *user_context, size_t x);
 extern void halide_tcm_free(void *user_context, void *ptr);
-extern int halide_init_dma();
-extern int32_t halide_xtensa_copy_1d(void* dst, int32_t dst_base, void* src, int32_t src_base, int extent, int item_size);
-extern int32_t halide_xtensa_wait_for_copy(int32_t id);
-extern int halide_release_dma();
+extern int32_t halide_init_dma(int32_t channel_count);
+extern int32_t halide_xtensa_copy_1d(int32_t channel, void* dst, int32_t dst_base, void* src, int32_t src_base, int32_t extent, int32_t item_size);
+extern int32_t halide_xtensa_copy_2d(int32_t channel, void *dst, int32_t dst_base, int32_t dst_stride, void *src, int32_t src_base, int32_t src_stride, int32_t extent0, int32_t extent1, int32_t item_size);
+extern int32_t halide_xtensa_wait_for_copy(int32_t channel);
+extern int32_t halide_release_dma();
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
 class ScopedDmaInitializer {
+  bool is_valid_;
  public:
-  ScopedDmaInitializer() {
-    int status = halide_init_dma();
-    (void)status;
+  ScopedDmaInitializer(int channel_count) {
+    is_valid_ = (halide_init_dma(channel_count) == 0);
   }
 
+  ScopedDmaInitializer() = delete;
+  ScopedDmaInitializer(const ScopedDmaInitializer&) = delete;
+  ScopedDmaInitializer& operator=(const ScopedDmaInitializer&) = delete;
+  ScopedDmaInitializer(ScopedDmaInitializer&&) = delete;
+
   ~ScopedDmaInitializer() {
-    halide_release_dma();
+    if (is_valid_) {
+      halide_release_dma();
+    }
   }
+
+  bool is_valid() const { return is_valid_; }
 };
 
 )INLINE_CODE";
@@ -195,7 +207,13 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
             UsesDmaCopy uses_dma;
             body.accept(&uses_dma);
             if (uses_dma.uses_dma) {
-                stream << "ScopedDmaInitializer dma_initializer;\n";
+                stream << get_indent() << "ScopedDmaInitializer dma_initializer(" << uses_dma.max_channel_no + 1 << ");\n";
+                stream << get_indent() << "if (!dma_initializer.is_valid()) {\n";
+                stream << get_indent() << "halide_error("
+                       << (have_user_context ? "__user_context" : "nullptr")
+                       << ", \"DMA initialization failed\");\n";
+                stream << get_indent() << "return halide_error_code_generic_error;\n";
+                stream << get_indent() << "}\n";
             }
             // stream << "printf(\"" << simple_name << "\\n\");";
             // Emit the body
@@ -2770,24 +2788,6 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     ostringstream rhs;
 
     vector<string> args(op->args.size());
-
-    if (op->name == "halide_xtensa_copy_1d") {
-        internal_assert(op->args.size() >= 3);
-
-        const Variable *dest = op->args[0].as<Variable>();
-        internal_assert(dest != nullptr);
-        args[0] = print_name(dest->name);
-        args[1] = print_expr(op->args[1]);
-        const Variable *src = op->args[2].as<Variable>();
-        internal_assert(src != nullptr);
-        args[2] = print_name(src->name);
-
-        for (size_t i = 3; i < op->args.size(); i++) {
-            args[i] = print_expr(op->args[i]);
-        }
-        rhs << op->name << "(" << with_commas(args) << ")";
-        return rhs.str();
-    }
 
     if (op->name == "halide_xtensa_widening_load") {
         internal_assert(op->args.size() == 3);
