@@ -113,6 +113,9 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(x*c0 + y*c1, (x + y*fold(c1/c0)) * c0, c1 % c0 == 0) ||
              rewrite(x*c0 + y*c1, (x*fold(c0/c1) + y) * c1, c0 % c1 == 0) ||
 
+             // Hoist shuffles. The Shuffle visitor wants to sink
+             // extract_elements to the leaves, and those count as degenerate
+             // shuffles, so only hoist shuffles that grab more than one lane.
              rewrite(slice(x, c0, c1, c2) + slice(y, c0, c1, c2), slice(x + y, c0, c1, c2), c2 > 1) ||
              rewrite(slice(x, c0, c1, c2) + (z + slice(y, c0, c1, c2)), slice(x + y, c0, c1, c2) + z, c2 > 1) ||
              rewrite(slice(x, c0, c1, c2) + (slice(y, c0, c1, c2) + z), slice(x + y, c0, c1, c2) + z, c2 > 1) ||

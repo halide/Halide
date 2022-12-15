@@ -193,6 +193,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
              rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
 
+             // Hoist shuffles. The Shuffle visitor wants to sink
+             // extract_elements to the leaves, and those count as degenerate
+             // shuffles, so only hoist shuffles that grab more than one lane.
              rewrite(min(slice(x, c0, c1, c2), slice(y, c0, c1, c2)), slice(min(x, y), c0, c1, c2), c2 > 1) ||
              rewrite(min(slice(x, c0, c1, c2), min(slice(y, c0, c1, c2), z)), min(slice(min(x, y), c0, c1, c2), z), c2 > 1) ||
              rewrite(min(slice(x, c0, c1, c2), min(z, slice(y, c0, c1, c2))), min(slice(min(x, y), c0, c1, c2), z), c2 > 1) ||
