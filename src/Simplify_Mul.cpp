@@ -95,9 +95,9 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             rewrite(ramp(broadcast(x, c0), broadcast(y, c0), c1) * broadcast(z, c2),
                     ramp(broadcast(x * z, c0), broadcast(y * z, c0), c1), c2 == c0 * c1) ||
 
-            rewrite(slice(x, c0, c1, c2) * slice(y, c0, c1, c2), slice(x * y, c0, c1, c2)) ||
-            rewrite(slice(x, c0, c1, c2) * (slice(y, c0, c1, c2) * z), slice(x * y, c0, c1, c2) * z) ||
-            rewrite(slice(x, c0, c1, c2) * (z * slice(y, c0, c1, c2)), slice(x * y, c0, c1, c2) * z) ||
+            rewrite(slice(x, c0, c1, c2) * slice(y, c0, c1, c2), slice(x * y, c0, c1, c2), c2 > 1) ||
+            rewrite(slice(x, c0, c1, c2) * (slice(y, c0, c1, c2) * z), slice(x * y, c0, c1, c2) * z, c2 > 1) ||
+            rewrite(slice(x, c0, c1, c2) * (z * slice(y, c0, c1, c2)), slice(x * y, c0, c1, c2) * z, c2 > 1) ||
 
             false) {
             return mutate(rewrite.result, bounds);
