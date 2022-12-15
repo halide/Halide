@@ -379,16 +379,14 @@ Target::Feature calculate_host_vulkan_capability(Target t) {
     internal_assert(interface->compute_capability);
     int major, minor;
     int err = interface->compute_capability(nullptr, &major, &minor);
-    internal_assert(err == 0) << "Failed to query cuda compute capability\n";
+    internal_assert(err == 0) << "Failed to query vulkan compute capability\n";
     int ver = major * 10 + minor;
     if (ver < 10) {
         return Target::FeatureEnd;
-    } else if (ver < 10) {
-        return Target::VulkanV10;
     } else if (ver < 12) {
-        return Target::VulkanV12;
+        return Target::VulkanV10;
     } else if (ver < 13) {
-        return Target::VulkanV13;
+        return Target::VulkanV12;
     } else {
         return Target::VulkanV13;
     }
