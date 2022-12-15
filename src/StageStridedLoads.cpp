@@ -188,7 +188,6 @@ protected:
 }  // namespace
 
 Stmt stage_strided_loads(const Stmt &s) {
-    Stmt stmt = s;
     FindStridedLoads finder;
     ReplaceStridedLoads replacer;
 
@@ -355,7 +354,7 @@ Stmt stage_strided_loads(const Stmt &s) {
         }
     }
 
-    return replacer.mutate(stmt);
+    return replacer.mutate(s);
 }
 
 }  // namespace Internal
