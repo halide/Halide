@@ -2125,6 +2125,9 @@ struct SliceOp {
     HALIDE_ALWAYS_INLINE
     SliceOp(Vec v, Base b, Stride s, Lanes l)
         : vec(v), base(b), stride(s), lanes(l) {
+        static_assert(Base::foldable, "Base of slice should consist only of operations that constant-fold");
+        static_assert(Stride::foldable, "Stride of slice should consist only of operations that constant-fold");
+        static_assert(Lanes::foldable, "Lanes of slice should consist only of operations that constant-fold");
     }
 };
 
