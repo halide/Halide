@@ -536,51 +536,51 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type 
     if (!value_type.is_bool()) {
         value_id = cast_type(Bool(), value_type, value_id);
     }
-    std::vector<uint8_t> true_data(target_type.bytes(), uint8_t(0));
-    std::vector<uint8_t> false_data(target_type.bytes(), uint8_t(0));
+    std::vector<uint8_t> true_data(target_type.bytes(), (uint8_t)0);
+    std::vector<uint8_t> false_data(target_type.bytes(), (uint8_t)0);
     for (int i = 0; i < target_type.lanes(); ++i) {
         if (target_type.is_int_or_uint() && target_type.bits() == 8) {
             int8_t *td = reinterpret_cast<int8_t *>(&true_data[0]);
             int8_t *fd = reinterpret_cast<int8_t *>(&false_data[0]);
-            td[i] = int8_t(1);
-            fd[i] = int8_t(0);
+            td[i] = (int8_t)1;
+            fd[i] = (int8_t)0;
         } else if (target_type.is_int_or_uint() && target_type.bits() == 16) {
             int16_t *td = reinterpret_cast<int16_t *>(&true_data[0]);
             int16_t *fd = reinterpret_cast<int16_t *>(&false_data[0]);
-            td[i] = int16_t(1);
-            fd[i] = int16_t(0);
+            td[i] = (int16_t)1;
+            fd[i] = (int16_t)0;
         } else if (target_type.is_int_or_uint() && target_type.bits() == 32) {
             int32_t *td = reinterpret_cast<int32_t *>(&true_data[0]);
             int32_t *fd = reinterpret_cast<int32_t *>(&false_data[0]);
-            td[i] = int32_t(1);
-            fd[i] = int32_t(0);
+            td[i] = (int32_t)1;
+            fd[i] = (int32_t)0;
         } else if (target_type.is_int_or_uint() && target_type.bits() == 64) {
             int64_t *td = reinterpret_cast<int64_t *>(&true_data[0]);
             int64_t *fd = reinterpret_cast<int64_t *>(&false_data[0]);
-            td[i] = int64_t(1);
-            fd[i] = int64_t(0);
+            td[i] = (int64_t)1;
+            fd[i] = (int64_t)0;
         } else if (target_type.is_float() && target_type.bits() == 16) {
             if (target_type.is_bfloat()) {
                 bfloat16_t *td = reinterpret_cast<bfloat16_t *>(&true_data[0]);
                 bfloat16_t *fd = reinterpret_cast<bfloat16_t *>(&false_data[0]);
-                td[i] = bfloat16_t(1.0f);
-                fd[i] = bfloat16_t(0.0f);
+                td[i] = (bfloat16_t)1.0f;
+                fd[i] = (bfloat16_t)0.0f;
             } else {
                 float16_t *td = reinterpret_cast<float16_t *>(&true_data[0]);
                 float16_t *fd = reinterpret_cast<float16_t *>(&false_data[0]);
-                td[i] = float16_t(1.0f);
-                fd[i] = float16_t(0.0f);
+                td[i] = (float16_t)1.0f;
+                fd[i] = (float16_t)0.0f;
             }
         } else if (target_type.is_float() && target_type.bits() == 32) {
             float *td = reinterpret_cast<float *>(&true_data[0]);
             float *fd = reinterpret_cast<float *>(&false_data[0]);
-            td[i] = float(1.0f);
-            fd[i] = float(0.0f);
+            td[i] = (float)1.0f;
+            fd[i] = (float)0.0f;
         } else if (target_type.is_float() && target_type.bits() == 64) {
             double *td = reinterpret_cast<double *>(&true_data[0]);
             double *fd = reinterpret_cast<double *>(&false_data[0]);
-            td[i] = double(1.0);
-            fd[i] = double(0.0);
+            td[i] = (double)1.0;
+            fd[i] = (double)0.0;
         } else {
             user_error << "Unhandled type cast from value type '" << value_type << "' to target type '" << target_type << "'!";
         }
@@ -615,7 +615,6 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::cast_type(Type target_type, Type value_
         }
     } else if (value_type.is_bool()) {
         op_code = SpvOpSelect;
-
     } else if (value_type.is_uint()) {
         if (target_type.is_float()) {
             op_code = SpvOpConvertUToF;
@@ -1103,7 +1102,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
         }
         if (cond.type().is_vector()) {
             scalarize(op);
-
         } else {
             // Generate Phi node if used as an expression.
             internal_assert(op->args.size() == 2 || op->args.size() == 3);
@@ -2245,7 +2243,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::reset() {
 }
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::init_module() {
-
     reset();
 
     if (target.has_feature(Target::VulkanV13)) {
