@@ -5,8 +5,6 @@
 #include "memory_resources.h"
 #include "region_allocator.h"
 
-// #define DEBUG_INTERNAL
-
 namespace Halide {
 namespace Runtime {
 namespace Internal {
