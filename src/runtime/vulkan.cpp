@@ -301,7 +301,7 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
     buf->device_interface->impl->use_module();
 
     debug(user_context)
-        << "    Allocated device buffer " << (void *)buf->device
+        << "    allocated device buffer " << (void *)buf->device
         << " for buffer " << buf << "\n";
 
     // retrieve the buffer from the region
@@ -544,7 +544,6 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
 }
 
 WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_buffer) {
-
 #ifdef DEBUG_RUNTIME
     debug(user_context)
         << "halide_copy_to_host (user_context: " << user_context
@@ -552,7 +551,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 #endif
 
     // Acquire the context so we can use the command queue. This also avoids multiple
-    // redundant calls to clEnqueueReadBuffer when multiple threads are trying to copy
+    // redundant calls to enqueue a download when multiple threads are trying to copy
     // the same buffer.
     VulkanContext ctx(user_context);
     if (ctx.error != VK_SUCCESS) {
@@ -562,8 +561,10 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
-
-    halide_abort_if_false(user_context, halide_buffer->host && halide_buffer->device);
+    if ((halide_buffer->host == nullptr) || (halide_buffer->device == 0)) {
+        error(user_context) << "Vulkan: Unable to copy buffer to host ... missing host and device pointers!\n";
+        return -1;
+    }
 
     device_copy copy_helper = make_device_to_host_copy(halide_buffer);
 
