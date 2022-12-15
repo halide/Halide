@@ -113,8 +113,12 @@ inline uint32_t spirv_minor_version(uint32_t version) {
     return ((version >> 8) & 0xff);
 }
 
+/** Returns the name string for a given SPIR-V operand **/
+const std::string &spirv_op_name(SpvId op);
+
 template<typename T, typename S>
-typename std::enable_if<std::is_unsigned<T>::value, T>::type constexpr rotl(const T n, const S i) {
+T constexpr rotl(const T n, const S i) {
+    static_assert(std::is_unsigned<T>::value, "rotl only works on unsigned types");
     const T m = (std::numeric_limits<T>::digits - 1);
     const T c = i & m;
     return (n << c) | (n >> ((T(0) - c) & m));
@@ -974,7 +978,6 @@ SpvBuilder::SpvBuilder() {
 }
 
 void SpvBuilder::reset() {
-
     active_id = SpvInvalidId;
     active_function = SpvFunction();
     active_block = SpvBlock();
@@ -1237,9 +1240,12 @@ SpvId SpvBuilder::declare_variable(const std::string &name, SpvId type_id, SpvSt
     if (existing_id != SpvInvalidId) {
         return existing_id;
     }
-
     SpvId var_id = reserve_id(SpvVariableId);
-    debug(3) << "    declare_variable: %" << var_id << " name='" << name << "' type_id=" << type_id << " storage_class=" << (uint32_t)storage_class << " init_id=" << init_id << "\n";
+    debug(3) << "    declare_variable: %" << var_id << "\n"
+             << "      name='" << name << "'\n"
+             << "      type_id=" << type_id << "\n"
+             << "      storage_class=" << (uint32_t)storage_class << "\n"
+             << "      init_id=" << init_id << "\n";
     current_function().entry_block().add_variable(SpvFactory::variable(var_id, type_id, storage_class, init_id));
     declare_symbol(name, var_id, block_id);
     storage_class_map[var_id] = storage_class;
@@ -1249,7 +1255,11 @@ SpvId SpvBuilder::declare_variable(const std::string &name, SpvId type_id, SpvSt
 
 SpvId SpvBuilder::declare_global_variable(const std::string &name, SpvId type_id, SpvStorageClass storage_class, SpvId init_id) {
     SpvId var_id = reserve_id(SpvVariableId);
-    debug(3) << "    declare_global_variable: %" << var_id << " name='" << name << "' type_id=" << type_id << " storage_class=" << (uint32_t)storage_class << " init_id=" << init_id << "\n";
+    debug(3) << "    declare_global_variable: %" << var_id << "\n"
+             << "      name='" << name << "'\n"
+             << "      type_id=" << type_id << "\n"
+             << "      storage_class=" << (uint32_t)storage_class << "\n"
+             << "      init_id=" << init_id << "\n";
     module.add_global(SpvFactory::variable(var_id, type_id, storage_class, init_id));
     declare_symbol(name, var_id, module.id());
     storage_class_map[var_id] = storage_class;
@@ -1264,7 +1274,10 @@ void SpvBuilder::add_entry_point(SpvId func_id, SpvExecutionModel exec_model,
     if (func_name.empty()) {
         internal_error << "SPIRV: Function missing name definition: " << func_id << "\n";
     } else {
-        debug(3) << "    add_entry_point: %" << func_id << " func_name='" << func_name << "' exec_model=" << (uint32_t)exec_model << " variable_count=" << (uint32_t)variables.size() << "\n";
+        debug(3) << "    add_entry_point: %" << func_id << "\n"
+                 << "      func_name='" << func_name << "'\n"
+                 << "      exec_model=" << (uint32_t)exec_model << "\n"
+                 << "      variable_count=" << (uint32_t)variables.size() << "\n";
         SpvInstruction inst = SpvFactory::entry_point(exec_model, func_id, func_name, variables);
         module.add_entry_point(func_name, inst);
     }
@@ -1273,8 +1286,10 @@ void SpvBuilder::add_entry_point(SpvId func_id, SpvExecutionModel exec_model,
 SpvId SpvBuilder::add_function(const std::string &name, SpvId return_type_id, const ParamTypes &param_types) {
     SpvId func_id = make_id(SpvFunctionId);
     SpvId func_type_id = declare_function_type(return_type_id, param_types);
-
-    debug(3) << "    add_function: %" << func_id << " func_type_id=" << func_type_id << " return_type_id=" << return_type_id << " parameter_count=" << (uint32_t)param_types.size() << "\n";
+    debug(3) << "    add_function: %" << func_id << "\n"
+             << "      func_type_id=" << func_type_id << "\n"
+             << "      return_type_id=" << return_type_id << "\n"
+             << "      parameter_count=" << (uint32_t)param_types.size() << "\n";
     SpvFunction func = SpvFunction::make(func_type_id, func_id, return_type_id);
     for (SpvId param_type_id : param_types) {
         SpvId param_id = make_id(SpvParameterId);
@@ -1292,7 +1307,9 @@ SpvId SpvBuilder::add_function(const std::string &name, SpvId return_type_id, co
 
 void SpvBuilder::add_annotation(SpvId target_id, SpvDecoration decoration_type, const Literals &literals) {
     SpvInstruction inst = SpvFactory::decorate(target_id, decoration_type, literals);
-    debug(3) << "    add_annotation: %" << target_id << " decoration_type=" << uint32_t(decoration_type) << " literals=[";
+    debug(3) << "    add_annotation: %" << target_id << "\n"
+             << "      decoration_type=" << uint32_t(decoration_type) << "\n"
+             << "      literals=[";
     for (uint32_t v : literals) {
         debug(3) << " " << v;
     }
@@ -1302,7 +1319,10 @@ void SpvBuilder::add_annotation(SpvId target_id, SpvDecoration decoration_type, 
 
 void SpvBuilder::add_struct_annotation(SpvId struct_type_id, uint32_t member_index, SpvDecoration decoration_type, const Literals &literals) {
     SpvInstruction inst = SpvFactory::decorate_member(struct_type_id, member_index, decoration_type, literals);
-    debug(3) << "    add_struct_annotation: %" << struct_type_id << " member_index=" << member_index << " decoration_type=" << uint32_t(decoration_type) << " literals=[";
+    debug(3) << "    add_struct_annotation: %" << struct_type_id << "\n"
+             << "      member_index=" << member_index << "\n"
+             << "      decoration_type=" << uint32_t(decoration_type) << "\n"
+             << "      literals=[";
     for (uint32_t v : literals) {
         debug(3) << " " << v;
     }
@@ -1381,7 +1401,9 @@ void SpvBuilder::add_symbol(const std::string &symbol, SpvId id, SpvId scope_id)
     symbol_id_map[symbol] = id;
     id_symbol_map[id] = symbol;
     scope_map[id] = scope_id;
-    debug(3) << "    add_symbol: %" << id << " symbol='" << symbol << "' scope_id=" << scope_id << "\n";
+    debug(3) << "    add_symbol: %" << id << "\n"
+             << "      symbol='" << symbol << "'\n"
+             << "      scope_id=" << scope_id << "\n";
     module.add_debug_symbol(id, symbol);
 }
 
@@ -1516,7 +1538,6 @@ SpvId SpvBuilder::add_type(const Type &type, uint32_t array_size) {
     }
 
     if (array_size > 1) {
-
         // first declare the array size as a uint32 constant value
         Type array_size_type = UInt(32);
         ConstantKey constant_key = make_constant_key(array_size_type, &array_size);
@@ -1529,7 +1550,9 @@ SpvId SpvBuilder::add_type(const Type &type, uint32_t array_size) {
         // declare the array type
         SpvId array_type_id = make_id(SpvArrayTypeId);
         SpvId element_type_id = add_type(type, 1);
-        debug(3) << "    add_array_type: %" << array_type_id << " element_type_id='" << element_type_id << " array_size='" << array_size << "\n";
+        debug(3) << "    add_array_type: %" << array_type_id << "\n"
+                 << "      element_type_id='" << element_type_id << "\n"
+                 << "      array_size='" << array_size << "\n";
         SpvInstruction inst = SpvFactory::array_type(array_type_id, element_type_id, array_size_id);
         module.add_type(inst);
         type_map[type_key] = array_type_id;
@@ -1540,7 +1563,9 @@ SpvId SpvBuilder::add_type(const Type &type, uint32_t array_size) {
     if (type.is_vector()) {
         type_id = make_id(SpvVectorTypeId);
         SpvId element_type_id = add_type(type.with_lanes(1));
-        debug(3) << "    add_vector_type: %" << type_id << " element_type_id='" << element_type_id << " lanes='" << type.lanes() << "\n";
+        debug(3) << "    add_vector_type: %" << type_id << "\n"
+                 << "      element_type_id='" << element_type_id << "\n"
+                 << "      lanes='" << type.lanes() << "\n";
         SpvInstruction inst = SpvFactory::vector_type(type_id, element_type_id, type.lanes());
         module.add_type(inst);
     } else {
@@ -1556,7 +1581,8 @@ SpvId SpvBuilder::add_type(const Type &type, uint32_t array_size) {
             module.add_type(inst);
         } else if (type.is_float()) {
             type_id = make_id(SpvFloatTypeId);
-            debug(3) << "    add_float_type: %" << type_id << " bits=" << type.bits() << "\n";
+            debug(3) << "    add_float_type: %" << type_id << "\n"
+                     << "      bits=" << type.bits() << "\n";
             SpvInstruction inst = SpvFactory::float_type(type_id, type.bits());
             module.add_type(inst);
             if (type.bits() == 16) {
@@ -1572,7 +1598,9 @@ SpvId SpvBuilder::add_type(const Type &type, uint32_t array_size) {
             }
 
             type_id = make_id(signedness ? SpvIntTypeId : SpvUIntTypeId);
-            debug(3) << "    add_integer_type: %" << type_id << " bits=" << type.bits() << " signed=" << (signedness ? "true" : "false") << "\n";
+            debug(3) << "    add_integer_type: %" << type_id << "\n"
+                     << "      bits=" << type.bits() << "\n"
+                     << "      signed=" << (signedness ? "true" : "false") << "\n";
             SpvInstruction inst = SpvFactory::integer_type(type_id, type.bits(), signedness);
             module.add_type(inst);
             if (type.bits() == 8) {
@@ -1624,7 +1652,9 @@ SpvId SpvBuilder::add_struct(const std::string &struct_name, const StructMemberT
     }
 
     SpvId struct_type_id = make_id(SpvStructTypeId);
-    debug(3) << "    add_struct_type: %" << struct_type_id << " name=" << struct_name << " member_type_ids=[";
+    debug(3) << "    add_struct_type: %" << struct_type_id << "\n"
+             << "      name=" << struct_name << "\n"
+             << "      member_type_ids=[";
     for (SpvId m : member_type_ids) {
         debug(3) << " " << m;
     }
@@ -1675,7 +1705,9 @@ SpvId SpvBuilder::lookup_pointer_type(SpvId base_type_id, SpvStorageClass storag
 
 SpvId SpvBuilder::add_pointer_type(const Type &type, SpvStorageClass storage_class) {
     SpvId base_type_id = declare_type(type);
-    debug(3) << "    add_pointer_type: base_type=" << type << " base_type_id=" << base_type_id << " storage_class=" << (uint32_t)(storage_class) << "\n";
+    debug(3) << "    add_pointer_type: " << type << "\n"
+             << "      base_type_id=" << base_type_id << "\n"
+             << "      storage_class=" << (uint32_t)(storage_class) << "\n";
     if (base_type_id == SpvInvalidId) {
         internal_error << "SPIRV: Attempted to create pointer type for undeclared base type! " << type << "\n";
     }
@@ -1694,7 +1726,9 @@ SpvId SpvBuilder::add_pointer_type(SpvId base_type_id, SpvStorageClass storage_c
     }
 
     SpvId pointer_type_id = make_id(SpvPointerTypeId);
-    debug(3) << "    add_pointer_type: %" << pointer_type_id << " base_type_id=" << base_type_id << " storage_class=" << (uint32_t)(storage_class) << "\n";
+    debug(3) << "    add_pointer_type: %" << pointer_type_id << "\n"
+             << "      base_type_id=" << base_type_id << "\n"
+             << "      storage_class=" << (uint32_t)(storage_class) << "\n";
     SpvInstruction inst = SpvFactory::pointer_type(pointer_type_id, storage_class, base_type_id);
     module.add_type(inst);
     pointer_type_map[key] = pointer_type_id;
@@ -1931,6 +1965,7 @@ SpvId SpvBuilder::declare_scalar_constant(const Type &scalar_type, const void *d
         return it->second;
     }
 
+    // TODO: Maybe add a templated Lambda to clean up this data conversion?
     SpvId result_id = SpvInvalidId;
     if (scalar_type.is_bool() && data) {
         bool value = *reinterpret_cast<const bool *>(data);
@@ -2141,9 +2176,10 @@ SpvId SpvBuilder::add_function_type(SpvId return_type_id, const ParamTypes &para
     if (it != function_type_map.end()) {
         return it->second;
     }
-
     SpvId function_type_id = make_id(SpvFunctionTypeId);
-    debug(3) << "    add_function_type: %" << function_type_id << " return_type_id=" << return_type_id << " param_type_ids=[";
+    debug(3) << "    add_function_type: %" << function_type_id << "\n"
+             << "      return_type_id=" << return_type_id << "\n"
+             << "      param_type_ids=[";
     for (SpvId p : param_type_ids) {
         debug(3) << " " << p;
     }
@@ -3133,1293 +3169,7 @@ std::ostream &operator<<(std::ostream &stream, const SpvInstruction &inst) {
         stream << " = ";
     }
 
-    switch (inst.op_code()) {
-    case SpvOpNop: {
-        stream << "OpNop";
-        break;
-    }
-    case SpvOpUndef: {
-        stream << "OpUndef";
-        break;
-    }
-    case SpvOpSourceContinued: {
-        stream << "OpSourceContinued";
-        break;
-    }
-    case SpvOpSource: {
-        stream << "OpSource";
-        break;
-    }
-    case SpvOpSourceExtension: {
-        stream << "OpSourceExtension";
-        break;
-    }
-    case SpvOpName: {
-        stream << "OpName";
-        break;
-    }
-    case SpvOpMemberName: {
-        stream << "OpMemberName";
-        break;
-    }
-    case SpvOpString: {
-        stream << "OpString";
-        break;
-    }
-    case SpvOpLine: {
-        stream << "OpLine";
-        break;
-    }
-    case SpvOpExtension: {
-        stream << "OpExtension";
-        break;
-    }
-    case SpvOpExtInstImport: {
-        stream << "OpExtInstImport";
-        break;
-    }
-    case SpvOpExtInst: {
-        stream << "OpExtInst";
-        break;
-    }
-    case SpvOpMemoryModel: {
-        stream << "OpMemoryModel";
-        break;
-    }
-    case SpvOpEntryPoint: {
-        stream << "OpEntryPoint";
-        break;
-    }
-    case SpvOpExecutionMode: {
-        stream << "OpExecutionMode";
-        break;
-    }
-    case SpvOpCapability: {
-        stream << "OpCapability";
-        break;
-    }
-    case SpvOpTypeVoid: {
-        stream << "OpTypeVoid";
-        break;
-    }
-    case SpvOpTypeBool: {
-        stream << "OpTypeBool";
-        break;
-    }
-    case SpvOpTypeInt: {
-        stream << "OpTypeInt";
-        break;
-    }
-    case SpvOpTypeFloat: {
-        stream << "OpTypeFloat";
-        break;
-    }
-    case SpvOpTypeVector: {
-        stream << "OpTypeVector";
-        break;
-    }
-    case SpvOpTypeMatrix: {
-        stream << "OpTypeMatrix";
-        break;
-    }
-    case SpvOpTypeImage: {
-        stream << "OpTypeImage";
-        break;
-    }
-    case SpvOpTypeSampler: {
-        stream << "OpTypeSampler";
-        break;
-    }
-    case SpvOpTypeSampledImage: {
-        stream << "OpTypeSampledImage";
-        break;
-    }
-    case SpvOpTypeArray: {
-        stream << "OpTypeArray";
-        break;
-    }
-    case SpvOpTypeRuntimeArray: {
-        stream << "OpTypeRuntimeArray";
-        break;
-    }
-    case SpvOpTypeStruct: {
-        stream << "OpTypeStruct";
-        break;
-    }
-    case SpvOpTypeOpaque: {
-        stream << "OpTypeOpaque";
-        break;
-    }
-    case SpvOpTypePointer: {
-        stream << "OpTypePointer";
-        break;
-    }
-    case SpvOpTypeFunction: {
-        stream << "OpTypeFunction";
-        break;
-    }
-    case SpvOpTypeEvent: {
-        stream << "OpTypeEvent";
-        break;
-    }
-    case SpvOpTypeDeviceEvent: {
-        stream << "OpTypeDeviceEvent";
-        break;
-    }
-    case SpvOpTypeReserveId: {
-        stream << "OpTypeReserveId";
-        break;
-    }
-    case SpvOpTypeQueue: {
-        stream << "OpTypeQueue";
-        break;
-    }
-    case SpvOpTypePipe: {
-        stream << "OpTypePipe";
-        break;
-    }
-    case SpvOpTypeForwardPointer: {
-        stream << "OpTypeForwardPointer";
-        break;
-    }
-    case SpvOpConstantTrue: {
-        stream << "OpConstantTrue";
-        break;
-    }
-    case SpvOpConstantFalse: {
-        stream << "OpConstantFalse";
-        break;
-    }
-    case SpvOpConstant: {
-        stream << "OpConstant";
-        break;
-    }
-    case SpvOpConstantComposite: {
-        stream << "OpConstantComposite";
-        break;
-    }
-    case SpvOpConstantSampler: {
-        stream << "OpConstantSampler";
-        break;
-    }
-    case SpvOpConstantNull: {
-        stream << "OpConstantNull";
-        break;
-    }
-    case SpvOpSpecConstantTrue: {
-        stream << "OpSpecConstantTrue";
-        break;
-    }
-    case SpvOpSpecConstantFalse: {
-        stream << "OpSpecConstantFalse";
-        break;
-    }
-    case SpvOpSpecConstant: {
-        stream << "OpSpecConstant";
-        break;
-    }
-    case SpvOpSpecConstantComposite: {
-        stream << "OpSpecConstantComposite";
-        break;
-    }
-    case SpvOpSpecConstantOp: {
-        stream << "OpSpecConstantOp";
-        break;
-    }
-    case SpvOpFunction: {
-        stream << "OpFunction";
-        break;
-    }
-    case SpvOpFunctionParameter: {
-        stream << "OpFunctionParameter";
-        break;
-    }
-    case SpvOpFunctionEnd: {
-        stream << "OpFunctionEnd";
-        break;
-    }
-    case SpvOpFunctionCall: {
-        stream << "OpFunctionCall";
-        break;
-    }
-    case SpvOpVariable: {
-        stream << "OpVariable";
-        break;
-    }
-    case SpvOpImageTexelPointer: {
-        stream << "OpImageTexelPointer";
-        break;
-    }
-    case SpvOpLoad: {
-        stream << "OpLoad";
-        break;
-    }
-    case SpvOpStore: {
-        stream << "OpStore";
-        break;
-    }
-    case SpvOpCopyMemory: {
-        stream << "OpCopyMemory";
-        break;
-    }
-    case SpvOpCopyMemorySized: {
-        stream << "OpCopyMemorySized";
-        break;
-    }
-    case SpvOpAccessChain: {
-        stream << "OpAccessChain";
-        break;
-    }
-    case SpvOpInBoundsAccessChain: {
-        stream << "OpInBoundsAccessChain";
-        break;
-    }
-    case SpvOpPtrAccessChain: {
-        stream << "OpPtrAccessChain";
-        break;
-    }
-    case SpvOpArrayLength: {
-        stream << "OpArrayLength";
-        break;
-    }
-    case SpvOpGenericPtrMemSemantics: {
-        stream << "OpGenericPtrMemSemantics";
-        break;
-    }
-    case SpvOpInBoundsPtrAccessChain: {
-        stream << "OpInBoundsPtrAccessChain";
-        break;
-    }
-    case SpvOpDecorate: {
-        stream << "OpDecorate";
-        break;
-    }
-    case SpvOpMemberDecorate: {
-        stream << "OpMemberDecorate";
-        break;
-    }
-    case SpvOpDecorationGroup: {
-        stream << "OpDecorationGroup";
-        break;
-    }
-    case SpvOpGroupDecorate: {
-        stream << "OpGroupDecorate";
-        break;
-    }
-    case SpvOpGroupMemberDecorate: {
-        stream << "OpGroupMemberDecorate";
-        break;
-    }
-    case SpvOpVectorExtractDynamic: {
-        stream << "OpVectorExtractDynamic";
-        break;
-    }
-    case SpvOpVectorInsertDynamic: {
-        stream << "OpVectorInsertDynamic";
-        break;
-    }
-    case SpvOpVectorShuffle: {
-        stream << "OpVectorShuffle";
-        break;
-    }
-    case SpvOpCompositeConstruct: {
-        stream << "OpCompositeConstruct";
-        break;
-    }
-    case SpvOpCompositeExtract: {
-        stream << "OpCompositeExtract";
-        break;
-    }
-    case SpvOpCompositeInsert: {
-        stream << "OpCompositeInsert";
-        break;
-    }
-    case SpvOpCopyObject: {
-        stream << "OpCopyObject";
-        break;
-    }
-    case SpvOpTranspose: {
-        stream << "OpTranspose";
-        break;
-    }
-    case SpvOpSampledImage: {
-        stream << "OpSampledImage";
-        break;
-    }
-    case SpvOpImageSampleImplicitLod: {
-        stream << "OpImageSampleImplicitLod";
-        break;
-    }
-    case SpvOpImageSampleExplicitLod: {
-        stream << "OpImageSampleExplicitLod";
-        break;
-    }
-    case SpvOpImageSampleDrefImplicitLod: {
-        stream << "OpImageSampleDrefImplicitLod";
-        break;
-    }
-    case SpvOpImageSampleDrefExplicitLod: {
-        stream << "OpImageSampleDrefExplicitLod";
-        break;
-    }
-    case SpvOpImageSampleProjImplicitLod: {
-        stream << "OpImageSampleProjImplicitLod";
-        break;
-    }
-    case SpvOpImageSampleProjExplicitLod: {
-        stream << "OpImageSampleProjExplicitLod";
-        break;
-    }
-    case SpvOpImageSampleProjDrefImplicitLod: {
-        stream << "OpImageSampleProjDrefImplicitLod";
-        break;
-    }
-    case SpvOpImageSampleProjDrefExplicitLod: {
-        stream << "OpImageSampleProjDrefExplicitLod";
-        break;
-    }
-    case SpvOpImageFetch: {
-        stream << "OpImageFetch";
-        break;
-    }
-    case SpvOpImageGather: {
-        stream << "OpImageGather";
-        break;
-    }
-    case SpvOpImageDrefGather: {
-        stream << "OpImageDrefGather";
-        break;
-    }
-    case SpvOpImageRead: {
-        stream << "OpImageRead";
-        break;
-    }
-    case SpvOpImageWrite: {
-        stream << "OpImageWrite";
-        break;
-    }
-    case SpvOpImage: {
-        stream << "OpImage";
-        break;
-    }
-    case SpvOpImageQueryFormat: {
-        stream << "OpImageQueryFormat";
-        break;
-    }
-    case SpvOpImageQueryOrder: {
-        stream << "OpImageQueryOrder";
-        break;
-    }
-    case SpvOpImageQuerySizeLod: {
-        stream << "OpImageQuerySizeLod";
-        break;
-    }
-    case SpvOpImageQuerySize: {
-        stream << "OpImageQuerySize";
-        break;
-    }
-    case SpvOpImageQueryLod: {
-        stream << "OpImageQueryLod";
-        break;
-    }
-    case SpvOpImageQueryLevels: {
-        stream << "OpImageQueryLevels";
-        break;
-    }
-    case SpvOpImageQuerySamples: {
-        stream << "OpImageQuerySamples";
-        break;
-    }
-    case SpvOpConvertFToU: {
-        stream << "OpConvertFToU";
-        break;
-    }
-    case SpvOpConvertFToS: {
-        stream << "OpConvertFToS";
-        break;
-    }
-    case SpvOpConvertSToF: {
-        stream << "OpConvertSToF";
-        break;
-    }
-    case SpvOpConvertUToF: {
-        stream << "OpConvertUToF";
-        break;
-    }
-    case SpvOpUConvert: {
-        stream << "OpUConvert";
-        break;
-    }
-    case SpvOpSConvert: {
-        stream << "OpSConvert";
-        break;
-    }
-    case SpvOpFConvert: {
-        stream << "OpFConvert";
-        break;
-    }
-    case SpvOpConvertPtrToU: {
-        stream << "OpConvertPtrToU";
-        break;
-    }
-    case SpvOpSatConvertSToU: {
-        stream << "OpSatConvertSToU";
-        break;
-    }
-    case SpvOpSatConvertUToS: {
-        stream << "OpSatConvertUToS";
-        break;
-    }
-    case SpvOpConvertUToPtr: {
-        stream << "OpConvertUToPtr";
-        break;
-    }
-    case SpvOpPtrCastToGeneric: {
-        stream << "OpPtrCastToGeneric";
-        break;
-    }
-    case SpvOpGenericCastToPtr: {
-        stream << "OpGenericCastToPtr";
-        break;
-    }
-    case SpvOpGenericCastToPtrExplicit: {
-        stream << "OpGenericCastToPtrExplicit";
-        break;
-    }
-    case SpvOpBitcast: {
-        stream << "OpBitcast";
-        break;
-    }
-    case SpvOpSNegate: {
-        stream << "OpSNegate";
-        break;
-    }
-    case SpvOpFNegate: {
-        stream << "OpFNegate";
-        break;
-    }
-    case SpvOpIAdd: {
-        stream << "OpIAdd";
-        break;
-    }
-    case SpvOpFAdd: {
-        stream << "OpFAdd";
-        break;
-    }
-    case SpvOpISub: {
-        stream << "OpISub";
-        break;
-    }
-    case SpvOpFSub: {
-        stream << "OpFSub";
-        break;
-    }
-    case SpvOpIMul: {
-        stream << "OpIMul";
-        break;
-    }
-    case SpvOpFMul: {
-        stream << "OpFMul";
-        break;
-    }
-    case SpvOpUDiv: {
-        stream << "OpUDiv";
-        break;
-    }
-    case SpvOpSDiv: {
-        stream << "OpSDiv";
-        break;
-    }
-    case SpvOpFDiv: {
-        stream << "OpFDiv";
-        break;
-    }
-    case SpvOpUMod: {
-        stream << "OpUMod";
-        break;
-    }
-    case SpvOpSRem: {
-        stream << "OpSRem";
-        break;
-    }
-    case SpvOpSMod: {
-        stream << "OpSMod";
-        break;
-    }
-    case SpvOpFRem: {
-        stream << "OpFRem";
-        break;
-    }
-    case SpvOpFMod: {
-        stream << "OpFMod";
-        break;
-    }
-    case SpvOpVectorTimesScalar: {
-        stream << "OpVectorTimesScalar";
-        break;
-    }
-    case SpvOpMatrixTimesScalar: {
-        stream << "OpMatrixTimesScalar";
-        break;
-    }
-    case SpvOpVectorTimesMatrix: {
-        stream << "OpVectorTimesMatrix";
-        break;
-    }
-    case SpvOpMatrixTimesVector: {
-        stream << "OpMatrixTimesVector";
-        break;
-    }
-    case SpvOpMatrixTimesMatrix: {
-        stream << "OpMatrixTimesMatrix";
-        break;
-    }
-    case SpvOpOuterProduct: {
-        stream << "OpOuterProduct";
-        break;
-    }
-    case SpvOpDot: {
-        stream << "OpDot";
-        break;
-    }
-    case SpvOpIAddCarry: {
-        stream << "OpIAddCarry";
-        break;
-    }
-    case SpvOpISubBorrow: {
-        stream << "OpISubBorrow";
-        break;
-    }
-    case SpvOpUMulExtended: {
-        stream << "OpUMulExtended";
-        break;
-    }
-    case SpvOpSMulExtended: {
-        stream << "OpSMulExtended";
-        break;
-    }
-    case SpvOpAny: {
-        stream << "OpAny";
-        break;
-    }
-    case SpvOpAll: {
-        stream << "OpAll";
-        break;
-    }
-    case SpvOpIsNan: {
-        stream << "OpIsNan";
-        break;
-    }
-    case SpvOpIsInf: {
-        stream << "OpIsInf";
-        break;
-    }
-    case SpvOpIsFinite: {
-        stream << "OpIsFinite";
-        break;
-    }
-    case SpvOpIsNormal: {
-        stream << "OpIsNormal";
-        break;
-    }
-    case SpvOpSignBitSet: {
-        stream << "OpSignBitSet";
-        break;
-    }
-    case SpvOpLessOrGreater: {
-        stream << "OpLessOrGreater";
-        break;
-    }
-    case SpvOpOrdered: {
-        stream << "OpOrdered";
-        break;
-    }
-    case SpvOpUnordered: {
-        stream << "OpUnordered";
-        break;
-    }
-    case SpvOpLogicalEqual: {
-        stream << "OpLogicalEqual";
-        break;
-    }
-    case SpvOpLogicalNotEqual: {
-        stream << "OpLogicalNotEqual";
-        break;
-    }
-    case SpvOpLogicalOr: {
-        stream << "OpLogicalOr";
-        break;
-    }
-    case SpvOpLogicalAnd: {
-        stream << "OpLogicalAnd";
-        break;
-    }
-    case SpvOpLogicalNot: {
-        stream << "OpLogicalNot";
-        break;
-    }
-    case SpvOpSelect: {
-        stream << "OpSelect";
-        break;
-    }
-    case SpvOpIEqual: {
-        stream << "OpIEqual";
-        break;
-    }
-    case SpvOpINotEqual: {
-        stream << "OpINotEqual";
-        break;
-    }
-    case SpvOpUGreaterThan: {
-        stream << "OpUGreaterThan";
-        break;
-    }
-    case SpvOpSGreaterThan: {
-        stream << "OpSGreaterThan";
-        break;
-    }
-    case SpvOpUGreaterThanEqual: {
-        stream << "OpUGreaterThanEqual";
-        break;
-    }
-    case SpvOpSGreaterThanEqual: {
-        stream << "OpSGreaterThanEqual";
-        break;
-    }
-    case SpvOpULessThan: {
-        stream << "OpULessThan";
-        break;
-    }
-    case SpvOpSLessThan: {
-        stream << "OpSLessThan";
-        break;
-    }
-    case SpvOpULessThanEqual: {
-        stream << "OpULessThanEqual";
-        break;
-    }
-    case SpvOpSLessThanEqual: {
-        stream << "OpSLessThanEqual";
-        break;
-    }
-    case SpvOpFOrdEqual: {
-        stream << "OpFOrdEqual";
-        break;
-    }
-    case SpvOpFUnordEqual: {
-        stream << "OpFUnordEqual";
-        break;
-    }
-    case SpvOpFOrdNotEqual: {
-        stream << "OpFOrdNotEqual";
-        break;
-    }
-    case SpvOpFUnordNotEqual: {
-        stream << "OpFUnordNotEqual";
-        break;
-    }
-    case SpvOpFOrdLessThan: {
-        stream << "OpFOrdLessThan";
-        break;
-    }
-    case SpvOpFUnordLessThan: {
-        stream << "OpFUnordLessThan";
-        break;
-    }
-    case SpvOpFOrdGreaterThan: {
-        stream << "OpFOrdGreaterThan";
-        break;
-    }
-    case SpvOpFUnordGreaterThan: {
-        stream << "OpFUnordGreaterThan";
-        break;
-    }
-    case SpvOpFOrdLessThanEqual: {
-        stream << "OpFOrdLessThanEqual";
-        break;
-    }
-    case SpvOpFUnordLessThanEqual: {
-        stream << "OpFUnordLessThanEqual";
-        break;
-    }
-    case SpvOpFOrdGreaterThanEqual: {
-        stream << "OpFOrdGreaterThanEqual";
-        break;
-    }
-    case SpvOpFUnordGreaterThanEqual: {
-        stream << "OpFUnordGreaterThanEqual";
-        break;
-    }
-    case SpvOpShiftRightLogical: {
-        stream << "OpShiftRightLogical";
-        break;
-    }
-    case SpvOpShiftRightArithmetic: {
-        stream << "OpShiftRightArithmetic";
-        break;
-    }
-    case SpvOpShiftLeftLogical: {
-        stream << "OpShiftLeftLogical";
-        break;
-    }
-    case SpvOpBitwiseOr: {
-        stream << "OpBitwiseOr";
-        break;
-    }
-    case SpvOpBitwiseXor: {
-        stream << "OpBitwiseXor";
-        break;
-    }
-    case SpvOpBitwiseAnd: {
-        stream << "OpBitwiseAnd";
-        break;
-    }
-    case SpvOpNot: {
-        stream << "OpNot";
-        break;
-    }
-    case SpvOpBitFieldInsert: {
-        stream << "OpBitFieldInsert";
-        break;
-    }
-    case SpvOpBitFieldSExtract: {
-        stream << "OpBitFieldSExtract";
-        break;
-    }
-    case SpvOpBitFieldUExtract: {
-        stream << "OpBitFieldUExtract";
-        break;
-    }
-    case SpvOpBitReverse: {
-        stream << "OpBitReverse";
-        break;
-    }
-    case SpvOpBitCount: {
-        stream << "OpBitCount";
-        break;
-    }
-    case SpvOpDPdx: {
-        stream << "OpDPdx";
-        break;
-    }
-    case SpvOpDPdy: {
-        stream << "OpDPdy";
-        break;
-    }
-    case SpvOpFwidth: {
-        stream << "OpFwidth";
-        break;
-    }
-    case SpvOpDPdxFine: {
-        stream << "OpDPdxFine";
-        break;
-    }
-    case SpvOpDPdyFine: {
-        stream << "OpDPdyFine";
-        break;
-    }
-    case SpvOpFwidthFine: {
-        stream << "OpFwidthFine";
-        break;
-    }
-    case SpvOpDPdxCoarse: {
-        stream << "OpDPdxCoarse";
-        break;
-    }
-    case SpvOpDPdyCoarse: {
-        stream << "OpDPdyCoarse";
-        break;
-    }
-    case SpvOpFwidthCoarse: {
-        stream << "OpFwidthCoarse";
-        break;
-    }
-    case SpvOpEmitVertex: {
-        stream << "OpEmitVertex";
-        break;
-    }
-    case SpvOpEndPrimitive: {
-        stream << "OpEndPrimitive";
-        break;
-    }
-    case SpvOpEmitStreamVertex: {
-        stream << "OpEmitStreamVertex";
-        break;
-    }
-    case SpvOpEndStreamPrimitive: {
-        stream << "OpEndStreamPrimitive";
-        break;
-    }
-    case SpvOpControlBarrier: {
-        stream << "OpControlBarrier";
-        break;
-    }
-    case SpvOpMemoryBarrier: {
-        stream << "OpMemoryBarrier";
-        break;
-    }
-    case SpvOpAtomicLoad: {
-        stream << "OpAtomicLoad";
-        break;
-    }
-    case SpvOpAtomicStore: {
-        stream << "OpAtomicStore";
-        break;
-    }
-    case SpvOpAtomicExchange: {
-        stream << "OpAtomicExchange";
-        break;
-    }
-    case SpvOpAtomicCompareExchange: {
-        stream << "OpAtomicCompareExchange";
-        break;
-    }
-    case SpvOpAtomicCompareExchangeWeak: {
-        stream << "OpAtomicCompareExchangeWeak";
-        break;
-    }
-    case SpvOpAtomicIIncrement: {
-        stream << "OpAtomicIIncrement";
-        break;
-    }
-    case SpvOpAtomicIDecrement: {
-        stream << "OpAtomicIDecrement";
-        break;
-    }
-    case SpvOpAtomicIAdd: {
-        stream << "OpAtomicIAdd";
-        break;
-    }
-    case SpvOpAtomicISub: {
-        stream << "OpAtomicISub";
-        break;
-    }
-    case SpvOpAtomicSMin: {
-        stream << "OpAtomicSMin";
-        break;
-    }
-    case SpvOpAtomicUMin: {
-        stream << "OpAtomicUMin";
-        break;
-    }
-    case SpvOpAtomicSMax: {
-        stream << "OpAtomicSMax";
-        break;
-    }
-    case SpvOpAtomicUMax: {
-        stream << "OpAtomicUMax";
-        break;
-    }
-    case SpvOpAtomicAnd: {
-        stream << "OpAtomicAnd";
-        break;
-    }
-    case SpvOpAtomicOr: {
-        stream << "OpAtomicOr";
-        break;
-    }
-    case SpvOpAtomicXor: {
-        stream << "OpAtomicXor";
-        break;
-    }
-    case SpvOpPhi: {
-        stream << "OpPhi";
-        break;
-    }
-    case SpvOpLoopMerge: {
-        stream << "OpLoopMerge";
-        break;
-    }
-    case SpvOpSelectionMerge: {
-        stream << "OpSelectionMerge";
-        break;
-    }
-    case SpvOpLabel: {
-        stream << "OpLabel";
-        break;
-    }
-    case SpvOpBranch: {
-        stream << "OpBranch";
-        break;
-    }
-    case SpvOpBranchConditional: {
-        stream << "OpBranchConditional";
-        break;
-    }
-    case SpvOpSwitch: {
-        stream << "OpSwitch";
-        break;
-    }
-    case SpvOpKill: {
-        stream << "OpKill";
-        break;
-    }
-    case SpvOpReturn: {
-        stream << "OpReturn";
-        break;
-    }
-    case SpvOpReturnValue: {
-        stream << "OpReturnValue";
-        break;
-    }
-    case SpvOpUnreachable: {
-        stream << "OpUnreachable";
-        break;
-    }
-    case SpvOpLifetimeStart: {
-        stream << "OpLifetimeStart";
-        break;
-    }
-    case SpvOpLifetimeStop: {
-        stream << "OpLifetimeStop";
-        break;
-    }
-    case SpvOpGroupAsyncCopy: {
-        stream << "OpGroupAsyncCopy";
-        break;
-    }
-    case SpvOpGroupWaitEvents: {
-        stream << "OpGroupWaitEvents";
-        break;
-    }
-    case SpvOpGroupAll: {
-        stream << "OpGroupAll";
-        break;
-    }
-    case SpvOpGroupAny: {
-        stream << "OpGroupAny";
-        break;
-    }
-    case SpvOpGroupBroadcast: {
-        stream << "OpGroupBroadcast";
-        break;
-    }
-    case SpvOpGroupIAdd: {
-        stream << "OpGroupIAdd";
-        break;
-    }
-    case SpvOpGroupFAdd: {
-        stream << "OpGroupFAdd";
-        break;
-    }
-    case SpvOpGroupFMin: {
-        stream << "OpGroupFMin";
-        break;
-    }
-    case SpvOpGroupUMin: {
-        stream << "OpGroupUMin";
-        break;
-    }
-    case SpvOpGroupSMin: {
-        stream << "OpGroupSMin";
-        break;
-    }
-    case SpvOpGroupFMax: {
-        stream << "OpGroupFMax";
-        break;
-    }
-    case SpvOpGroupUMax: {
-        stream << "OpGroupUMax";
-        break;
-    }
-    case SpvOpGroupSMax: {
-        stream << "OpGroupSMax";
-        break;
-    }
-    case SpvOpReadPipe: {
-        stream << "OpReadPipe";
-        break;
-    }
-    case SpvOpWritePipe: {
-        stream << "OpWritePipe";
-        break;
-    }
-    case SpvOpReservedReadPipe: {
-        stream << "OpReservedReadPipe";
-        break;
-    }
-    case SpvOpReservedWritePipe: {
-        stream << "OpReservedWritePipe";
-        break;
-    }
-    case SpvOpReserveReadPipePackets: {
-        stream << "OpReserveReadPipePackets";
-        break;
-    }
-    case SpvOpReserveWritePipePackets: {
-        stream << "OpReserveWritePipePackets";
-        break;
-    }
-    case SpvOpCommitReadPipe: {
-        stream << "OpCommitReadPipe";
-        break;
-    }
-    case SpvOpCommitWritePipe: {
-        stream << "OpCommitWritePipe";
-        break;
-    }
-    case SpvOpIsValidReserveId: {
-        stream << "OpIsValidReserveId";
-        break;
-    }
-    case SpvOpGetNumPipePackets: {
-        stream << "OpGetNumPipePackets";
-        break;
-    }
-    case SpvOpGetMaxPipePackets: {
-        stream << "OpGetMaxPipePackets";
-        break;
-    }
-    case SpvOpGroupReserveReadPipePackets: {
-        stream << "OpGroupReserveReadPipePackets";
-        break;
-    }
-    case SpvOpGroupReserveWritePipePackets: {
-        stream << "OpGroupReserveWritePipePackets";
-        break;
-    }
-    case SpvOpGroupCommitReadPipe: {
-        stream << "OpGroupCommitReadPipe";
-        break;
-    }
-    case SpvOpGroupCommitWritePipe: {
-        stream << "OpGroupCommitWritePipe";
-        break;
-    }
-    case SpvOpEnqueueMarker: {
-        stream << "OpEnqueueMarker";
-        break;
-    }
-    case SpvOpEnqueueKernel: {
-        stream << "OpEnqueueKernel";
-        break;
-    }
-    case SpvOpGetKernelNDrangeSubGroupCount: {
-        stream << "OpGetKernelNDrangeSubGroupCount";
-        break;
-    }
-    case SpvOpGetKernelNDrangeMaxSubGroupSize: {
-        stream << "OpGetKernelNDrangeMaxSubGroupSize";
-        break;
-    }
-    case SpvOpGetKernelWorkGroupSize: {
-        stream << "OpGetKernelWorkGroupSize";
-        break;
-    }
-    case SpvOpGetKernelPreferredWorkGroupSizeMultiple: {
-        stream << "OpGetKernelPreferredWorkGroupSizeMultiple";
-        break;
-    }
-    case SpvOpRetainEvent: {
-        stream << "OpRetainEvent";
-        break;
-    }
-    case SpvOpReleaseEvent: {
-        stream << "OpReleaseEvent";
-        break;
-    }
-    case SpvOpCreateUserEvent: {
-        stream << "OpCreateUserEvent";
-        break;
-    }
-    case SpvOpIsValidEvent: {
-        stream << "OpIsValidEvent";
-        break;
-    }
-    case SpvOpSetUserEventStatus: {
-        stream << "OpSetUserEventStatus";
-        break;
-    }
-    case SpvOpCaptureEventProfilingInfo: {
-        stream << "OpCaptureEventProfilingInfo";
-        break;
-    }
-    case SpvOpGetDefaultQueue: {
-        stream << "OpGetDefaultQueue";
-        break;
-    }
-    case SpvOpBuildNDRange: {
-        stream << "OpBuildNDRange";
-        break;
-    }
-    case SpvOpImageSparseSampleImplicitLod: {
-        stream << "OpImageSparseSampleImplicitLod";
-        break;
-    }
-    case SpvOpImageSparseSampleExplicitLod: {
-        stream << "OpImageSparseSampleExplicitLod";
-        break;
-    }
-    case SpvOpImageSparseSampleDrefImplicitLod: {
-        stream << "OpImageSparseSampleDrefImplicitLod";
-        break;
-    }
-    case SpvOpImageSparseSampleDrefExplicitLod: {
-        stream << "OpImageSparseSampleDrefExplicitLod";
-        break;
-    }
-    case SpvOpImageSparseSampleProjImplicitLod: {
-        stream << "OpImageSparseSampleProjImplicitLod";
-        break;
-    }
-    case SpvOpImageSparseSampleProjExplicitLod: {
-        stream << "OpImageSparseSampleProjExplicitLod";
-        break;
-    }
-    case SpvOpImageSparseSampleProjDrefImplicitLod: {
-        stream << "OpImageSparseSampleProjDrefImplicitLod";
-        break;
-    }
-    case SpvOpImageSparseSampleProjDrefExplicitLod: {
-        stream << "OpImageSparseSampleProjDrefExplicitLod";
-        break;
-    }
-    case SpvOpImageSparseFetch: {
-        stream << "OpImageSparseFetch";
-        break;
-    }
-    case SpvOpImageSparseGather: {
-        stream << "OpImageSparseGather";
-        break;
-    }
-    case SpvOpImageSparseDrefGather: {
-        stream << "OpImageSparseDrefGather";
-        break;
-    }
-    case SpvOpImageSparseTexelsResident: {
-        stream << "OpImageSparseTexelsResident";
-        break;
-    }
-    case SpvOpNoLine: {
-        stream << "OpNoLine";
-        break;
-    }
-    case SpvOpAtomicFlagTestAndSet: {
-        stream << "OpAtomicFlagTestAndSet";
-        break;
-    }
-    case SpvOpAtomicFlagClear: {
-        stream << "OpAtomicFlagClear";
-        break;
-    }
-    case SpvOpImageSparseRead: {
-        stream << "OpImageSparseRead";
-        break;
-    }
-    case SpvOpDecorateId: {
-        stream << "OpDecorateId";
-        break;
-    }
-    case SpvOpSubgroupBallotKHR: {
-        stream << "OpSubgroupBallotKHR";
-        break;
-    }
-    case SpvOpSubgroupFirstInvocationKHR: {
-        stream << "OpSubgroupFirstInvocationKHR";
-        break;
-    }
-    case SpvOpSubgroupAllKHR: {
-        stream << "OpSubgroupAllKHR";
-        break;
-    }
-    case SpvOpSubgroupAnyKHR: {
-        stream << "OpSubgroupAnyKHR";
-        break;
-    }
-    case SpvOpSubgroupAllEqualKHR: {
-        stream << "OpSubgroupAllEqualKHR";
-        break;
-    }
-    case SpvOpSubgroupReadInvocationKHR: {
-        stream << "OpSubgroupReadInvocationKHR";
-        break;
-    }
-    case SpvOpGroupIAddNonUniformAMD: {
-        stream << "OpGroupIAddNonUniformAMD";
-        break;
-    }
-    case SpvOpGroupFAddNonUniformAMD: {
-        stream << "OpGroupFAddNonUniformAMD";
-        break;
-    }
-    case SpvOpGroupFMinNonUniformAMD: {
-        stream << "OpGroupFMinNonUniformAMD";
-        break;
-    }
-    case SpvOpGroupUMinNonUniformAMD: {
-        stream << "OpGroupUMinNonUniformAMD";
-        break;
-    }
-    case SpvOpGroupSMinNonUniformAMD: {
-        stream << "OpGroupSMinNonUniformAMD";
-        break;
-    }
-    case SpvOpGroupFMaxNonUniformAMD: {
-        stream << "OpGroupFMaxNonUniformAMD";
-        break;
-    }
-    case SpvOpGroupUMaxNonUniformAMD: {
-        stream << "OpGroupUMaxNonUniformAMD";
-        break;
-    }
-    case SpvOpGroupSMaxNonUniformAMD: {
-        stream << "OpGroupSMaxNonUniformAMD";
-        break;
-    }
-    case SpvOpFragmentMaskFetchAMD: {
-        stream << "OpFragmentMaskFetchAMD";
-        break;
-    }
-    case SpvOpFragmentFetchAMD: {
-        stream << "OpFragmentFetchAMD";
-        break;
-    }
-    case SpvOpSubgroupShuffleINTEL: {
-        stream << "OpSubgroupShuffleINTEL";
-        break;
-    }
-    case SpvOpSubgroupShuffleDownINTEL: {
-        stream << "OpSubgroupShuffleDownINTEL";
-        break;
-    }
-    case SpvOpSubgroupShuffleUpINTEL: {
-        stream << "OpSubgroupShuffleUpINTEL";
-        break;
-    }
-    case SpvOpSubgroupShuffleXorINTEL: {
-        stream << "OpSubgroupShuffleXorINTEL";
-        break;
-    }
-    case SpvOpSubgroupBlockReadINTEL: {
-        stream << "OpSubgroupBlockReadINTEL";
-        break;
-    }
-    case SpvOpSubgroupBlockWriteINTEL: {
-        stream << "OpSubgroupBlockWriteINTEL";
-        break;
-    }
-    case SpvOpSubgroupImageBlockReadINTEL: {
-        stream << "OpSubgroupImageBlockReadINTEL";
-        break;
-    }
-    case SpvOpSubgroupImageBlockWriteINTEL: {
-        stream << "OpSubgroupImageBlockWriteINTEL";
-        break;
-    }
-    case SpvOpDecorateStringGOOGLE: {
-        stream << "OpDecorateStringGOOGLE";
-        break;
-    }
-    case SpvOpMemberDecorateStringGOOGLE: {
-        stream << "OpMemberDecorateStringGOOGLE";
-        break;
-    }
-    case SpvOpMax:
-    default: {
-        stream << "*INVALID*";
-        break;
-    }
-    };
+    stream << spirv_op_name(inst.op_code());
 
     if (inst.has_type()) {
         stream << std::string(" %") << std::to_string(inst.type_id());
@@ -4455,6 +3205,695 @@ std::ostream &operator<<(std::ostream &stream, const SpvInstruction &inst) {
 
 // --
 
+namespace {
+
+/** Returns the name string for a given SPIR-V operand **/
+const std::string &spirv_op_name(SpvId op) {
+    using SpvOpNameMap = std::unordered_map<SpvId, std::string>;
+    static const SpvOpNameMap op_names = {
+        {SpvOpNop, "OpNop"},
+        {SpvOpUndef, "OpUndef"},
+        {SpvOpSourceContinued, "OpSourceContinued"},
+        {SpvOpSource, "OpSource"},
+        {SpvOpSourceExtension, "OpSourceExtension"},
+        {SpvOpName, "OpName"},
+        {SpvOpMemberName, "OpMemberName"},
+        {SpvOpString, "OpString"},
+        {SpvOpLine, "OpLine"},
+        {SpvOpExtension, "OpExtension"},
+        {SpvOpExtInstImport, "OpExtInstImport"},
+        {SpvOpExtInst, "OpExtInst"},
+        {SpvOpMemoryModel, "OpMemoryModel"},
+        {SpvOpEntryPoint, "OpEntryPoint"},
+        {SpvOpExecutionMode, "OpExecutionMode"},
+        {SpvOpCapability, "OpCapability"},
+        {SpvOpTypeVoid, "OpTypeVoid"},
+        {SpvOpTypeBool, "OpTypeBool"},
+        {SpvOpTypeInt, "OpTypeInt"},
+        {SpvOpTypeFloat, "OpTypeFloat"},
+        {SpvOpTypeVector, "OpTypeVector"},
+        {SpvOpTypeMatrix, "OpTypeMatrix"},
+        {SpvOpTypeImage, "OpTypeImage"},
+        {SpvOpTypeSampler, "OpTypeSampler"},
+        {SpvOpTypeSampledImage, "OpTypeSampledImage"},
+        {SpvOpTypeArray, "OpTypeArray"},
+        {SpvOpTypeRuntimeArray, "OpTypeRuntimeArray"},
+        {SpvOpTypeStruct, "OpTypeStruct"},
+        {SpvOpTypeOpaque, "OpTypeOpaque"},
+        {SpvOpTypePointer, "OpTypePointer"},
+        {SpvOpTypeFunction, "OpTypeFunction"},
+        {SpvOpTypeEvent, "OpTypeEvent"},
+        {SpvOpTypeDeviceEvent, "OpTypeDeviceEvent"},
+        {SpvOpTypeReserveId, "OpTypeReserveId"},
+        {SpvOpTypeQueue, "OpTypeQueue"},
+        {SpvOpTypePipe, "OpTypePipe"},
+        {SpvOpTypeForwardPointer, "OpTypeForwardPointer"},
+        {SpvOpConstantTrue, "OpConstantTrue"},
+        {SpvOpConstantFalse, "OpConstantFalse"},
+        {SpvOpConstant, "OpConstant"},
+        {SpvOpConstantComposite, "OpConstantComposite"},
+        {SpvOpConstantSampler, "OpConstantSampler"},
+        {SpvOpConstantNull, "OpConstantNull"},
+        {SpvOpSpecConstantTrue, "OpSpecConstantTrue"},
+        {SpvOpSpecConstantFalse, "OpSpecConstantFalse"},
+        {SpvOpSpecConstant, "OpSpecConstant"},
+        {SpvOpSpecConstantComposite, "OpSpecConstantComposite"},
+        {SpvOpSpecConstantOp, "OpSpecConstantOp"},
+        {SpvOpFunction, "OpFunction"},
+        {SpvOpFunctionParameter, "OpFunctionParameter"},
+        {SpvOpFunctionEnd, "OpFunctionEnd"},
+        {SpvOpFunctionCall, "OpFunctionCall"},
+        {SpvOpVariable, "OpVariable"},
+        {SpvOpImageTexelPointer, "OpImageTexelPointer"},
+        {SpvOpLoad, "OpLoad"},
+        {SpvOpStore, "OpStore"},
+        {SpvOpCopyMemory, "OpCopyMemory"},
+        {SpvOpCopyMemorySized, "OpCopyMemorySized"},
+        {SpvOpAccessChain, "OpAccessChain"},
+        {SpvOpInBoundsAccessChain, "OpInBoundsAccessChain"},
+        {SpvOpPtrAccessChain, "OpPtrAccessChain"},
+        {SpvOpArrayLength, "OpArrayLength"},
+        {SpvOpGenericPtrMemSemantics, "OpGenericPtrMemSemantics"},
+        {SpvOpInBoundsPtrAccessChain, "OpInBoundsPtrAccessChain"},
+        {SpvOpDecorate, "OpDecorate"},
+        {SpvOpMemberDecorate, "OpMemberDecorate"},
+        {SpvOpDecorationGroup, "OpDecorationGroup"},
+        {SpvOpGroupDecorate, "OpGroupDecorate"},
+        {SpvOpGroupMemberDecorate, "OpGroupMemberDecorate"},
+        {SpvOpVectorExtractDynamic, "OpVectorExtractDynamic"},
+        {SpvOpVectorInsertDynamic, "OpVectorInsertDynamic"},
+        {SpvOpVectorShuffle, "OpVectorShuffle"},
+        {SpvOpCompositeConstruct, "OpCompositeConstruct"},
+        {SpvOpCompositeExtract, "OpCompositeExtract"},
+        {SpvOpCompositeInsert, "OpCompositeInsert"},
+        {SpvOpCopyObject, "OpCopyObject"},
+        {SpvOpTranspose, "OpTranspose"},
+        {SpvOpSampledImage, "OpSampledImage"},
+        {SpvOpImageSampleImplicitLod, "OpImageSampleImplicitLod"},
+        {SpvOpImageSampleExplicitLod, "OpImageSampleExplicitLod"},
+        {SpvOpImageSampleDrefImplicitLod, "OpImageSampleDrefImplicitLod"},
+        {SpvOpImageSampleDrefExplicitLod, "OpImageSampleDrefExplicitLod"},
+        {SpvOpImageSampleProjImplicitLod, "OpImageSampleProjImplicitLod"},
+        {SpvOpImageSampleProjExplicitLod, "OpImageSampleProjExplicitLod"},
+        {SpvOpImageSampleProjDrefImplicitLod, "OpImageSampleProjDrefImplicitLod"},
+        {SpvOpImageSampleProjDrefExplicitLod, "OpImageSampleProjDrefExplicitLod"},
+        {SpvOpImageFetch, "OpImageFetch"},
+        {SpvOpImageGather, "OpImageGather"},
+        {SpvOpImageDrefGather, "OpImageDrefGather"},
+        {SpvOpImageRead, "OpImageRead"},
+        {SpvOpImageWrite, "OpImageWrite"},
+        {SpvOpImage, "OpImage"},
+        {SpvOpImageQueryFormat, "OpImageQueryFormat"},
+        {SpvOpImageQueryOrder, "OpImageQueryOrder"},
+        {SpvOpImageQuerySizeLod, "OpImageQuerySizeLod"},
+        {SpvOpImageQuerySize, "OpImageQuerySize"},
+        {SpvOpImageQueryLod, "OpImageQueryLod"},
+        {SpvOpImageQueryLevels, "OpImageQueryLevels"},
+        {SpvOpImageQuerySamples, "OpImageQuerySamples"},
+        {SpvOpConvertFToU, "OpConvertFToU"},
+        {SpvOpConvertFToS, "OpConvertFToS"},
+        {SpvOpConvertSToF, "OpConvertSToF"},
+        {SpvOpConvertUToF, "OpConvertUToF"},
+        {SpvOpUConvert, "OpUConvert"},
+        {SpvOpSConvert, "OpSConvert"},
+        {SpvOpFConvert, "OpFConvert"},
+        {SpvOpQuantizeToF16, "OpQuantizeToF16"},
+        {SpvOpConvertPtrToU, "OpConvertPtrToU"},
+        {SpvOpSatConvertSToU, "OpSatConvertSToU"},
+        {SpvOpSatConvertUToS, "OpSatConvertUToS"},
+        {SpvOpConvertUToPtr, "OpConvertUToPtr"},
+        {SpvOpPtrCastToGeneric, "OpPtrCastToGeneric"},
+        {SpvOpGenericCastToPtr, "OpGenericCastToPtr"},
+        {SpvOpGenericCastToPtrExplicit, "OpGenericCastToPtrExplicit"},
+        {SpvOpBitcast, "OpBitcast"},
+        {SpvOpSNegate, "OpSNegate"},
+        {SpvOpFNegate, "OpFNegate"},
+        {SpvOpIAdd, "OpIAdd"},
+        {SpvOpFAdd, "OpFAdd"},
+        {SpvOpISub, "OpISub"},
+        {SpvOpFSub, "OpFSub"},
+        {SpvOpIMul, "OpIMul"},
+        {SpvOpFMul, "OpFMul"},
+        {SpvOpUDiv, "OpUDiv"},
+        {SpvOpSDiv, "OpSDiv"},
+        {SpvOpFDiv, "OpFDiv"},
+        {SpvOpUMod, "OpUMod"},
+        {SpvOpSRem, "OpSRem"},
+        {SpvOpSMod, "OpSMod"},
+        {SpvOpFRem, "OpFRem"},
+        {SpvOpFMod, "OpFMod"},
+        {SpvOpVectorTimesScalar, "OpVectorTimesScalar"},
+        {SpvOpMatrixTimesScalar, "OpMatrixTimesScalar"},
+        {SpvOpVectorTimesMatrix, "OpVectorTimesMatrix"},
+        {SpvOpMatrixTimesVector, "OpMatrixTimesVector"},
+        {SpvOpMatrixTimesMatrix, "OpMatrixTimesMatrix"},
+        {SpvOpOuterProduct, "OpOuterProduct"},
+        {SpvOpDot, "OpDot"},
+        {SpvOpIAddCarry, "OpIAddCarry"},
+        {SpvOpISubBorrow, "OpISubBorrow"},
+        {SpvOpUMulExtended, "OpUMulExtended"},
+        {SpvOpSMulExtended, "OpSMulExtended"},
+        {SpvOpAny, "OpAny"},
+        {SpvOpAll, "OpAll"},
+        {SpvOpIsNan, "OpIsNan"},
+        {SpvOpIsInf, "OpIsInf"},
+        {SpvOpIsFinite, "OpIsFinite"},
+        {SpvOpIsNormal, "OpIsNormal"},
+        {SpvOpSignBitSet, "OpSignBitSet"},
+        {SpvOpLessOrGreater, "OpLessOrGreater"},
+        {SpvOpOrdered, "OpOrdered"},
+        {SpvOpUnordered, "OpUnordered"},
+        {SpvOpLogicalEqual, "OpLogicalEqual"},
+        {SpvOpLogicalNotEqual, "OpLogicalNotEqual"},
+        {SpvOpLogicalOr, "OpLogicalOr"},
+        {SpvOpLogicalAnd, "OpLogicalAnd"},
+        {SpvOpLogicalNot, "OpLogicalNot"},
+        {SpvOpSelect, "OpSelect"},
+        {SpvOpIEqual, "OpIEqual"},
+        {SpvOpINotEqual, "OpINotEqual"},
+        {SpvOpUGreaterThan, "OpUGreaterThan"},
+        {SpvOpSGreaterThan, "OpSGreaterThan"},
+        {SpvOpUGreaterThanEqual, "OpUGreaterThanEqual"},
+        {SpvOpSGreaterThanEqual, "OpSGreaterThanEqual"},
+        {SpvOpULessThan, "OpULessThan"},
+        {SpvOpSLessThan, "OpSLessThan"},
+        {SpvOpULessThanEqual, "OpULessThanEqual"},
+        {SpvOpSLessThanEqual, "OpSLessThanEqual"},
+        {SpvOpFOrdEqual, "OpFOrdEqual"},
+        {SpvOpFUnordEqual, "OpFUnordEqual"},
+        {SpvOpFOrdNotEqual, "OpFOrdNotEqual"},
+        {SpvOpFUnordNotEqual, "OpFUnordNotEqual"},
+        {SpvOpFOrdLessThan, "OpFOrdLessThan"},
+        {SpvOpFUnordLessThan, "OpFUnordLessThan"},
+        {SpvOpFOrdGreaterThan, "OpFOrdGreaterThan"},
+        {SpvOpFUnordGreaterThan, "OpFUnordGreaterThan"},
+        {SpvOpFOrdLessThanEqual, "OpFOrdLessThanEqual"},
+        {SpvOpFUnordLessThanEqual, "OpFUnordLessThanEqual"},
+        {SpvOpFOrdGreaterThanEqual, "OpFOrdGreaterThanEqual"},
+        {SpvOpFUnordGreaterThanEqual, "OpFUnordGreaterThanEqual"},
+        {SpvOpShiftRightLogical, "OpShiftRightLogical"},
+        {SpvOpShiftRightArithmetic, "OpShiftRightArithmetic"},
+        {SpvOpShiftLeftLogical, "OpShiftLeftLogical"},
+        {SpvOpBitwiseOr, "OpBitwiseOr"},
+        {SpvOpBitwiseXor, "OpBitwiseXor"},
+        {SpvOpBitwiseAnd, "OpBitwiseAnd"},
+        {SpvOpNot, "OpNot"},
+        {SpvOpBitFieldInsert, "OpBitFieldInsert"},
+        {SpvOpBitFieldSExtract, "OpBitFieldSExtract"},
+        {SpvOpBitFieldUExtract, "OpBitFieldUExtract"},
+        {SpvOpBitReverse, "OpBitReverse"},
+        {SpvOpBitCount, "OpBitCount"},
+        {SpvOpDPdx, "OpDPdx"},
+        {SpvOpDPdy, "OpDPdy"},
+        {SpvOpFwidth, "OpFwidth"},
+        {SpvOpDPdxFine, "OpDPdxFine"},
+        {SpvOpDPdyFine, "OpDPdyFine"},
+        {SpvOpFwidthFine, "OpFwidthFine"},
+        {SpvOpDPdxCoarse, "OpDPdxCoarse"},
+        {SpvOpDPdyCoarse, "OpDPdyCoarse"},
+        {SpvOpFwidthCoarse, "OpFwidthCoarse"},
+        {SpvOpEmitVertex, "OpEmitVertex"},
+        {SpvOpEndPrimitive, "OpEndPrimitive"},
+        {SpvOpEmitStreamVertex, "OpEmitStreamVertex"},
+        {SpvOpEndStreamPrimitive, "OpEndStreamPrimitive"},
+        {SpvOpControlBarrier, "OpControlBarrier"},
+        {SpvOpMemoryBarrier, "OpMemoryBarrier"},
+        {SpvOpAtomicLoad, "OpAtomicLoad"},
+        {SpvOpAtomicStore, "OpAtomicStore"},
+        {SpvOpAtomicExchange, "OpAtomicExchange"},
+        {SpvOpAtomicCompareExchange, "OpAtomicCompareExchange"},
+        {SpvOpAtomicCompareExchangeWeak, "OpAtomicCompareExchangeWeak"},
+        {SpvOpAtomicIIncrement, "OpAtomicIIncrement"},
+        {SpvOpAtomicIDecrement, "OpAtomicIDecrement"},
+        {SpvOpAtomicIAdd, "OpAtomicIAdd"},
+        {SpvOpAtomicISub, "OpAtomicISub"},
+        {SpvOpAtomicSMin, "OpAtomicSMin"},
+        {SpvOpAtomicUMin, "OpAtomicUMin"},
+        {SpvOpAtomicSMax, "OpAtomicSMax"},
+        {SpvOpAtomicUMax, "OpAtomicUMax"},
+        {SpvOpAtomicAnd, "OpAtomicAnd"},
+        {SpvOpAtomicOr, "OpAtomicOr"},
+        {SpvOpAtomicXor, "OpAtomicXor"},
+        {SpvOpPhi, "OpPhi"},
+        {SpvOpLoopMerge, "OpLoopMerge"},
+        {SpvOpSelectionMerge, "OpSelectionMerge"},
+        {SpvOpLabel, "OpLabel"},
+        {SpvOpBranch, "OpBranch"},
+        {SpvOpBranchConditional, "OpBranchConditional"},
+        {SpvOpSwitch, "OpSwitch"},
+        {SpvOpKill, "OpKill"},
+        {SpvOpReturn, "OpReturn"},
+        {SpvOpReturnValue, "OpReturnValue"},
+        {SpvOpUnreachable, "OpUnreachable"},
+        {SpvOpLifetimeStart, "OpLifetimeStart"},
+        {SpvOpLifetimeStop, "OpLifetimeStop"},
+        {SpvOpGroupAsyncCopy, "OpGroupAsyncCopy"},
+        {SpvOpGroupWaitEvents, "OpGroupWaitEvents"},
+        {SpvOpGroupAll, "OpGroupAll"},
+        {SpvOpGroupAny, "OpGroupAny"},
+        {SpvOpGroupBroadcast, "OpGroupBroadcast"},
+        {SpvOpGroupIAdd, "OpGroupIAdd"},
+        {SpvOpGroupFAdd, "OpGroupFAdd"},
+        {SpvOpGroupFMin, "OpGroupFMin"},
+        {SpvOpGroupUMin, "OpGroupUMin"},
+        {SpvOpGroupSMin, "OpGroupSMin"},
+        {SpvOpGroupFMax, "OpGroupFMax"},
+        {SpvOpGroupUMax, "OpGroupUMax"},
+        {SpvOpGroupSMax, "OpGroupSMax"},
+        {SpvOpReadPipe, "OpReadPipe"},
+        {SpvOpWritePipe, "OpWritePipe"},
+        {SpvOpReservedReadPipe, "OpReservedReadPipe"},
+        {SpvOpReservedWritePipe, "OpReservedWritePipe"},
+        {SpvOpReserveReadPipePackets, "OpReserveReadPipePackets"},
+        {SpvOpReserveWritePipePackets, "OpReserveWritePipePackets"},
+        {SpvOpCommitReadPipe, "OpCommitReadPipe"},
+        {SpvOpCommitWritePipe, "OpCommitWritePipe"},
+        {SpvOpIsValidReserveId, "OpIsValidReserveId"},
+        {SpvOpGetNumPipePackets, "OpGetNumPipePackets"},
+        {SpvOpGetMaxPipePackets, "OpGetMaxPipePackets"},
+        {SpvOpGroupReserveReadPipePackets, "OpGroupReserveReadPipePackets"},
+        {SpvOpGroupReserveWritePipePackets, "OpGroupReserveWritePipePackets"},
+        {SpvOpGroupCommitReadPipe, "OpGroupCommitReadPipe"},
+        {SpvOpGroupCommitWritePipe, "OpGroupCommitWritePipe"},
+        {SpvOpEnqueueMarker, "OpEnqueueMarker"},
+        {SpvOpEnqueueKernel, "OpEnqueueKernel"},
+        {SpvOpGetKernelNDrangeSubGroupCount, "OpGetKernelNDrangeSubGroupCount"},
+        {SpvOpGetKernelNDrangeMaxSubGroupSize, "OpGetKernelNDrangeMaxSubGroupSize"},
+        {SpvOpGetKernelWorkGroupSize, "OpGetKernelWorkGroupSize"},
+        {SpvOpGetKernelPreferredWorkGroupSizeMultiple, "OpGetKernelPreferredWorkGroupSizeMultiple"},
+        {SpvOpRetainEvent, "OpRetainEvent"},
+        {SpvOpReleaseEvent, "OpReleaseEvent"},
+        {SpvOpCreateUserEvent, "OpCreateUserEvent"},
+        {SpvOpIsValidEvent, "OpIsValidEvent"},
+        {SpvOpSetUserEventStatus, "OpSetUserEventStatus"},
+        {SpvOpCaptureEventProfilingInfo, "OpCaptureEventProfilingInfo"},
+        {SpvOpGetDefaultQueue, "OpGetDefaultQueue"},
+        {SpvOpBuildNDRange, "OpBuildNDRange"},
+        {SpvOpImageSparseSampleImplicitLod, "OpImageSparseSampleImplicitLod"},
+        {SpvOpImageSparseSampleExplicitLod, "OpImageSparseSampleExplicitLod"},
+        {SpvOpImageSparseSampleDrefImplicitLod, "OpImageSparseSampleDrefImplicitLod"},
+        {SpvOpImageSparseSampleDrefExplicitLod, "OpImageSparseSampleDrefExplicitLod"},
+        {SpvOpImageSparseSampleProjImplicitLod, "OpImageSparseSampleProjImplicitLod"},
+        {SpvOpImageSparseSampleProjExplicitLod, "OpImageSparseSampleProjExplicitLod"},
+        {SpvOpImageSparseSampleProjDrefImplicitLod, "OpImageSparseSampleProjDrefImplicitLod"},
+        {SpvOpImageSparseSampleProjDrefExplicitLod, "OpImageSparseSampleProjDrefExplicitLod"},
+        {SpvOpImageSparseFetch, "OpImageSparseFetch"},
+        {SpvOpImageSparseGather, "OpImageSparseGather"},
+        {SpvOpImageSparseDrefGather, "OpImageSparseDrefGather"},
+        {SpvOpImageSparseTexelsResident, "OpImageSparseTexelsResident"},
+        {SpvOpNoLine, "OpNoLine"},
+        {SpvOpAtomicFlagTestAndSet, "OpAtomicFlagTestAndSet"},
+        {SpvOpAtomicFlagClear, "OpAtomicFlagClear"},
+        {SpvOpImageSparseRead, "OpImageSparseRead"},
+        {SpvOpSizeOf, "OpSizeOf"},
+        {SpvOpTypePipeStorage, "OpTypePipeStorage"},
+        {SpvOpConstantPipeStorage, "OpConstantPipeStorage"},
+        {SpvOpCreatePipeFromPipeStorage, "OpCreatePipeFromPipeStorage"},
+        {SpvOpGetKernelLocalSizeForSubgroupCount, "OpGetKernelLocalSizeForSubgroupCount"},
+        {SpvOpGetKernelMaxNumSubgroups, "OpGetKernelMaxNumSubgroups"},
+        {SpvOpTypeNamedBarrier, "OpTypeNamedBarrier"},
+        {SpvOpNamedBarrierInitialize, "OpNamedBarrierInitialize"},
+        {SpvOpMemoryNamedBarrier, "OpMemoryNamedBarrier"},
+        {SpvOpModuleProcessed, "OpModuleProcessed"},
+        {SpvOpExecutionModeId, "OpExecutionModeId"},
+        {SpvOpDecorateId, "OpDecorateId"},
+        {SpvOpGroupNonUniformElect, "OpGroupNonUniformElect"},
+        {SpvOpGroupNonUniformAll, "OpGroupNonUniformAll"},
+        {SpvOpGroupNonUniformAny, "OpGroupNonUniformAny"},
+        {SpvOpGroupNonUniformAllEqual, "OpGroupNonUniformAllEqual"},
+        {SpvOpGroupNonUniformBroadcast, "OpGroupNonUniformBroadcast"},
+        {SpvOpGroupNonUniformBroadcastFirst, "OpGroupNonUniformBroadcastFirst"},
+        {SpvOpGroupNonUniformBallot, "OpGroupNonUniformBallot"},
+        {SpvOpGroupNonUniformInverseBallot, "OpGroupNonUniformInverseBallot"},
+        {SpvOpGroupNonUniformBallotBitExtract, "OpGroupNonUniformBallotBitExtract"},
+        {SpvOpGroupNonUniformBallotBitCount, "OpGroupNonUniformBallotBitCount"},
+        {SpvOpGroupNonUniformBallotFindLSB, "OpGroupNonUniformBallotFindLSB"},
+        {SpvOpGroupNonUniformBallotFindMSB, "OpGroupNonUniformBallotFindMSB"},
+        {SpvOpGroupNonUniformShuffle, "OpGroupNonUniformShuffle"},
+        {SpvOpGroupNonUniformShuffleXor, "OpGroupNonUniformShuffleXor"},
+        {SpvOpGroupNonUniformShuffleUp, "OpGroupNonUniformShuffleUp"},
+        {SpvOpGroupNonUniformShuffleDown, "OpGroupNonUniformShuffleDown"},
+        {SpvOpGroupNonUniformIAdd, "OpGroupNonUniformIAdd"},
+        {SpvOpGroupNonUniformFAdd, "OpGroupNonUniformFAdd"},
+        {SpvOpGroupNonUniformIMul, "OpGroupNonUniformIMul"},
+        {SpvOpGroupNonUniformFMul, "OpGroupNonUniformFMul"},
+        {SpvOpGroupNonUniformSMin, "OpGroupNonUniformSMin"},
+        {SpvOpGroupNonUniformUMin, "OpGroupNonUniformUMin"},
+        {SpvOpGroupNonUniformFMin, "OpGroupNonUniformFMin"},
+        {SpvOpGroupNonUniformSMax, "OpGroupNonUniformSMax"},
+        {SpvOpGroupNonUniformUMax, "OpGroupNonUniformUMax"},
+        {SpvOpGroupNonUniformFMax, "OpGroupNonUniformFMax"},
+        {SpvOpGroupNonUniformBitwiseAnd, "OpGroupNonUniformBitwiseAnd"},
+        {SpvOpGroupNonUniformBitwiseOr, "OpGroupNonUniformBitwiseOr"},
+        {SpvOpGroupNonUniformBitwiseXor, "OpGroupNonUniformBitwiseXor"},
+        {SpvOpGroupNonUniformLogicalAnd, "OpGroupNonUniformLogicalAnd"},
+        {SpvOpGroupNonUniformLogicalOr, "OpGroupNonUniformLogicalOr"},
+        {SpvOpGroupNonUniformLogicalXor, "OpGroupNonUniformLogicalXor"},
+        {SpvOpGroupNonUniformQuadBroadcast, "OpGroupNonUniformQuadBroadcast"},
+        {SpvOpGroupNonUniformQuadSwap, "OpGroupNonUniformQuadSwap"},
+        {SpvOpCopyLogical, "OpCopyLogical"},
+        {SpvOpPtrEqual, "OpPtrEqual"},
+        {SpvOpPtrNotEqual, "OpPtrNotEqual"},
+        {SpvOpPtrDiff, "OpPtrDiff"},
+        {SpvOpTerminateInvocation, "OpTerminateInvocation"},
+        {SpvOpSubgroupBallotKHR, "OpSubgroupBallotKHR"},
+        {SpvOpSubgroupFirstInvocationKHR, "OpSubgroupFirstInvocationKHR"},
+        {SpvOpSubgroupAllKHR, "OpSubgroupAllKHR"},
+        {SpvOpSubgroupAnyKHR, "OpSubgroupAnyKHR"},
+        {SpvOpSubgroupAllEqualKHR, "OpSubgroupAllEqualKHR"},
+        {SpvOpGroupNonUniformRotateKHR, "OpGroupNonUniformRotateKHR"},
+        {SpvOpSubgroupReadInvocationKHR, "OpSubgroupReadInvocationKHR"},
+        {SpvOpTraceRayKHR, "OpTraceRayKHR"},
+        {SpvOpExecuteCallableKHR, "OpExecuteCallableKHR"},
+        {SpvOpConvertUToAccelerationStructureKHR, "OpConvertUToAccelerationStructureKHR"},
+        {SpvOpIgnoreIntersectionKHR, "OpIgnoreIntersectionKHR"},
+        {SpvOpTerminateRayKHR, "OpTerminateRayKHR"},
+        {SpvOpSDot, "OpSDot"},
+        {SpvOpSDotKHR, "OpSDotKHR"},
+        {SpvOpUDot, "OpUDot"},
+        {SpvOpUDotKHR, "OpUDotKHR"},
+        {SpvOpSUDot, "OpSUDot"},
+        {SpvOpSUDotKHR, "OpSUDotKHR"},
+        {SpvOpSDotAccSat, "OpSDotAccSat"},
+        {SpvOpSDotAccSatKHR, "OpSDotAccSatKHR"},
+        {SpvOpUDotAccSat, "OpUDotAccSat"},
+        {SpvOpUDotAccSatKHR, "OpUDotAccSatKHR"},
+        {SpvOpSUDotAccSat, "OpSUDotAccSat"},
+        {SpvOpSUDotAccSatKHR, "OpSUDotAccSatKHR"},
+        {SpvOpTypeRayQueryKHR, "OpTypeRayQueryKHR"},
+        {SpvOpRayQueryInitializeKHR, "OpRayQueryInitializeKHR"},
+        {SpvOpRayQueryTerminateKHR, "OpRayQueryTerminateKHR"},
+        {SpvOpRayQueryGenerateIntersectionKHR, "OpRayQueryGenerateIntersectionKHR"},
+        {SpvOpRayQueryConfirmIntersectionKHR, "OpRayQueryConfirmIntersectionKHR"},
+        {SpvOpRayQueryProceedKHR, "OpRayQueryProceedKHR"},
+        {SpvOpRayQueryGetIntersectionTypeKHR, "OpRayQueryGetIntersectionTypeKHR"},
+        {SpvOpGroupIAddNonUniformAMD, "OpGroupIAddNonUniformAMD"},
+        {SpvOpGroupFAddNonUniformAMD, "OpGroupFAddNonUniformAMD"},
+        {SpvOpGroupFMinNonUniformAMD, "OpGroupFMinNonUniformAMD"},
+        {SpvOpGroupUMinNonUniformAMD, "OpGroupUMinNonUniformAMD"},
+        {SpvOpGroupSMinNonUniformAMD, "OpGroupSMinNonUniformAMD"},
+        {SpvOpGroupFMaxNonUniformAMD, "OpGroupFMaxNonUniformAMD"},
+        {SpvOpGroupUMaxNonUniformAMD, "OpGroupUMaxNonUniformAMD"},
+        {SpvOpGroupSMaxNonUniformAMD, "OpGroupSMaxNonUniformAMD"},
+        {SpvOpFragmentMaskFetchAMD, "OpFragmentMaskFetchAMD"},
+        {SpvOpFragmentFetchAMD, "OpFragmentFetchAMD"},
+        {SpvOpReadClockKHR, "OpReadClockKHR"},
+        {SpvOpImageSampleFootprintNV, "OpImageSampleFootprintNV"},
+        {SpvOpEmitMeshTasksEXT, "OpEmitMeshTasksEXT"},
+        {SpvOpSetMeshOutputsEXT, "OpSetMeshOutputsEXT"},
+        {SpvOpGroupNonUniformPartitionNV, "OpGroupNonUniformPartitionNV"},
+        {SpvOpWritePackedPrimitiveIndices4x8NV, "OpWritePackedPrimitiveIndices4x8NV"},
+        {SpvOpReportIntersectionKHR, "OpReportIntersectionKHR"},
+        {SpvOpReportIntersectionNV, "OpReportIntersectionNV"},
+        {SpvOpIgnoreIntersectionNV, "OpIgnoreIntersectionNV"},
+        {SpvOpTerminateRayNV, "OpTerminateRayNV"},
+        {SpvOpTraceNV, "OpTraceNV"},
+        {SpvOpTraceMotionNV, "OpTraceMotionNV"},
+        {SpvOpTraceRayMotionNV, "OpTraceRayMotionNV"},
+        {SpvOpTypeAccelerationStructureKHR, "OpTypeAccelerationStructureKHR"},
+        {SpvOpTypeAccelerationStructureNV, "OpTypeAccelerationStructureNV"},
+        {SpvOpExecuteCallableNV, "OpExecuteCallableNV"},
+        {SpvOpTypeCooperativeMatrixNV, "OpTypeCooperativeMatrixNV"},
+        {SpvOpCooperativeMatrixLoadNV, "OpCooperativeMatrixLoadNV"},
+        {SpvOpCooperativeMatrixStoreNV, "OpCooperativeMatrixStoreNV"},
+        {SpvOpCooperativeMatrixMulAddNV, "OpCooperativeMatrixMulAddNV"},
+        {SpvOpCooperativeMatrixLengthNV, "OpCooperativeMatrixLengthNV"},
+        {SpvOpBeginInvocationInterlockEXT, "OpBeginInvocationInterlockEXT"},
+        {SpvOpEndInvocationInterlockEXT, "OpEndInvocationInterlockEXT"},
+        {SpvOpDemoteToHelperInvocation, "OpDemoteToHelperInvocation"},
+        {SpvOpDemoteToHelperInvocationEXT, "OpDemoteToHelperInvocationEXT"},
+        {SpvOpIsHelperInvocationEXT, "OpIsHelperInvocationEXT"},
+        {SpvOpConvertUToImageNV, "OpConvertUToImageNV"},
+        {SpvOpConvertUToSamplerNV, "OpConvertUToSamplerNV"},
+        {SpvOpConvertImageToUNV, "OpConvertImageToUNV"},
+        {SpvOpConvertSamplerToUNV, "OpConvertSamplerToUNV"},
+        {SpvOpConvertUToSampledImageNV, "OpConvertUToSampledImageNV"},
+        {SpvOpConvertSampledImageToUNV, "OpConvertSampledImageToUNV"},
+        {SpvOpSamplerImageAddressingModeNV, "OpSamplerImageAddressingModeNV"},
+        {SpvOpSubgroupShuffleINTEL, "OpSubgroupShuffleINTEL"},
+        {SpvOpSubgroupShuffleDownINTEL, "OpSubgroupShuffleDownINTEL"},
+        {SpvOpSubgroupShuffleUpINTEL, "OpSubgroupShuffleUpINTEL"},
+        {SpvOpSubgroupShuffleXorINTEL, "OpSubgroupShuffleXorINTEL"},
+        {SpvOpSubgroupBlockReadINTEL, "OpSubgroupBlockReadINTEL"},
+        {SpvOpSubgroupBlockWriteINTEL, "OpSubgroupBlockWriteINTEL"},
+        {SpvOpSubgroupImageBlockReadINTEL, "OpSubgroupImageBlockReadINTEL"},
+        {SpvOpSubgroupImageBlockWriteINTEL, "OpSubgroupImageBlockWriteINTEL"},
+        {SpvOpSubgroupImageMediaBlockReadINTEL, "OpSubgroupImageMediaBlockReadINTEL"},
+        {SpvOpSubgroupImageMediaBlockWriteINTEL, "OpSubgroupImageMediaBlockWriteINTEL"},
+        {SpvOpUCountLeadingZerosINTEL, "OpUCountLeadingZerosINTEL"},
+        {SpvOpUCountTrailingZerosINTEL, "OpUCountTrailingZerosINTEL"},
+        {SpvOpAbsISubINTEL, "OpAbsISubINTEL"},
+        {SpvOpAbsUSubINTEL, "OpAbsUSubINTEL"},
+        {SpvOpIAddSatINTEL, "OpIAddSatINTEL"},
+        {SpvOpUAddSatINTEL, "OpUAddSatINTEL"},
+        {SpvOpIAverageINTEL, "OpIAverageINTEL"},
+        {SpvOpUAverageINTEL, "OpUAverageINTEL"},
+        {SpvOpIAverageRoundedINTEL, "OpIAverageRoundedINTEL"},
+        {SpvOpUAverageRoundedINTEL, "OpUAverageRoundedINTEL"},
+        {SpvOpISubSatINTEL, "OpISubSatINTEL"},
+        {SpvOpUSubSatINTEL, "OpUSubSatINTEL"},
+        {SpvOpIMul32x16INTEL, "OpIMul32x16INTEL"},
+        {SpvOpUMul32x16INTEL, "OpUMul32x16INTEL"},
+        {SpvOpConstantFunctionPointerINTEL, "OpConstantFunctionPointerINTEL"},
+        {SpvOpFunctionPointerCallINTEL, "OpFunctionPointerCallINTEL"},
+        {SpvOpAsmTargetINTEL, "OpAsmTargetINTEL"},
+        {SpvOpAsmINTEL, "OpAsmINTEL"},
+        {SpvOpAsmCallINTEL, "OpAsmCallINTEL"},
+        {SpvOpAtomicFMinEXT, "OpAtomicFMinEXT"},
+        {SpvOpAtomicFMaxEXT, "OpAtomicFMaxEXT"},
+        {SpvOpAssumeTrueKHR, "OpAssumeTrueKHR"},
+        {SpvOpExpectKHR, "OpExpectKHR"},
+        {SpvOpDecorateString, "OpDecorateString"},
+        {SpvOpDecorateStringGOOGLE, "OpDecorateStringGOOGLE"},
+        {SpvOpMemberDecorateString, "OpMemberDecorateString"},
+        {SpvOpMemberDecorateStringGOOGLE, "OpMemberDecorateStringGOOGLE"},
+        {SpvOpVmeImageINTEL, "OpVmeImageINTEL"},
+        {SpvOpTypeVmeImageINTEL, "OpTypeVmeImageINTEL"},
+        {SpvOpTypeAvcImePayloadINTEL, "OpTypeAvcImePayloadINTEL"},
+        {SpvOpTypeAvcRefPayloadINTEL, "OpTypeAvcRefPayloadINTEL"},
+        {SpvOpTypeAvcSicPayloadINTEL, "OpTypeAvcSicPayloadINTEL"},
+        {SpvOpTypeAvcMcePayloadINTEL, "OpTypeAvcMcePayloadINTEL"},
+        {SpvOpTypeAvcMceResultINTEL, "OpTypeAvcMceResultINTEL"},
+        {SpvOpTypeAvcImeResultINTEL, "OpTypeAvcImeResultINTEL"},
+        {SpvOpTypeAvcImeResultSingleReferenceStreamoutINTEL, "OpTypeAvcImeResultSingleReferenceStreamoutINTEL"},
+        {SpvOpTypeAvcImeResultDualReferenceStreamoutINTEL, "OpTypeAvcImeResultDualReferenceStreamoutINTEL"},
+        {SpvOpTypeAvcImeSingleReferenceStreaminINTEL, "OpTypeAvcImeSingleReferenceStreaminINTEL"},
+        {SpvOpTypeAvcImeDualReferenceStreaminINTEL, "OpTypeAvcImeDualReferenceStreaminINTEL"},
+        {SpvOpTypeAvcRefResultINTEL, "OpTypeAvcRefResultINTEL"},
+        {SpvOpTypeAvcSicResultINTEL, "OpTypeAvcSicResultINTEL"},
+        {SpvOpSubgroupAvcMceGetDefaultInterBaseMultiReferencePenaltyINTEL, "OpSubgroupAvcMceGetDefaultInterBaseMultiReferencePenaltyINTEL"},
+        {SpvOpSubgroupAvcMceSetInterBaseMultiReferencePenaltyINTEL, "OpSubgroupAvcMceSetInterBaseMultiReferencePenaltyINTEL"},
+        {SpvOpSubgroupAvcMceGetDefaultInterShapePenaltyINTEL, "OpSubgroupAvcMceGetDefaultInterShapePenaltyINTEL"},
+        {SpvOpSubgroupAvcMceSetInterShapePenaltyINTEL, "OpSubgroupAvcMceSetInterShapePenaltyINTEL"},
+        {SpvOpSubgroupAvcMceGetDefaultInterDirectionPenaltyINTEL, "OpSubgroupAvcMceGetDefaultInterDirectionPenaltyINTEL"},
+        {SpvOpSubgroupAvcMceSetInterDirectionPenaltyINTEL, "OpSubgroupAvcMceSetInterDirectionPenaltyINTEL"},
+        {SpvOpSubgroupAvcMceGetDefaultIntraLumaShapePenaltyINTEL, "OpSubgroupAvcMceGetDefaultIntraLumaShapePenaltyINTEL"},
+        {SpvOpSubgroupAvcMceGetDefaultInterMotionVectorCostTableINTEL, "OpSubgroupAvcMceGetDefaultInterMotionVectorCostTableINTEL"},
+        {SpvOpSubgroupAvcMceGetDefaultHighPenaltyCostTableINTEL, "OpSubgroupAvcMceGetDefaultHighPenaltyCostTableINTEL"},
+        {SpvOpSubgroupAvcMceGetDefaultMediumPenaltyCostTableINTEL, "OpSubgroupAvcMceGetDefaultMediumPenaltyCostTableINTEL"},
+        {SpvOpSubgroupAvcMceGetDefaultLowPenaltyCostTableINTEL, "OpSubgroupAvcMceGetDefaultLowPenaltyCostTableINTEL"},
+        {SpvOpSubgroupAvcMceSetMotionVectorCostFunctionINTEL, "OpSubgroupAvcMceSetMotionVectorCostFunctionINTEL"},
+        {SpvOpSubgroupAvcMceGetDefaultIntraLumaModePenaltyINTEL, "OpSubgroupAvcMceGetDefaultIntraLumaModePenaltyINTEL"},
+        {SpvOpSubgroupAvcMceGetDefaultNonDcLumaIntraPenaltyINTEL, "OpSubgroupAvcMceGetDefaultNonDcLumaIntraPenaltyINTEL"},
+        {SpvOpSubgroupAvcMceGetDefaultIntraChromaModeBasePenaltyINTEL, "OpSubgroupAvcMceGetDefaultIntraChromaModeBasePenaltyINTEL"},
+        {SpvOpSubgroupAvcMceSetAcOnlyHaarINTEL, "OpSubgroupAvcMceSetAcOnlyHaarINTEL"},
+        {SpvOpSubgroupAvcMceSetSourceInterlacedFieldPolarityINTEL, "OpSubgroupAvcMceSetSourceInterlacedFieldPolarityINTEL"},
+        {SpvOpSubgroupAvcMceSetSingleReferenceInterlacedFieldPolarityINTEL, "OpSubgroupAvcMceSetSingleReferenceInterlacedFieldPolarityINTEL"},
+        {SpvOpSubgroupAvcMceSetDualReferenceInterlacedFieldPolaritiesINTEL, "OpSubgroupAvcMceSetDualReferenceInterlacedFieldPolaritiesINTEL"},
+        {SpvOpSubgroupAvcMceConvertToImePayloadINTEL, "OpSubgroupAvcMceConvertToImePayloadINTEL"},
+        {SpvOpSubgroupAvcMceConvertToImeResultINTEL, "OpSubgroupAvcMceConvertToImeResultINTEL"},
+        {SpvOpSubgroupAvcMceConvertToRefPayloadINTEL, "OpSubgroupAvcMceConvertToRefPayloadINTEL"},
+        {SpvOpSubgroupAvcMceConvertToRefResultINTEL, "OpSubgroupAvcMceConvertToRefResultINTEL"},
+        {SpvOpSubgroupAvcMceConvertToSicPayloadINTEL, "OpSubgroupAvcMceConvertToSicPayloadINTEL"},
+        {SpvOpSubgroupAvcMceConvertToSicResultINTEL, "OpSubgroupAvcMceConvertToSicResultINTEL"},
+        {SpvOpSubgroupAvcMceGetMotionVectorsINTEL, "OpSubgroupAvcMceGetMotionVectorsINTEL"},
+        {SpvOpSubgroupAvcMceGetInterDistortionsINTEL, "OpSubgroupAvcMceGetInterDistortionsINTEL"},
+        {SpvOpSubgroupAvcMceGetBestInterDistortionsINTEL, "OpSubgroupAvcMceGetBestInterDistortionsINTEL"},
+        {SpvOpSubgroupAvcMceGetInterMajorShapeINTEL, "OpSubgroupAvcMceGetInterMajorShapeINTEL"},
+        {SpvOpSubgroupAvcMceGetInterMinorShapeINTEL, "OpSubgroupAvcMceGetInterMinorShapeINTEL"},
+        {SpvOpSubgroupAvcMceGetInterDirectionsINTEL, "OpSubgroupAvcMceGetInterDirectionsINTEL"},
+        {SpvOpSubgroupAvcMceGetInterMotionVectorCountINTEL, "OpSubgroupAvcMceGetInterMotionVectorCountINTEL"},
+        {SpvOpSubgroupAvcMceGetInterReferenceIdsINTEL, "OpSubgroupAvcMceGetInterReferenceIdsINTEL"},
+        {SpvOpSubgroupAvcMceGetInterReferenceInterlacedFieldPolaritiesINTEL, "OpSubgroupAvcMceGetInterReferenceInterlacedFieldPolaritiesINTEL"},
+        {SpvOpSubgroupAvcImeInitializeINTEL, "OpSubgroupAvcImeInitializeINTEL"},
+        {SpvOpSubgroupAvcImeSetSingleReferenceINTEL, "OpSubgroupAvcImeSetSingleReferenceINTEL"},
+        {SpvOpSubgroupAvcImeSetDualReferenceINTEL, "OpSubgroupAvcImeSetDualReferenceINTEL"},
+        {SpvOpSubgroupAvcImeRefWindowSizeINTEL, "OpSubgroupAvcImeRefWindowSizeINTEL"},
+        {SpvOpSubgroupAvcImeAdjustRefOffsetINTEL, "OpSubgroupAvcImeAdjustRefOffsetINTEL"},
+        {SpvOpSubgroupAvcImeConvertToMcePayloadINTEL, "OpSubgroupAvcImeConvertToMcePayloadINTEL"},
+        {SpvOpSubgroupAvcImeSetMaxMotionVectorCountINTEL, "OpSubgroupAvcImeSetMaxMotionVectorCountINTEL"},
+        {SpvOpSubgroupAvcImeSetUnidirectionalMixDisableINTEL, "OpSubgroupAvcImeSetUnidirectionalMixDisableINTEL"},
+        {SpvOpSubgroupAvcImeSetEarlySearchTerminationThresholdINTEL, "OpSubgroupAvcImeSetEarlySearchTerminationThresholdINTEL"},
+        {SpvOpSubgroupAvcImeSetWeightedSadINTEL, "OpSubgroupAvcImeSetWeightedSadINTEL"},
+        {SpvOpSubgroupAvcImeEvaluateWithSingleReferenceINTEL, "OpSubgroupAvcImeEvaluateWithSingleReferenceINTEL"},
+        {SpvOpSubgroupAvcImeEvaluateWithDualReferenceINTEL, "OpSubgroupAvcImeEvaluateWithDualReferenceINTEL"},
+        {SpvOpSubgroupAvcImeEvaluateWithSingleReferenceStreaminINTEL, "OpSubgroupAvcImeEvaluateWithSingleReferenceStreaminINTEL"},
+        {SpvOpSubgroupAvcImeEvaluateWithDualReferenceStreaminINTEL, "OpSubgroupAvcImeEvaluateWithDualReferenceStreaminINTEL"},
+        {SpvOpSubgroupAvcImeEvaluateWithSingleReferenceStreamoutINTEL, "OpSubgroupAvcImeEvaluateWithSingleReferenceStreamoutINTEL"},
+        {SpvOpSubgroupAvcImeEvaluateWithDualReferenceStreamoutINTEL, "OpSubgroupAvcImeEvaluateWithDualReferenceStreamoutINTEL"},
+        {SpvOpSubgroupAvcImeEvaluateWithSingleReferenceStreaminoutINTEL, "OpSubgroupAvcImeEvaluateWithSingleReferenceStreaminoutINTEL"},
+        {SpvOpSubgroupAvcImeEvaluateWithDualReferenceStreaminoutINTEL, "OpSubgroupAvcImeEvaluateWithDualReferenceStreaminoutINTEL"},
+        {SpvOpSubgroupAvcImeConvertToMceResultINTEL, "OpSubgroupAvcImeConvertToMceResultINTEL"},
+        {SpvOpSubgroupAvcImeGetSingleReferenceStreaminINTEL, "OpSubgroupAvcImeGetSingleReferenceStreaminINTEL"},
+        {SpvOpSubgroupAvcImeGetDualReferenceStreaminINTEL, "OpSubgroupAvcImeGetDualReferenceStreaminINTEL"},
+        {SpvOpSubgroupAvcImeStripSingleReferenceStreamoutINTEL, "OpSubgroupAvcImeStripSingleReferenceStreamoutINTEL"},
+        {SpvOpSubgroupAvcImeStripDualReferenceStreamoutINTEL, "OpSubgroupAvcImeStripDualReferenceStreamoutINTEL"},
+        {SpvOpSubgroupAvcImeGetStreamoutSingleReferenceMajorShapeMotionVectorsINTEL, "OpSubgroupAvcImeGetStreamoutSingleReferenceMajorShapeMotionVectorsINTEL"},
+        {SpvOpSubgroupAvcImeGetStreamoutSingleReferenceMajorShapeDistortionsINTEL, "OpSubgroupAvcImeGetStreamoutSingleReferenceMajorShapeDistortionsINTEL"},
+        {SpvOpSubgroupAvcImeGetStreamoutSingleReferenceMajorShapeReferenceIdsINTEL, "OpSubgroupAvcImeGetStreamoutSingleReferenceMajorShapeReferenceIdsINTEL"},
+        {SpvOpSubgroupAvcImeGetStreamoutDualReferenceMajorShapeMotionVectorsINTEL, "OpSubgroupAvcImeGetStreamoutDualReferenceMajorShapeMotionVectorsINTEL"},
+        {SpvOpSubgroupAvcImeGetStreamoutDualReferenceMajorShapeDistortionsINTEL, "OpSubgroupAvcImeGetStreamoutDualReferenceMajorShapeDistortionsINTEL"},
+        {SpvOpSubgroupAvcImeGetStreamoutDualReferenceMajorShapeReferenceIdsINTEL, "OpSubgroupAvcImeGetStreamoutDualReferenceMajorShapeReferenceIdsINTEL"},
+        {SpvOpSubgroupAvcImeGetBorderReachedINTEL, "OpSubgroupAvcImeGetBorderReachedINTEL"},
+        {SpvOpSubgroupAvcImeGetTruncatedSearchIndicationINTEL, "OpSubgroupAvcImeGetTruncatedSearchIndicationINTEL"},
+        {SpvOpSubgroupAvcImeGetUnidirectionalEarlySearchTerminationINTEL, "OpSubgroupAvcImeGetUnidirectionalEarlySearchTerminationINTEL"},
+        {SpvOpSubgroupAvcImeGetWeightingPatternMinimumMotionVectorINTEL, "OpSubgroupAvcImeGetWeightingPatternMinimumMotionVectorINTEL"},
+        {SpvOpSubgroupAvcImeGetWeightingPatternMinimumDistortionINTEL, "OpSubgroupAvcImeGetWeightingPatternMinimumDistortionINTEL"},
+        {SpvOpSubgroupAvcFmeInitializeINTEL, "OpSubgroupAvcFmeInitializeINTEL"},
+        {SpvOpSubgroupAvcBmeInitializeINTEL, "OpSubgroupAvcBmeInitializeINTEL"},
+        {SpvOpSubgroupAvcRefConvertToMcePayloadINTEL, "OpSubgroupAvcRefConvertToMcePayloadINTEL"},
+        {SpvOpSubgroupAvcRefSetBidirectionalMixDisableINTEL, "OpSubgroupAvcRefSetBidirectionalMixDisableINTEL"},
+        {SpvOpSubgroupAvcRefSetBilinearFilterEnableINTEL, "OpSubgroupAvcRefSetBilinearFilterEnableINTEL"},
+        {SpvOpSubgroupAvcRefEvaluateWithSingleReferenceINTEL, "OpSubgroupAvcRefEvaluateWithSingleReferenceINTEL"},
+        {SpvOpSubgroupAvcRefEvaluateWithDualReferenceINTEL, "OpSubgroupAvcRefEvaluateWithDualReferenceINTEL"},
+        {SpvOpSubgroupAvcRefEvaluateWithMultiReferenceINTEL, "OpSubgroupAvcRefEvaluateWithMultiReferenceINTEL"},
+        {SpvOpSubgroupAvcRefEvaluateWithMultiReferenceInterlacedINTEL, "OpSubgroupAvcRefEvaluateWithMultiReferenceInterlacedINTEL"},
+        {SpvOpSubgroupAvcRefConvertToMceResultINTEL, "OpSubgroupAvcRefConvertToMceResultINTEL"},
+        {SpvOpSubgroupAvcSicInitializeINTEL, "OpSubgroupAvcSicInitializeINTEL"},
+        {SpvOpSubgroupAvcSicConfigureSkcINTEL, "OpSubgroupAvcSicConfigureSkcINTEL"},
+        {SpvOpSubgroupAvcSicConfigureIpeLumaINTEL, "OpSubgroupAvcSicConfigureIpeLumaINTEL"},
+        {SpvOpSubgroupAvcSicConfigureIpeLumaChromaINTEL, "OpSubgroupAvcSicConfigureIpeLumaChromaINTEL"},
+        {SpvOpSubgroupAvcSicGetMotionVectorMaskINTEL, "OpSubgroupAvcSicGetMotionVectorMaskINTEL"},
+        {SpvOpSubgroupAvcSicConvertToMcePayloadINTEL, "OpSubgroupAvcSicConvertToMcePayloadINTEL"},
+        {SpvOpSubgroupAvcSicSetIntraLumaShapePenaltyINTEL, "OpSubgroupAvcSicSetIntraLumaShapePenaltyINTEL"},
+        {SpvOpSubgroupAvcSicSetIntraLumaModeCostFunctionINTEL, "OpSubgroupAvcSicSetIntraLumaModeCostFunctionINTEL"},
+        {SpvOpSubgroupAvcSicSetIntraChromaModeCostFunctionINTEL, "OpSubgroupAvcSicSetIntraChromaModeCostFunctionINTEL"},
+        {SpvOpSubgroupAvcSicSetBilinearFilterEnableINTEL, "OpSubgroupAvcSicSetBilinearFilterEnableINTEL"},
+        {SpvOpSubgroupAvcSicSetSkcForwardTransformEnableINTEL, "OpSubgroupAvcSicSetSkcForwardTransformEnableINTEL"},
+        {SpvOpSubgroupAvcSicSetBlockBasedRawSkipSadINTEL, "OpSubgroupAvcSicSetBlockBasedRawSkipSadINTEL"},
+        {SpvOpSubgroupAvcSicEvaluateIpeINTEL, "OpSubgroupAvcSicEvaluateIpeINTEL"},
+        {SpvOpSubgroupAvcSicEvaluateWithSingleReferenceINTEL, "OpSubgroupAvcSicEvaluateWithSingleReferenceINTEL"},
+        {SpvOpSubgroupAvcSicEvaluateWithDualReferenceINTEL, "OpSubgroupAvcSicEvaluateWithDualReferenceINTEL"},
+        {SpvOpSubgroupAvcSicEvaluateWithMultiReferenceINTEL, "OpSubgroupAvcSicEvaluateWithMultiReferenceINTEL"},
+        {SpvOpSubgroupAvcSicEvaluateWithMultiReferenceInterlacedINTEL, "OpSubgroupAvcSicEvaluateWithMultiReferenceInterlacedINTEL"},
+        {SpvOpSubgroupAvcSicConvertToMceResultINTEL, "OpSubgroupAvcSicConvertToMceResultINTEL"},
+        {SpvOpSubgroupAvcSicGetIpeLumaShapeINTEL, "OpSubgroupAvcSicGetIpeLumaShapeINTEL"},
+        {SpvOpSubgroupAvcSicGetBestIpeLumaDistortionINTEL, "OpSubgroupAvcSicGetBestIpeLumaDistortionINTEL"},
+        {SpvOpSubgroupAvcSicGetBestIpeChromaDistortionINTEL, "OpSubgroupAvcSicGetBestIpeChromaDistortionINTEL"},
+        {SpvOpSubgroupAvcSicGetPackedIpeLumaModesINTEL, "OpSubgroupAvcSicGetPackedIpeLumaModesINTEL"},
+        {SpvOpSubgroupAvcSicGetIpeChromaModeINTEL, "OpSubgroupAvcSicGetIpeChromaModeINTEL"},
+        {SpvOpSubgroupAvcSicGetPackedSkcLumaCountThresholdINTEL, "OpSubgroupAvcSicGetPackedSkcLumaCountThresholdINTEL"},
+        {SpvOpSubgroupAvcSicGetPackedSkcLumaSumThresholdINTEL, "OpSubgroupAvcSicGetPackedSkcLumaSumThresholdINTEL"},
+        {SpvOpSubgroupAvcSicGetInterRawSadsINTEL, "OpSubgroupAvcSicGetInterRawSadsINTEL"},
+        {SpvOpVariableLengthArrayINTEL, "OpVariableLengthArrayINTEL"},
+        {SpvOpSaveMemoryINTEL, "OpSaveMemoryINTEL"},
+        {SpvOpRestoreMemoryINTEL, "OpRestoreMemoryINTEL"},
+        {SpvOpArbitraryFloatSinCosPiINTEL, "OpArbitraryFloatSinCosPiINTEL"},
+        {SpvOpArbitraryFloatCastINTEL, "OpArbitraryFloatCastINTEL"},
+        {SpvOpArbitraryFloatCastFromIntINTEL, "OpArbitraryFloatCastFromIntINTEL"},
+        {SpvOpArbitraryFloatCastToIntINTEL, "OpArbitraryFloatCastToIntINTEL"},
+        {SpvOpArbitraryFloatAddINTEL, "OpArbitraryFloatAddINTEL"},
+        {SpvOpArbitraryFloatSubINTEL, "OpArbitraryFloatSubINTEL"},
+        {SpvOpArbitraryFloatMulINTEL, "OpArbitraryFloatMulINTEL"},
+        {SpvOpArbitraryFloatDivINTEL, "OpArbitraryFloatDivINTEL"},
+        {SpvOpArbitraryFloatGTINTEL, "OpArbitraryFloatGTINTEL"},
+        {SpvOpArbitraryFloatGEINTEL, "OpArbitraryFloatGEINTEL"},
+        {SpvOpArbitraryFloatLTINTEL, "OpArbitraryFloatLTINTEL"},
+        {SpvOpArbitraryFloatLEINTEL, "OpArbitraryFloatLEINTEL"},
+        {SpvOpArbitraryFloatEQINTEL, "OpArbitraryFloatEQINTEL"},
+        {SpvOpArbitraryFloatRecipINTEL, "OpArbitraryFloatRecipINTEL"},
+        {SpvOpArbitraryFloatRSqrtINTEL, "OpArbitraryFloatRSqrtINTEL"},
+        {SpvOpArbitraryFloatCbrtINTEL, "OpArbitraryFloatCbrtINTEL"},
+        {SpvOpArbitraryFloatHypotINTEL, "OpArbitraryFloatHypotINTEL"},
+        {SpvOpArbitraryFloatSqrtINTEL, "OpArbitraryFloatSqrtINTEL"},
+        {SpvOpArbitraryFloatLogINTEL, "OpArbitraryFloatLogINTEL"},
+        {SpvOpArbitraryFloatLog2INTEL, "OpArbitraryFloatLog2INTEL"},
+        {SpvOpArbitraryFloatLog10INTEL, "OpArbitraryFloatLog10INTEL"},
+        {SpvOpArbitraryFloatLog1pINTEL, "OpArbitraryFloatLog1pINTEL"},
+        {SpvOpArbitraryFloatExpINTEL, "OpArbitraryFloatExpINTEL"},
+        {SpvOpArbitraryFloatExp2INTEL, "OpArbitraryFloatExp2INTEL"},
+        {SpvOpArbitraryFloatExp10INTEL, "OpArbitraryFloatExp10INTEL"},
+        {SpvOpArbitraryFloatExpm1INTEL, "OpArbitraryFloatExpm1INTEL"},
+        {SpvOpArbitraryFloatSinINTEL, "OpArbitraryFloatSinINTEL"},
+        {SpvOpArbitraryFloatCosINTEL, "OpArbitraryFloatCosINTEL"},
+        {SpvOpArbitraryFloatSinCosINTEL, "OpArbitraryFloatSinCosINTEL"},
+        {SpvOpArbitraryFloatSinPiINTEL, "OpArbitraryFloatSinPiINTEL"},
+        {SpvOpArbitraryFloatCosPiINTEL, "OpArbitraryFloatCosPiINTEL"},
+        {SpvOpArbitraryFloatASinINTEL, "OpArbitraryFloatASinINTEL"},
+        {SpvOpArbitraryFloatASinPiINTEL, "OpArbitraryFloatASinPiINTEL"},
+        {SpvOpArbitraryFloatACosINTEL, "OpArbitraryFloatACosINTEL"},
+        {SpvOpArbitraryFloatACosPiINTEL, "OpArbitraryFloatACosPiINTEL"},
+        {SpvOpArbitraryFloatATanINTEL, "OpArbitraryFloatATanINTEL"},
+        {SpvOpArbitraryFloatATanPiINTEL, "OpArbitraryFloatATanPiINTEL"},
+        {SpvOpArbitraryFloatATan2INTEL, "OpArbitraryFloatATan2INTEL"},
+        {SpvOpArbitraryFloatPowINTEL, "OpArbitraryFloatPowINTEL"},
+        {SpvOpArbitraryFloatPowRINTEL, "OpArbitraryFloatPowRINTEL"},
+        {SpvOpArbitraryFloatPowNINTEL, "OpArbitraryFloatPowNINTEL"},
+        {SpvOpLoopControlINTEL, "OpLoopControlINTEL"},
+        {SpvOpAliasDomainDeclINTEL, "OpAliasDomainDeclINTEL"},
+        {SpvOpAliasScopeDeclINTEL, "OpAliasScopeDeclINTEL"},
+        {SpvOpAliasScopeListDeclINTEL, "OpAliasScopeListDeclINTEL"},
+        {SpvOpFixedSqrtINTEL, "OpFixedSqrtINTEL"},
+        {SpvOpFixedRecipINTEL, "OpFixedRecipINTEL"},
+        {SpvOpFixedRsqrtINTEL, "OpFixedRsqrtINTEL"},
+        {SpvOpFixedSinINTEL, "OpFixedSinINTEL"},
+        {SpvOpFixedCosINTEL, "OpFixedCosINTEL"},
+        {SpvOpFixedSinCosINTEL, "OpFixedSinCosINTEL"},
+        {SpvOpFixedSinPiINTEL, "OpFixedSinPiINTEL"},
+        {SpvOpFixedCosPiINTEL, "OpFixedCosPiINTEL"},
+        {SpvOpFixedSinCosPiINTEL, "OpFixedSinCosPiINTEL"},
+        {SpvOpFixedLogINTEL, "OpFixedLogINTEL"},
+        {SpvOpFixedExpINTEL, "OpFixedExpINTEL"},
+        {SpvOpPtrCastToCrossWorkgroupINTEL, "OpPtrCastToCrossWorkgroupINTEL"},
+        {SpvOpCrossWorkgroupCastToPtrINTEL, "OpCrossWorkgroupCastToPtrINTEL"},
+        {SpvOpReadPipeBlockingINTEL, "OpReadPipeBlockingINTEL"},
+        {SpvOpWritePipeBlockingINTEL, "OpWritePipeBlockingINTEL"},
+        {SpvOpFPGARegINTEL, "OpFPGARegINTEL"},
+        {SpvOpRayQueryGetRayTMinKHR, "OpRayQueryGetRayTMinKHR"},
+        {SpvOpRayQueryGetRayFlagsKHR, "OpRayQueryGetRayFlagsKHR"},
+        {SpvOpRayQueryGetIntersectionTKHR, "OpRayQueryGetIntersectionTKHR"},
+        {SpvOpRayQueryGetIntersectionInstanceCustomIndexKHR, "OpRayQueryGetIntersectionInstanceCustomIndexKHR"},
+        {SpvOpRayQueryGetIntersectionInstanceIdKHR, "OpRayQueryGetIntersectionInstanceIdKHR"},
+        {SpvOpRayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetKHR, "OpRayQueryGetIntersectionInstanceShaderBindingTableRecordOffsetKHR"},
+        {SpvOpRayQueryGetIntersectionGeometryIndexKHR, "OpRayQueryGetIntersectionGeometryIndexKHR"},
+        {SpvOpRayQueryGetIntersectionPrimitiveIndexKHR, "OpRayQueryGetIntersectionPrimitiveIndexKHR"},
+        {SpvOpRayQueryGetIntersectionBarycentricsKHR, "OpRayQueryGetIntersectionBarycentricsKHR"},
+        {SpvOpRayQueryGetIntersectionFrontFaceKHR, "OpRayQueryGetIntersectionFrontFaceKHR"},
+        {SpvOpRayQueryGetIntersectionCandidateAABBOpaqueKHR, "OpRayQueryGetIntersectionCandidateAABBOpaqueKHR"},
+        {SpvOpRayQueryGetIntersectionObjectRayDirectionKHR, "OpRayQueryGetIntersectionObjectRayDirectionKHR"},
+        {SpvOpRayQueryGetIntersectionObjectRayOriginKHR, "OpRayQueryGetIntersectionObjectRayOriginKHR"},
+        {SpvOpRayQueryGetWorldRayDirectionKHR, "OpRayQueryGetWorldRayDirectionKHR"},
+        {SpvOpRayQueryGetWorldRayOriginKHR, "OpRayQueryGetWorldRayOriginKHR"},
+        {SpvOpRayQueryGetIntersectionObjectToWorldKHR, "OpRayQueryGetIntersectionObjectToWorldKHR"},
+        {SpvOpRayQueryGetIntersectionWorldToObjectKHR, "OpRayQueryGetIntersectionWorldToObjectKHR"},
+        {SpvOpAtomicFAddEXT, "OpAtomicFAddEXT"},
+        {SpvOpTypeBufferSurfaceINTEL, "OpTypeBufferSurfaceINTEL"},
+        {SpvOpTypeStructContinuedINTEL, "OpTypeStructContinuedINTEL"},
+        {SpvOpConstantCompositeContinuedINTEL, "OpConstantCompositeContinuedINTEL"},
+        {SpvOpSpecConstantCompositeContinuedINTEL, "OpSpecConstantCompositeContinuedINTEL"},
+        {SpvOpControlBarrierArriveINTEL, "OpControlBarrierArriveINTEL"},
+        {SpvOpControlBarrierWaitINTEL, "OpControlBarrierWaitINTEL"},
+        {SpvOpGroupIMulKHR, "OpGroupIMulKHR"},
+        {SpvOpGroupFMulKHR, "OpGroupFMulKHR"},
+        {SpvOpGroupBitwiseAndKHR, "OpGroupBitwiseAndKHR"},
+        {SpvOpGroupBitwiseOrKHR, "OpGroupBitwiseOrKHR"},
+        {SpvOpGroupBitwiseXorKHR, "OpGroupBitwiseXorKHR"},
+        {SpvOpGroupLogicalAndKHR, "OpGroupLogicalAndKHR"},
+        {SpvOpGroupLogicalOrKHR, "OpGroupLogicalOrKHR"},
+        {SpvOpGroupLogicalXorKHR, "OpGroupLogicalXorKHR"},
+    };
+
+    SpvOpNameMap::const_iterator entry = op_names.find(op);
+    if (entry != op_names.end()) {
+        return entry->second;
+    }
+    static const std::string invalid_op_name("*INVALID*");
+    return invalid_op_name;
+}
+
+// --
+
+}  // namespace
 }  // namespace Internal
 }  // namespace Halide
 
