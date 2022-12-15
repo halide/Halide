@@ -134,7 +134,7 @@ ALWAYS_INLINE size_t conform_alignment(size_t requested, size_t required) {
     return ((required > 0) && (alignment > required)) ? (required * ((alignment / required) + 1)) : alignment;
 }
 
-// Returns a padded size to accomodate an adjusted offset due to alignment constraints
+// Returns a padded size to accommodate an adjusted offset due to alignment constraints
 // -- Alignment must be power of two!
 ALWAYS_INLINE size_t aligned_size(size_t offset, size_t size, size_t alignment) {
     size_t actual_offset = aligned_offset(offset, alignment);
