@@ -2743,7 +2743,12 @@ string CodeGen_C::print_scalarized_expr(const Expr &e) {
     Type t = e.type();
     internal_assert(t.is_vector());
     string v = unique_name('_');
-    stream << get_indent() << print_type(t, AppendSpace) << v << ";\n";
+    // All of the lanes of this vector will get replaced, so in theory
+    // we don't need to initialize it to anything, but if we don't,
+    // we'll get "possible uninitialized var" warnings. Since this code
+    // is already hopelessly inefficient at this point, let's just init
+    // it with a broadcast(0) to avoid any possible weirdness.
+    stream << get_indent() << print_type(t, AppendSpace) << v << " = " << print_type(t) + "_ops::broadcast(0);\n";
     for (int lane = 0; lane < t.lanes(); lane++) {
         Expr e2 = extract_lane(e, lane);
         string elem = print_expr(e2);
