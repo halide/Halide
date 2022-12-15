@@ -1218,12 +1218,13 @@ void CodeGen_ARM::visit(const Shuffle *op) {
     // load.
     int stride = op->slice_stride();
     const Load *load = op->vectors[0].as<Load>();
-    if (load &&
+    if (target.os != Target::IOS && target.os != Target::OSX &&
+        load &&
         op->vectors.size() == 1 &&
         2 <= stride && stride <= 4 &&
         op->slice_begin() < stride &&
-        load->type.lanes() == stride * op->type.lanes() &&
-        target.os != Target::IOS && target.os != Target::OSX) {
+        load->type.lanes() == stride * op->type.lanes()) {
+
         value = codegen_dense_vector_load(load, nullptr, /* slice_to_native */ false);
         value = shuffle_vectors(value, op->indices);
     } else {

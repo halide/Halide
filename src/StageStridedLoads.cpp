@@ -7,7 +7,6 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "UniquifyVariableNames.h"
 
 namespace Halide {
 namespace Internal {
@@ -82,6 +81,10 @@ public:
 protected:
     void visit(const Load *op) override {
         if (is_const_one(op->predicate)) {
+            // We want to give ourselves the best possible chance at recognizing
+            // a naked Ramp, so we simplify and substitute in lets (and take
+            // care to treat the index expression as a graph until the next
+            // CSE).
             Expr idx = substitute_in_all_lets(simplify(common_subexpression_elimination(op->index)));
             if (const Ramp *r = idx.as<Ramp>()) {
                 const int64_t *stride_ptr = as_const_int(r->stride);
@@ -113,9 +116,6 @@ protected:
     void visit(const For *op) override {
         if (can_prove(op->extent > 0)) {
             // The loop body definitely runs
-
-            // TODO: worry about different iterations of the loop somehow not
-            // providing the evidence we thought it did.
             IRVisitor::visit(op);
         } else {
             const IRNode *child_scope = op->body.get();
@@ -189,10 +189,6 @@ protected:
 
 Stmt stage_strided_loads(const Stmt &s) {
     Stmt stmt = s;
-    // The following pass assumes that same variable name is the same variable,
-    // which is violated by the prior unrolling pass. Fix it up first.
-    stmt = uniquify_variable_names(stmt);
-
     FindStridedLoads finder;
     ReplaceStridedLoads replacer;
 
