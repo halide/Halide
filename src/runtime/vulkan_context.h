@@ -18,15 +18,18 @@ namespace Vulkan {
 
 // --------------------------------------------------------------------------
 
-// An Vulkan context/queue/synchronization lock defined in this module with weak linkage
 // Vulkan Memory allocator for host-device allocations
 halide_vulkan_memory_allocator *WEAK cached_allocator = nullptr;
+
+// Cached instance related handles for device resources
 VkInstance WEAK cached_instance = nullptr;
 VkDevice WEAK cached_device = nullptr;
 VkCommandPool WEAK cached_command_pool = 0;
 VkQueue WEAK cached_queue = nullptr;
 VkPhysicalDevice WEAK cached_physical_device = nullptr;
 uint32_t WEAK cached_queue_family_index = 0;
+
+// A Vulkan context/queue/synchronization lock defined in this module with weak linkage
 volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 
 // --------------------------------------------------------------------------
@@ -191,25 +194,40 @@ int vk_select_device_for_context(void *user_context,
                                  VkInstance *instance, VkDevice *device,
                                  VkPhysicalDevice *physical_device,
                                  uint32_t *queue_family_index) {
-
-    // For now handle more than 16 devices by just looking at the first 16.
-    VkPhysicalDevice chosen_device = nullptr;
-    VkPhysicalDevice avail_devices[16];
-    uint32_t device_count = sizeof(avail_devices) / sizeof(avail_devices[0]);
-    VkResult result = vkEnumeratePhysicalDevices(*instance, &device_count, avail_devices);
+    // query for the number of physical devices available in this instance
+    uint32_t device_count = 0;
+    VkResult result = vkEnumeratePhysicalDevices(*instance, &device_count, nullptr);
     if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) {
         debug(user_context) << "Vulkan: vkEnumeratePhysicalDevices failed with return code: " << vk_get_error_name(result) << "\n";
         return halide_error_code_incompatible_device_interface;
     }
-
     if (device_count == 0) {
         debug(user_context) << "Vulkan: No devices found.\n";
         return halide_error_code_incompatible_device_interface;
     }
 
+    // allocate enough storage for the physical device query results
+    BlockStorage::Config device_query_storage_config;
+    device_query_storage_config.entry_size = sizeof(VkPhysicalDevice);
+    BlockStorage device_query_storage(user_context, device_query_storage_config);
+    device_query_storage.resize(user_context, device_count);
+
+    VkPhysicalDevice chosen_device = nullptr;
+    VkPhysicalDevice *avail_devices = (VkPhysicalDevice *)(device_query_storage.data());
+    if (avail_devices == nullptr) {
+        debug(user_context) << "Vulkan: Out of system memory!\n";
+        return halide_error_code_out_of_memory;
+    }
+    result = vkEnumeratePhysicalDevices(*instance, &device_count, avail_devices);
+    if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) {
+        debug(user_context) << "Vulkan: vkEnumeratePhysicalDevices failed with return code: " << vk_get_error_name(result) << "\n";
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    // get the configurable device type to search for (e.g. 'cpu', 'gpu', 'integrated-gpu', 'discrete-gpu', ...)
     const char *dev_type = halide_vulkan_get_device_type(user_context);
 
-    // Try to find a device that supports compute.
+    // try to find a matching device that supports compute.
     uint32_t queue_family = 0;
     for (uint32_t i = 0; (chosen_device == nullptr) && (i < device_count); i++) {
         VkPhysicalDeviceProperties properties;
@@ -238,8 +256,20 @@ int vk_select_device_for_context(void *user_context,
         }
 
         if (matching_device) {
-            VkQueueFamilyProperties queue_properties[16];
-            uint32_t queue_properties_count = sizeof(queue_properties) / sizeof(queue_properties[0]);
+            // get the number of supported queues for this physical device
+            uint32_t queue_properties_count = 0;
+            vkGetPhysicalDeviceQueueFamilyProperties(avail_devices[i], &queue_properties_count, nullptr);
+            if (queue_properties_count < 1) {
+                continue;
+            }
+
+            // allocate enough storage for the queue properties query results
+            BlockStorage::Config queue_properties_storage_config;
+            queue_properties_storage_config.entry_size = sizeof(VkPhysicalDevice);
+            BlockStorage queue_properties_storage(user_context, queue_properties_storage_config);
+            queue_properties_storage.resize(user_context, queue_properties_count);
+
+            VkQueueFamilyProperties *queue_properties = (VkQueueFamilyProperties *)(queue_properties_storage.data());
             vkGetPhysicalDeviceQueueFamilyProperties(avail_devices[i], &queue_properties_count, queue_properties);
             for (uint32_t j = 0; (chosen_device == nullptr) && (j < queue_properties_count); j++) {
                 if (queue_properties[j].queueCount > 0 &&
@@ -269,17 +299,24 @@ int vk_select_device_for_context(void *user_context,
 int vk_create_device(void *user_context, const StringTable &requested_layers, VkInstance *instance, VkDevice *device, VkQueue *queue,
                      VkPhysicalDevice *physical_device, uint32_t *queue_family_index, const VkAllocationCallbacks *alloc_callbacks) {
     debug(user_context) << " vk_create_device (user_context=" << user_context << ")\n";
+
+    debug(user_context) << "  checking for required device extensions ...\n";
     StringTable required_device_extensions;
     vk_get_required_device_extensions(user_context, required_device_extensions);
 
+    debug(user_context) << "  checking for optional device extensions ...\n";
     StringTable optional_device_extensions;
     vk_get_optional_device_extensions(user_context, optional_device_extensions);
 
+    debug(user_context) << "  validating supported device extensions ...\n";
     StringTable supported_device_extensions;
     vk_get_supported_device_extensions(user_context, *physical_device, supported_device_extensions);
 
     bool valid_device = vk_validate_required_extension_support(user_context, required_device_extensions, supported_device_extensions);
-    halide_abort_if_false(user_context, valid_device);
+    if (!valid_device) {
+        debug(user_context) << "Vulkan: Unable to validate required extension support!\n";
+        return halide_error_code_incompatible_device_interface;
+    }
 
     debug(user_context) << "  found " << (uint32_t)required_device_extensions.size() << " required extensions for device!\n";
     for (int n = 0; n < (int)required_device_extensions.size(); ++n) {
@@ -334,7 +371,7 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     }
 
     if (vkGetPhysicalDeviceFeatures2KHR) {
-        debug(user_context) << "  qerying for extended device features...\n";
+        debug(user_context) << "  querying for extended device features...\n";
         vkGetPhysicalDeviceFeatures2KHR(*physical_device, &device_features_ext);
         debug(user_context) << "   shader int8 support: " << (shader_f16_i8_ext.shaderInt8 ? "true" : "false") << "...\n";
         debug(user_context) << "   shader float16 support: " << (shader_f16_i8_ext.shaderFloat16 ? "true" : "false") << "...\n";
