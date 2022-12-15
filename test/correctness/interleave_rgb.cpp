@@ -103,7 +103,6 @@ bool test_deinterleave(int x_stride) {
 }
 
 int main(int argc, char **argv) {
-
     for (int x_stride : {3, 4}) {
         if (!test_interleave<uint8_t>(x_stride)) return -1;
         if (!test_interleave<uint16_t>(x_stride)) return -1;
@@ -113,7 +112,6 @@ int main(int argc, char **argv) {
         if (!test_deinterleave<uint16_t>(x_stride)) return -1;
         if (!test_deinterleave<uint32_t>(x_stride)) return -1;
     }
-
     printf("Success!\n");
     return 0;
 }
