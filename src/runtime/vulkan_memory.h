@@ -871,26 +871,31 @@ VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context,
                                                   const VkAllocationCallbacks *alloc_callbacks) {
 
     SystemMemoryAllocatorFns system_allocator = {vk_system_malloc, vk_system_free};
-
     VulkanMemoryConfig config = memory_allocator_config;
 
-    const char *min_block_size_env = getenv("HL_VK_MIN_BLOCK_SIZE");
-    const char *max_block_size_env = getenv("HL_VK_MAX_BLOCK_SIZE");
-    const char *max_block_count_env = getenv("HL_VK_MAX_BLOCK_COUNT");
-
-    if (!StringUtils::is_empty(min_block_size_env)) {
-        config.minimum_block_size = atoi(min_block_size_env) * 1024 * 1024;
-        debug(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.minimum_block_size << " for minimum block size (in bytes)\n";
-    }
-
-    if (!StringUtils::is_empty(max_block_size_env)) {
-        config.maximum_block_size = atoi(max_block_size_env) * 1024 * 1024;
-        debug(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.maximum_block_size << " for maximum block size (in bytes)\n";
-    }
-
-    if (!StringUtils::is_empty(max_block_count_env)) {
-        config.maximum_block_count = atoi(max_block_count_env);
-        debug(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.maximum_block_count << " for maximum block count\n";
+    // Parse the allocation config string (if specified).
+    //
+    // `HL_VK_ALLOC_CONFIG=N:N:N` will tell Halide to configure the Vulkan memory
+    // allocator use the given constraints specified as three integer values
+    // separated by a `:` or `;`. These values correspond to `minimum_block_size`,
+    // `maximum_block_size` and `maximum_block_count`.
+    //
+    const char *alloc_config = vk_get_alloc_config_internal(user_context);
+    if (!StringUtils::is_empty(alloc_config)) {
+        StringTable alloc_config_values;
+        alloc_config_values.parse(user_context, alloc_config, HL_VK_ENV_DELIM);
+        if (alloc_config_values.size() > 0) {
+            config.minimum_block_size = atoi(alloc_config_values[0]) * 1024 * 1024;
+            print(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.minimum_block_size << " for minimum block size (in bytes)\n";
+        }
+        if (alloc_config_values.size() > 1) {
+            config.maximum_block_size = atoi(alloc_config_values[1]) * 1024 * 1024;
+            print(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.minimum_block_size << " for minimum block size (in bytes)\n";
+        }
+        if (alloc_config_values.size() > 2) {
+            config.maximum_block_count = atoi(alloc_config_values[2]);
+            print(user_context) << "Vulkan: Configuring allocator with " << (uint32_t)config.maximum_block_count << " for maximum block count\n";
+        }
     }
 
     return VulkanMemoryAllocator::create(user_context,
