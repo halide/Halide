@@ -28,13 +28,17 @@ WEAK char build_options[1024];
 WEAK ScopedSpinLock::AtomicFlag build_options_lock = 0;
 WEAK bool build_options_initialized = false;
 
+WEAK char alloc_config[1024];
+WEAK ScopedSpinLock::AtomicFlag alloc_config_lock = 0;
+WEAK bool alloc_config_initialized = false;
+
 // --------------------------------------------------------------------------
 namespace {
 
 void vk_set_layer_names_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(layer_names) / sizeof(layer_names[0]);
-        StringUtils::copy_upto(layer_names, n, buffer_size);
+        StringUtils::copy_up_to(layer_names, n, buffer_size);
     } else {
         layer_names[0] = 0;
     }
@@ -55,7 +59,7 @@ const char *vk_get_layer_names_internal(void *user_context) {
 void vk_set_extension_names_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(extension_names) / sizeof(extension_names[0]);
-        StringUtils::copy_upto(extension_names, n, buffer_size);
+        StringUtils::copy_up_to(extension_names, n, buffer_size);
     } else {
         extension_names[0] = 0;
     }
@@ -73,7 +77,7 @@ const char *vk_get_extension_names_internal(void *user_context) {
 void vk_set_device_type_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(device_type) / sizeof(device_type[0]);
-        StringUtils::copy_upto(device_type, n, buffer_size);
+        StringUtils::copy_up_to(device_type, n, buffer_size);
     } else {
         device_type[0] = 0;
     }
@@ -91,7 +95,7 @@ const char *vk_get_device_type_internal(void *user_context) {
 void vk_set_build_options_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(build_options) / sizeof(build_options[0]);
-        StringUtils::copy_upto(build_options, n, buffer_size);
+        StringUtils::copy_up_to(build_options, n, buffer_size);
     } else {
         build_options[0] = 0;
     }
@@ -104,6 +108,24 @@ const char *vk_get_build_options_internal(void *user_context) {
         vk_set_build_options_internal(name);
     }
     return build_options;
+}
+
+void vk_set_alloc_config_internal(const char *n) {
+    if (n) {
+        size_t buffer_size = sizeof(alloc_config) / sizeof(alloc_config[0]);
+        StringUtils::copy_up_to(alloc_config, n, buffer_size);
+    } else {
+        alloc_config[0] = 0;
+    }
+    alloc_config_initialized = true;
+}
+
+const char *vk_get_alloc_config_internal(void *user_context) {
+    if (!alloc_config_initialized) {
+        const char *name = getenv("HL_VK_ALLOC_CONFIG");
+        vk_set_alloc_config_internal(name);
+    }
+    return alloc_config;
 }
 
 // --------------------------------------------------------------------------
@@ -183,7 +205,7 @@ uint32_t vk_get_optional_device_extensions(void *user_context, StringTable &ext_
     return optional_ext_count;
 }
 uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalDevice physical_device, StringTable &ext_table) {
-
+    debug(user_context) << "vk_get_supported_device_extensions\n";
     if (vkEnumerateDeviceExtensionProperties == nullptr) {
         debug(user_context) << "Vulkan: Missing vkEnumerateDeviceExtensionProperties proc address! Invalid loader?!\n";
         return 0;
@@ -193,7 +215,7 @@ uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalDevice
     vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &avail_ext_count, nullptr);
     debug(user_context) << "Vulkan: vkEnumerateDeviceExtensionProperties found  " << avail_ext_count << " extensions ...\n";
 
-    if (avail_ext_count) {
+    if (avail_ext_count > 0) {
         BlockStorage::Config config;
         config.entry_size = sizeof(VkExtensionProperties);
         config.minimum_capacity = avail_ext_count;
@@ -289,6 +311,16 @@ WEAK void halide_vulkan_set_build_options(const char *n) {
 WEAK const char *halide_vulkan_get_build_options(void *user_context) {
     ScopedSpinLock lock(&build_options_lock);
     return vk_get_build_options_internal(user_context);
+}
+
+WEAK void halide_vulkan_set_alloc_config(const char *n) {
+    ScopedSpinLock lock(&alloc_config_lock);
+    vk_set_alloc_config_internal(n);
+}
+
+WEAK const char *halide_vulkan_get_alloc_config(void *user_context) {
+    ScopedSpinLock lock(&alloc_config_lock);
+    return vk_get_alloc_config_internal(user_context);
 }
 
 // --------------------------------------------------------------------------
