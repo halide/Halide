@@ -3,7 +3,7 @@
 Halide supports the Khronos Vulkan framework as a compute API backend for GPU-like 
 devices, and compiles directly to a binary SPIR-V representation as part of its 
 code generation before submitting it to the Vulkan API. Both JIT and AOT usage 
-are supported via the `vulkan` target flag (eg `HL_JIT_TARGET=host-vulkan`).
+are supported via the `vulkan` target flag (e.g. `HL_JIT_TARGET=host-vulkan`).
 
 Vulkan support is actively under development, and considered *BETA* quality
 at this stage.  Tests are passing, but performance tuning and user testing is needed 
@@ -63,7 +63,7 @@ https://www.intel.com/content/www/us/en/download-center/home.html
 
 ## Linux 
 
-On Ubuntu Linux v22.04, the vulkan runtime is distributed in the `vulkan-tools` package. For earlier versions of Ubuntu (eg v20.x or v18.x) the contents of the `vulkan-tools` package was distributed as `vulkan-utils` so use this package instead.
+On Ubuntu Linux v22.04, the vulkan runtime is distributed in the `vulkan-tools` package. For earlier versions of Ubuntu (e.g. v20.x or v18.x) the contents of the `vulkan-tools` package was distributed as `vulkan-utils` so use that package instead.
 
 Proprietary drivers can be installed via 'apt' using PPA's for each vendor. Examples for AMD and NVIDIA are provided below.
 
@@ -80,14 +80,14 @@ For NVIDIA on Ubuntu v22.04:
 $ sudo add-apt-repository ppa:graphics-drivers/ppa
 $ sudo apt update
 $ sudo apt upgrade
-# - replace ### with latest driver release (eg 515)
+# - replace ### with latest driver release (e.g. 515)
 $ sudo apt install nvidia-driver-### nvidia-settings vulkan vulkan-tools
 ```
 
-Note that only valid drivers for your system should be installed since there's been 
+Note that only valid drivers for your system should be installed since there are
 reports of the Vulkan loader segfaulting just by having a non-supported driver present. 
 Specifically, the seemingly generic `mesa-vulkan-drivers` actually includes the AMD 
-graphics driver, which can cause problems if installed on an NVIDIA only system. 
+graphics driver, which can cause problems if installed on an NVIDIA-only system. 
 
 ## Mac
 
@@ -145,7 +145,7 @@ To generate Halide code for Vulkan, simply add the `vulkan` flag to your target 
 | `vk_v12`       | Generates code compatible with the Vulkan v1.2+ API |
 | `vk_v13`       | Generates code compatible with the Vulkan v1.3+ API |
 
-Note that all optional device features are off by default (since they are not required by the Vulkan API, and thus must be explicitly enabled to ensure that the code being generated will be compatible with the device and API version being used for execution).
+Note that 32-bit integer and floating-point types are always available. All other optional device features are off by default (since they are not required by the Vulkan API, and thus must be explicitly enabled to ensure that the code being generated will be compatible with the device and API version being used for execution). 
 
 For AOT generators add `vulkan` (and any other flags you wish to use) to the target command line option:
 
@@ -159,12 +159,18 @@ For JIT apps use the `HL_JIT_TARGET` environment variable:
 $ HL_JIT_TARGET=host-vulkan-vk_int8-vk_int16 ./tutorial/lesson_01_basics
 ```
 
-# Useful Environment Variables
+# Useful Runtime Environment Variables
+
+To modify the default behavior of the runtime, the following environment 
+variables can be used to adjust the configuration of the Vulkan backend 
+at execution time:
 
 `HL_VK_LAYERS=...` will tell Halide to choose a suitable Vulkan instance
 that supports the given list of layers. If not set, `VK_INSTANCE_LAYERS=...` 
 will be used instead. If neither are present, Halide will use the first 
-Vulkan compute device it can find.
+Vulkan compute device it can find.  Multiple layers can be specified using 
+the appropriate environment variable list delimiter (`:` on Linux/OSX/Posix, 
+or `;` on Windows).
 
 `HL_VK_DEVICE_TYPE=...` will tell Halide to choose which type of device
 to select for creating the Vulkan instance. Valid options are 'gpu', 
@@ -172,22 +178,35 @@ to select for creating the Vulkan instance. Valid options are 'gpu',
 Halide will search for the first 'gpu' like device it can find, or fall back
 to the first compute device it can find.
 
-`HL_VK_MIN_BLOCK_SIZE=N` will tell Halide to configure the Vulkan memory
-allocator to always request a minimum of N megabytes for a resource block,
-which will be used as a pool for suballocations.  Increasing this value
-may improve performance while sacrificing the amount of available device 
-memory. Default is 32MB.
+`HL_VK_ALLOC_CONFIG=...` will tell Halide to configure the Vulkan memory
+allocator use the given constraints specified as three integer values 
+separated by the appropriate environment variable list delimiter 
+(e.g. `N:N:N` on Linux/OSX/Posix, or `N;N;N` on Windows). These values 
+correspond to `minimum_block_size`, `maximum_block_size` and 
+`maximum_block_count`. 
 
-`HL_VK_MAX_BLOCK_SIZE=N` will tell Halide to configure the Vulkan memory
-allocator to never exceed a maximum of N megabytes for a resource block,
-which will be used as a pool for suballocations.  Decreasing this value
-may free up more memory but may impact performance, and/or restrict 
-allocations to be unusably small. Default is 0 ... meaning no limit.
+The `minimum_block_size` constraint will tell Halide to configure the 
+Vulkan memory allocator to always request a minimum of N megabytes for 
+a resource block, which will be used as a pool for suballocations.  
+Increasing this value may improve performance while sacrificing the amount 
+of available device memory. Default is 32MB.
 
-`HL_VK_MAX_BLOCK_COUNT=N` will tell Halide to configure the Vulkan memory
-allocator to never exceed a total of N block allocations.  Decreasing this 
-value may free up more memory but may impact performance, and/or restrict 
-allocations. Default is 0 ... meaning no limit.
+The `maximum_block_size` constraint will tell Halide to configure the 
+Vulkan memory allocator to never exceed a maximum of N megabytes for a 
+resource block.  Decreasing this value may free up more memory but may 
+impact performance, and/or restrict allocations to be unusably small. 
+Default is 0 ... meaning no limit.
+
+The `maximum_block_count` constraint will tell Halide to configure the 
+Vulkan memory allocator to never exceed a total of N block allocations.  
+Decreasing this value may free up more memory but may impact performance, 
+and/or restrict allocations. Default is 0 ... meaning no limit.
+
+
+# Debug Environment Variables
+
+The following environment variables may be useful for tracking down potential
+issues related to Vulkan:
 
 `HL_DEBUG_CODEGEN=3` will print out debug info that includees the SPIR-V
 code generator used for Vulkan while it is compiling.
@@ -203,7 +222,7 @@ https://github.com/KhronosGroup/SPIRV-Tools
 
 All correctness tests are now passing on tested configs for Linux & Windows using the target `host-vulkan-vk_int8-vk_int16-vk_int64-vk_float16-vk_float64-vk_v13` on LLVM v14.x. 
 
-MacOS passes most tests but encounters internal MoltenVK code translation issues for wide vectors, and ambiguously function calls.
+MacOS passes most tests but encounters internal MoltenVK code translation issues for wide vectors, and ambiguous function calls.
 
 Python apps, tutorials and correctness tests are now passing, but the AOT cases are skipped since the runtime environment needs to be customized to locate the platform specific Vulkan loader library.
 
@@ -219,7 +238,7 @@ Android platform support is currently being worked on.
 # Known TODO:
 
 -   Performance tuning of CodeGen and Runtime
--   More platform support (Android is WIP, RISC-V, etc)
+-   More platform support (Android is work-in-progress, RISC-V, etc)
 -   Adapt unsupported types to supported types (if missing vk_int8 then promote to uint32_t)?
 -   Better debugging utilities using the Vulkan debug hooks.
 -   Allow debug symbols to be stripped from SPIR-V during codegen to reduce
