@@ -154,12 +154,17 @@ protected:
 // Replace a bunch of load expressions in a stmt
 class ReplaceStridedLoads : public IRMutator {
 public:
-    std::map<const Load *, Expr> replacements;
+    std::map<std::pair<const Allocate *, const Load *>, Expr> replacements;
     std::map<const Allocate *, int> padding;
+    Scope<const Allocate *> allocation_scope;
 
 protected:
     Expr visit(const Load *op) override {
-        auto it = replacements.find(op);
+        const Allocate *alloc = nullptr;
+        if (allocation_scope.contains(op->name)) {
+            alloc = allocation_scope.get(op->name);
+        }
+        auto it = replacements.find({alloc, op});
         if (it != replacements.end()) {
             return mutate(it->second);
         } else {
@@ -168,6 +173,7 @@ protected:
     }
 
     Stmt visit(const Allocate *op) override {
+        ScopedBinding bind(allocation_scope, op->name, op);
         auto it = padding.find(op);
         Stmt s = IRMutator::visit(op);
         if (it == padding.end()) {
@@ -199,6 +205,7 @@ Stmt stage_strided_loads(const Stmt &s) {
 
     for (const auto &l : finder.found_loads) {
         const FindStridedLoads::Key &k = l.first;
+        const Allocate *alloc = k.allocation;
         const std::map<int64_t, std::vector<const Load *>> &v = l.second;
 
         // Find clusters of strided loads that can share the same dense load.
@@ -227,7 +234,7 @@ Stmt stage_strided_loads(const Stmt &s) {
             for (; load != v.end() && load->first < first_offset + k.stride; load++) {
                 Expr shuf = Shuffle::make_slice(shared_load, load->first - first_offset, k.stride, k.lanes);
                 for (const Load *l : load->second) {
-                    replacer.replacements.emplace(l, shuf);
+                    replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
                 }
             }
         }
@@ -236,7 +243,7 @@ Stmt stage_strided_loads(const Stmt &s) {
         // picked up in a cluster, but for whom we know it's safe to do a
         // dense load before their start.
         for (auto load = v.rbegin(); load != v.rend(); load++) {
-            if (replacer.replacements.count(load->second[0])) {
+            if (replacer.replacements.count({alloc, load->second[0]})) {
                 continue;
             }
             int64_t delta = k.stride - 1;
@@ -254,14 +261,14 @@ Stmt stage_strided_loads(const Stmt &s) {
             dense_load = common_subexpression_elimination(dense_load);
             Expr shuf = Shuffle::make_slice(dense_load, delta, k.stride, k.lanes);
             for (const Load *l : load->second) {
-                replacer.replacements.emplace(l, shuf);
+                replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
             }
         }
 
         // Look for any loads we can densify because an overlapping load occurs
         // in any parent scope.
         for (auto load = v.rbegin(); load != v.rend(); load++) {
-            if (replacer.replacements.count(load->second[0])) {
+            if (replacer.replacements.count({alloc, load->second[0]})) {
                 continue;
             }
             int64_t min_offset = load->first;
@@ -292,7 +299,7 @@ Stmt stage_strided_loads(const Stmt &s) {
             dense_load = common_subexpression_elimination(dense_load);
             Expr shuf = Shuffle::make_slice(dense_load, load->first - offset, k.stride, k.lanes);
             for (const Load *l : load->second) {
-                replacer.replacements.emplace(l, shuf);
+                replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
             }
         }
 
@@ -301,7 +308,7 @@ Stmt stage_strided_loads(const Stmt &s) {
         // external allocations by doing a dense load at a trimmed size. We rely
         // on codegen to do a good job at loading vectors of a funny size.
         for (auto load = v.begin(); load != v.end(); load++) {  // NOLINT
-            if (replacer.replacements.count(load->second[0])) {
+            if (replacer.replacements.count({alloc, load->second[0]})) {
                 continue;
             }
 
@@ -325,7 +332,7 @@ Stmt stage_strided_loads(const Stmt &s) {
                 dense_load = common_subexpression_elimination(dense_load);
                 Expr shuf = Shuffle::make_slice(dense_load, load->first - first_offset, k.stride, k.lanes);
                 for (const Load *l : load->second) {
-                    replacer.replacements.emplace(l, shuf);
+                    replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
                 }
 
             } else if (k.lanes % 2 == 0) {
@@ -348,7 +355,7 @@ Stmt stage_strided_loads(const Stmt &s) {
                 Expr shuf2 = Shuffle::make_slice(dense_load2, delta, k.stride, k.lanes / 2);
                 Expr shuf = Shuffle::make_concat({shuf1, shuf2});
                 for (const Load *l : load->second) {
-                    replacer.replacements.emplace(l, shuf);
+                    replacer.replacements.emplace(std::make_pair(alloc, l), shuf);
                 }
             }
         }
