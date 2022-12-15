@@ -14,9 +14,6 @@
 
 #include "vulkan_interface.h"
 
-#ifndef DEBUG_RUNTIME
-#define DEBUG_RUNTIME
-#endif
 // --
 
 namespace Halide {
