@@ -367,7 +367,7 @@ public:
     // Reserve a unique ID to use for identifying a specifc kind of SPIR-V result **/
     SpvId reserve_id(SpvKind = SpvResultId);
 
-    // Look up the specific kind of SPIR-V item from it's unique ID
+    // Look up the specific kind of SPIR-V item from its unique ID
     SpvKind kind_of(SpvId id) const;
 
     // Get a human readable name for a specific kind of SPIR-V item
@@ -406,7 +406,7 @@ public:
     SpvId declare_symbol(const std::string &symbol, SpvId id, SpvId scope_id);
 
     // Top level creation methods for adding new items ... these have a limited
-    // number of checks and the caller must insure that duplicates aren't created
+    // number of checks and the caller must ensure that duplicates aren't created
     SpvId add_type(const Type &type, uint32_t array_size = 1);
     SpvId add_struct(const std::string &name, const StructMemberTypes &member_types);
     SpvId add_array_with_default_size(SpvId base_type_id, SpvId array_size_id);
