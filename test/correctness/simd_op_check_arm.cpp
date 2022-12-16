@@ -291,35 +291,61 @@ public:
                 check(arm32 ? "vld1.32" : "ldr", 2 * w, in_f32(x + y));
             }
 
-            // VLD2     X       -       Load Two-Element Structures
-            // These need to be vectorized at least 2 native vectors wide,
-            // so we get a full vectors' worth that we know is safe to
-            // access.
-            check(arm32 ? "vld2.8" : "ld2", 32 * w, in_i8(x * 2) + in_i8(x * 2 + 1));
-            check(arm32 ? "vld2.8" : "ld2", 32 * w, in_u8(x * 2) + in_u8(x * 2 + 1));
-            check(arm32 ? "vld2.16" : "ld2", 16 * w, in_i16(x * 2) + in_i16(x * 2 + 1));
-            check(arm32 ? "vld2.16" : "ld2", 16 * w, in_u16(x * 2) + in_u16(x * 2 + 1));
-            check(arm32 ? "vld2.32" : "ld2", 8 * w, in_i32(x * 2) + in_i32(x * 2 + 1));
-            check(arm32 ? "vld2.32" : "ld2", 8 * w, in_u32(x * 2) + in_u32(x * 2 + 1));
-            check(arm32 ? "vld2.32" : "ld2", 8 * w, in_f32(x * 2) + in_f32(x * 2 + 1));
+            if (target.os != Target::IOS && target.os != Target::OSX) {
+                // VLD* are not profitable on Apple silicon
 
-            // VLD3     X       -       Load Three-Element Structures
-            check(arm32 ? "vld3.8" : "ld3", 32 * w, in_i8(x * 3));
-            check(arm32 ? "vld3.8" : "ld3", 32 * w, in_u8(x * 3));
-            check(arm32 ? "vld3.16" : "ld3", 16 * w, in_i16(x * 3));
-            check(arm32 ? "vld3.16" : "ld3", 16 * w, in_u16(x * 3));
-            check(arm32 ? "vld3.32" : "ld3", 8 * w, in_i32(x * 3));
-            check(arm32 ? "vld3.32" : "ld3", 8 * w, in_u32(x * 3));
-            check(arm32 ? "vld3.32" : "ld3", 8 * w, in_f32(x * 3));
+                // VLD2     X       -       Load Two-Element Structures
+                // These need to be vectorized at least 2 native vectors wide,
+                // so we get a full vectors' worth that we know is safe to
+                // access.
+                check(arm32 ? "vld2.8" : "ld2", 32 * w, in_i8(x * 2));
+                check(arm32 ? "vld2.8" : "ld2", 32 * w, in_u8(x * 2));
+                check(arm32 ? "vld2.16" : "ld2", 16 * w, in_i16(x * 2));
+                check(arm32 ? "vld2.16" : "ld2", 16 * w, in_u16(x * 2));
+                check(arm32 ? "vld2.32" : "ld2", 8 * w, in_i32(x * 2));
+                check(arm32 ? "vld2.32" : "ld2", 8 * w, in_u32(x * 2));
+                check(arm32 ? "vld2.32" : "ld2", 8 * w, in_f32(x * 2));
 
-            // VLD4     X       -       Load Four-Element Structures
-            check(arm32 ? "vld4.8" : "ld4", 32 * w, in_i8(x * 4));
-            check(arm32 ? "vld4.8" : "ld4", 32 * w, in_u8(x * 4));
-            check(arm32 ? "vld4.16" : "ld4", 16 * w, in_i16(x * 4));
-            check(arm32 ? "vld4.16" : "ld4", 16 * w, in_u16(x * 4));
-            check(arm32 ? "vld4.32" : "ld4", 8 * w, in_i32(x * 4));
-            check(arm32 ? "vld4.32" : "ld4", 8 * w, in_u32(x * 4));
-            check(arm32 ? "vld4.32" : "ld4", 8 * w, in_f32(x * 4));
+                // VLD3     X       -       Load Three-Element Structures
+                check(arm32 ? "vld3.8" : "ld3", 32 * w, in_i8(x * 3));
+                check(arm32 ? "vld3.8" : "ld3", 32 * w, in_u8(x * 3));
+                check(arm32 ? "vld3.16" : "ld3", 16 * w, in_i16(x * 3));
+                check(arm32 ? "vld3.16" : "ld3", 16 * w, in_u16(x * 3));
+                check(arm32 ? "vld3.32" : "ld3", 8 * w, in_i32(x * 3));
+                check(arm32 ? "vld3.32" : "ld3", 8 * w, in_u32(x * 3));
+                check(arm32 ? "vld3.32" : "ld3", 8 * w, in_f32(x * 3));
+
+                // VLD4     X       -       Load Four-Element Structures
+                check(arm32 ? "vld4.8" : "ld4", 32 * w, in_i8(x * 4));
+                check(arm32 ? "vld4.8" : "ld4", 32 * w, in_u8(x * 4));
+                check(arm32 ? "vld4.16" : "ld4", 16 * w, in_i16(x * 4));
+                check(arm32 ? "vld4.16" : "ld4", 16 * w, in_u16(x * 4));
+                check(arm32 ? "vld4.32" : "ld4", 8 * w, in_i32(x * 4));
+                check(arm32 ? "vld4.32" : "ld4", 8 * w, in_u32(x * 4));
+                check(arm32 ? "vld4.32" : "ld4", 8 * w, in_f32(x * 4));
+            } else if (!arm32) {
+                // On Apple Silicon we expect dense loads followed by shuffles.
+                check("uzp1.16b", 32 * w, in_i8(x * 2));
+                check("uzp1.16b", 32 * w, in_u8(x * 2));
+                check("uzp1.8h", 16 * w, in_i16(x * 2));
+                check("uzp1.8h", 16 * w, in_u16(x * 2));
+                check("uzp1.4s", 8 * w, in_i32(x * 2));
+                check("uzp1.4s", 8 * w, in_u32(x * 2));
+                check("uzp1.4s", 8 * w, in_f32(x * 2));
+
+                // VLD3     X       -       Load Three-Element Structures
+                check("tbl.16b", 32 * w, in_i8(x * 3));
+                check("tbl.16b", 32 * w, in_u8(x * 3));
+                check("tbl.16b", 16 * w, in_i16(x * 3));
+                check("tbl.16b", 16 * w, in_u16(x * 3));
+                // For 32-bit types llvm just scalarizes
+
+                // VLD4     X       -       Load Four-Element Structures
+                check("tbl.16b", 32 * w, in_i8(x * 4));
+                check("tbl.16b", 32 * w, in_u8(x * 4));
+                check("tbl.16b", 16 * w, in_i16(x * 4));
+                check("tbl.16b", 16 * w, in_u16(x * 4));
+            }
 
             // VLDM     X       F, D    Load Multiple Registers
             // VLDR     X       F, D    Load Single Register

@@ -338,7 +338,8 @@ protected:
                               op->condition,
                               std::move(body),
                               op->new_expr,
-                              op->free_function);
+                              op->free_function,
+                              op->padding);
     }
 
     Stmt visit(const ProducerConsumer *op) override {

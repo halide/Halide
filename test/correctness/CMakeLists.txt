@@ -288,6 +288,7 @@ tests(GROUPS correctness
       split_reuse_inner_name_bug.cpp
       split_store_compute.cpp
       stack_allocations.cpp
+      stage_strided_loads.cpp
       stencil_chain_in_update_definitions.cpp
       stmt_to_html.cpp
       storage_folding.cpp
