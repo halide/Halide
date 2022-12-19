@@ -1084,14 +1084,6 @@ void CodeGen_LLVM::optimize_module() {
 
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
-    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-    if (get_target().has_feature(Target::DisableLLVMLoopOpt)) {
-        user_warning << "halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15 "
-                        "(and will be removed in Halide 16). Halide 15 now defaults to disabling "
-                        "LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.\n";
-    }
     const bool do_loop_opt = get_target().has_feature(Target::EnableLLVMLoopOpt);
 
     PipelineTuningOptions pto;
