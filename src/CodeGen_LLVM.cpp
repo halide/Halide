@@ -5030,12 +5030,11 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
 
 llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
                                           VectorTypeConstraint type_constraint) const {
-    bool scalable;
-
     if (t->isVoidTy()) {
         return t;
     }
 
+    bool scalable = false;
     switch (type_constraint) {
     case VectorTypeConstraint::None:
         scalable = effective_vscale != 0 &&
@@ -5049,6 +5048,9 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
         break;
     case VectorTypeConstraint::VScale:
         scalable = true;
+        break;
+    default:
+        internal_error << "Impossible";
         break;
     }
 
