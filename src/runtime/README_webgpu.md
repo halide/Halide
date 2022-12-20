@@ -76,6 +76,9 @@ Next, get Dawn and its dependencies:
     # Fetch external dependencies and toolchains with gclient
     gclient sync
 
+    # Other dependencies that must be installed manually:
+    # - go
+
 Finally, build Dawn, enabling both the Node.js bindings and shared libraries:
 
     mkdir -p <build_dir>
