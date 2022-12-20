@@ -144,7 +144,8 @@ void load_webgpu() {
             debug(1) << "not found.\n";
         }
     }
-    user_assert(error.empty()) << "Could not find a native WebGPU library\n";
+    user_assert(error.empty()) << "Could not find a native WebGPU library: "
+                               << error << "\n";
 }
 
 }  // namespace
