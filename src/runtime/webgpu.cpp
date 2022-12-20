@@ -779,12 +779,14 @@ WEAK int halide_webgpu_device_release_crop(void *user_context,
 
 WEAK int halide_webgpu_wrap_native(void *user_context, struct halide_buffer_t *buf, uint64_t mem) {
     // TODO: Implement this.
+    // See https://github.com/halide/Halide/issues/7250
     halide_debug_assert(user_context, false && "unimplemented");
     return 1;
 }
 
 WEAK int halide_webgpu_detach_native(void *user_context, halide_buffer_t *buf) {
     // TODO: Implement this.
+    // See https://github.com/halide/Halide/issues/7250
     halide_debug_assert(user_context, false && "unimplemented");
     return 1;
 }
