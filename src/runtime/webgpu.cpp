@@ -915,7 +915,7 @@ WEAK int halide_webgpu_run(void *user_context,
             num_buffers++;
         } else {
             uint32_t arg_size = arg_types[num_args].bytes();
-            halide_abort_if_false(user_context, arg_size <= 4);
+            halide_debug_assert(user_context, arg_size <= 4);
 
             // Round up to 4 bytes.
             arg_size = round_up_to_multiple_of_4(arg_size);
@@ -984,9 +984,9 @@ WEAK int halide_webgpu_run(void *user_context,
             }
 
             halide_type_t arg_type = arg_types[a];
-            halide_abort_if_false(user_context, arg_type.lanes == 1);
-            halide_abort_if_false(user_context, arg_type.bits > 0);
-            halide_abort_if_false(user_context, arg_type.bits <= 32);
+            halide_debug_assert(user_context, arg_type.lanes == 1);
+            halide_debug_assert(user_context, arg_type.bits > 0);
+            halide_debug_assert(user_context, arg_type.bits <= 32);
 
             void *arg_in = args[a];
             void *arg_out = &arg_values[i++];
@@ -994,7 +994,7 @@ WEAK int halide_webgpu_run(void *user_context,
             // Copy the argument value, expanding it to 32-bits.
             switch (arg_type.code) {
             case halide_type_float: {
-                halide_abort_if_false(user_context, arg_type.bits == 32);
+                halide_debug_assert(user_context, arg_type.bits == 32);
                 *(float *)arg_out = *(float *)arg_in;
                 break;
             }
@@ -1016,7 +1016,7 @@ WEAK int halide_webgpu_run(void *user_context,
                     break;
                 }
                 default: {
-                    halide_abort_if_false(user_context, false);
+                    halide_debug_assert(user_context, false);
                 }
                 }
                 break;
@@ -1039,13 +1039,13 @@ WEAK int halide_webgpu_run(void *user_context,
                     break;
                 }
                 default: {
-                    halide_abort_if_false(user_context, false);
+                    halide_debug_assert(user_context, false);
                 }
                 }
                 break;
             }
             default: {
-                halide_abort_if_false(user_context, false && "unhandled type");
+                halide_debug_assert(user_context, false && "unhandled type");
             }
             }
         }
