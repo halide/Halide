@@ -118,6 +118,7 @@ function(add_wasm_executable TARGET)
     endif ()
 
     # TODO: Remove this when Emscripten and Dawn implement the same APIs.
+    # See https://github.com/halide/Halide/issues/7248
     if (WEBGPU_NATIVE_LIB)
         message(FATAL_ERROR "Cannot generate WASM executables when targeting native WebGPU implementations.")
     endif ()

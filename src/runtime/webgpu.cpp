@@ -38,6 +38,7 @@ using namespace Halide::Runtime::Internal::WebGPU;
 
 extern "C" {
 // TODO: Remove all of this when wgpuInstanceProcessEvents() is supported.
+// See https://github.com/halide/Halide/issues/7248
 #ifdef WITH_DAWN_NATIVE
 // Defined by Dawn, and used to yield execution to asynchronous commands.
 void wgpuDeviceTick(WGPUDevice);
@@ -259,6 +260,7 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
     memset(&requestedLimits.limits, 0xFF, sizeof(WGPULimits));
 
     // TODO: Enable for Emscripten when wgpuAdapterGetLimits is supported.
+    // See https://github.com/halide/Halide/issues/7248
 #ifdef WITH_DAWN_NATIVE
     WGPUSupportedLimits supportedLimits{.nextInChain = nullptr};
     if (!wgpuAdapterGetLimits(adapter, &supportedLimits)) {
@@ -293,6 +295,7 @@ size_t roundUpToMultipleOf4(size_t x) {
 
 WEAK int create_webgpu_context(void *user_context) {
     // TODO: Unify this when Emscripten implements wgpuCreateInstance().
+    // See https://github.com/halide/Halide/issues/7248
 #ifdef WITH_DAWN_NATIVE
     WGPUInstanceDescriptor desc{
         .nextInChain = nullptr,
@@ -308,6 +311,7 @@ WEAK int create_webgpu_context(void *user_context) {
     // Wait for device initialization to complete.
     while (!global_device && init_error_code == halide_error_code_success) {
         // TODO: Use wgpuInstanceProcessEvents() when it is supported.
+        // See https://github.com/halide/Halide/issues/7248
 #ifndef WITH_DAWN_NATIVE
         emscripten_sleep(10);
 #else
@@ -492,6 +496,7 @@ WEAK int halide_webgpu_device_release(void *user_context) {
             global_adapter = nullptr;
 
             // TODO: Unify this when Emscripten supports wgpuInstanceRelease().
+            // See https://github.com/halide/Halide/issues/7248
 #ifdef WITH_DAWN_NATIVE
             wgpuInstanceRelease(instance);
             global_instance = nullptr;
