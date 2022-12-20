@@ -256,13 +256,15 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
     global_adapter = adapter;
 
     // Use the defaults for most limits.
-    WGPURequiredLimits requestedLimits{.nextInChain = nullptr};
+    WGPURequiredLimits requestedLimits{};
+    requestedLimits.nextInChain = nullptr;
     memset(&requestedLimits.limits, 0xFF, sizeof(WGPULimits));
 
     // TODO: Enable for Emscripten when wgpuAdapterGetLimits is supported.
     // See https://github.com/halide/Halide/issues/7248
 #ifdef WITH_DAWN_NATIVE
-    WGPUSupportedLimits supportedLimits{.nextInChain = nullptr};
+    WGPUSupportedLimits supportedLimits{};
+    supportedLimits.nextInChain = nullptr;
     if (!wgpuAdapterGetLimits(adapter, &supportedLimits)) {
         debug(user_context) << "wgpuAdapterGetLimits failed\n";
     } else {
@@ -276,13 +278,13 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
     }
 #endif
 
-    WGPUDeviceDescriptor desc = {
-        .nextInChain = nullptr,
-        .label = nullptr,
-        .requiredFeaturesCount = 0,
-        .requiredFeatures = nullptr,
-        .requiredLimits = &requestedLimits,
-    };
+    WGPUDeviceDescriptor desc{};
+    desc.nextInChain = nullptr;
+    desc.label = nullptr;
+    desc.requiredFeaturesCount = 0;
+    desc.requiredFeatures = nullptr;
+    desc.requiredLimits = &requestedLimits;
+
     wgpuAdapterRequestDevice(adapter, &desc, request_device_callback,
                              user_context);
 }
@@ -297,9 +299,8 @@ WEAK int create_webgpu_context(void *user_context) {
     // TODO: Unify this when Emscripten implements wgpuCreateInstance().
     // See https://github.com/halide/Halide/issues/7248
 #ifdef WITH_DAWN_NATIVE
-    WGPUInstanceDescriptor desc{
-        .nextInChain = nullptr,
-    };
+    WGPUInstanceDescriptor desc{};
+    desc.nextInChain = nullptr;
     global_instance = wgpuCreateInstance(&desc);
 #else
     global_instance = nullptr;
@@ -347,15 +348,15 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
 
     ErrorScope error_scope(user_context, context.device);
 
-    WGPUBufferDescriptor desc = {
-        .nextInChain = nullptr,
-        .label = nullptr,
-        .usage = WGPUBufferUsage_Storage |
+    WGPUBufferDescriptor desc{};
+    desc.nextInChain = nullptr;
+    desc.label = nullptr;
+    desc.usage = WGPUBufferUsage_Storage |
                  WGPUBufferUsage_CopyDst |
-                 WGPUBufferUsage_CopySrc,
-        .size = round_up_to_multiple_of_4(buf->size_in_bytes()),
-        .mappedAtCreation = false,
-    };
+                 WGPUBufferUsage_CopySrc;
+    desc.size = round_up_to_multiple_of_4(buf->size_in_bytes());
+    desc.mappedAtCreation = false;
+
     WgpuBufferHandle *device_handle =
         (WgpuBufferHandle *)malloc(sizeof(WgpuBufferHandle));
     device_handle->buffer = wgpuDeviceCreateBuffer(context.device, &desc);
@@ -370,13 +371,13 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
         ErrorScope error_scope(user_context, context.device);
 
         // Create a staging buffer for transfers if we haven't already.
-        WGPUBufferDescriptor desc = {
-            .nextInChain = nullptr,
-            .label = nullptr,
-            .usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead,
-            .size = kWebGpuStagingBufferSize,
-            .mappedAtCreation = false,
-        };
+        WGPUBufferDescriptor desc{};
+        desc.nextInChain = nullptr;
+        desc.label = nullptr;
+        desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
+        desc.size = kWebGpuStagingBufferSize;
+        desc.mappedAtCreation = false;
+
         staging_buffer = wgpuDeviceCreateBuffer(global_device, &desc);
 
         int error_code = error_scope.wait();
@@ -810,17 +811,13 @@ WEAK int halide_webgpu_initialize_kernels(void *user_context, void **state_ptr, 
             [&]() -> WGPUShaderModule {
                 ErrorScope error_scope(user_context, context.device);
 
-                WGPUShaderModuleWGSLDescriptor wgsl_desc = {
-                    .chain = {
-                        .next = nullptr,
-                        .sType = WGPUSType_ShaderModuleWGSLDescriptor,
-                    },
-                    .source = src,
-                };
-                WGPUShaderModuleDescriptor desc = {
-                    .nextInChain = (const WGPUChainedStruct *)(&wgsl_desc),
-                    .label = nullptr,
-                };
+                WGPUShaderModuleWGSLDescriptor wgsl_desc{};
+                wgsl_desc.chain.next = nullptr;
+                wgsl_desc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
+                wgsl_desc.source = src;
+                WGPUShaderModuleDescriptor desc{};
+                desc.nextInChain = (const WGPUChainedStruct *)(&wgsl_desc);
+                desc.label = nullptr;
                 WGPUShaderModule shader_module =
                     wgpuDeviceCreateShaderModule(context.device, &desc);
 
@@ -883,19 +880,19 @@ WEAK int halide_webgpu_run(void *user_context,
         {nullptr, "wgsize_z", (double)threadsZ},
         {nullptr, "workgroup_mem_bytes", (double)workgroup_mem_bytes},
     };
-    WGPUProgrammableStageDescriptor stage_desc = {
-        .nextInChain = nullptr,
-        .module = shader_module,
-        .entryPoint = entry_name,
-        .constantCount = 4,
-        .constants = overrides,
-    };
-    WGPUComputePipelineDescriptor pipeline_desc = {
-        .nextInChain = nullptr,
-        .label = nullptr,
-        .layout = nullptr,
-        .compute = stage_desc,
-    };
+    WGPUProgrammableStageDescriptor stage_desc{};
+    stage_desc.nextInChain = nullptr;
+    stage_desc.module = shader_module;
+    stage_desc.entryPoint = entry_name;
+    stage_desc.constantCount = 4;
+    stage_desc.constants = overrides;
+
+    WGPUComputePipelineDescriptor pipeline_desc{};
+    pipeline_desc.nextInChain = nullptr;
+    pipeline_desc.label = nullptr;
+    pipeline_desc.layout = nullptr;
+    pipeline_desc.compute = stage_desc;
+
     WGPUComputePipeline pipeline =
         wgpuDeviceCreateComputePipeline(context.device, &pipeline_desc);
 
@@ -933,15 +930,15 @@ WEAK int halide_webgpu_run(void *user_context,
             if (arg_is_buffer[i]) {
                 halide_buffer_t *buffer = (halide_buffer_t *)args[i];
                 WgpuBufferHandle *handle = (WgpuBufferHandle *)(buffer->device);
-                bind_group_entries[b] = WGPUBindGroupEntry{
-                    .nextInChain = nullptr,
-                    .binding = i,
-                    .buffer = handle->buffer,
-                    .offset = handle->offset,
-                    .size = round_up_to_multiple_of_4(buffer->size_in_bytes()),
-                    .sampler = nullptr,
-                    .textureView = nullptr,
-                };
+                WGPUBindGroupEntry entry{};
+                entry.nextInChain = nullptr;
+                entry.binding = i;
+                entry.buffer = handle->buffer;
+                entry.offset = handle->offset;
+                entry.size = round_up_to_multiple_of_4(buffer->size_in_bytes());
+                entry.sampler = nullptr;
+                entry.textureView = nullptr;
+                bind_group_entries[b] = entry;
                 b++;
             }
         }
@@ -949,13 +946,12 @@ WEAK int halide_webgpu_run(void *user_context,
         // Create a bind group for the buffer arguments.
         WGPUBindGroupLayout layout =
             wgpuComputePipelineGetBindGroupLayout(pipeline, 0);
-        WGPUBindGroupDescriptor bindgroup_desc = {
-            .nextInChain = nullptr,
-            .label = nullptr,
-            .layout = layout,
-            .entryCount = num_buffers,
-            .entries = bind_group_entries,
-        };
+        WGPUBindGroupDescriptor bindgroup_desc{};
+        bindgroup_desc.nextInChain = nullptr;
+        bindgroup_desc.label = nullptr;
+        bindgroup_desc.layout = layout;
+        bindgroup_desc.entryCount = num_buffers;
+        bindgroup_desc.entries = bind_group_entries;
         WGPUBindGroup bind_group =
             wgpuDeviceCreateBindGroup(context.device, &bindgroup_desc);
         wgpuComputePassEncoderSetBindGroup(pass, 0, bind_group, 0, nullptr);
@@ -966,13 +962,12 @@ WEAK int halide_webgpu_run(void *user_context,
     }
     if (num_args > num_buffers) {
         // Create a uniform buffer for the non-buffer arguments.
-        WGPUBufferDescriptor desc = {
-            .nextInChain = nullptr,
-            .label = nullptr,
-            .usage = WGPUBufferUsage_Uniform,
-            .size = uniform_size,
-            .mappedAtCreation = true,
-        };
+        WGPUBufferDescriptor desc{};
+        desc.nextInChain = nullptr;
+        desc.label = nullptr;
+        desc.usage = WGPUBufferUsage_Uniform;
+        desc.size = uniform_size;
+        desc.mappedAtCreation = true;
         WGPUBuffer arg_buffer = wgpuDeviceCreateBuffer(context.device, &desc);
 
         // Write the argument values to the uniform buffer.
@@ -1054,22 +1049,20 @@ WEAK int halide_webgpu_run(void *user_context,
         // Create a bind group for the uniform buffer.
         WGPUBindGroupLayout layout =
             wgpuComputePipelineGetBindGroupLayout(pipeline, 1);
-        WGPUBindGroupEntry entry = {
-            .nextInChain = nullptr,
-            .binding = 0,
-            .buffer = arg_buffer,
-            .offset = 0,
-            .size = uniform_size,
-            .sampler = nullptr,
-            .textureView = nullptr,
-        };
-        WGPUBindGroupDescriptor bindgroup_desc = {
-            .nextInChain = nullptr,
-            .label = nullptr,
-            .layout = layout,
-            .entryCount = 1,
-            .entries = &entry,
-        };
+        WGPUBindGroupEntry entry{};
+        entry.nextInChain = nullptr;
+        entry.binding = 0;
+        entry.buffer = arg_buffer;
+        entry.offset = 0;
+        entry.size = uniform_size;
+        entry.sampler = nullptr;
+        entry.textureView = nullptr;
+        WGPUBindGroupDescriptor bindgroup_desc{};
+        bindgroup_desc.nextInChain = nullptr;
+        bindgroup_desc.label = nullptr;
+        bindgroup_desc.layout = layout;
+        bindgroup_desc.entryCount = 1;
+        bindgroup_desc.entries = &entry;
         WGPUBindGroup bind_group =
             wgpuDeviceCreateBindGroup(context.device, &bindgroup_desc);
         wgpuComputePassEncoderSetBindGroup(pass, 1, bind_group, 0, nullptr);

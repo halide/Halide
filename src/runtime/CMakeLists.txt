@@ -157,6 +157,7 @@ set(RUNTIME_CXX_FLAGS
     # Necessary for using virtual functions in the runtime code.
     -fno-rtti
     -Wall
+    -Wc++20-designator
     -Wcast-qual
     -Werror
     -Wignored-qualifiers
