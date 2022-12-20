@@ -1205,6 +1205,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         }
         if (t.has_feature(Target::WebGPU)) {
             if (t.os == Target::Windows) {
+                // TOOD: Test on Windows and enable this.
+                // See https://github.com/halide/Halide/issues/7249
                 user_error << "WebGPU runtime not yet supported on Windows.\n";
             } else {
                 modules.push_back(get_initmod_webgpu(c, bits_64, debug));
