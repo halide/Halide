@@ -287,7 +287,7 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
                              user_context);
 }
 
-size_t roundUpToMultipleOf4(size_t x) {
+size_t round_up_to_multiple_of_4(size_t x) {
     return (x + 3) & ~0x3;
 }
 
@@ -353,7 +353,7 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
         .usage = WGPUBufferUsage_Storage |
                  WGPUBufferUsage_CopyDst |
                  WGPUBufferUsage_CopySrc,
-        .size = roundUpToMultipleOf4(buf->size_in_bytes()),
+        .size = round_up_to_multiple_of_4(buf->size_in_bytes()),
         .mappedAtCreation = false,
     };
     WgpuBufferHandle *device_handle =
@@ -598,7 +598,7 @@ int do_multidimensional_copy(void *user_context, WgpuContext *context,
                             << (void *)c.src << " + " << src_idx
                             << " -> " << (void *)c.dst << " + " << dst_idx
                             << ", " << c.chunk_size << " bytes\n";
-        uint64_t copy_size = roundUpToMultipleOf4(c.chunk_size);
+        uint64_t copy_size = round_up_to_multiple_of_4(c.chunk_size);
         if (!from_host && to_host) {
             err = do_copy_to_host(user_context, context,
                                   (uint8_t *)(c.dst + dst_idx),
@@ -916,7 +916,7 @@ WEAK int halide_webgpu_run(void *user_context,
             halide_abort_if_false(user_context, arg_size <= 4);
 
             // Round up to 4 bytes.
-            arg_size = (arg_size + 3) & ~3;
+            arg_size = round_up_to_multiple_of_4(arg_size);
 
             uniform_size += arg_size;
         }
@@ -936,7 +936,7 @@ WEAK int halide_webgpu_run(void *user_context,
                     .binding = i,
                     .buffer = handle->buffer,
                     .offset = handle->offset,
-                    .size = roundUpToMultipleOf4(buffer->size_in_bytes()),
+                    .size = round_up_to_multiple_of_4(buffer->size_in_bytes()),
                     .sampler = nullptr,
                     .textureView = nullptr,
                 };
