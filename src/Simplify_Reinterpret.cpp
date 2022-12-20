@@ -23,7 +23,7 @@ Expr Simplify::visit(const Reinterpret *op, ExprInfo *bounds) {
     } else if ((op->type.bits() == a.type().bits()) &&
                op->type.is_int_or_uint() &&
                a.type().is_int_or_uint()) {
-        // Normalize to casts for non lane-changing reinterprets.
+        // Normalize to casts for non-lane-changing reinterprets.
         return cast(op->type, a);
     } else if (a.same_as(op->value)) {
         return op;

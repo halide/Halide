@@ -251,7 +251,7 @@ Stmt IRMutator::visit(const Allocate *op) {
     }
     return Allocate::make(op->name, op->type, op->memory_type,
                           new_extents, std::move(condition),
-                          std::move(body), std::move(new_expr), op->free_function);
+                          std::move(body), std::move(new_expr), op->free_function, op->padding);
 }
 
 Stmt IRMutator::visit(const Free *op) {

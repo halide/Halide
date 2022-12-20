@@ -1,93 +1,143 @@
-
 import halide as hl
 import numpy as np
 import gc
 import sys
 
-def test_ndarray_to_buffer():
+
+def test_ndarray_to_buffer(reverse_axes=True):
     a0 = np.ones((200, 300), dtype=np.int32)
 
     # Buffer always shares data (when possible) by default,
     # and maintains the shape of the data source. (note that
     # the ndarray is col-major by default!)
-    b0 = hl.Buffer(a0, "float32_test_buffer")
+    b0 = hl.Buffer(a0, "float32_test_buffer", reverse_axes)
     assert b0.type() == hl.Int(32)
     assert b0.name() == "float32_test_buffer"
     assert b0.all_equal(1)
 
-    assert b0.dim(0).min() == 0
-    assert b0.dim(0).max() == 199
-    assert b0.dim(0).extent() == 200
-    assert b0.dim(0).stride() == 300
+    if reverse_axes:
+        assert b0.dim(0).min() == 0
+        assert b0.dim(0).max() == 299
+        assert b0.dim(0).extent() == 300
+        assert b0.dim(0).stride() == 1
 
-    assert b0.dim(1).min() == 0
-    assert b0.dim(1).max() == 299
-    assert b0.dim(1).extent() == 300
-    assert b0.dim(1).stride() == 1
+        assert b0.dim(1).min() == 0
+        assert b0.dim(1).max() == 199
+        assert b0.dim(1).extent() == 200
+        assert b0.dim(1).stride() == 300
 
-    a0[12, 34] = 56
-    assert b0[12, 34] == 56
+        a0[12, 34] = 56
+        assert b0[34, 12] == 56
 
-    b0[56, 34] = 12
-    assert a0[56, 34] == 12
+        b0[56, 34] = 12
+        assert a0[34, 56] == 12
+    else:
+        assert b0.dim(0).min() == 0
+        assert b0.dim(0).max() == 199
+        assert b0.dim(0).extent() == 200
+        assert b0.dim(0).stride() == 300
+
+        assert b0.dim(1).min() == 0
+        assert b0.dim(1).max() == 299
+        assert b0.dim(1).extent() == 300
+        assert b0.dim(1).stride() == 1
+
+        a0[12, 34] = 56
+        assert b0[12, 34] == 56
+
+        b0[56, 34] = 12
+        assert a0[56, 34] == 12
 
 
-def test_buffer_to_ndarray():
-    buf = hl.Buffer(hl.Int(16), [4, 4])
-    assert buf.type() == hl.Int(16)
-    buf.fill(0)
-    buf[1, 2] = 42
-    assert buf[1, 2] == 42
+def test_buffer_to_ndarray(reverse_axes=True):
+    buf0 = hl.Buffer(hl.Int(16), [4, 6])
+    assert buf0.type() == hl.Int(16)
+    buf0.fill(0)
+    buf0[1, 2] = 42
+    assert buf0[1, 2] == 42
+
+    # This is subtle: the default behavior when converting
+    # a Buffer to an np.array (or ndarray, etc) is to reverse the
+    # order of the axes, since Halide prefers column-major and
+    # the rest of Python prefers row-major. By calling reverse_axes()
+    # before that conversion, we end up doing a *double* reverse, i.e,
+    # not reversing at all. So the 'not' here is correct.
+    buf = buf0.reverse_axes() if not reverse_axes else buf0
 
     # Should share storage with buf
-    array_shared = np.array(buf, copy = False)
-    assert array_shared.shape == (4, 4)
+    array_shared = np.array(buf, copy=False)
     assert array_shared.dtype == np.int16
-    assert array_shared[1, 2] == 42
+    if reverse_axes:
+        assert array_shared.shape == (6, 4)
+        assert array_shared[2, 1] == 42
+    else:
+        assert array_shared.shape == (4, 6)
+        assert array_shared[1, 2] == 42
 
     # Should *not* share storage with buf
-    array_copied = np.array(buf, copy = True)
-    assert array_copied.shape == (4, 4)
+    array_copied = np.array(buf, copy=True)
     assert array_copied.dtype == np.int16
-    assert array_copied[1, 2] == 42
+    if reverse_axes:
+        assert array_copied.shape == (6, 4)
+        assert array_copied[2, 1] == 42
+    else:
+        assert array_copied.shape == (4, 6)
+        assert array_copied[1, 2] == 42
 
-    buf[1, 2] = 3
-    assert array_shared[1, 2] == 3
-    assert array_copied[1, 2] == 42
+    # Should affect array_shared but not array_copied
+    buf0[1, 2] = 3
+    if reverse_axes:
+        assert array_shared[2, 1] == 3
+        assert array_copied[2, 1] == 42
+    else:
+        assert array_shared[1, 2] == 3
+        assert array_copied[1, 2] == 42
 
     # Ensure that Buffers that have nonzero mins get converted correctly,
     # since the Python Buffer Protocol doesn't have the 'min' concept
-    cropped = buf.copy()
-    cropped.crop(dimension = 0, min = 1, extent = 2)
+    cropped_buf0 = buf0.copy()
+    cropped_buf0.crop(dimension=0, min=1, extent=2)
+    cropped_buf = cropped_buf0.reverse_axes() if not reverse_axes else cropped_buf0
 
     # Should share storage with cropped (and buf)
-    cropped_array_shared = np.array(cropped, copy = False)
-    assert cropped_array_shared.shape == (2, 4)
+    cropped_array_shared = np.array(cropped_buf, copy=False)
     assert cropped_array_shared.dtype == np.int16
-    assert cropped_array_shared[0, 2] == 3
+    if reverse_axes:
+        assert cropped_array_shared.shape == (6, 2)
+        assert cropped_array_shared[2, 0] == 3
+    else:
+        assert cropped_array_shared.shape == (2, 6)
+        assert cropped_array_shared[0, 2] == 3
 
     # Should *not* share storage with anything
-    cropped_array_copied = np.array(cropped, copy = True)
-    assert cropped_array_copied.shape == (2, 4)
+    cropped_array_copied = np.array(cropped_buf, copy=True)
     assert cropped_array_copied.dtype == np.int16
-    assert cropped_array_copied[0, 2] == 3
+    if reverse_axes:
+        assert cropped_array_copied.shape == (6, 2)
+        assert cropped_array_copied[2, 0] == 3
+    else:
+        assert cropped_array_copied.shape == (2, 6)
+        assert cropped_array_copied[0, 2] == 3
 
-    cropped[1, 2] = 5
-
-    assert buf[1, 2] == 3
-    assert array_shared[1, 2] == 3
-    assert array_copied[1, 2] == 42
-
-    assert cropped[1, 2] == 5
-    assert cropped_array_shared[0, 2] == 5
-    assert cropped_array_copied[0, 2] == 3
+    cropped_buf0[1, 2] = 5
+    assert cropped_buf0[1, 2] == 5
+    if reverse_axes:
+        assert cropped_buf[1, 2] == 5
+        assert cropped_array_shared[2, 0] == 5
+        assert cropped_array_copied[2, 0] == 3
+    else:
+        assert cropped_buf[2, 1] == 5
+        assert cropped_array_shared[0, 2] == 5
+        assert cropped_array_copied[0, 2] == 3
 
 
 def _assert_fn(e):
     assert e
 
+
 def _is_64bits():
     return sys.maxsize > 2**32
+
 
 def test_for_each_element():
     buf = hl.Buffer(hl.Float(32), [3, 4])
@@ -95,7 +145,10 @@ def test_for_each_element():
         for y in range(4):
             buf[x, y] = x + y
     # Can't use 'assert' in a lambda, but can call a fn that uses it.
-    buf.for_each_element(lambda pos, buf=buf: _assert_fn(buf[pos[0], pos[1]] == pos[0] + pos[1]))
+    buf.for_each_element(
+        lambda pos, buf=buf: _assert_fn(buf[pos[0], pos[1]] == pos[0] + pos[1])
+    )
+
 
 def test_fill_all_equal():
     buf = hl.Buffer(hl.Int(32), [3, 4])
@@ -125,10 +178,12 @@ def test_bufferinfo_sharing():
     b0[56, 34] = 12
     assert b0[56, 34] == 12
 
+
 def test_float16():
-    array_in = np.zeros((256, 256, 3), dtype=np.float16, order='F')
+    array_in = np.zeros((256, 256, 3), dtype=np.float16, order="F")
     hl_img = hl.Buffer(array_in)
-    array_out = np.array(hl_img, copy = False)
+    array_out = np.array(hl_img, copy=False)
+
 
 # TODO: https://github.com/halide/Halide/issues/6849
 # def test_bfloat16():
@@ -144,17 +199,19 @@ def test_float16():
 #     else:
 #         assert False, "This should not happen"
 
+
 def test_int64():
-    array_in = np.zeros((256, 256, 3), dtype=np.int64, order='F')
+    array_in = np.zeros((256, 256, 3), dtype=np.int64, order="F")
     hl_img = hl.Buffer(array_in)
-    array_out = np.array(hl_img, copy = False)
+    array_out = np.array(hl_img, copy=False)
+
 
 def test_make_interleaved():
     w = 7
     h = 13
     c = 3
 
-    b = hl.Buffer.make_interleaved(type = hl.UInt(8), width = w, height = h, channels = c)
+    b = hl.Buffer.make_interleaved(type=hl.UInt(8), width=w, height=h, channels=c)
 
     assert b.dim(0).min() == 0
     assert b.dim(0).extent() == w
@@ -168,36 +225,39 @@ def test_make_interleaved():
     assert b.dim(2).extent() == c
     assert b.dim(2).stride() == 1
 
-    a = np.array(b, copy = False)
-    assert a.shape == (w, h, c)
-    assert a.strides == (c, w*c, 1)
+    a = np.array(b, copy=False)
+    # NumPy shape order is opposite that of Halide shape order
+    assert a.shape == (c, h, w)
+    assert a.strides == (1, w * c, c)
     assert a.dtype == np.uint8
+
 
 def test_interleaved_ndarray():
     w = 7
     h = 13
     c = 3
 
-    a = np.ndarray(dtype=np.uint8, shape=(w, h, c), strides=(c, w*c, 1))
+    a = np.ndarray(dtype=np.uint8, shape=(w, h, c), strides=(c, w * c, 1))
 
     assert a.shape == (w, h, c)
-    assert a.strides == (c, w*c, 1)
+    assert a.strides == (c, w * c, 1)
     assert a.dtype == np.uint8
 
     b = hl.Buffer(a)
     assert b.type() == hl.UInt(8)
 
     assert b.dim(0).min() == 0
-    assert b.dim(0).extent() == w
-    assert b.dim(0).stride() == c
+    assert b.dim(0).extent() == c
+    assert b.dim(0).stride() == 1
 
     assert b.dim(1).min() == 0
     assert b.dim(1).extent() == h
     assert b.dim(1).stride() == w * c
 
     assert b.dim(2).min() == 0
-    assert b.dim(2).extent() == c
-    assert b.dim(2).stride() == 1
+    assert b.dim(2).extent() == w
+    assert b.dim(2).stride() == c
+
 
 def test_reorder():
     W = 7
@@ -205,7 +265,7 @@ def test_reorder():
     C = 3
     Z = 2
 
-    a = hl.Buffer(type = hl.UInt(8), sizes = [W, H, C], storage_order = [2, 0, 1])
+    a = hl.Buffer(type=hl.UInt(8), sizes=[W, H, C], storage_order=[2, 0, 1])
     assert a.dim(0).extent() == W
     assert a.dim(1).extent() == H
     assert a.dim(2).extent() == C
@@ -243,6 +303,7 @@ def test_reorder():
     assert b.dim(2).stride() == b2.dim(2).stride()
     assert b.dim(3).stride() == b2.dim(3).stride()
 
+
 def test_overflow():
     # Don't bother testing this on 32-bit systems (our "huge" size is too large there)
     if not _is_64bits():
@@ -264,13 +325,15 @@ def test_overflow():
     try:
         hl.Buffer(size_over_intmax)
     except ValueError as e:
-        assert 'Out of range dimensions in buffer conversion' in str(e)
+        assert "Out of range dimensions in buffer conversion" in str(e)
+
 
 def test_buffer_to_str():
     b = hl.Buffer()
-    assert str(b) == '<undefined halide.Buffer>'
+    assert str(b) == "<undefined halide.Buffer>"
     b = hl.Buffer(hl.Int(32), [128, 256])
-    assert str(b) == '<halide.Buffer of type int32 shape:[[0,128,1],[0,256,128]]>'
+    assert str(b) == "<halide.Buffer of type int32 shape:[[0,128,1],[0,256,128]]>"
+
 
 def test_scalar_buffers():
     buf = hl.Buffer.make_scalar(hl.Float(32))
@@ -285,11 +348,47 @@ def test_scalar_buffers():
     buf.fill(32)
     assert buf[()] == 32
 
+
+def test_oob():
+    buf = hl.Buffer(hl.Int(16), [4, 6])
+    buf.fill(0)
+
+    # getitem below min
+    try:
+        print(buf[-1, 2])
+    except IndexError as e:
+        assert "index -1 is out of bounds for axis 0 with min=0, extent=4" in str(e)
+    else:
+        assert False, "Did not see expected exception!"
+
+    # getitem above max
+    try:
+        print(buf[1, 6])
+    except IndexError as e:
+        assert "index 6 is out of bounds for axis 1 with min=0, extent=6" in str(e)
+
+    # setitem below min
+    try:
+        buf[-1, 2] = 42
+    except IndexError as e:
+        assert "index -1 is out of bounds for axis 0 with min=0, extent=4" in str(e)
+    else:
+        assert False, "Did not see expected exception!"
+
+    # setitem above max
+    try:
+        buf[1, 6] = 42
+    except IndexError as e:
+        assert "index 6 is out of bounds for axis 1 with min=0, extent=6" in str(e)
+
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
-    test_ndarray_to_buffer()
-    test_buffer_to_ndarray()
+    test_ndarray_to_buffer(reverse_axes=True)
+    test_ndarray_to_buffer(reverse_axes=False)
+    test_buffer_to_ndarray(reverse_axes=True)
+    test_buffer_to_ndarray(reverse_axes=False)
     test_for_each_element()
     test_fill_all_equal()
     test_bufferinfo_sharing()
@@ -301,3 +400,4 @@ if __name__ == "__main__":
     test_overflow()
     test_buffer_to_str()
     test_scalar_buffers()
+    test_oob()

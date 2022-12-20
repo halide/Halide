@@ -140,7 +140,7 @@ class BoundSmallAllocations : public IRMutator {
         if (size_ptr && size == 0 && !op->new_expr.defined()) {
             // This allocation is dead
             return Allocate::make(op->name, op->type, op->memory_type, {0}, const_false(),
-                                  mutate(op->body), op->new_expr, op->free_function);
+                                  mutate(op->body), op->new_expr, op->free_function, op->padding);
         }
 
         // 128 bytes is a typical minimum allocation size in
@@ -155,7 +155,7 @@ class BoundSmallAllocations : public IRMutator {
             user_assert(size >= 0 && size < (int64_t)1 << 31)
                 << "Allocation " << op->name << " has a size greater than 2^31: " << bound << "\n";
             return Allocate::make(op->name, op->type, op->memory_type, {(int32_t)size}, op->condition,
-                                  mutate(op->body), op->new_expr, op->free_function);
+                                  mutate(op->body), op->new_expr, op->free_function, op->padding);
         } else {
             return IRMutator::visit(op);
         }

@@ -175,6 +175,11 @@ public:
 // misattributed to Halide.h. Either make such functions internal to
 // libHalide, or mark them as HALIDE_NO_USER_CODE_INLINE.
 
+// handler suitable for use with std::terminate; it will catch unhandled exceptions
+// and log the `what()` to stderr, then abort. Exposed as a function to minimize
+// the need for external code to need to know the definition of Halide::Error.
+HALIDE_EXPORT_SYMBOL void unhandled_exception_handler();
+
 }  // namespace Internal
 
 }  // namespace Halide

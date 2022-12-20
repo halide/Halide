@@ -65,11 +65,14 @@ void deallocate_system(void *user_context, void *aligned_ptr) {
     size_t aligned_offset = *((size_t *)aligned_ptr - 1);
     size_t alloc_size = *((size_t *)aligned_ptr - 2);
     void *raw_ptr = (void *)((uint8_t *)aligned_ptr - aligned_offset);
+    // The compiler may see printing the pointer value after the free as a use.
+    // This protects against a use after free warning.
+    intptr_t raw_ptr_save = (intptr_t)raw_ptr;
     free(raw_ptr);
     allocated_system_memory -= alloc_size;
 
     debug(user_context) << "Test : deallocate_system ("
-                        << "ptr=" << (void *)(raw_ptr) << " "
+                        << "ptr=" << (void *)(raw_ptr_save) << " "
                         << "aligned_ptr=" << (void *)(aligned_ptr) << " "
                         << "aligned_offset=" << int32_t(aligned_offset) << " "
                         << "alloc_size=" << int32_t(alloc_size) << " "

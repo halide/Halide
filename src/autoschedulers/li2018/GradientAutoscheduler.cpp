@@ -925,25 +925,11 @@ void generate_schedule(const std::vector<Function> &outputs,
         }
     }
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    auto_scheduler_results->scheduler_name = "Li2018";
-#endif
     auto_scheduler_results->schedule_source = schedule_source.str();
     debug(1) << schedule_source.str() << "\n";
 }
 
 struct Li2018 {
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    void operator()(const Pipeline &p, const Target &target, const MachineParams &params_in, AutoSchedulerResults *results) {
-        std::vector<Function> outputs;
-        for (const Func &f : p.outputs()) {
-            outputs.push_back(f.function());
-        }
-        GradientAutoschedulerParams params;
-        params.parallelism = params_in.parallelism;
-        generate_schedule(outputs, target, params, results);
-    }
-#else
     void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
         internal_assert(params_in.name == "Li2018");
 
@@ -960,7 +946,6 @@ struct Li2018 {
         generate_schedule(outputs, target, params, results);
         results->autoscheduler_params = params_in;
     }
-#endif
 };
 
 REGISTER_AUTOSCHEDULER(Li2018)

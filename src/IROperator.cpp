@@ -1482,7 +1482,7 @@ Expr require(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(args[0].type(),
                                 Internal::Call::require,
                                 {likely(std::move(condition)), args[0], std::move(err)},
-                                Internal::Call::PureIntrinsic);
+                                Internal::Call::Intrinsic);
 }
 
 Expr saturating_cast(Type t, Expr e) {
@@ -2264,12 +2264,7 @@ Expr floor(Expr x) {
         return Internal::Call::make(t, "floor_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
         t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "floor_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+        return Internal::Call::make(t, "floor_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
 
@@ -2282,31 +2277,18 @@ Expr ceil(Expr x) {
         return Internal::Call::make(t, "ceil_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
         t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "ceil_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+        return Internal::Call::make(t, "ceil_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
 
 Expr round(Expr x) {
     user_assert(x.defined()) << "round of undefined Expr\n";
     Type t = x.type();
-    if (t.element_of() == Float(64)) {
-        return Internal::Call::make(t, "round_f64", {std::move(x)}, Internal::Call::PureExtern);
-    } else if (t.element_of() == Float(16)) {
-        return Internal::Call::make(t, "round_f16", {std::move(x)}, Internal::Call::PureExtern);
-    } else {
-        t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "round_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+    if (!t.is_float()) {
+        x = cast<float>(x);
+        t = x.type();
     }
+    return Internal::Call::make(t, Internal::Call::round, {std::move(x)}, Internal::Call::PureIntrinsic);
 }
 
 Expr trunc(Expr x) {
@@ -2318,12 +2300,7 @@ Expr trunc(Expr x) {
         return Internal::Call::make(t, "trunc_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
         t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "trunc_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+        return Internal::Call::make(t, "trunc_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
 
@@ -2647,7 +2624,7 @@ Expr strict_float(Expr e) {
 Expr undef(Type t) {
     return Internal::Call::make(t, Internal::Call::undef,
                                 std::vector<Expr>(),
-                                Internal::Call::PureIntrinsic);
+                                Internal::Call::Intrinsic);
 }
 
 namespace Internal {
@@ -2665,7 +2642,7 @@ Expr make_scatter_gather(const std::vector<Expr> &args) {
     return Halide::Internal::Call::make(args[0].type(),
                                         Halide::Internal::Call::scatter_gather,
                                         args,
-                                        Halide::Internal::Call::PureIntrinsic);
+                                        Halide::Internal::Call::Intrinsic);
 }
 }  // namespace
 

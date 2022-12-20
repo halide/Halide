@@ -39,6 +39,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::compiler_log, {"compiler_log", ".halide_compiler_log", IsSingle}},
         {OutputFileType::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
         {OutputFileType::featurization, {"featurization", ".featurization", IsMulti}},
+        {OutputFileType::function_info_header, {"function_info_header", ".function_info.h", IsSingle}},
         {OutputFileType::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
         {OutputFileType::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
         {OutputFileType::python_extension, {"python_extension", ".py.cpp", IsSingle}},
@@ -243,11 +244,7 @@ std::string indent_string(const std::string &src, const std::string &indent) {
 void emit_schedule_file(const std::string &name,
                         const std::vector<Target> &targets,
                         const std::string &scheduler_name,
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-                        const std::string &machine_params_string,
-#else
                         const std::string &autoscheduler_params_string,
-#endif
                         const std::string &body,
                         std::ostream &stream) {
     std::string s = R"INLINE_CODE(#ifndef $CLEANNAME$_SCHEDULE_H
@@ -310,13 +307,8 @@ $NAMESPACECLOSE$
     s = replace_all(s, "$NAMESPACECLOSE$", nsclose);
     s = replace_all(s, "$TARGET$", target_string);
     s = replace_all(s, "$BODY$", body_text);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    s = replace_all(s, "$MPNAME$", "machine_params");
-    s = replace_all(s, "$MACHINEPARAMS$", machine_params_string);
-#else
     s = replace_all(s, "$MPNAME$", "autoscheduler_params");
     s = replace_all(s, "$MACHINEPARAMS$", autoscheduler_params_string);
-#endif
     stream << s;
 }
 
@@ -329,9 +321,6 @@ struct ModuleContents {
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
     std::vector<Module> submodules;
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    std::vector<ExternalCode> external_code;
-#endif
     MetadataNameMap metadata_name_map;
     bool any_strict_float{false};
     std::unique_ptr<AutoSchedulerResults> auto_scheduler_results;
@@ -372,10 +361,11 @@ LoweredFunc::LoweredFunc(const std::string &name,
 
 using namespace Halide::Internal;
 
-Module::Module(const std::string &name, const Target &target)
+Module::Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map)
     : contents(new Internal::ModuleContents) {
     contents->name = name;
     contents->target = target;
+    contents->metadata_name_map = metadata_name_map;
 }
 
 void Module::set_auto_scheduler_results(const AutoSchedulerResults &auto_scheduler_results) {
@@ -419,12 +409,6 @@ const std::vector<Module> &Module::submodules() const {
     return contents->submodules;
 }
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-const std::vector<ExternalCode> &Module::external_code() const {
-    return contents->external_code;
-}
-#endif
-
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
     for (const auto &f : functions()) {
         if (f.name == name) {
@@ -446,12 +430,6 @@ void Module::append(const Internal::LoweredFunc &function) {
 void Module::append(const Module &module) {
     contents->submodules.push_back(module);
 }
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-void Module::append(const ExternalCode &external_code) {
-    contents->external_code.push_back(external_code);
-}
-#endif
 
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {
     Module output(name, modules.front().target());
@@ -519,30 +497,8 @@ Module Module::resolve_submodules() const {
     for (const auto &buf : buffers()) {
         lowered_module.append(buf);
     }
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    for (const auto &ec : external_code()) {
-        lowered_module.append(ec);
-    }
-#endif
     for (const auto &m : submodules()) {
         Module copy(m.resolve_submodules());
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-        // Propagate external code blocks.
-        for (const auto &ec : external_code()) {
-            // TODO(zalman): Is this the right thing to do?
-            bool already_in_list = false;
-            for (const auto &ec_sub : copy.external_code()) {
-                if (ec_sub.name() == ec.name()) {
-                    already_in_list = true;
-                    break;
-                }
-            }
-            if (!already_in_list) {
-                copy.append(ec);
-            }
-        }
-#endif
 
         auto buf = copy.compile_to_buffer();
         lowered_module.append(buf);
@@ -646,6 +602,15 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
         }
     }
+    if (contains(output_files, OutputFileType::function_info_header)) {
+        debug(1) << "Module.compile(): function_info_header " << output_files.at(OutputFileType::function_info_header) << "\n";
+        std::ofstream file(output_files.at(OutputFileType::function_info_header));
+        Internal::CodeGen_C cg(file,
+                               target(),
+                               Internal::CodeGen_C::CPlusPlusFunctionInfoHeader,
+                               output_files.at(OutputFileType::function_info_header));
+        cg.compile(*this);
+    }
     if (contains(output_files, OutputFileType::c_header)) {
         debug(1) << "Module.compile(): c_header " << output_files.at(OutputFileType::c_header) << "\n";
         std::ofstream file(output_files.at(OutputFileType::c_header));
@@ -674,15 +639,9 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::ofstream file(output_files.at(OutputFileType::schedule));
         auto *r = contents->auto_scheduler_results.get();
         std::string body = r && !r->schedule_source.empty() ? r->schedule_source : "// No autoscheduler has been run for this Generator.\n";
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        std::string scheduler = r ? r->scheduler_name : "(None)";
-        std::string machine_params = r ? r->machine_params_string : "(None)";
-        emit_schedule_file(name(), {target()}, scheduler, machine_params, body, file);
-#else
         std::string scheduler = r ? r->autoscheduler_params.name : "(None)";
         std::string autoscheduler_params_string = r ? r->autoscheduler_params.to_string() : "(None)";
         emit_schedule_file(name(), {target()}, scheduler, autoscheduler_params_string, body, file);
-#endif
     }
     if (contains(output_files, OutputFileType::featurization)) {
         debug(1) << "Module.compile(): featurization " << output_files.at(OutputFileType::featurization) << "\n";
@@ -852,6 +811,7 @@ void compile_multitarget(const std::string &fn_name,
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
+    MetadataNameMap metadata_name_map;
 
     for (size_t i = 0; i < targets.size(); ++i) {
         const Target &target = targets[i];
@@ -903,6 +863,7 @@ void compile_multitarget(const std::string &fn_name,
             sub_out.erase(OutputFileType::registration);
             sub_out.erase(OutputFileType::schedule);
             sub_out.erase(OutputFileType::c_header);
+            sub_out.erase(OutputFileType::function_info_header);
             if (contains(sub_out, OutputFileType::compiler_log)) {
                 sub_out[OutputFileType::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(OutputFileType::compiler_log), suffix, target);
             }
@@ -910,6 +871,9 @@ void compile_multitarget(const std::string &fn_name,
             sub_module.compile(sub_out);
             const auto *r = sub_module.get_auto_scheduler_results();
             auto_scheduler_results.push_back(r ? *r : AutoSchedulerResults());
+            if (target == base_target) {
+                metadata_name_map = sub_module.get_metadata_name_map();
+            }
         }
 
         uint64_t cur_target_features[kFeaturesWordCount] = {0};
@@ -984,7 +948,7 @@ void compile_multitarget(const std::string &fn_name,
                                     .with_feature(Target::NoBoundsQuery)
                                     .without_feature(Target::NoAsserts);
 
-        Module wrapper_module(fn_name, wrapper_target);
+        Module wrapper_module(fn_name, wrapper_target, metadata_name_map);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
         std::string wrapper_path = contains(output_files, OutputFileType::static_library) ?
@@ -1004,6 +968,14 @@ void compile_multitarget(const std::string &fn_name,
         header_module.compile(header_out);
     }
 
+    if (contains(output_files, OutputFileType::function_info_header)) {
+        Module header_module(fn_name, base_target);
+        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
+        std::map<OutputFileType, std::string> header_out = {{OutputFileType::function_info_header, output_files.at(OutputFileType::function_info_header)}};
+        debug(1) << "compile_multitarget: function_info_header " << header_out.at(OutputFileType::function_info_header) << "\n";
+        header_module.compile(header_out);
+    }
+
     if (contains(output_files, OutputFileType::registration)) {
         debug(1) << "compile_multitarget: registration " << output_files.at(OutputFileType::registration) << "\n";
         Module registration_module(fn_name, base_target);
@@ -1015,20 +987,9 @@ void compile_multitarget(const std::string &fn_name,
 
     if (contains(output_files, OutputFileType::schedule)) {
         debug(1) << "compile_multitarget: schedule " << output_files.at(OutputFileType::schedule) << "\n";
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        std::string scheduler = auto_scheduler_results.front().scheduler_name;
-        if (scheduler.empty()) {
-            scheduler = "(None)";
-        }
-        std::string machine_params = auto_scheduler_results.front().machine_params_string;
-        if (machine_params.empty()) {
-            machine_params = "(None)";
-        }
-#else
         const auto &autoscheduler_params = auto_scheduler_results.front().autoscheduler_params;
         std::string scheduler = autoscheduler_params.name.empty() ? "(None)" : autoscheduler_params.name;
         std::string autoscheduler_params_string = autoscheduler_params.name.empty() ? "(None)" : autoscheduler_params.to_string();
-#endif
 
         // Find the features that are unique to each stage (vs the baseline case).
         const auto &baseline_target = auto_scheduler_results.back().target;
@@ -1070,11 +1031,7 @@ void compile_multitarget(const std::string &fn_name,
         }
 
         std::ofstream file(output_files.at(OutputFileType::schedule));
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        emit_schedule_file(fn_name, targets, scheduler, machine_params, body.str(), file);
-#else
         emit_schedule_file(fn_name, targets, scheduler, autoscheduler_params_string, body.str(), file);
-#endif
     }
 
     if (contains(output_files, OutputFileType::static_library)) {

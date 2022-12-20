@@ -618,7 +618,7 @@ class HoistIfStatements : public IRMutator {
                 is_pure(i->condition)) {
                 Stmt s = Allocate::make(op->name, op->type, op->memory_type,
                                         op->extents, op->condition, i->then_case,
-                                        op->new_expr, op->free_function);
+                                        op->new_expr, op->free_function, op->padding);
                 return IfThenElse::make(i->condition, s);
             }
         }
@@ -627,7 +627,7 @@ class HoistIfStatements : public IRMutator {
         } else {
             return Allocate::make(op->name, op->type, op->memory_type,
                                   op->extents, op->condition, body,
-                                  op->new_expr, op->free_function);
+                                  op->new_expr, op->free_function, op->padding);
         }
     }
 

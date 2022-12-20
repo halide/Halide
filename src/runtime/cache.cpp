@@ -106,7 +106,7 @@ struct CacheBlockHeader {
 // the hash entry.
 WEAK __attribute((always_inline)) size_t header_bytes() {
     size_t s = sizeof(CacheBlockHeader);
-    size_t mask = halide_malloc_alignment() - 1;
+    size_t mask = ::halide_internal_malloc_alignment() - 1;
     return (s + mask) & ~mask;
 }
 

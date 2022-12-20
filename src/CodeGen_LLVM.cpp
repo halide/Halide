@@ -217,6 +217,7 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
 
       inside_atomic_mutex_node(false),
       emit_atomic_stores(false),
+      use_llvm_vp_intrinsics(false),
 
       destructor_block(nullptr),
       strict_float(t.has_feature(Target::StrictFloat)),
@@ -337,16 +338,6 @@ void CodeGen_LLVM::init_module() {
     // Start with a module containing the initial module for this target.
     module = get_initial_module_for_target(target, context);
 }
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-void CodeGen_LLVM::add_external_code(const Module &halide_module) {
-    for (const ExternalCode &code_blob : halide_module.external_code()) {
-        if (code_blob.is_for_cpu_target(get_target())) {
-            add_bitcode_to_module(context, *module, code_blob.contents(), code_blob.name());
-        }
-    }
-}
-#endif
 
 CodeGen_LLVM::~CodeGen_LLVM() {
     delete builder;
@@ -504,10 +495,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
     internal_assert(module && context && builder)
         << "The CodeGen_LLVM subclass should have made an initial module before calling CodeGen_LLVM::compile\n";
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    add_external_code(input);
-#endif
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
@@ -1128,13 +1115,6 @@ void CodeGen_LLVM::optimize_module() {
     llvm::CGSCCAnalysisManager cgam;
     llvm::ModuleAnalysisManager mam;
 
-#if LLVM_VERSION < 140
-    // If building against LLVM older than 14, explicitly specify AA pipeline.
-    // Not needed with LLVM14 or later, already the default.
-    llvm::AAManager aa = pb.buildDefaultAAPipeline();
-    fam.registerPass([&] { return std::move(aa); });
-#endif
-
     // Register all the basic analyses with the managers.
     pb.registerModuleAnalyses(mam);
     pb.registerCGSCCAnalyses(cgam);
@@ -1143,12 +1123,7 @@ void CodeGen_LLVM::optimize_module() {
     pb.crossRegisterProxies(lam, fam, cgam, mam);
     ModulePassManager mpm;
 
-#if LLVM_VERSION >= 140
     using OptimizationLevel = llvm::OptimizationLevel;
-#else
-    using OptimizationLevel = PassBuilder::OptimizationLevel;
-#endif
-
     OptimizationLevel level = OptimizationLevel::O3;
 
     if (get_target().has_feature(Target::SanitizerCoverage)) {
@@ -1183,7 +1158,6 @@ void CodeGen_LLVM::optimize_module() {
         });
 #endif
         pb.registerPipelineStartEPCallback([](ModulePassManager &mpm, OptimizationLevel) {
-#if LLVM_VERSION >= 140
             AddressSanitizerOptions asan_options;  // default values are good...
             asan_options.UseAfterScope = true;     // ...except this one
             constexpr bool use_global_gc = false;
@@ -1195,14 +1169,6 @@ void CodeGen_LLVM::optimize_module() {
 #else
             mpm.addPass(ModuleAddressSanitizerPass(
                 asan_options, use_global_gc, use_odr_indicator, destructor_kind));
-#endif
-#else
-            constexpr bool compile_kernel = false;
-            constexpr bool recover = false;
-            constexpr bool module_use_global_gc = false;
-            constexpr bool use_odr_indicator = true;
-            mpm.addPass(ModuleAddressSanitizerPass(
-                compile_kernel, recover, module_use_global_gc, use_odr_indicator));
 #endif
         });
     }
@@ -1545,13 +1511,22 @@ void CodeGen_LLVM::visit(const Add *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
-        value = builder->CreateFAdd(a, b);
+        if (!try_vector_predication_intrinsic("llvm.vp.fadd", llvm_type_of(t), t.lanes(), AllEnabledMask(),
+                                              {VPArg(a, 0), VPArg(b)})) {
+            value = builder->CreateFAdd(a, b);
+        }
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
+        // TODO(zvookin): This needs vector predication, but I can't
+        // see a way to do it. May go away in introducing correct
+        // index type instead of using int32_t.
         value = builder->CreateNSWAdd(a, b);
     } else {
-        value = builder->CreateAdd(a, b);
+        if (!try_vector_predication_intrinsic("llvm.vp.add", llvm_type_of(t), t.lanes(), AllEnabledMask(),
+                                              {VPArg(a, 0), VPArg(b)})) {
+            value = builder->CreateAdd(a, b);
+        }
     }
 }
 
@@ -1565,13 +1540,22 @@ void CodeGen_LLVM::visit(const Sub *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
-        value = builder->CreateFSub(a, b);
+        if (!try_vector_predication_intrinsic("llvm.vp.fsub", llvm_type_of(t), t.lanes(), AllEnabledMask(),
+                                              {VPArg(a, 0), VPArg(b)})) {
+            value = builder->CreateFSub(a, b);
+        }
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
+        // TODO(zvookin): This needs vector predication, but I can't
+        // see a way to do it. May go away in introducing correct
+        // index type instead of using int32_t.
         value = builder->CreateNSWSub(a, b);
     } else {
-        value = builder->CreateSub(a, b);
+        if (!try_vector_predication_intrinsic("llvm.vp.sub", llvm_type_of(t), t.lanes(), AllEnabledMask(),
+                                              {VPArg(a, 0), VPArg(b)})) {
+            value = builder->CreateSub(a, b);
+        }
     }
 }
 
@@ -1589,13 +1573,22 @@ void CodeGen_LLVM::visit(const Mul *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (op->type.is_float()) {
-        value = builder->CreateFMul(a, b);
+        if (!try_vector_predication_intrinsic("llvm.vp.fmul", llvm_type_of(t), t.lanes(), AllEnabledMask(),
+                                              {VPArg(a, 0), VPArg(b)})) {
+            value = builder->CreateFMul(a, b);
+        }
     } else if (op->type.is_int() && op->type.bits() >= 32) {
         // We tell llvm integers don't wrap, so that it generates good
         // code for loop indices.
+        // TODO(zvookin): This needs vector predication, but I can't
+        // see a way to do it. May go away in introducing correct
+        // index type instead of using int32_t.
         value = builder->CreateNSWMul(a, b);
     } else {
-        value = builder->CreateMul(a, b);
+        if (!try_vector_predication_intrinsic("llvm.vp.mul", llvm_type_of(t), t.lanes(), AllEnabledMask(),
+                                              {VPArg(a, 0), VPArg(b)})) {
+            value = builder->CreateMul(a, b);
+        }
     }
 }
 
@@ -1615,7 +1608,10 @@ void CodeGen_LLVM::visit(const Div *op) {
         // output hard.
         Value *a = codegen(op->a);
         Value *b = codegen(op->b);
-        value = builder->CreateFDiv(a, b);
+        if (!try_vector_predication_intrinsic("llvm.vp.fdiv", llvm_type_of(t), t.lanes(), AllEnabledMask(),
+                                              {VPArg(a, 0), VPArg(b)})) {
+            value = builder->CreateFDiv(a, b);
+        }
     } else {
         value = codegen(lower_int_uint_div(op->a, op->b));
     }
@@ -1685,9 +1681,13 @@ void CodeGen_LLVM::visit(const EQ *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        value = builder->CreateFCmpOEQ(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "oeq")) {
+            value = builder->CreateFCmpOEQ(a, b);
+        }
     } else {
-        value = builder->CreateICmpEQ(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "eq")) {
+            value = builder->CreateICmpEQ(a, b);
+        }
     }
 }
 
@@ -1701,9 +1701,13 @@ void CodeGen_LLVM::visit(const NE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        value = builder->CreateFCmpONE(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "one")) {
+            value = builder->CreateFCmpONE(a, b);
+        }
     } else {
-        value = builder->CreateICmpNE(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "ne")) {
+            value = builder->CreateICmpNE(a, b);
+        }
     }
 }
 
@@ -1717,11 +1721,17 @@ void CodeGen_LLVM::visit(const LT *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        value = builder->CreateFCmpOLT(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "olt")) {
+            value = builder->CreateFCmpOLT(a, b);
+        }
     } else if (t.is_int()) {
-        value = builder->CreateICmpSLT(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "slt")) {
+            value = builder->CreateICmpSLT(a, b);
+        }
     } else {
-        value = builder->CreateICmpULT(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "ult")) {
+            value = builder->CreateICmpULT(a, b);
+        }
     }
 }
 
@@ -1735,11 +1745,17 @@ void CodeGen_LLVM::visit(const LE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        value = builder->CreateFCmpOLE(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "ole")) {
+            value = builder->CreateFCmpOLE(a, b);
+        }
     } else if (t.is_int()) {
-        value = builder->CreateICmpSLE(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "sle")) {
+            value = builder->CreateICmpSLE(a, b);
+        }
     } else {
-        value = builder->CreateICmpULE(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "ule")) {
+            value = builder->CreateICmpULE(a, b);
+        }
     }
 }
 
@@ -1754,11 +1770,17 @@ void CodeGen_LLVM::visit(const GT *op) {
     Value *b = codegen(op->b);
 
     if (t.is_float()) {
-        value = builder->CreateFCmpOGT(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "ogt")) {
+            value = builder->CreateFCmpOGT(a, b);
+        }
     } else if (t.is_int()) {
-        value = builder->CreateICmpSGT(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "sgt")) {
+            value = builder->CreateICmpSGT(a, b);
+        }
     } else {
-        value = builder->CreateICmpUGT(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "ugt")) {
+            value = builder->CreateICmpUGT(a, b);
+        }
     }
 }
 
@@ -1772,11 +1794,17 @@ void CodeGen_LLVM::visit(const GE *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
     if (t.is_float()) {
-        value = builder->CreateFCmpOGE(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.fcmp", op->type, AllEnabledMask(), a, b, "oge")) {
+            value = builder->CreateFCmpOGE(a, b);
+        }
     } else if (t.is_int()) {
-        value = builder->CreateICmpSGE(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "sge")) {
+            value = builder->CreateICmpSGE(a, b);
+        }
     } else {
-        value = builder->CreateICmpUGE(a, b);
+        if (!try_vector_predication_comparison("llvm.vp.icmp", op->type, AllEnabledMask(), a, b, "uge")) {
+            value = builder->CreateICmpUGE(a, b);
+        }
     }
 }
 
@@ -1787,7 +1815,10 @@ void CodeGen_LLVM::visit(const And *op) {
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    value = builder->CreateAnd(a, b);
+    if (!try_vector_predication_intrinsic("llvm.vp.and", llvm_type_of(op->type), op->type.lanes(),
+                                          AllEnabledMask(), {VPArg(a, 0), VPArg(b)})) {
+        value = builder->CreateAnd(a, b);
+    }
 }
 
 void CodeGen_LLVM::visit(const Or *op) {
@@ -1797,19 +1828,34 @@ void CodeGen_LLVM::visit(const Or *op) {
 
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
-    value = builder->CreateOr(a, b);
+    if (!try_vector_predication_intrinsic("llvm.vp.or", llvm_type_of(op->type), op->type.lanes(),
+                                          AllEnabledMask(), {VPArg(a, 0), VPArg(b)})) {
+        value = builder->CreateOr(a, b);
+    }
 }
 
 void CodeGen_LLVM::visit(const Not *op) {
     Value *a = codegen(op->a);
-    value = builder->CreateNot(a);
+    if (!try_vector_predication_intrinsic("llvm.vp.not", llvm_type_of(op->type), op->type.lanes(),
+                                          AllEnabledMask(), {VPArg(a, 0)})) {
+        value = builder->CreateNot(a);
+    }
 }
 
 void CodeGen_LLVM::visit(const Select *op) {
     Value *cmp = codegen(op->condition);
+    if (use_llvm_vp_intrinsics &&
+        op->type.is_vector() &&
+        op->condition.type().is_scalar()) {
+        cmp = create_broadcast(cmp, op->type.lanes());
+    }
+
     Value *a = codegen(op->true_value);
     Value *b = codegen(op->false_value);
-    value = builder->CreateSelect(cmp, a, b);
+    if (!try_vector_predication_intrinsic("llvm.vp.select", llvm_type_of(op->type), op->type.lanes(),
+                                          NoMask(), {VPArg(cmp), VPArg(a, 0), VPArg(b)})) {
+        value = builder->CreateSelect(cmp, a, b);
+    }
 }
 
 namespace {
@@ -1881,7 +1927,13 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module.get());
     if (d.getPointerSize() == 8) {
-        index = builder->CreateIntCast(index, i64_t, true);
+        llvm::Type *index_type = index->getType();
+        llvm::Type *desired_index_type = i64_t;
+        if (isa<VectorType>(index_type)) {
+            desired_index_type = VectorType::get(desired_index_type,
+                                                 dyn_cast<VectorType>(index_type)->getElementCount());
+        }
+        index = builder->CreateIntCast(index, desired_index_type, true);
     }
 
     return CreateInBoundsGEP(builder, load_type, base_address, index);
@@ -1951,6 +2003,14 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, con
     inst->setMetadata("tbaa", tbaa);
 }
 
+void CodeGen_LLVM::function_does_not_access_memory(llvm::Function *fn) {
+#if LLVM_VERSION >= 160
+    fn->addFnAttr("memory(none)");
+#else
+    fn->addFnAttr(llvm::Attribute::ReadNone);
+#endif
+}
+
 void CodeGen_LLVM::visit(const Load *op) {
     // If the type should be stored as some other type, insert a reinterpret cast.
     Type storage_type = upgrade_type_for_storage(op->type);
@@ -1981,72 +2041,6 @@ void CodeGen_LLVM::visit(const Load *op) {
         llvm::Type *load_type = llvm_type_of(op->type.element_of());
         if (ramp && stride && stride->value == 1) {
             value = codegen_dense_vector_load(op);
-        } else if (ramp && stride && 2 <= stride->value && stride->value <= 4) {
-            // Try to rewrite strided loads as shuffles of dense loads,
-            // aligned to the stride. This makes adjacent strided loads
-            // share the same underlying dense loads.
-            Expr base = ramp->base;
-            // The variable align will track the alignment of the
-            // base. Every time we change base, we also need to update
-            // align.
-            ModulusRemainder align = op->alignment;
-
-            int aligned_stride = gcd(stride->value, align.modulus);
-            int offset = 0;
-            if (aligned_stride == stride->value) {
-                offset = mod_imp((int)align.remainder, aligned_stride);
-            } else {
-                const Add *add = base.as<Add>();
-                if (const IntImm *add_c = add ? add->b.as<IntImm>() : base.as<IntImm>()) {
-                    offset = mod_imp(add_c->value, stride->value);
-                }
-            }
-
-            if (offset) {
-                base = simplify(base - offset);
-                align.remainder = mod_imp(align.remainder - offset, align.modulus);
-            }
-
-            // We want to load a few more bytes than the original load did.
-            // We know this is safe for internal buffers because we allocate
-            // padding.
-            // (In ASAN mode, don't read beyond the end of internal buffers either,
-            // as ASAN will complain even about harmless stack overreads.)
-            // The min moves lower by offset.
-            int load_lanes = ramp->lanes * stride->value;
-            bool external = op->param.defined() || op->image.defined();
-            if (external || target.has_feature(Target::ASAN)) {
-                load_lanes -= (stride->value - 1 - offset);
-            }
-
-            int slice_lanes = native_vector_bits() / op->type.bits();
-
-            // We're going to add multiples of slice_lanes to base in
-            // the loop below, so reduce alignment modulo slice_lanes.
-            align.modulus = gcd(align.modulus, slice_lanes);
-            align.remainder = mod_imp(align.remainder, align.modulus);
-
-            // We need to slice the result in to native vector lanes, otherwise
-            // LLVM misses optimizations like using ldN on ARM.
-            vector<Value *> results;
-            for (int i = 0; i < op->type.lanes(); i += slice_lanes) {
-                int load_base_i = i * stride->value;
-                int load_lanes_i = std::min<int>(slice_lanes * stride->value, load_lanes - load_base_i);
-                int lanes_i = std::min<int>(slice_lanes, op->type.lanes() - i);
-                Expr slice_base = simplify(base + load_base_i);
-
-                Value *load_i = codegen_dense_vector_load(op->type.with_lanes(load_lanes_i), op->name, slice_base,
-                                                          op->image, op->param, align, nullptr, false);
-
-                std::vector<int> constants;
-                for (int j = 0; j < lanes_i; j++) {
-                    constants.push_back(j * stride->value + offset);
-                }
-                results.push_back(shuffle_vectors(load_i, constants));
-            }
-
-            // Concat the results
-            value = concat_vectors(results);
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Expr flipped_base = ramp->base - ramp->lanes + 1;
@@ -2250,8 +2244,7 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
         Halide::Type value_type = op->value.type();
         Value *val = codegen(op->value);
         int alignment = value_type.bytes();
-        int native_bits = native_vector_bits();
-        int native_bytes = native_bits / 8;
+        int native_bytes = native_vector_bits() / 8;
 
         // Boost the alignment if possible, up to the native vector width.
         ModulusRemainder mod_rem = op->alignment;
@@ -2274,7 +2267,7 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
         // For dense vector stores wider than the native vector
         // width, bust them up into native vectors.
         int store_lanes = value_type.lanes();
-        int native_lanes = native_bits / value_type.bits();
+        int native_lanes = maximum_vector_bits() / value_type.bits();
 
         for (int i = 0; i < store_lanes; i += native_lanes) {
             int slice_lanes = std::min(native_lanes, store_lanes - i);
@@ -2286,8 +2279,13 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
             Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
 
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-            Instruction *store =
-                builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
+            Instruction *store;
+            if (try_vector_predication_intrinsic("llvm.vp.store", void_t, slice_lanes, slice_mask,
+                                                 {VPArg(slice_val, 0), VPArg(vec_ptr, 1, alignment)})) {
+                store = dyn_cast<Instruction>(value);
+            } else {
+                store = builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
+            }
             add_tbaa_metadata(store, op->name, slice_index);
         }
     } else {  // It's not dense vector store, we need to scalarize it
@@ -2331,9 +2329,9 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
     }
 }
 
-llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std::string &name, const Expr &base,
-                                                     const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
-                                                     llvm::Value *vpred, bool slice_to_native) {
+llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
+                                               const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
+                                               llvm::Value *vpred, bool slice_to_native, llvm::Value *stride) {
     debug(4) << "Vectorize predicated dense vector load:\n\t"
              << "(" << type << ")" << name << "[ramp(base, 1, " << type.lanes() << ")]\n";
 
@@ -2370,7 +2368,7 @@ llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std
     // For dense vector loads wider than the native vector
     // width, bust them up into native vectors
     int load_lanes = type.lanes();
-    int native_lanes = slice_to_native ? std::max(1, native_bits / type.bits()) : load_lanes;
+    int native_lanes = slice_to_native ? std::max(1, maximum_vector_bits() / type.bits()) : load_lanes;
     vector<Value *> slices;
     for (int i = 0; i < load_lanes; i += native_lanes) {
         int slice_lanes = std::min(native_lanes, load_lanes - i);
@@ -2381,12 +2379,37 @@ llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std
         Value *elt_ptr = codegen_buffer_pointer(name, type.element_of(), slice_base);
         Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
 
-        Instruction *load_inst;
-        if (vpred != nullptr) {
-            Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-            load_inst = builder->CreateMaskedLoad(slice_type, vec_ptr, llvm::Align(align_bytes), slice_mask);
+        Value *slice_mask = (vpred != nullptr) ? slice_vector(vpred, i, slice_lanes) : nullptr;
+        MaskVariant vp_slice_mask = slice_mask ? MaskVariant(slice_mask) : AllEnabledMask();
+
+        Instruction *load_inst = nullptr;
+        // In this path, strided predicated loads are only handled if vector
+        // predication is enabled. Otherwise this would be scalarized at a higher
+        // level. Assume that if stride is passed, this is not dense, though
+        // LLVM should codegen the same thing for a constant 1 strided load as
+        // for a non-strided load.
+        if (stride) {
+            if (get_target().bits == 64 && !stride->getType()->isIntegerTy(64)) {
+                stride = builder->CreateIntCast(stride, i64_t, true);
+            }
+            if (try_vector_predication_intrinsic("llvm.experimental.vp.strided.load", VPResultType(slice_type, 0),
+                                                 slice_lanes, vp_slice_mask,
+                                                 {VPArg(vec_ptr, 1, align_bytes), VPArg(stride, 1)})) {
+                load_inst = dyn_cast<Instruction>(value);
+            } else {
+                internal_error << "Vector predicated strided load should not be requested if not supported.\n";
+            }
         } else {
-            load_inst = builder->CreateAlignedLoad(slice_type, vec_ptr, llvm::Align(align_bytes));
+            if (try_vector_predication_intrinsic("llvm.vp.load", VPResultType(slice_type, 0), slice_lanes, vp_slice_mask,
+                                                 {VPArg(vec_ptr, 1, align_bytes)})) {
+                load_inst = dyn_cast<Instruction>(value);
+            } else {
+                if (slice_mask != nullptr) {
+                    load_inst = builder->CreateMaskedLoad(slice_type, vec_ptr, llvm::Align(align_bytes), slice_mask);
+                } else {
+                    load_inst = builder->CreateAlignedLoad(slice_type, vec_ptr, llvm::Align(align_bytes));
+                }
+            }
         }
         add_tbaa_metadata(load_inst, name, slice_index);
         slices.push_back(load_inst);
@@ -2399,8 +2422,8 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred, b
     const Ramp *ramp = load->index.as<Ramp>();
     internal_assert(ramp && is_const_one(ramp->stride)) << "Should be dense vector load\n";
 
-    return codegen_dense_vector_load(load->type, load->name, ramp->base, load->image, load->param,
-                                     load->alignment, vpred, slice_to_native);
+    return codegen_vector_load(load->type, load->name, ramp->base, load->image, load->param,
+                               load->alignment, vpred, slice_to_native, nullptr);
 }
 
 void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
@@ -2410,6 +2433,11 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
     if (ramp && is_const_one(ramp->stride)) {  // Dense vector load
         Value *vpred = codegen(op->predicate);
         value = codegen_dense_vector_load(op, vpred);
+    } else if (use_llvm_vp_intrinsics && stride) {  // Case only handled by vector predication, otherwise must scalarize.
+        Value *vpred = codegen(op->predicate);
+        Value *llvm_stride = codegen(stride);  // Not 1 (dense) as that was caught above.
+        value = codegen_vector_load(op->type, op->name, ramp->base, op->image, op->param,
+                                    op->alignment, vpred, true, llvm_stride);
     } else if (ramp && stride && stride->value == -1) {
         debug(4) << "Predicated dense vector load with stride -1\n\t" << Expr(op) << "\n";
         vector<int> indices(ramp->lanes);
@@ -2679,27 +2707,42 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
-        value = builder->CreateAnd(a, b);
+        if (!try_vector_predication_intrinsic("llvm.vp.and", llvm_type_of(op->type), op->type.lanes(),
+                                              AllEnabledMask(), {VPArg(a, 0), VPArg(b)})) {
+            value = builder->CreateAnd(a, b);
+        }
     } else if (op->is_intrinsic(Call::bitwise_xor)) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
-        value = builder->CreateXor(a, b);
+        if (!try_vector_predication_intrinsic("llvm.vp.xor", llvm_type_of(op->type), op->type.lanes(),
+                                              AllEnabledMask(), {VPArg(a, 0), VPArg(b)})) {
+            value = builder->CreateXor(a, b);
+        }
     } else if (op->is_intrinsic(Call::bitwise_or)) {
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
-        value = builder->CreateOr(a, b);
+        if (!try_vector_predication_intrinsic("llvm.vp.or", llvm_type_of(op->type), op->type.lanes(),
+                                              AllEnabledMask(), {VPArg(a, 0), VPArg(b)})) {
+            value = builder->CreateOr(a, b);
+        }
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         internal_assert(op->args.size() == 1);
         Value *a = codegen(op->args[0]);
-        value = builder->CreateNot(a);
+        if (!try_vector_predication_intrinsic("llvm.vp.not", llvm_type_of(op->type), op->type.lanes(),
+                                              AllEnabledMask(), {VPArg(a, 0)})) {
+            value = builder->CreateNot(a);
+        }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
         if (op->args[1].type().is_uint()) {
             Value *a = codegen(op->args[0]);
             Value *b = codegen(op->args[1]);
-            value = builder->CreateShl(a, b);
+            if (!try_vector_predication_intrinsic("llvm.vp.shl", llvm_type_of(op->type), op->type.lanes(),
+                                                  AllEnabledMask(), {VPArg(a, 0), VPArg(b)})) {
+                value = builder->CreateShl(a, b);
+            }
         } else {
             value = codegen(lower_signed_shift_left(op->args[0], op->args[1]));
         }
@@ -2709,9 +2752,15 @@ void CodeGen_LLVM::visit(const Call *op) {
             Value *a = codegen(op->args[0]);
             Value *b = codegen(op->args[1]);
             if (op->type.is_int()) {
-                value = builder->CreateAShr(a, b);
+                if (!try_vector_predication_intrinsic("llvm.vp.ashr", llvm_type_of(op->type), op->type.lanes(),
+                                                      AllEnabledMask(), {VPArg(a, 0), VPArg(b)})) {
+                    value = builder->CreateAShr(a, b);
+                }
             } else {
-                value = builder->CreateLShr(a, b);
+                if (!try_vector_predication_intrinsic("llvm.vp.lshr", llvm_type_of(op->type), op->type.lanes(),
+                                                      AllEnabledMask(), {VPArg(a, 0), VPArg(b)})) {
+                    value = builder->CreateLShr(a, b);
+                }
             }
         } else {
             value = codegen(lower_signed_shift_right(op->args[0], op->args[1]));
@@ -2834,6 +2883,8 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             value = phi;
         }
+    } else if (op->is_intrinsic(Call::round)) {
+        value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
     } else if (op->is_intrinsic(Call::require)) {
         internal_assert(op->args.size() == 3);
         Expr cond = op->args[0];
@@ -3649,7 +3700,7 @@ void CodeGen_LLVM::visit(const For *op) {
     Value *extent = codegen(op->extent);
     const Acquire *acquire = op->body.as<Acquire>();
 
-    // TODO(zalman): remove this after validating it doesn't happen
+    // TODO(zvookin): remove this after validating it doesn't happen
     internal_assert(!(op->for_type == ForType::Parallel ||
                       (op->for_type == ForType::Serial &&
                        acquire &&
@@ -3760,7 +3811,11 @@ void CodeGen_LLVM::visit(const Store *op) {
     } else {
         int alignment = value_type.bytes();
         const Ramp *ramp = op->index.as<Ramp>();
-        if (ramp && is_const_one(ramp->stride)) {
+        // TODO(zvookin): consider splitting out vector predication path. Current
+        // code shows how vector predication would simplify things as the
+        // following scalarization cases would go away.
+        bool is_dense = ramp && is_const_one(ramp->stride);
+        if (use_llvm_vp_intrinsics || is_dense) {
 
             int native_bits = native_vector_bits();
             int native_bytes = native_bits / 8;
@@ -3786,18 +3841,44 @@ void CodeGen_LLVM::visit(const Store *op) {
             // For dense vector stores wider than the native vector
             // width, bust them up into native vectors.
             int store_lanes = value_type.lanes();
-            int native_lanes = native_bits / value_type.bits();
+            int native_lanes = maximum_vector_bits() / value_type.bits();
+
+            Expr base = (ramp != nullptr) ? ramp->base : 0;
+            Expr stride = (ramp != nullptr) ? ramp->stride : 0;
+            Value *stride_val = (!is_dense && ramp != nullptr) ? codegen(stride) : nullptr;
+            Value *index = (ramp == nullptr) ? codegen(op->index) : nullptr;
 
             for (int i = 0; i < store_lanes; i += native_lanes) {
                 int slice_lanes = std::min(native_lanes, store_lanes - i);
-                Expr slice_base = simplify(ramp->base + i);
+                Expr slice_base = simplify(base + i * stride);
                 Expr slice_stride = make_one(slice_base.type());
                 Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
                 Value *slice_val = slice_vector(val, i, slice_lanes);
                 Value *elt_ptr = codegen_buffer_pointer(op->name, value_type.element_of(), slice_base);
                 Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
-                StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, llvm::Align(alignment));
-                annotate_store(store, slice_index);
+                if (is_dense || slice_lanes == 1) {
+                    if (try_vector_predication_intrinsic("llvm.vp.store", void_t, slice_lanes, AllEnabledMask(),
+                                                         {VPArg(slice_val, 0), VPArg(vec_ptr, 1, alignment)})) {
+                        add_tbaa_metadata(dyn_cast<Instruction>(value), op->name, slice_index);
+                    } else {
+                        StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, llvm::Align(alignment));
+                        annotate_store(store, slice_index);
+                    }
+                } else if (ramp != nullptr) {
+                    if (get_target().bits == 64 && !stride_val->getType()->isIntegerTy(64)) {
+                        stride_val = builder->CreateIntCast(stride_val, i64_t, true);
+                    }
+                    bool generated = try_vector_predication_intrinsic("llvm.experimental.vp.strided.store", void_t, slice_lanes, AllEnabledMask(),
+                                                                      {VPArg(slice_val, 0), VPArg(vec_ptr, 1, alignment), VPArg(stride_val, 2)});
+                    internal_assert(generated) << "Using vector predicated intrinsics, but code generation was not successful for strided store.\n";
+                    add_tbaa_metadata(dyn_cast<Instruction>(value), op->name, slice_index);
+                } else {
+                    Value *slice_index = slice_vector(index, i, slice_lanes);
+                    Value *vec_ptrs = codegen_buffer_pointer(op->name, value_type, slice_index);
+                    bool generated = try_vector_predication_intrinsic("llvm.vp.scatter", void_t, slice_lanes, AllEnabledMask(),
+                                                                      {VPArg(slice_val, 0), VPArg(vec_ptrs, 1, alignment)});
+                    internal_assert(generated) << "Using vector predicated intrinsics, but code generation was not successful for gathering store.\n";
+                }
             }
         } else if (ramp) {
             Type ptr_type = value_type.element_of();
@@ -4581,7 +4662,7 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
 
 Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes,
                                  const string &name, vector<Value *> arg_values,
-                                 bool scalable_vector_result) {
+                                 bool scalable_vector_result, bool is_reduction) {
     llvm::Function *fn = module->getFunction(name);
     if (!fn) {
         vector<llvm::Type *> arg_types(arg_values.size());
@@ -4590,7 +4671,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
         }
 
         llvm::Type *intrinsic_result_type = result_type->getScalarType();
-        if (intrin_lanes > 1) {
+        if (intrin_lanes > 1 && !is_reduction) {
             if (scalable_vector_result && effective_vscale != 0) {
                 intrinsic_result_type = get_vector_type(result_type->getScalarType(),
                                                         intrin_lanes / effective_vscale, VectorTypeConstraint::VScale);
@@ -4604,18 +4685,21 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
         fn->setCallingConv(CallingConv::C);
     }
 
-    return call_intrin(result_type, intrin_lanes, fn, arg_values);
+    return call_intrin(result_type, intrin_lanes, fn, arg_values, is_reduction);
 }
 
 Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes,
-                                 llvm::Function *intrin, vector<Value *> arg_values) {
+                                 llvm::Function *intrin, vector<Value *> arg_values,
+                                 bool is_reduction) {
     internal_assert(intrin);
     int arg_lanes = 1;
-    if (result_type->isVectorTy()) {
+    if (result_type->isVoidTy()) {
+        arg_lanes = intrin_lanes;
+    } else if (result_type->isVectorTy()) {
         arg_lanes = get_vector_num_elements(result_type);
     }
 
-    if (intrin_lanes != arg_lanes) {
+    if (!is_reduction && intrin_lanes != arg_lanes) {
         // Cut up each arg into appropriately-sized pieces, call the
         // intrinsic on each, then splice together the results.
         vector<Value *> results;
@@ -4996,6 +5080,10 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
                                           VectorTypeConstraint type_constraint) const {
     bool scalable;
 
+    if (t->isVoidTy()) {
+        return t;
+    }
+
     switch (type_constraint) {
     case VectorTypeConstraint::None:
         scalable = effective_vscale != 0 &&
@@ -5037,6 +5125,133 @@ llvm::Constant *CodeGen_LLVM::get_splat(int lanes, llvm::Constant *value,
     llvm::ElementCount ec = scalable ? llvm::ElementCount::getScalable(lanes) :
                                        llvm::ElementCount::getFixed(lanes);
     return ConstantVector::getSplat(ec, value);
+}
+
+std::string CodeGen_LLVM::mangle_llvm_type(llvm::Type *type) {
+    std::string type_string = ".";
+    llvm::ElementCount llvm_vector_ec;
+    if (isa<PointerType>(type)) {
+        const auto *vt = cast<llvm::PointerType>(type);
+        type_string = ".p" + std::to_string(vt->getAddressSpace());
+    } else if (isa<llvm::ScalableVectorType>(type)) {
+        const auto *vt = cast<llvm::ScalableVectorType>(type);
+        const char *type_designator = vt->getElementType()->isIntegerTy() ? "i" : "f";
+        std::string bits_designator = std::to_string(vt->getScalarSizeInBits());
+        llvm_vector_ec = vt->getElementCount();
+        type_string = ".nxv" + std::to_string(vt->getMinNumElements()) + type_designator + bits_designator;
+    } else if (isa<llvm::FixedVectorType>(type)) {
+        const auto *vt = cast<llvm::FixedVectorType>(type);
+        const char *type_designator = vt->getElementType()->isIntegerTy() ? "i" : "f";
+        std::string bits_designator = std::to_string(vt->getScalarSizeInBits());
+        llvm_vector_ec = vt->getElementCount();
+        type_string = ".v" + std::to_string(vt->getNumElements()) + type_designator + bits_designator;
+    } else if (type->isIntegerTy()) {
+        type_string = ".i" + std::to_string(type->getScalarSizeInBits());
+    } else if (type->isFloatTy()) {
+        type_string = ".f" + std::to_string(type->getScalarSizeInBits());
+    } else {
+        std::string type_name;
+        llvm::raw_string_ostream type_name_stream(type_name);
+        type->print(type_name_stream, true);
+        internal_error << "Attempt to mangle unknown LLVM type " << type_name << "\n";
+    }
+    return type_string;
+}
+
+bool CodeGen_LLVM::try_vector_predication_intrinsic(const std::string &name, VPResultType result_type,
+                                                    int32_t length, MaskVariant mask, std::vector<VPArg> vp_args) {
+    if (!use_llvm_vp_intrinsics) {
+        return false;
+    }
+
+    llvm::Type *llvm_result_type = result_type.type;
+    bool any_scalable = isa<llvm::ScalableVectorType>(llvm_result_type);
+    bool any_fixed = isa<llvm::FixedVectorType>(llvm_result_type);
+    bool result_is_vector_type = any_scalable || any_fixed;
+    bool is_reduction = !any_scalable && !any_fixed;
+    llvm::Type *base_vector_type = nullptr;
+    for (const VPArg &arg : vp_args) {
+        llvm::Type *arg_type = arg.value->getType();
+        bool scalable = isa<llvm::ScalableVectorType>(arg_type);
+        bool fixed = isa<llvm::FixedVectorType>(arg_type);
+        if (base_vector_type == nullptr && (fixed || scalable)) {
+            base_vector_type = arg_type;
+        }
+        any_scalable |= scalable;
+        any_fixed |= fixed;
+    }
+    if (!any_fixed && !any_scalable) {
+        return false;
+    }
+    internal_assert(!(any_scalable && any_fixed)) << "Cannot combine fixed and scalable vectors to vector predication intrinsic.\n";
+    if (base_vector_type == nullptr && result_is_vector_type) {
+        base_vector_type = llvm_result_type;
+    }
+    bool is_scalable = any_scalable;
+
+    std::vector<llvm::Value *> args;
+    args.reserve(2 + vp_args.size());
+    std::vector<string> mangled_types(vp_args.size() + 1);
+
+    for (const VPArg &arg : vp_args) {
+        args.push_back(arg.value);
+        if (arg.mangle_index) {
+            llvm::Type *llvm_type = arg.value->getType();
+            mangled_types[arg.mangle_index.value()] = mangle_llvm_type(llvm_type);
+        }
+    }
+    if (result_type.mangle_index) {
+        mangled_types[result_type.mangle_index.value()] = mangle_llvm_type(llvm_result_type);
+    }
+
+    std::string full_name = name;
+    for (const std::string &mangle : mangled_types) {
+        full_name += mangle;
+    }
+
+    if (!std::holds_alternative<NoMask>(mask)) {
+        if (std::holds_alternative<AllEnabledMask>(mask)) {
+            internal_assert(base_vector_type != nullptr) << "Requested all enabled mask without any vector type to use for type/length.\n";
+            llvm::ElementCount llvm_vector_ec;
+            if (is_scalable) {
+                const auto *vt = cast<llvm::ScalableVectorType>(base_vector_type);
+                llvm_vector_ec = vt->getElementCount();
+            } else {
+                const auto *vt = cast<llvm::FixedVectorType>(base_vector_type);
+                llvm_vector_ec = vt->getElementCount();
+            }
+            args.push_back(ConstantVector::getSplat(llvm_vector_ec, ConstantInt::get(i1_t, 1)));
+        } else {
+            args.push_back(std::get<llvm::Value *>(mask));
+        }
+    }
+    args.push_back(ConstantInt::get(i32_t, length));
+
+    value = call_intrin(llvm_result_type, length, full_name, args, is_scalable, is_reduction);
+    llvm::CallInst *call = dyn_cast<llvm::CallInst>(value);
+    for (size_t i = 0; i < vp_args.size(); i++) {
+        if (vp_args[i].alignment != 0) {
+            call->addParamAttr(i, Attribute::getWithAlignment(*context, llvm::Align(vp_args[i].alignment)));
+        }
+    }
+    return true;
+}
+
+bool CodeGen_LLVM::try_vector_predication_comparison(const std::string &name, const Type &result_type,
+                                                     MaskVariant mask, llvm::Value *a, llvm::Value *b,
+                                                     const char *cmp_op) {
+    // Early out to prevent creating useless metadata.
+    if (!use_llvm_vp_intrinsics ||
+        result_type.is_scalar()) {
+        return false;
+    }
+
+    internal_assert(result_type.is_bool()) << "Vector predicated comparisons must return bool type.\n";
+
+    llvm::MDBuilder md_builder(*context);
+    llvm::Value *md_val = llvm::MetadataAsValue::get(*context, md_builder.createString(cmp_op));
+    return try_vector_predication_intrinsic(name, llvm_type_of(result_type), result_type.lanes(), mask,
+                                            {VPArg(a, 0), VPArg(b), VPArg(md_val)});
 }
 
 }  // namespace Internal

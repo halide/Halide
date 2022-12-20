@@ -522,11 +522,53 @@ bool add_would_overflow(int bits, int64_t a, int64_t b) {
             (b < 0 && a < min_val - b));   // (a + b) < min_val, rewritten to avoid overflow
 }
 
+bool add_with_overflow(int bits, int64_t a, int64_t b, int64_t *result) {
+#ifndef _MSC_VER
+    if (bits == 64) {
+        static_assert(sizeof(long long) == sizeof(int64_t));
+        bool flag = __builtin_saddll_overflow(a, b, (long long *)result);
+        if (flag) {
+            // Overflowed 64 bits
+            *result = 0;
+        }
+        return !flag;
+    }
+#endif
+    if (add_would_overflow(bits, a, b)) {
+        *result = 0;
+        return false;
+    } else {
+        *result = a + b;
+        return true;
+    }
+}
+
 bool sub_would_overflow(int bits, int64_t a, int64_t b) {
     int64_t max_val = 0x7fffffffffffffffLL >> (64 - bits);
     int64_t min_val = -max_val - 1;
     return ((b < 0 && a > max_val + b) ||  // (a - b) > max_val, rewritten to avoid overflow
             (b > 0 && a < min_val + b));   // (a - b) < min_val, rewritten to avoid overflow
+}
+
+bool sub_with_overflow(int bits, int64_t a, int64_t b, int64_t *result) {
+#ifndef _MSC_VER
+    if (bits == 64) {
+        static_assert(sizeof(long long) == sizeof(int64_t));
+        bool flag = __builtin_ssubll_overflow(a, b, (long long *)result);
+        if (flag) {
+            // Overflowed 64 bits
+            *result = 0;
+        }
+        return !flag;
+    }
+#endif
+    if (sub_would_overflow(bits, a, b)) {
+        *result = 0;
+        return false;
+    } else {
+        *result = a - b;
+        return true;
+    }
 }
 
 bool mul_would_overflow(int bits, int64_t a, int64_t b) {
@@ -545,6 +587,27 @@ bool mul_would_overflow(int bits, int64_t a, int64_t b) {
         // no 64-bit overflow occurs, and the third clause catches
         // 64-bit overflow.
         return ab < min_val || ab > max_val || (ab / a != b);
+    }
+}
+
+bool mul_with_overflow(int bits, int64_t a, int64_t b, int64_t *result) {
+#ifndef _MSC_VER
+    if (bits == 64) {
+        static_assert(sizeof(long long) == sizeof(int64_t));
+        bool flag = __builtin_smulll_overflow(a, b, (long long *)result);
+        if (flag) {
+            // Overflowed 64 bits
+            *result = 0;
+        }
+        return !flag;
+    }
+#endif
+    if (mul_would_overflow(bits, a, b)) {
+        *result = 0;
+        return false;
+    } else {
+        *result = a * b;
+        return true;
     }
 }
 
@@ -661,9 +724,19 @@ size_t get_compiler_stack_size() {
 
 namespace Internal {
 
-#ifdef HALIDE_INTERNAL_USING_ASAN
-// nothing
+#if defined(HALIDE_INTERNAL_USING_ASAN) || defined(__ANDROID__)
+// If we are compiling under ASAN,  we will get a zillion warnings about
+// ASAN not supporting makecontext/swapcontext and the possibility of
+// false positives.
+//
+// If we are building for Android, well, it apparently doesn't provide
+// makecontext() / swapcontext(), despite being posixy
+#define MAKECONTEXT_OK 0
 #else
+#define MAKECONTEXT_OK 1
+#endif
+
+#if MAKECONTEXT_OK
 namespace {
 // We can't reliably pass arguments through makecontext, because
 // the calling convention involves an invalid function pointer
@@ -722,10 +795,7 @@ void run_with_large_stack(const std::function<void()> &action) {
 #else
     // On posixy systems we have makecontext / swapcontext
 
-#ifdef HALIDE_INTERNAL_USING_ASAN
-    // ... unless we are compiling under ASAN, in which case we
-    // will get a zillion warnings about ASAN not supporting makecontext/swapcontext
-    // and the possibility of false positives. Just skip the extra stack space, I guess?
+#if !MAKECONTEXT_OK
     action();
     return;
 #else

@@ -258,7 +258,7 @@ public:
         }
 
         if (interpreter_ != nullptr) {
-            TF_LITE_KERNEL_LOG(context, "Init must not be called twice.");
+            context->ReportError(context, "Init must not be called twice.");
             return kTfLiteDelegateError;
         }
 
@@ -332,13 +332,13 @@ public:
                 #undef KNOWN_OP
 
             default:
-                TF_LITE_KERNEL_LOG(context, "Op not supported: %d", op_type);
+                context->ReportError(context, "Op not supported: %d", op_type);
                 return kTfLiteDelegateError;
             }
             // clang-format on
 
             if (op == nullptr) {
-                TF_LITE_KERNEL_LOG(context, "Op factory returned null: %s", op_type);
+                context->ReportError(context, "Op factory returned null: %s", op_type);
                 return kTfLiteDelegateError;
             }
             ops.push_back(std::move(op));
@@ -359,7 +359,7 @@ public:
         assert(model_ != nullptr);
 
         if (interpreter_ != nullptr) {
-            TF_LITE_KERNEL_LOG(context, "Calling Prepare() multiple times");
+            context->ReportError(context, "Calling Prepare() multiple times");
             return kTfLiteDelegateError;
         }
 
@@ -389,7 +389,7 @@ public:
         options.verbosity = options_.verbosity;
         interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_), std::move(options)));
         if (!interpreter_->prepare()) {
-            TF_LITE_KERNEL_LOG(context, "hannk::Interpreter::prepare() failed");
+            context->ReportError(context, "hannk::Interpreter::prepare() failed");
             return kTfLiteDelegateError;
         }
 
@@ -418,7 +418,7 @@ public:
         }
 
         if (interpreter_ == nullptr) {
-            TF_LITE_KERNEL_LOG(context, "interpreter_ is not built in Eval");
+            context->ReportError(context, "interpreter_ is not built in Eval");
             return kTfLiteDelegateError;
         }
 
@@ -471,7 +471,7 @@ public:
                 // (Note that ResizeTensor takes ownership of new_size, even if an error is returned.)
                 auto status = context->ResizeTensor(context, &tensor, new_size);
                 if (status != kTfLiteOk) {
-                    TF_LITE_KERNEL_LOG(context, "ResizeTensor() failed:", status);
+                    context->ReportError(context, "ResizeTensor() failed:", status);
                     return status;
                 }
                 auto buf = t->buffer();

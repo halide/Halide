@@ -51,7 +51,7 @@ bool can_convert(const LoweredArgument *arg) {
     if (arg->type.is_vector()) {
         return false;
     }
-    if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64) {
+    if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64 && arg->type.bits() != 16) {
         return false;
     }
     if ((arg->type.is_int() || arg->type.is_uint()) &&
@@ -77,6 +77,8 @@ std::pair<string, string> print_type(const LoweredArgument *arg) {
         return std::make_pair("f", "float");
     } else if (arg->type.is_float() && arg->type.bits() == 64) {
         return std::make_pair("d", "double");
+        // } else if (arg->type.is_float() && arg->type.bits() == 16) {
+        //     TODO: can't pass scalar float16 type
     } else if (arg->type.bits() == 1) {
         // "b" expects an unsigned char, so we assume that bool == uint8.
         return std::make_pair("b", "bool");
@@ -101,12 +103,6 @@ namespace Halide::PythonExtensions {
       HALIDE_PYTHON_EXTENSION_FUNCTIONS
 #undef X
 }  // namespace Halide::PythonExtensions
-
-#ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
-namespace Halide::PythonRuntime {
-      thread_local std::string current_error;
-}  // namespace Halide::PythonRuntime
-#endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
 
 namespace {
 
@@ -136,17 +132,19 @@ PyModuleDef _moduledef = {
 
 #ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
 void _module_halide_error(void *user_context, const char *msg) {
-    using Halide::PythonRuntime::current_error;
-    if (current_error.empty()) {
-        // fprintf(stderr, "Setting current_error=(%s)\n", msg);
-        current_error = msg;
-    } else {
-        // fprintf(stderr, "Warning: error (%s) ignored because current_error=(%s)\n", msg, current_error.c_str());
-    }
+    // Most Python code probably doesn't want to log the error text to stderr,
+    // so we won't do that by default.
+    #ifdef HALIDE_PYTHON_EXTENSION_LOG_ERRORS_TO_STDERR
+    PyGILState_STATE s = PyGILState_Ensure();
+    PySys_FormatStderr("%s\n", msg);
+    PyGILState_Release(s);
+    #endif
 }
 
 void _module_halide_print(void *user_context, const char *msg) {
+    PyGILState_STATE s = PyGILState_Ensure();
     PySys_FormatStdout("%s", msg);
+    PyGILState_Release(s);
 }
 #endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
 
@@ -225,8 +223,8 @@ bool unpack_buffer(PyObject *py_obj,
         while (strchr("@<>!=", *p)) {
             p++;  // ignore little/bit endian (and alignment)
         }
-        if (*p == 'f' || *p == 'd') {
-            // 'f' and 'd' are float and double, respectively.
+        if (*p == 'f' || *p == 'd' || *p == 'e') {
+            // 'f', 'd', and 'e' are float, double, and half, respectively.
             halide_buf.type.code = halide_type_float;
         } else if (*p >= 'a' && *p <= 'z') {
             // lowercase is signed int.
@@ -235,7 +233,7 @@ bool unpack_buffer(PyObject *py_obj,
             // uppercase is unsigned int.
             halide_buf.type.code = halide_type_uint;
         }
-        const char *type_codes = "bBhHiIlLqQfd";  // integers and floats
+        const char *type_codes = "bBhHiIlLqQfde";  // integers and floats
         if (*p == '?') {
             // Special-case bool, so that it is a distinct type vs uint8_t
             // (even though the memory layout is identical)
@@ -388,14 +386,6 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     Indentation indent;
     indent.indent = 0;
 
-    dest << R"INLINE_CODE(
-#ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
-namespace Halide::PythonRuntime {
-extern thread_local std::string current_error;
-}  // namespace Halide::PythonRuntime
-#endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
-)INLINE_CODE";
-
     dest << "namespace Halide::PythonExtensions {\n";
     dest << "\n";
     dest << "namespace {\n";
@@ -502,9 +492,7 @@ extern thread_local std::string current_error;
     dest << indent << "if (result != 0) {\n";
     indent.indent += 2;
     dest << indent << "#ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS\n";
-    dest << indent << "std::string take;\n";
-    dest << indent << "std::swap(take, Halide::PythonRuntime::current_error);\n";
-    dest << indent << "PyErr_Format(PyExc_RuntimeError, \"Halide Runtime Error: %d (%s)\", result, take.c_str());\n";
+    dest << indent << "PyErr_Format(PyExc_RuntimeError, \"Halide Runtime Error: %d\", result);\n";
     dest << indent << "#else\n";
     dest << indent << "PyErr_Format(PyExc_ValueError, \"Halide error %d\", result);\n";
     dest << indent << "#endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS\n";

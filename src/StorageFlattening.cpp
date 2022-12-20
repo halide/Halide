@@ -446,7 +446,7 @@ class PromoteToMemoryType : public IRMutator {
         if (t != op->type) {
             return Allocate::make(op->name, t, op->memory_type, mutate(op->extents),
                                   mutate(op->condition), mutate(op->body),
-                                  mutate(op->new_expr), op->free_function);
+                                  mutate(op->new_expr), op->free_function, op->padding);
         } else {
             return IRMutator::visit(op);
         }

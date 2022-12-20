@@ -41,9 +41,6 @@ void define_pipeline(py::module &m) {
     // - set_custom_trace()
     // - set_custom_print()
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-// nothing
-#else
     py::class_<AutoschedulerParams>(m, "AutoschedulerParams")
         .def(py::init<>())
         .def(py::init<std::string>(), py::arg("name"))
@@ -65,7 +62,6 @@ void define_pipeline(py::module &m) {
         .def("__repr__", [](const AutoSchedulerResults &o) -> std::string {
             return "<halide.AutoschedulerParams>";
         });
-#endif
 
     auto pipeline_class =
         py::class_<Pipeline>(m, "Pipeline")
@@ -75,18 +71,8 @@ void define_pipeline(py::module &m) {
 
             .def("outputs", &Pipeline::outputs)
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const std::string &, const Target &, const MachineParams &) const) & Pipeline::auto_schedule,
-                 py::arg("autoscheduler_name"), py::arg("target"), py::arg("machine_params") = MachineParams::generic())
-            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const Target &, const MachineParams &) const) & Pipeline::auto_schedule,
-                 py::arg("target"), py::arg("machine_params") = MachineParams::generic())
-
-            .def_static("set_default_autoscheduler_name", &Pipeline::set_default_autoscheduler_name,
-                        py::arg("autoscheduler_name"))
-#else
             .def("apply_autoscheduler", (AutoSchedulerResults(Pipeline::*)(const Target &, const AutoschedulerParams &) const) & Pipeline::apply_autoscheduler,
                  py::arg("target"), py::arg("autoscheduler_params"))
-#endif
             .def("get_func", &Pipeline::get_func,
                  py::arg("index"))
             .def("print_loop_nest", &Pipeline::print_loop_nest)
@@ -195,6 +181,13 @@ void define_pipeline(py::module &m) {
 
             .def("defined", &Pipeline::defined)
             .def("invalidate_cache", &Pipeline::invalidate_cache)
+
+            .def(
+                "add_requirement", [](Pipeline &p, const Expr &condition, const py::args &error_args) -> void {
+                    auto v = collect_print_args(error_args);
+                    p.add_requirement(condition, v);
+                },
+                py::arg("condition"))
 
             .def("__repr__", [](const Pipeline &p) -> std::string {
                 std::ostringstream o;

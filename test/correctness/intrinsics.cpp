@@ -39,16 +39,18 @@ void check(Expr test, Expr expected) {
 
 template<typename T>
 int64_t mul_shift_right(int64_t a, int64_t b, int q) {
-    const int64_t min_t = std::numeric_limits<T>::min();
-    const int64_t max_t = std::numeric_limits<T>::max();
-    return std::min<int64_t>(std::max<int64_t>((a * b) >> q, min_t), max_t);
+    constexpr int64_t min_t = std::numeric_limits<T>::min();
+    constexpr int64_t max_t = std::numeric_limits<T>::max();
+    using W = std::conditional_t<min_t == 0, uint64_t, int64_t>;
+    return std::min<int64_t>(std::max<int64_t>((W(a) * W(b)) >> q, min_t), max_t);
 }
 
 template<typename T>
 int64_t rounding_mul_shift_right(int64_t a, int64_t b, int q) {
     const int64_t min_t = std::numeric_limits<T>::min();
     const int64_t max_t = std::numeric_limits<T>::max();
-    return std::min<int64_t>(std::max<int64_t>((a * b + (1ll << (q - 1))) >> q, min_t), max_t);
+    using W = std::conditional_t<min_t == 0, uint64_t, int64_t>;
+    return std::min<int64_t>(std::max<int64_t>((W(a) * W(b) + (W(1) << (q - 1))) >> q, min_t), max_t);
 }
 
 template<typename T>
