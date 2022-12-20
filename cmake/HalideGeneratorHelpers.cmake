@@ -188,6 +188,7 @@ function(add_halide_library TARGET)
         BITCODE
         COMPILER_LOG
         FEATURIZATION
+        FUNCTION_INFO_HEADER
         LLVM_ASSEMBLY
         PYTHON_EXTENSION
         PYTORCH_WRAPPER
@@ -201,6 +202,7 @@ function(add_halide_library TARGET)
     set(BITCODE_extension ".bc")
     set(COMPILER_LOG_extension ".halide_compiler_log")
     set(FEATURIZATION_extension ".featurization")
+    set(FUNCTION_INFO_HEADER_extension ".function_info.h")
     set(LLVM_ASSEMBLY_extension ".ll")
     set(PYTHON_EXTENSION_extension ".py.cpp")
     set(PYTORCH_WRAPPER_extension ".pytorch.h")

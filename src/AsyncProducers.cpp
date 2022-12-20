@@ -80,7 +80,7 @@ protected:
         } else {
             return Allocate::make(op->name, op->type, op->memory_type,
                                   op->extents, op->condition, body,
-                                  op->new_expr, op->free_function);
+                                  op->new_expr, op->free_function, op->padding);
         }
     }
 

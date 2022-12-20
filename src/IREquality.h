@@ -116,6 +116,12 @@ bool graph_equal(const Expr &a, const Expr &b);
 bool graph_equal(const Stmt &a, const Stmt &b);
 // @}
 
+/** Order unsanitized IRNodes for use in a map key */
+// @{
+bool graph_less_than(const Expr &a, const Expr &b);
+bool graph_less_than(const Stmt &a, const Stmt &b);
+// @}
+
 void ir_equality_test();
 
 }  // namespace Internal

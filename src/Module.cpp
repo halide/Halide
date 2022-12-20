@@ -39,6 +39,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::compiler_log, {"compiler_log", ".halide_compiler_log", IsSingle}},
         {OutputFileType::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
         {OutputFileType::featurization, {"featurization", ".featurization", IsMulti}},
+        {OutputFileType::function_info_header, {"function_info_header", ".function_info.h", IsSingle}},
         {OutputFileType::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
         {OutputFileType::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
         {OutputFileType::python_extension, {"python_extension", ".py.cpp", IsSingle}},
@@ -358,10 +359,11 @@ LoweredFunc::LoweredFunc(const std::string &name,
 
 using namespace Halide::Internal;
 
-Module::Module(const std::string &name, const Target &target)
+Module::Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map)
     : contents(new Internal::ModuleContents) {
     contents->name = name;
     contents->target = target;
+    contents->metadata_name_map = metadata_name_map;
 }
 
 void Module::set_auto_scheduler_results(const AutoSchedulerResults &auto_scheduler_results) {
@@ -598,6 +600,15 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
         }
     }
+    if (contains(output_files, OutputFileType::function_info_header)) {
+        debug(1) << "Module.compile(): function_info_header " << output_files.at(OutputFileType::function_info_header) << "\n";
+        std::ofstream file(output_files.at(OutputFileType::function_info_header));
+        Internal::CodeGen_C cg(file,
+                               target(),
+                               Internal::CodeGen_C::CPlusPlusFunctionInfoHeader,
+                               output_files.at(OutputFileType::function_info_header));
+        cg.compile(*this);
+    }
     if (contains(output_files, OutputFileType::c_header)) {
         debug(1) << "Module.compile(): c_header " << output_files.at(OutputFileType::c_header) << "\n";
         std::ofstream file(output_files.at(OutputFileType::c_header));
@@ -798,6 +809,7 @@ void compile_multitarget(const std::string &fn_name,
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
+    MetadataNameMap metadata_name_map;
 
     for (size_t i = 0; i < targets.size(); ++i) {
         const Target &target = targets[i];
@@ -849,6 +861,7 @@ void compile_multitarget(const std::string &fn_name,
             sub_out.erase(OutputFileType::registration);
             sub_out.erase(OutputFileType::schedule);
             sub_out.erase(OutputFileType::c_header);
+            sub_out.erase(OutputFileType::function_info_header);
             if (contains(sub_out, OutputFileType::compiler_log)) {
                 sub_out[OutputFileType::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(OutputFileType::compiler_log), suffix, target);
             }
@@ -856,6 +869,9 @@ void compile_multitarget(const std::string &fn_name,
             sub_module.compile(sub_out);
             const auto *r = sub_module.get_auto_scheduler_results();
             auto_scheduler_results.push_back(r ? *r : AutoSchedulerResults());
+            if (target == base_target) {
+                metadata_name_map = sub_module.get_metadata_name_map();
+            }
         }
 
         uint64_t cur_target_features[kFeaturesWordCount] = {0};
@@ -930,7 +946,7 @@ void compile_multitarget(const std::string &fn_name,
                                     .with_feature(Target::NoBoundsQuery)
                                     .without_feature(Target::NoAsserts);
 
-        Module wrapper_module(fn_name, wrapper_target);
+        Module wrapper_module(fn_name, wrapper_target, metadata_name_map);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
         std::string wrapper_path = contains(output_files, OutputFileType::static_library) ?
@@ -947,6 +963,14 @@ void compile_multitarget(const std::string &fn_name,
         header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
         std::map<OutputFileType, std::string> header_out = {{OutputFileType::c_header, output_files.at(OutputFileType::c_header)}};
         debug(1) << "compile_multitarget: c_header " << header_out.at(OutputFileType::c_header) << "\n";
+        header_module.compile(header_out);
+    }
+
+    if (contains(output_files, OutputFileType::function_info_header)) {
+        Module header_module(fn_name, base_target);
+        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
+        std::map<OutputFileType, std::string> header_out = {{OutputFileType::function_info_header, output_files.at(OutputFileType::function_info_header)}};
+        debug(1) << "compile_multitarget: function_info_header " << header_out.at(OutputFileType::function_info_header) << "\n";
         header_module.compile(header_out);
     }
 

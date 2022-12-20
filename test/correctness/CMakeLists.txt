@@ -268,6 +268,7 @@ tests(GROUPS correctness
       simd_op_check_arm.cpp
       simd_op_check_hvx.cpp
       simd_op_check_powerpc.cpp
+      simd_op_check_riscv.cpp
       simd_op_check_wasm.cpp
       simd_op_check_x86.cpp
       simplified_away_embedded_image.cpp
@@ -287,6 +288,7 @@ tests(GROUPS correctness
       split_reuse_inner_name_bug.cpp
       split_store_compute.cpp
       stack_allocations.cpp
+      stage_strided_loads.cpp
       stencil_chain_in_update_definitions.cpp
       stmt_to_html.cpp
       storage_folding.cpp

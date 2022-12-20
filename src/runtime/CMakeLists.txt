@@ -52,6 +52,7 @@ set(RUNTIME_CPP
     osx_host_cpu_count
     osx_opengl_context
     osx_yield
+    posix_aligned_alloc
     posix_allocator
     posix_clock
     posix_error_handler
@@ -82,8 +83,8 @@ set(RUNTIME_CPP
     webgpu
     windows_clock
     windows_cuda
-    windows_d3d12compute_x86
     windows_d3d12compute_arm
+    windows_d3d12compute_x86
     windows_get_symbol
     windows_io
     windows_opencl

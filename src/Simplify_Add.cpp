@@ -9,21 +9,12 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
     Expr b = mutate(op->b, &b_bounds);
 
     if (bounds && no_overflow_int(op->type)) {
-        bounds->min_defined = a_bounds.min_defined && b_bounds.min_defined;
-        bounds->max_defined = a_bounds.max_defined && b_bounds.max_defined;
-        if (add_would_overflow(64, a_bounds.min, b_bounds.min)) {
-            bounds->min_defined = false;
-            bounds->min = 0;
-        } else {
-            bounds->min = a_bounds.min + b_bounds.min;
-        }
-        if (add_would_overflow(64, a_bounds.max, b_bounds.max)) {
-            bounds->max_defined = false;
-            bounds->max = 0;
-        } else {
-            bounds->max = a_bounds.max + b_bounds.max;
-        }
-
+        bounds->min_defined = a_bounds.min_defined &&
+                              b_bounds.min_defined &&
+                              add_with_overflow(64, a_bounds.min, b_bounds.min, &(bounds->min));
+        bounds->max_defined = a_bounds.max_defined &&
+                              b_bounds.max_defined &&
+                              add_with_overflow(64, a_bounds.max, b_bounds.max, &(bounds->max));
         bounds->alignment = a_bounds.alignment + b_bounds.alignment;
         bounds->trim_bounds_using_alignment();
     }

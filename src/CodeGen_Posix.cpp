@@ -74,22 +74,15 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     return codegen(total_size);
 }
 
-int CodeGen_Posix::allocation_padding(Type type) const {
-    // We potentially load 3 scalar values past the end of the
-    // buffer, so pad the allocation with an extra instance of the
-    // scalar type.
-    return 3 * type.bytes();
-}
-
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, MemoryType memory_type,
                                                            const std::vector<Expr> &extents, const Expr &condition,
-                                                           const Expr &new_expr, std::string free_function) {
+                                                           const Expr &new_expr, std::string free_function, int padding) {
     Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
     int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);
     if (constant_bytes > 0) {
         constant_bytes *= type.bytes();
-        stack_bytes = constant_bytes;
+        stack_bytes = constant_bytes + padding * type.bytes();
 
         if (stack_bytes > target.maximum_buffer_size()) {
             const string str_max_size = target.has_large_buffers() ? "2^63 - 1" : "2^31 - 1";
@@ -117,8 +110,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         // Add the requested padding to the allocation size. If the
         // allocation is on the stack, we can just read past the top
         // of the stack, so we only need this for heap allocations.
-        Value *padding = ConstantInt::get(llvm_size->getType(), allocation_padding(type));
-        llvm_size = builder->CreateAdd(llvm_size, padding);
+        Value *padding_bytes = ConstantInt::get(llvm_size->getType(), padding * type.bytes());
+        llvm_size = builder->CreateAdd(llvm_size, padding_bytes);
         llvm_size = builder->CreateSelect(llvm_condition,
                                           llvm_size,
                                           ConstantInt::get(llvm_size->getType(), 0));
@@ -364,7 +357,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
 
     Allocation allocation = create_allocation(alloc->name, alloc->type, alloc->memory_type,
                                               alloc->extents, alloc->condition,
-                                              alloc->new_expr, alloc->free_function);
+                                              alloc->new_expr, alloc->free_function, alloc->padding);
     sym_push(alloc->name, allocation.ptr);
 
     codegen(alloc->body);

@@ -118,40 +118,17 @@ class FlattenRamps : public IRMutator {
     }
 };
 
-/** Simplify bit concatenation of interleaved loads to vector reinterprets of
- * dense loads. Must be done to both vectors and scalars after flattening nested
- * ramps, because it can expand a flat ramp into a wider one. */
-class SimplifyConcatBits : public IRMutator {
+/** Lower bit concatenation into vector interleaving followed by a vector
+ * reinterpret. */
+class LowerConcatBits : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::concat_bits)) {
-            // Simplify a concat of a load of adjacent bits to a reinterpret of a load of a small vector.
-            const Load *l0 = op->args[0].as<Load>();
-            bool ok = true;
-            const int n = (int)(op->args.size());
-            for (int i = 0; ok && i < n; i++) {
-                const Load *li = op->args[i].as<Load>();
-                ok &= (li != nullptr);
-                if (!ok) {
-                    break;
-                }
-                const Ramp *r = li->index.as<Ramp>();
-                Expr base = r ? r->base : li->index;
-                ok &= (is_const_one(li->predicate) &&
-                       l0->name == li->name &&
-                       can_prove(l0->index + i == li->index) &&
-                       (r == nullptr || is_const(r->stride, n)));
-            }
-
-            if (ok) {
-                internal_assert(l0);
-                const Ramp *r0 = l0->index.as<Ramp>();
-                int new_lanes = (r0 ? r0->lanes : 1) * n;
-                Expr base = r0 ? r0->base : l0->index;
-                Expr idx = Ramp::make(base, 1, new_lanes);
-                return mutate(Reinterpret::make(op->type, Load::make(l0->type.with_lanes(n * l0->type.lanes()), l0->name, idx, l0->image, l0->param, const_true(new_lanes), l0->alignment)));
-            }
+            // Rewrite concat_bits into a shuffle followed by a vector reinterpret.
+            Expr shuf = simplify(Shuffle::make_interleave(op->args));
+            Expr e = Reinterpret::make(op->type, shuf);
+            return mutate(e);
         }
 
         return IRMutator::visit(op);
@@ -161,11 +138,11 @@ class SimplifyConcatBits : public IRMutator {
 }  // namespace
 
 Stmt flatten_nested_ramps(const Stmt &s) {
-    return SimplifyConcatBits().mutate(FlattenRamps().mutate(s));
+    return LowerConcatBits().mutate(FlattenRamps().mutate(s));
 }
 
 Expr flatten_nested_ramps(const Expr &e) {
-    return SimplifyConcatBits().mutate(FlattenRamps().mutate(e));
+    return LowerConcatBits().mutate(FlattenRamps().mutate(e));
 }
 
 }  // namespace Internal

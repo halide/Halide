@@ -649,6 +649,11 @@ bool graph_equal(const Expr &a, const Expr &b) {
     return IRComparer(&cache).compare_expr(a, b) == IRComparer::Equal;
 }
 
+bool graph_less_than(const Expr &a, const Expr &b) {
+    IRCompareCache cache(8);
+    return IRComparer(&cache).compare_expr(a, b) == IRComparer::LessThan;
+}
+
 bool equal(const Stmt &a, const Stmt &b) {
     return IRComparer().compare_stmt(a, b) == IRComparer::Equal;
 }
@@ -656,6 +661,11 @@ bool equal(const Stmt &a, const Stmt &b) {
 bool graph_equal(const Stmt &a, const Stmt &b) {
     IRCompareCache cache(8);
     return IRComparer(&cache).compare_stmt(a, b) == IRComparer::Equal;
+}
+
+bool graph_less_than(const Stmt &a, const Stmt &b) {
+    IRCompareCache cache(8);
+    return IRComparer(&cache).compare_stmt(a, b) == IRComparer::LessThan;
 }
 
 bool IRDeepCompare::operator()(const Expr &a, const Expr &b) const {

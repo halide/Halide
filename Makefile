@@ -564,6 +564,7 @@ SOURCE_FILES = \
   Solve.cpp \
   SpirvIR.cpp \
   SplitTuples.cpp \
+  StageStridedLoads.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
@@ -731,6 +732,7 @@ HEADER_FILES = \
   SlidingWindow.h \
   Solve.h \
   SplitTuples.h \
+  StageStridedLoads.h \
   StmtToHtml.h \
   StorageFlattening.h \
   StorageFolding.h \
@@ -759,8 +761,8 @@ RUNTIME_CPP_COMPONENTS = \
   aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
-  allocation_cache \
   alignment_64 \
+  allocation_cache \
   android_clock \
   android_host_cpu_count \
   android_io \
@@ -784,8 +786,8 @@ RUNTIME_CPP_COMPONENTS = \
   halide_buffer_t \
   hexagon_cache_allocator \
   hexagon_cpu_features \
-  hexagon_dma_pool \
   hexagon_dma \
+  hexagon_dma_pool \
   hexagon_host \
   ios_io \
   linux_clock \
@@ -800,14 +802,15 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
-  openglcompute \
   opengl_egl_context \
   opengl_glx_context \
+  openglcompute \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
   osx_opengl_context \
   osx_yield \
+  posix_aligned_alloc \
   posix_allocator \
   posix_clock \
   posix_error_handler \
@@ -1442,7 +1445,7 @@ $(FILTERS_DIR)/cxx_mangling_externs.o: $(ROOT_DIR)/test/generator/cxx_mangling_e
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
 $(FILTERS_DIR)/cxx_mangling.a: $(BIN_DIR)/cxx_mangling.generator $(FILTERS_DIR)/cxx_mangling_externs.o
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g cxx_mangling $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::AnotherNamespace::cxx_mangling"
+	$(CURDIR)/$< -g cxx_mangling $(GEN_AOT_OUTPUTS),function_info_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::AnotherNamespace::cxx_mangling"
 	$(ROOT_DIR)/tools/makelib.sh $@ $@ $(FILTERS_DIR)/cxx_mangling_externs.o
 
 ifneq ($(TEST_CUDA), )
@@ -1526,14 +1529,21 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	array_outputs8.size=2 \
 	array_outputs9.size=2
 
-# metadata_tester is built with and without user-context
+# metadata_tester is built with and without user-context.
+# Also note that metadata_tester (but not metadata_tester_ucon) is built as "multitarget" to verify that
+# the metadata names are correctly emitted.
 $(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g metadata_tester -f metadata_tester $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
+	$(CURDIR)/$< -g metadata_tester -f metadata_tester -e static_library,c_header,registration,function_info_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime,$(TARGET)-no_runtime-no_bounds_query $(METADATA_TESTER_GENERATOR_ARGS)
+
+# c_source output doesn't work properly with multitarget output
+$(FILTERS_DIR)/metadata_tester.halide_generated.cpp: $(BIN_DIR)/metadata_tester.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g metadata_tester -f metadata_tester -e c_source -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
 
 $(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g metadata_tester -f metadata_tester_ucon $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-user_context-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
+	$(CURDIR)/$< -g metadata_tester -f metadata_tester_ucon $(GEN_AOT_OUTPUTS),function_info_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-user_context-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
 
 $(BIN_DIR)/$(TARGET)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
 

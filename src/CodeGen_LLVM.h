@@ -304,12 +304,13 @@ protected:
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
 
-    /** Return type string for LLVM vector type using LLVM IR intrinsic type mangling.
-     * E.g. ".nxv4i32" for a scalable vector of four 32-bit integers,
+    /** Return type string for LLVM type using LLVM IR intrinsic type mangling.
+     * E.g. ".i32 or ".f32" for scalars, ".p0" for pointers,
+     * ".nxv4i32" for a scalable vector of four 32-bit integers,
      * or ".v4f32" for a fixed vector of four 32-bit floats.
      * The dot is included in the result.
      */
-    std::string mangle_llvm_vector_type(llvm::Type *type);
+    std::string mangle_llvm_type(llvm::Type *type);
 
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
     llvm::Value *make_halide_type_t(const Type &);
@@ -630,6 +631,11 @@ protected:
     bool use_llvm_vp_intrinsics;
     // @}
 
+    /** Generate a basic dense vector load, with an optional predicate and
+     * control over whether or not we should slice the load into native
+     * vectors. Used by CodeGen_ARM to help with vld2/3/4 emission. */
+    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
@@ -674,7 +680,6 @@ private:
     llvm::Value *codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
                                      const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
                                      llvm::Value *vpred = nullptr, bool slice_to_native = true, llvm::Value *stride = nullptr);
-    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
     virtual void codegen_predicated_load(const Load *op);
     virtual void codegen_predicated_store(const Store *op);
