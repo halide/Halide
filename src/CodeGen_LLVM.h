@@ -631,6 +631,11 @@ protected:
     bool use_llvm_vp_intrinsics;
     // @}
 
+    /** Generate a basic dense vector load, with an optional predicate and
+     * control over whether or not we should slice the load into native
+     * vectors. Used by CodeGen_ARM to help with vld2/3/4 emission. */
+    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
@@ -675,7 +680,6 @@ private:
     llvm::Value *codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
                                      const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
                                      llvm::Value *vpred = nullptr, bool slice_to_native = true, llvm::Value *stride = nullptr);
-    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
     virtual void codegen_predicated_load(const Load *op);
     virtual void codegen_predicated_store(const Store *op);

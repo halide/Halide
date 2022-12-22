@@ -596,8 +596,8 @@ public:
         }
     }
 
-    template<int... Indices>
-    static Vec shuffle(const Vec &a) {
+    template<int... Indices, typename InputVec>
+    static Vec shuffle(const InputVec &a) {
         static_assert(sizeof...(Indices) == Lanes, "shuffle() requires an exact match of lanes");
         Vec r = { a[Indices]... };
         return r;
@@ -1129,15 +1129,14 @@ public:
         }
     }
 
-    template<int... Indices>
-    static Vec shuffle(const Vec a) {
+    template<int... Indices, typename InputVec>
+    static Vec shuffle(const InputVec a) {
         static_assert(sizeof...(Indices) == Lanes, "shuffle() requires an exact match of lanes");
 #if __has_builtin(__builtin_shufflevector)
-        // Clang
+        // Exists in clang and gcc >= 12. Gcc's __builtin_shuffle can't
+        // be used, because it can't handle changing the number of vector
+        // lanes between input and output.
         return __builtin_shufflevector(a, a, Indices...);
-#elif __has_builtin(__builtin_shuffle) || defined(__GNUC__)
-        // GCC
-        return __builtin_shuffle(a, NativeVector<int, sizeof...(Indices)>{Indices...});
 #else
         Vec r = { a[Indices]... };
         return r;
@@ -2743,7 +2742,12 @@ string CodeGen_C::print_scalarized_expr(const Expr &e) {
     Type t = e.type();
     internal_assert(t.is_vector());
     string v = unique_name('_');
-    stream << get_indent() << print_type(t, AppendSpace) << v << ";\n";
+    // All of the lanes of this vector will get replaced, so in theory
+    // we don't need to initialize it to anything, but if we don't,
+    // we'll get "possible uninitialized var" warnings. Since this code
+    // is already hopelessly inefficient at this point, let's just init
+    // it with a broadcast(0) to avoid any possible weirdness.
+    stream << get_indent() << print_type(t, AppendSpace) << v << " = " << print_type(t) + "_ops::broadcast(0);\n";
     for (int lane = 0; lane < t.lanes(); lane++) {
         Expr e2 = extract_lane(e, lane);
         string elem = print_expr(e2);

@@ -472,7 +472,8 @@ private:
             return op;
         } else {
             return Allocate::make(op->name, op->type, op->memory_type,
-                                  new_extents, condition, body, new_expr, op->free_function);
+                                  new_extents, condition, body, new_expr,
+                                  op->free_function, op->padding);
         }
     }
 

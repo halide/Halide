@@ -877,7 +877,8 @@ class RenormalizeGPULoops : public IRMutator {
                 return IRMutator::visit(op);
             } else {
                 Stmt inner = LetStmt::make(op->name, op->value, a->body);
-                inner = Allocate::make(a->name, a->type, a->memory_type, a->extents, a->condition, inner);
+                inner = Allocate::make(a->name, a->type, a->memory_type, a->extents, a->condition, inner,
+                                       a->new_expr, a->free_function, a->padding);
                 return mutate(inner);
             }
         } else {
@@ -912,7 +913,8 @@ class RenormalizeGPULoops : public IRMutator {
             Stmt inner = IfThenElse::make(op->condition, allocate_a->body, allocate_b->body);
             inner = Allocate::make(allocate_a->name, allocate_a->type,
                                    allocate_a->memory_type, allocate_a->extents,
-                                   allocate_a->condition, inner);
+                                   allocate_a->condition, inner, allocate_a->new_expr,
+                                   allocate_a->free_function, allocate_a->padding);
             return mutate(inner);
         } else if (let_a && let_b && let_a->name == let_b->name) {
             string condition_name = unique_name('t');
