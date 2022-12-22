@@ -1084,14 +1084,6 @@ void CodeGen_LLVM::optimize_module() {
 
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
-    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-    if (get_target().has_feature(Target::DisableLLVMLoopOpt)) {
-        user_warning << "halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15 "
-                        "(and will be removed in Halide 16). Halide 15 now defaults to disabling "
-                        "LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.\n";
-    }
     const bool do_loop_opt = get_target().has_feature(Target::EnableLLVMLoopOpt);
 
     PipelineTuningOptions pto;
@@ -2041,73 +2033,6 @@ void CodeGen_LLVM::visit(const Load *op) {
         llvm::Type *load_type = llvm_type_of(op->type.element_of());
         if (ramp && stride && stride->value == 1) {
             value = codegen_dense_vector_load(op);
-        } else if (ramp && stride && 2 <= stride->value && stride->value <= 4) {
-            // Try to rewrite strided loads as shuffles of dense loads,
-            // aligned to the stride. This makes adjacent strided loads
-            // share the same underlying dense loads.
-            Expr base = ramp->base;
-            // The variable align will track the alignment of the
-            // base. Every time we change base, we also need to update
-            // align.
-            ModulusRemainder align = op->alignment;
-
-            int aligned_stride = gcd(stride->value, align.modulus);
-            int offset = 0;
-            if (aligned_stride == stride->value) {
-                offset = mod_imp((int)align.remainder, aligned_stride);
-            } else {
-                const Add *add = base.as<Add>();
-                if (const IntImm *add_c = add ? add->b.as<IntImm>() : base.as<IntImm>()) {
-                    offset = mod_imp(add_c->value, stride->value);
-                }
-            }
-
-            if (offset) {
-                base = simplify(base - offset);
-                align.remainder = mod_imp(align.remainder - offset, align.modulus);
-            }
-
-            // We want to load a few more bytes than the original load did.
-            // We know this is safe for internal buffers because we allocate
-            // padding.
-            // (In ASAN mode, don't read beyond the end of internal buffers either,
-            // as ASAN will complain even about harmless stack overreads.)
-            // The min moves lower by offset.
-            int load_lanes = ramp->lanes * stride->value;
-            bool external = op->param.defined() || op->image.defined();
-            if (external || target.has_feature(Target::ASAN)) {
-                load_lanes -= (stride->value - 1 - offset);
-            }
-
-            int slice_lanes = native_vector_bits() / op->type.bits();
-
-            // We're going to add multiples of slice_lanes to base in
-            // the loop below, so reduce alignment modulo slice_lanes.
-            align.modulus = gcd(align.modulus, slice_lanes);
-            align.remainder = mod_imp(align.remainder, align.modulus);
-
-            // We need to slice the result in to native vector lanes, otherwise
-            // LLVM misses optimizations like using ldN on ARM.
-            vector<Value *> results;
-            for (int i = 0; i < op->type.lanes(); i += slice_lanes) {
-                int load_base_i = i * stride->value;
-                int load_lanes_i = std::min<int>(slice_lanes * stride->value, load_lanes - load_base_i);
-                int lanes_i = std::min<int>(slice_lanes, op->type.lanes() - i);
-                Expr slice_base = simplify(base + load_base_i);
-
-                Value *load_i = codegen_vector_load(op->type.with_lanes(load_lanes_i), op->name, slice_base,
-                                                    op->image, op->param, align, /*vpred=*/nullptr,
-                                                    /*slice_to_native=*/false);
-
-                std::vector<int> constants;
-                for (int j = 0; j < lanes_i; j++) {
-                    constants.push_back(j * stride->value + offset);
-                }
-                results.push_back(shuffle_vectors(load_i, constants));
-            }
-
-            // Concat the results
-            value = concat_vectors(results);
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Expr flipped_base = ramp->base - ramp->lanes + 1;
@@ -5097,12 +5022,11 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
 
 llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
                                           VectorTypeConstraint type_constraint) const {
-    bool scalable;
-
     if (t->isVoidTy()) {
         return t;
     }
 
+    bool scalable = false;
     switch (type_constraint) {
     case VectorTypeConstraint::None:
         scalable = effective_vscale != 0 &&
@@ -5116,6 +5040,9 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
         break;
     case VectorTypeConstraint::VScale:
         scalable = true;
+        break;
+    default:
+        internal_error << "Impossible";
         break;
     }
 

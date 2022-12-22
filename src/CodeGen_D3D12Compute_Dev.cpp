@@ -1059,7 +1059,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 
                 Stmt new_alloc = Allocate::make(new_name, op->type, op->memory_type, new_extents,
                                                 std::move(new_condition), std::move(new_body),
-                                                std::move(new_new_expr), op->free_function);
+                                                std::move(new_new_expr), op->free_function, op->padding);
 
                 allocs.push_back(new_alloc);
                 replacements.erase(op->name);

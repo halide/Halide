@@ -365,6 +365,8 @@ struct Allocate : public StmtNode<Allocate> {
     Type type;
     MemoryType memory_type;
     std::vector<Expr> extents;
+
+    // A boolean condition that determines if the allocation needs to be made at all.
     Expr condition;
 
     // These override the code generator dependent malloc and free
@@ -377,18 +379,22 @@ struct Allocate : public StmtNode<Allocate> {
     Expr new_expr;
     std::string free_function;
 
+    // Extra padding elements to allow for overreads. Elements in the padding
+    // have undetermined values, but are guaranteed safe to load.
+    int padding;
+
     Stmt body;
 
     static Stmt make(const std::string &name, Type type, MemoryType memory_type,
                      const std::vector<Expr> &extents,
                      Expr condition, Stmt body,
-                     Expr new_expr = Expr(), const std::string &free_function = std::string());
+                     Expr new_expr = Expr(), const std::string &free_function = std::string(), int padding = 0);
 
     /** A routine to check if the extents are all constants, and if so verify
      * the total size is less than 2^31 - 1. If the result is constant, but
      * overflows, this routine asserts. This returns 0 if the extents are
      * not all constants; otherwise, it returns the total constant allocation
-     * size. */
+     * size. Does not include any padding bytes. */
     static int32_t constant_allocation_size(const std::vector<Expr> &extents, const std::string &name);
     int32_t constant_allocation_size() const;
 

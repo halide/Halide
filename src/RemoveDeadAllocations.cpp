@@ -62,8 +62,8 @@ class RemoveDeadAllocations : public IRMutator {
         } else if (body.same_as(op->body)) {
             return op;
         } else {
-            return Allocate::make(op->name, op->type, op->memory_type, op->extents,
-                                  op->condition, body, op->new_expr, op->free_function);
+            return Allocate::make(op->name, op->type, op->memory_type, op->extents, op->condition,
+                                  body, op->new_expr, op->free_function, op->padding);
         }
     }
 

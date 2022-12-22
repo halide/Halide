@@ -11,7 +11,9 @@ int main(int argc, char **argv) {
     }
 
     double times[3] = {0.f, 0.f, 0.f};
-    for (int i = 0; i < 3; i++) {
+
+    for (int sz = 1; sz < 32; sz = sz * 2 + 1) {
+
         for (int c = 0; c < 3; c++) {
             MemoryType mem_type;
             bool use_bound;
@@ -31,12 +33,19 @@ int main(int argc, char **argv) {
                 use_bound = false;
             }
 
-            Func f;
             Var x, y;
-            f(x, y) = x / 18.3f + y;
+
+            std::vector<Func> fs;
+            Expr e = 0.0f;
+            for (int j = 0; j < 10; j++) {
+                Func f;
+                f(x, y) = x * j + y;
+                e += f(x, y);
+                fs.push_back(f);
+            }
 
             Func g;
-            g(x, y) = f(x, y) + f(x, y + 1);
+            g(x, y) = e;
 
             Var yo, yi;
             // Place the y loop body in its own function with its own
@@ -44,15 +53,16 @@ int main(int argc, char **argv) {
             // which will be 1 in practice.
             Param<int> task_size;
             g.split(y, yo, yi, task_size).parallel(yi);
-            f.compute_at(g, yi).store_in(mem_type);
-
-            if (use_bound) {
-                f.bound_extent(x, 8);
+            for (auto f : fs) {
+                f.compute_at(g, yi).store_in(mem_type);
+                if (use_bound) {
+                    f.bound_extent(x, sz);
+                }
             }
 
-            Buffer<float> out(8, 1024);
+            Buffer<float> out(sz, 1024);
             task_size.set(1);
-            double t = 1e3 * Tools::benchmark(10, 100, [&]() {
+            double t = 1e3 * Tools::benchmark(10, 1 + 100 / sz, [&]() {
                            g.realize(out);
                        });
             times[c] += t;
