@@ -135,7 +135,7 @@ void CodeGen_WebGPU_Dev::init_module() {
     // Write out the Halide math functions.
     src_stream
         << "fn float_from_bits(x : u32) -> f32 {return bitcast<f32>(x);}\n"
-        << "fn nan_f32() -> f32 {return bitcast<f32>(0x7fc00000);}\n"
+        << "fn nan_f32() -> f32 {return float_from_bits(0x7fc00000);}\n"
         << "fn acos_f32(x : f32) -> f32 {return acos(x);}\n"
         << "fn acosh_f32(x : f32) -> f32 {return acosh(x);}\n"
         << "fn asin_f32(x : f32) -> f32 {return asin(x);}\n"
