@@ -1084,14 +1084,6 @@ void CodeGen_LLVM::optimize_module() {
 
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
-    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-    if (get_target().has_feature(Target::DisableLLVMLoopOpt)) {
-        user_warning << "halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15 "
-                        "(and will be removed in Halide 16). Halide 15 now defaults to disabling "
-                        "LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.\n";
-    }
     const bool do_loop_opt = get_target().has_feature(Target::EnableLLVMLoopOpt);
 
     PipelineTuningOptions pto;
@@ -5030,12 +5022,11 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
 
 llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
                                           VectorTypeConstraint type_constraint) const {
-    bool scalable;
-
     if (t->isVoidTy()) {
         return t;
     }
 
+    bool scalable = false;
     switch (type_constraint) {
     case VectorTypeConstraint::None:
         scalable = effective_vscale != 0 &&
@@ -5049,6 +5040,9 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
         break;
     case VectorTypeConstraint::VScale:
         scalable = true;
+        break;
+    default:
+        internal_error << "Impossible";
         break;
     }
 
