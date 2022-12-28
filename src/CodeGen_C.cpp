@@ -3232,7 +3232,20 @@ void CodeGen_C::visit(const Allocate *op) {
     }
 
     if (!on_stack) {
-        create_assertion(op_name, Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
+        ostringstream check;
+        if (is_const_zero(op->condition)) {
+            // Assertion always succeeds here, since allocation is never used
+            check << print_expr(const_true());
+        } else {
+            // Assert that the allocation worked....
+            check << "((" << op_name << " != nullptr) || (" << size_id << " == 0))";
+            if (!is_const_one(op->condition)) {
+                // ...but if the condition is false, it's OK for the new_expr to be null.
+                string op_condition = print_assignment(Bool(), print_expr(op->condition));
+                check << " || (!" << op_condition << ")";
+            }
+        }
+        create_assertion(check.str(), Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
         stream << get_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
@@ -3414,7 +3427,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
   } // overflow test tmp.heap
   int64_t _3 = _2;
   int32_t *_tmp_heap = (int32_t  *)halide_malloc(_ucon, sizeof(int32_t )*_3);
-  if (!_tmp_heap)
+  if (!((_tmp_heap != nullptr) || (_3 == 0)))
   {
    int32_t _4 = halide_error_out_of_memory(_ucon);
    return _4;
