@@ -3232,7 +3232,20 @@ void CodeGen_C::visit(const Allocate *op) {
     }
 
     if (!on_stack) {
-        create_assertion(op_name, Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
+        ostringstream check;
+        if (is_const_zero(op->condition)) {
+            // Assertion always succeeds here, since allocation is never used
+            check << print_expr(const_true());
+        } else {
+            // Assert that the allocation worked....
+            check << "((" << op_name << " != nullptr) || (" << size_id << " == 0))";
+            if (!is_const_one(op->condition)) {
+                // ...but if the condition is false, it's OK for the new_expr to be null.
+                string op_condition = print_assignment(Bool(), print_expr(op->condition));
+                check << " || (!" << op_condition << ")";
+            }
+        }
+        create_assertion(check.str(), Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
         stream << get_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
