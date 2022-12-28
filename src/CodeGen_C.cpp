@@ -3427,7 +3427,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
   } // overflow test tmp.heap
   int64_t _3 = _2;
   int32_t *_tmp_heap = (int32_t  *)halide_malloc(_ucon, sizeof(int32_t )*_3);
-  if (!_tmp_heap)
+  if (!((_tmp_heap != nullptr) || (_3 == 0)))
   {
    int32_t _4 = halide_error_out_of_memory(_ucon);
    return _4;
