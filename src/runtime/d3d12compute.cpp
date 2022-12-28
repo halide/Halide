@@ -553,7 +553,7 @@ struct d3d12_buffer {
         d3d12_buffer *staging;
         size_t offset;
         size_t size;
-    } * xfer;
+    } *xfer;
 
     bool mallocd;
     void *host_mirror;

@@ -38,11 +38,17 @@ bool convert_to_value<bool>(double interpolated) {
 
 // Prevent iostream from printing 8-bit numbers as character constants.
 template<typename t>
-struct promote_if_char { typedef t promoted; };
+struct promote_if_char {
+    typedef t promoted;
+};
 template<>
-struct promote_if_char<signed char> { typedef int32_t promoted; };
+struct promote_if_char<signed char> {
+    typedef int32_t promoted;
+};
 template<>
-struct promote_if_char<unsigned char> { typedef int32_t promoted; };
+struct promote_if_char<unsigned char> {
+    typedef int32_t promoted;
+};
 
 template<typename value_t>
 bool relatively_equal(value_t a, value_t b) {
