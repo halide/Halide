@@ -222,6 +222,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
 
             // Return success.
             stream << get_indent() << "return 0;\n";
+            cache.clear();
         }
 
         indent -= 1;
