@@ -884,9 +884,17 @@ void IRPrinter::visit(const Provide *op) {
 void IRPrinter::visit(const Allocate *op) {
     ScopedBinding<> bind(known_type, op->name);
     stream << get_indent() << "allocate " << op->name << "[" << op->type;
+    bool first = true;
     for (const auto &extent : op->extents) {
         stream << " * ";
+        if (first && op->padding) {
+            stream << "(";
+            first = false;
+        }
         print(extent);
+    }
+    if (op->padding) {
+        stream << " + " << op->padding << ")";
     }
     stream << "]";
     if (op->memory_type != MemoryType::Auto) {

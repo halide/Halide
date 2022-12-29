@@ -227,9 +227,9 @@ private:
     Func downsample(Func f) {
         using Halide::_;
         Func downx, downy;
-        downx(x, y, _) = (f(2 * x - 1, y, _) + 3.0f * (f(2 * x, y, _) + f(2 * x + 1, y, _)) + f(2 * x + 2, y, _)) / 8.0f;
-        downy(x, y, _) = (downx(x, 2 * y - 1, _) + 3.0f * (downx(x, 2 * y, _) + downx(x, 2 * y + 1, _)) + downx(x, 2 * y + 2, _)) / 8.0f;
-        return downy;
+        downy(x, y, _) = (f(x, 2 * y - 1, _) + 3.0f * (f(x, 2 * y, _) + f(x, 2 * y + 1, _)) + f(x, 2 * y + 2, _)) / 8.0f;
+        downx(x, y, _) = (downy(2 * x - 1, y, _) + 3.0f * (downy(2 * x, y, _) + downy(2 * x + 1, y, _)) + downy(2 * x + 2, y, _)) / 8.0f;
+        return downx;
     }
 
     // Upsample using bilinear interpolation

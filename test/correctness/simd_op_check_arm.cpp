@@ -291,35 +291,61 @@ public:
                 check(arm32 ? "vld1.32" : "ldr", 2 * w, in_f32(x + y));
             }
 
-            // VLD2     X       -       Load Two-Element Structures
-            // These need to be vectorized at least 2 native vectors wide,
-            // so we get a full vectors' worth that we know is safe to
-            // access.
-            check(arm32 ? "vld2.8" : "ld2", 32 * w, in_i8(x * 2) + in_i8(x * 2 + 1));
-            check(arm32 ? "vld2.8" : "ld2", 32 * w, in_u8(x * 2) + in_u8(x * 2 + 1));
-            check(arm32 ? "vld2.16" : "ld2", 16 * w, in_i16(x * 2) + in_i16(x * 2 + 1));
-            check(arm32 ? "vld2.16" : "ld2", 16 * w, in_u16(x * 2) + in_u16(x * 2 + 1));
-            check(arm32 ? "vld2.32" : "ld2", 8 * w, in_i32(x * 2) + in_i32(x * 2 + 1));
-            check(arm32 ? "vld2.32" : "ld2", 8 * w, in_u32(x * 2) + in_u32(x * 2 + 1));
-            check(arm32 ? "vld2.32" : "ld2", 8 * w, in_f32(x * 2) + in_f32(x * 2 + 1));
+            if (target.os != Target::IOS && target.os != Target::OSX) {
+                // VLD* are not profitable on Apple silicon
 
-            // VLD3     X       -       Load Three-Element Structures
-            check(arm32 ? "vld3.8" : "ld3", 32 * w, in_i8(x * 3));
-            check(arm32 ? "vld3.8" : "ld3", 32 * w, in_u8(x * 3));
-            check(arm32 ? "vld3.16" : "ld3", 16 * w, in_i16(x * 3));
-            check(arm32 ? "vld3.16" : "ld3", 16 * w, in_u16(x * 3));
-            check(arm32 ? "vld3.32" : "ld3", 8 * w, in_i32(x * 3));
-            check(arm32 ? "vld3.32" : "ld3", 8 * w, in_u32(x * 3));
-            check(arm32 ? "vld3.32" : "ld3", 8 * w, in_f32(x * 3));
+                // VLD2     X       -       Load Two-Element Structures
+                // These need to be vectorized at least 2 native vectors wide,
+                // so we get a full vectors' worth that we know is safe to
+                // access.
+                check(arm32 ? "vld2.8" : "ld2", 32 * w, in_i8(x * 2));
+                check(arm32 ? "vld2.8" : "ld2", 32 * w, in_u8(x * 2));
+                check(arm32 ? "vld2.16" : "ld2", 16 * w, in_i16(x * 2));
+                check(arm32 ? "vld2.16" : "ld2", 16 * w, in_u16(x * 2));
+                check(arm32 ? "vld2.32" : "ld2", 8 * w, in_i32(x * 2));
+                check(arm32 ? "vld2.32" : "ld2", 8 * w, in_u32(x * 2));
+                check(arm32 ? "vld2.32" : "ld2", 8 * w, in_f32(x * 2));
 
-            // VLD4     X       -       Load Four-Element Structures
-            check(arm32 ? "vld4.8" : "ld4", 32 * w, in_i8(x * 4));
-            check(arm32 ? "vld4.8" : "ld4", 32 * w, in_u8(x * 4));
-            check(arm32 ? "vld4.16" : "ld4", 16 * w, in_i16(x * 4));
-            check(arm32 ? "vld4.16" : "ld4", 16 * w, in_u16(x * 4));
-            check(arm32 ? "vld4.32" : "ld4", 8 * w, in_i32(x * 4));
-            check(arm32 ? "vld4.32" : "ld4", 8 * w, in_u32(x * 4));
-            check(arm32 ? "vld4.32" : "ld4", 8 * w, in_f32(x * 4));
+                // VLD3     X       -       Load Three-Element Structures
+                check(arm32 ? "vld3.8" : "ld3", 32 * w, in_i8(x * 3));
+                check(arm32 ? "vld3.8" : "ld3", 32 * w, in_u8(x * 3));
+                check(arm32 ? "vld3.16" : "ld3", 16 * w, in_i16(x * 3));
+                check(arm32 ? "vld3.16" : "ld3", 16 * w, in_u16(x * 3));
+                check(arm32 ? "vld3.32" : "ld3", 8 * w, in_i32(x * 3));
+                check(arm32 ? "vld3.32" : "ld3", 8 * w, in_u32(x * 3));
+                check(arm32 ? "vld3.32" : "ld3", 8 * w, in_f32(x * 3));
+
+                // VLD4     X       -       Load Four-Element Structures
+                check(arm32 ? "vld4.8" : "ld4", 32 * w, in_i8(x * 4));
+                check(arm32 ? "vld4.8" : "ld4", 32 * w, in_u8(x * 4));
+                check(arm32 ? "vld4.16" : "ld4", 16 * w, in_i16(x * 4));
+                check(arm32 ? "vld4.16" : "ld4", 16 * w, in_u16(x * 4));
+                check(arm32 ? "vld4.32" : "ld4", 8 * w, in_i32(x * 4));
+                check(arm32 ? "vld4.32" : "ld4", 8 * w, in_u32(x * 4));
+                check(arm32 ? "vld4.32" : "ld4", 8 * w, in_f32(x * 4));
+            } else if (!arm32) {
+                // On Apple Silicon we expect dense loads followed by shuffles.
+                check("uzp1.16b", 32 * w, in_i8(x * 2));
+                check("uzp1.16b", 32 * w, in_u8(x * 2));
+                check("uzp1.8h", 16 * w, in_i16(x * 2));
+                check("uzp1.8h", 16 * w, in_u16(x * 2));
+                check("uzp1.4s", 8 * w, in_i32(x * 2));
+                check("uzp1.4s", 8 * w, in_u32(x * 2));
+                check("uzp1.4s", 8 * w, in_f32(x * 2));
+
+                // VLD3     X       -       Load Three-Element Structures
+                check("tbl.16b", 32 * w, in_i8(x * 3));
+                check("tbl.16b", 32 * w, in_u8(x * 3));
+                check("tbl.16b", 16 * w, in_i16(x * 3));
+                check("tbl.16b", 16 * w, in_u16(x * 3));
+                // For 32-bit types llvm just scalarizes
+
+                // VLD4     X       -       Load Four-Element Structures
+                check("tbl.16b", 32 * w, in_i8(x * 4));
+                check("tbl.16b", 32 * w, in_u8(x * 4));
+                check("tbl.16b", 16 * w, in_i16(x * 4));
+                check("tbl.16b", 16 * w, in_u16(x * 4));
+            }
 
             // VLDM     X       F, D    Load Multiple Registers
             // VLDR     X       F, D    Load Single Register
@@ -548,9 +574,15 @@ public:
                         // If we're widening the type by a factor of four
                         // as well as reducing by a factor of four, we
                         // expect vpaddl followed by vpadal
-                        check(arm32 ? "vpaddl.s8" : "saddlp", 8, sum_(i32(in_i8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(i32(in_u8(f * x + r))));
-                        check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(u32(in_u8(f * x + r))));
+                        if (target.has_feature(Target::ARMDotProd)) {
+                            check(arm32 ? "vpaddl.s8" : "sdot", 8, sum_(i32(in_i8(f * x + r))));
+                            check(arm32 ? "vpaddl.u8" : "udot", 8, sum_(i32(in_u8(f * x + r))));
+                            check(arm32 ? "vpaddl.u8" : "udot", 8, sum_(u32(in_u8(f * x + r))));
+                        } else {
+                            check(arm32 ? "vpaddl.s8" : "saddlp", 8, sum_(i32(in_i8(f * x + r))));
+                            check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(i32(in_u8(f * x + r))));
+                            check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(u32(in_u8(f * x + r))));
+                        }
                         check(arm32 ? "vpaddl.s16" : "saddlp", 4, sum_(i64(in_i16(f * x + r))));
                         check(arm32 ? "vpaddl.u16" : "uaddlp", 4, sum_(i64(in_u16(f * x + r))));
                         check(arm32 ? "vpaddl.u16" : "uaddlp", 4, sum_(u64(in_u16(f * x + r))));
@@ -558,9 +590,15 @@ public:
                         // Note that when going from u8 to i32 like this,
                         // the vpaddl is unsigned and the vpadal is a
                         // signed, because the intermediate type is u16
-                        check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i8(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u8(f * x + r))));
-                        check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(u32(in_u8(f * x + r))));
+                        if (target.has_feature(Target::ARMDotProd)) {
+                            check(arm32 ? "vpadal.s16" : "sdot", 8, sum_(i32(in_i8(f * x + r))));
+                            check(arm32 ? "vpadal.u16" : "udot", 8, sum_(i32(in_u8(f * x + r))));
+                            check(arm32 ? "vpadal.u16" : "udot", 8, sum_(u32(in_u8(f * x + r))));
+                        } else {
+                            check(arm32 ? "vpadal.s16" : "sadalp", 8, sum_(i32(in_i8(f * x + r))));
+                            check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(i32(in_u8(f * x + r))));
+                            check(arm32 ? "vpadal.u16" : "uadalp", 8, sum_(u32(in_u8(f * x + r))));
+                        }
                         check(arm32 ? "vpadal.s32" : "sadalp", 4, sum_(i64(in_i16(f * x + r))));
                         check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(i64(in_u16(f * x + r))));
                         check(arm32 ? "vpadal.u32" : "uadalp", 4, sum_(u64(in_u16(f * x + r))));
@@ -983,7 +1021,7 @@ public:
                     tmp2(x, y) = select(x % 2 == 0, tmp1(x / 2), tmp1(x / 2 + 16));
                     tmp2.compute_root().vectorize(x, width / bits);
                     std::string op = "vst2." + std::to_string(bits);
-                    check(arm32 ? op : "st2"s, width / bits, tmp2(0, 0) + tmp2(0, 63));
+                    check(arm32 ? op : "st2", width / bits, tmp2(0, 0) + tmp2(0, 63));
                 }
             }
         }
@@ -1001,7 +1039,7 @@ public:
                     tmp2(x, y) = select(x % 2 == 0, e * 3, e + 17);
                     tmp2.compute_root().vectorize(x, width / bits);
                     std::string op = "vst2." + std::to_string(bits);
-                    check(arm32 ? op : "st2"s, width / bits, tmp2(0, 0) + tmp2(0, 127));
+                    check(arm32 ? op : "st2", width / bits, tmp2(0, 0) + tmp2(0, 127));
                 }
             }
         }
@@ -1019,7 +1057,7 @@ public:
                                         tmp1(x / 3 + 32));
                     tmp2.compute_root().vectorize(x, width / bits);
                     std::string op = "vst3." + std::to_string(bits);
-                    check(arm32 ? op : "st3"s, width / bits, tmp2(0, 0) + tmp2(0, 127));
+                    check(arm32 ? op : "st3", width / bits, tmp2(0, 0) + tmp2(0, 127));
                 }
             }
         }
@@ -1038,7 +1076,7 @@ public:
                                         tmp1(x / 4 + 48));
                     tmp2.compute_root().vectorize(x, width / bits);
                     std::string op = "vst4." + std::to_string(bits);
-                    check(arm32 ? op : "st4"s, width / bits, tmp2(0, 0) + tmp2(0, 127));
+                    check(arm32 ? op : "st4", width / bits, tmp2(0, 0) + tmp2(0, 127));
                 }
             }
         }
@@ -1078,5 +1116,11 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
-    return SimdOpCheckTest::main<SimdOpCheckARM>(argc, argv);
+    return SimdOpCheckTest::main<SimdOpCheckARM>(
+        argc, argv,
+        {
+            Target("arm-32-linux"),
+            Target("arm-64-linux"),
+            Target("arm-64-linux-arm_dot_prod"),
+        });
 }

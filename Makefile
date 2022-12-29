@@ -559,6 +559,7 @@ SOURCE_FILES = \
   Solve.cpp \
   SpirvIR.cpp \
   SplitTuples.cpp \
+  StageStridedLoads.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
@@ -725,6 +726,7 @@ HEADER_FILES = \
   SlidingWindow.h \
   Solve.h \
   SplitTuples.h \
+  StageStridedLoads.h \
   StmtToHtml.h \
   StorageFlattening.h \
   StorageFolding.h \
@@ -753,8 +755,8 @@ RUNTIME_CPP_COMPONENTS = \
   aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
-  allocation_cache \
   alignment_64 \
+  allocation_cache \
   android_clock \
   android_host_cpu_count \
   android_io \
@@ -778,8 +780,8 @@ RUNTIME_CPP_COMPONENTS = \
   halide_buffer_t \
   hexagon_cache_allocator \
   hexagon_cpu_features \
-  hexagon_dma_pool \
   hexagon_dma \
+  hexagon_dma_pool \
   hexagon_host \
   ios_io \
   linux_clock \
@@ -794,14 +796,15 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
-  openglcompute \
   opengl_egl_context \
   opengl_glx_context \
+  openglcompute \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
   osx_opengl_context \
   osx_yield \
+  posix_aligned_alloc \
   posix_allocator \
   posix_clock \
   posix_error_handler \
