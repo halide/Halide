@@ -199,6 +199,23 @@ bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
     return false;
 }
 
+class Inliner : public IRMutator {
+public:
+    std::set<Function, Function::Compare> to_inline;
+
+    Expr visit(const Call *op) override {
+        if (op->func.defined()) {
+            Function f(op->func);
+            if (to_inline.count(f)) {
+                return mutate(inline_function(op, f));
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
+    using IRMutator::visit;
+};
+
 class BoundsInference : public IRMutator {
 public:
     const vector<Function> &funcs;
@@ -211,6 +228,8 @@ public:
     const FuncValueBounds &func_bounds;
     set<string> in_pipeline, inner_productions, has_extern_consumer;
     const Target target;
+
+    Inliner inliner;
 
     struct CondValue {
         Expr cond;  // Condition on params only (can't depend on loop variable)
@@ -231,6 +250,7 @@ public:
         set<ReductionVariable, ReductionVariable::Compare> rvars;
         string stage_prefix;
         size_t fused_group_index;
+        Inliner *inliner;
 
         // Computed expressions on the left and right-hand sides.
         // Note that a function definition might have different LHS or reduction domain
@@ -657,7 +677,7 @@ public:
             vector<pair<Expr, int>> buffers_to_annotate;
             for (const auto &arg : args) {
                 if (arg.is_expr()) {
-                    bounds_inference_args.push_back(arg.expr);
+                    bounds_inference_args.push_back(inliner->mutate(arg.expr));
                 } else if (arg.is_func()) {
                     Function input(arg.func);
                     for (int k = 0; k < input.outputs(); k++) {
@@ -827,6 +847,7 @@ public:
                 f[i].schedule().compute_level().is_inlined() &&
                 f[i].can_be_inlined()) {
                 inlined[i] = true;
+                inliner.to_inline.insert(f[i]);
             } else {
                 inlined[i] = false;
             }
@@ -848,6 +869,7 @@ public:
             s.fused_group_index = find_fused_group_index(s.func, fused_groups);
             s.compute_exprs();
             s.stage_prefix = s.name + ".s0.";
+            s.inliner = &inliner;
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
@@ -858,16 +880,11 @@ public:
             }
         }
 
-        // Do any pure inlining (TODO: This is currently slow)
-        for (size_t i = f.size(); i > 0; i--) {
-            const Function &func = f[i - 1];
-            if (inlined[i - 1]) {
-                for (auto &s : stages) {
-                    for (auto &cond_val : s.exprs) {
-                        internal_assert(cond_val.value.defined());
-                        cond_val.value = inline_function(cond_val.value, func);
-                    }
-                }
+        // Do any pure inlining
+        for (auto &s : stages) {
+            for (auto &cond_val : s.exprs) {
+                internal_assert(cond_val.value.defined());
+                cond_val.value = inliner.mutate(cond_val.value);
             }
         }
 
