@@ -234,7 +234,7 @@ protected:
             if (to_inline.count(f)) {
                 auto args = mutate(op->args);
                 Expr body = get_qualified_body(f, op->value_index);
-                const vector<string> func_args = f.args();
+                const vector<string> &func_args = f.args();
                 for (size_t i = 0; i < args.size(); i++) {
                     body = Let::make(f.name() + "." + func_args[i], args[i], body);
                 }
