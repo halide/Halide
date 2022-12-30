@@ -201,30 +201,50 @@ bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
     return false;
 }
 
+// An inliner that can inline an entire set of functions at once. The inliner in
+// Inline.h only handles with one function at a time.
 class Inliner : public IRMutator {
 public:
     std::set<Function, Function::Compare> to_inline;
+
+    Expr do_inlining(const Expr &e) {
+        return common_subexpression_elimination(mutate(e));
+    }
+
+protected:
+    std::map<Function, std::map<int, Expr>, Function::Compare> qualified_bodies;
+
+    Expr get_qualified_body(const Function &f, int idx) {
+        auto it = qualified_bodies.find(f);
+        if (it != qualified_bodies.end()) {
+            auto it2 = it->second.find(idx);
+            if (it2 != it->second.end()) {
+                return it2->second;
+            }
+        }
+        Expr e = qualify(f.name() + ".", f.values()[idx]);
+        e = do_inlining(e);
+        qualified_bodies[f][idx] = e;
+        return e;
+    }
 
     Expr visit(const Call *op) override {
         if (op->func.defined()) {
             Function f(op->func);
             if (to_inline.count(f)) {
                 auto args = mutate(op->args);
-                Expr body = qualify(f.name() + ".", f.values()[op->value_index]);
+                Expr body = get_qualified_body(f, op->value_index);
                 const vector<string> func_args = f.args();
                 for (size_t i = 0; i < args.size(); i++) {
                     body = Let::make(f.name() + "." + func_args[i], args[i], body);
                 }
+                return body;
             }
         }
         return IRMutator::visit(op);
     }
 
     using IRMutator::visit;
-
-    Expr do_inlining(const Expr &e) {
-        return common_subexpression_elimination(mutate(e));
-    }
 };
 
 class BoundsInference : public IRMutator {
