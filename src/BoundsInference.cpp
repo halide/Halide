@@ -1,5 +1,6 @@
 #include "BoundsInference.h"
 #include "Bounds.h"
+#include "CSE.h"
 #include "ExprUsesVar.h"
 #include "ExternFuncArgument.h"
 #include "Function.h"
@@ -7,6 +8,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Inline.h"
+#include "Qualify.h"
 #include "Scope.h"
 #include "Simplify.h"
 
@@ -207,13 +209,22 @@ public:
         if (op->func.defined()) {
             Function f(op->func);
             if (to_inline.count(f)) {
-                return mutate(inline_function(op, f));
+                auto args = mutate(op->args);
+                Expr body = qualify(f.name() + ".", f.values()[op->value_index]);
+                const vector<string> func_args = f.args();
+                for (size_t i = 0; i < args.size(); i++) {
+                    body = Let::make(f.name() + "." + func_args[i], args[i], body);
+                }
             }
         }
         return IRMutator::visit(op);
     }
 
     using IRMutator::visit;
+
+    Expr do_inlining(const Expr &e) {
+        return common_subexpression_elimination(mutate(e));
+    }
 };
 
 class BoundsInference : public IRMutator {
@@ -677,7 +688,7 @@ public:
             vector<pair<Expr, int>> buffers_to_annotate;
             for (const auto &arg : args) {
                 if (arg.is_expr()) {
-                    bounds_inference_args.push_back(inliner->mutate(arg.expr));
+                    bounds_inference_args.push_back(inliner->do_inlining(arg.expr));
                 } else if (arg.is_func()) {
                     Function input(arg.func);
                     for (int k = 0; k < input.outputs(); k++) {
@@ -884,7 +895,7 @@ public:
         for (auto &s : stages) {
             for (auto &cond_val : s.exprs) {
                 internal_assert(cond_val.value.defined());
-                cond_val.value = inliner.mutate(cond_val.value);
+                cond_val.value = inliner.do_inlining(cond_val.value);
             }
         }
 
