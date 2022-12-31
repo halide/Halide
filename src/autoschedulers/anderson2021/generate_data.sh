@@ -8,7 +8,13 @@
 # by providing statistics, support for resuming previous batches, autotuning
 # across multiple apps, etc.
 #
+# It assumes that the autoscheduler itself and any apps to be autoscheduled have
+# already been built and the resulting files are stored in halide_build_dir.
+# Using CMake is recommended because this script assumes that the given
+# halide_build_dir has the same structure that the CMake build will produce
+#
 # Arguments:
+# halide_build_dir - path where Halide is built
 # max_iterations - the number of batches to generate. The cost model is
 # retrained after each
 # resume - resume using the previously generated samples or start a new run?
@@ -16,21 +22,61 @@
 # existing samples
 # predict_only - don't generate new data, just predict the costs of the existing
 # samples
+# parallelism - the number of streaming multiprocessors in the target GPU
 # app - the individual application (in Halide/apps/) to generate data for. If
 # not provided, it will generate a data for all the apps in the list below
 
-if [[ $# -ne 4 && $# -ne 5 ]]; then
-    echo "Usage: $0 max_iterations resume train_only predict_only app"
+if [[ $# -ne 6 && $# -ne 7 ]]; then
+    echo "Usage: $0 halide_build_dir max_iterations resume train_only predict_only parallelism app"
     exit
 fi
 
-set -e
+set -eu
 
-MAX_ITERATIONS=${1}
-RESUME=${2}
-TRAIN_ONLY=${3}
-PREDICT_ONLY=${4}
-APP=${5}
+HALIDE_BUILD_DIR=${1}
+MAX_ITERATIONS=${2}
+RESUME=${3}
+TRAIN_ONLY=${4}
+PREDICT_ONLY=${5}
+PARALLELISM=${6}
+
+if [ -z ${7+x} ]; then
+    APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur depthwise_separable_conv"
+else
+    APPS=${7}
+fi
+
+if [ -z ${CXX+x} ]; then
+    echo The CXX environment variable must be set. Exiting...
+    exit
+fi
+
+export CXX="ccache ${CXX}"
+
+AUTOSCHEDULER_SRC_DIR=$(dirname $0)
+SCRIPTS_DIR="${AUTOSCHEDULER_SRC_DIR}/scripts"
+source ${SCRIPTS_DIR}/utils.sh
+make_dir_path_absolute $(dirname $0) AUTOSCHEDULER_SRC_DIR
+
+get_halide_src_dir ${AUTOSCHEDULER_SRC_DIR} HALIDE_SRC_DIR
+get_autoscheduler_build_dir ${HALIDE_BUILD_DIR} AUTOSCHEDULER_BUILD_DIR
+
+echo "HALIDE_SRC_DIR = ${HALIDE_SRC_DIR}"
+echo "HALIDE_BUILD_DIR = ${HALIDE_BUILD_DIR}"
+echo "AUTOSCHEDULER_SRC_DIR = ${AUTOSCHEDULER_SRC_DIR}"
+echo "AUTOSCHEDULER_BUILD_DIR = ${AUTOSCHEDULER_BUILD_DIR}"
+echo
+
+BEST_SCHEDULES_DIR=${AUTOSCHEDULER_SRC_DIR}/best
+export HL_PERMIT_FAILED_UNROLL=1
+
+if [ -z ${HL_TARGET+x} ]; then
+    get_host_target ${AUTOSCHEDULER_BUILD_DIR} HL_TARGET
+    HL_TARGET=${HL_TARGET}-cuda-cuda_capability_70
+fi
+
+echo "HL_TARGET set to ${HL_TARGET}"
+echo
 
 if [[ $PREDICT_ONLY == 1 && $TRAIN_ONLY == 1 ]]; then
     echo "At most one of train_only and predict_only can be set to 1."
@@ -40,36 +86,6 @@ fi
 if [[ $PREDICT_ONLY == 1 ]]; then
     echo "Predict only mode: ON"
 fi
-
-SCRIPTS_DIR="$(dirname $0)/scripts"
-source ${SCRIPTS_DIR}/utils.sh
-
-BEST_SCHEDULES_DIR=$(dirname $0)/best
-
-find_halide HALIDE_ROOT
-
-build_autoscheduler_tools ${HALIDE_ROOT}
-get_absolute_autoscheduler_bin_dir ${HALIDE_ROOT} AUTOSCHED_BIN
-get_autoscheduler_dir ${HALIDE_ROOT} AUTOSCHED_SRC
-
-export CXX="ccache ${CXX}"
-
-export HL_MACHINE_PARAMS=80,24000000,160
-
-export HL_PERMIT_FAILED_UNROLL=1
-
-export AUTOSCHED_BIN=${AUTOSCHED_BIN}
-echo "AUTOSCHED_BIN set to ${AUTOSCHED_BIN}"
-echo
-
-if [ ! -v HL_TARGET ]; then
-    get_host_target ${HALIDE_ROOT} HL_TARGET
-    HL_TARGET=${HL_TARGET}-cuda-cuda_capability_70
-fi
-
-export HL_TARGET=${HL_TARGET}
-
-echo "HL_TARGET set to ${HL_TARGET}"
 
 DEFAULT_SAMPLES_DIR_NAME="${SAMPLES_DIR:-autotuned_samples}"
 
@@ -117,12 +133,6 @@ function ctrl_c() {
 
 trap ctrl_c INT
 
-if [ -z $APP ]; then
-    APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur depthwise_separable_conv"
-else
-    APPS=${APP}
-fi
-
 NUM_APPS=0
 for app in $APPS; do
     NUM_APPS=$((NUM_APPS + 1))
@@ -132,7 +142,11 @@ echo "Autotuning on $APPS for $MAX_ITERATIONS iteration(s)"
 
 for app in $APPS; do
     SECONDS=0
-    APP_DIR="${HALIDE_ROOT}/apps/${app}"
+    APP_DIR="${HALIDE_SRC_DIR}/apps/${app}"
+    if [ ! -d $APP_DIR ]; then
+        echo "App ${APP_DIR} not found. Skipping..."
+        continue
+    fi
 
     unset -v LATEST_SAMPLES_DIR
     for f in "$APP_DIR/${DEFAULT_SAMPLES_DIR_NAME}"*; do
@@ -172,32 +186,36 @@ for app in $APPS; do
     mkdir -p ${SAMPLES_DIR}
     touch ${OUTPUT_FILE}
 
+    GENERATOR_BUILD_DIR=${HALIDE_BUILD_DIR}/apps/${app}
+
     if [[ ${app} = "cuda_mat_mul" ]]; then
         app="mat_mul"
     fi
 
-    GENERATOR=bin/host/${app}.generator
-    make -C ${APP_DIR} ${GENERATOR}
+    GENERATOR=${GENERATOR_BUILD_DIR}/${app}.generator
+    if [ ! -f $GENERATOR ]; then
+        echo "Generator ${GENERATOR} not found. Skipping..."
+        continue
+    fi
+    echo
 
     if [[ $PREDICT_ONLY != 1 ]]; then
         NUM_BATCHES=${MAX_ITERATIONS} \
         TRAIN_ONLY=${TRAIN_ONLY} \
         SAMPLES_DIR=${SAMPLES_DIR} \
-        HARDWARE_PARALLELISM=80 \
-        SAMPLES_DIR=${SAMPLES_DIR} \
         HL_DEBUG_CODEGEN=0 \
-        HL_SHARED_MEMORY_LIMIT=48 \
-        bash ${AUTOSCHED_SRC}/autotune_loop.sh \
-            ${APP_DIR}/${GENERATOR} \
+        bash ${AUTOSCHEDULER_SRC_DIR}/autotune_loop.sh \
+            ${GENERATOR} \
             ${app} \
             ${HL_TARGET} \
-            ${AUTOSCHED_SRC}/baseline.weights \
-            ${AUTOSCHED_BIN} \
+            ${AUTOSCHEDULER_SRC_DIR}/baseline.weights \
+            ${HALIDE_BUILD_DIR} \
+            ${PARALLELISM} \
             ${TRAIN_ONLY} | tee -a ${OUTPUT_FILE}
     fi
 
     WEIGHTS_FILE="${SAMPLES_DIR}/updated.weights"
-    predict_all ${HALIDE_ROOT} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_WITH_FILENAMES_FILE} 1 ${LIMIT:-0}
+    predict_all ${HALIDE_SRC_DIR} ${HALIDE_BUILD_DIR} ${SAMPLES_DIR} ${WEIGHTS_FILE} ${PREDICTIONS_WITH_FILENAMES_FILE} 1 ${LIMIT:-0} ${PARALLELISM}
     awk -F", " '{printf("%f, %f\n", $2, $3);}' ${PREDICTIONS_WITH_FILENAMES_FILE} > ${PREDICTIONS_FILE}
 
     echo "Computing average statistics..."
@@ -208,4 +226,5 @@ for app in $APPS; do
     save_best_schedule_result ${BEST_SCHEDULES_DIR} ${SAMPLES_DIR}
 done
 
+echo
 print_best_schedule_times $(dirname $0)/best

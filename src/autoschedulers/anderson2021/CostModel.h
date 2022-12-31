@@ -30,7 +30,7 @@ struct Anderson2021Params {
 
     /** Random seed used by the random dropout. If 0, use time().
      * Formerly HL_SEED */
-    int random_dropout_seed = 0;
+    int64_t random_dropout_seed = 0;
 
     /** When training or schedule, read weights from this directory or file.
      * (If path ends in `.weights` it is written as a single file, otherwise a directory of files.)

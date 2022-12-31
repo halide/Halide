@@ -728,12 +728,12 @@ struct Anderson2021 {
         params.parallelism = params_in.parallelism;
         params.beam_size = get_scalar_env_var<int>("HL_BEAM_SIZE", 32);
         params.random_dropout = get_scalar_env_var<int>("HL_RANDOM_DROPOUT", 100);
-        params.random_dropout_seed = get_scalar_env_var<int>("HL_SEED", (int)time(nullptr));
+        params.random_dropout_seed = get_scalar_env_var<int64_t>("HL_SEED", (int)time(nullptr));
         params.weights_path = get_scalar_env_var<std::string>("HL_WEIGHTS_DIR");
         params.disable_subtiling = get_scalar_env_var<int>("HL_NO_SUBTILING", 0);
         params.randomize_tilings = get_scalar_env_var<int>("HL_RANDOMIZE_TILINGS", 0);
-        params.search_space_options = get_scalar_env_var<std::string>("HL_DISABLE_MEMOIZED_FEATURES", "1111");
-        params.freeze_inline_compute_root = get_scalar_env_var<int>("HL_AUTOSCHEDULE_MEMORY_LIMIT", 0);
+        params.search_space_options = get_scalar_env_var<std::string>("HL_SEARCH_SPACE_OPTIONS", "1111");
+        params.freeze_inline_compute_root = get_scalar_env_var<int>("HL_FREEZE_INLINE_COMPUTE_ROOT", 0);
         params.partial_schedule_path = get_scalar_env_var<std::string>("PARTIAL_SCHEDULE", "");
         params.num_passes = get_scalar_env_var<int>("HL_NUM_PASSES", 0);
         params.stack_factor = get_scalar_env_var<double>("HL_STACK_FACTOR", 0.95f);

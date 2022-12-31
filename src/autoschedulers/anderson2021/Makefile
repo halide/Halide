@@ -4,7 +4,7 @@ HALIDE_SRC_ROOT = $(realpath $(SRC)/../../../)
 COMMON_DIR ?= $(realpath $(SRC)/../common/)
 
 HALIDE_DISTRIB_PATH ?= $(HALIDE_SRC_ROOT)/distrib
-HL_TARGET ?= host-cuda
+HL_TARGET ?= host
 
 $(info Looking for Halide distro at $(HALIDE_DISTRIB_PATH). If this is incorrect, set the make variable HALIDE_DISTRIB_PATH)
 
@@ -41,8 +41,8 @@ $(BIN)/baseline_weights.o: $(BIN)/baseline_weights.cpp
 	$(CXX) -c $< -o $@
 
 AUTOSCHED_COST_MODEL_LIBS=\
-$(BIN)/cost_model/cost_model.a \
-$(BIN)/cost_model/train_cost_model.a \
+$(BIN)/cost_model/anderson2021_cost_model.a \
+$(BIN)/cost_model/anderson2021_train_cost_model.a \
 
 $(BIN)/cost_model.generator: $(SRC)/cost_model_generator.cpp \
 							$(SRC)/cost_model_schedule.h \
@@ -55,9 +55,9 @@ $(BIN)/auto_schedule_runtime.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
 	$^ -r auto_schedule_runtime -o $(BIN) target=$(HL_TARGET)
 
-$(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
+$(BIN)/cost_model/anderson2021_%.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
-	$^ -g $* -o $(BIN)/cost_model -f $* target=$(HL_TARGET)-no_runtime enable_debug_output=$(ENABLE_DEBUG_OUTPUT) -e stmt,static_library,h,assembly
+	$^ -g $* -o $(BIN)/cost_model -f $* -n anderson2021_$* target=$(HL_TARGET)-no_runtime enable_debug_output=$(ENABLE_DEBUG_OUTPUT) -e stmt,static_library,h,assembly
 
 # It's important to use dynamic lookups for undefined symbols here: all of libHalide
 # is expected to be present (in the loading binary), so we explicitly make the symbols
@@ -94,7 +94,7 @@ $(BIN)/libautoschedule_anderson2021.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 										$(GENERATOR_DEPS) \
 										$(BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) -I .
 
 $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 									$(COMMON_DIR)/ASLog.cpp \
@@ -110,17 +110,17 @@ $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_OPEN_MP)
 
-$(BIN)/featurization_to_sample: $(COMMON_DIR)/featurization_to_sample.cpp
+$(BIN)/anderson2021_featurization_to_sample: $(COMMON_DIR)/featurization_to_sample.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OPTIMIZE) -o $@
 
-$(BIN)/get_host_target: $(COMMON_DIR)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
+$(BIN)/anderson2021_get_host_target: $(COMMON_DIR)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) $(OPTIMIZE) -o $@
 
-$(BIN)/weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(COMMON_DIR)/Weights.cpp
+$(BIN)/anderson2021_weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(COMMON_DIR)/Weights.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@
+	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@ -I .
 
 # A sample generator to autoschedule. Note that if it statically links
 # to libHalide, then it must be build with $(USE_EXPORT_DYNAMIC), or the
@@ -145,7 +145,7 @@ demo: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_anderson2021.$(SHAR
 
 # demonstrates an autotuning loop
 # (using $(BIN) and $(SRC) here seems overkill, but makes copy-n-paste elsewhere easier)
-autotune: $(GENERATOR_BIN)/demo.generator $(BIN)/featurization_to_sample $(BIN)/get_host_target $(BIN)/retrain_cost_model $(BIN)/libautoschedule_anderson2021.$(SHARED_EXT) $(SRC)/autotune_loop.sh
+autotune: $(GENERATOR_BIN)/demo.generator $(BIN)/anderson2021_featurization_to_sample $(BIN)/anderson2021_get_host_target $(BIN)/anderson2021_retrain_cost_model $(BIN)/libautoschedule_anderson2021.$(SHARED_EXT) $(SRC)/autotune_loop.sh
 	SAMPLES_DIR=test_autotuned_samples \
 	bash $(SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/demo.generator \
@@ -194,9 +194,9 @@ build: $(BIN)/$(HL_TARGET)/test \
 	$(BIN)/test_function_dag \
 	$(BIN)/$(HL_TARGET)/included_schedule_file.rungen \
 	$(GENERATOR_BIN)/demo.generator \
-	$(BIN)/featurization_to_sample \
-	$(BIN)/get_host_target \
-	$(BIN)/retrain_cost_model \
+	$(BIN)/anderson2021_featurization_to_sample \
+	$(BIN)/anderson2021_get_host_target \
+	$(BIN)/anderson2021_retrain_cost_model \
 	$(BIN)/libautoschedule_anderson2021.$(SHARED_EXT)
 
 test: test_bounds test_tiling test_storage_strides test_parser test_state test_thread_info run_test test_perfect_hash_map test_function_dag demo included_schedule_file autotune

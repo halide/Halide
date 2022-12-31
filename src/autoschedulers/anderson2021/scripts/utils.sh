@@ -1,24 +1,24 @@
 #!/bin/bash
 
-function find_halide() {
-    local -n halide_root_ref=$1
-    local -r silent="${2:-0}"
-    local dir=$(pwd)
+#function find_halide() {
+    #local -n halide_root_ref=$1
+    #local -r silent="${2:-0}"
+    #local dir=$(pwd)
 
-    for i in {1..5}; do
-        if [[ -f ${dir}/distrib/include/Halide.h ]]; then
-            halide_root_ref=$(cd ${dir}; pwd)
-            if [[ $silent -ne 1 ]]; then
-                echo "Using Halide in ${halide_root_ref}"
-            fi
-            return 0
-        fi
-        dir=${dir}/..
-    done
+    #for i in {1..5}; do
+        #if [[ -f ${dir}/build/include/Halide.h ]]; then
+            #halide_root_ref=$(cd ${dir}; pwd)
+            #if [[ $silent -ne 1 ]]; then
+                #echo "Using Halide in ${halide_root_ref}"
+            #fi
+            #return 0
+        #fi
+        #dir=${dir}/..
+    #done
 
-    echo "Unable to find Halide. Try re-running $(basename $0) from somewhere in the Halide tree."
-    exit
-}
+    #echo "Unable to find Halide. Try re-running $(basename $0) from somewhere in the Halide tree."
+    #exit
+#}
 
 function make_dir_path_absolute() {
     local -r path=$1
@@ -32,17 +32,28 @@ function make_file_path_absolute() {
     converted_path_ref=$(cd $(dirname ${path}); pwd)/$(basename ${path})
 }
 
-function get_autoscheduler_dir() {
-    local -r halide_root=$1
-    local -n autoscheduler_dir_ref=$2
-    autoscheduler_dir_ref=${halide_root}/src/autoschedulers/anderson2021
+function get_halide_src_dir() {
+    local -r autoscheduler_src_dir=$1
+    local -n halide_src_dir_ref=$2
+    make_dir_path_absolute ${autoscheduler_src_dir}/../../../ halide_src_dir_ref
 }
 
-function get_absolute_autoscheduler_bin_dir() {
-    local -r halide_root=$1
-    local -n autoscheduler_bin_dir_ref=$2
-    get_autoscheduler_dir $halide_root autoscheduler_dir
-    autoscheduler_bin_dir_ref=${autoscheduler_dir}/bin
+function get_autoscheduler_src_dir() {
+    local -r halide_src_dir=$1
+    local -n autoscheduler_dir_ref=$2
+    autoscheduler_dir_ref=${halide_src_dir}/src/autoschedulers/anderson2021
+}
+
+function get_autoscheduler_build_dir() {
+    local -r halide_build_dir=$1
+    local -n autoscheduler_build_dir_ref=$2
+    autoscheduler_build_dir_ref=${halide_build_dir}/src/autoschedulers/anderson2021
+}
+
+function get_tools_build_dir() {
+    local -r halide_build_dir=$1
+    local -n tools_build_dir_ref=$2
+    tools_build_dir_ref=${halide_build_dir}/tools
 }
 
 function get_autoscheduler_bin_dir() {
@@ -56,15 +67,15 @@ function get_autoscheduler_make_bin_dir() {
 }
 
 function get_autoscheduler_scripts_dir() {
-    local -r halide_root=$1
+    local -r halide_src_dir=$1
     local -n autoscheduler_scripts_dir_ref=$2
-    get_autoscheduler_dir $halide_root autoscheduler_dir
-    autoscheduler_scripts_dir_ref=${autoscheduler_dir}/scripts
+    get_autoscheduler_src_dir $halide_src_dir autoscheduler_src_dir
+    autoscheduler_scripts_dir_ref=${autoscheduler_src_dir}/scripts
 }
 
 function build_rungenmain() {
     local -r halide_root=$1
-    get_autoscheduler_dir $halide_root autoscheduler_dir
+    get_autoscheduler_src_dir $halide_root autoscheduler_dir
     get_autoscheduler_bin_dir autoscheduler_bin_dir
 
     echo
@@ -75,7 +86,7 @@ function build_rungenmain() {
 
 function build_featurization_to_sample() {
     local -r halide_root=$1
-    get_autoscheduler_dir $halide_root autoscheduler_dir
+    get_autoscheduler_src_dir $halide_root autoscheduler_dir
     get_autoscheduler_bin_dir autoscheduler_bin_dir
 
     echo
@@ -86,7 +97,7 @@ function build_featurization_to_sample() {
 
 function build_libauto_schedule() {
     local -r halide_root=$1
-    get_autoscheduler_dir $halide_root autoscheduler_dir
+    get_autoscheduler_src_dir $halide_root autoscheduler_dir
     get_autoscheduler_bin_dir autoscheduler_bin_dir
 
     echo
@@ -97,7 +108,7 @@ function build_libauto_schedule() {
 
 function build_retrain_cost_model() {
     local -r halide_root=$1
-    get_autoscheduler_dir $halide_root autoscheduler_dir
+    get_autoscheduler_src_dir $halide_root autoscheduler_dir
     get_autoscheduler_bin_dir autoscheduler_bin_dir
 
     echo
@@ -108,7 +119,7 @@ function build_retrain_cost_model() {
 
 function build_get_host_target() {
     local -r halide_root=$1
-    get_autoscheduler_dir $halide_root autoscheduler_dir
+    get_autoscheduler_src_dir $halide_root autoscheduler_dir
     get_autoscheduler_bin_dir autoscheduler_bin_dir
 
     echo
@@ -118,20 +129,18 @@ function build_get_host_target() {
 }
 
 function get_host_target() {
-    local -r halide_root=$1
+    local -r autoscheduler_build_dir=$1
     local -n host_target_ref=$2
 
-    get_absolute_autoscheduler_bin_dir $halide_root autoscheduler_bin_dir
-
     echo "Calling get_host_target()..."
-    host_target_ref=$(${AUTOSCHED_BIN}/get_host_target)
+    host_target_ref=$(${autoscheduler_build_dir}/anderson2021_get_host_target)
     echo "host_target = ${host_target_ref}"
     echo
 }
 
 function build_autoscheduler_tools() {
     local -r halide_root=$1
-    get_autoscheduler_dir $halide_root autoscheduler_dir
+    get_autoscheduler_src_dir $halide_root autoscheduler_dir
 
     echo
     echo "Building autoscheduler tools..."
@@ -144,7 +153,7 @@ function build_autoscheduler_tools() {
 }
 
 function retrain_cost_model() {
-    local -r halide_root=$1
+    local -r halide_build_dir=$1
     local -r samples_dir=$2
     local -r weights=$3
     local -r num_cores=$4
@@ -156,12 +165,12 @@ function retrain_cost_model() {
     local -r partition_schedules=${10-0}
     local -r limit=${11-0}
 
-    get_absolute_autoscheduler_bin_dir ${halide_root} autosched_bin
+    get_autoscheduler_build_dir ${halide_build_dir} autoscheduler_build_dir
 
     echo "Using learning rate: ${learning_rate}"
 
     find ${samples_dir} -name "*.sample" | \
-         HL_NUM_THREADS=8 ${autosched_bin}/retrain_cost_model \
+         HL_NUM_THREADS=8 ${autoscheduler_build_dir}/anderson2021_retrain_cost_model \
             --epochs=${num_epochs} \
             --rates=${learning_rate} \
             --num_cores=${num_cores} \
@@ -190,15 +199,17 @@ function get_timeout_cmd() {
 }
 
 function predict_all() {
-    local -r halide_root=$1
-    local -r samples_dir=$2
-    local -r weights_dir=$3
-    local -r predictions_file=$4
-    local -r include_filenames=$5
-    local -r limit=$6
+    local -r halide_src_dir=$1
+    local -r halide_build_dir=$2
+    local -r samples_dir=$3
+    local -r weights_dir=$4
+    local -r predictions_file=$5
+    local -r include_filenames=$6
+    local -r limit=$7
+    local -r parallelism=$8
 
-    get_autoscheduler_scripts_dir ${halide_root} scripts_dir
-    bash ${scripts_dir}/predict_all.sh ${samples_dir} ${weights_dir} ${predictions_file} ${include_filenames} ${limit}
+    get_autoscheduler_scripts_dir ${halide_src_dir} scripts_dir
+    bash ${scripts_dir}/predict_all.sh ${halide_build_dir} ${samples_dir} ${weights_dir} ${predictions_file} ${include_filenames} ${limit} ${parallelism}
 }
 
 function average_compile_time_beam_search() {
@@ -337,6 +348,7 @@ function print_best_schedule_times() {
 
     local -r apps="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur depthwise_separable_conv"
 
+    echo "Best found schedule times:"
     for app in $apps; do
         local file=$dir/$app.txt
         if [ ! -f $file ]; then
@@ -349,13 +361,13 @@ function print_best_schedule_times() {
     done
 }
 
-function get_num_local_cores() {
-    local -n num_local_cores_ref=$1
+function get_num_cpu_cores() {
+    local -n num_cpu_cores_ref=$1
 
     if [ $(uname -s) = "Darwin" ]; then
-        num_local_cores_ref=$(sysctl -n hw.ncpu)
+        num_cpu_cores_ref=$(sysctl -n hw.ncpu)
     else
-        num_local_cores_ref=$(nproc)
+        num_cpu_cores_ref=$(nproc)
     fi
 }
 

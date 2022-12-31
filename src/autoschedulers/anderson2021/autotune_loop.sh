@@ -1,35 +1,36 @@
 #!/bin/bash
 
-# Build the generator to autotune. This script will be autotuning the
-# autoscheduler's cost model training pipeline, which is large enough
-# to be interesting.
-if [ $# -lt 6 -o $# -gt 7 ]; then
-    echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir train_only [generator_args_sets]"
+# Autotune the given generator
+if [ $# -lt 7 -o $# -gt 8 ]; then
+    echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file halide_build_dir parallelism train_only [generator_args_sets]"
     exit
 fi
 
 set -eu
 
-source $(dirname $0)/scripts/utils.sh
-find_halide HALIDE_ROOT
-
-#trap "exit" INT TERM
-#trap "kill 0" EXIT
+AUTOSCHEDULER_SRC_DIR=$(dirname $0)
+SCRIPTS_DIR="${AUTOSCHEDULER_SRC_DIR}/scripts"
+source ${SCRIPTS_DIR}/utils.sh
 
 GENERATOR=${1}
 PIPELINE=${2}
 HL_TARGET=${3}
 START_WEIGHTS_FILE=${4}
-AUTOSCHED_BIN=${5}
-TRAIN_ONLY=${6}
+HALIDE_BUILD_DIR=${5}
+PARALLELISM=${6}
+TRAIN_ONLY=${7}
+
+get_halide_src_dir ${AUTOSCHEDULER_SRC_DIR} HALIDE_SRC_DIR
+get_autoscheduler_build_dir ${HALIDE_BUILD_DIR} AUTOSCHEDULER_BUILD_DIR
+get_tools_build_dir ${HALIDE_BUILD_DIR} TOOLS_BUILD_DIR
 
 LEARNING_RATE=${LEARNING_RATE:-0.001}
 
 # Read the generator-arg sets into an array. Each set is delimited
 # by space; multiple values within each set are are delimited with ;
 # e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
-if [ $# -ge 7 ]; then
-    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${7}"
+if [ $# -ge 8 ]; then
+    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${8}"
 else
     declare -a GENERATOR_ARGS_SETS_ARRAY=
 fi
@@ -47,10 +48,6 @@ if [ -z ${CXX+x} ]; then
     exit
 fi
 
-if [ -z ${HL_TARGET} ]; then
-    get_host_target ${HALIDE_ROOT} HL_TARGET
-    HL_TARGET=${HL_TARGET}-cuda-cuda_capability_70
-fi
 echo Training target is: ${HL_TARGET}
 
 if [ -z ${GENERATOR} ]; then
@@ -84,18 +81,12 @@ fi
     #fi
 #done
 
-if [ $(uname -s) = "Darwin" ]; then
-    LOCAL_CORES=`sysctl -n hw.ncpu`
-else
-    LOCAL_CORES=`nproc`
-fi
-LOCAL_CORES=80
-echo Local number of cores detected as ${LOCAL_CORES}
+get_num_cpu_cores NUM_CPU_CORES
+echo "Number of CPU cores detected as ${NUM_CPU_CORES}"
 
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
 BATCH_SIZE=80
-NUM_CORES=80
 EPOCHS=200
 NUM_GPUS=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
 
@@ -177,21 +168,14 @@ make_featurization() {
         beam=1
     fi
 
+    # TODO: make these arguments to this file
     local -r shared_memory_limit=48
     local -r shared_memory_sm_limit=96
+    local -r active_block_limit=32
+    local -r active_warp_limit=64
 
     GPU=$((RANDOM % NUM_GPUS))
-    CMD="CUDA_VISIBLE_DEVICES=${GPU} \
-        HL_SEARCH_SPACE_OPTIONS=${SEARCH_SPACE_OPTIONS}
-        HL_SEED=${RANDOM_DROPOUT_SEED} \
-        HL_WEIGHTS_DIR=${WEIGHTS} \
-        HL_RANDOMIZE_TILINGS=${RANDOMIZE_TILINGS} \
-        HL_FREEZE_INLINE_COMPUTE_ROOT=${USE_FREEZE} \
-        HL_RANDOM_DROPOUT=${dropout} \
-        HL_BEAM_SIZE=${beam} \
-        HL_SHARED_MEMORY_LIMIT=${shared_memory_limit} \
-        HL_SHARED_MEMORY_SM_LIMIT=${shared_memory_sm_limit} \
-        HL_DEBUG_AUTOSCHEDULE=1 \
+    CMD="HL_DEBUG_AUTOSCHEDULE=1 \
         HL_DEBUG_CODEGEN=1 \
         /bin/time -f 'Compile time (s): %e' ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
@@ -201,9 +185,20 @@ make_featurization() {
         -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
         target=${HL_TARGET} \
         ${EXTRA_GENERATOR_ARGS} \
-        -p ${AUTOSCHED_BIN}/libautoschedule_anderson2021.so \
+        -p ${AUTOSCHEDULER_BUILD_DIR}/libautoschedule_anderson2021.so \
         autoscheduler=Anderson2021 \
-        autoscheduler.parallelism=${NUM_CORES}
+        autoscheduler.parallelism=${PARALLELISM} \
+        autoscheduler.beam_size=${beam} \
+        autoscheduler.random_dropout=${dropout} \
+        autoscheduler.random_dropout_seed=${RANDOM_DROPOUT_SEED} \
+        autoscheduler.weights_path=${WEIGHTS} \
+        autoscheduler.randomize_tilings=${RANDOMIZE_TILINGS} \
+        autoscheduler.search_space_options=${SEARCH_SPACE_OPTIONS} \
+        autoscheduler.freeze_inline_compute_root=${USE_FREEZE} \
+        autoscheduler.shared_memory_limit_kb=${shared_memory_limit} \
+        autoscheduler.shared_memory_sm_limit_kb=${shared_memory_sm_limit} \
+        autoscheduler.active_block_limit=${active_block_limit} \
+        autoscheduler.active_warp_limit=${active_warp_limit} \
         2> ${D}/compile_err.txt > ${D}/compile_log.txt"
 
     FAILED=0
@@ -227,7 +222,7 @@ make_featurization() {
         -O3
         -I ../../include \
         ${LIBPNG_CFLAGS} \
-        ${AUTOSCHED_BIN}/host-cuda/RunGenMain.o \
+        ${TOOLS_BUILD_DIR}/RunGenMain.o \
         ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
@@ -254,7 +249,7 @@ make_featurization() {
     rm ${D}/compile_log.txt
 }
 
-IMAGES_DIR="${HALIDE_ROOT}/apps/images"
+IMAGES_DIR="${HALIDE_SRC_DIR}/apps/images"
 
 # Benchmark one of the random samples
 benchmark_sample() {
@@ -270,7 +265,7 @@ benchmark_sample() {
         return
     fi
 
-    CMD="CUDA_VISIBLE_DEVICES=${GPU_INDEX} HL_NUM_THREADS=${NUM_CORES} \
+    CMD="CUDA_VISIBLE_DEVICES=${GPU_INDEX} HL_NUM_THREADS=${PARALLELISM} \
         ${TIMEOUT_CMD} -k ${BENCHMARKING_TIMEOUT} ${BENCHMARKING_TIMEOUT} \
         ${D}/bench"
 
@@ -304,7 +299,7 @@ benchmark_sample() {
     S=$2
     FNAME=$6
 
-    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
+    ${AUTOSCHEDULER_BUILD_DIR}/anderson2021_featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
 
     rm ${D}/${FNAME}.featurization
     rm ${D}/bench
@@ -423,20 +418,26 @@ benchmark_loop() {
     rm -rf ${BENCHMARK_QUEUE_DIR}
 }
 
-MAX_AUTOSCHEDULE_JOBS=${LOCAL_CORES}
+MAX_AUTOSCHEDULE_JOBS=${NUM_CPU_CORES}
 
 BENCHMARK_QUEUE_ENABLED=0
 
 if [[ $USE_BENCHMARK_QUEUE == 1 ]] && [[ $TRAIN_ONLY != 1 ]]; then
-    echo "Benchmark queue = ON"
-    # This includes 1 job for the benchmark loop
-    MAX_AUTOSCHEDULE_JOBS=$((LOCAL_CORES-NUM_GPUS))
-    BENCHMARK_QUEUE_ENABLED=1
+    # Include 1 job for the benchmark loop
+    MAX_AUTOSCHEDULE_JOBS=$((NUM_CPU_CORES-NUM_GPUS-1))
+    if [[ MAX_AUTOSCHEDULE_JOBS -le 0 ]]; then
+        MAX_AUTOSCHEDULE_JOBS=${NUM_CPU_CORES}
+        echo "Not enough cores available to use the benchmark queue"
+        echo "Benchmark queue = OFF"
+    else
+        BENCHMARK_QUEUE_ENABLED=1
+        echo "Benchmark queue = ON"
+    fi
 else
     echo "Benchmark queue = OFF"
 fi
 
-echo "Max. autoschedule jobs = ${MAX_AUTOSCHEDULE_JOBS}"
+echo "Max. concurrent autoschedule jobs = ${MAX_AUTOSCHEDULE_JOBS}"
 
 SECONDS=0
 
@@ -540,7 +541,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
             fi
 
             CUR_SECONDS="$SECONDS"
-            retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
+            retrain_cost_model ${HALIDE_BUILD_DIR} ${SAMPLES} ${WEIGHTS} ${PARALLELISM} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
             TRAIN_TIME=$((SECONDS-CUR_SECONDS))
             echo "Train time for batch with ID = ${BATCH_ID}: ${TRAIN_TIME}"
         fi
@@ -563,7 +564,7 @@ fi
 echo Retraining model...
 
 CUR_SECONDS="$SECONDS"
-retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
+retrain_cost_model ${HALIDE_SRC_DIR} ${SAMPLES} ${WEIGHTS} ${PARALLELISM} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
 TRAIN_TIME=$((SECONDS-CUR_SECONDS))
 echo "Num batches = ${NUM_BATCHES}. Train time: ${TRAIN_TIME}"
 
