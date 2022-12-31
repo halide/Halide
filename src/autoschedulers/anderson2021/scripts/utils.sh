@@ -1,25 +1,5 @@
 #!/bin/bash
 
-#function find_halide() {
-    #local -n halide_root_ref=$1
-    #local -r silent="${2:-0}"
-    #local dir=$(pwd)
-
-    #for i in {1..5}; do
-        #if [[ -f ${dir}/build/include/Halide.h ]]; then
-            #halide_root_ref=$(cd ${dir}; pwd)
-            #if [[ $silent -ne 1 ]]; then
-                #echo "Using Halide in ${halide_root_ref}"
-            #fi
-            #return 0
-        #fi
-        #dir=${dir}/..
-    #done
-
-    #echo "Unable to find Halide. Try re-running $(basename $0) from somewhere in the Halide tree."
-    #exit
-#}
-
 function make_dir_path_absolute() {
     local -r path=$1
     local -n absolute_path_ref=$2
@@ -56,76 +36,11 @@ function get_tools_build_dir() {
     tools_build_dir_ref=${halide_build_dir}/tools
 }
 
-function get_autoscheduler_bin_dir() {
-    local -n autoscheduler_bin_dir_ref=$1
-    autoscheduler_bin_dir_ref=bin
-}
-
-function get_autoscheduler_make_bin_dir() {
-    local -n autoscheduler_bin_dir_ref=$1
-    autoscheduler_bin_dir_ref=../autoscheduler/bin
-}
-
 function get_autoscheduler_scripts_dir() {
     local -r halide_src_dir=$1
     local -n autoscheduler_scripts_dir_ref=$2
     get_autoscheduler_src_dir $halide_src_dir autoscheduler_src_dir
     autoscheduler_scripts_dir_ref=${autoscheduler_src_dir}/scripts
-}
-
-function build_rungenmain() {
-    local -r halide_root=$1
-    get_autoscheduler_src_dir $halide_root autoscheduler_dir
-    get_autoscheduler_bin_dir autoscheduler_bin_dir
-
-    echo
-    echo "Building RunGenMain..."
-    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/host-cuda/RunGenMain.o
-    echo
-}
-
-function build_featurization_to_sample() {
-    local -r halide_root=$1
-    get_autoscheduler_src_dir $halide_root autoscheduler_dir
-    get_autoscheduler_bin_dir autoscheduler_bin_dir
-
-    echo
-    echo "Building featurization_to_sample..."
-    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/featurization_to_sample
-    echo
-}
-
-function build_libauto_schedule() {
-    local -r halide_root=$1
-    get_autoscheduler_src_dir $halide_root autoscheduler_dir
-    get_autoscheduler_bin_dir autoscheduler_bin_dir
-
-    echo
-    echo "Building libauto_schedule..."
-    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/libautoschedule_anderson2021.so
-    echo
-}
-
-function build_retrain_cost_model() {
-    local -r halide_root=$1
-    get_autoscheduler_src_dir $halide_root autoscheduler_dir
-    get_autoscheduler_bin_dir autoscheduler_bin_dir
-
-    echo
-    echo "Building retrain_cost_model..."
-    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/retrain_cost_model
-    echo
-}
-
-function build_get_host_target() {
-    local -r halide_root=$1
-    get_autoscheduler_src_dir $halide_root autoscheduler_dir
-    get_autoscheduler_bin_dir autoscheduler_bin_dir
-
-    echo
-    echo "Building get_host_target..."
-    make -C ${autoscheduler_dir} ${autoscheduler_bin_dir}/get_host_target
-    echo
 }
 
 function get_host_target() {
@@ -135,20 +50,6 @@ function get_host_target() {
     echo "Calling get_host_target()..."
     host_target_ref=$(${autoscheduler_build_dir}/anderson2021_get_host_target)
     echo "host_target = ${host_target_ref}"
-    echo
-}
-
-function build_autoscheduler_tools() {
-    local -r halide_root=$1
-    get_autoscheduler_src_dir $halide_root autoscheduler_dir
-
-    echo
-    echo "Building autoscheduler tools..."
-    build_featurization_to_sample $halide_root
-    build_retrain_cost_model $halide_root
-    build_libauto_schedule $halide_root
-    build_get_host_target $halide_root
-    build_rungenmain $halide_root
     echo
 }
 
@@ -225,12 +126,12 @@ function average_compile_time_greedy() {
 }
 
 function reset_weights() {
-    local -r halide_root=$1
+    local -r halide_build_dir=$1
     local -r weights=$2
 
-    get_absolute_autoscheduler_bin_dir ${halide_root} autosched_bin
+    get_autoscheduler_build_dir ${halide_build_dir} autoscheduler_build_dir
 
-    ${autosched_bin}/retrain_cost_model \
+    ${autoscheduler_build_dir}/anderson2021_retrain_cost_model \
         --initial_weights=${weights} \
         --weights_out=${weights} \
         --randomize_weights=1 \
