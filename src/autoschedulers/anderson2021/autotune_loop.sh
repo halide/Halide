@@ -48,6 +48,12 @@ if [ -z ${CXX+x} ]; then
     exit
 fi
 
+RUNGENMAIN="${TOOLS_BUILD_DIR}/RunGenMain.o"
+if [ ! -f $RUNGENMAIN ]; then
+    echo "RunGenMain.o not found. Exiting..."
+    exit
+fi
+
 echo Training target is: ${HL_TARGET}
 
 if [ -z ${GENERATOR} ]; then
@@ -222,7 +228,7 @@ make_featurization() {
         -O3
         -I ../../include \
         ${LIBPNG_CFLAGS} \
-        ${TOOLS_BUILD_DIR}/RunGenMain.o \
+        ${RUNGENMAIN} \
         ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
