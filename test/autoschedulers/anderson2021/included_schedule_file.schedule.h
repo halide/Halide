@@ -88,15 +88,7 @@ inline void apply_schedule_included_schedule_file(
         .gpu_threads(xi)
         .split(yi, yi_serial_outer, yi, 8, TailStrategy::GuardWithIf)
         .gpu_threads(yi);
-    conv.in(relu).store_in(MemoryType::Register).compute_at(relu, ci)
-        .bound_extent(c, 1)
-        .unroll(c)
-        .bound_extent(x, 4)
-        .unroll(x)
-        .bound_extent(y, 2)
-        .unroll(y)
-        .bound_extent(n, 1)
-        .unroll(n);
+    conv.in(relu).store_in(MemoryType::Register).compute_at(relu, ci).bound_extent(c, 1).unroll(c).bound_extent(x, 4).unroll(x).bound_extent(y, 2).unroll(y).bound_extent(n, 1).unroll(n);
 }
 
 #endif  // included_schedule_file_SCHEDULE_H
