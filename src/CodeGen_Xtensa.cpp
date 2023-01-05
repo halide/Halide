@@ -79,21 +79,22 @@ extern "C" {
 
 extern void *halide_tcm_malloc(void *user_context, size_t x);
 extern void halide_tcm_free(void *user_context, void *ptr);
-extern int32_t halide_init_dma(int32_t channel_count);
+extern void **halide_init_dma(int32_t channel_count);
 extern int32_t halide_xtensa_copy_1d(int32_t channel, void* dst, int32_t dst_base, void* src, int32_t src_base, int32_t extent, int32_t item_size);
 extern int32_t halide_xtensa_copy_2d(int32_t channel, void *dst, int32_t dst_base, int32_t dst_stride, void *src, int32_t src_base, int32_t src_stride, int32_t extent0, int32_t extent1, int32_t item_size);
 extern int32_t halide_xtensa_wait_for_copy(int32_t channel);
-extern int32_t halide_release_dma();
+extern int32_t halide_release_dma(int32_t channel_count, void** dma_desc);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
 class ScopedDmaInitializer {
-  bool is_valid_;
+  int channel_count_;
+  void** dma_desc_ = nullptr;
  public:
-  ScopedDmaInitializer(int channel_count) {
-    is_valid_ = (halide_init_dma(channel_count) == 0);
+  ScopedDmaInitializer(int channel_count) : channel_count_(channel_count) {
+    dma_desc_ = halide_init_dma(channel_count_);
   }
 
   ScopedDmaInitializer() = delete;
@@ -102,12 +103,12 @@ class ScopedDmaInitializer {
   ScopedDmaInitializer(ScopedDmaInitializer&&) = delete;
 
   ~ScopedDmaInitializer() {
-    if (is_valid_) {
-      halide_release_dma();
+    if (dma_desc_ != nullptr) {
+      halide_release_dma(channel_count_, dma_desc_);
     }
   }
 
-  bool is_valid() const { return is_valid_; }
+  bool is_valid() const { return dma_desc_ != nullptr; }
 };
 
 )INLINE_CODE";
