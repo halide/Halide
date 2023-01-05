@@ -74,12 +74,14 @@ public:
 // Call two extern stages then pass the two results to another extern stage.
 class NestedExternsRoot : public Generator<NestedExternsRoot> {
 public:
-    Input<float> value{"value", 1.0f};
+    // This is a zero-dimensional buffer instead of a scalar input, to check for
+    // bugs with passing constant-index calls to buffers as extern func args.
+    Input<Buffer<float, 0>> value{"value"};
     Output<Buffer<float, 3>> root{"root"};
 
     void generate() {
-        extern_stage_1.define_extern("nested_externs_inner", {value}, Float(32), 3);
-        extern_stage_2.define_extern("nested_externs_inner", {value + 1}, Float(32), 3);
+        extern_stage_1.define_extern("nested_externs_inner", {value()}, Float(32), 3);
+        extern_stage_2.define_extern("nested_externs_inner", {value() + 1}, Float(32), 3);
         extern_stage_combine.define_extern("nested_externs_combine",
                                            {extern_stage_1, extern_stage_2}, Float(32), 3);
         root(x, y, c) = extern_stage_combine(x, y, c);
