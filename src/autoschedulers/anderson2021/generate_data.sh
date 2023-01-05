@@ -14,16 +14,16 @@
 # halide_build_dir has the same structure that the CMake build will produce
 #
 # Arguments:
-# halide_build_dir - path where Halide is built
-# max_iterations - the number of batches to generate. The cost model is
+# halide_build_dir [path] - path where Halide is built
+# max_iterations [int] - the number of batches to generate. The cost model is
 # retrained after each
-# resume - resume using the previously generated samples or start a new run?
-# train_only - don't generate new data, just retrain the cost model with
+# resume [0|1] - resume using the previously generated samples or start a new run?
+# train_only [0|1] - don't generate new data, just retrain the cost model with
 # existing samples
-# predict_only - don't generate new data, just predict the costs of the existing
+# predict_only [0|1] - don't generate new data, just predict the costs of the existing
 # samples
-# parallelism - the number of streaming multiprocessors in the target GPU
-# app - the individual application (in Halide/apps/) to generate data for. If
+# parallelism [int] - the number of streaming multiprocessors in the target GPU
+# app [string; optional] - the individual application (in Halide/apps/) to generate data for. If
 # not provided, it will generate a data for all the apps in the list below
 
 if [[ $# -ne 6 && $# -ne 7 ]]; then
@@ -32,6 +32,11 @@ if [[ $# -ne 6 && $# -ne 7 ]]; then
 fi
 
 set -eu
+
+if [ -z ${BASH_VERSION+x} ]; then
+    echo "${0} should be run as a bash script"
+    exit
+fi
 
 HALIDE_BUILD_DIR=${1}
 MAX_ITERATIONS=${2}
@@ -51,7 +56,10 @@ if [ -z ${CXX+x} ]; then
     exit
 fi
 
-export CXX="ccache ${CXX}"
+if command -v ccache > /dev/null; then
+    echo "ccache detected and will be used"
+    export CXX="ccache ${CXX}"
+fi
 
 AUTOSCHEDULER_SRC_DIR=$(dirname $0)
 SCRIPTS_DIR="${AUTOSCHEDULER_SRC_DIR}/scripts"
@@ -182,6 +190,13 @@ for app in $APPS; do
     PREDICTIONS_FILE="${SAMPLES_DIR}/predictions"
     PREDICTIONS_WITH_FILENAMES_FILE="${SAMPLES_DIR}/predictions_with_filenames"
     BEST_TIMES_FILE="${SAMPLES_DIR}/best_times"
+
+    if [[ $TRAIN_ONLY == 1 ]]; then
+        if [[ ! -d ${SAMPLES_DIR} || -z "$(ls -A ${SAMPLES_DIR})" ]]; then
+            echo "No samples found in ${SAMPLES_DIR}. Skipping..."
+            continue
+        fi
+    fi
 
     mkdir -p ${SAMPLES_DIR}
     touch ${OUTPUT_FILE}

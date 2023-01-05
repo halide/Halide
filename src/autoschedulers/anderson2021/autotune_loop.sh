@@ -8,6 +8,11 @@ fi
 
 set -eu
 
+if [ -z ${BASH_VERSION+x} ]; then
+    echo "${0} should be run as a bash script"
+    exit
+fi
+
 AUTOSCHEDULER_SRC_DIR=$(dirname $0)
 SCRIPTS_DIR="${AUTOSCHEDULER_SRC_DIR}/scripts"
 source ${SCRIPTS_DIR}/utils.sh
@@ -48,9 +53,9 @@ if [ -z ${CXX+x} ]; then
     exit
 fi
 
-RUNGENMAIN="${TOOLS_BUILD_DIR}/RunGenMain.o"
+RUNGENMAIN="${TOOLS_BUILD_DIR}/RunGenMain.cpp.o"
 if [ ! -f $RUNGENMAIN ]; then
-    echo "RunGenMain.o not found. Exiting..."
+    echo "${RUNGENMAIN} not found. Exiting..."
     exit
 fi
 
@@ -94,6 +99,12 @@ echo "Number of CPU cores detected as ${NUM_CPU_CORES}"
 # benchmarked serially.
 BATCH_SIZE=80
 EPOCHS=200
+
+if ! command -v nvidia-smi > /dev/null; then
+    echo "nvidia-smi is required for autotuning"
+    exit
+fi
+
 NUM_GPUS=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
 
 RANDOMIZE_TILINGS="${RANDOMIZE_TILINGS:-1}"
