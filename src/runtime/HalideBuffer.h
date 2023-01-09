@@ -58,7 +58,9 @@ static_assert(((HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT & (HALIDE_RUNTIME_BUF
 // Unfortunately, not all C++17 runtimes support aligned_alloc
 // (it may depends on OS/SDK version); this is provided as an opt-out
 // if you are compiling on a platform that doesn't provide a (good)
-// implementation.
+// implementation. (Note that we actually use the C11 `::aligned_alloc()`
+// rather than the C++17 `std::aligned_alloc()` because at least one platform
+// we found supports the former but not the latter.)
 #ifndef HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
 
 // clang-format off
@@ -888,7 +890,7 @@ public:
             // so that the user storage also starts at an aligned point. This is a bit
             // wasteful, but probably not a big deal.
             static_assert(sizeof(AllocationHeader) <= alignment);
-            void *alloc_storage = std::aligned_alloc(alignment, align_up(size) + alignment);
+            void *alloc_storage = ::aligned_alloc(alignment, align_up(size) + alignment);
             assert((uintptr_t)alloc_storage == align_up((uintptr_t)alloc_storage));
             alloc = new (alloc_storage) AllocationHeader(free);
             buf.host = (uint8_t *)((uintptr_t)alloc_storage + alignment);
