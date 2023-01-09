@@ -210,9 +210,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
             if (uses_dma.uses_dma) {
                 stream << get_indent() << "ScopedDmaInitializer dma_initializer(" << uses_dma.max_channel_no + 1 << ");\n";
                 stream << get_indent() << "if (!dma_initializer.is_valid()) {\n";
-                stream << get_indent() << "halide_error("
-                       << (have_user_context ? "__user_context" : "nullptr")
-                       << ", \"DMA initialization failed\");\n";
+                stream << get_indent() << "halide_error(_ucon, \"DMA initialization failed\");\n";
                 stream << get_indent() << "return halide_error_code_generic_error;\n";
                 stream << get_indent() << "}\n";
             }
