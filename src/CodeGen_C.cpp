@@ -1434,18 +1434,17 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (i > 0) {
                 stream << ", ";
             }
-            const Variable *possible_ucon = op->args[i].as<Variable>();
-            if (possible_ucon && possible_ucon->name == "__user_context") {
+            if (op->args[i].as<StringImm>()) {
+                stream << "const char *";
+            } else {
+                const Variable *possible_ucon = op->args[i].as<Variable>();
                 // For non-builtin funcs, assume they follow the protocol
                 // of Halide's AOT type signature and declare the ucon
                 // as 'void const *' rather than 'void *'. (This matters
                 // for C++ name mangling.) Note that this assumes that the
                 // ucon (if present) will always be the first argument.
-                stream << "void const *";
-            } else if (op->args[i].as<StringImm>()) {
-                stream << "const char *";
-            } else {
-                stream << type_to_c_type(op->args[i].type(), true);
+                Type t = (possible_ucon && possible_ucon->name == "__user_context") ? type_of<const void *>() : op->args[i].type();
+                stream << type_to_c_type(t, true);
             }
         }
         stream << ");\n";
