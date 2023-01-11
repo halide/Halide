@@ -1424,6 +1424,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         }
         stream << type_to_c_type(op->type, /* append_space */ true) << name << "(";
         if (function_takes_user_context(name)) {
+            // For the 'builtin' Halide functions, the ucon is declared as 'void *' (rather than void const *)
             stream << "void *";
             if (!op->args.empty()) {
                 stream << ", ";
@@ -1433,7 +1434,15 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (i > 0) {
                 stream << ", ";
             }
-            if (op->args[i].as<StringImm>()) {
+            const Variable* possible_ucon = op->args[i].as<Variable>();
+            if (possible_ucon && possible_ucon->name == "__user_context") {
+                // For non-builtin funcs, assume they follow the protocol
+                // of Halide's AOT type signature and declare the ucon
+                // as 'void const *' rather than 'void *'. (This matters
+                // for C++ name mangling.) Note that this assumes that the
+                // ucon (if present) will always be the first argument.
+                stream << "void const *";
+            } else if (op->args[i].as<StringImm>()) {
                 stream << "const char *";
             } else {
                 stream << type_to_c_type(op->args[i].type(), true);
