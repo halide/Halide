@@ -1434,7 +1434,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (i > 0) {
                 stream << ", ";
             }
-            const Variable* possible_ucon = op->args[i].as<Variable>();
+            const Variable *possible_ucon = op->args[i].as<Variable>();
             if (possible_ucon && possible_ucon->name == "__user_context") {
                 // For non-builtin funcs, assume they follow the protocol
                 // of Halide's AOT type signature and declare the ucon
