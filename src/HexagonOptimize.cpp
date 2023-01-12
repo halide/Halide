@@ -911,9 +911,11 @@ class OptimizePatterns : public IRMutator {
 
             // Saturating narrowing casts. These may interleave later with trunc_sat.
             {"halide.hexagon.pack_satub.vh", u8_sat(wild_i16x)},
+            {"halide.hexagon.pack_satub.vuh", u8_sat(wild_u16x)},
             {"halide.hexagon.pack_satuh.vw", u16_sat(wild_i32x)},
             {"halide.hexagon.pack_satb.vh", i8_sat(wild_i16x)},
             {"halide.hexagon.pack_sath.vw", i16_sat(wild_i32x)},
+            {"halide.hexagon.pack_satuh.vuw", u16_sat(wild_u32x)},
 
             // We don't have a vpack equivalent to this one, so we match it directly.
             {"halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0},
@@ -1702,8 +1704,10 @@ class EliminateInterleaves : public IRMutator {
             {"halide.hexagon.packhi.vh", "halide.hexagon.trunclo.vh"},
             {"halide.hexagon.packhi.vw", "halide.hexagon.trunclo.vw"},
             {"halide.hexagon.pack_satub.vh", "halide.hexagon.trunc_satub.vh"},
+            {"halide.hexagon.pack_satub.vuh", "halide.hexagon.trunc_satub.vuh"},
             {"halide.hexagon.pack_sath.vw", "halide.hexagon.trunc_sath.vw"},
             {"halide.hexagon.pack_satuh.vw", "halide.hexagon.trunc_satuh.vw"},
+            {"halide.hexagon.pack_satuh.vuw", "halide.hexagon.trunc_satuh.vuw"},
         };
 
         // The reverse mapping of the above.
