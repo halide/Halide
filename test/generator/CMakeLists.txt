@@ -150,7 +150,7 @@ function(halide_define_aot_test NAME)
     # Apparently CMake has no one-liner for 'assign bool value to var'?
     set(TARGETING_WASM FALSE)
     if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
-        set(TARGETING_WASM FALSE)
+        set(TARGETING_WASM TRUE)
     endif()
 
     # Always omit C++ backend testing when we are targeting wasm
