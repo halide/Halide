@@ -242,7 +242,7 @@ endif ()
 # alias_aottest.cpp
 # alias_generator.cpp
 set(ALIAS_LIBS alias_with_offset_42 alias_Adams2019 alias_Li2018 alias_Mullapudi2016)
-halide_define_aot_test(alias EXTRA_LIBS ${ALIAS_LIBS})
+halide_define_aot_test(alias)
 foreach (LIB IN LISTS ALIAS_LIBS)
     _add_halide_libraries(${LIB}
                           LINK_TO_AOTTEST alias
@@ -308,7 +308,6 @@ target_include_directories(generator_aotcpp_cleanup_on_error PRIVATE "${Halide_S
 halide_define_aot_test(configure)
 
 if (NOT ${USING_WASM})
-
     # cxx_mangling_externs.cpp
     add_library(cxx_mangling_externs STATIC cxx_mangling_externs.cpp)
 
@@ -344,7 +343,6 @@ if (NOT ${USING_WASM})
     target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling)
     target_link_libraries(cxx_mangling_define_extern_cpp INTERFACE cxx_mangling_define_extern_externs)
     target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling_cpp)
-
 endif ()  # (NOT ${USING_WASM})
 
 # define_extern_opencl_aottest.cpp
@@ -486,7 +484,6 @@ else()
 endif()
 
 halide_define_aot_test(metadata_tester
-                       EXTRA_LIBS metadata_tester_ucon
                        PARAMS ${metadata_tester_params}
                        TARGETS ${MDT_TARGETS}
                        EXTRA_OUTPUTS FUNCTION_INFO_HEADER)
@@ -529,13 +526,7 @@ halide_define_aot_test(multitarget
 # nested_externs_aottest.cpp
 # nested_externs_generator.cpp
 halide_define_aot_test(nested_externs
-                       OMIT_DEFAULT_HALIDE_LIBRARY
-                       EXTRA_LIBS
-                       nested_externs_root
-                       nested_externs_inner
-                       nested_externs_combine
-                       nested_externs_leaf
-                       nested_externs_root.runtime)
+                       OMIT_DEFAULT_HALIDE_LIBRARY)
 
 # Explicitly define our Generator here since OMIT_DEFAULT_HALIDE_LIBRARY
 # was specified
