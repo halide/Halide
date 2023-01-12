@@ -323,7 +323,7 @@ if (NOT ${USING_WASM})
                            FUNCTION_NAME HalideTest::cxx_mangling_gpu
                            FEATURES c_plus_plus_name_mangling cuda)
         target_link_libraries(generator_aot_cxx_mangling PRIVATE cxx_mangling_gpu)
-        target_link_libraries(generator_aot_cxx_mangling_cpp PRIVATE cxx_mangling_gpu)
+        target_link_libraries(generator_aotcpp_cxx_mangling PRIVATE cxx_mangling_gpu)
     endif ()
 
     # cxx_mangling_define_extern_externs.cpp
