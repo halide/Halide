@@ -85,7 +85,7 @@ $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT): \
 				$(BIN)/auto_schedule_runtime.a \
 				| $(LIB_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB) -I .
 
 $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 				$(COMMON_DIR)/ASLog.cpp \
@@ -110,7 +110,7 @@ $(BIN)/get_host_target: $(COMMON_DIR)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) $(OPTIMIZE) -o $@ $(HALIDE_RPATH_FOR_BIN)
 $(BIN)/weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(COMMON_DIR)/Weights.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@
+	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@ -I .
 
 .PHONY: clean
 
