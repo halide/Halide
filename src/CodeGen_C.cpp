@@ -3220,6 +3220,9 @@ void CodeGen_C::visit(const Allocate *op) {
             stream << op_name
                    << "[" << size_id << "];\n";
         } else {
+            // Shouldn't ever currently be possible to have !on_stack && size_id.empty(),
+            // but reality-check in case things change in the future.
+            internal_assert(!size_id.empty());
             stream << "*"
                    << op_name
                    << " = ("
@@ -3238,14 +3241,19 @@ void CodeGen_C::visit(const Allocate *op) {
             check << print_expr(const_true());
         } else {
             // Assert that the allocation worked....
-            check << "((" << op_name << " != nullptr) || (" << size_id << " == 0))";
+            // Note that size_id can be empty if the "allocation" is via a custom_new that
+            // wraps _halide_buffer_get_host(), so don't emit malformed code in that case.
+            check << "(" << op_name << " != nullptr)";
+            if (!size_id.empty()) {
+                check << " || (" << size_id << " == 0)";
+            }
             if (!is_const_one(op->condition)) {
                 // ...but if the condition is false, it's OK for the new_expr to be null.
                 string op_condition = print_assignment(Bool(), print_expr(op->condition));
                 check << " || (!" << op_condition << ")";
             }
         }
-        create_assertion(check.str(), Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
+        create_assertion("(" + check.str() + ")", Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
         stream << get_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
