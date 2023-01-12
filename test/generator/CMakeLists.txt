@@ -18,13 +18,12 @@ endfunction()
 function(_add_aot_test TARGET)
     set(options "")
     set(oneValueArgs "")
-    set(multiValueArgs SRCS DEPS GROUPS DEFINES)
+    set(multiValueArgs SRCS GROUPS DEFINES)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     add_executable("${TARGET}" ${args_SRCS})
     target_compile_definitions("${TARGET}" PRIVATE ${args_DEFINES})
     target_include_directories("${TARGET}" PRIVATE "${Halide_SOURCE_DIR}/test/common" "${Halide_SOURCE_DIR}/tools")
-    target_link_libraries("${TARGET}" PRIVATE ${args_DEPS})
     _add_gpu_deps("${TARGET}")
     add_halide_test("${TARGET}" GROUPS generator ${args_GROUPS})
 endfunction()
@@ -141,7 +140,7 @@ endfunction()
 function(halide_define_aot_test NAME)
     set(options OMIT_DEFAULT_HALIDE_LIBRARY OMIT_C_BACKEND)
     set(oneValueArgs FUNCTION_NAME)
-    set(multiValueArgs GENERATOR_LINK_LIBRARIES EXTRA_LIBS ENABLE_IF FEATURES PARAMS TARGETS GROUPS EXTRA_OUTPUTS)
+    set(multiValueArgs GENERATOR_LINK_LIBRARIES ENABLE_IF FEATURES PARAMS TARGETS GROUPS EXTRA_OUTPUTS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
@@ -176,12 +175,10 @@ function(halide_define_aot_test NAME)
 
     _add_aot_test("${TARGET}"
                   SRCS "${NAME}_aottest.cpp"
-                  DEPS ${args_EXTRA_LIBS}
                   GROUPS ${args_GROUPS})
     if (NOT args_OMIT_C_BACKEND)
         _add_aot_test("${TARGET_CPP}"
                       SRCS "${NAME}_aottest.cpp"
-                      DEPS ${args_EXTRA_LIBS}
                       GROUPS ${args_GROUPS})
     endif()
 
@@ -576,7 +573,9 @@ halide_define_aot_test(templated)
 
 # tiled_blur_aottest.cpp
 # tiled_blur_generator.cpp
-halide_define_aot_test(tiled_blur EXTRA_LIBS blur2x2)
+halide_define_aot_test(tiled_blur)
+target_link_libraries(generator_aot_tiled_blur PRIVATE blur2x2)
+target_link_libraries(generator_aotcpp_tiled_blur PRIVATE blur2x2_cpp)
 
 # user_context_aottest.cpp
 # user_context_generator.cpp
