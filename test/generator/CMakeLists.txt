@@ -298,16 +298,16 @@ if (NOT ${_USING_WASM})
                           FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
                           FEATURES c_plus_plus_name_mangling
                           EXTERNS cxx_mangling_externs)
-    set(_CXX_MANGLING_HALIDE_LIBRARIES cxx_mangling)
+    _add_halide_aot_tests(cxx_mangling)
     if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
         add_halide_library(cxx_mangling_gpu
                            FROM cxx_mangling.generator
                            GENERATOR cxx_mangling
                            FUNCTION_NAME HalideTest::cxx_mangling_gpu
                            FEATURES c_plus_plus_name_mangling cuda)
-        list(APPEND _CXX_MANGLING_HALIDE_LIBRARIES cxx_mangling_gpu)
+        target_link_libraries(generator_aot_cxx_mangling PRIVATE cxx_mangling_gpu)
+        target_link_libraries(generator_aotcpp_cxx_mangling PRIVATE cxx_mangling_gpu)
     endif ()
-    _add_halide_aot_tests(cxx_mangling HALIDE_LIBRARIES ${_CXX_MANGLING_HALIDE_LIBRARIES})
 
     # cxx_mangling_define_extern_externs.cpp
     add_library(cxx_mangling_define_extern_externs STATIC cxx_mangling_define_extern_externs.cpp)
