@@ -2050,11 +2050,11 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
         stream.write((char *)b.host, num_elems);
         stream << ")BUFCHARSOURCE\";\n";
 
-        stream << "static const uint8_t *" << name << "_data HALIDE_ATTRIBUTE_ALIGN(32) = (const uint8_t *) "
+        stream << "static const HALIDE_ATTRIBUTE_ALIGN(32) uint8_t *" << name << "_data = (const uint8_t *) "
                << name << "_string;\n";
     } else {
         // Emit the data
-        stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
+        stream << "static " << (is_constant ? "const" : "") << " HALIDE_ATTRIBUTE_ALIGN(32) uint8_t " << name << "_data[] = {\n";
         stream << get_indent();
         for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
             if (i > 0) {
