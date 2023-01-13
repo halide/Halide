@@ -228,6 +228,16 @@ function(add_halide_library TARGET)
         message(FATAL_ERROR "Missing FROM argument specifying a Halide generator target")
     endif ()
 
+    if (NOT TARGET ${ARG_FROM})
+        # FROM is usually an unqualified name; if we are crosscompiling, we might need a
+        # fully-qualified name, so add the default package name and retry
+        set(FQ_ARG_FROM "${PROJECT_NAME}::halide_generators::${ARG_FROM}")
+        if (NOT TARGET ${FQ_ARG_FROM})
+            message(FATAL_ERROR "Unable to locate FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
+        endif ()
+        set(ARG_FROM "${FQ_ARG_FROM}")
+    endif()
+
     get_property(py_src TARGET ${ARG_FROM} PROPERTY Halide_PYTHON_GENERATOR_SOURCE)
     if (py_src)
         # TODO: Python Generators need work to support crosscompiling (https://github.com/halide/Halide/issues/7014)
@@ -241,15 +251,6 @@ function(add_halide_library TARGET)
         set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${Python3_EXECUTABLE} $<SHELL_PATH:${py_src}>)
         set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python ${py_src})
     else()
-        if (NOT TARGET ${ARG_FROM})
-            # FROM is usually an unqualified name; if we are crosscompiling, we might need a
-            # fully-qualified name, so add the default package name and retry
-            set(FQ_ARG_FROM "${PROJECT_NAME}::halide_generators::${ARG_FROM}")
-            if (NOT TARGET ${FQ_ARG_FROM})
-                message(FATAL_ERROR "Unable to locate FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
-            endif ()
-            set(ARG_FROM "${FQ_ARG_FROM}")
-        endif()
         set(GENERATOR_CMD "${ARG_FROM}")
         set(GENERATOR_CMD_DEPS ${ARG_FROM})
         _Halide_place_dll(${ARG_FROM})
@@ -313,7 +314,7 @@ function(add_halide_library TARGET)
         set(ARG_USE_RUNTIME Halide::Runtime)
     elseif (NOT ARG_USE_RUNTIME)
         # If we're not using an existing runtime, create one.
-        add_halide_runtime("${TARGET}.runtime" TARGETS ${ARG_TARGETS})
+        add_halide_runtime("${TARGET}.runtime" TARGETS ${ARG_TARGETS} FROM ${ARG_FROM})
         set(ARG_USE_RUNTIME "${TARGET}.runtime")
     elseif (NOT TARGET ${ARG_USE_RUNTIME})
         message(FATAL_ERROR "Invalid runtime target ${ARG_USE_RUNTIME}")
@@ -555,7 +556,7 @@ endfunction()
 
 function(add_halide_runtime RT)
     set(options "")
-    set(oneValueArgs "")
+    set(oneValueArgs FROM)
     set(multiValueArgs TARGETS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -569,6 +570,17 @@ function(add_halide_runtime RT)
     # so that GCD calculation doesn't get confused.
     list(TRANSFORM ARG_TARGETS APPEND "-no_runtime")
 
+    if (ARG_FROM)
+        # Try to use generator which is available. This is essential for cross-compilation
+        # where we cannot use host compiler to build generator only for runtime.
+
+        # Need to check if the ones for python extension, which is not actually an executable
+        get_target_property(target_type ${ARG_FROM} TYPE)
+        get_target_property(aliased ${ARG_FROM} ALIASED_TARGET)
+        if (target_type STREQUAL "EXECUTABLE" AND NOT aliased)
+            add_executable(_Halide_gengen ALIAS ${ARG_FROM})
+        endif()
+    endif()
     # Ensure _Halide_gengen is defined
     _Halide_gengen_ensure()
 
