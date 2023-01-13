@@ -14,13 +14,12 @@ set(_USING_WASM (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm"))
 
 # Arguments are (mostly) identical to add_halide_library(), except:
 # - OMIT_C_BACKEND option to skip the CPP backend
-# - DEPS_OUT and DEPS_CPP_OUT as optional out-params, to receive the deps needed for using the standard / cpp outputs
 # - We always generate FUNCTION_INFO_HEADER
 #
 function(_add_halide_libraries TARGET)
     set(options GRADIENT_DESCENT OMIT_C_BACKEND)
-    set(oneValueArgs FROM GENERATOR_NAME FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER DEPS_OUT DEPS_CPP_OUT)
-    set(multiValueArgs ENABLE_IF TARGETS FEATURES PARAMS PLUGINS)
+    set(oneValueArgs FROM GENERATOR_NAME FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER)
+    set(multiValueArgs ENABLE_IF TARGETS FEATURES PARAMS PLUGINS EXTERNS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
@@ -48,8 +47,6 @@ function(_add_halide_libraries TARGET)
     endif()
 
     set(TARGET_CPP "${TARGET}_cpp")
-    set(_DEPS_CPP )
-    set(_DEPS )
 
     add_halide_library(${TARGET}
                        ${GRADIENT_DESCENT_OPT}
@@ -64,7 +61,10 @@ function(_add_halide_libraries TARGET)
                        PARAMS "${args_PARAMS}"
                        PLUGINS "${args_PLUGINS}"
                        FUNCTION_INFO_HEADER function_info_header_out)
-    list(APPEND _DEPS ${TARGET} ${TARGET}.runtime)
+    if (args_EXTERNS)
+        target_link_libraries(${TARGET} INTERFACE ${args_EXTERNS})
+    endif()
+
 
     if (NOT args_OMIT_C_BACKEND)
         # The C backend basically ignores TARGETS (it emits a warning that the sources
@@ -87,7 +87,9 @@ function(_add_halide_libraries TARGET)
                            PARAMS "${args_PARAMS}"
                            PLUGINS "${args_PLUGINS}"
                            FUNCTION_INFO_HEADER function_info_header_cpp_out)
-        list(APPEND _DEPS_CPP ${TARGET_CPP} ${TARGET}.runtime)
+        if (args_EXTERNS)
+            target_link_libraries(${TARGET_CPP} INTERFACE ${args_EXTERNS})
+        endif()
         # This is a bit subtle: we end up emitting NAME.h and NAME_cpp.h header files;
         # these are *identical* in content (aside from the guard macro and the filename).
         # For convenience, we use the NAME.h variant in all cases downstream (even when linking
@@ -96,13 +98,6 @@ function(_add_halide_libraries TARGET)
         # on NAME.h already being generated.) This is a bit suboptimal, but it is arguably better
         # that having conditionalized #includes in all the downstream test targets.
         add_dependencies(${TARGET_CPP} ${TARGET})
-    endif()
-
-    if (args_DEPS_OUT)
-        set(${args_DEPS_OUT} ${_DEPS} PARENT_SCOPE)
-    endif()
-    if (args_DEPS_CPP_OUT)
-        set(${args_DEPS_CPP_OUT} ${_DEPS_CPP} PARENT_SCOPE)
     endif()
 endfunction()
 
@@ -301,32 +296,33 @@ if (NOT ${_USING_WASM})
     # cxx_mangling_generator.cpp
     _add_halide_libraries(cxx_mangling
                           FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
-                          FEATURES c_plus_plus_name_mangling)
-    _add_halide_aot_tests(cxx_mangling
-                          DEPS cxx_mangling_externs)
-
+                          FEATURES c_plus_plus_name_mangling
+                          EXTERNS cxx_mangling_externs)
+    set(_CXX_MANGLING_HALIDE_LIBRARIES cxx_mangling)
     if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
         add_halide_library(cxx_mangling_gpu
                            FROM cxx_mangling.generator
-                           GENERATOR_NAME cxx_mangling
+                           GENERATOR cxx_mangling
                            FUNCTION_NAME HalideTest::cxx_mangling_gpu
                            FEATURES c_plus_plus_name_mangling cuda)
-        target_link_libraries(generator_aot_cxx_mangling PRIVATE cxx_mangling_gpu)
-        target_link_libraries(generator_aotcpp_cxx_mangling PRIVATE cxx_mangling_gpu)
+        list(APPEND _CXX_MANGLING_HALIDE_LIBRARIES cxx_mangling_gpu)
     endif ()
+    _add_halide_aot_tests(cxx_mangling HALIDE_LIBRARIES ${_CXX_MANGLING_HALIDE_LIBRARIES})
 
     # cxx_mangling_define_extern_externs.cpp
     add_library(cxx_mangling_define_extern_externs STATIC cxx_mangling_define_extern_externs.cpp)
+    # Ensure that cxx_mangling.h is availabe for cxx_mangling_define_extern_externs
     target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling)
+    add_dependencies(cxx_mangling_define_extern_externs cxx_mangling)
 
     # cxx_mangling_define_extern_aottest.cpp
     # cxx_mangling_define_extern_generator.cpp
     _add_halide_libraries(cxx_mangling_define_extern
                           FUNCTION_NAME "HalideTest::cxx_mangling_define_extern"
-                          FEATURES c_plus_plus_name_mangling user_context)
+                          FEATURES c_plus_plus_name_mangling user_context
+                          EXTERNS cxx_mangling_define_extern_externs cxx_mangling)
     _add_halide_aot_tests(cxx_mangling_define_extern
-                          HALIDE_LIBRARIES cxx_mangling_define_extern cxx_mangling
-                          DEPS cxx_mangling_externs cxx_mangling_define_extern_externs)
+                          HALIDE_LIBRARIES cxx_mangling_define_extern cxx_mangling)
 endif ()  # (NOT ${_USING_WASM})
 
 # define_extern_opencl_aottest.cpp
