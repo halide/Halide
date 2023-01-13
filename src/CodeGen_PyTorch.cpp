@@ -68,7 +68,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     stream << "HALIDE_FUNCTION_ATTRS\n";
     stream << "inline int " << simple_name << "_th_(";
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].name == "__user_context") {
+        if (args[i].name == user_context_name()) {
             continue;
         } else if (args[i].is_buffer()) {
             buffer_args.push_back(args[i]);

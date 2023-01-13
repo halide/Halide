@@ -243,7 +243,7 @@ struct LowerParallelTasks : public IRMutator {
             Type closure_function_type;
 
             std::vector<LoweredArgument> closure_args(use_parallel_for ? 3 : 5);
-            closure_args[0] = make_scalar_arg<void *>("__user_context");
+            closure_args[0] = make_scalar_arg(user_context_name(), user_context_type());
             if (use_parallel_for) {
                 // The closure will be a halide_task_t, with arguments like:
                 //

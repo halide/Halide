@@ -1913,7 +1913,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
     have_user_context = false;
     for (const auto &arg : args) {
         // TODO: check that its type is void *?
-        have_user_context |= (arg.name == "__user_context");
+        have_user_context |= (arg.name == user_context_name());
     }
 
     NameMangling name_mangling = f.name_mangling;
@@ -1974,8 +1974,8 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
             } else {
                 // Emit a local user_context we can pass in all cases, either
                 // aliasing __user_context or nullptr.
-                stream << get_indent() << "void * const _ucon = "
-                       << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
+                stream << get_indent() << print_type(user_context_type(), AppendSpace) << "_ucon = "
+                       << (have_user_context ? "__user_context" : "nullptr")
                        << ";\n";
 
                 // Always declare it unused, since this could be a generated closure that doesn't
@@ -2174,7 +2174,7 @@ void CodeGen_C::visit(const Variable *op) {
         id = op->name;
     } else {
         // This substitution ensures const correctness for all calls
-        if (op->name == "__user_context") {
+        if (op->name == user_context_name()) {
             id = "_ucon";
         } else {
             id = print_name(op->name);
@@ -2768,7 +2768,7 @@ string CodeGen_C::print_extern_call(const Call *op) {
     for (size_t i = 0; i < op->args.size(); i++) {
         args[i] = print_expr(op->args[i]);
         // This substitution ensures const correctness for all calls
-        if (args[i] == "__user_context") {
+        if (args[i] == user_context_name()) {
             args[i] = "_ucon";
         }
     }
@@ -2885,7 +2885,7 @@ void CodeGen_C::visit(const Store *op) {
 void CodeGen_C::visit(const Let *op) {
     string id_value = print_expr(op->value);
     Expr body = op->body;
-    if (op->value.type().is_handle() && op->name != "__user_context") {
+    if (op->value.type().is_handle() && op->name != user_context_name()) {
         // The body might contain a Load that references this directly
         // by name, so we can't rewrite the name.
         std::string name = print_name(op->name);
@@ -2980,7 +2980,7 @@ void CodeGen_C::visit(const LetStmt *op) {
     string id_value = print_expr(op->value);
     Stmt body = op->body;
 
-    if (op->value.type().is_handle() && op->name != "__user_context") {
+    if (op->value.type().is_handle() && op->name != user_context_name()) {
         // The body might contain a Load or Store that references this
         // directly by name, so we can't rewrite the name.
         std::string name = print_name(op->name);
@@ -3371,7 +3371,7 @@ void CodeGen_C::test() {
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3, ArgumentEstimates{});
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0, ArgumentEstimates{});
     LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0, ArgumentEstimates{});
-    LoweredArgument user_context_arg("__user_context", Argument::InputScalar, type_of<const void *>(), 0, ArgumentEstimates{});
+    LoweredArgument user_context_arg(user_context_name(), Argument::InputScalar, user_context_type(), 0, ArgumentEstimates{});
     vector<LoweredArgument> args = {buffer_arg, float_arg, int_arg, user_context_arg};
     Var x("x");
     Param<float> alpha("alpha");
@@ -3412,7 +3412,7 @@ extern "C" {
 
 HALIDE_FUNCTION_ATTRS
 int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
- void * const _ucon = const_cast<void *>(__user_context);
+ void *_ucon = __user_context;
  halide_maybe_unused(_ucon);
  auto *_0 = _halide_buffer_get_host(_buf_buffer);
  auto _buf = _0;

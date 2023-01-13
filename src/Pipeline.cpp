@@ -153,8 +153,8 @@ struct PipelineContents {
 
     PipelineContents()
         : module("", Target()) {
-        user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void *>(), 0, ArgumentEstimates{});
-        user_context_arg.param = Parameter(Handle(), false, 0, "__user_context");
+        user_context_arg.arg = Argument(user_context_name(), Argument::InputScalar, user_context_type(), 0, ArgumentEstimates{});
+        user_context_arg.param = user_context_parameter();
     }
 
     ~PipelineContents() {

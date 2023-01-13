@@ -174,6 +174,18 @@ public:
 /** Validate arguments to a call to a func, image or imageparam. */
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims);
 
+inline const char *user_context_name() {
+    return "__user_context";
+}
+
+inline Type user_context_type() {
+    return Handle();
+}
+
+inline Parameter user_context_parameter() {
+    return Parameter(user_context_type(), false, 0, user_context_name());
+}
+
 }  // namespace Internal
 }  // namespace Halide
 

@@ -32,7 +32,7 @@ class Param {
     using not_void_T = typename std::conditional<std::is_void<T>::value, DynamicParamType *, T>::type;
 
     void check_name() const {
-        user_assert(param.name() != "__user_context")
+        user_assert(param.name() != Internal::user_context_name())
             << "Param<void*>(\"__user_context\") "
             << "is no longer used to control whether Halide functions take explicit "
             << "user_context arguments. Use set_custom_user_context() when jitting, "
@@ -327,8 +327,7 @@ public:
  * the function (if any). It is rare that this function is necessary
  * (e.g. to pass the user context to an extern function written in C). */
 inline Expr user_context_value() {
-    return Internal::Variable::make(Handle(), "__user_context",
-                                    Internal::Parameter(Handle(), false, 0, "__user_context"));
+    return Internal::Variable::make(Internal::user_context_type(), Internal::user_context_name(), Internal::user_context_parameter());
 }
 
 }  // namespace Halide
