@@ -14,7 +14,7 @@
     }
 
 namespace Ext {
-HalideExtern_6(int, sleeper, void *, int, int, int, int, int)
+HalideExtern_6(int, sleeper, void const *, int, int, int, int, int)
 }
 
 using namespace Halide;

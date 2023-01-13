@@ -486,7 +486,7 @@ void lower_impl(const vector<Function> &output_funcs,
     }
 
     for (const InferredArgument &arg : inferred_args) {
-        if (arg.param.defined() && arg.param.name() == "__user_context") {
+        if (arg.param.defined() && arg.param.name() == user_context_name()) {
             // The user context is always in the inferred args, but is
             // not required to be in the args list.
             continue;
@@ -519,7 +519,7 @@ void lower_impl(const vector<Function> &output_funcs,
             }
             err << "\n\nParameters referenced in generated code: ";
             for (const InferredArgument &ia : inferred_args) {
-                if (ia.arg.name != "__user_context") {
+                if (ia.arg.name != user_context_name()) {
                     err << ia.arg.name << " ";
                 }
             }

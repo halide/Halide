@@ -62,7 +62,7 @@ Callable::Callable(const std::string &name,
 
     contents->quick_call_check_info.reserve(contents->jit_cache.arguments.size());
     for (const Argument &a : contents->jit_cache.arguments) {
-        const auto qcci = (a.name == "__user_context") ?
+        const auto qcci = (a.name == user_context_name()) ?
                               Callable::make_ucon_qcci() :
                               (a.is_scalar() ? Callable::make_scalar_qcci(a.type) : Callable::make_buffer_qcci());
         contents->quick_call_check_info.push_back(qcci);
@@ -179,7 +179,7 @@ Callable::FailureFn Callable::check_fcci(size_t argc, const FullCallCheckInfo *a
     // this is effectively just documentation that these invariants are expected to have
     // been enforced prior to this call.
     assert(contents->jit_cache.jit_target.has_feature(Target::UserContext));
-    assert(contents->jit_cache.arguments[0].name == "__user_context");
+    assert(contents->jit_cache.arguments[0].name == user_context_name());
 
     JITUserContext *context = *(JITUserContext **)const_cast<void *>(argv[0]);
     assert(context != nullptr);

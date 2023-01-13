@@ -243,7 +243,10 @@ struct LowerParallelTasks : public IRMutator {
             Type closure_function_type;
 
             std::vector<LoweredArgument> closure_args(use_parallel_for ? 3 : 5);
-            closure_args[0] = make_scalar_arg<void *>("__user_context");
+            // This is subtle: since the closure is of internal linkage, and must conform to the type of
+            // halide_loop_task_t or halide_task_t, the user_context argument must be `void *`, *not*
+            // `void const *` (which is what all public AOT functions use). This is regrettable.
+            closure_args[0] = make_scalar_arg<void *>(user_context_name());
             if (use_parallel_for) {
                 // The closure will be a halide_task_t, with arguments like:
                 //

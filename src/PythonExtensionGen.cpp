@@ -40,7 +40,7 @@ string remove_namespaces(const string &name) {
 
 bool can_convert(const LoweredArgument *arg) {
     if (arg->type.is_handle()) {
-        if (arg->name == "__user_context") {
+        if (arg->name == user_context_name()) {
             /* __user_context is a void* pointer to a user supplied memory region.
              * We allow the Python callee to pass PyObject* pointers to that. */
             return true;

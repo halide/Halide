@@ -2522,7 +2522,7 @@ int WasmModuleContents::run(const void *const *args) {
     for (size_t i = 0; i < arguments.size(); i++) {
         const Argument &arg = arguments[i];
         const void *arg_ptr = args[i];
-        if (arg.name == "__user_context") {
+        if (arg.name == user_context_name()) {
             jit_user_context = *(JITUserContext **)const_cast<void *>(arg_ptr);
         }
     }
@@ -2547,7 +2547,7 @@ int WasmModuleContents::run(const void *const *args) {
             wbufs[i] = wbuf;
             wabt_args.push_back(load_value(wbuf));
         } else {
-            if (arg.name == "__user_context") {
+            if (arg.name == user_context_name()) {
                 wabt_args.push_back(wabt::interp::Value::Make(kMagicJitUserContextValue));
             } else {
                 wabt_args.push_back(load_value(arg.type, arg_ptr));
@@ -2622,7 +2622,7 @@ int WasmModuleContents::run(const void *const *args) {
             wbufs[i] = wbuf;
             js_args.push_back(load_scalar(context, wbuf));
         } else {
-            if (arg.name == "__user_context") {
+            if (arg.name == user_context_name()) {
                 js_args.push_back(load_scalar(context, kMagicJitUserContextValue));
                 JITUserContext *jit_user_context = *(JITUserContext **)const_cast<void *>(arg_ptr);
                 context->SetAlignedPointerInEmbedderData(kJitUserContext, jit_user_context);

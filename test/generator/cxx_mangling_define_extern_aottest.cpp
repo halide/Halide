@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
 
     Buffer<double, 1> result_1(10), result_2(10), result_3(10);
 
-    const void *user_context = nullptr;
+    void const *user_context = nullptr;
     int ptr_arg = 42;
     int *int_ptr = &ptr_arg;
     const int *const_int_ptr = &ptr_arg;

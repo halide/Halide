@@ -4416,7 +4416,7 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
 }
 
 Value *CodeGen_LLVM::get_user_context() const {
-    Value *ctx = sym_get("__user_context", false);
+    Value *ctx = sym_get(user_context_name(), false);
     if (!ctx) {
         ctx = ConstantPointerNull::get(i8_t->getPointerTo());  // void*
     }

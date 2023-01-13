@@ -23,24 +23,36 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int argc, const char **argv) {
-    IRPrinter::test();
-    CodeGen_C::test();
-    ir_equality_test();
-    bounds_test();
-    expr_match_test();
-    deinterleave_vector_test();
-    modulus_remainder_test();
-    cse_test();
-    solve_test();
-    target_test();
-    cplusplus_mangle_test();
-    is_monotonic_test();
-    split_predicate_test();
-    associativity_test();
-    generator_test();
-    propagate_estimate_test();
-    uniquify_variable_names_test();
-    spirv_ir_test();
+
+#if HALIDE_WITH_EXCEPTIONS
+    try {
+#endif
+
+        IRPrinter::test();
+        CodeGen_C::test();
+        ir_equality_test();
+        bounds_test();
+        expr_match_test();
+        deinterleave_vector_test();
+        modulus_remainder_test();
+        cse_test();
+        solve_test();
+        target_test();
+        cplusplus_mangle_test();
+        is_monotonic_test();
+        split_predicate_test();
+        associativity_test();
+        generator_test();
+        propagate_estimate_test();
+        uniquify_variable_names_test();
+        spirv_ir_test();
+
+#if HALIDE_WITH_EXCEPTIONS
+    } catch (const Halide::Error &e) {
+        std::cerr << e.what() << "\n";
+        return 1;
+    }
+#endif
 
     printf("Success!\n");
     return 0;

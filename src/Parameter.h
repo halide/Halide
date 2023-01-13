@@ -174,6 +174,20 @@ public:
 /** Validate arguments to a call to a func, image or imageparam. */
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims);
 
+inline const char *user_context_name() {
+    return "__user_context";
+}
+
+inline Type user_context_type() {
+    // This is the type for user_context for aot-generated code in Halide.
+    // (For Halide runtime functions, it is always a non-const void*.)
+    return type_of<void const *>();
+}
+
+inline Parameter user_context_parameter() {
+    return Parameter(user_context_type(), false, 0, user_context_name());
+}
+
 }  // namespace Internal
 }  // namespace Halide
 
