@@ -200,7 +200,7 @@ extern "C" {
 #endif
 
 HALIDE_FUNCTION_ATTRS
-int test2(void const *__user_context, float _alpha, int32_t _beta, struct halide_buffer_t *_buf_buffer);
+int test2(void *__user_context, float _alpha, int32_t _beta, struct halide_buffer_t *_buf_buffer);
 
 HALIDE_FUNCTION_ATTRS
 int test2_argv(void **args);

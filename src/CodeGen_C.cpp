@@ -3411,7 +3411,7 @@ extern "C" {
 #endif
 
 HALIDE_FUNCTION_ATTRS
-int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
+int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void *__user_context) {
  void *_ucon = __user_context;
  halide_maybe_unused(_ucon);
  auto *_0 = _halide_buffer_get_host(_buf_buffer);
