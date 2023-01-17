@@ -6,7 +6,11 @@
 # Some tests are not available when compiling for WASM.
 ##
 
-set(_USING_WASM (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm"))
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+    set(_USING_WASM 1)
+else()
+    set(_USING_WASM 0)
+endif()
 
 # Emit two halide_library targets, one with the default backend with the given name,
 # and (optionally) one with the C++ backend with the name NAME_cpp. (The CPP one defaults to being
