@@ -292,7 +292,6 @@ Target calculate_host_target() {
 #endif
 #endif
 #endif
-#endif
 
     return {os, arch, bits, processor, initial_features, vector_bits};
 }
