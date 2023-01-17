@@ -136,7 +136,7 @@ $ ctest -L "correctness|generator" -j
     (`"all"`) then it's already present, but otherwise, add it explicitly:
 
 ```
--DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;PowerPC;Hexagon;WebAssembly
+-DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;PowerPC;Hexagon;WebAssembly
 ```
 
 ## Enabling wasm JIT
