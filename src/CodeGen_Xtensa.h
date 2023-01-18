@@ -48,6 +48,7 @@ protected:
     void visit(const EQ *op) override;
     void visit(const LE *op) override;
     void visit(const LT *op) override;
+    void visit(const GE *op) override;
     void visit(const GT *op) override;
     void visit(const Or *op) override;
     void visit(const Reinterpret *op) override;
