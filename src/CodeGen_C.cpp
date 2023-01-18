@@ -1487,7 +1487,7 @@ public:
     }
 
     bool has_c_declarations() const {
-        return !c_externs.empty();
+        return !c_externs.empty() || !destructors.empty();
     }
 
     bool has_c_plus_plus_declarations() const {
