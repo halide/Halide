@@ -54,7 +54,7 @@ endif ()
 ##
 
 set(active_components orcjit bitwriter linker passes)
-set(known_components AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
+set(known_components AArch64 AMDGPU ARM Hexagon NVPTX PowerPC RISCV WebAssembly X86)
 
 foreach (comp IN LISTS known_components)
     string(TOUPPER "TARGET_${comp}" OPTION)

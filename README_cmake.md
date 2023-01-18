@@ -409,7 +409,6 @@ LLVM component names):
 | `TARGET_AMDGPU`      | `ON`, _if available_ | Enable the AMD GPU backend          |
 | `TARGET_ARM`         | `ON`, _if available_ | Enable the ARM backend              |
 | `TARGET_HEXAGON`     | `ON`, _if available_ | Enable the Hexagon backend          |
-| `TARGET_MIPS`        | `ON`, _if available_ | Enable the MIPS backend             |
 | `TARGET_NVPTX`       | `ON`, _if available_ | Enable the NVidia PTX backend       |
 | `TARGET_POWERPC`     | `ON`, _if available_ | Enable the PowerPC backend          |
 | `TARGET_RISCV`       | `ON`, _if available_ | Enable the RISC V backend           |
