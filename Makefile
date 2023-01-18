@@ -1196,37 +1196,23 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_multitarget,$(GENERATOR_
 # remove AOT-CPP tests that don't (yet) work for C++ backend
 # (each tagged with the *known* blocking issue(s))
 
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_texture,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_acquire_release,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_define_extern_opencl,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_object_lifetime,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_only,$(GENERATOR_AOTCPP_TESTS))
+# sanitizercoverage relies on LLVM-specific hooks, so it will never work with the C backend
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_sanitizercoverage,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled))
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
+#GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_buffer_copy,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2075
+# https://github.com/halide/Halide/issues/7273
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2075
+# https://github.com/halide/Halide/issues/7272
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/4916
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
 
+# Build requirements are finicky, testing non-C++ backend is good enough here
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_multi_context_threaded,$(GENERATOR_AOTCPP_TESTS))
 
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
@@ -1669,6 +1655,11 @@ $(BIN_DIR)/$(TARGET)/generator_aot_sanitizercoverage: $(ROOT_DIR)/test/generator
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter-out %.h,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
+# SanitizerCoverage test will never work with C++ backend
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_sanitizercoverage: $(ROOT_DIR)/test/generator/sanitizercoverage_aottest.cpp
+	@mkdir -p $(@D)
+	echo "SanitizerCoverage test will never work with C++ backend"
+	exit 1
 
 # alias has additional deps to link in
 $(BIN_DIR)/$(TARGET)/generator_aot_alias: $(ROOT_DIR)/test/generator/alias_aottest.cpp $(FILTERS_DIR)/alias.a $(FILTERS_DIR)/alias_with_offset_42.a $(FILTERS_DIR)/alias_Adams2019.a $(FILTERS_DIR)/alias_Li2018.a $(FILTERS_DIR)/alias_Mullapudi2016.a  $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
