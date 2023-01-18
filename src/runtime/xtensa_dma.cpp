@@ -5,13 +5,21 @@
 extern "C" {
 #endif
 
-typedef unsigned char uint8_t;
-typedef int int32_t;
-typedef unsigned int uint32_t;
-typedef __SIZE_TYPE__ size_t;
+#define IDMA_USE_INTR         0
+#define IDMA_APP_USE_XTOS     1
+#define IDMA_USE_MULTICHANNEL 1
+#include <xtensa/idma.h>
+#include <xtensa/xmem_bank.h>
+#include <xtensa/config/core-isa.h>
 
-extern void *tcm_alloc_on_bank(size_t size, unsigned char alignment, unsigned char bank);
-extern void tcm_free(void *ptr);
+static void *tcm_alloc_on_bank(size_t size, unsigned char alignment,
+                               unsigned char bank) {
+  return xmem_bank_alloc(bank, size, alignment, NULL);
+}
+
+static void tcm_free(void *ptr) {
+  xmem_bank_free(-1, ptr);
+}
 
 void *halide_tcm_malloc(void *user_context, unsigned int x) {
     const size_t alignment = ::halide_malloc_alignment();
@@ -27,92 +35,129 @@ void halide_tcm_free(void *user_context, void *ptr) {
     tcm_free(ptr);
 }
 
-struct idma_buffer_t;
-
-typedef enum {
-    IDMA_1D_DESC = 1,
-    IDMA_2D_DESC = 2,
-    IDMA_64B_DESC = 4
-} idma_type_t;
-
-typedef enum {
-    IDMA_ERR_NO_BUF = -40,      /* No valid ring buffer */
-    IDMA_ERR_BAD_DESC = -20,    /* Descriptor not correct */
-    IDMA_ERR_BAD_CHAN,          /* Invalid channel number */
-    IDMA_ERR_NOT_INIT,          /* iDMAlib and HW not initialized  */
-    IDMA_ERR_TASK_NOT_INIT,     /* Cannot scheduled uninitialized task  */
-    IDMA_ERR_BAD_TASK,          /* Task not correct  */
-    IDMA_ERR_BUSY,              /* iDMA busy when not expected */
-    IDMA_ERR_IN_SPEC_MODE,      /* iDMAlib in unexpected mode */
-    IDMA_ERR_NOT_SPEC_MODE,     /* iDMAlib in unexpected mode */
-    IDMA_ERR_TASK_EMPTY,        /* No descs in the task/buffer */
-    IDMA_ERR_TASK_OUTSTAND_NEG, /* Number of outstanding descs is a negative value  */
-    IDMA_ERR_TASK_IN_ERROR,     /* Task in error */
-    IDMA_ERR_BUFFER_IN_ERROR,   /* Buffer in error */
-    IDMA_ERR_NO_NEXT_TASK,      /* Next task to process is missing  */
-    IDMA_ERR_BUF_OVFL,          /* Attempt to schedule too many descriptors */
-    IDMA_ERR_HW_ERROR,          /* HW error detected */
-    IDMA_ERR_BAD_INIT,          /* Bad idma_init args */
-    IDMA_OK = 0,                /* No error */
-    IDMA_CANT_SLEEP = 1,        /* Cannot sleep (no pending descriptors) */
-} idma_status_t;
-
-typedef void (*idma_callback_fn)(void *arg);
-
-#define DESC_IDMA_PRIOR_H 0x08000 /* QoS high */
-
-idma_status_t
-idma_init_loop(int32_t ch,
-               idma_buffer_t *bufh,
-               idma_type_t type,
-               int32_t ndescs,
-               void *cb_data,
-               idma_callback_fn cb_func);
-
-int32_t
-idma_copy_desc(int32_t ch,
-               void *dst,
-               void *src,
-               size_t size,
-               uint32_t flags);
-
-int32_t idma_buffer_status(int32_t ch);
-
-idma_status_t idma_sleep(int32_t ch);
-
-idma_buffer_t *gxp_idma_descriptor_alloc(idma_type_t type, int count);
-void gxp_idma_descriptor_free(idma_buffer_t *buffer);
-
-void DmaCallback(void *data) {
+static idma_buffer_t *idma_descriptor_alloc(idma_type_t type, int count) {
+  return (idma_buffer_t *)
+         xmem_bank_alloc(0, IDMA_BUFFER_SIZE(count, type),
+                        /*align */4, /*status*/nullptr);
 }
 
-static idma_buffer_t *dma_desc = nullptr;
-int halide_init_dma() {
-    dma_desc = gxp_idma_descriptor_alloc(IDMA_1D_DESC, /*count=*/2);
+static void idma_descriptor_free(idma_buffer_t *buffer) {
+  xmem_bank_free(0, buffer);
+}
+
+static const int kMaxChannelCount = XCHAL_IDMA_NUM_CHANNELS;
+static const int kMaxRequestCount = 4;
+
+namespace {
+void cleanup_on_init_failure(int32_t channel_count, void **dma_desc) {
     if (!dma_desc) {
-        return -1;
+        return;
+    }
+    if (channel_count > kMaxChannelCount) {
+        channel_count = kMaxChannelCount;
+    }
+    for (int ix = 0; ix < channel_count; ix++) {
+        if (dma_desc[ix] != nullptr) {
+            idma_descriptor_free((idma_buffer_t *)dma_desc[ix]);
+        }
+    }
+    halide_tcm_free(nullptr, dma_desc);
+}
+}  // namespace
+
+void **halide_init_dma(int32_t channel_count) {
+    if (channel_count > kMaxChannelCount) {
+        channel_count = kMaxChannelCount;
     }
 
-    constexpr int kDmaCh = 0;  // DMA Channel.
-    idma_status_t init_status =
-        idma_init_loop(kDmaCh, dma_desc, IDMA_1D_DESC, 2, nullptr, &DmaCallback);
-    return init_status;
+    // Allocate storage for DMA buffers/descriptors.
+    void **dma_desc = (void **)halide_tcm_malloc(nullptr, sizeof(void *) * kMaxChannelCount);
+
+    if (!dma_desc) {
+        return nullptr;
+    }
+
+    // Reset pointers to DMA buffers/descriptors.
+    for (int ix = 0; ix < kMaxChannelCount; ix++) {
+        dma_desc[ix] = nullptr;
+    }
+
+    // Allocate DMA descriptors and initialize DMA loop.
+    for (int ix = 0; ix < channel_count; ix++) {
+        dma_desc[ix] =
+            idma_descriptor_alloc(IDMA_2D_DESC, /*count=*/kMaxRequestCount);
+        if (!dma_desc[ix]) {
+            cleanup_on_init_failure(channel_count, dma_desc);
+            return nullptr;
+        }
+
+        idma_status_t init_status = idma_init_loop(
+            ix, (idma_buffer_t *)dma_desc[ix], IDMA_2D_DESC, kMaxRequestCount, nullptr, nullptr);
+
+        if (init_status != IDMA_OK) {
+            cleanup_on_init_failure(channel_count, dma_desc);
+            return nullptr;
+        }
+    }
+
+    return dma_desc;
 }
 
-void halide_release_dma() {
-    gxp_idma_descriptor_free(dma_desc);
+int32_t halide_xtensa_copy_1d(int channel, void *dst, int32_t dst_base,
+                              void *src, int32_t src_base, int extent,
+                              int item_size) {
+    if (channel >= kMaxChannelCount) {
+        channel = 0;
+    }
+
+    while (idma_buffer_status(channel) == kMaxRequestCount) {
+    }
+    int32_t id =
+        idma_copy_desc(channel, (uint8_t *)dst + dst_base * item_size,
+                       (uint8_t *)src + src_base * item_size,
+                       extent * item_size, DESC_IDMA_PRIOR_H);
+    return id;
 }
 
-int32_t halide_xtensa_copy_1d(void *dst, int32_t dst_base, void *src, int32_t src_base, int extent, int item_size) {
-    return idma_copy_desc(0, (uint8_t *)dst + dst_base * item_size, (uint8_t *)src + src_base * item_size, extent * item_size, DESC_IDMA_PRIOR_H);
+int32_t halide_xtensa_copy_2d(int channel, void *dst, int32_t dst_base,
+                              int32_t dst_stride, void *src, int32_t src_base,
+                              int32_t src_stride, int extent0, int extent1,
+                              int item_size) {
+    if (channel >= kMaxChannelCount) {
+        channel = 0;
+    }
+
+    while (idma_buffer_status(channel) == kMaxRequestCount) {
+    }
+    int32_t id =
+        idma_copy_2d_desc(channel, (uint8_t *)dst + dst_base * item_size,
+                          (uint8_t *)src + src_base * item_size,
+                          extent0 * item_size, DESC_IDMA_PRIOR_H, extent1,
+                          src_stride * item_size, dst_stride * item_size);
+
+    return id;
 }
 
-int32_t halide_xtensa_wait_for_copy(int32_t id) {
-    while (idma_buffer_status(0) > 0) {
-        idma_sleep(0);
+int32_t halide_xtensa_wait_for_copy(int32_t channel) {
+    if (channel >= kMaxChannelCount) {
+        channel = 0;
+    }
+    while (idma_buffer_status(channel) > 0) {
     }
 
     return 0;
+}
+
+void halide_release_dma(int32_t channel_count, void **dma_desc) {
+    if (channel_count > kMaxChannelCount) {
+        channel_count = kMaxChannelCount;
+    }
+    for (int ix = 0; ix < channel_count; ix++) {
+        halide_xtensa_wait_for_copy(ix);
+        idma_descriptor_free((idma_buffer_t *)dma_desc[ix]);
+    }
+
+    halide_tcm_free(nullptr, dma_desc);
 }
 
 #ifdef __cplusplus
