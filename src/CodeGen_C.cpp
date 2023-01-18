@@ -1937,6 +1937,24 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
     }
 
     if (output_kind != CPlusPlusFunctionInfoHeader) {
+        const auto emit_arg_decls = [&](const Type &ucon_type = Type()) {
+            const char *comma = "";
+            for (const auto &arg : args) {
+                stream << comma;
+                if (arg.is_buffer()) {
+                    stream << "struct halide_buffer_t *"
+                           << print_name(arg.name)
+                           << "_buffer";
+                } else {
+                    // If this arg is the user_context value, *and* ucon_type is valid,
+                    // use ucon_type instead of arg.type.
+                    const Type &t = (arg.name == "__user_context" && ucon_type.bits() != 0) ? ucon_type : arg.type;
+                    stream << print_type(t, AppendSpace) << print_name(arg.name);
+                }
+                comma = ", ";
+            }
+        };
+
         // Emit the function prototype
         if (f.linkage == LinkageType::Internal) {
             // If the function isn't public, mark it static.
@@ -1944,20 +1962,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
         }
         stream << "HALIDE_FUNCTION_ATTRS\n";
         stream << "int " << simple_name << "(";
-        for (size_t i = 0; i < args.size(); i++) {
-            if (args[i].is_buffer()) {
-                stream << "struct halide_buffer_t *"
-                       << print_name(args[i].name)
-                       << "_buffer";
-            } else {
-                stream << print_type(args[i].type, AppendSpace)
-                       << print_name(args[i].name);
-            }
-
-            if (i < args.size() - 1) {
-                stream << ", ";
-            }
-        }
+        emit_arg_decls();
 
         if (is_header_or_extern_decl()) {
             stream << ");\n";
@@ -1993,6 +1998,58 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
             // Ensure we use open/close_scope, so that the cache doesn't try to linger
             // across function boundaries for internal closures.
             close_scope("");
+        }
+
+        // This is subtle: for historical reasons, Halide-generated AOT code defines
+        // user_context as `void const*`, but expects all define_extern code with
+        // user_context usage to use `void *`. This usually isn't an issue, but turns
+        // into one if both the caller and callee of the define_extern() use the C++ backend,
+        // *and* a user_context is passed, *and* c_plus_plus_name_mangling is enabled,
+        // in which case we get link errors because of this dichotomy. Fixing this
+        // "correctly" (ie so that everything always uses identical types for user_context
+        // in all cases) will require a *lot* of downstream churn, so this is an ugly workaround:
+        // - If this is an external function, and
+        // - It's a C++ implementation, and
+        // - It uses user_context, then:
+        //
+        // Add a wrapper with `void*` ucon -> `void const*` ucon. In most cases this will
+        // be ignored (and probably dead-stripped), but in these cases it's critical.
+        //
+        // (Note that we don't check to see if c_plus_plus_name_mangling is enabled, since
+        // that would have to be done on the caller side, and this is purely a callee-side fix.)
+        if (f.linkage != LinkageType::Internal &&
+            output_kind == CPlusPlusImplementation &&
+            get_target().has_feature(Target::UserContext)) {
+
+            Type ucon_type = Type();
+            for (const auto &arg : args) {
+                if (arg.name == "__user_context") {
+                    ucon_type = arg.type;
+                    break;
+                }
+            }
+            if (ucon_type == type_of<const void *>()) {
+                stream << "\nHALIDE_FUNCTION_ATTRS\n";
+                stream << "int " << simple_name << "(";
+                emit_arg_decls(type_of<void *>());
+                stream << ") ";
+                open_scope();
+                stream << get_indent() << "return " << simple_name << "(";
+                const char *comma = "";
+                for (const auto &arg : args) {
+                    if (arg.name == "__user_context") {
+                        // Add an explicit cast here so we won't call ourselves into oblivion
+                        stream << "(void const *)";
+                    }
+                    stream << comma << print_name(arg.name);
+                    if (arg.is_buffer()) {
+                        stream << "_buffer";
+                    }
+                    comma = ", ";
+                }
+                stream << ");\n";
+                close_scope("");
+            }
         }
 
         if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {

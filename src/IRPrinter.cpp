@@ -30,11 +30,8 @@ ostream &operator<<(ostream &out, const Type &type) {
         out << "float";
         break;
     case Type::Handle:
-        if (type.handle_type) {
-            out << "(" << type.handle_type->inner_name.name << " *)";
-        } else {
-            out << "(void *)";
-        }
+        // ensure that 'const' (etc) qualifiers are emitted when appropriate
+        out << "(" << type_to_c_type(type, false) << ")";
         break;
     case Type::BFloat:
         out << "bfloat";
