@@ -2000,25 +2000,24 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
             close_scope("");
         }
 
-        // This is subtle: for historical reasons, Halide-generated AOT code defines
-        // user_context as `void const*`, but expects all define_extern code with
-        // user_context usage to use `void *`. This usually isn't an issue, but turns
-        // into one if both the caller and callee of the define_extern() use the C++ backend,
-        // *and* a user_context is passed, *and* c_plus_plus_name_mangling is enabled,
-        // in which case we get link errors because of this dichotomy. Fixing this
-        // "correctly" (ie so that everything always uses identical types for user_context
-        // in all cases) will require a *lot* of downstream churn, so this is an ugly workaround:
-        // - If this is an external function, and
-        // - It's a C++ implementation, and
-        // - It uses user_context, then:
+        // This is subtle: for historical reasons, Halide-generated AOT code
+        // defines user_context as `void const*`, but expects all
+        // define_extern code with user_context usage to use `void *`. This
+        // usually isn't an issue, but if both the caller and callee of the
+        // pass a user_context, *and* c_plus_plus_name_mangling is enabled,
+        // we get link errors because of this dichotomy. Fixing this
+        // "correctly" (ie so that everything always uses identical types for
+        //  user_context in all cases) will require a *lot* of downstream
+        //  churn, so this is an ugly workaround: Add a wrapper with `void*`
+        //  ucon -> `void const*` ucon. In most cases this will be ignored
+        //  (and probably dead-stripped), but in these cases it's critical.
         //
-        // Add a wrapper with `void*` ucon -> `void const*` ucon. In most cases this will
-        // be ignored (and probably dead-stripped), but in these cases it's critical.
-        //
-        // (Note that we don't check to see if c_plus_plus_name_mangling is enabled, since
-        // that would have to be done on the caller side, and this is purely a callee-side fix.)
+        // (Note that we don't check to see if c_plus_plus_name_mangling is
+        // enabled, since that would have to be done on the caller side, and
+        // this is purely a callee-side fix.)
         if (f.linkage != LinkageType::Internal &&
             output_kind == CPlusPlusImplementation &&
+            target.has_feature(Target::CPlusPlusMangling) &&
             get_target().has_feature(Target::UserContext)) {
 
             Type ucon_type = Type();
@@ -2028,13 +2027,13 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
                     break;
                 }
             }
-            if (ucon_type == type_of<const void *>()) {
+            if (ucon_type == type_of<void const *>()) {
                 stream << "\nHALIDE_FUNCTION_ATTRS\n";
                 stream << "int " << simple_name << "(";
                 emit_arg_decls(type_of<void *>());
                 stream << ") ";
                 open_scope();
-                stream << get_indent() << "return " << simple_name << "(";
+                stream << get_indent() << "    return " << simple_name << "(";
                 const char *comma = "";
                 for (const auto &arg : args) {
                     if (arg.name == "__user_context") {
