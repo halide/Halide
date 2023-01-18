@@ -3419,10 +3419,8 @@ void CodeGen_Xtensa::visit(const Load *op) {
         //         << id_index_base << ", " << id_index_stride << ")";
         // } else {
         string id_index = print_expr(op->index);
-        bool is_tcm = true;
-        if (heap_allocations.contains(name)) {
-            is_tcm = false;
-        }
+        // Is not allocated on the heap and is not a buffer
+        bool is_tcm = !(heap_allocations.contains(name) || external_buffers.count(op->name) > 0);
 
         rhs << "gather_load<" << print_type(t) << ", "
             << print_type(Int(32, t.lanes())) << ", "
