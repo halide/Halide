@@ -11,8 +11,8 @@ set(CMAKE_CXX_EXTENSIONS NO)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 
 option(BAREMETAL "Compile for baremetal target" OFF)
-set(GEN_EXE_INSTALL "generator_install")
 set(GEN_EXE "add.generator")
+set(GEN_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/generator)
 
 # Step 1
 # Build generator executable with host compiler in external child project
@@ -20,11 +20,11 @@ set(GEN_EXE "add.generator")
 include(ExternalProject)
 ExternalProject_Add(gen_project
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/generator
+    BINARY_DIR ${GEN_BINARY_DIR}
+    INSTALL_COMMAND ""
     CMAKE_ARGS
       -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
       -DGEN_EXE=${GEN_EXE}
-      -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}
-      -DINSTALL_DESTINATION=${GEN_EXE_INSTALL}
 )
 
 
@@ -34,9 +34,6 @@ ExternalProject_Add(gen_project
 if (BAREMETAL)
     # Avoid handling Threads library as mandatory dependency in find_package()
     set(Halide_NO_THREADS ON)
-    set(GEN_TARGET arm-32-noos-semihosting)
-else()
-    set(GEN_TARGET host)
 endif()
 
 # Import Halide. Instead of the package Halide, HalideHelpers is enough as we don't use JIT mode.
@@ -44,11 +41,12 @@ find_package(HalideHelpers REQUIRED)
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
-# Declare the generator executable as imported, which is actually built in external project
+# NOTE : find_package(HelloBaremetal-add_generator REQUIRED) is not ready at configuration time.
+# Instead, declare the generator executable as imported, which is built in external project
 add_executable(${GEN_EXE} IMPORTED)
 # Specify the location of exe file to import
 set_property(TARGET ${GEN_EXE}
-             PROPERTY IMPORTED_LOCATION ${GEN_EXE_INSTALL}/${GEN_EXE})
+             PROPERTY IMPORTED_LOCATION ${GEN_BINARY_DIR}/${GEN_EXE})
 # Associate with external project so that it invokes build porcess
 add_dependencies(${GEN_EXE} gen_project)
 
@@ -56,7 +54,8 @@ add_dependencies(${GEN_EXE} gen_project)
 add_halide_library(add
                    FROM ${GEN_EXE}
                    GENERATOR add
-                   TARGETS ${GEN_TARGET}
+                   # You may set Target feature in addition to what is set in the toolchain file
+                   TARGETS ${Halide_TARGET}-debug
 
                    # In baremetal, set parallelism=1 because thread support is unavailable.
                    AUTOSCHEDULER Halide::Mullapudi2016

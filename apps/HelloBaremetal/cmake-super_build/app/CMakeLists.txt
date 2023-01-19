@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 3.22)
 # Enable assembly language (.s) support additionally
 project(HelloBaremetal-app LANGUAGES C CXX ASM)
 
-if (NOT DEFINED GEN_EXE)
-    message(FATAL_ERROR "CMakeVariable GEN_EXE is not set")
+if (NOT DEFINED GEN_TARGET)
+    message(FATAL_ERROR "CMakeVariable GEN_TARGET is not set")
 endif()
 
 # Set up C++ language settings
@@ -15,9 +15,6 @@ set(CMAKE_CXX_EXTENSIONS NO)
 if (BAREMETAL)
     # Avoid handling Threads library as mandatory dependency in find_package()
     set(Halide_NO_THREADS ON)
-    set(GEN_TARGET arm-32-noos-semihosting)
-else()
-    set(GEN_TARGET host)
 endif()
 
 # Import Halide. Instead of the package Halide, HalideHelpers is enough as we don't use JIT mode.
@@ -30,9 +27,10 @@ find_package(HelloBaremetal-add_generator REQUIRED)
 
 # Generate filter function
 add_halide_library(add
-                   FROM ${GEN_EXE}
+                   FROM ${GEN_TARGET}
                    GENERATOR add
-                   TARGETS ${GEN_TARGET}
+                   # You may set Target feature in addition to what is set in the toolchain file
+                   TARGETS ${Halide_TARGET}-debug
 
                    # In baremetal, set parallelism=1 because thread support is unavailable.
                    AUTOSCHEDULER Halide::Mullapudi2016

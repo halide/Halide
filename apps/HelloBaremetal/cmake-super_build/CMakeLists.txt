@@ -5,21 +5,26 @@ project(HelloBaremetal-Super)
 include(ExternalProject)
 
 option(BAREMETAL "Compile for baremetal target" OFF)
+
+# The following variables are for 2 sub-projects to communicate.
+# Alternatively, you may rely on the default naming rules defined in HalideGeneratorHelpers.cmake
 set(GEN_PACKAGE "HelloBaremetal-add_generator")
-set(GEN_PACKAGE_INSTALL "${CMAKE_CURRENT_BINARY_DIR}/generator_install")
+set(GEN_NAMESPACE "HelloBaremetal::generators::")
 set(GEN_EXE "add.generator")
+set(GEN_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/generator)
 
 # Step 1
 # Build generator executable with host compiler in external child project
 # and export as a package for CMake find_package()
 ExternalProject_Add(gen_project
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/generator
+    BINARY_DIR ${GEN_BINARY_DIR}
     INSTALL_COMMAND ""
     CMAKE_ARGS
       -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
       -DGEN_PACKAGE=${GEN_PACKAGE}
+      -DGEN_NAMESPACE=${GEN_NAMESPACE}
       -DGEN_EXE=${GEN_EXE}
-      -DINSTALL_DESTINATION=${GEN_PACKAGE_INSTALL}
 )
 
 # Step 2
@@ -32,11 +37,12 @@ endif()
 ExternalProject_Add(app_project
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/app
     INSTALL_COMMAND ""
+    DEPENDS gen_project  # To make sure generator is ready
     CMAKE_ARGS
       -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_PATH}
       -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/bin
       -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
       -DBAREMETAL=${BAREMETAL}
-      -D${GEN_PACKAGE}_ROOT:FILEPATH=${GEN_PACKAGE_INSTALL}
-      -DGEN_EXE=${GEN_EXE}
+      -D${GEN_PACKAGE}_ROOT:FILEPATH=${GEN_BINARY_DIR}
+      -DGEN_TARGET=${GEN_NAMESPACE}${GEN_EXE}
 )

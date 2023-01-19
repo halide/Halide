@@ -1,6 +1,7 @@
 # CMake toolchain setup for AArch32 baremetal target
+# with semihosting mode enabled, where minimum I/O communication with a host PC is available
 set(CROSS_PREFIX "arm-none-eabi-")
-set(CMAKE_CROSSCOMPILING ON)
+set(CMAKE_SYSTEM_NAME none)
 set(CMAKE_SYSTEM_PROCESSOR arm)
 
 set(CMAKE_C_COMPILER ${CROSS_PREFIX}gcc)
@@ -23,3 +24,6 @@ set(CMAKE_ASM_FLAGS "${C_COMMON_FLAGS}")
 
 # To surpress linker warning "missing .note.GNU-stack section" by GCC 12
 set(CMAKE_EXE_LINKER_FLAGS "-z noexecstack")
+
+# Halide target for Halide Generator
+set(Halide_TARGET "arm-32-noos-semihosting")

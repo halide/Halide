@@ -11,9 +11,6 @@ set(CMAKE_CXX_EXTENSIONS NO)
 if (BAREMETAL)
     # Avoid handling Threads library as mandatory dependency in find_package()
     set(Halide_NO_THREADS ON)
-    set(GEN_TARGET arm-32-noos-semihosting)
-else()
-    set(GEN_TARGET host)
 endif()
 
 if (NOT DEFINED GEN_PACKAGE)
@@ -34,7 +31,8 @@ add_halide_generator(add.generator
 add_halide_library(add
                    FROM add.generator
                    GENERATOR add
-                   TARGETS ${GEN_TARGET}
+                   # You may set Target feature in addition to what is set in the toolchain file
+                   TARGETS ${Halide_TARGET}-debug
 
                    # In baremetal, set parallelism=1 because thread support is unavailable.
                    AUTOSCHEDULER Halide::Mullapudi2016

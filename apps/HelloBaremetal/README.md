@@ -13,7 +13,7 @@ Because we cannot rely on the abstraction of OS, you will probably need to modif
 ## How to build
 ### Cross compilation
 Halide cross-compiling in CMake is tricky and there are a couple of ways to realize it. This application demonstrates 3 different ways with concrete code, located in `CMakeLists.txt` in the following sub directories.
-1. cmake-add_halide_generator
+1. cmake-twice
 1. cmake-super_build
 1. cmake-external_project
 
@@ -22,7 +22,7 @@ If you want to understand the detail of build steps, please read "Cross compilin
 ### Build procedure
 #### Baremetal target
 As a prerequisite, toolchain described above needs to be installed in your host machine. The detail of the toolchanin configuration is set in [toolchain.arm-32-sample.cmake](cmake/toolchain.arm-32-sample.cmake), which you might need to modify depending on the target baremetal system.
-Then, just run the build script in a sub directory.
+Then, just run the build script in one of the aforementioned sub directories.
 ```
 cd cmake-<xxx>/
 ./build.sh

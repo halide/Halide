@@ -4,7 +4,7 @@ project(HelloBaremetal)
 
 enable_testing()
 
-add_subdirectory(cmake-add_halide_generator)
+add_subdirectory(cmake-twice)
 # add_subdirectory(cmake-super_build)
 # add_subdirectory(cmake-external_project)
 
