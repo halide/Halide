@@ -174,9 +174,6 @@ Target calculate_host_target() {
 #if __riscv
     Target::Arch arch = Target::RISCV;
 #else
-#if __mips__ || __mips || __MIPS__
-    Target::Arch arch = Target::MIPS;
-#else
 #if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
 #else
@@ -295,7 +292,6 @@ Target calculate_host_target() {
 #endif
 #endif
 #endif
-#endif
 
     return {os, arch, bits, processor, initial_features, vector_bits};
 }
@@ -399,7 +395,6 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arch_unknown", Target::ArchUnknown},
     {"x86", Target::X86},
     {"arm", Target::ARM},
-    {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
     {"wasm", Target::WebAssembly},
@@ -837,9 +832,6 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_X86)
     bad |= arch == Target::X86;
-#endif
-#if !defined(WITH_MIPS)
-    bad |= arch == Target::MIPS;
 #endif
 #if !defined(WITH_POWERPC)
     bad |= arch == Target::POWERPC;
