@@ -79,21 +79,22 @@ extern "C" {
 
 extern void *halide_tcm_malloc(void *user_context, size_t x) __attribute__ ((__malloc__));
 extern void halide_tcm_free(void *user_context, void *ptr);
-extern int32_t halide_init_dma(int32_t channel_count);
+extern void **halide_init_dma(int32_t channel_count);
 extern int32_t halide_xtensa_copy_1d(int32_t channel, void* dst, int32_t dst_base, void* src, int32_t src_base, int32_t extent, int32_t item_size);
 extern int32_t halide_xtensa_copy_2d(int32_t channel, void *dst, int32_t dst_base, int32_t dst_stride, void *src, int32_t src_base, int32_t src_stride, int32_t extent0, int32_t extent1, int32_t item_size);
 extern int32_t halide_xtensa_wait_for_copy(int32_t channel);
-extern int32_t halide_release_dma();
+extern int32_t halide_release_dma(int32_t channel_count, void** dma_desc);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
 class ScopedDmaInitializer {
-  bool is_valid_;
+  int channel_count_;
+  void** dma_desc_ = nullptr;
  public:
-  ScopedDmaInitializer(int channel_count) {
-    is_valid_ = (halide_init_dma(channel_count) == 0);
+  ScopedDmaInitializer(int channel_count) : channel_count_(channel_count) {
+    dma_desc_ = halide_init_dma(channel_count_);
   }
 
   ScopedDmaInitializer() = delete;
@@ -102,12 +103,12 @@ class ScopedDmaInitializer {
   ScopedDmaInitializer(ScopedDmaInitializer&&) = delete;
 
   ~ScopedDmaInitializer() {
-    if (is_valid_) {
-      halide_release_dma();
+    if (dma_desc_ != nullptr) {
+      halide_release_dma(channel_count_, dma_desc_);
     }
   }
 
-  bool is_valid() const { return is_valid_; }
+  bool is_valid() const { return dma_desc_ != nullptr; }
 };
 
 )INLINE_CODE";
@@ -209,9 +210,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
             if (uses_dma.uses_dma) {
                 stream << get_indent() << "ScopedDmaInitializer dma_initializer(" << uses_dma.max_channel_no + 1 << ");\n";
                 stream << get_indent() << "if (!dma_initializer.is_valid()) {\n";
-                stream << get_indent() << "halide_error("
-                       << (have_user_context ? "__user_context" : "nullptr")
-                       << ", \"DMA initialization failed\");\n";
+                stream << get_indent() << "halide_error(_ucon, \"DMA initialization failed\");\n";
                 stream << get_indent() << "return halide_error_code_generic_error;\n";
                 stream << get_indent() << "}\n";
             }
@@ -222,6 +221,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
 
             // Return success.
             stream << get_indent() << "return 0;\n";
+            cache.clear();
         }
 
         indent -= 1;
@@ -2363,6 +2363,26 @@ HALIDE_ALWAYS_INLINE native_vector_i16 convert<native_vector_i16, native_vector_
 }
 
 template<>
+HALIDE_ALWAYS_INLINE native_vector_f16 convert<native_vector_f16, native_vector_i16>(const native_vector_i16& src) {
+    return IVP_FLOAT16NX16(src, 0);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE native_vector_i16 convert<native_vector_i16, native_vector_f16>(const native_vector_f16& src) {
+    return IVP_TRUNC16NXF16(src, 0);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE native_vector_f16 convert<native_vector_f16, native_vector_u16>(const native_vector_u16& src) {
+    return convert<native_vector_f16, native_vector_i16>(xb_vecNx16U_rtor_xb_vecNx16(src));
+}
+
+template<>
+HALIDE_ALWAYS_INLINE native_vector_u16 convert<native_vector_u16, native_vector_f16>(const native_vector_f16& src) {
+    return xb_vecNx16U_rtor_xb_vecNx16(convert<native_vector_i16, native_vector_f16>(src));
+}
+
+template<>
 HALIDE_ALWAYS_INLINE native_vector_u8 convert<native_vector_u8, native_vector_f32_x4>(const native_vector_f32_x4& src) {
     native_vector_i32_x4 tmp(native_vector_i32_x4::from_native_vector,
                   convert<native_vector_i32, native_vector_f32>(src.native_vector[0]),
@@ -2910,6 +2930,9 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         } else if (is_native_xtensa_vector<uint32_t>(op->type, target)) {
             intrinsic_name = "IVP_SELN_2X32UI";
             shift_define = "IVP_SELI_32B_ROTATE_";
+        } else if (is_native_xtensa_vector<float16_t>(op->type, target)) {
+            intrinsic_name = "IVP_SELNXF16I";
+            shift_define = "IVP_SELI_16B_ROTATE_";
         } else if (is_native_xtensa_vector<float>(op->type, target)) {
             intrinsic_name = "IVP_SELN_2XF32I";
             shift_define = "IVP_SELI_32B_ROTATE_";
@@ -3020,6 +3043,10 @@ void CodeGen_Xtensa::visit(const Div *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         print_expr(Call::make(op->type, Call::shift_right, {op->a, Expr(bits)}, Call::PureIntrinsic));
+    } else if (is_native_xtensa_vector<float16_t>(op->type, target)) {
+        ostringstream rhs;
+        rhs << "IVP_DIVNXF16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        print_assignment(op->type, rhs.str());
     } else if (is_native_xtensa_vector<float>(op->type, target)) {
         ostringstream rhs;
         rhs << "IVP_DIVN_2XF32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
@@ -3069,6 +3096,8 @@ void CodeGen_Xtensa::visit(const Max *op) {
             rhs << "IVP_MAXN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else if (is_native_xtensa_vector<uint32_t>(op->type, target)) {
             rhs << "IVP_MAXUN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        } else if (is_native_xtensa_vector<float16_t>(op->type, target)) {
+            rhs << "IVP_MAXNXF16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else if (is_native_xtensa_vector<float>(op->type, target)) {
             rhs << "IVP_MAXN_2XF32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else {
@@ -3095,6 +3124,8 @@ void CodeGen_Xtensa::visit(const Min *op) {
             rhs << "IVP_MINN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else if (is_native_xtensa_vector<uint32_t>(op->type, target)) {
             rhs << "IVP_MINUN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        } else if (is_native_xtensa_vector<float16_t>(op->type, target)) {
+            rhs << "IVP_MINNXF16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else if (is_native_xtensa_vector<float>(op->type, target)) {
             rhs << "IVP_MINN_2XF32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else {
@@ -3239,6 +3270,8 @@ void CodeGen_Xtensa::visit(const LE *op) {
         print_assignment(op->type, "IVP_LEN_2X32(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_LEUN_2X32U(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_OLENXF16(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_OLEN_2XF32(" + sa + ", " + sb + ")");
     } else {
@@ -3266,6 +3299,31 @@ void CodeGen_Xtensa::visit(const LT *op) {
         print_assignment(op->type, "IVP_OLTNXF16(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_OLTN_2XF32(" + sa + ", " + sb + ")");
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_Xtensa::visit(const GE *op) {
+    string sa = print_expr(op->a);
+    string sb = print_expr(op->b);
+
+    if (is_native_xtensa_vector<int8_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_GE2NX8(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<uint8_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_GEU2NX8U(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<int16_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_GENX16(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<uint16_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_GEUNX16U(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<int32_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_GEN_2X32(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_GEUN_2X32U(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_OGENXF16(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_OGEN_2XF32(" + sa + ", " + sb + ")");
     } else {
         CodeGen_C::visit(op);
     }
@@ -3331,6 +3389,8 @@ void CodeGen_Xtensa::visit(const EQ *op) {
         print_assignment(op->type, "IVP_EQN_2X32(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_EQN_2X32U(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
+        print_assignment(op->type, "IVP_OEQNXF16(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
         print_assignment(op->type, "IVP_OEQN_2XF32(" + sa + ", " + sb + ")");
     } else {
@@ -3407,10 +3467,8 @@ void CodeGen_Xtensa::visit(const Load *op) {
         //         << id_index_base << ", " << id_index_stride << ")";
         // } else {
         string id_index = print_expr(op->index);
-        bool is_tcm = true;
-        if (heap_allocations.contains(name)) {
-            is_tcm = false;
-        }
+        // Is not allocated on the heap and is not a buffer
+        bool is_tcm = !(heap_allocations.contains(name) || external_buffers.count(op->name) > 0);
 
         rhs << "gather_load<" << print_type(t) << ", "
             << print_type(Int(32, t.lanes())) << ", "
@@ -3737,24 +3795,30 @@ void CodeGen_Xtensa::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_error << "Prefetch is not supported by Xtensa backend." << Expr(op) << "\n";
-    } else if (op->name == "sqrt_f32") {
+    } else if (op->name == "sqrt" || op->name == "sqrt_f32") {
         string a0 = print_expr(op->args[0]);
         if (is_native_xtensa_vector<float>(op->type, target)) {
             rhs << "IVP_FSQRTN_2XF32(" << a0 << ")";
+        } else if (is_native_xtensa_vector<float16_t>(op->type, target)) {
+            rhs << "IVP_FSQRTNXF16(" << a0 << ")";
         } else {
             rhs << "sqrtf(" << a0 << ")";
         }
-    } else if (op->name == "round_f32") {
+    } else if (op->name == "round" || op->name == "round_f32") {
         string a0 = print_expr(op->args[0]);
         if (is_native_xtensa_vector<float>(op->type, target)) {
             rhs << "IVP_FIRINTN_2XF32(" << a0 << ")";
+        } else if (is_native_xtensa_vector<float16_t>(op->type, target)) {
+            rhs << "IVP_FIRINTNXF16(" << a0 << ")";
         } else {
             rhs << "nearbyint(" << a0 << ")";
         }
-    } else if (op->name == "floor_f32") {
+    } else if (op->name == "floor" || op->name == "floor_f32") {
         string a0 = print_expr(op->args[0]);
         if (is_native_xtensa_vector<float>(op->type, target)) {
             rhs << "IVP_FIFLOORN_2XF32(" << a0 << ")";
+        } else if (is_native_xtensa_vector<float16_t>(op->type, target)) {
+            rhs << "IVP_FIFLOORNXF16(" << a0 << ")";
         } else {
             rhs << "floor_f32(" << a0 << ")";
         }
@@ -3896,7 +3960,8 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
         return;
     }
 
-    if (op->is_slice() && (op->slice_stride() == 1) && (is_native_xtensa_vector<int8_t>(op->type, target) || is_native_xtensa_vector<uint8_t>(op->type, target) || is_native_xtensa_vector<int16_t>(op->type, target) || is_native_xtensa_vector<uint16_t>(op->type, target) || is_native_xtensa_vector<int32_t>(op->type, target) || is_native_xtensa_vector<uint32_t>(op->type, target) || is_native_xtensa_vector<float>(op->type, target))) {
+    if (op->is_slice() && (op->slice_stride() == 1) &&
+        (is_native_xtensa_vector<int8_t>(op->type, target) || is_native_xtensa_vector<uint8_t>(op->type, target) || is_native_xtensa_vector<int16_t>(op->type, target) || is_native_xtensa_vector<uint16_t>(op->type, target) || is_native_xtensa_vector<int32_t>(op->type, target) || is_native_xtensa_vector<uint32_t>(op->type, target) || is_native_xtensa_vector<float>(op->type, target) || is_native_xtensa_vector<float16_t>(op->type, target))) {
         string type_suffix = suffix_for_type(op->type);
         string function_name = "halide_xtensa_slice";
         int slice_begin = op->slice_begin();
@@ -4090,7 +4155,20 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
     }
 
     if (!on_stack) {
-        create_assertion(op_name, Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
+        ostringstream check;
+        if (is_const_zero(op->condition)) {
+            // Assertion always succeeds here, since allocation is never used
+            check << print_expr(const_true());
+        } else {
+            // Assert that the allocation worked....
+            check << "((" << op_name << " != nullptr) || (" << size_id << " == 0))";
+            if (!is_const_one(op->condition)) {
+                // ...but if the condition is false, it's OK for the new_expr to be null.
+                string op_condition = print_assignment(Bool(), print_expr(op->condition));
+                check << " || (!" << op_condition << ")";
+            }
+        }
+        create_assertion(check.str(), Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
         string free_function = op->free_function.empty() ?
                                    (op->memory_type != MemoryType::VTCM ? "halide_free" : "halide_tcm_free") :

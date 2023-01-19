@@ -2056,11 +2056,11 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
         stream.write((char *)b.host, num_elems);
         stream << ")BUFCHARSOURCE\";\n";
 
-        stream << "static const uint8_t *" << name << "_data HALIDE_ATTRIBUTE_ALIGN(32) = (const uint8_t *) "
+        stream << "static const HALIDE_ATTRIBUTE_ALIGN(32) uint8_t *" << name << "_data = (const uint8_t *) "
                << name << "_string;\n";
     } else {
         // Emit the data
-        stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
+        stream << "static " << (is_constant ? "const" : "") << " HALIDE_ATTRIBUTE_ALIGN(32) uint8_t " << name << "_data[] = {\n";
         stream << get_indent();
         for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
             if (i > 0) {
@@ -3262,6 +3262,9 @@ void CodeGen_C::visit(const Allocate *op) {
             stream << op_name
                    << "[" << size_id << "];\n";
         } else {
+            // Shouldn't ever currently be possible to have !on_stack && size_id.empty(),
+            // but reality-check in case things change in the future.
+            internal_assert(!size_id.empty());
             stream << "*"
                    << op_name
                    << " = ("
@@ -3274,7 +3277,25 @@ void CodeGen_C::visit(const Allocate *op) {
     }
 
     if (!on_stack) {
-        create_assertion(op_name, Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
+        ostringstream check;
+        if (is_const_zero(op->condition)) {
+            // Assertion always succeeds here, since allocation is never used
+            check << print_expr(const_true());
+        } else {
+            // Assert that the allocation worked....
+            // Note that size_id can be empty if the "allocation" is via a custom_new that
+            // wraps _halide_buffer_get_host(), so don't emit malformed code in that case.
+            check << "(" << op_name << " != nullptr)";
+            if (!size_id.empty()) {
+                check << " || (" << size_id << " == 0)";
+            }
+            if (!is_const_one(op->condition)) {
+                // ...but if the condition is false, it's OK for the new_expr to be null.
+                string op_condition = print_assignment(Bool(), print_expr(op->condition));
+                check << " || (!" << op_condition << ")";
+            }
+        }
+        create_assertion("(" + check.str() + ")", Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
         stream << get_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
@@ -3456,7 +3477,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
   } // overflow test tmp.heap
   int64_t _3 = _2;
   int32_t *_tmp_heap = (int32_t  *)halide_malloc(_ucon, sizeof(int32_t )*_3);
-  if (!_tmp_heap)
+  if (!((_tmp_heap != nullptr) || (_3 == 0)))
   {
    int32_t _4 = halide_error_out_of_memory(_ucon);
    return _4;

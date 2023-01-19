@@ -165,10 +165,6 @@ void define_enums(py::module &m) {
         .value("HexagonDma", Target::Feature::HexagonDma)
         .value("EmbedBitcode", Target::Feature::EmbedBitcode)
         .value("EnableLLVMLoopOpt", Target::Feature::EnableLLVMLoopOpt)
-        // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-        // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-        // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-        .value("DisableLLVMLoopOpt", Target::Feature::DisableLLVMLoopOpt)
         .value("WasmSimd128", Target::Feature::WasmSimd128)
         .value("WasmSignExt", Target::Feature::WasmSignExt)
         .value("WasmSatFloatToInt", Target::Feature::WasmSatFloatToInt)
