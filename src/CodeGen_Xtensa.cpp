@@ -4105,10 +4105,6 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
             }
         }
 
-        if (op->type.bits() == 24) {
-            on_stack = true;
-        }
-
         // Check the condition to see if this allocation should actually be created.
         // If the allocation is on the stack, the only condition we can respect is
         // unconditional false (otherwise a non-constant-sized array declaration

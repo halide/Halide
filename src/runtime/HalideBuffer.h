@@ -49,11 +49,7 @@
 // Conservatively align buffer allocations to 128 bytes by default.
 // This is enough alignment for all the platforms currently in use.
 // Redefine this in your compiler settings if you desire more/less alignment.
-#if defined(__XTENSA__)
-#define HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT (XCHAL_DATA_WIDTH)
-#else
 #define HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT 128
-#endif
 #endif
 
 static_assert(((HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT & (HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT - 1)) == 0),
