@@ -40,7 +40,6 @@ struct Target {
         ArchUnknown = 0,
         X86,
         ARM,
-        MIPS,
         Hexagon,
         POWERPC,
         WebAssembly,

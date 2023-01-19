@@ -112,12 +112,6 @@ using std::vector;
 #define InitializeHexagonAsmPrinter() InitializeAsmPrinter(Hexagon)
 #endif
 
-#ifdef WITH_MIPS
-#define InitializeMipsTarget() InitializeTarget(Mips)
-#define InitializeMipsAsmParser() InitializeAsmParser(Mips)
-#define InitializeMipsAsmPrinter() InitializeAsmPrinter(Mips)
-#endif
-
 #ifdef WITH_POWERPC
 #define InitializePowerPCTarget() InitializeTarget(PowerPC)
 #define InitializePowerPCAsmParser() InitializeAsmParser(PowerPC)
@@ -237,8 +231,6 @@ std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target,
         result = new_CodeGen_X86(target);
     } else if (target.arch == Target::ARM) {
         result = new_CodeGen_ARM(target);
-    } else if (target.arch == Target::MIPS) {
-        result = new_CodeGen_MIPS(target);
     } else if (target.arch == Target::POWERPC) {
         result = new_CodeGen_PowerPC(target);
     } else if (target.arch == Target::Hexagon) {
