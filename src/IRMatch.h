@@ -2614,7 +2614,7 @@ std::ostream &operator<<(std::ostream &s, const IsMinValue<A> &op) {
 }
 
 template<typename A>
-struct HasEvenLanes {
+struct LanesOf {
     struct pattern_tag {};
     A a;
 
@@ -2631,22 +2631,22 @@ struct HasEvenLanes {
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Type t = a.make(state, {}).type();
-        val.u.u64 = (t.lanes() % 2 == 0);
+        val.u.u64 = t.lanes();
         ty.code = halide_type_uint;
-        ty.bits = 1;
-        ty.lanes = t.lanes();
+        ty.bits = 32;
+        ty.lanes = 1;
     }
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto has_even_lanes(A &&a) noexcept -> HasEvenLanes<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto lanes_of(A &&a) noexcept -> LanesOf<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
     return {pattern_arg(a)};
 }
 
 template<typename A>
-std::ostream &operator<<(std::ostream &s, const HasEvenLanes<A> &op) {
-    s << "has_even_lanes(" << op.a << ")";
+std::ostream &operator<<(std::ostream &s, const LanesOf<A> &op) {
+    s << "lanes_of(" << op.a << ")";
     return s;
 }
 
