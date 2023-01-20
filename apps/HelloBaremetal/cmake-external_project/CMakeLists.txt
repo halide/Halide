@@ -10,7 +10,6 @@ set(CMAKE_CXX_EXTENSIONS NO)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 
-option(BAREMETAL "Compile for baremetal target" OFF)
 set(GEN_EXE "add.generator")
 set(GEN_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/generator)
 
@@ -23,7 +22,6 @@ ExternalProject_Add(gen_project
     BINARY_DIR ${GEN_BINARY_DIR}
     INSTALL_COMMAND ""
     CMAKE_ARGS
-      -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
       -DGEN_EXE=${GEN_EXE}
 )
 
@@ -55,7 +53,7 @@ add_halide_library(add
                    FROM ${GEN_EXE}
                    GENERATOR add
                    # You may set Target feature in addition to what is set in the toolchain file
-                   TARGETS ${Halide_TARGET}-debug
+                   FEATURES debug
 
                    # In baremetal, set parallelism=1 because thread support is unavailable.
                    AUTOSCHEDULER Halide::Mullapudi2016

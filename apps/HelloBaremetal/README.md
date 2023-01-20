@@ -37,4 +37,4 @@ cmake --build build/
 ```
 
 ## How to run
-`run.sh` in each sub directories is a sample script that shows how to run the executable on QEMU Arm System emulator with semohosting mode.
+`run.sh` in each sub directories is a sample script that shows how to run the executable on QEMU Arm System emulator with semihosting mode.

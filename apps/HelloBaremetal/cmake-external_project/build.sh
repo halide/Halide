@@ -2,17 +2,14 @@
 set -eo pipefail
 
 # Prerequisite :
-#     Halide is installed system-wide in your host machine
-#      or environmental variable `HALIDE_ROOT` is set to point your own Halide installation
+#     Halide is installed system-wide in your host machine or discoverable via CMAKE_PREFIX_PATH
 
 cd "$(dirname ${BASH_SOURCE[0]})"
-readonly TOOLCHAIN_FILE="../cmake/toolchain.noos-arm32-sample.cmake"
+readonly TOOLCHAIN_FILE="${PWD}/../cmake/toolchain.noos-arm32-sample.cmake"
 
 rm -rf build
 
-cmake -DCMAKE_PREFIX_PATH=${HALIDE_ROOT} \
-    -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE} \
-    -DBAREMETAL=ON \
-    -B build -S .
+cmake -S . -B build \
+    -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}"
 
 cmake --build build/

@@ -32,7 +32,7 @@ add_halide_library(add
                    FROM add.generator
                    GENERATOR add
                    # You may set Target feature in addition to what is set in the toolchain file
-                   TARGETS ${Halide_TARGET}-debug
+                   FEATURES debug
 
                    # In baremetal, set parallelism=1 because thread support is unavailable.
                    AUTOSCHEDULER Halide::Mullapudi2016

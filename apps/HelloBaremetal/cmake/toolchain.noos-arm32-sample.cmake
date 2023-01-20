@@ -27,3 +27,6 @@ set(CMAKE_EXE_LINKER_FLAGS "-z noexecstack")
 
 # Halide target for Halide Generator
 set(Halide_TARGET "arm-32-noos-semihosting")
+
+# Switch for baremetal specific build steps
+set(BAREMETAL ON)
