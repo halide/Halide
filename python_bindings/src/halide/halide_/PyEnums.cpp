@@ -85,7 +85,6 @@ void define_enums(py::module &m) {
         .value("ArchUnknown", Target::Arch::ArchUnknown)
         .value("X86", Target::Arch::X86)
         .value("ARM", Target::Arch::ARM)
-        .value("MIPS", Target::Arch::MIPS)
         .value("Hexagon", Target::Arch::Hexagon)
         .value("POWERPC", Target::Arch::POWERPC)
         .value("RISCV", Target::Arch::RISCV)

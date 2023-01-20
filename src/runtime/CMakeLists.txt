@@ -38,7 +38,6 @@ set(RUNTIME_CPP
     metal
     metal_objc_arm
     metal_objc_x86
-    mips_cpu_features
     module_aot_ref_count
     module_jit_ref_count
     msan
@@ -100,7 +99,6 @@ set(RUNTIME_LL
     arm
     arm_no_neon
     hvx_128
-    mips
     posix_math
     powerpc
     ptx_dev

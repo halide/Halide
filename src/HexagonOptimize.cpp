@@ -1416,7 +1416,7 @@ class EliminateInterleaves : public IRMutator {
                 does_not_yield++;
             }
         }
-        return removable > 0 && removable >= does_not_yield;
+        return removable > 0 && removable > does_not_yield;
     }
 
     // Asserting that x is an expression that can yield an interleave
