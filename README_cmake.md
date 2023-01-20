@@ -769,14 +769,15 @@ Variables set by the package:
 
 Halide defines the following targets that are available to users:
 
-| Imported target      | Description                                                                                                                          |
-|----------------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| `Halide::Halide`     | this is the JIT-mode library to use when using Halide from C++.                                                                      |
-| `Halide::Generator`  | this is the target to use when defining a generator executable. It supplies a `main()` function.                                     |
-| `Halide::Runtime`    | adds include paths to the Halide runtime headers                                                                                     |
-| `Halide::Tools`      | adds include paths to the Halide tools, including the benchmarking utility.                                                          |
-| `Halide::ImageIO`    | adds include paths to the Halide image IO utility and sets up dependencies to PNG / JPEG if they are available.                      |
-| `Halide::RunGenMain` | used with the `REGISTRATION` parameter of `add_halide_library` to create simple runners and benchmarking tools for Halide libraries. |
+| Imported target      | Description                                                                                                                                                                                    |
+|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Halide::Halide`     | this is the JIT-mode library to use when using Halide from C++.                                                                                                                                |
+| `Halide::Generator`  | this is the target to use when defining a generator executable. It supplies a `main()` function.                                                                                               |
+| `Halide::Runtime`    | adds include paths to the Halide runtime headers                                                                                                                                               |
+| `Halide::Tools`      | adds include paths to the Halide tools, including the benchmarking utility.                                                                                                                    |
+| `Halide::ImageIO`    | adds include paths to the Halide image IO utility. Depends on `PNG::PNG` and `JPEG::JPEG` if they exist or were loaded through the corresponding package components.                           |
+| `Halide::ThreadPool` | adds include paths to the Halide _simple_ thread pool utility library. This is not the same as the runtime's thread pool and is intended only for use by tests. Depends on `Threads::Threads`. |
+| `Halide::RunGenMain` | used with the `REGISTRATION` parameter of `add_halide_library` to create simple runners and benchmarking tools for Halide libraries.                                                           |
 
 The following targets are not guaranteed to be available:
 

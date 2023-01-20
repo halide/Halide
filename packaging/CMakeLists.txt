@@ -51,7 +51,7 @@ endforeach ()
 
 target_sources(Halide_RunGenMain INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/RunGenMain.cpp>)
 
-install(TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain
+install(TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain Halide_ThreadPool
         EXPORT Halide_Interfaces
         INCLUDES DESTINATION ${Halide_INSTALL_TOOLSDIR})
 
