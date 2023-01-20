@@ -536,6 +536,65 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
                                       names.simple_name, f.args, input.get_metadata_name_map());
             }
         }
+
+        // Workaround for https://github.com/halide/Halide/issues/635:
+        // For historical reasons, Halide-generated AOT code
+        // defines user_context as `void const*`, but expects all
+        // define_extern code with user_context usage to use `void *`. This
+        // usually isn't an issue, but if both the caller and callee of the
+        // pass a user_context, *and* c_plus_plus_name_mangling is enabled,
+        // we get link errors because of this dichotomy. Fixing this
+        // "correctly" (ie so that everything always uses identical types for
+        // user_context in all cases) will require a *lot* of downstream
+        // churn (see https://github.com/halide/Halide/issues/7298),
+        // so this is a workaround: Add a wrapper with `void*`
+        // ucon -> `void const*` ucon. In most cases this will be ignored
+        // (and probably dead-stripped), but in these cases it's critical.
+        //
+        // (Note that we don't check to see if c_plus_plus_name_mangling is
+        // enabled, since that would have to be done on the caller side, and
+        // this is purely a callee-side fix.)
+        if (f.linkage != LinkageType::Internal &&
+            target.has_feature(Target::CPlusPlusMangling) &&
+            target.has_feature(Target::UserContext)) {
+
+            int wrapper_ucon_index = -1;
+            auto wrapper_args = f.args;               // make a copy
+            auto wrapper_llvm_arg_types = arg_types;  // make a copy
+            for (int i = 0; i < (int)wrapper_args.size(); i++) {
+                if (wrapper_args[i].name == "__user_context" && wrapper_args[i].type == type_of<void const *>()) {
+                    // Update the type of the user_context argument to be void* rather than void const*
+                    wrapper_args[i].type = type_of<void *>();
+                    wrapper_llvm_arg_types[i] = llvm_type_of(upgrade_type_for_argument_passing(wrapper_args[i].type));
+                    wrapper_ucon_index = i;
+                }
+            }
+            if (wrapper_ucon_index >= 0) {
+                const auto wrapper_names = get_mangled_names(f.name, f.linkage, f.name_mangling, wrapper_args, target);
+
+                FunctionType *wrapper_func_t = FunctionType::get(i32_t, wrapper_llvm_arg_types, false);
+                llvm::Function *wrapper_func = llvm::Function::Create(wrapper_func_t,
+                                                                      llvm::GlobalValue::ExternalLinkage,
+                                                                      wrapper_names.extern_name,
+                                                                      module.get());
+                set_function_attributes_from_halide_target_options(*wrapper_func);
+                llvm::BasicBlock *wrapper_block = llvm::BasicBlock::Create(module->getContext(), "entry", wrapper_func);
+                builder->SetInsertPoint(wrapper_block);
+
+                std::vector<llvm::Value *> wrapper_call_args;
+                for (auto &arg : wrapper_func->args()) {
+                    wrapper_call_args.push_back(&arg);
+                }
+                wrapper_call_args[wrapper_ucon_index] = builder->CreatePointerCast(wrapper_call_args[wrapper_ucon_index],
+                                                                                   llvm_type_of(type_of<void const *>()));
+
+                llvm::CallInst *wrapper_result = builder->CreateCall(function, wrapper_call_args);
+                // This call should never inline
+                wrapper_result->setIsNoInline();
+                builder->CreateRet(wrapper_result);
+                internal_assert(!verifyFunction(*wrapper_func, &llvm::errs()));
+            }
+        }
     }
     // Define all functions
     int idx = 0;

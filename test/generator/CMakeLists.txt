@@ -508,7 +508,7 @@ _add_halide_aot_tests(multitarget
 add_halide_generator(nested_externs.generator SOURCES nested_externs_generator.cpp)
 set(NESTED_EXTERNS_LIBS nested_externs_root nested_externs_inner nested_externs_combine nested_externs_leaf)
 foreach (LIB IN LISTS NESTED_EXTERNS_LIBS)
-    _add_halide_libraries(${LIB} FROM nested_externs.generator GENERATOR_NAME ${LIB} FEATURES c_plus_plus_name_mangling)
+    _add_halide_libraries(${LIB} FROM nested_externs.generator GENERATOR_NAME ${LIB} FEATURES user_context c_plus_plus_name_mangling)
 endforeach ()
 _add_halide_aot_tests(nested_externs
                       HALIDE_LIBRARIES ${NESTED_EXTERNS_LIBS})
