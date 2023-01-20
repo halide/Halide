@@ -50,7 +50,7 @@ function(add_halide_generator TARGET)
 
     if (NOT ARG_EXPORT_FILE)
         file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/cmake")
-        set(ARG_EXPORT_FILE "${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}-config.cmake")
+        set(ARG_EXPORT_FILE "${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}Config.cmake")
     endif ()
 
     if (NOT ARG_SOURCES)
