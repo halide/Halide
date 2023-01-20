@@ -2000,17 +2000,19 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
             close_scope("");
         }
 
-        // This is subtle: for historical reasons, Halide-generated AOT code
+        // Workaround for https://github.com/halide/Halide/issues/635:
+        // For historical reasons, Halide-generated AOT code
         // defines user_context as `void const*`, but expects all
         // define_extern code with user_context usage to use `void *`. This
         // usually isn't an issue, but if both the caller and callee of the
         // pass a user_context, *and* c_plus_plus_name_mangling is enabled,
         // we get link errors because of this dichotomy. Fixing this
         // "correctly" (ie so that everything always uses identical types for
-        //  user_context in all cases) will require a *lot* of downstream
-        //  churn, so this is an ugly workaround: Add a wrapper with `void*`
-        //  ucon -> `void const*` ucon. In most cases this will be ignored
-        //  (and probably dead-stripped), but in these cases it's critical.
+        // user_context in all cases) will require a *lot* of downstream
+        // churn (see https://github.com/halide/Halide/issues/7298),
+        // so this is a workaround: Add a wrapper with `void*`
+        // ucon -> `void const*` ucon. In most cases this will be ignored
+        // (and probably dead-stripped), but in these cases it's critical.
         //
         // (Note that we don't check to see if c_plus_plus_name_mangling is
         // enabled, since that would have to be done on the caller side, and
