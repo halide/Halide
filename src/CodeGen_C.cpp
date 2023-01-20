@@ -1487,7 +1487,7 @@ public:
     }
 
     bool has_c_declarations() const {
-        return !c_externs.empty();
+        return !c_externs.empty() || !destructors.empty();
     }
 
     bool has_c_plus_plus_declarations() const {
@@ -1937,6 +1937,24 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
     }
 
     if (output_kind != CPlusPlusFunctionInfoHeader) {
+        const auto emit_arg_decls = [&](const Type &ucon_type = Type()) {
+            const char *comma = "";
+            for (const auto &arg : args) {
+                stream << comma;
+                if (arg.is_buffer()) {
+                    stream << "struct halide_buffer_t *"
+                           << print_name(arg.name)
+                           << "_buffer";
+                } else {
+                    // If this arg is the user_context value, *and* ucon_type is valid,
+                    // use ucon_type instead of arg.type.
+                    const Type &t = (arg.name == "__user_context" && ucon_type.bits() != 0) ? ucon_type : arg.type;
+                    stream << print_type(t, AppendSpace) << print_name(arg.name);
+                }
+                comma = ", ";
+            }
+        };
+
         // Emit the function prototype
         if (f.linkage == LinkageType::Internal) {
             // If the function isn't public, mark it static.
@@ -1944,20 +1962,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
         }
         stream << "HALIDE_FUNCTION_ATTRS\n";
         stream << "int " << simple_name << "(";
-        for (size_t i = 0; i < args.size(); i++) {
-            if (args[i].is_buffer()) {
-                stream << "struct halide_buffer_t *"
-                       << print_name(args[i].name)
-                       << "_buffer";
-            } else {
-                stream << print_type(args[i].type, AppendSpace)
-                       << print_name(args[i].name);
-            }
-
-            if (i < args.size() - 1) {
-                stream << ", ";
-            }
-        }
+        emit_arg_decls();
 
         if (is_header_or_extern_decl()) {
             stream << ");\n";
@@ -1993,6 +1998,59 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
             // Ensure we use open/close_scope, so that the cache doesn't try to linger
             // across function boundaries for internal closures.
             close_scope("");
+        }
+
+        // Workaround for https://github.com/halide/Halide/issues/635:
+        // For historical reasons, Halide-generated AOT code
+        // defines user_context as `void const*`, but expects all
+        // define_extern code with user_context usage to use `void *`. This
+        // usually isn't an issue, but if both the caller and callee of the
+        // pass a user_context, *and* c_plus_plus_name_mangling is enabled,
+        // we get link errors because of this dichotomy. Fixing this
+        // "correctly" (ie so that everything always uses identical types for
+        // user_context in all cases) will require a *lot* of downstream
+        // churn (see https://github.com/halide/Halide/issues/7298),
+        // so this is a workaround: Add a wrapper with `void*`
+        // ucon -> `void const*` ucon. In most cases this will be ignored
+        // (and probably dead-stripped), but in these cases it's critical.
+        //
+        // (Note that we don't check to see if c_plus_plus_name_mangling is
+        // enabled, since that would have to be done on the caller side, and
+        // this is purely a callee-side fix.)
+        if (f.linkage != LinkageType::Internal &&
+            output_kind == CPlusPlusImplementation &&
+            target.has_feature(Target::CPlusPlusMangling) &&
+            get_target().has_feature(Target::UserContext)) {
+
+            Type ucon_type = Type();
+            for (const auto &arg : args) {
+                if (arg.name == "__user_context") {
+                    ucon_type = arg.type;
+                    break;
+                }
+            }
+            if (ucon_type == type_of<void const *>()) {
+                stream << "\nHALIDE_FUNCTION_ATTRS\n";
+                stream << "int " << simple_name << "(";
+                emit_arg_decls(type_of<void *>());
+                stream << ") ";
+                open_scope();
+                stream << get_indent() << "    return " << simple_name << "(";
+                const char *comma = "";
+                for (const auto &arg : args) {
+                    if (arg.name == "__user_context") {
+                        // Add an explicit cast here so we won't call ourselves into oblivion
+                        stream << "(void const *)";
+                    }
+                    stream << comma << print_name(arg.name);
+                    if (arg.is_buffer()) {
+                        stream << "_buffer";
+                    }
+                    comma = ", ";
+                }
+                stream << ");\n";
+                close_scope("");
+            }
         }
 
         if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
@@ -2050,11 +2108,11 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
         stream.write((char *)b.host, num_elems);
         stream << ")BUFCHARSOURCE\";\n";
 
-        stream << "static const uint8_t *" << name << "_data HALIDE_ATTRIBUTE_ALIGN(32) = (const uint8_t *) "
+        stream << "static const HALIDE_ATTRIBUTE_ALIGN(32) uint8_t *" << name << "_data = (const uint8_t *) "
                << name << "_string;\n";
     } else {
         // Emit the data
-        stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
+        stream << "static " << (is_constant ? "const" : "") << " HALIDE_ATTRIBUTE_ALIGN(32) uint8_t " << name << "_data[] = {\n";
         stream << get_indent();
         for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
             if (i > 0) {
@@ -3220,6 +3278,9 @@ void CodeGen_C::visit(const Allocate *op) {
             stream << op_name
                    << "[" << size_id << "];\n";
         } else {
+            // Shouldn't ever currently be possible to have !on_stack && size_id.empty(),
+            // but reality-check in case things change in the future.
+            internal_assert(!size_id.empty());
             stream << "*"
                    << op_name
                    << " = ("
@@ -3238,14 +3299,19 @@ void CodeGen_C::visit(const Allocate *op) {
             check << print_expr(const_true());
         } else {
             // Assert that the allocation worked....
-            check << "((" << op_name << " != nullptr) || (" << size_id << " == 0))";
+            // Note that size_id can be empty if the "allocation" is via a custom_new that
+            // wraps _halide_buffer_get_host(), so don't emit malformed code in that case.
+            check << "(" << op_name << " != nullptr)";
+            if (!size_id.empty()) {
+                check << " || (" << size_id << " == 0)";
+            }
             if (!is_const_one(op->condition)) {
                 // ...but if the condition is false, it's OK for the new_expr to be null.
                 string op_condition = print_assignment(Bool(), print_expr(op->condition));
                 check << " || (!" << op_condition << ")";
             }
         }
-        create_assertion(check.str(), Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
+        create_assertion("(" + check.str() + ")", Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
         stream << get_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;

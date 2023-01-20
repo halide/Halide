@@ -382,8 +382,11 @@ tests(GROUPS correctness multithreaded
       unroll_huge_mux.cpp
       )
 
-# Make sure the test that needs image_io has it
+# Make sure the test that needs Halide::ImageIO has it
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
+
+# Make sure the test that needs Halide::ThreadPool has it
+target_link_libraries(correctness_gpu_allocation_cache PRIVATE Halide::ThreadPool)
 
 # Tests which use external funcs need to enable exports.
 set_target_properties(correctness_async

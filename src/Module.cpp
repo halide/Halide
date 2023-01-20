@@ -534,10 +534,20 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         Internal::print_to_html(output_files.at(OutputFileType::stmt_html), *this);
     }
 
+    // Minor but worthwhile optimization: if all of the output files are of types that won't
+    // ever rely on submodules (e.g.: toplevel declarations in C/C++), don't bother resolving
+    // the submodules, which can call compile_to_buffer().
+    const auto should_ignore_submodules = [](const std::map<OutputFileType, std::string> &output_files) {
+        const size_t uninteresting_count = output_files.count(OutputFileType::c_header) +
+                                           output_files.count(OutputFileType::function_info_header) +
+                                           output_files.count(OutputFileType::registration);
+        return output_files.size() == uninteresting_count;
+    };
+
     // If there are submodules, recursively lower submodules to
     // buffers on a copy of the module being compiled, then compile
     // the copied module.
-    if (!submodules().empty()) {
+    if (!submodules().empty() && !should_ignore_submodules(output_files)) {
         std::map<OutputFileType, std::string> output_files_copy = output_files;
         output_files_copy.erase(OutputFileType::stmt);
         output_files_copy.erase(OutputFileType::stmt_html);
