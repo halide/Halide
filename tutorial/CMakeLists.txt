@@ -1,3 +1,5 @@
+find_package(OpenMP)
+
 configure_file(images/gray.png images/gray.png COPYONLY)
 configure_file(images/rgb.png images/rgb.png COPYONLY)
 

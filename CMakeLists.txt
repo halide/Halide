@@ -96,8 +96,6 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
 ## Find standard CMake packages
 find_package(Threads REQUIRED)
-find_package(OpenGL)
-find_package(OpenMP)
 find_package(JPEG)
 find_package(PNG)
 
