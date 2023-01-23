@@ -175,6 +175,15 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite(x - x%c0, (x/c0)*c0) ||
              rewrite(x - ((x + c0)/c1)*c1, (x + c0)%c1 - c0, c1 > 0) ||
 
+             // Hoist shuffles. The Shuffle visitor wants to sink
+             // extract_elements to the leaves, and those count as degenerate
+             // slices, so only hoist shuffles that grab more than one lane.
+             rewrite(slice(x, c0, c1, c2) - slice(y, c0, c1, c2), slice(x - y, c0, c1, c2), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+             rewrite(slice(x, c0, c1, c2) - (z + slice(y, c0, c1, c2)), slice(x - y, c0, c1, c2) - z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+             rewrite(slice(x, c0, c1, c2) - (slice(y, c0, c1, c2) + z), slice(x - y, c0, c1, c2) - z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+             rewrite((slice(x, c0, c1, c2) - z) - slice(y, c0, c1, c2), slice(x - y, c0, c1, c2) - z, c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+             rewrite((z - slice(x, c0, c1, c2)) - slice(y, c0, c1, c2), z - slice(x + y, c0, c1, c2), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+
              (no_overflow(op->type) &&
               (rewrite(max(x, y) - x, max(y - x, 0)) ||
                rewrite(min(x, y) - x, min(y - x, 0)) ||
@@ -441,18 +450,6 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
         }
     }
     // clang-format on
-
-    const Shuffle *shuffle_a = a.as<Shuffle>();
-    const Shuffle *shuffle_b = b.as<Shuffle>();
-    if (shuffle_a && shuffle_b &&
-        shuffle_a->is_slice() &&
-        shuffle_b->is_slice()) {
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return hoist_slice_vector<Sub>(op);
-        } else {
-            return hoist_slice_vector<Sub>(Sub::make(a, b));
-        }
-    }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {
         return op;

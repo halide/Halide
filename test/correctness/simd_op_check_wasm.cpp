@@ -511,6 +511,8 @@ public:
                 check("i8x16.narrow_i16x8_u", 16 * w, u8_sat(i16_1));
                 check("i16x8.narrow_i32x4_s", 8 * w, i16_sat(i32_1));
                 check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(i32_1));
+                check("i16x8.narrow_i32x4_s", 8 * w, i8_sat(i32_1));
+                check("i16x8.narrow_i32x4_s", 8 * w, u8_sat(i32_1));
 
                 // Integer to integer widening
                 check("i16x8.extend_low_i8x16_s", 16 * w, i16(i8_1));
