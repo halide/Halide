@@ -37,6 +37,14 @@ Expr IRMutator::visit(const Cast *op) {
     return Cast::make(op->type, std::move(value));
 }
 
+Expr IRMutator::visit(const Reinterpret *op) {
+    Expr value = mutate(op->value);
+    if (value.same_as(op->value)) {
+        return op;
+    }
+    return Reinterpret::make(op->type, std::move(value));
+}
+
 namespace {
 template<typename T>
 Expr mutate_binary_operator(IRMutator *mutator, const T *op) {
@@ -243,7 +251,7 @@ Stmt IRMutator::visit(const Allocate *op) {
     }
     return Allocate::make(op->name, op->type, op->memory_type,
                           new_extents, std::move(condition),
-                          std::move(body), std::move(new_expr), op->free_function);
+                          std::move(body), std::move(new_expr), op->free_function, op->padding);
 }
 
 Stmt IRMutator::visit(const Free *op) {

@@ -3,6 +3,7 @@
 #include "Util.h"  // for get_env_variable
 
 #include <csignal>
+#include <mutex>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -33,8 +34,48 @@ bool exceptions_enabled() {
 #endif
 }
 
+Error::Error(const char *msg)
+    : what_(new char[strlen(msg) + 1]) {
+    strcpy(what_, msg);
+}
+
 Error::Error(const std::string &msg)
-    : std::runtime_error(msg) {
+    : Error(msg.c_str()) {
+}
+
+Error::Error(const Error &that)
+    : Error(that.what_) {
+}
+
+Error &Error::operator=(const Error &that) {
+    if (this != &that) {
+        delete[] this->what_;
+        this->what_ = new char[strlen(that.what_) + 1];
+        strcpy(this->what_, that.what_);
+    }
+    return *this;
+}
+
+Error::Error(Error &&that) noexcept {
+    this->what_ = that.what_;
+    that.what_ = nullptr;
+}
+
+Error &Error::operator=(Error &&that) noexcept {
+    if (this != &that) {
+        delete[] this->what_;
+        this->what_ = that.what_;
+        that.what_ = nullptr;
+    }
+    return *this;
+}
+
+Error::~Error() {
+    delete[] what_;
+}
+
+const char *Error::what() const noexcept {
+    return what_;
 }
 
 CompileError::CompileError(const std::string &msg)
@@ -49,7 +90,49 @@ InternalError::InternalError(const std::string &msg)
     : Error(msg) {
 }
 
+CompileError::CompileError(const char *msg)
+    : Error(msg) {
+}
+
+RuntimeError::RuntimeError(const char *msg)
+    : Error(msg) {
+}
+
+InternalError::InternalError(const char *msg)
+    : Error(msg) {
+}
+
 namespace Internal {
+
+void unhandled_exception_handler() {
+    // Note that we use __cpp_exceptions (rather than HALIDE_WITH_EXCEPTIONS)
+    // to maximize the change of dealing with uncaught exceptions in weird
+    // build situations (i.e., exceptions enabled via C++ but HALIDE_WITH_EXCEPTIONS
+    // is somehow not set).
+#ifdef __cpp_exceptions
+    // This is a trick: rethrow the pending (unhandled) exception
+    // so that we can see what it is and log `what` before dying.
+    if (auto ce = std::current_exception()) {
+        try {
+            std::rethrow_exception(ce);
+        } catch (Error &e) {
+            // Halide Errors are presume to be nicely formatted as-is
+            std::cerr << e.what() << std::flush;
+        } catch (std::exception &e) {
+            // Arbitrary C++ exceptions... who knows?
+            std::cerr << "Uncaught exception: " << e.what() << "\n"
+                      << std::flush;
+        } catch (...) {
+            std::cerr << "Uncaught exception: <unknown>\n"
+                      << std::flush;
+        }
+    }
+#else
+    std::cerr << "unhandled_exception_handler() called but Halide was compiled without exceptions enabled; this should not happen.\n"
+              << std::flush;
+#endif
+    abort();
+}
 
 // Force the classes to exist, even if exceptions are off
 namespace {
@@ -96,11 +179,7 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
     }
 }
 
-ErrorReport::~ErrorReport()
-#if __cplusplus >= 201100 || _MSC_VER >= 1900
-    noexcept(false)
-#endif
-{
+ErrorReport::~ErrorReport() noexcept(false) {
     if (!msg.str().empty() && msg.str().back() != '\n') {
         msg << "\n";
     }
@@ -138,7 +217,7 @@ ErrorReport::~ErrorReport()
         throw InternalError(msg.str());
     }
 #else
-    std::cerr << msg.str();
+    std::cerr << msg.str() << std::flush;
     abort();
 #endif
 }

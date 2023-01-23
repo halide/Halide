@@ -15,7 +15,7 @@ if (NOT TARGET Halide::Test)
     add_library(Halide_test INTERFACE)
     add_library(Halide::Test ALIAS Halide_test)
 
-    # Obviously, link to the main library
+    # Obviously link to libHalide, but also grant all tests access to the threads library.
     target_link_libraries(Halide_test INTERFACE Halide::Halide Threads::Threads)
 
     # Everyone gets to see the common headers
@@ -29,6 +29,12 @@ if (NOT TARGET Halide::ExpectAbort)
     # Add an OBJECT (not static) library to convert abort calls into exit(1).
     add_library(Halide_expect_abort OBJECT ${Halide_SOURCE_DIR}/test/common/expect_abort.cpp)
     add_library(Halide::ExpectAbort ALIAS Halide_expect_abort)
+endif ()
+
+if (NOT TARGET Halide::TerminateHandler)
+    # Add an OBJECT (not static) library to add a terminate_handler to catch unhandled exceptions.
+    add_library(Halide_terminate_handler OBJECT ${Halide_SOURCE_DIR}/test/common/terminate_handler.cpp)
+    add_library(Halide::TerminateHandler ALIAS Halide_terminate_handler)
 endif ()
 
 ##
@@ -48,6 +54,13 @@ function(add_halide_test TARGET)
     add_test(NAME ${TARGET}
              COMMAND ${args_COMMAND} ${args_ARGS}
              WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
+
+    # We can't add Halide::TerminateHandler here, because it requires Halide::Error
+    # and friends to be present in the final linkage, but some callers of add_halide_test()
+    # are AOT tests, which don't link in libHalide. (It's relatively rare for these
+    # tests to throw exceptions, though, so this isn't the dealbreaker you might think.)
+    #
+    # target_link_libraries("${TARGET}" PRIVATE Halide::TerminateHandler)
 
     set_tests_properties(${TARGET} PROPERTIES
                          LABELS "${args_GROUPS}"
@@ -81,13 +94,13 @@ function(tests)
 
     set(TEST_NAMES "")
     foreach (file IN LISTS args_SOURCES)
-        get_filename_component(name "${file}" NAME_WE)
+        cmake_path(GET file STEM name)
         set(TARGET "${PRIMARY_GROUP}_${name}")
 
         list(APPEND TEST_NAMES "${TARGET}")
 
         add_executable("${TARGET}" "${file}")
-        target_link_libraries("${TARGET}" PRIVATE Halide::Test)
+        target_link_libraries("${TARGET}" PRIVATE Halide::Test Halide::TerminateHandler)
         if ("${file}" MATCHES ".cpp$")
             target_precompile_headers("${TARGET}" REUSE_FROM _test_internal)
         endif ()

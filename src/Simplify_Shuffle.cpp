@@ -1,4 +1,5 @@
 #include "Deinterleave.h"
+#include "IROperator.h"
 #include "Simplify_Internal.h"
 
 namespace Halide {
@@ -191,7 +192,34 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 }
             }
         }
+
+        // Try to collapse an interleave of a series of extract_bits into a vector reinterpret.
+        if (const Call *extract = new_vectors[0].as<Call>()) {
+            if (extract->is_intrinsic(Call::extract_bits) &&
+                is_const_zero(extract->args[1])) {
+                int n = (int)new_vectors.size();
+                Expr base = extract->args[0];
+                bool can_collapse = base.type().bits() == n * op->type.bits();
+                for (int i = 1; can_collapse && i < n; i++) {
+                    const Call *c = new_vectors[i].as<Call>();
+                    if (!(c->is_intrinsic(Call::extract_bits) &&
+                          is_const(c->args[1], i * op->type.bits()) &&
+                          equal(base, c->args[0]))) {
+                        can_collapse = false;
+                    }
+                }
+                if (can_collapse) {
+                    return Reinterpret::make(op->type, base);
+                }
+            }
+        }
+
     } else if (op->is_concat()) {
+        // Bypass concat of a single vector (identity shuffle)
+        if (new_vectors.size() == 1) {
+            return new_vectors[0];
+        }
+
         // Try to collapse a concat of ramps into a single ramp.
         const Ramp *r = new_vectors[0].as<Ramp>();
         if (r) {
@@ -292,48 +320,6 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         return Shuffle::make(new_vectors, op->indices);
     }
 }
-
-template<typename T>
-Expr Simplify::hoist_slice_vector(Expr e) {
-    const T *op = e.as<T>();
-    internal_assert(op);
-
-    const Shuffle *shuffle_a = op->a.template as<Shuffle>();
-    const Shuffle *shuffle_b = op->b.template as<Shuffle>();
-
-    internal_assert(shuffle_a && shuffle_b &&
-                    shuffle_a->is_slice() &&
-                    shuffle_b->is_slice());
-
-    if (shuffle_a->indices != shuffle_b->indices) {
-        return e;
-    }
-
-    const std::vector<Expr> &slices_a = shuffle_a->vectors;
-    const std::vector<Expr> &slices_b = shuffle_b->vectors;
-    if (slices_a.size() != slices_b.size()) {
-        return e;
-    }
-
-    for (size_t i = 0; i < slices_a.size(); i++) {
-        if (slices_a[i].type() != slices_b[i].type()) {
-            return e;
-        }
-    }
-
-    vector<Expr> new_slices;
-    for (size_t i = 0; i < slices_a.size(); i++) {
-        new_slices.push_back(T::make(slices_a[i], slices_b[i]));
-    }
-
-    return Shuffle::make(new_slices, shuffle_a->indices);
-}
-
-template Expr Simplify::hoist_slice_vector<Add>(Expr);
-template Expr Simplify::hoist_slice_vector<Sub>(Expr);
-template Expr Simplify::hoist_slice_vector<Mul>(Expr);
-template Expr Simplify::hoist_slice_vector<Min>(Expr);
-template Expr Simplify::hoist_slice_vector<Max>(Expr);
 
 }  // namespace Internal
 }  // namespace Halide

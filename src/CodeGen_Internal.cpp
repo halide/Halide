@@ -16,55 +16,12 @@ using std::string;
 
 using namespace llvm;
 
-llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
-    if (t.lanes() == 1) {
-        if (t.is_float() && !t.is_bfloat()) {
-            switch (t.bits()) {
-            case 16:
-                return llvm::Type::getHalfTy(*c);
-            case 32:
-                return llvm::Type::getFloatTy(*c);
-            case 64:
-                return llvm::Type::getDoubleTy(*c);
-            default:
-                internal_error << "There is no llvm type matching this floating-point bit width: " << t << "\n";
-                return nullptr;
-            }
-        } else if (t.is_handle()) {
-            return llvm::Type::getInt8PtrTy(*c);
-        } else {
-            return llvm::Type::getIntNTy(*c, t.bits());
-        }
-    } else {
-        llvm::Type *element_type = llvm_type_of(c, t.element_of());
-        return get_vector_type(element_type, t.lanes());
-    }
-}
-
-int get_vector_num_elements(llvm::Type *t) {
-    if (t->isVectorTy()) {
-        auto *vt = dyn_cast<llvm::FixedVectorType>(t);
-        internal_assert(vt) << "Called get_vector_num_elements on a scalable vector type\n";
-        return vt->getNumElements();
-    } else {
-        return 1;
-    }
-}
-
 llvm::Type *get_vector_element_type(llvm::Type *t) {
     if (t->isVectorTy()) {
         return dyn_cast<llvm::VectorType>(t)->getElementType();
     } else {
         return t;
     }
-}
-
-llvm::ElementCount element_count(int e) {
-    return llvm::ElementCount::getFixed(e);
-}
-
-llvm::Type *get_vector_type(llvm::Type *t, int n) {
-    return VectorType::get(t, element_count(n));
 }
 
 // Returns true if the given function name is one of the Halide runtime
@@ -118,6 +75,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_hexagon_initialize_kernels",
         "halide_hexagon_run",
         "halide_hexagon_device_release",
+        "halide_hexagon_get_module_state",
         "halide_hexagon_power_hvx_on",
         "halide_hexagon_power_hvx_on_mode",
         "halide_hexagon_power_hvx_on_perf",
@@ -216,7 +174,12 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b, bool round_to_zero) {
         Type num_as_uint_t = num.type().with_code(Type::UInt);
         Expr sign = cast(num_as_uint_t, num >> make_const(UInt(t.bits()), t.bits() - 1));
 
-        if (!round_to_zero) {
+        // If the numerator is negative, we want to either flip the bits (when
+        // rounding to negative infinity), or negate the numerator (when
+        // rounding to zero).
+        if (round_to_zero) {
+            num = abs(num);
+        } else {
             // Flip the numerator bits if the mask is high.
             num = cast(num_as_uint_t, num);
             num = num ^ sign;
@@ -224,15 +187,14 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b, bool round_to_zero) {
 
         // Multiply and keep the high half of the
         // result, and then apply the shift.
+        internal_assert(num.type().can_represent(multiplier));
         Expr mult = make_const(num.type(), multiplier);
         num = mul_shift_right(num, mult, shift + num.type().bits());
 
+        // Maybe flip the bits back or negate again.
+        num = cast(a.type(), num ^ sign);
         if (round_to_zero) {
-            // Add one if the numerator was negative
             num -= sign;
-        } else {
-            // Maybe flip the bits back again.
-            num = cast(a.type(), num ^ sign);
         }
 
         return num;
@@ -561,6 +523,35 @@ Expr lower_mux(const Call *mux) {
     return equiv;
 }
 
+// An implementation of rounding to nearest integer with ties to even to use for
+// Halide::round. Written to avoid all use of c standard library functions so
+// that it's cleanly vectorizable and a safe fallback on all platforms.
+Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
+    Type bits_type = x.type().with_code(halide_type_uint);
+    Type int_type = x.type().with_code(halide_type_int);
+
+    // Make one half with the same sign as x
+    Expr sign_bit = reinterpret(bits_type, x) & (cast(bits_type, 1) << (x.type().bits() - 1));
+    Expr one_half = reinterpret(bits_type, cast(x.type(), 0.5f)) | sign_bit;
+    Expr just_under_one_half = reinterpret(x.type(), one_half - 1);
+    one_half = reinterpret(x.type(), one_half);
+    // Do the same for the constant one.
+    Expr one = reinterpret(bits_type, cast(x.type(), 1)) | sign_bit;
+    // Round to nearest, with ties going towards zero
+    Expr ix = cast(int_type, x + just_under_one_half);
+    Expr a = cast(x.type(), ix);
+    // Get the residual
+    Expr diff = a - x;
+    // Make a mask of all ones if the result is odd
+    Expr odd = -cast(bits_type, ix & 1);
+    // Make a mask of all ones if the result was a tie
+    Expr tie = select(diff == one_half, cast(bits_type, -1), cast(bits_type, 0));
+    // If it was a tie, and the result is odd, we should have rounded in the
+    // other direction.
+    Expr correction = reinterpret(x.type(), odd & tie & one);
+    return common_subexpression_elimination(a - correction);
+}
+
 bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!value) {
         return false;
@@ -681,18 +672,34 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     llvm::Module &module = *fn.getParent();
 
-    std::string mcpu_target, mcpu_tune, mattrs;
+    std::string mcpu_target, mcpu_tune, mattrs, vscale_range;
     get_md_string(module.getModuleFlag("halide_mcpu_target"), mcpu_target);
     get_md_string(module.getModuleFlag("halide_mcpu_tune"), mcpu_tune);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    get_md_string(module.getModuleFlag("halide_vscale_range"), vscale_range);
 
     fn.addFnAttr("target-cpu", mcpu_target);
     fn.addFnAttr("tune-cpu", mcpu_tune);
     fn.addFnAttr("target-features", mattrs);
 
+    // Halide-generated IR is not exception-safe.
+    // No exception should unwind out of Halide functions.
+    // No exception should be thrown within Halide functions.
+    // All functions called by the Halide function must not unwind.
+    fn.setDoesNotThrow();
+
+    // Side-effect-free loops are undefined.
+    // But asserts and external calls *might* abort.
+    fn.setMustProgress();
+
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn.addFnAttr("reciprocal-estimates", "none");
+
+    // If a fixed vscale is asserted, add it as an attribute on the function.
+    if (!vscale_range.empty()) {
+        fn.addFnAttr("vscale_range", vscale_range);
+    }
 }
 
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
@@ -767,6 +774,35 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
             llvm::ConstantArray::get(ATy, used_array), "llvm.compiler.used");
         new_used->setSection("llvm.metadata");
     }
+}
+
+Expr lower_concat_bits(const Call *op) {
+    internal_assert(op->is_intrinsic(Call::concat_bits));
+    internal_assert(!op->args.empty());
+
+    Expr result = make_zero(op->type);
+    int shift = 0;
+    for (const Expr &e : op->args) {
+        result = result | (cast(result.type(), e) << shift);
+        shift += e.type().bits();
+    }
+    return result;
+}
+
+Expr lower_extract_bits(const Call *op) {
+    Expr e = op->args[0];
+    // Do a shift-and-cast as a uint, which will zero-fill any out-of-range
+    // bits for us.
+    if (!e.type().is_uint()) {
+        e = reinterpret(e.type().with_code(halide_type_uint), e);
+    }
+    e = e >> op->args[1];
+    e = cast(op->type.with_code(halide_type_uint), e);
+    if (op->type != e.type()) {
+        e = reinterpret(op->type, e);
+    }
+    e = simplify(e);
+    return e;
 }
 
 }  // namespace Internal

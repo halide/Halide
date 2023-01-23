@@ -29,14 +29,13 @@ namespace Halide {
 namespace Internal {
 
 inline int64_t saturating_mul(int64_t a, int64_t b) {
-    if (mul_would_overflow(64, a, b)) {
-        if ((a > 0) == (b > 0)) {
-            return INT64_MAX;
-        } else {
-            return INT64_MIN;
-        }
+    int64_t result;
+    if (mul_with_overflow(64, a, b, &result)) {
+        return result;
+    } else if ((a > 0) == (b > 0)) {
+        return INT64_MAX;
     } else {
-        return a * b;
+        return INT64_MIN;
     }
 }
 
@@ -290,9 +289,6 @@ public:
         return f;
     }
 
-    template<typename T>
-    Expr hoist_slice_vector(Expr e);
-
     Stmt mutate_let_body(const Stmt &s, ExprInfo *) {
         return mutate(s);
     }
@@ -309,6 +305,7 @@ public:
     Expr visit(const StringImm *op, ExprInfo *bounds);
     Expr visit(const Broadcast *op, ExprInfo *bounds);
     Expr visit(const Cast *op, ExprInfo *bounds);
+    Expr visit(const Reinterpret *op, ExprInfo *bounds);
     Expr visit(const Variable *op, ExprInfo *bounds);
     Expr visit(const Add *op, ExprInfo *bounds);
     Expr visit(const Sub *op, ExprInfo *bounds);

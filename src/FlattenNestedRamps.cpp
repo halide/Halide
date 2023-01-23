@@ -118,16 +118,31 @@ class FlattenRamps : public IRMutator {
     }
 };
 
+/** Lower bit concatenation into vector interleaving followed by a vector
+ * reinterpret. */
+class LowerConcatBits : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::concat_bits)) {
+            // Rewrite concat_bits into a shuffle followed by a vector reinterpret.
+            Expr shuf = simplify(Shuffle::make_interleave(op->args));
+            Expr e = Reinterpret::make(op->type, shuf);
+            return mutate(e);
+        }
+
+        return IRMutator::visit(op);
+    }
+};
+
 }  // namespace
 
 Stmt flatten_nested_ramps(const Stmt &s) {
-    FlattenRamps flatten_ramps;
-    return flatten_ramps.mutate(s);
+    return LowerConcatBits().mutate(FlattenRamps().mutate(s));
 }
 
 Expr flatten_nested_ramps(const Expr &e) {
-    FlattenRamps flatten_ramps;
-    return flatten_ramps.mutate(e);
+    return LowerConcatBits().mutate(FlattenRamps().mutate(e));
 }
 
 }  // namespace Internal

@@ -25,7 +25,11 @@ Checks: >
     modernize-make-unique,
     modernize-redundant-void-arg,
     modernize-use-bool-literals,
-    modernize-use-default-member-init,
+    # Disabled: there is not consensus on whether the Clang-14 behavior
+    # of this checker is always desirable or not, and there isn't currently
+    # a way to revert to the Clang-13 behavior. We may revisit this
+    # check the next time we examine clang-tidy options.
+    # modernize-use-default-member-init,
     modernize-use-emplace,
     modernize-use-equals-default,
     modernize-use-equals-delete,
@@ -54,7 +58,7 @@ Checks: >
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
 FormatStyle: 'file'
-CheckOptions:
-    - key:   modernize-use-default-member-init.UseAssignment
-      value: 1
+#CheckOptions:
+#    - key:   modernize-use-default-member-init.UseAssignment
+#      value: 1
 ...

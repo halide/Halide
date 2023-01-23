@@ -23,18 +23,18 @@
 #include "Target.h"
 
 #if WITH_WABT
-#include "wabt-src/src/binary-reader.h"
-#include "wabt-src/src/cast.h"
-#include "wabt-src/src/common.h"
-#include "wabt-src/src/error-formatter.h"
-#include "wabt-src/src/error.h"
-#include "wabt-src/src/feature.h"
-#include "wabt-src/src/interp/binary-reader-interp.h"
-#include "wabt-src/src/interp/interp-util.h"
-#include "wabt-src/src/interp/interp.h"
-#include "wabt-src/src/interp/istream.h"
-#include "wabt-src/src/result.h"
-#include "wabt-src/src/stream.h"
+#include "wabt/binary-reader.h"
+#include "wabt/cast.h"
+#include "wabt/common.h"
+#include "wabt/error-formatter.h"
+#include "wabt/error.h"
+#include "wabt/feature.h"
+#include "wabt/interp/binary-reader-interp.h"
+#include "wabt/interp/interp-util.h"
+#include "wabt/interp/interp.h"
+#include "wabt/interp/istream.h"
+#include "wabt/result.h"
+#include "wabt/stream.h"
 #endif
 
 // clang-format off
@@ -360,17 +360,10 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     // Note that we must restore it before using internal_error (and also on the non-error path).
     auto old_abort_handler = std::signal(SIGABRT, SIG_DFL);
 
-#if LLVM_VERSION >= 140
     if (!lld::wasm::link(lld_args, llvm::outs(), llvm::errs(), /*canExitEarly*/ false, /*disableOutput*/ false)) {
         std::signal(SIGABRT, old_abort_handler);
         internal_error << "lld::wasm::link failed\n";
     }
-#else
-    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
-        std::signal(SIGABRT, old_abort_handler);
-        internal_error << "lld::wasm::link failed\n";
-    }
-#endif
 
     std::signal(SIGABRT, old_abort_handler);
 
@@ -1719,21 +1712,6 @@ void copy_hostbuf_to_existing_wasmbuf(const Local<Context> &context, const halid
     dump_wasmbuf(context, dst_ptr, "dst_post");
 }
 
-JITUserContext *check_jit_user_context(JITUserContext *jit_user_context) {
-    user_assert(!jit_user_context->handlers.custom_malloc &&
-                !jit_user_context->handlers.custom_free)
-        << "The WebAssembly JIT cannot support set_custom_allocator()";
-    user_assert(!jit_user_context->handlers.custom_do_task)
-        << "The WebAssembly JIT cannot support set_custom_do_task()";
-    user_assert(!jit_user_context->handlers.custom_do_par_for)
-        << "The WebAssembly JIT cannot support set_custom_do_par_for()";
-    user_assert(!jit_user_context->handlers.custom_get_symbol &&
-                !jit_user_context->handlers.custom_load_library &&
-                !jit_user_context->handlers.custom_get_library_symbol)
-        << "The WebAssembly JIT cannot support custom_get_symbol, custom_load_library, or custom_get_library_symbol.";
-    return jit_user_context;
-}
-
 // Some internal code can call halide_error(null, ...), so this needs to be resilient to that.
 // Callers must expect null and not crash.
 JITUserContext *get_jit_user_context(const Local<Context> &context, const Local<Value> &arg) {
@@ -1842,7 +1820,9 @@ void wasm_jit_malloc_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
 
     size_t size = args[0]->Int32Value(context).ToChecked() + kExtraMallocSlop;
     wasm32_ptr_t p = v8_WasmMemoryObject_malloc(context, size);
-    if (p) { p += kExtraMallocSlop; }
+    if (p) {
+        p += kExtraMallocSlop;
+    }
     args.GetReturnValue().Set(load_scalar(context, p));
 }
 
@@ -1851,7 +1831,9 @@ void wasm_jit_free_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     HandleScope scope(isolate);
     Local<Context> context = isolate->GetCurrentContext();
     wasm32_ptr_t p = args[0]->Int32Value(context).ToChecked();
-    if (p) { p -= kExtraMallocSlop; }
+    if (p) {
+        p -= kExtraMallocSlop;
+    }
     v8_WasmMemoryObject_free(context, p);
 }
 
@@ -2280,7 +2262,7 @@ struct WasmModuleContents {
         const std::map<std::string, Halide::JITExtern> &jit_externs,
         const std::vector<JITModule> &extern_deps);
 
-    int run(const void **args);
+    int run(const void *const *args);
 
     ~WasmModuleContents() = default;
 };
@@ -2517,7 +2499,7 @@ WasmModuleContents::WasmModuleContents(
 #endif
 }
 
-int WasmModuleContents::run(const void **args) {
+int WasmModuleContents::run(const void *const *args) {
 #if WITH_WABT
     const auto &module_desc = module->desc();
 
@@ -2642,7 +2624,7 @@ int WasmModuleContents::run(const void **args) {
         } else {
             if (arg.name == "__user_context") {
                 js_args.push_back(load_scalar(context, kMagicJitUserContextValue));
-                JITUserContext *jit_user_context = check_jit_user_context(*(JITUserContext **)const_cast<void *>(arg_ptr));
+                JITUserContext *jit_user_context = *(JITUserContext **)const_cast<void *>(arg_ptr);
                 context->SetAlignedPointerInEmbedderData(kJitUserContext, jit_user_context);
             } else {
                 js_args.push_back(load_scalar(context, arg.type, arg_ptr));
@@ -2726,7 +2708,7 @@ WasmModule WasmModule::compile(
 }
 
 /** Run generated previously compiled wasm code with a set of arguments. */
-int WasmModule::run(const void **args) {
+int WasmModule::run(const void *const *args) {
     internal_assert(contents.defined());
     return contents->run(args);
 }

@@ -208,7 +208,7 @@ struct SpecificExpr {
 
     // What is the weakest and strongest IR node this could possibly be
     constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
-    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static IRNodeType max_node_type = StrongestExprNodeType;
     constexpr static bool canonical = true;
 
     const BaseExprNode &expr;
@@ -1358,6 +1358,10 @@ struct Intrin {
     struct pattern_tag {};
     Call::IntrinsicOp intrin;
     std::tuple<Args...> args;
+    // The type of the output of the intrinsic node.
+    // Only necessary in cases where it can't be inferred
+    // from the input types (e.g. saturating_cast).
+    Type optional_type_hint;
 
     static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
 
@@ -1385,7 +1389,9 @@ struct Intrin {
             return false;
         }
         const Call &c = (const Call &)e;
-        return (c.is_intrinsic(intrin) && match_args<0, bound>(0, c, state));
+        return (c.is_intrinsic(intrin) &&
+                ((optional_type_hint == Type()) || optional_type_hint == e.type) &&
+                match_args<0, bound>(0, c, state));
     }
 
     template<int i,
@@ -1416,11 +1422,19 @@ struct Intrin {
             return likely_if_innermost(arg0);
         } else if (intrin == Call::abs) {
             return abs(arg0);
+        } else if (intrin == Call::saturating_cast) {
+            return saturating_cast(optional_type_hint, arg0);
         }
 
         Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::absd) {
             return absd(arg0, arg1);
+        } else if (intrin == Call::widen_right_add) {
+            return widen_right_add(arg0, arg1);
+        } else if (intrin == Call::widen_right_mul) {
+            return widen_right_mul(arg0, arg1);
+        } else if (intrin == Call::widen_right_sub) {
+            return widen_right_sub(arg0, arg1);
         } else if (intrin == Call::widening_add) {
             return widening_add(arg0, arg1);
         } else if (intrin == Call::widening_sub) {
@@ -1522,6 +1536,19 @@ HALIDE_ALWAYS_INLINE auto intrin(Call::IntrinsicOp intrinsic_op, Args... args) n
 }
 
 template<typename A, typename B>
+auto widen_right_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widen_right_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_mul, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widen_right_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_sub, pattern_arg(a), pattern_arg(b)};
+}
+
+template<typename A, typename B>
 auto widening_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     return {Call::widening_add, pattern_arg(a), pattern_arg(b)};
 }
@@ -1540,6 +1567,12 @@ auto saturating_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), d
 template<typename A, typename B>
 auto saturating_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     return {Call::saturating_sub, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A>
+auto saturating_cast(const Type &t, A &&a) noexcept -> Intrin<decltype(pattern_arg(a))> {
+    Intrin<decltype(pattern_arg(a))> p = {Call::saturating_cast, pattern_arg(a)};
+    p.optional_type_hint = t;
+    return p;
 }
 template<typename A, typename B>
 auto halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
@@ -1845,7 +1878,7 @@ struct VectorReduceOp {
     A a;
     B lanes;
 
-    constexpr static uint32_t binds = bindings<A>::mask;
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
 
     constexpr static IRNodeType min_node_type = IRNodeType::VectorReduce;
     constexpr static IRNodeType max_node_type = IRNodeType::VectorReduce;
@@ -2045,6 +2078,69 @@ template<typename A>
 HALIDE_ALWAYS_INLINE auto cast(halide_type_t t, A &&a) noexcept -> CastOp<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
     return {t, pattern_arg(a)};
+}
+
+template<typename Vec, typename Base, typename Stride, typename Lanes>
+struct SliceOp {
+    struct pattern_tag {};
+    Vec vec;
+    Base base;
+    Stride stride;
+    Lanes lanes;
+
+    static constexpr uint32_t binds = Vec::binds | Base::binds | Stride::binds | Lanes::binds;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Shuffle;
+    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static bool canonical = Vec::canonical && Base::canonical && Stride::canonical && Lanes::canonical;
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+        if (e.node_type != IRNodeType::Shuffle) {
+            return false;
+        }
+        const Shuffle &v = (const Shuffle &)e;
+        return v.vectors.size() == 1 &&
+               vec.template match<bound>(*v.vectors[0].get(), state) &&
+               base.template match<bound | bindings<Vec>::mask>(v.slice_begin(), state) &&
+               stride.template match<bound | bindings<Vec>::mask | bindings<Base>::mask>(v.slice_stride(), state) &&
+               lanes.template match<bound | bindings<Vec>::mask | bindings<Base>::mask | bindings<Stride>::mask>(v.type.lanes(), state);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
+        halide_scalar_value_t base_val, stride_val, lanes_val;
+        halide_type_t ty;
+        base.make_folded_const(base_val, ty, state);
+        int b = (int)base_val.u.i64;
+        stride.make_folded_const(stride_val, ty, state);
+        int s = (int)stride_val.u.i64;
+        lanes.make_folded_const(lanes_val, ty, state);
+        int l = (int)lanes_val.u.i64;
+        return Shuffle::make_slice(vec.make(state, type_hint), b, s, l);
+    }
+
+    constexpr static bool foldable = false;
+
+    HALIDE_ALWAYS_INLINE
+    SliceOp(Vec v, Base b, Stride s, Lanes l)
+        : vec(v), base(b), stride(s), lanes(l) {
+        static_assert(Base::foldable, "Base of slice should consist only of operations that constant-fold");
+        static_assert(Stride::foldable, "Stride of slice should consist only of operations that constant-fold");
+        static_assert(Lanes::foldable, "Lanes of slice should consist only of operations that constant-fold");
+    }
+};
+
+template<typename Vec, typename Base, typename Stride, typename Lanes>
+std::ostream &operator<<(std::ostream &s, const SliceOp<Vec, Base, Stride, Lanes> &op) {
+    s << "slice(" << op.vec << ", " << op.base << ", " << op.stride << ", " << op.lanes << ")";
+    return s;
+}
+
+template<typename Vec, typename Base, typename Stride, typename Lanes>
+HALIDE_ALWAYS_INLINE auto slice(Vec vec, Base base, Stride stride, Lanes lanes) noexcept
+    -> SliceOp<decltype(pattern_arg(vec)), decltype(pattern_arg(base)), decltype(pattern_arg(stride)), decltype(pattern_arg(lanes))> {
+    return {pattern_arg(vec), pattern_arg(base), pattern_arg(stride), pattern_arg(lanes)};
 }
 
 template<typename A>
@@ -2310,7 +2406,7 @@ template<typename A>
 struct IsInt {
     struct pattern_tag {};
     A a;
-    int bits;
+    int bits, lanes;
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
@@ -2325,7 +2421,7 @@ struct IsInt {
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Type t = a.make(state, {}).type();
-        val.u.u64 = t.is_int() && (bits == 0 || t.bits() == bits);
+        val.u.u64 = t.is_int() && (bits == 0 || t.bits() == bits) && (lanes == 0 || t.lanes() == lanes);
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
@@ -2333,9 +2429,9 @@ struct IsInt {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_int(A &&a, int bits = 0) noexcept -> IsInt<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_int(A &&a, int bits = 0, int lanes = 0) noexcept -> IsInt<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), bits};
+    return {pattern_arg(a), bits, lanes};
 }
 
 template<typename A>
@@ -2343,6 +2439,9 @@ std::ostream &operator<<(std::ostream &s, const IsInt<A> &op) {
     s << "is_int(" << op.a;
     if (op.bits > 0) {
         s << ", " << op.bits;
+    }
+    if (op.lanes > 0) {
+        s << ", " << op.lanes;
     }
     s << ")";
     return s;
@@ -2352,7 +2451,7 @@ template<typename A>
 struct IsUInt {
     struct pattern_tag {};
     A a;
-    int bits;
+    int bits, lanes;
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
@@ -2367,7 +2466,7 @@ struct IsUInt {
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Type t = a.make(state, {}).type();
-        val.u.u64 = t.is_uint() && (bits == 0 || t.bits() == bits);
+        val.u.u64 = t.is_uint() && (bits == 0 || t.bits() == bits) && (lanes == 0 || t.lanes() == lanes);
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
@@ -2375,9 +2474,9 @@ struct IsUInt {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_uint(A &&a, int bits = 0) noexcept -> IsUInt<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_uint(A &&a, int bits = 0, int lanes = 0) noexcept -> IsUInt<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), bits};
+    return {pattern_arg(a), bits, lanes};
 }
 
 template<typename A>
@@ -2385,6 +2484,9 @@ std::ostream &operator<<(std::ostream &s, const IsUInt<A> &op) {
     s << "is_uint(" << op.a;
     if (op.bits > 0) {
         s << ", " << op.bits;
+    }
+    if (op.lanes > 0) {
+        s << ", " << op.lanes;
     }
     s << ")";
     return s;
@@ -2508,6 +2610,43 @@ HALIDE_ALWAYS_INLINE auto is_min_value(A &&a) noexcept -> IsMinValue<decltype(pa
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsMinValue<A> &op) {
     s << "is_min_value(" << op.a << ")";
+    return s;
+}
+
+template<typename A>
+struct LanesOf {
+    struct pattern_tag {};
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = t.lanes();
+        ty.code = halide_type_uint;
+        ty.bits = 32;
+        ty.lanes = 1;
+    }
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto lanes_of(A &&a) noexcept -> LanesOf<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const LanesOf<A> &op) {
+    s << "lanes_of(" << op.a << ")";
     return s;
 }
 

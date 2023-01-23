@@ -1055,6 +1055,14 @@ public:
      * next time this Func is realized. */
     JITHandlers &jit_handlers();
 
+    /** Eagerly jit compile the function to machine code and return a callable
+     * struct that behaves like a function pointer. The calling convention
+     * will exactly match that of an AOT-compiled version of this Func
+     * with the same Argument list.
+     */
+    Callable compile_to_callable(const std::vector<Argument> &args,
+                                 const Target &target = get_jit_target_from_environment());
+
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of
      * the lowered Stmt, instrument it with extra code, or otherwise
@@ -1216,15 +1224,6 @@ public:
     const Type &type() const;
     const std::vector<Type> &types() const;
     // @}
-
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
-    const Type &output_type() const {
-        return type();
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
-    const std::vector<Type> &output_types() const {
-        return types();
-    }
 
     /** Get the number of outputs of this Func. Corresponds to the
      * size of the Tuple this Func was defined to return.

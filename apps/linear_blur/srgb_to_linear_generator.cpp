@@ -17,7 +17,7 @@ struct sRGBToLinear : public Halide::Generator<sRGBToLinear> {
     }
 
     void schedule() {
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             const int W = 1536, H = 2560, C = 4;
             // Wart: Input<Func> are defined with Vars we don't know.
             // Might be x,y but might be _0,_1. Use the args() to work around.

@@ -527,6 +527,16 @@ class VectorSubs : public IRMutator {
         }
     }
 
+    Expr visit(const Reinterpret *op) override {
+        Expr value = mutate(op->value);
+        if (value.same_as(op->value)) {
+            return op;
+        } else {
+            Type t = op->type.with_lanes(value.type().lanes());
+            return Reinterpret::make(t, value);
+        }
+    }
+
     string get_widened_var_name(const string &name) {
         return name + ".widened." + vectorized_vars.back().name;
     }
@@ -1051,6 +1061,12 @@ class VectorSubs : public IRMutator {
             // The variable itself could still exist inside an inner scalarized block.
             body = substitute(vv.name + ".from_zero", Variable::make(Int(32), vv.name), body);
         }
+
+        // Difficult to tell how the padding should grow when vectorizing an
+        // allocation. It's not currently an issue, because vectorization
+        // happens before the only source of padding (lowering strided
+        // loads). Add an assert to enforce it.
+        internal_assert(op->padding == 0) << "Vectorization of padded allocations not yet implemented";
 
         return Allocate::make(op->name, op->type, op->memory_type, new_extents, op->condition, body, new_expr, op->free_function);
     }

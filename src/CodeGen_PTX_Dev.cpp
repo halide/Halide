@@ -245,11 +245,13 @@ void CodeGen_PTX_Dev::init_module() {
         {"dp2a", Int(32), "dp2a_s32_u32", {Int(16, 4), UInt(8, 4), Int(32)}},
         {"dp2a", Int(32), "dp2a_u32_s32", {UInt(16, 4), Int(8, 4), Int(32)}},
         {"dp2a", UInt(32), "dp2a_u32_u32", {UInt(16, 4), UInt(8, 4), UInt(32)}},
+        {"round", Float(32), "llvm.rint.f32", {Float(32)}},
+        {"round", Float(64), "llvm.rint.f64", {Float(64)}},
     };
 
     for (auto &&i : ptx_intrins) {
         auto *fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
-        fn->addFnAttr(llvm::Attribute::ReadNone);
+        function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
@@ -269,11 +271,12 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
         builder->CreateCall(barrier0);
         value = ConstantInt::get(i32_t, 0);
-    } else if (op->name == "dp2a" || op->name == "dp4a") {
-        // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
-        value = call_overloaded_intrin(op->type, op->name, op->args);
-        internal_assert(value) << Expr(op) << "\n";
-    } else {
+        return;
+    }
+
+    // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
+    value = call_overloaded_intrin(op->type, op->name, op->args);
+    if (!value) {
         CodeGen_LLVM::visit(op);
     }
 }
@@ -662,14 +665,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         }
     }
 
-    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-    if (get_target().has_feature(Target::DisableLLVMLoopOpt)) {
-        user_warning << "halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15 "
-                        "(and will be removed in Halide 16). Halide 15 now defaults to disabling "
-                        "LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.\n";
-    }
     const bool do_loop_opt = get_target().has_feature(Target::EnableLLVMLoopOpt);
 
     // Define and run optimization pipeline with new pass manager
@@ -697,12 +692,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     pb.crossRegisterProxies(lam, fam, cgam, mam);
     ModulePassManager mpm;
 
-#if LLVM_VERSION >= 140
     using OptimizationLevel = llvm::OptimizationLevel;
-#else
-    using OptimizationLevel = PassBuilder::OptimizationLevel;
-#endif
-
     OptimizationLevel level = OptimizationLevel::O3;
 
     target_machine->registerPassBuilderCallbacks(pb);

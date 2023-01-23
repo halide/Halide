@@ -208,27 +208,27 @@
  *     };
  * \endcode
  *
- *  All Generators have three GeneratorParams that are implicitly provided
+ *  All Generators have two GeneratorParams that are implicitly provided
  *  by the base class:
  *
  *      GeneratorParam<Target> target{"target", Target()};
- *      GeneratorParam<bool> auto_schedule{"auto_schedule", false};
- *      GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
+ *      GeneratorParam<AutoschedulerParams> autoscheduler{"autoscheduler", {}}
  *
  *  - 'target' is the Halide::Target for which the Generator is producing code.
  *    It is read-only during the Generator's lifetime, and must not be modified;
  *    its value should always be filled in by the calling code: either the Halide
  *    build system (for ahead-of-time compilation), or ordinary C++ code
  *    (for JIT compilation).
- *  - 'auto_schedule' indicates whether the auto-scheduler should be run for this
- *    Generator:
- *      - if 'false', the Generator should schedule its Funcs as it sees fit.
- *      - if 'true', the Generator should only provide estimate()s for its Funcs,
- *        and not call any other scheduling methods.
- *  - 'machine_params' is only used if auto_schedule is true; it is ignored
- *    if auto_schedule is false. It provides details about the machine architecture
- *    being targeted which may be used to enhance the automatically-generated
- *    schedule.
+ *  - 'autoscheduler' is a string-to-string map that is used to indicates whether
+ *    and how an auto-scheduler should be run for this Generator:
+ *      - if empty, the Generator should schedule its Funcs as it sees fit; no autoscheduler will be run.
+ *      - if the 'name' key is set, it should be one of the known autoschedulers
+ *        provided with this release of Halide, which will be used to schedule
+ *        the Funcs in the Generator. In this case, the Generator should only
+ *        provide estimate()s for its Funcs, and not call any other scheduling methods.
+ *      - Other keys may be specified in the params, on a per-autoscheduler
+ *        basis, to optimize or enhance the automatically-generated schedule.
+ *        See documentation for each autoscheduler for options.
  *
  * Generators are added to a global registry to simplify AOT build mechanics; this
  * is done by simply using the HALIDE_REGISTER_GENERATOR macro at global scope:
@@ -272,7 +272,6 @@
 #include <vector>
 
 #include "AbstractGenerator.h"
-#include "ExternalCode.h"
 #include "Func.h"
 #include "ImageParam.h"
 #include "Introspection.h"
@@ -292,7 +291,6 @@ namespace Internal {
 void generator_test();
 
 class GeneratorBase;
-class ValueTracker;
 
 std::vector<Expr> parameter_constraints(const Parameter &p);
 
@@ -351,6 +349,9 @@ public:
     GeneratorFactoryProvider &operator=(GeneratorFactoryProvider &&) = delete;
 };
 
+/** Return a GeneratorFactoryProvider that knows about all the currently-registered C++ Generators. */
+const GeneratorFactoryProvider &get_registered_generators();
+
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
  * command-line utility for ahead-of-time filter compilation. */
@@ -361,12 +362,6 @@ int generate_filter_main(int argc, char **argv);
  * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
  * other than C++). */
 int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &generator_factory_provider);
-
-/** This overload of generate_filter_main lets you provide your own provider for how to enumerate and/or create
- * the generators based on registration name; this is useful if you want to re-use the
- * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
- * other than C++). */
-int generate_filter_main(int argc, char **argv, std::ostream &cerr, const GeneratorFactoryProvider &generator_factory_provider);
 
 // select_type<> is to std::conditional as switch is to if:
 // it allows a multiway compile-time type definition via the form
@@ -428,7 +423,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoschedulerParams)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
 
@@ -542,7 +537,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoschedulerParams)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
 
@@ -636,30 +631,19 @@ public:
     }
 };
 
-template<typename T>
-class GeneratorParam_MachineParams : public GeneratorParamImpl<T> {
+class GeneratorParam_AutoSchedulerParams : public GeneratorParamImpl<AutoschedulerParams> {
 public:
-    GeneratorParam_MachineParams(const std::string &name, const T &value)
-        : GeneratorParamImpl<T>(name, value) {
-    }
+    GeneratorParam_AutoSchedulerParams();
 
-    void set_from_string(const std::string &new_value_string) override {
-        this->set(MachineParams(new_value_string));
-    }
+    void set_from_string(const std::string &new_value_string) override;
+    std::string get_default_value() const override;
+    std::string call_to_string(const std::string &v) const override;
+    std::string get_c_type() const override;
 
-    std::string get_default_value() const override {
-        return this->value().to_string();
-    }
+private:
+    friend class GeneratorBase;
 
-    std::string call_to_string(const std::string &v) const override {
-        std::ostringstream oss;
-        oss << v << ".to_string()";
-        return oss.str();
-    }
-
-    std::string get_c_type() const override {
-        return "MachineParams";
-    }
+    bool try_set(const std::string &key, const std::string &value);
 };
 
 class GeneratorParam_LoopLevel : public GeneratorParamImpl<LoopLevel> {
@@ -956,7 +940,6 @@ template<typename T>
 using GeneratorParamImplBase =
     typename select_type<
         cond<std::is_same<T, Target>::value, GeneratorParam_Target<T>>,
-        cond<std::is_same<T, MachineParams>::value, GeneratorParam_MachineParams<T>>,
         cond<std::is_same<T, LoopLevel>::value, GeneratorParam_LoopLevel>,
         cond<std::is_same<T, std::string>::value, GeneratorParam_String<T>>,
         cond<std::is_same<T, Type>::value, GeneratorParam_Type<T>>,
@@ -1947,16 +1930,6 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, dimensions)
     HALIDE_FORWARD_METHOD_CONST(Func, has_update_definition)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
-    const Type &output_type() const {
-        this->check_gio_access();
-        return this->as<Func>().type();
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
-    const std::vector<Type> &output_types() const {
-        this->check_gio_access();
-        return this->as<Func>().types();
-    }
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD_CONST(Func, rvars)
     HALIDE_FORWARD_METHOD_CONST(Func, type)
@@ -2322,16 +2295,6 @@ public:
     HALIDE_FORWARD_METHOD(Func, in)
     HALIDE_FORWARD_METHOD(Func, memoize)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
-    const Type &output_type() const {
-        this->check_gio_access();
-        return this->as<Func>().type();
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
-    const std::vector<Type> &output_types() const {
-        this->check_gio_access();
-        return this->as<Func>().types();
-    }
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD(Func, parallel)
     HALIDE_FORWARD_METHOD(Func, prefetch)
@@ -3011,7 +2974,7 @@ private:
  * \endcode
  *
  * Note that all Generators embed a GeneratorContext, so if you are using a Stub
- * from within a Generator, you can just pass 'contex()' for the GeneratorContext:
+ * from within a Generator, you can just pass 'context()' for the GeneratorContext:
  * \code
  *  struct SomeGen : Generator<SomeGen> {
  *   void generate() {
@@ -3032,11 +2995,9 @@ class GeneratorContext {
 public:
     friend class Internal::GeneratorBase;
 
-    using ExternsMap = std::map<std::string, ExternalCode>;
-
+    explicit GeneratorContext(const Target &t);
     explicit GeneratorContext(const Target &t,
-                              bool auto_schedule = false,
-                              const MachineParams &machine_params = MachineParams::generic());
+                              const AutoschedulerParams &autoscheduler_params);
 
     GeneratorContext() = default;
     GeneratorContext(const GeneratorContext &) = default;
@@ -3047,24 +3008,8 @@ public:
     const Target &target() const {
         return target_;
     }
-    bool auto_schedule() const {
-        return auto_schedule_;
-    }
-    const MachineParams &machine_params() const {
-        return machine_params_;
-    }
-
-    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::target() instead of GeneratorContext::get_target().")
-    const Target &get_target() const {
-        return target_;
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::auto_schedule() instead of GeneratorContext::get_auto_schedule().")
-    bool get_auto_schedule() const {
-        return auto_schedule_;
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::machine_params() instead of GeneratorContext::get_machine_params().")
-    const MachineParams &get_machine_params() const {
-        return machine_params_;
+    const AutoschedulerParams &autoscheduler_params() const {
+        return autoscheduler_params_;
     }
 
     // Return a copy of this GeneratorContext that uses the given Target.
@@ -3085,16 +3030,7 @@ public:
 
 private:
     Target target_;
-    bool auto_schedule_ = false;
-    MachineParams machine_params_ = MachineParams::generic();
-    std::shared_ptr<ExternsMap> externs_map_;
-    std::shared_ptr<Internal::ValueTracker> value_tracker_;
-
-    GeneratorContext(const Target &target,
-                     bool auto_schedule,
-                     const MachineParams &machine_params,
-                     std::shared_ptr<ExternsMap> externs_map,
-                     std::shared_ptr<Internal::ValueTracker> value_tracker);
+    AutoschedulerParams autoscheduler_params_;
 };
 
 class NamesInterface {
@@ -3393,9 +3329,14 @@ public:
         return p;
     }
 
-    template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE void add_requirement(Expr condition, Args &&...args) {
-        get_pipeline().add_requirement(condition, std::forward<Args>(args)...);
+    void add_requirement(const Expr &condition, const std::vector<Expr> &error_args);
+
+    template<typename... Args,
+             typename = typename std::enable_if<Internal::all_are_printable_args<Args...>::value>::type>
+    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...error_args) {
+        std::vector<Expr> collected_args;
+        Internal::collect_print_args(collected_args, std::forward<Args>(error_args)...);
+        add_requirement(condition, collected_args);
     }
 
     void trace_pipeline() {
@@ -3467,8 +3408,6 @@ protected:
     virtual void call_generate() = 0;
     virtual void call_schedule() = 0;
 
-    void track_parameter_values(bool include_outputs);
-
     void pre_build();
     void post_build();
     void pre_configure();
@@ -3516,35 +3455,13 @@ protected:
     Target get_target() const {
         return target;
     }
-    bool get_auto_schedule() const {
-        return auto_schedule;
-    }
-    MachineParams get_machine_params() const {
-        return machine_params;
-    }
-    /** Generators can register ExternalCode objects onto
-     * themselves. The Generator infrastructure will arrange to have
-     * this ExternalCode appended to the Module that is finally
-     * compiled using the Generator. This allows encapsulating
-     * functionality that depends on external libraries or handwritten
-     * code for various targets. The name argument should match the
-     * name of the ExternalCode block and is used to ensure the same
-     * code block is not duplicated in the output. Halide does not do
-     * anything other than to compare names for equality. To guarantee
-     * uniqueness in public code, we suggest using a Java style
-     * inverted domain name followed by organization specific
-     * naming. E.g.:
-     *     com.yoyodyne.overthruster.0719acd19b66df2a9d8d628a8fefba911a0ab2b7
-     *
-     * See test/generator/external_code_generator.cpp for example use. */
-    std::shared_ptr<GeneratorContext::ExternsMap> get_externs_map() const {
-        return externs_map;
+    bool using_autoscheduler() const {
+        return !autoscheduler_.value().name.empty();
     }
 
     // These must remain here for legacy code that access the fields directly.
     GeneratorParam<Target> target{"target", Target()};
-    GeneratorParam<bool> auto_schedule{"auto_schedule", false};
-    GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
+    GeneratorParam_AutoSchedulerParams autoscheduler_;
 
 private:
     friend void ::Halide::Internal::generator_test();
@@ -3556,8 +3473,6 @@ private:
     friend class StubOutputBufferBase;
 
     const size_t size;
-    std::shared_ptr<GeneratorContext::ExternsMap> externs_map;
-    std::shared_ptr<Internal::ValueTracker> value_tracker;
 
     // Lazily-allocated-and-inited struct with info about our various Params.
     // Do not access directly: use the param_info() getter.
@@ -3565,6 +3480,12 @@ private:
 
     std::string generator_registered_name, generator_stub_name;
     Pipeline pipeline;
+
+    struct Requirement {
+        Expr condition;
+        std::vector<Expr> error_args;
+    };
+    std::vector<Requirement> requirements;
 
     // Return our GeneratorParamInfo.
     GeneratorParamInfo &param_info();
@@ -3754,8 +3675,6 @@ public:
 
     std::vector<Parameter> input_parameter(const std::string &name) override;
     std::vector<Func> output_func(const std::string &name) override;
-
-    ExternsMap external_code_map() override;
 
     // This is overridden in the concrete Generator<> subclass.
     // Pipeline build_pipeline() override;
@@ -3951,8 +3870,6 @@ public:
 
 // -----------------------------
 
-using GeneratorParamsMap = std::map<std::string, std::string>;
-
 /** ExecuteGeneratorArgs is the set of arguments to execute_generator().
  */
 struct ExecuteGeneratorArgs {
@@ -4017,6 +3934,9 @@ struct ExecuteGeneratorArgs {
 
     // Compiler Logger to use, for diagnostic work. If null, don't do any logging.
     CompilerLoggerFactory compiler_logger_factory = nullptr;
+
+    // If true, log the path of all output files to stdout.
+    bool log_outputs = false;
 };
 
 /**
@@ -4029,6 +3949,18 @@ void execute_generator(const ExecuteGeneratorArgs &args);
 // -----------------------------
 
 }  // namespace Internal
+
+/** Create a Generator from the currently-registered Generators, use it to create a Callable.
+ * Any GeneratorParams specified will be applied to the Generator before compilation.
+ * If the name isn't registered, assert-fail. */
+// @{
+Callable create_callable_from_generator(const GeneratorContext &context,
+                                        const std::string &name,
+                                        const GeneratorParamsMap &generator_params = {});
+Callable create_callable_from_generator(const Target &target,
+                                        const std::string &name,
+                                        const GeneratorParamsMap &generator_params = {});
+// @}
 
 }  // namespace Halide
 
@@ -4110,10 +4042,8 @@ struct halide_global_ns;
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
         std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                     \
             auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context);                                                                 \
-            const Halide::Internal::GeneratorParamsMap m = __VA_ARGS__;                                                             \
-            for (const auto &c : m) {                                                                                               \
-                g->set_generatorparam_value(c.first, c.second);                                                                     \
-            }                                                                                                                       \
+            const Halide::GeneratorParamsMap m = __VA_ARGS__;                                                                       \
+            g->set_generatorparam_values(m);                                                                                        \
             return g;                                                                                                               \
         }                                                                                                                           \
     }                                                                                                                               \
@@ -4121,5 +4051,19 @@ struct halide_global_ns;
     }                                                                                                                               \
     static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value,  \
                   "HALIDE_REGISTER_GENERATOR_ALIAS must be used at global scope");
+
+// The HALIDE_GENERATOR_PYSTUB macro is used to produce "PyStubs" -- i.e., CPython wrappers to let a C++ Generator
+// be called from Python. It shouldn't be necessary to use by anything but the build system in most cases.
+
+#define HALIDE_GENERATOR_PYSTUB(GEN_REGISTRY_NAME, MODULE_NAME)                                                           \
+    static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");                                 \
+    extern "C" PyObject *_halide_pystub_impl(const char *module_name, const Halide::Internal::GeneratorFactory &factory); \
+    namespace halide_register_generator::GEN_REGISTRY_NAME##_ns {                                                         \
+        extern std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);     \
+    }                                                                                                                     \
+    extern "C" HALIDE_EXPORT_SYMBOL PyObject *PyInit_##MODULE_NAME() {                                                    \
+        const auto factory = halide_register_generator::GEN_REGISTRY_NAME##_ns::factory;                                  \
+        return _halide_pystub_impl(#MODULE_NAME, factory);                                                                \
+    }
 
 #endif  // HALIDE_GENERATOR_H_

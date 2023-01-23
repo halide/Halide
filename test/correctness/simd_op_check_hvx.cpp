@@ -290,6 +290,8 @@ public:
         check("vdelta(v*,v*)", hvx_width / 2, in_u32(3 * x / 2));
         check("vdelta(v*,v*)", hvx_width * 3, in_u16(x * 3));
         check("vdelta(v*,v*)", hvx_width * 3, in_u8(x * 3));
+        check("vdelta(v*,v*)", hvx_width * 4, in_u16(x * 4));
+        check("vdelta(v*,v*)", hvx_width * 4, in_u8(x * 4));
 
         check("vlut32(v*.b,v*.b,r*)", hvx_width / 1, in_u8(u8_1));
         check("vlut32(v*.b,v*.b,r*)", hvx_width / 1, in_u8(clamp(u16_1, 0, 63)));
@@ -456,7 +458,7 @@ public:
         check("vmpyi(v*.h,v*.h)", hvx_width / 2, i16_1 * i16_2);
         check("vmpyio(v*.w,v*.h)", hvx_width / 2, i32_1 * i32(i16_1));
         check("vmpyie(v*.w,v*.uh)", hvx_width / 2, i32_1 * i32(u16_1));
-        check("vmpy(v*.uh,v*.uh)", hvx_width / 2, u32_1 * u32(u16_1));
+        check("vmpyie(v*.w,v*.uh)", hvx_width / 2, u32_1 * u32(u16_1));
         check("vmpyieo(v*.h,v*.h)", hvx_width / 4, i32_1 * i32_2);
         // The inconsistency in the expected instructions here is
         // correct. For bytes, the unsigned value is first, for half
@@ -703,61 +705,13 @@ private:
 };
 
 int main(int argc, char **argv) {
-    Target host = get_host_target();
-    Target hl_target = get_target_from_environment();
-    printf("host is:      %s\n", host.to_string().c_str());
-    printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
-
-    Target t(Target::NoOS, Target::Hexagon, 32);
-    for (const auto &f : {Target::HVX,
-                          Target::HVX_v62,
-                          Target::HVX_v65,
-                          Target::HVX_v66}) {
-        if (hl_target.has_feature(f)) {
-            t.set_feature(f);
-        }
-    }
-
-    if (t == Target("hexagon-32-noos")) {
-        Halide::Internal::Test::Sharder::accept_sharded_status();
-        printf("[SKIP] No HVX target enabled.\n");
-        return 0;
-    }
-
-    SimdOpCheckHVX test_hvx(t);
-
-    if (argc > 1) {
-        test_hvx.filter = argv[1];
-    }
-
-    if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
-        test_hvx.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
-    }
-
-    const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
-    std::cout << "simd_op_check test seed: " << seed << "\n";
-    test_hvx.set_seed(seed);
-
-    // Remove some features like simd_op_check.cpp used to do.
-
-    if (argc > 2) {
-        // Don't forget: if you want to run the standard tests to a specific output
-        // directory, you'll need to invoke with the first arg enclosed
-        // in quotes (to avoid it being wildcard-expanded by the shell):
-        //
-        //    correctness_simd_op_check "*" /path/to/output
-        //
-        test_hvx.output_directory = argv[2];
-    }
-    bool success = test_hvx.test_all();
-
-    // Compile a runtime for this target, for use in the static test.
-    compile_standalone_runtime(test_hvx.output_directory + "simd_op_check_runtime.o", test_hvx.target);
-
-    if (!success) {
-        return -1;
-    }
-
-    printf("Success!\n");
-    return 0;
+    return SimdOpCheckTest::main<SimdOpCheckHVX>(
+        argc, argv,
+        {
+            Target("hexagon-32-noos-hvx"),
+            Target("hexagon-32-noos-hvx-hvx_128"),
+            Target("hexagon-32-noos-hvx-hvx_128-hvx_v62"),
+            Target("hexagon-32-noos-hvx-hvx_128-hvx_v65"),
+            Target("hexagon-32-noos-hvx-hvx_128-hvx_v66"),
+        });
 }

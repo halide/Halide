@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 
     // This should throw an error since auto-scheduler does not currently
     // support partial schedules
-    p.auto_schedule(target);
+    p.apply_autoscheduler(target, {"Mullapudi2016"});
 
     printf("Success!\n");
     return 0;

@@ -174,9 +174,6 @@ Target calculate_host_target() {
 #if __riscv
     Target::Arch arch = Target::RISCV;
 #else
-#if __mips__ || __mips || __MIPS__
-    Target::Arch arch = Target::MIPS;
-#else
 #if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
 #else
@@ -295,7 +292,6 @@ Target calculate_host_target() {
 #endif
 #endif
 #endif
-#endif
 
     return {os, arch, bits, processor, initial_features, vector_bits};
 }
@@ -399,7 +395,6 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arch_unknown", Target::ArchUnknown},
     {"x86", Target::X86},
     {"arm", Target::ARM},
-    {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
     {"wasm", Target::WebAssembly},
@@ -509,10 +504,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"check_unsafe_promises", Target::CheckUnsafePromises},
     {"hexagon_dma", Target::HexagonDma},
     {"embed_bitcode", Target::EmbedBitcode},
-    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-    {"disable_llvm_loop_opt", Target::DisableLLVMLoopOpt},
     {"enable_llvm_loop_opt", Target::EnableLLVMLoopOpt},
     {"wasm_simd128", Target::WasmSimd128},
     {"wasm_signext", Target::WasmSignExt},
@@ -528,6 +519,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"armv81a", Target::ARMv81a},
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
+    {"spirv", Target::SPIRV},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -552,6 +544,22 @@ int parse_vector_bits(const std::string &tok) {
     return -1;
 }
 
+void set_sanitizer_bits(Target &t) {
+// Note, we must include Util.h for these to be defined properly (or not)
+#ifdef HALIDE_INTERNAL_USING_ASAN
+    t.set_feature(Target::ASAN);
+#endif
+#ifdef HALIDE_INTERNAL_USING_MSAN
+    t.set_feature(Target::MSAN);
+#endif
+#ifdef HALIDE_INTERNAL_USING_TSAN
+    t.set_feature(Target::TSAN);
+#endif
+#ifdef HALIDE_INTERNAL_USING_COVSAN
+    t.set_feature(Target::SanitizerCoverage);
+#endif
+}
+
 }  // End anonymous namespace
 
 Target get_target_from_environment() {
@@ -566,22 +574,10 @@ Target get_target_from_environment() {
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
-#if defined(__has_feature)
-#if __has_feature(address_sanitizer)
-    host.set_feature(Target::ASAN);
-#endif
-#if __has_feature(memory_sanitizer)
-    host.set_feature(Target::MSAN);
-#endif
-#if __has_feature(thread_sanitizer)
-    host.set_feature(Target::TSAN);
-#endif
-#if __has_feature(coverage_sanitizer)
-    host.set_feature(Target::SanitizerCoverage);
-#endif
-#endif
+
     string target = Internal::get_env_variable("HL_JIT_TARGET");
     if (target.empty()) {
+        set_sanitizer_bits(host);
         return host;
     } else {
         Target t(target);
@@ -592,6 +588,7 @@ Target get_jit_target_from_environment() {
             << "Host is " << host.to_string() << ".\n";
         user_assert(!t.has_feature(Target::NoBoundsQuery))
             << "The Halide JIT requires the use of bounds query, but HL_JIT_TARGET was specified with no_bounds_query: " << target;
+        set_sanitizer_bits(t);
         return t;
     }
 }
@@ -835,9 +832,6 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_X86)
     bad |= arch == Target::X86;
-#endif
-#if !defined(WITH_MIPS)
-    bad |= arch == Target::MIPS;
 #endif
 #if !defined(WITH_POWERPC)
     bad |= arch == Target::POWERPC;

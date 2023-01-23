@@ -39,16 +39,18 @@ void check(Expr test, Expr expected) {
 
 template<typename T>
 int64_t mul_shift_right(int64_t a, int64_t b, int q) {
-    const int64_t min_t = std::numeric_limits<T>::min();
-    const int64_t max_t = std::numeric_limits<T>::max();
-    return std::min<int64_t>(std::max<int64_t>((a * b) >> q, min_t), max_t);
+    constexpr int64_t min_t = std::numeric_limits<T>::min();
+    constexpr int64_t max_t = std::numeric_limits<T>::max();
+    using W = std::conditional_t<min_t == 0, uint64_t, int64_t>;
+    return std::min<int64_t>(std::max<int64_t>((W(a) * W(b)) >> q, min_t), max_t);
 }
 
 template<typename T>
 int64_t rounding_mul_shift_right(int64_t a, int64_t b, int q) {
     const int64_t min_t = std::numeric_limits<T>::min();
     const int64_t max_t = std::numeric_limits<T>::max();
-    return std::min<int64_t>(std::max<int64_t>((a * b + (1ll << (q - 1))) >> q, min_t), max_t);
+    using W = std::conditional_t<min_t == 0, uint64_t, int64_t>;
+    return std::min<int64_t>(std::max<int64_t>((W(a) * W(b) + (W(1) << (q - 1))) >> q, min_t), max_t);
 }
 
 template<typename T>
@@ -243,10 +245,10 @@ int main(int argc, char **argv) {
     check(narrow((u32(u16x) + 15) >> 4), rounding_halving_add(u16x, u16(14)) >> u16(3));
 
     // But not if the constant can't fit in the narrower type
-    check(narrow((u16(u8x) + 500) >> 4), narrow((u16(u8x) + 500) >> 4));
+    check(narrow((u16(u8x) + 500) >> 4), narrow((widen_right_add(cast<uint16_t>(500), u8x)) >> 4));
 
     check((u64(u32x) + 8) / 16, u64(rounding_shift_right(u32x, 4)));
-    check(u16(min((u64(u32x) + 8) / 16, 65535)), u16(min(rounding_shift_right(u32x, 4), 65535)));
+    check(u16(min((u64(u32x) + 8) / 16, 65535)), u16_sat(rounding_shift_right(u32x, 4)));
 
     // And with variable shifts.
     check(i8(widening_add(i8x, (i8(1) << u8y) / 2) >> u8y), rounding_shift_right(i8x, u8y));

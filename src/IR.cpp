@@ -20,6 +20,22 @@ Expr Cast::make(Type t, Expr v) {
     return node;
 }
 
+Expr Reinterpret::make(Type t, Expr v) {
+    user_assert(v.defined()) << "reinterpret of undefined Expr\n";
+    int from_bits = v.type().bits() * v.type().lanes();
+    int to_bits = t.bits() * t.lanes();
+    user_assert(from_bits == to_bits)
+        << "Reinterpret cast from type " << v.type()
+        << " which has " << from_bits
+        << " bits, to type " << t
+        << " which has " << to_bits << " bits\n";
+
+    Reinterpret *node = new Reinterpret;
+    node->type = t;
+    node->value = std::move(v);
+    return node;
+}
+
 Expr Add::make(Expr a, Expr b) {
     internal_assert(a.defined()) << "Add of undefined\n";
     internal_assert(b.defined()) << "Add of undefined\n";
@@ -393,7 +409,7 @@ Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, con
 Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
                     const std::vector<Expr> &extents,
                     Expr condition, Stmt body,
-                    Expr new_expr, const std::string &free_function) {
+                    Expr new_expr, const std::string &free_function, int padding) {
     for (const auto &extent : extents) {
         internal_assert(extent.defined()) << "Allocate of undefined extent\n";
         internal_assert(extent.type().is_scalar() == 1) << "Allocate of vector extent\n";
@@ -401,6 +417,8 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
     internal_assert(body.defined()) << "Allocate of undefined\n";
     internal_assert(condition.defined()) << "Allocate with undefined condition\n";
     internal_assert(condition.type().is_bool()) << "Allocate condition is not boolean\n";
+    internal_assert(!(new_expr.defined() && padding))
+        << "Allocate nodes with custom new expressions may not have padding\n";
 
     Allocate *node = new Allocate;
     node->name = name;
@@ -410,6 +428,7 @@ Stmt Allocate::make(const std::string &name, Type type, MemoryType memory_type,
     node->new_expr = std::move(new_expr);
     node->free_function = free_function;
     node->condition = std::move(condition);
+    node->padding = padding;
     node->body = std::move(body);
     return node;
 }
@@ -595,12 +614,14 @@ const char *const intrinsic_op_names[] = {
     "bundle",
     "call_cached_indirect_function",
     "cast_mask",
+    "concat_bits",
     "count_leading_zeros",
     "count_trailing_zeros",
     "debug_to_file",
     "declare_box_touched",
     "div_round_to_zero",
     "dynamic_shuffle",
+    "extract_bits",
     "extract_mask_element",
     "get_user_context",
     "gpu_thread_barrier",
@@ -628,17 +649,18 @@ const char *const intrinsic_op_names[] = {
     "promise_clamped",
     "random",
     "register_destructor",
-    "reinterpret",
     "require",
     "require_mask",
     "return_second",
     "rewrite_buffer",
+    "round",
     "rounding_halving_add",
     "rounding_mul_shift_right",
     "rounding_shift_left",
     "rounding_shift_right",
     "saturating_add",
     "saturating_sub",
+    "saturating_cast",
     "scatter_gather",
     "select_mask",
     "shift_left",
@@ -651,6 +673,9 @@ const char *const intrinsic_op_names[] = {
     "undef",
     "unreachable",
     "unsafe_promise_clamped",
+    "widen_right_add",
+    "widen_right_mul",
+    "widen_right_sub",
     "widening_add",
     "widening_mul",
     "widening_shift_left",
@@ -970,6 +995,10 @@ void ExprNode<Cast>::accept(IRVisitor *v) const {
     v->visit((const Cast *)this);
 }
 template<>
+void ExprNode<Reinterpret>::accept(IRVisitor *v) const {
+    v->visit((const Reinterpret *)this);
+}
+template<>
 void ExprNode<Variable>::accept(IRVisitor *v) const {
     v->visit((const Variable *)this);
 }
@@ -1153,6 +1182,10 @@ Expr ExprNode<StringImm>::mutate_expr(IRMutator *v) const {
 template<>
 Expr ExprNode<Cast>::mutate_expr(IRMutator *v) const {
     return v->visit((const Cast *)this);
+}
+template<>
+Expr ExprNode<Reinterpret>::mutate_expr(IRMutator *v) const {
+    return v->visit((const Reinterpret *)this);
 }
 template<>
 Expr ExprNode<Variable>::mutate_expr(IRMutator *v) const {

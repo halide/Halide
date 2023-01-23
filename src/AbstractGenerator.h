@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "Callable.h"
 #include "Expr.h"
 #include "Func.h"
 #include "Module.h"
@@ -18,6 +19,7 @@
 namespace Halide {
 
 class GeneratorContext;
+using GeneratorParamsMap = std::map<std::string, std::string>;
 
 namespace Internal {
 
@@ -27,8 +29,6 @@ enum class ArgInfoKind { Scalar,
 
 enum class ArgInfoDirection { Input,
                               Output };
-
-using ExternsMap = std::map<std::string, ExternalCode>;
 
 /**
  * AbstractGenerator is an ABC that defines the API a Generator must provide
@@ -77,7 +77,7 @@ public:
      * used to register it.) */
     virtual std::string name() = 0;
 
-    /** Return the Target, autoscheduler flag, and MachineParams that this Generator
+    /** Return the Target and autoscheduler info that this Generator
      * was created with. Always legal to call on any AbstractGenerator instance,
      * regardless of what other methods have been called. (All AbstractGenerator instances
      * are expected to be created with immutable values for these, which can't be
@@ -149,13 +149,6 @@ public:
      */
     virtual std::vector<Func> output_func(const std::string &name) = 0;
 
-    /** Return the ExternsMap for the Generator, if any.
-     *
-     * CALL-AFTER: build_pipeline()
-     * CALL-BEFORE: n/a
-     */
-    virtual ExternsMap external_code_map() = 0;
-
     /** Rebind a specified Input to refer to the given piece of IR, replacing the
      * default ImageParam / Param in place for that Input. Basic type-checking is
      * done to ensure that inputs are still sane (e.g. types, dimensions, etc must match expectations).
@@ -207,6 +200,22 @@ public:
      *     (For the common case of just one original-output, this amounts to being one output for each original-input.)
      */
     Module build_gradient_module(const std::string &function_name);
+
+    /**
+     * JIT the AbstractGenerator into a Callable (using the currently-set
+     * Target) and return it.
+     *
+     * If jit_handlers is not null, set the jitted func's jit_handlers to use a copy of it.
+     *
+     * If jit_externs is not null, use it to set the jitted func's external dependencies.
+     */
+    Callable compile_to_callable(const JITHandlers *jit_handlers = nullptr,
+                                 const std::map<std::string, JITExtern> *jit_externs = nullptr);
+
+    /*
+     * Set all the GeneratorParams in the map. This is equivalent to simply calling the
+     * `set_generatorparam_value()` method in a loop over the map, but is quite convenient. */
+    void set_generatorparam_values(const GeneratorParamsMap &m);
 };
 
 using AbstractGeneratorPtr = std::unique_ptr<AbstractGenerator>;

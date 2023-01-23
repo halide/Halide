@@ -59,6 +59,18 @@ private:
         }
     }
 
+    Expr visit(const Reinterpret *op) override {
+        Expr value = mutate(op->value);
+        if (!value.defined()) {
+            return Expr();
+        }
+        if (value.same_as(op->value)) {
+            return op;
+        } else {
+            return Reinterpret::make(op->type, std::move(value));
+        }
+    }
+
     Expr visit(const Add *op) override {
         return mutate_binary_operator(op);
     }
@@ -460,7 +472,8 @@ private:
             return op;
         } else {
             return Allocate::make(op->name, op->type, op->memory_type,
-                                  new_extents, condition, body, new_expr, op->free_function);
+                                  new_extents, condition, body, new_expr,
+                                  op->free_function, op->padding);
         }
     }
 

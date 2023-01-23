@@ -171,6 +171,11 @@ Flags:
 
         and is a convenience for automated benchmarking.
 
+    --success:
+        Print "Success!" to stdout if we exit with a result code of zero.
+        (This is mainly useful for use with Halide's testing infrastructure,
+        which relies on this for successful tests.)
+
 Known Issues:
 
     * Filters running on GPU (vs CPU) have not been tested.
@@ -391,6 +396,7 @@ int main(int argc, char **argv) {
     std::string default_input_buffers;
     std::string default_input_scalars;
     std::string benchmarks_flag_value;
+    bool emit_success = false;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1;  // skip -
@@ -471,6 +477,13 @@ int main(int argc, char **argv) {
                 default_input_buffers = "random:0:estimate_then_auto";
                 default_input_scalars = "estimate";
                 user_specified_output_shape = "estimate";
+            } else if (flag_name == "success") {
+                if (flag_value.empty()) {
+                    flag_value = "true";
+                }
+                if (!parse_scalar(flag_value, &emit_success)) {
+                    fail() << "Invalid value for flag: " << flag_name;
+                }
             } else {
                 usage(argv[0]);
                 fail() << "Unknown flag: " << flag_name;
@@ -547,6 +560,10 @@ int main(int argc, char **argv) {
 
     // Save the output(s), if necessary.
     r.save_outputs();
+
+    if (emit_success) {
+        std::cout << "Success!\n";
+    }
 
     return 0;
 }

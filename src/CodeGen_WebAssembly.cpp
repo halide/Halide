@@ -6,10 +6,12 @@
 #include "IRMatch.h"
 #include "IROperator.h"
 #include "LLVM_Headers.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::pair;
 using std::string;
 using std::vector;
 
@@ -37,6 +39,7 @@ protected:
     bool use_pic() const override;
 
     void visit(const Cast *) override;
+    void visit(const Call *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
 };
 
@@ -69,10 +72,6 @@ const WasmIntrinsic intrinsic_defs[] = {
 
     {"llvm.wasm.avgr.unsigned.v16i8", UInt(8, 16), "rounding_halving_add", {UInt(8, 16), UInt(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.avgr.unsigned.v8i16", UInt(16, 8), "rounding_halving_add", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
-
-#if LLVM_VERSION == 130
-    {"float_to_double", Float(64, 4), "float_to_double", {Float(32, 4)}, Target::WasmSimd128},
-#endif
 
     // With some work, some of these could possibly be adapted to work under earlier versions of LLVM.
     {"widening_mul_i8x16", Int(16, 16), "widening_mul", {Int(8, 16), Int(8, 16)}, Target::WasmSimd128},
@@ -111,6 +110,11 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"extend_u16x8_to_u32x8", UInt(32, 8), "widen_integer", {UInt(16, 8)}, Target::WasmSimd128},
     {"extend_i32x4_to_i64x4", Int(64, 4), "widen_integer", {Int(32, 4)}, Target::WasmSimd128},
     {"extend_u32x4_to_u64x4", UInt(64, 4), "widen_integer", {UInt(32, 4)}, Target::WasmSimd128},
+
+    {"llvm.nearbyint.v4f32", Float(32, 4), "nearbyint", {Float(32, 4)}, Target::WasmSimd128},
+    {"llvm.nearbyint.v2f64", Float(64, 2), "nearbyint", {Float(64, 2)}, Target::WasmSimd128},
+    {"llvm.nearbyint.f32", Float(32), "nearbyint", {Float(32)}},
+    {"llvm.nearbyint.f64", Float(64), "nearbyint", {Float(64)}},
 };
 // clang-format on
 
@@ -133,7 +137,7 @@ void CodeGen_WebAssembly::init_module() {
         }
 
         auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
-        fn->addFnAttr(llvm::Attribute::ReadNone);
+        function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
@@ -147,16 +151,8 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
 
     // clang-format off
     static const Pattern patterns[] = {
-        {"q15mulr_sat_s", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))), Target::WasmSimd128},
-        {"saturating_narrow", i8_sat(wild_i16x_), Target::WasmSimd128},
-        {"saturating_narrow", u8_sat(wild_i16x_), Target::WasmSimd128},
-        {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
-        {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
         {"int_to_double", f64(wild_i32x_), Target::WasmSimd128},
         {"int_to_double", f64(wild_u32x_), Target::WasmSimd128},
-#if LLVM_VERSION == 130
-        {"float_to_double", f64(wild_f32x_), Target::WasmSimd128},
-#endif
         {"widen_integer", i16(wild_i8x_), Target::WasmSimd128},
         {"widen_integer", u16(wild_u8x_), Target::WasmSimd128},
         {"widen_integer", i32(wild_i16x_), Target::WasmSimd128},
@@ -178,6 +174,63 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
                     return;
                 }
             }
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_WebAssembly::visit(const Call *op) {
+    struct Pattern {
+        std::string intrin;  ///< Name of the intrinsic
+        Expr pattern;        ///< The pattern to match against
+        Target::Feature required_feature;
+    };
+
+    // clang-format off
+    static const Pattern patterns[] = {
+        {"q15mulr_sat_s", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15), Target::WasmSimd128},
+        {"saturating_narrow", i8_sat(wild_i16x_), Target::WasmSimd128},
+        {"saturating_narrow", u8_sat(wild_i16x_), Target::WasmSimd128},
+        {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
+        {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
+    };
+    static const vector<pair<Expr, Expr>> cast_rewrites = {
+        // Some double-narrowing saturating casts can be better expressed as
+        // combinations of single-narrowing saturating casts.
+        {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
+        {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
+    };
+    // clang-format on
+
+    if (op->type.is_vector()) {
+        std::vector<Expr> matches;
+        for (const Pattern &p : patterns) {
+            if (!target.has_feature(p.required_feature)) {
+                continue;
+            }
+            if (expr_match(p.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, p.intrin, matches);
+                if (value) {
+                    return;
+                }
+            }
+        }
+
+        for (const auto &i : cast_rewrites) {
+            if (expr_match(i.first, op, matches)) {
+                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
+                value = codegen(replacement);
+                return;
+            }
+        }
+    }
+
+    if (op->is_intrinsic(Call::round)) {
+        // For webassembly, llvm.nearbyint compiles to f32.nearest, which gives us the semantics we want.
+        value = call_overloaded_intrin(op->type, "nearbyint", op->args);
+        if (value) {
+            return;
         }
     }
 
@@ -291,7 +344,9 @@ string CodeGen_WebAssembly::mattrs() const {
         sep = ",";
     }
 
-    if (target.has_feature(Target::WasmBulkMemory)) {
+    // Recent Emscripten builds assume that specifying `-pthread` implies bulk-memory too,
+    // so quietly enable it if either of these are specified.
+    if (target.has_feature(Target::WasmBulkMemory) || target.has_feature(Target::WasmThreads)) {
         s << sep << "+bulk-memory";
         sep = ",";
     }

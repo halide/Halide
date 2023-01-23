@@ -1,4 +1,0 @@
-{
-global: PyInit_${SYMBOL};
-local: *;
-};

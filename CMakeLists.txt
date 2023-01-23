@@ -1,6 +1,6 @@
-cmake_minimum_required(VERSION 3.16...3.23)
+cmake_minimum_required(VERSION 3.22...3.23)
 project(Halide
-        VERSION 15.0.0
+        VERSION 16.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
@@ -10,24 +10,22 @@ enable_testing()
 # Required CMake modules
 ##
 
+# Import useful standard modules
 include(CMakeDependentOption)
-include(GNUInstallDirs)
+include(CheckCXXSymbolExists)
 
-##
-# Gather information about build environment
-##
+# Make our custom helpers available throughout the project via include().
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
+include(HalideGeneratorHelpers)
+include(MakeShellPath)
 
 get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-
-if (CMAKE_VERSION VERSION_LESS 3.21)
-    string(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}" PROJECT_IS_TOP_LEVEL)
-endif ()
 
 # Warn if the user is using the wrong kind of build type selection for their generator
 if (CMAKE_BUILD_TYPE AND is_multi_config)
     message(WARNING "Multi-config generators do not honor CMAKE_BUILD_TYPE.")
-elseif (NOT CMAKE_BUILD_TYPE AND NOT is_multi_config)
-    message(WARNING "Single-config generators require CMAKE_BUILD_TYPE.")
+elseif (NOT is_multi_config AND NOT DEFINED CMAKE_BUILD_TYPE)
+    message(WARNING "Single-configuration generators require CMAKE_BUILD_TYPE to be set.")
 endif ()
 
 # Windows has file name length restrictions and lacks an RPATH mechanism.
@@ -154,6 +152,7 @@ option(TARGET_OPENCL "Enable OpenCL-C target" ON)
 option(TARGET_METAL "Enable Metal target" ON)
 option(TARGET_D3D12COMPUTE "Enable Direct3D 12 Compute target" ON)
 option(TARGET_OPENGLCOMPUTE "Enable OpenGLCompute target" ON)
+option(TARGET_SPIRV "Include SPIR-V target" OFF)
 
 ## Optional extra subprojects
 option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
@@ -179,38 +178,72 @@ mark_as_advanced(Halide_SOVERSION_OVERRIDE)
 ##
 
 # Require standard C++17
-if (CMAKE_CXX_STANDARD LESS 17)
-    message(FATAL_ERROR "Halide requires C++17 or newer")
-endif ()
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use. Halide requires 17 or higher.")
+option(CMAKE_CXX_STANDARD_REQUIRED "When enabled, the value of CMAKE_CXX_STANDARD is a requirement." ON)
+option(CMAKE_CXX_EXTENSIONS "When enabled, compiler-specific language extensions are enabled (e.g. -std=gnu++17)" OFF)
+
+if(CMAKE_CXX_STANDARD LESS 17)
+    message(FATAL_ERROR "Halide requires C++17 or newer but CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
+endif()
 
 # Validate RTTI compatibility with LLVM
 if (Halide_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
     message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
 endif ()
 
-# Configure CCache build when requested
+# Build Halide with ccache if the package is present
+option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
+mark_as_advanced(Halide_CCACHE_BUILD)
+
 if (Halide_CCACHE_BUILD)
-    # TODO: when upgrading to CMake >=3.18, add REQUIRED here.
-    find_program(CCACHE_PROGRAM ccache)
-    if (CCACHE_PROGRAM)
-        # TODO: ccache recommends setting CCACHE_SLOPPINESS=pch_defines,time_macros to
-        # enable precompiled header caching. Our timing found it slightly faster with
-        # just CCACHE_SLOPPINESS=pch_defines, so that's what we're using. Maybe revisit
-        # if issues occur (but we don't use any of the time macros so should be irrelevant).
-        set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines
-            CACHE STRING "Parameters to pass through to ccache")
-        mark_as_advanced(Halide_CCACHE_PARAMS)
-        set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
-        set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
-        message(STATUS "Enabling ccache usage for building.")
-    else ()
-        message(FATAL_ERROR "Unable to find the program ccache. Set Halide_CCACHE_BUILD to OFF")
-    endif ()
+    find_program(CCACHE_PROGRAM ccache REQUIRED)
+
+    # TODO: ccache recommends setting CCACHE_SLOPPINESS=pch_defines,time_macros to
+    # enable precompiled header caching. Our timing found it slightly faster with
+    # just CCACHE_SLOPPINESS=pch_defines, so that's what we're using. Maybe revisit
+    # if issues occur (but we don't use any of the time macros so should be irrelevant).
+    set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines
+        CACHE STRING "Parameters to pass through to ccache")
+    mark_as_advanced(Halide_CCACHE_PARAMS)
+
+    set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+
+    message(STATUS "Enabling ccache usage for building.")
 endif ()
 
-# Include our own CMake helpers
-include(HalideGeneratorHelpers)
-include(MakeShellPath)
+# Detect whether or not ASAN is enabled. Don't cache the result to ensure this
+# check happens every time we reconfigure.
+unset(Halide_ASAN_ENABLED CACHE)
+check_cxx_symbol_exists(HALIDE_INTERNAL_USING_ASAN "${Halide_SOURCE_DIR}/src/Util.h" Halide_ASAN_ENABLED)
+
+if (Halide_ASAN_ENABLED)
+    set(Halide_ANY_SANITIZERS_ENABLED 1)
+else ()
+    set(Halide_ANY_SANITIZERS_ENABLED 0)
+endif ()
+
+##
+# Declare options
+##
+
+# Declare these options after we include dependencies (since it declares Halide_ENABLE_RTTI etc)
+# but before we add any subdirectories, since any option you test before it is defined is
+# implicitly false the *first* time that the build file is processed, and there are some
+# out-of-order dependencies here (e.g, code in src/ eventually checks WITH_UTILS).
+# This is especially subtle since it means that some options can end up with different
+# values if you build a target as part of the initial CMake run, so (e.g.) a `make install`
+# from as totally clean build might neglect to install some pieces.
+
+option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_DOCS "Build documentation" OFF)
+option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
+cmake_dependent_option(
+    WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
+    "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
+)
+
 
 ##
 # Add source directories
@@ -231,17 +264,8 @@ else ()
 endif ()
 
 if (WITH_PYTHON_BINDINGS)
-    if (Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS)
-        message(STATUS "Building Python bindings enabled")
-        add_subdirectory(python_bindings)
-    else ()
-        if (NOT Halide_ENABLE_RTTI)
-            message(WARNING "Building Python bindings disabled: must compile with RTTI")
-        endif ()
-        if (NOT Halide_ENABLE_EXCEPTIONS)
-            message(WARNING "Building Python bindings disabled: must compile with exceptions")
-        endif ()
-    endif ()
+    message(STATUS "Building Python bindings enabled")
+    add_subdirectory(python_bindings)
 else ()
     message(STATUS "Building Python bindings disabled")
 endif ()

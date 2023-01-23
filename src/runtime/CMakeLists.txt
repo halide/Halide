@@ -1,7 +1,3 @@
-if (NOT CMAKE_GENERATOR MATCHES "Make|Ninja")
-    message(STATUS "Notice: ${CMAKE_GENERATOR} does not support depfile dependencies. Incremental builds may fail.")
-endif ()
-
 # Keep these lists in alphabetical order.
 set(RUNTIME_CPP
     aarch64_cpu_features
@@ -22,6 +18,8 @@ set(RUNTIME_CPP
     fake_get_symbol
     fake_thread_pool
     float16_t
+    fopen
+    fopen_lfs
     force_include_types
     fuchsia_clock
     fuchsia_host_cpu_count
@@ -40,7 +38,6 @@ set(RUNTIME_CPP
     metal
     metal_objc_arm
     metal_objc_x86
-    mips_cpu_features
     module_aot_ref_count
     module_jit_ref_count
     msan
@@ -54,6 +51,7 @@ set(RUNTIME_CPP
     osx_host_cpu_count
     osx_opengl_context
     osx_yield
+    posix_aligned_alloc
     posix_allocator
     posix_clock
     posix_error_handler
@@ -83,8 +81,8 @@ set(RUNTIME_CPP
     wasm_cpu_features
     windows_clock
     windows_cuda
-    windows_d3d12compute_x86
     windows_d3d12compute_arm
+    windows_d3d12compute_x86
     windows_get_symbol
     windows_io
     windows_opencl
@@ -101,7 +99,6 @@ set(RUNTIME_LL
     arm
     arm_no_neon
     hvx_128
-    mips
     posix_math
     powerpc
     ptx_dev
@@ -164,6 +161,7 @@ set(RUNTIME_CXX_FLAGS
     -Wno-psabi
     -Wno-unknown-warning-option
     -Wno-unused-function
+    -Wvla
     -Wsign-compare
 )
 
@@ -232,28 +230,7 @@ foreach (i IN LISTS RUNTIME_CPP)
             set(INITMOD "_initmod_${i}_${j}${SUFFIX}.cpp")
             set(SYMBOL "halide_internal_initmod_${i}_${j}${SUFFIX}")
 
-            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S)
-
-            set(ll_path "${LL}")
-            if (CMAKE_GENERATOR MATCHES "Ninja")
-                if (POLICY CMP0116)
-                    # CMake 3.20+ does the right thing here and transforms the depfiles for us
-                    list(APPEND clang_flags -MD -MF "${basename}.d")
-                    set(dep_args DEPFILE "${basename}.d")
-                else()
-                    # Dep-files are subtle and require clang to run using *just* the right
-                    # relative paths to the build root, NOT the Halide build root. This is
-                    # a perfect storm of bad behavior from CMake <3.20, Ninja, and Clang.
-                    file(RELATIVE_PATH ll_path "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/${LL}")
-                    file(TO_NATIVE_PATH "${ll_path}" ll_path)
-                    list(APPEND clang_flags -MD -MF "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}/${basename}.d>")
-                    set(dep_args
-                        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-                        DEPFILE "${CMAKE_CURRENT_BINARY_DIR}/${basename}.d")
-                endif()
-            elseif (CMAKE_GENERATOR MATCHES "Make")
-                set(dep_args IMPLICIT_DEPENDS CXX "${SOURCE}")
-            endif ()
+            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S -MD -MF "${basename}.d")
 
             if (Halide_CLANG_TIDY_BUILD)
                 # Create a 'fake' entry just so that clang-tidy will see a C++ compilation command
@@ -264,9 +241,9 @@ foreach (i IN LISTS RUNTIME_CPP)
                 target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
             else()
                 add_custom_command(OUTPUT "${LL}"
-                                   COMMAND Halide::clang ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
+                                   COMMAND ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:Halide::clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
                                    DEPENDS "${SOURCE}"
-                                   ${dep_args}
+                                   DEPFILE "${basename}.d"
                                    VERBATIM)
             endif()
 
@@ -291,28 +268,11 @@ foreach (i IN LISTS RUNTIME_LL)
     set(BC "initmod.${i}.bc")
     set(INITMOD "_initmod_${i}.cpp")
 
-    # For LLVM14+, we must add elementtype() annotations to some of our LLVM IR;
-    # earlier versions either don't understand that keyword at all, or don't support
-    # the uses we have for it. Rather than forking these sources, for now we'll just
-    # edit the files at build time to remove the offending uses. Note that `sed` and friends aren't
-    # an option for CMake builds (since they must support Windows environments without
-    # such tooling).
-    #
-    # (This may well need attention in the future, depending on how the LLVM opaque-pointers work proceeeds;
-    # see https://llvm.org/docs/OpaquePointers.html)
-
     set(LL_TRANSFORMED "${LL}.transformed.ll")
-    if (HalideLLVM_VERSION VERSION_LESS 14.0.0)
-        add_custom_command(OUTPUT "${LL_TRANSFORMED}"
-                           COMMAND regexp_replace "elementtype\\(i[0-9]+\\)" "" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" > "${LL_TRANSFORMED}"
-                           DEPENDS "${LL}" regexp_replace
-                           VERBATIM)
-    else ()
-        add_custom_command(OUTPUT "${LL_TRANSFORMED}"
-                           COMMAND ${CMAKE_COMMAND} -E copy "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" "${LL_TRANSFORMED}"
-                           DEPENDS "${LL}"
-                           VERBATIM)
-    endif ()
+    add_custom_command(OUTPUT "${LL_TRANSFORMED}"
+                       COMMAND ${CMAKE_COMMAND} -E copy "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" "${LL_TRANSFORMED}"
+                       DEPENDS "${LL}"
+                       VERBATIM)
 
     add_custom_command(OUTPUT "${BC}"
                        COMMAND Halide::llvm-as "${LL_TRANSFORMED}" -o "${BC}"

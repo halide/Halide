@@ -6,6 +6,7 @@
 #include "Simplify.h"
 #include "SimplifyCorrelatedDifferences.h"
 #include "Substitute.h"
+#include "UniquifyVariableNames.h"
 
 using std::pair;
 using std::vector;
@@ -124,7 +125,9 @@ public:
 }  // namespace
 
 Stmt unroll_loops(const Stmt &s) {
-    return UnrollLoops().mutate(s);
+    Stmt stmt = UnrollLoops().mutate(s);
+    // Unrolling duplicates variable names. Other passes assume variable names are unique.
+    return uniquify_variable_names(stmt);
 }
 
 }  // namespace Internal

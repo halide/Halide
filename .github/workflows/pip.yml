@@ -1,0 +1,215 @@
+# Relevant GHA docs links:
+# https://docs.github.com/en/actions/using-jobs/running-jobs-in-a-container
+# https://docs.github.com/en/packages/managing-github-packages-using-github-actions-workflows/publishing-and-installing-a-package-with-github-actions#upgrading-a-workflow-that-accesses-ghcrio
+
+name: Build PyPI package
+
+on:
+  push:
+    branches: [ main ]
+  release:
+    types: [ created ]
+
+concurrency:
+  group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+env:
+  LLVM_VER: 15.0.1
+
+permissions:
+  contents: read  #  to fetch code (actions/checkout)
+  packages: read  #  to fetch packages (docker)
+
+jobs:
+  pip-linux:
+    name: Package Halide Python bindings
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [ x86_64, aarch64 ]
+
+    steps:
+      - uses: actions/checkout@v3.1.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2.1.0
+        with:
+          platforms: all
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.11.2
+        env:
+          CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
+          CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux*"
+          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
+          # CIBW_MANYLINUX_I686_IMAGE: ghcr.io/halide/manylinux2014_i686-llvm:${{ env.LLVM_VER }}
+          CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
+          CIBW_BEFORE_ALL_LINUX: >
+            cmake -G Ninja -S . -B build
+            -DCMAKE_BUILD_TYPE=Release -DWITH_DOCS=NO -DWITH_PYTHON_BINDINGS=NO -DWITH_TESTS=NO
+            -DWITH_TUTORIALS=NO -DWITH_UTILS=NO -DWITH_PYTHON_STUBS=NO &&
+            cmake --build build --target install
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: ./wheelhouse/*.whl
+
+  pip-other:
+    name: Package Halide Python bindings
+
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            pytag: win_amd64
+            arch: x64
+
+          - runner: macos-latest
+            pytag: macosx_universal2
+            arch: x86_64;arm64
+
+    steps:
+      - uses: actions/checkout@v3.1.0
+
+      - name: Cache LLVM build folder
+        id: cache-llvm
+        uses: actions/cache@v3.0.11
+        with:
+          path: local-llvm
+          key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
+
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: lukka/get-cmake@latest
+
+      - uses: actions/checkout@v3.1.0
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        with:
+          path: llvm-src
+          repository: llvm/llvm-project
+          ref: llvmorg-${{ env.LLVM_VER }}
+
+      - name: Configure LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: >
+          cmake -G Ninja -S llvm-src/llvm -B llvm-build
+          -DCMAKE_BUILD_TYPE=Release
+          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+          "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly"
+          "-DLLVM_ENABLE_PROJECTS=clang;lld"
+          -DLLVM_ENABLE_ASSERTIONS=ON
+          -DLLVM_ENABLE_RTTI=ON
+          -DLLVM_ENABLE_EH=ON
+          -DLLVM_ENABLE_LIBXML2=OFF
+          -DLLVM_ENABLE_TERMINFO=OFF
+          -DLLVM_ENABLE_ZSTD=OFF
+          -DLLVM_ENABLE_ZLIB=OFF
+          -DLLVM_ENABLE_OCAMLDOC=OFF
+          -DLLVM_ENABLE_BINDINGS=OFF
+          -DLLVM_ENABLE_IDE=OFF
+
+      - name: Build LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: cmake --build llvm-build
+
+      - name: Install LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: cmake --install llvm-build --prefix local-llvm
+
+      # Remove the LLVM source tree after building it, otherwise we can
+      # run out of local space while building halide
+      - name: Clean LLVM Source
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        shell: bash
+        run: rm -rf llvm-src
+
+      - name: Configure Halide
+        if: runner.os == 'Windows'
+        run: >
+          cmake -G "Visual Studio 17 2022" -T ClangCL -A "${{ matrix.arch }}" -S . -B halide-build
+          -DWITH_DOCS=NO
+          -DWITH_PYTHON_BINDINGS=NO
+          -DWITH_TESTS=NO
+          -DWITH_TUTORIALS=NO
+          -DWITH_UTILS=NO
+          -DWITH_PYTHON_STUBS=NO
+          -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
+
+      - name: Configure Halide
+        if: runner.os != 'Windows'
+        run: >
+          cmake -G Ninja -S . -B halide-build
+          -DCMAKE_BUILD_TYPE=Release
+          "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
+          -DWITH_DOCS=NO
+          -DWITH_PYTHON_BINDINGS=NO
+          -DWITH_TESTS=NO
+          -DWITH_TUTORIALS=NO
+          -DWITH_UTILS=NO
+          -DWITH_PYTHON_STUBS=NO
+          -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
+
+      - name: Build Halide
+        run: cmake --build halide-build --config Release
+
+      - name: Install Halide
+        run: cmake --install halide-build --config Release --prefix local-halide
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.10.2
+        env:
+          CMAKE_PREFIX_PATH: ${{ github.workspace }}/local-halide
+          CIBW_BUILD: "cp38-${{ matrix.pytag }} cp39-${{ matrix.pytag }} cp310-${{ matrix.pytag }}"
+          CIBW_ARCHS_MACOS: "universal2"
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: ./wheelhouse/*.whl
+
+  pip-sdist:
+    name: Make SDist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3.1.0
+      - run: pipx run build --sdist
+      - uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist/*.tar.gz
+
+  publish:
+    name: Publish on PyPI
+    needs: [ pip-linux, pip-other, pip-sdist ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: wheels
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@v1.5.1
+        with:
+          user: __token__
+          password: ${{ secrets.TEST_PYPI_TOKEN }}
+          repository_url: https://test.pypi.org/legacy/
+
+      - uses: pypa/gh-action-pypi-publish@v1.5.1
+        if: github.event_name == 'release' && github.event.action == 'published'
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_TOKEN }}

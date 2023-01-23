@@ -8,6 +8,7 @@
 #include "Debug.h"
 #include "IREquality.h"
 #include "IRMatch.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
@@ -30,6 +31,71 @@ using namespace llvm;
 
 namespace {
 
+// Substitute in loads that feed into slicing shuffles, to help with vld2/3/4
+// emission. These are commonly lifted as lets because they get used by multiple
+// interleaved slices of the same load.
+class SubstituteInStridedLoads : public IRMutator {
+    Scope<Expr> loads;
+    std::map<std::string, std::vector<std::string>> vars_per_buffer;
+    std::set<std::string> poisoned_vars;
+
+    template<typename LetOrLetStmt>
+    auto visit_let(const LetOrLetStmt *op) -> decltype(op->body) {
+        const Load *l = op->value.template as<Load>();
+        const Ramp *r = l ? l->index.as<Ramp>() : nullptr;
+        auto body = op->body;
+        if (r && is_const_one(r->stride)) {
+            ScopedBinding bind(loads, op->name, op->value);
+            vars_per_buffer[l->name].push_back(op->name);
+            body = mutate(op->body);
+            vars_per_buffer[l->name].pop_back();
+            poisoned_vars.erase(l->name);
+        } else {
+            body = mutate(op->body);
+        }
+
+        // Unconditionally preserve the let, because there may be unsubstituted uses of
+        // it. It'll get dead-stripped by LLVM if not.
+        return LetOrLetStmt::make(op->name, op->value, body);
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
+    }
+
+    // Avoid substituting a load over an intervening store
+    Stmt visit(const Store *op) override {
+        auto it = vars_per_buffer.find(op->name);
+        if (it != vars_per_buffer.end()) {
+            for (const auto &v : it->second) {
+                poisoned_vars.insert(v);
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Shuffle *op) override {
+        int stride = op->slice_stride();
+        const Variable *var = op->vectors[0].as<Variable>();
+        if (var &&
+            poisoned_vars.count(var->name) == 0 &&
+            op->vectors.size() == 1 &&
+            2 <= stride && stride <= 4 &&
+            op->slice_begin() < stride &&
+            loads.contains(var->name)) {
+            return Shuffle::make_slice({loads.get(var->name)}, op->slice_begin(), op->slice_stride(), op->type.lanes());
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    using IRMutator::visit;
+};
+
 /** A code generator that emits ARM code from a given Halide stmt. */
 class CodeGen_ARM : public CodeGen_Posix {
 public:
@@ -42,7 +108,10 @@ protected:
     /** Assuming 'inner' is a function that takes two vector arguments, define a wrapper that
      * takes one vector argument and splits it into two to call inner. */
     llvm::Function *define_concat_args_wrapper(llvm::Function *inner, const string &name);
+
     void init_module() override;
+    void compile_func(const LoweredFunc &f,
+                      const std::string &simple_name, const std::string &extern_name) override;
 
     /** Nodes for which we want to emit specific neon intrinsics */
     // @{
@@ -52,6 +121,7 @@ protected:
     void visit(const Max *) override;
     void visit(const Store *) override;
     void visit(const Load *) override;
+    void visit(const Shuffle *) override;
     void visit(const Call *) override;
     void visit(const LT *) override;
     void visit(const LE *) override;
@@ -142,43 +212,43 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     // TODO: We need to match rounding shift right, and negate the RHS.
 
     // SQRSHRN, SQRSHRUN, UQRSHRN - Saturating rounding narrowing shift right narrow (by immediate in [1, output bits])
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_u16x_, wild_u16_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_u32x_, wild_u32_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, wild_u64_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", i8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_u16x_, wild_u16_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", i16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_u32x_, wild_u32_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, wild_u64_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
 
     // SQSHL, UQSHL, SQSHLU - Saturating shift left by signed register.
     for (const Expr &rhs : {wild_i8x_, wild_u8x_}) {
-        casts.emplace_back("saturating_shift_left", i8_sat(widening_shift_left(wild_i8x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_u8x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_i8x_, rhs)));
+        calls.emplace_back("saturating_shift_left", i8_sat(widening_shift_left(wild_i8x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_u8x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_i8x_, rhs)));
     }
     for (const Expr &rhs : {wild_i16x_, wild_u16x_}) {
-        casts.emplace_back("saturating_shift_left", i16_sat(widening_shift_left(wild_i16x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_u16x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_i16x_, rhs)));
+        calls.emplace_back("saturating_shift_left", i16_sat(widening_shift_left(wild_i16x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_u16x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_i16x_, rhs)));
     }
     for (const Expr &rhs : {wild_i32x_, wild_u32x_}) {
-        casts.emplace_back("saturating_shift_left", i32_sat(widening_shift_left(wild_i32x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_u32x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_i32x_, rhs)));
+        calls.emplace_back("saturating_shift_left", i32_sat(widening_shift_left(wild_i32x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_u32x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_i32x_, rhs)));
     }
 
     // SQSHRN, UQSHRN, SQRSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
-    casts.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> wild_u16_));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> wild_u16_));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> wild_u16_));
-    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> wild_u32_));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> wild_u32_));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> wild_u32_));
-    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> wild_u64_));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> wild_u64_));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> wild_u64_));
+    calls.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> wild_u16_));
+    calls.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> wild_u16_));
+    calls.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> wild_u16_));
+    calls.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> wild_u32_));
+    calls.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> wild_u32_));
+    calls.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> wild_u32_));
+    calls.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> wild_u64_));
+    calls.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> wild_u64_));
+    calls.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> wild_u64_));
 
     // SRSHL, URSHL - Rounding shift left (by signed vector)
     // These are already written as rounding_shift_left
@@ -190,15 +260,15 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     // These patterns are almost identity, we just need to strip off the broadcast.
 
     // SQXTN, UQXTN, SQXTUN - Saturating narrow.
-    casts.emplace_back("saturating_narrow", i8_sat(wild_i16x_));
-    casts.emplace_back("saturating_narrow", u8_sat(wild_u16x_));
-    casts.emplace_back("saturating_narrow", u8_sat(wild_i16x_));
-    casts.emplace_back("saturating_narrow", i16_sat(wild_i32x_));
-    casts.emplace_back("saturating_narrow", u16_sat(wild_u32x_));
-    casts.emplace_back("saturating_narrow", u16_sat(wild_i32x_));
-    casts.emplace_back("saturating_narrow", i32_sat(wild_i64x_));
-    casts.emplace_back("saturating_narrow", u32_sat(wild_u64x_));
-    casts.emplace_back("saturating_narrow", u32_sat(wild_i64x_));
+    calls.emplace_back("saturating_narrow", i8_sat(wild_i16x_));
+    calls.emplace_back("saturating_narrow", u8_sat(wild_u16x_));
+    calls.emplace_back("saturating_narrow", u8_sat(wild_i16x_));
+    calls.emplace_back("saturating_narrow", i16_sat(wild_i32x_));
+    calls.emplace_back("saturating_narrow", u16_sat(wild_u32x_));
+    calls.emplace_back("saturating_narrow", u16_sat(wild_i32x_));
+    calls.emplace_back("saturating_narrow", i32_sat(wild_i64x_));
+    calls.emplace_back("saturating_narrow", u32_sat(wild_u64x_));
+    calls.emplace_back("saturating_narrow", u32_sat(wild_i64x_));
 
     // SQNEG - Saturating negate
     negations.emplace_back("saturating_negate", -max(wild_i8x_, -127));
@@ -239,6 +309,13 @@ const ArmIntrinsic intrinsic_defs[] = {
 
     {"llvm.sqrt", "llvm.sqrt", Float(32, 2), "sqrt_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"llvm.sqrt", "llvm.sqrt", Float(64, 2), "sqrt_f64", {Float(64, 2)}},
+
+    {"llvm.roundeven", "llvm.roundeven", Float(16, 8), "round", {Float(16, 8)}, ArmIntrinsic::RequireFp16},
+    {"llvm.roundeven", "llvm.roundeven", Float(32, 4), "round", {Float(32, 4)}},
+    {"llvm.roundeven", "llvm.roundeven", Float(64, 2), "round", {Float(64, 2)}},
+    {"llvm.roundeven.f16", "llvm.roundeven.f16", Float(16), "round", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
+    {"llvm.roundeven.f32", "llvm.roundeven.f32", Float(32), "round", {Float(32)}, ArmIntrinsic::NoMangle},
+    {"llvm.roundeven.f64", "llvm.roundeven.f64", Float(64), "round", {Float(64)}, ArmIntrinsic::NoMangle},
 
     // SABD, UABD - Absolute difference
     {"vabds", "sabd", UInt(8, 8), "absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -599,7 +676,6 @@ const std::set<string> float16_native_funcs = {
     "is_finite_f16",
     "is_inf_f16",
     "is_nan_f16",
-    "round_f16",
     "sqrt_f16",
     "trunc_f16",
 };
@@ -752,7 +828,7 @@ void CodeGen_ARM::init_module() {
                 intrin_impl = get_llvm_intrin(ret_type, mangled_name, arg_types, scalars_are_vectors);
             }
 
-            intrin_impl->addFnAttr(llvm::Attribute::ReadNone);
+            function_does_not_access_memory(intrin_impl);
             intrin_impl->addFnAttr(llvm::Attribute::NoUnwind);
             declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
             if (intrin.flags & ArmIntrinsic::AllowUnsignedOp1) {
@@ -762,6 +838,22 @@ void CodeGen_ARM::init_module() {
             }
         }
     }
+}
+
+void CodeGen_ARM::compile_func(const LoweredFunc &f,
+                               const string &simple_name,
+                               const string &extern_name) {
+
+    LoweredFunc func = f;
+
+    if (target.os != Target::IOS && target.os != Target::OSX) {
+        // Substitute in strided loads to get vld2/3/4 emission. We don't do it
+        // on Apple silicon, because doing a dense load and then shuffling is
+        // actually faster.
+        func.body = SubstituteInStridedLoads().mutate(func.body);
+    }
+
+    CodeGen_Posix::compile_func(func, simple_name, extern_name);
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
@@ -795,38 +887,6 @@ void CodeGen_ARM::visit(const Cast *op) {
             t.bits() == op->value.type().bits() * 2) {
             if (const Call *absd = Call::as_intrinsic(op->value, {Call::absd})) {
                 value = call_overloaded_intrin(t, "widening_absd", absd->args);
-                return;
-            }
-        }
-
-        // If we didn't find a pattern, try rewriting the cast.
-        static const vector<pair<Expr, Expr>> cast_rewrites = {
-            // Double or triple narrowing saturating casts are better expressed as
-            // regular narrowing casts.
-            {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
-            {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
-            {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
-            {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
-            {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
-            {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
-            {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
-            {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
-            {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
-            {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
-            {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
-            {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
-            {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
-            {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
-            {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
-            {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
-            {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
-            {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
-        };
-        for (const auto &i : cast_rewrites) {
-            if (expr_match(i.first, op, matches)) {
-                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
-                debug(3) << "rewriting cast to: " << replacement << " from " << Expr(op) << "\n";
-                value = codegen(replacement);
                 return;
             }
         }
@@ -881,7 +941,7 @@ void CodeGen_ARM::visit(const Sub *op) {
         Value *b = codegen(op->b);
 
         if (op->type.lanes() > 1) {
-            a = ConstantVector::getSplat(element_count(op->type.lanes()), a);
+            a = get_splat(op->type.lanes(), a);
         }
         value = builder->CreateFSub(a, b);
         return;
@@ -1118,9 +1178,9 @@ void CodeGen_ARM::visit(const Load *op) {
         return;
     }
 
-    // If the stride is in [-1, 4], we can deal with that using vanilla codegen
+    // If the stride is in [-1, 1], we can deal with that using vanilla codegen
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
-    if (stride && (-1 <= stride->value && stride->value <= 4)) {
+    if (stride && (-1 <= stride->value && stride->value <= 1)) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1149,6 +1209,29 @@ void CodeGen_ARM::visit(const Load *op) {
     CodeGen_Posix::visit(op);
 }
 
+void CodeGen_ARM::visit(const Shuffle *op) {
+    // For small strided loads on non-Apple hardware, we may want to use vld2,
+    // vld3, vld4, etc. These show up in the IR as slice shuffles of wide dense
+    // loads. LLVM expects the same. The base codegen class breaks the loads
+    // into native vectors, which triggers shuffle instructions rather than
+    // vld2, vld3, vld4. So here we explicitly do the load as a single big dense
+    // load.
+    int stride = op->slice_stride();
+    const Load *load = op->vectors[0].as<Load>();
+    if (target.os != Target::IOS && target.os != Target::OSX &&
+        load &&
+        op->vectors.size() == 1 &&
+        2 <= stride && stride <= 4 &&
+        op->slice_begin() < stride &&
+        load->type.lanes() == stride * op->type.lanes()) {
+
+        value = codegen_dense_vector_load(load, nullptr, /* slice_to_native */ false);
+        value = shuffle_vectors(value, op->indices);
+    } else {
+        CodeGen_Posix::visit(op);
+    }
+}
+
 void CodeGen_ARM::visit(const Call *op) {
     if (op->is_intrinsic(Call::sorted_avg)) {
         value = codegen(halving_add(op->args[0], op->args[1]));
@@ -1171,16 +1254,73 @@ void CodeGen_ARM::visit(const Call *op) {
         // We want these as left shifts with a negative b instead.
         value = codegen(op->args[0] << simplify(-op->args[1]));
         return;
+    } else if (op->is_intrinsic(Call::round)) {
+        // llvm's roundeven intrinsic reliably lowers to the correct
+        // instructions on aarch64, but despite having the same instruction
+        // available, it doesn't seem to work for arm-32.
+        if (target.bits == 64) {
+            value = call_overloaded_intrin(op->type, "round", op->args);
+            if (value) {
+                return;
+            }
+        } else if (target.os != Target::Linux) {
+            // Furthermore, roundevenf isn't always in the standard library on arm-32
+            value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
+            return;
+        }
     }
 
     if (op->type.is_vector()) {
         vector<Expr> matches;
         for (const Pattern &pattern : calls) {
             if (expr_match(pattern.pattern, op, matches)) {
+                if (pattern.intrin.find("shift_right_narrow") != string::npos) {
+                    // The shift_right_narrow patterns need the shift to be constant in [1, output_bits].
+                    const uint64_t *const_b = as_const_uint(matches[1]);
+                    if (!const_b || *const_b == 0 || (int)*const_b > op->type.bits()) {
+                        continue;
+                    }
+                }
+                if (target.bits == 32 && pattern.intrin.find("shift_right") != string::npos) {
+                    // The 32-bit ARM backend wants right shifts as negative values.
+                    matches[1] = simplify(-cast(matches[1].type().with_code(halide_type_int), matches[1]));
+                }
                 value = call_overloaded_intrin(op->type, pattern.intrin, matches);
                 if (value) {
                     return;
                 }
+            }
+        }
+
+        // If we didn't find a pattern, try rewriting any saturating casts.
+        static const vector<pair<Expr, Expr>> cast_rewrites = {
+            // Double or triple narrowing saturating casts are better expressed as
+            // combinations of single narrowing saturating casts.
+            {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
+            {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
+            {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
+            {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
+            {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
+            {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
+            {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
+            {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
+            {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
+            {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
+            {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
+            {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
+            {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
+            {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
+            {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
+            {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
+        };
+        for (const auto &i : cast_rewrites) {
+            if (expr_match(i.first, op, matches)) {
+                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
+                debug(3) << "rewriting cast to: " << replacement << " from " << Expr(op) << "\n";
+                value = codegen(replacement);
+                return;
             }
         }
     }
@@ -1320,6 +1460,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         if (narrow.defined()) {
             if (init.defined() && target.bits == 32) {
                 // On 32-bit, we have an intrinsic for widening add-accumulate.
+                // TODO: this could be written as a pattern with widen_right_add (#6951).
                 intrin = "pairwise_widening_add_accumulate";
                 intrin_args = {accumulator, narrow};
                 accumulator = Expr();
