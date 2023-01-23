@@ -546,10 +546,9 @@ if (TARGET_OPENGLCOMPUTE)
 endif ()
 
 if (TARGET_SPIRV)
-    # Our vendored SPIRV headers are only used internally; users do not need
-    # them installed.
+    # The SPIRV headers are only used internally; users do not need them installed.
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
-    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:Halide::SPIRV>")
+    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:SPIRV-Headers::SPIRV-Headers>")
 endif ()
 
 ##

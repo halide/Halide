@@ -136,7 +136,7 @@ function(_FindHalideLLVM)
     # Check the LLVM version
     if (LLVM_FOUND)
         set(llvm_min_ver 12.0.0)
-        set(llvm_max_ver 15.0)
+        set(llvm_max_ver 16.0)
         if (llvm_found_version VERSION_LESS llvm_min_ver)
             # We didn't find LLVM if version is too old.
             set(LLVM_FOUND 0)

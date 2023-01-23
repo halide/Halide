@@ -17,7 +17,6 @@ include(CheckCXXSymbolExists)
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(HalideGeneratorHelpers)
-include(MakeShellPath)
 
 get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 
@@ -177,24 +176,17 @@ mark_as_advanced(Halide_SOVERSION_OVERRIDE)
 # Apply project-wide options
 ##
 
-# Require standard C++17
-set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use. Halide requires 17 or higher.")
-option(CMAKE_CXX_STANDARD_REQUIRED "When enabled, the value of CMAKE_CXX_STANDARD is a requirement." ON)
-option(CMAKE_CXX_EXTENSIONS "When enabled, compiler-specific language extensions are enabled (e.g. -std=gnu++17)" OFF)
-
-if(CMAKE_CXX_STANDARD LESS 17)
+## Validate language standard settings
+if (CMAKE_CXX_STANDARD LESS 17)
     message(FATAL_ERROR "Halide requires C++17 or newer but CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
-endif()
+endif ()
 
-# Validate RTTI compatibility with LLVM
+## Validate RTTI compatibility with LLVM
 if (Halide_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
     message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
 endif ()
 
-# Build Halide with ccache if the package is present
-option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
-mark_as_advanced(Halide_CCACHE_BUILD)
-
+## Enable CCache build when requested by the user (for convenience)
 if (Halide_CCACHE_BUILD)
     find_program(CCACHE_PROGRAM ccache REQUIRED)
 
@@ -212,8 +204,8 @@ if (Halide_CCACHE_BUILD)
     message(STATUS "Enabling ccache usage for building.")
 endif ()
 
-# Detect whether or not ASAN is enabled. Don't cache the result to ensure this
-# check happens every time we reconfigure.
+## Detect whether or not ASAN is enabled. Don't cache the result to ensure this
+## check happens every time we reconfigure.
 unset(Halide_ASAN_ENABLED CACHE)
 check_cxx_symbol_exists(HALIDE_INTERNAL_USING_ASAN "${Halide_SOURCE_DIR}/src/Util.h" Halide_ASAN_ENABLED)
 
@@ -223,27 +215,10 @@ else ()
     set(Halide_ANY_SANITIZERS_ENABLED 0)
 endif ()
 
-##
-# Declare options
-##
-
-# Declare these options after we include dependencies (since it declares Halide_ENABLE_RTTI etc)
-# but before we add any subdirectories, since any option you test before it is defined is
-# implicitly false the *first* time that the build file is processed, and there are some
-# out-of-order dependencies here (e.g, code in src/ eventually checks WITH_UTILS).
-# This is especially subtle since it means that some options can end up with different
-# values if you build a target as part of the initial CMake run, so (e.g.) a `make install`
-# from as totally clean build might neglect to install some pieces.
-
-option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
-option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
-option(WITH_DOCS "Build documentation" OFF)
-option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
-cmake_dependent_option(
-    WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
-    "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
-)
-
+## Find SPIR-V dependency if that backend was requested
+if (TARGET_SPIRV)
+    find_package(SPIRV-Headers REQUIRED)
+endif ()
 
 ##
 # Add source directories
