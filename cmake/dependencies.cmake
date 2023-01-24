@@ -30,10 +30,19 @@ FetchContent_Declare(
 )
 
 function(Halide_provide_dependency method dep_name)
-    if ("${dep_name}" MATCHES "^(pybind11|SPIRV-Headers)$")
+    if (dep_name STREQUAL "pybind11")
         FetchContent_MakeAvailable("${dep_name}")
+
         set(${dep_name}_FOUND TRUE PARENT_SCOPE)
-    elseif ("${dep_name}" MATCHES "^wabt$")
+    elseif (dep_name STREQUAL "SPIRV-Headers")
+        FetchContent_MakeAvailable("${dep_name}")
+
+        if (NOT TARGET SPIRV-Headers::SPIRV-Headers)
+            add_library(SPIRV-Headers::SPIRV-Headers ALIAS SPIRV-Headers)
+        endif ()
+
+        set(${dep_name}_FOUND TRUE PARENT_SCOPE)
+    elseif (dep_name STREQUAL "wabt")
         set(BUILD_TESTS 0)
         set(BUILD_TOOLS 0)
         set(BUILD_LIBWASM 0)
@@ -43,6 +52,7 @@ function(Halide_provide_dependency method dep_name)
         endif ()
 
         FetchContent_MakeAvailable("${dep_name}")
+
         set(${dep_name}_FOUND TRUE PARENT_SCOPE)
     endif ()
 endfunction()
