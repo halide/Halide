@@ -123,7 +123,7 @@ endforeach ()
 ## WebAssembly target requires wasm
 if (TARGET_WEBASSEMBLY)
     if (WITH_WABT)
-        find_package(WABT REQUIRED)
+        find_package(wabt REQUIRED)
     endif ()
 
     if (WITH_V8)

@@ -163,6 +163,11 @@ function(_FindHalideLLVM)
         if (Clang IN_LIST "${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS")
             find_package(Clang ${quiet} HINTS "${LLVM_DIR}/../clang" "${LLVM_DIR}/../lib/cmake/clang")
 
+            if (NOT LLVM_PACKAGE_VERSION)
+                # LLVM 16+ packages set LLVM_VERSION instead of LLVM_PACKAGE_VERSION
+                set(LLVM_PACKAGE_VERSION "${LLVM_VERSION}")
+            endif ()
+
             # Validate Clang version
             if (Clang_FOUND AND NOT LLVM_PACKAGE_VERSION VERSION_EQUAL llvm_found_version)
                 set(Clang_FOUND 0)
@@ -179,6 +184,11 @@ function(_FindHalideLLVM)
 
         if (LLD IN_LIST "${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS")
             find_package(LLD ${quiet} HINTS "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")
+
+            if (NOT LLVM_PACKAGE_VERSION)
+                # LLVM 16+ packages set LLVM_VERSION instead of LLVM_PACKAGE_VERSION
+                set(LLVM_PACKAGE_VERSION "${LLVM_VERSION}")
+            endif ()
 
             # Validate LLD version
             if (LLD_FOUND AND NOT LLVM_PACKAGE_VERSION VERSION_EQUAL llvm_found_version)
