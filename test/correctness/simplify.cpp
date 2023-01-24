@@ -712,6 +712,23 @@ void check_vectors() {
     }
 
     {
+        Expr vx = Variable::make(Int(32, 32), "x");
+        Expr vy = Variable::make(Int(32, 32), "y");
+        Expr vz = Variable::make(Int(32, 8), "z");
+        Expr vw = Variable::make(Int(32, 16), "w");
+        // Check that vector slices are hoisted.
+        check(slice(vx, 0, 2, 8) + slice(vy, 0, 2, 8), slice(vx + vy, 0, 2, 8));
+        check(slice(vx, 0, 2, 8) + (slice(vy, 0, 2, 8) + vz), slice(vx + vy, 0, 2, 8) + vz);
+        check(slice(vx, 0, 2, 8) + (vz + slice(vy, 0, 2, 8)), slice(vx + vy, 0, 2, 8) + vz);
+        // Check that degenerate vector slices are not hoisted.
+        check(slice(vx, 0, 2, 1) + slice(vy, 0, 2, 1), slice(vx, 0, 2, 1) + slice(vy, 0, 2, 1));
+        check(slice(vx, 0, 2, 1) + (slice(vy, 0, 2, 1) + z), slice(vx, 0, 2, 1) + (slice(vy, 0, 2, 1) + z));
+        // Check slices are only hoisted when the lanes of the sliced vectors match.
+        check(slice(vx, 0, 2, 8) + slice(vw, 0, 2, 8), slice(vx, 0, 2, 8) + slice(vw, 0, 2, 8));
+        check(slice(vx, 0, 2, 8) + (slice(vw, 0, 2, 8) + vz), slice(vx, 0, 2, 8) + (slice(vw, 0, 2, 8) + vz));
+    }
+
+    {
         // A predicated store with a provably-false predicate.
         Expr pred = ramp(x * y + x * z, 2, 8) > 2;
         Expr index = ramp(x + y, 1, 8);

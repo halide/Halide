@@ -3,7 +3,6 @@
 #include <condition_variable>
 #include <fstream>
 #include <memory>
-#include <thread>
 #include <unordered_map>
 #include <utility>
 
@@ -896,49 +895,7 @@ gengen
         user_error << o.str();
     }
 
-    {
-        // TODO: should we move the TimeoutMonitor stuff to execute_generator?
-        // It seems more likely to be useful here.
-
-        struct TimeoutMonitor {
-            std::atomic<bool> generator_finished = false;
-            std::thread thread;
-            std::condition_variable cond_var;
-            std::mutex mutex;
-
-            // Kill the timeout monitor as a destructor to ensure the thread
-            // gets joined in the event of an exception
-            ~TimeoutMonitor() {
-                generator_finished = true;
-                cond_var.notify_all();
-                thread.join();
-            }
-        } monitor;
-
-        const int timeout_in_seconds = std::stoi(flags_info["-t"]);
-        const auto timeout_time = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_in_seconds);
-        monitor.thread = std::thread([timeout_time, timeout_in_seconds, &monitor]() {
-            std::unique_lock<std::mutex> lock(monitor.mutex);
-
-            if (timeout_in_seconds <= 0) {
-                // No watchdog timer, just let it run as long as it likes.
-                return;
-            }
-            while (!monitor.generator_finished) {
-                auto now = std::chrono::steady_clock::now();
-                if (now > timeout_time) {
-                    fprintf(stderr, "Timed out waiting for Generator to complete (%d seconds)!\n", timeout_in_seconds);
-                    fflush(stdout);
-                    fflush(stderr);
-                    exit(1);
-                } else {
-                    monitor.cond_var.wait_for(lock, timeout_time - now);
-                }
-            }
-        });
-
-        execute_generator(args);
-    }
+    execute_generator(args);
     return 0;
 }
 

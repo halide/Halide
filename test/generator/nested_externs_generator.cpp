@@ -17,7 +17,7 @@ public:
     Output<Buffer<>> combine{"combine"};  // unspecified type-and-dim will be inferred
 
     void generate() {
-        Var x, y, c;
+        Var x{"x"}, y{"y"}, c{"c"};
         combine(x, y, c) = input_a(x, y, c) + input_b(x, y, c);
     }
 
@@ -35,10 +35,11 @@ public:
     Output<Buffer<float, 3>> inner{"inner"};
 
     void generate() {
-        extern_stage_1.define_extern("nested_externs_leaf", {value}, Float(32), 3);
-        extern_stage_2.define_extern("nested_externs_leaf", {value + 1}, Float(32), 3);
+        Expr ucon = user_context_value();
+        extern_stage_1.define_extern("nested_externs_leaf", {ucon, value}, Float(32), 3);
+        extern_stage_2.define_extern("nested_externs_leaf", {ucon, value + 1}, Float(32), 3);
         extern_stage_combine.define_extern("nested_externs_combine",
-                                           {extern_stage_1, extern_stage_2}, Float(32), 3);
+                                           {ucon, extern_stage_1, extern_stage_2}, Float(32), 3);
         inner(x, y, c) = extern_stage_combine(x, y, c);
     }
 
@@ -51,8 +52,10 @@ public:
     }
 
 private:
-    Var x, y, c;
-    Func extern_stage_1, extern_stage_2, extern_stage_combine;
+    Var x{"x"}, y{"y"}, c{"c"};
+    Func extern_stage_1{"extern_stage_1_inner"},
+        extern_stage_2{"extern_stage_2_inner"},
+        extern_stage_combine{"extern_stage_combine_inner"};
 };
 
 // Basically a memset.
@@ -62,7 +65,7 @@ public:
     Output<Buffer<float, 3>> leaf{"leaf"};
 
     void generate() {
-        Var x, y, c;
+        Var x{"x"}, y{"y"}, c{"c"};
         leaf(x, y, c) = value;
     }
 
@@ -80,10 +83,11 @@ public:
     Output<Buffer<float, 3>> root{"root"};
 
     void generate() {
-        extern_stage_1.define_extern("nested_externs_inner", {value()}, Float(32), 3);
-        extern_stage_2.define_extern("nested_externs_inner", {value() + 1}, Float(32), 3);
+        Expr ucon = user_context_value();
+        extern_stage_1.define_extern("nested_externs_inner", {ucon, value()}, Float(32), 3);
+        extern_stage_2.define_extern("nested_externs_inner", {ucon, value() + 1}, Float(32), 3);
         extern_stage_combine.define_extern("nested_externs_combine",
-                                           {extern_stage_1, extern_stage_2}, Float(32), 3);
+                                           {ucon, extern_stage_1, extern_stage_2}, Float(32), 3);
         root(x, y, c) = extern_stage_combine(x, y, c);
     }
 
@@ -94,11 +98,14 @@ public:
         }
         set_interleaved(root);
         root.reorder_storage(c, x, y);
+        root.parallel(y, 8);
     }
 
 private:
-    Var x, y, c;
-    Func extern_stage_1, extern_stage_2, extern_stage_combine;
+    Var x{"x"}, y{"y"}, c{"c"};
+    Func extern_stage_1{"extern_stage_1_root"},
+        extern_stage_2{"extern_stage_2_root"},
+        extern_stage_combine{"extern_stage_combine_root"};
 };
 
 }  // namespace

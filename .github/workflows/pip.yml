@@ -109,7 +109,7 @@ jobs:
           cmake -G Ninja -S llvm-src/llvm -B llvm-build
           -DCMAKE_BUILD_TYPE=Release
           "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
-          "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly"
+          "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly"
           "-DLLVM_ENABLE_PROJECTS=clang;lld"
           -DLLVM_ENABLE_ASSERTIONS=ON
           -DLLVM_ENABLE_RTTI=ON

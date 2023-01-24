@@ -1,5 +1,5 @@
 # TODO(aam): Confirm that application builds and runs for all supported targets:
-# APP_ABI := armeabi armeabi-v7a arm64-v8a mips x86_64 x86
+# APP_ABI := armeabi armeabi-v7a arm64-v8a x86_64 x86
 APP_ABI := armeabi-v7a
 APP_PLATFORM := android-17
 

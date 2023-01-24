@@ -15,7 +15,7 @@ if (NOT TARGET Halide::Test)
     add_library(Halide_test INTERFACE)
     add_library(Halide::Test ALIAS Halide_test)
 
-    # Obviously, link to the main library
+    # Obviously link to libHalide, but also grant all tests access to the threads library.
     target_link_libraries(Halide_test INTERFACE Halide::Halide Threads::Threads)
 
     # Everyone gets to see the common headers
