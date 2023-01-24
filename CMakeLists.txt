@@ -55,8 +55,10 @@ endif ()
 
 # LLVM link modes
 option(Halide_SHARED_LLVM "Enable to link to shared LLVM (Linux only)" OFF)
-cmake_dependent_option(Halide_BUNDLE_LLVM "Enable with BUILD_SHARED_LIBS=OFF to bundle LLVM libs with static Halide" OFF
-                       "NOT BUILD_SHARED_LIBS" OFF)
+cmake_dependent_option(
+    Halide_BUNDLE_LLVM "Enable with BUILD_SHARED_LIBS=OFF to bundle LLVM libs with static Halide" OFF
+    "NOT BUILD_SHARED_LIBS" OFF
+)
 
 # LLVM target dependencies
 set(known_llvm_targets AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
@@ -68,9 +70,11 @@ foreach (target IN LISTS known_llvm_targets)
     set("${target_opt}" "OPTIONAL"
         CACHE STRING "Enable ${target} target. Set to 'OPTIONAL' to include if available (the default), or to a true value to require it.")
 
-    if (${target_opt} STREQUAL "OPTIONAL")
+    string(TOUPPER "${${target_opt}}" opt_value)
+
+    if (opt_value STREQUAL "OPTIONAL")
         list(APPEND optional_llvm_targets "${target}")
-    elseif (${target_opt})
+    elseif (opt_value OR opt_value STREQUAL "REQUIRED")
         list(APPEND required_llvm_targets "${target}")
     endif ()
 endforeach ()
