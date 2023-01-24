@@ -156,7 +156,9 @@ inline int halide_popcount_fallback(T a) {
     int bits_set = 0;
     while (a != 0) {
         bits_set += 1;
-        // NOTE(aelphy): remove least significant zeros and the first met one
+        // this is Brian Kernigan's bit counting algorithm
+        // https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan)
+        // removes the least significant one
         a &= a - 1;
     }
     return bits_set;
