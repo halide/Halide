@@ -23,10 +23,6 @@ cmake_dependent_option(
     WITH_TESTS OFF
 )
 
-# Set the expected (downloaded) version of pybind11
-option(PYBIND11_USE_FETCHCONTENT "Enable to download pybind11 via FetchContent" ON)
-set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
-
 ##
 # Dependencies
 ##
@@ -35,24 +31,10 @@ set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
 # Development.Module and Development.Embed. We don't need the Embed
 # part, so only requesting Module avoids failures when Embed is not
 # available, as is the case in the manylinux Docker images.
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
-if (Python3_VERSION VERSION_LESS "3.8")
-    message(FATAL_ERROR "Halide requires Python v3.8 or later, but found ${Python3_VERSION}.")
-endif ()
-
-if (PYBIND11_USE_FETCHCONTENT)
-    include(FetchContent)
-    FetchContent_Declare(
-        pybind11
-        GIT_REPOSITORY https://github.com/pybind/pybind11.git
-        GIT_TAG v${PYBIND11_VER}
-    )
-    FetchContent_MakeAvailable(pybind11)
-else ()
-    find_package(pybind11 ${PYBIND11_VER} REQUIRED)
-endif ()
-
+find_package(Python3 3.8 REQUIRED COMPONENTS Interpreter Development.Module)
+find_package(pybind11 2.6.2 REQUIRED)
 find_package(Halide REQUIRED Halide)
+
 if (NOT Halide_ENABLE_RTTI OR NOT Halide_ENABLE_EXCEPTIONS)
     message(FATAL_ERROR "Python bindings require RTTI and exceptions to be enabled.")
 endif ()

@@ -23,7 +23,7 @@ set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
 
 target_sources(Halide_Generator INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/GenGen.cpp>)
 
-install(TARGETS Halide Halide_Generator Halide_LanguageOptions
+install(TARGETS Halide Halide_Generator
         EXPORT Halide_Targets
         RUNTIME COMPONENT Halide_Runtime
         LIBRARY COMPONENT Halide_Runtime
@@ -37,13 +37,6 @@ if (TARGET Halide_Adams2019)
             LIBRARY DESTINATION ${Halide_INSTALL_PLUGINDIR} COMPONENT Halide_Runtime
             NAMELINK_COMPONENT Halide_Development)
 endif ()
-
-# Halide_LLVM
-foreach (dep IN ITEMS Halide_LLVM Halide_wabt)
-    if (TARGET ${dep})
-        install(TARGETS ${dep} EXPORT Halide_Targets)
-    endif ()
-endforeach ()
 
 ##
 # Library-type-agnostic interface targets
@@ -153,20 +146,35 @@ else ()
     set(type static)
 endif ()
 
-# If Halide explicitly links against shared LLVM or if it is a static library
-# and we are not bundling our static dependencies, then end-users must have
-# the relevant system libraries installed.
-if (Halide_SHARED_LLVM OR (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM))
+# If Halide is a static library, then end-users must have the relevant system libraries installed.
+if (NOT BUILD_SHARED_LIBS)
     set(depFile "${CMAKE_CURRENT_BINARY_DIR}/Halide-${type}-deps.cmake")
-    file(WRITE "${depFile}" "find_dependency(LLVM ${LLVM_PACKAGE_VERSION})\n")
+    file(WRITE "${depFile}" "include(CMakeFindDependencyMacro)\n\n")
+    file(APPEND "${depFile}" "list(APPEND CMAKE_MODULE_PATH \${CMAKE_CURRENT_LIST_DIR})\n\n")
 
-    if (TARGET_WEBASSEMBLY)
-        file(APPEND "${depFile}" [[find_dependency(LLD HINTS "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")]])
+    # We use a dummy target since Halide::WABT is a private wrapper around $<TARGET_OBJECTS>.
+    if (WITH_WABT)
+        file(APPEND "${depFile}" "find_dependency(wabt ${wabt_VERSION} EXACT)\n\n")
     endif ()
 
-    install(FILES "${depFile}"
-            DESTINATION ${Halide_INSTALL_CMAKEDIR}
-            COMPONENT Halide_Development)
+    if (WITH_V8)
+        # TODO: test this
+        file(APPEND "${depFile}" "find_dependency(V8 ${V8_VERSION} EXACT)\n\n")
+
+        install(FILES "${depFile}" "${Halide_SOURCE_DIR}/cmake/FindV8.cmake"
+                DESTINATION ${Halide_INSTALL_CMAKEDIR}
+                COMPONENT Halide_Development)
+    endif ()
+
+    if (NOT Halide_BUNDLE_LLVM)
+        file(APPEND "${depFile}" "set(Halide_SHARED_LLVM \"${Halide_SHARED_LLVM}\")\n")
+        file(APPEND "${depFile}" "set(HalideLLVM_TARGETS \"${HalideLLVM_TARGETS}\")\n")
+        file(APPEND "${depFile}" "find_dependency(HalideLLVM ${HalideLLVM_VERSION} COMPONENTS \${HalideLLVM_TARGETS})\n\n")
+
+        install(FILES "${depFile}" "${Halide_SOURCE_DIR}/cmake/FindHalideLLVM.cmake"
+                DESTINATION ${Halide_INSTALL_CMAKEDIR}
+                COMPONENT Halide_Development)
+    endif ()
 endif ()
 
 install(EXPORT Halide_Targets

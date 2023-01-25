@@ -7,7 +7,7 @@ project(Halide
 enable_testing()
 
 ##
-# Set up project-wide properties
+# Required CMake modules
 ##
 
 # Import useful standard modules
@@ -18,12 +18,12 @@ include(CheckCXXSymbolExists)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(HalideGeneratorHelpers)
 
-# Build Halide as a shared lib by default, but still honor command-line settings.
-option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 
-# Warn if the user did not set a build type and is using a single-configuration generator.
-get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if (NOT IS_MULTI_CONFIG AND NOT DEFINED CMAKE_BUILD_TYPE)
+# Warn if the user is using the wrong kind of build type selection for their generator
+if (CMAKE_BUILD_TYPE AND is_multi_config)
+    message(WARNING "Multi-config generators do not honor CMAKE_BUILD_TYPE.")
+elseif (NOT is_multi_config AND NOT DEFINED CMAKE_BUILD_TYPE)
     message(WARNING "Single-configuration generators require CMAKE_BUILD_TYPE to be set.")
 endif ()
 
@@ -37,22 +37,158 @@ if (CMAKE_SYSTEM_NAME MATCHES "Windows")
     message(STATUS "Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
 endif ()
 
-# Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS
-set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+##
+# Settings for finding dependencies
+##
 
-# Require standard C++17
-set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use. Halide requires 17 or higher.")
-option(CMAKE_CXX_STANDARD_REQUIRED "When enabled, the value of CMAKE_CXX_STANDARD is a requirement." ON)
-option(CMAKE_CXX_EXTENSIONS "When enabled, compiler-specific language extensions are enabled (e.g. -std=gnu++17)" OFF)
+option(THREADS_PREFER_PTHREAD_FLAG "Enable to use the -pthreads flag when available." ON)
 
-if(CMAKE_CXX_STANDARD LESS 17)
-    message(FATAL_ERROR "Halide requires C++17 or newer but CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
-endif()
+if (APPLE)
+    # This changes how find_xxx() commands work; the default is to find frameworks before
+    # standard libraries or headers, but this can be a problem on systems that have Mono
+    # installed, as it has a framework with the libjpeg and libpng  headers present -- so
+    # CMake finds the headers from Mono but the libraries from Homebrew, and hilarity ensues.
+    # Setting this to "last" means we always try the standard libraries before the frameworks.
+    set(CMAKE_FIND_FRAMEWORK "LAST"
+        CACHE STRING "Whether to search for macOS Frameworks FIRST, LAST, ONLY, or NEVER.")
+endif ()
 
-# Build Halide with ccache if the package is present
+# LLVM link modes
+option(Halide_SHARED_LLVM "Enable to link to shared LLVM (Linux only)" OFF)
+cmake_dependent_option(
+    Halide_BUNDLE_LLVM "Enable with BUILD_SHARED_LIBS=OFF to bundle LLVM libs with static Halide" OFF
+    "NOT BUILD_SHARED_LIBS" OFF
+)
+
+# LLVM target dependencies
+set(known_llvm_targets AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
+set(required_llvm_targets "")
+set(optional_llvm_targets "")
+foreach (target IN LISTS known_llvm_targets)
+    string(TOUPPER "TARGET_${target}" target_opt)
+
+    set("${target_opt}" "OPTIONAL"
+        CACHE STRING "Enable ${target} target. Set to 'OPTIONAL' to include if available (the default), or to a true value to require it.")
+
+    string(TOUPPER "${${target_opt}}" opt_value)
+
+    if (opt_value STREQUAL "OPTIONAL")
+        list(APPEND optional_llvm_targets "${target}")
+    elseif (opt_value OR opt_value STREQUAL "REQUIRED")
+        list(APPEND required_llvm_targets "${target}")
+    endif ()
+endforeach ()
+
+# WASM dependency options
+
+cmake_dependent_option(WITH_WABT "Include WABT Interpreter for WASM testing" ON
+                       "NOT WIN32" OFF)
+
+option(WITH_V8 "Include V8 for WASM testing" OFF)
+
+# Validate dependency options
+if (WITH_WABT AND WITH_V8)
+    message(FATAL_ERROR "Cannot use both WABT and V8 at the same time, disable one of them.")
+endif ()
+
+##
+# Find dependencies
+##
+
+## Make our custom helpers available via include() and find_package().
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+
+## Find standard CMake packages
+find_package(Threads REQUIRED)
+find_package(JPEG)
+find_package(PNG)
+
+## Find LLVM
+find_package(HalideLLVM ${Halide_REQUIRE_LLVM_VERSION} REQUIRED
+             COMPONENTS Clang ${required_llvm_targets}
+             OPTIONAL_COMPONENTS ${optional_llvm_targets})
+
+# Set TARGET_<target> to ON if it was actually found and to OFF otherwise.
+# Does NOT touch the cache; if it was marked "optional" before, it will
+# still be marked optional afterwards.
+foreach (target IN LISTS known_llvm_targets)
+    string(TOUPPER "TARGET_${target}" target_opt)
+    if (${target} IN_LIST HalideLLVM_TARGETS)
+        set("${target_opt}" ON)
+    else ()
+        set("${target_opt}" OFF)
+    endif ()
+endforeach ()
+
+## WebAssembly target requires wasm
+if (TARGET_WEBASSEMBLY)
+    if (WITH_WABT)
+        find_package(wabt REQUIRED)
+    endif ()
+
+    if (WITH_V8)
+        find_package(V8 REQUIRED)
+    endif ()
+endif ()
+
+##
+# Define project-wide options
+##
+
+## C++ standard selection
+set(CMAKE_CXX_STANDARD "17" CACHE STRING "Select which C++ standard to use (>=C++17 required)")
+option(CMAKE_CXX_STANDARD_REQUIRED "Enable strict C++ standard selection" ON)
+option(CMAKE_CXX_EXTENSIONS "Enable compiler-specific C++ extensions" OFF)
+
+## C++ feature selection
+option(Halide_ENABLE_RTTI "Enable RTTI" "${LLVM_ENABLE_RTTI}")
+option(Halide_ENABLE_EXCEPTIONS "Enable exceptions" ON)
+
+## Library type selection (shared by default)
+option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+
+## Main library features and backends
+option(Halide_WITH_INTROSPECTION "Enable use of debugging symbols for default Func, Var, etc. names" ON)
+option(TARGET_OPENCL "Enable OpenCL-C target" ON)
+option(TARGET_METAL "Enable Metal target" ON)
+option(TARGET_D3D12COMPUTE "Enable Direct3D 12 Compute target" ON)
+option(TARGET_OPENGLCOMPUTE "Enable OpenGLCompute target" ON)
+option(TARGET_SPIRV "Include SPIR-V target" OFF)
+
+## Optional extra subprojects
+option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_DOCS "Build documentation" OFF)
+option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_PACKAGING "Include Halide's packaging rules" "${PROJECT_IS_TOP_LEVEL}")
+
+## Advanced options for special/internal build scenarios
 option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
 mark_as_advanced(Halide_CCACHE_BUILD)
 
+option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)
+mark_as_advanced(Halide_CLANG_TIDY_BUILD)
+
+set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
+    CACHE STRING "SOVERSION to set for custom Halide packaging")
+mark_as_advanced(Halide_SOVERSION_OVERRIDE)
+
+##
+# Apply project-wide options
+##
+
+## Validate language standard settings
+if (CMAKE_CXX_STANDARD LESS 17)
+    message(FATAL_ERROR "Halide requires C++17 or newer but CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
+endif ()
+
+## Validate RTTI compatibility with LLVM
+if (Halide_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
+    message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
+endif ()
+
+## Enable CCache build when requested by the user (for convenience)
 if (Halide_CCACHE_BUILD)
     find_program(CCACHE_PROGRAM ccache REQUIRED)
 
@@ -70,8 +206,8 @@ if (Halide_CCACHE_BUILD)
     message(STATUS "Enabling ccache usage for building.")
 endif ()
 
-# Detect whether or not ASAN is enabled. Don't cache the result to ensure this
-# check happens every time we reconfigure.
+## Detect whether or not ASAN is enabled. Don't cache the result to ensure this
+## check happens every time we reconfigure.
 unset(Halide_ASAN_ENABLED CACHE)
 check_cxx_symbol_exists(HALIDE_INTERNAL_USING_ASAN "${Halide_SOURCE_DIR}/src/Util.h" Halide_ASAN_ENABLED)
 
@@ -81,36 +217,10 @@ else ()
     set(Halide_ANY_SANITIZERS_ENABLED 0)
 endif ()
 
-# Enable the SPIR-V target if requested (must declare before processing dependencies)
-option(TARGET_SPIRV "Include SPIR-V target" OFF)
-
-##
-# Import dependencies
-##
-
-add_subdirectory(dependencies)
-
-##
-# Declare options
-##
-
-# Declare these options after we include dependencies (since it declares Halide_ENABLE_RTTI etc)
-# but before we add any subdirectories, since any option you test before it is defined is
-# implicitly false the *first* time that the build file is processed, and there are some
-# out-of-order dependencies here (e.g, code in src/ eventually checks WITH_UTILS).
-# This is especially subtle since it means that some options can end up with different
-# values if you build a target as part of the initial CMake run, so (e.g.) a `make install`
-# from as totally clean build might neglect to install some pieces.
-
-option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
-option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
-option(WITH_DOCS "Build documentation" OFF)
-option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
-cmake_dependent_option(
-    WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
-    "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
-)
-
+## Find SPIR-V dependency if that backend was requested
+if (TARGET_SPIRV)
+    find_package(SPIRV-Headers REQUIRED)
+endif ()
 
 ##
 # Add source directories
@@ -158,4 +268,9 @@ else ()
     message(STATUS "Building utils disabled")
 endif ()
 
-add_subdirectory(packaging)
+if (WITH_PACKAGING)
+    message(STATUS "Halide packaging rules enabled")
+    add_subdirectory(packaging)
+else ()
+    message(STATUS "Halide packaging rules disabled")
+endif ()

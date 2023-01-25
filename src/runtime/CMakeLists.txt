@@ -165,9 +165,6 @@ set(RUNTIME_CXX_FLAGS
     -Wsign-compare
 )
 
-option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)
-mark_as_advanced(Halide_CLANG_TIDY_BUILD)
-
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
         # -fpic needs special treatment; see below on windows 64bits
@@ -244,14 +241,14 @@ foreach (i IN LISTS RUNTIME_CPP)
                 target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
             else()
                 add_custom_command(OUTPUT "${LL}"
-                                   COMMAND ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
+                                   COMMAND ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:Halide::clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
                                    DEPENDS "${SOURCE}"
                                    DEPFILE "${basename}.d"
                                    VERBATIM)
             endif()
 
             add_custom_command(OUTPUT "${BC}"
-                               COMMAND llvm-as "${LL}" -o "${BC}"
+                               COMMAND Halide::llvm-as "${LL}" -o "${BC}"
                                DEPENDS "${LL}"
                                VERBATIM)
 
@@ -278,7 +275,7 @@ foreach (i IN LISTS RUNTIME_LL)
                        VERBATIM)
 
     add_custom_command(OUTPUT "${BC}"
-                       COMMAND llvm-as "${LL_TRANSFORMED}" -o "${BC}"
+                       COMMAND Halide::llvm-as "${LL_TRANSFORMED}" -o "${BC}"
                        DEPENDS "${LL_TRANSFORMED}"
                        VERBATIM)
     add_custom_command(OUTPUT "${INITMOD}"
