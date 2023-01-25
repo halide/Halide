@@ -88,6 +88,22 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
         }
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return is_linear(b->value, linear);
+    } else if (const Min *m = e.as<Min>()) {
+        Expr la = is_linear(m->a, linear);
+        Expr lb = is_linear(m->b, linear);
+        if (is_const_zero(la) && is_const_zero(lb)) {
+            return la;
+        } else {
+            return Expr();
+        }
+    } else if (const Max *m = e.as<Max>()) {
+        Expr la = is_linear(m->a, linear);
+        Expr lb = is_linear(m->b, linear);
+        if (is_const_zero(la) && is_const_zero(lb)) {
+            return la;
+        } else {
+            return Expr();
+        }
     } else {
         return Expr();
     }
@@ -114,7 +130,17 @@ class InjectDmaTransferIntoProducer : public IRMutator {
 
     Stmt visit(const For *op) override {
         debug(3) << "InjectDmaTransfer::for " << op->name << "\n";
-        loop_vars.push_back({op->name, op->min, op->extent, op->body.as<For>() != nullptr});
+        // Check if the body is also a loop.
+        bool is_body_a_single_for_loop = op->body.as<For>() != nullptr;
+        // Maybe a loop, but with lets in front of it.
+        if (const LetStmt *let = op->body.as<LetStmt>()) {
+            Stmt let_body = let->body;
+            while (let_body.node_type() == IRNodeType::LetStmt) {
+                let_body = let_body.as<LetStmt>()->body;
+            }
+            is_body_a_single_for_loop = let_body.as<For>() != nullptr;
+        }
+        loop_vars.push_back({op->name, op->min, op->extent, is_body_a_single_for_loop});
         Stmt mutated = IRMutator::visit(op);
         loop_vars.pop_back();
         if (loops_to_be_removed.count(op->name) > 0) {
@@ -188,10 +214,12 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         for (const auto &v : loop_vars) {
             Scope<Expr> local_scope;
             local_scope.push(v.name, 1);
-            debug(3) << "is_linear (stride) store: " << v.name << " " << is_linear(op_index, local_scope) << "\n";
-            debug(3) << "is_linear (stride) load: " << v.name << " " << is_linear(value_index, local_scope) << "\n";
-            store_strides.push_back(is_linear(op_index, local_scope));
-            value_strides.push_back(is_linear(value_index, local_scope));
+            Expr is_linear_store = is_linear(op_index, local_scope);
+            Expr is_linear_value = is_linear(value_index, local_scope);
+            debug(3) << "is_linear (stride) store: " << v.name << " " << is_linear_store << "\n";
+            debug(3) << "is_linear (stride) load: " << v.name << " " << is_linear_value << "\n";
+            store_strides.push_back(is_linear_store);
+            value_strides.push_back(is_linear_value);
         }
 
         // Use innermost loop var first.
