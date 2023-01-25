@@ -164,7 +164,7 @@ option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
 option(WITH_PACKAGING "Include Halide's packaging rules" "${PROJECT_IS_TOP_LEVEL}")
 
 ## Advanced options for special/internal build scenarios
-option(Halide_CCACHE_BUILD "Build Halide with ccache and preferred settings" OFF)
+option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
 mark_as_advanced(Halide_CCACHE_BUILD)
 
 option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)
