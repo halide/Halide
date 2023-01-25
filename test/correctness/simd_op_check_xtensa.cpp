@@ -4,9 +4,6 @@
 using namespace Halide;
 using namespace Halide::ConciseCasts;
 
-void generate_xtensa_glue_code(const std::string &directory, const std::string &name) {
-}
-
 class SimdOpCheckXtensa : public SimdOpCheckTest {
 public:
     SimdOpCheckXtensa(Target t, int w = 768 /*256*3*/, int h = 128)
@@ -65,8 +62,6 @@ public:
         std::string fn_h_name = fn_name + +".h";
         error.compile_to_c(output_directory + fn_cpp_name, arg_types, fn_name, target);
         error.compile_to_header(output_directory + fn_h_name, arg_types, fn_name, target);
-
-        generate_xtensa_glue_code(output_directory, name);
     }
 
     void add_tests() override {
