@@ -1338,6 +1338,14 @@ template <typename VectorType, typename BaseType, int Lanes>
 HALIDE_ALWAYS_INLINE void store_narrowing(const VectorType& a, void *base, int32_t offset) = delete;
 
 template<>
+HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_i16, int8_t, VECTOR_WIDTH_I16>(const native_vector_i16& a, void *base, int32_t offset) {
+    valign align = IVP_ZALIGN();
+    xb_vecNx8* __restrict ptr  = (xb_vecNx8*)((int8_t*)base + offset);
+    IVP_SANX8S_IP(a, align, ptr);
+    IVP_SAPOSNX8S_FP(align, ptr);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_i16, uint8_t, VECTOR_WIDTH_I16>(const native_vector_i16& a, void *base, int32_t offset) {
     valign align = IVP_ZALIGN();
     xb_vecNx8U* __restrict ptr  = (xb_vecNx8U*)((uint8_t*)base + offset);
@@ -1351,6 +1359,22 @@ HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_u16, uint8_t, VECTOR_WID
     xb_vecNx8U* __restrict ptr  = (xb_vecNx8U*)((uint8_t*)base + offset);
     IVP_SANX8U_IP(a, align, ptr);
     IVP_SAPOSNX8U_FP(align, ptr);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_i32, int16_t, VECTOR_WIDTH_I32>(const native_vector_i32& a, void *base, int32_t offset) {
+    valign align = IVP_ZALIGN();
+    xb_vecN_2x16* __restrict ptr  = (xb_vecN_2x16*)((int16_t*)base + offset);
+    IVP_SAN_2X16S_IP(a, align, ptr);
+    IVP_SAPOSN_2X16S_FP(align, ptr);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_u32, uint16_t, VECTOR_WIDTH_U32>(const native_vector_u32& a, void *base, int32_t offset) {
+    valign align = IVP_ZALIGN();
+    xb_vecN_2x16U* __restrict ptr  = (xb_vecN_2x16U*)((uint16_t*)base + offset);
+    IVP_SAN_2X16U_IP(a, align, ptr);
+    IVP_SAPOSN_2X16U_FP(align, ptr);
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i16_x2 halide_xtensa_interleave_i16(const native_vector_i16& a, const native_vector_i16& b) {
