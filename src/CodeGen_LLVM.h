@@ -637,7 +637,10 @@ protected:
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
     /** Warning messages which we want to avoid displaying number of times */
-    std::map<int, std::string> onetime_warnings;
+    enum class WarningKind {
+        EmulatedFloat16,
+    };
+    std::map<WarningKind, std::string> onetime_warnings;
 
 private:
     /** All the values in scope at the current code location during

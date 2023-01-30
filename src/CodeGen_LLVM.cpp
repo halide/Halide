@@ -1448,7 +1448,7 @@ void CodeGen_LLVM::visit(const Cast *op) {
                 "(b)float16 type operation is emulated, which is likely to slow down the performance. "
                 "If your target supports native (b)float16 operations, "
                 "it could be improved by adding Target feature to enable it.\n";
-            onetime_warnings.try_emplace(__LINE__, warn_msg);
+            onetime_warnings.try_emplace(WarningKind::EmulatedFloat16, warn_msg);
             Expr equiv = lower_float16_cast(op);
             internal_assert(equiv.type() == op->type);
             codegen(equiv);
