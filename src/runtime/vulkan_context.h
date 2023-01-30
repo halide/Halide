@@ -342,8 +342,17 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         &queue_priority,
     };
 
+    // Get the API version to determine what device features are valid to search for
+    VkPhysicalDeviceProperties device_properties = {0};
+    debug(user_context) << "  querying for device properties ...\n";
+    vkGetPhysicalDeviceProperties(*physical_device, &device_properties);
+    uint32_t major_version = VK_API_VERSION_MAJOR(device_properties.apiVersion);
+    uint32_t minor_version = VK_API_VERSION_MINOR(device_properties.apiVersion);
+    bool has_capability_v11 = (major_version >= 1) && (minor_version >= 1); // supports >= v1.1
+    bool has_capability_v12 = (major_version >= 1) && (minor_version >= 2); // supports >= v1.2
+    debug(user_context) << "  found device compute capability v" << major_version << "." << minor_version << " ...\n";
+
     // Get the device features so that all supported features are enabled when device is created
-    //
     VkPhysicalDeviceFeatures device_features = {};
     void *extended_features_ptr = nullptr;
     void *standard_features_ptr = nullptr;
@@ -354,28 +363,42 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     debug(user_context) << "   shader int64 support: " << (device_features.shaderInt64 ? "true" : "false") << "...\n";
     debug(user_context) << "   shader int16 support: " << (device_features.shaderInt16 ? "true" : "false") << "...\n";
 
-    // If the instance runtime supports querying extended device features, request them
-    VkPhysicalDeviceShaderFloat16Int8FeaturesKHR shader_f16_i8_ext = {
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES,
+    // assemble the chain of features to query, but only add the ones that exist in the API version
+    VkPhysicalDeviceShaderFloat16Int8FeaturesKHR shader_f16_i8_ext = { // requires v1.2+
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR,
         nullptr, VK_FALSE, VK_FALSE};
+
+    VkPhysicalDevice8BitStorageFeaturesKHR storage_8bit_ext = { // requires v1.2+
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR,
+        &shader_f16_i8_ext, VK_FALSE, VK_FALSE, VK_FALSE};
+
+    VkPhysicalDevice16BitStorageFeaturesKHR storage_16bit_ext = { // requires v1.1+
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES_KHR,
+        (has_capability_v12 ? &storage_8bit_ext : nullptr), 
+        VK_FALSE, VK_FALSE, VK_FALSE, VK_FALSE};
 
     VkPhysicalDeviceFeatures2KHR device_features_ext = {
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
-        &shader_f16_i8_ext,
-        device_features};
+        &storage_16bit_ext, device_features};
 
-    // Look for v1.1+ device feature query method
+    // Look for extended device feature query method (KHR was removed when it was adopted into v1.1+)
     PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(*instance, "vkGetPhysicalDeviceFeatures2KHR");  // v1.0+
     if (!vkGetPhysicalDeviceFeatures2KHR) {
         vkGetPhysicalDeviceFeatures2KHR = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(*instance, "vkGetPhysicalDeviceFeatures2");
     }
 
-    if (vkGetPhysicalDeviceFeatures2KHR) {
+    // If the instance runtime supports querying extended device features, request them
+    if (vkGetPhysicalDeviceFeatures2KHR && has_capability_v11) {
+
         debug(user_context) << "  querying for extended device features...\n";
         vkGetPhysicalDeviceFeatures2KHR(*physical_device, &device_features_ext);
         debug(user_context) << "   shader int8 support: " << (shader_f16_i8_ext.shaderInt8 ? "true" : "false") << "...\n";
         debug(user_context) << "   shader float16 support: " << (shader_f16_i8_ext.shaderFloat16 ? "true" : "false") << "...\n";
-        extended_features_ptr = (void *)(&device_features_ext);  // pass v1.1 extended features (which also contains the standard features)
+        if(has_capability_v12) {
+            debug(user_context) << "   storage buffer 8bit access support: " << (storage_8bit_ext.storageBuffer8BitAccess ? "true" : "false") << "...\n";
+            debug(user_context) << "   storage buffer 16bit access support: " << (storage_16bit_ext.storageBuffer16BitAccess ? "true" : "false") << "...\n";
+        }
+        extended_features_ptr = (void *)(&device_features_ext);  // pass extended features (which also contains the standard features)
     } else {
         standard_features_ptr = &device_features;  // pass v1.0 standard features
     }
