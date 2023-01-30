@@ -2201,7 +2201,13 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_glsl_op(SpvId glsl_op_code, Type t
     operands.reserve(args.size());
     for (const Expr &e : args) {
         e.accept(this);
-        operands.push_back(builder.current_id());
+        SpvId arg_value_id = builder.current_id();
+        if(builder.type_of(arg_value_id) != type_id) {
+            SpvId casted_value_id = cast_type(type, e.type(), arg_value_id); // all GLSL args must match return type
+            operands.push_back(casted_value_id);
+        } else {
+            operands.push_back(arg_value_id);
+        }
     }
 
     // sanity check the expected number of operands
@@ -2580,15 +2586,15 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
     DescriptorSet descriptor_set;
     descriptor_set.entry_point_name = entry_point_name;
 
-    // Add required extension support for storage types
+    // Add required extension support for storage types which are necessary to 
+    // use smaller bit-width types for any halide buffer *or* device argument 
+    // (passed as a runtime array)
     for (const auto &arg : args) {
-        if (arg.is_buffer) {
-            if (arg.type.is_int_or_uint()) {
-                if (arg.type.bits() == 8) {
-                    builder.require_extension("SPV_KHR_8bit_storage");
-                } else if (arg.type.bits() == 16) {
-                    builder.require_extension("SPV_KHR_16bit_storage");
-                }
+        if (arg.type.is_int_or_uint()) {
+            if (arg.type.bits() == 8) {
+                builder.require_extension("SPV_KHR_8bit_storage");
+            } else if (arg.type.bits() == 16) {
+                builder.require_extension("SPV_KHR_16bit_storage");
             }
         }
     }
@@ -2599,6 +2605,13 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
     SpvBuilder::StructMemberTypes param_struct_members;
     for (const auto &arg : args) {
         if (!arg.is_buffer) {
+            // Add required access capability for smaller bit-width types used as runtime arrays
+            if (arg.type.bits() == 8) {
+                builder.require_capability(SpvCapabilityUniformAndStorageBuffer8BitAccess);
+            } else if (arg.type.bits() == 16) {
+                builder.require_capability(SpvCapabilityUniformAndStorageBuffer16BitAccess);
+            }
+            
             SpvId arg_type_id = builder.declare_type(arg.type);
             param_struct_members.push_back(arg_type_id);
         }
@@ -2736,11 +2749,6 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::compile(std::vector<char> &module) {
 
     if (builder.is_capability_required(SpvCapabilityInt16) && !target.has_feature(Target::VulkanInt16)) {
         user_error << "Vulkan: Code requires 16-bit integer support (which is not enabled in the target features)! "
-                   << "Either enable the target feature, or adjust the algorithm to avoid using this data type!";
-    }
-
-    if (builder.is_capability_required(SpvCapabilityInt64) && !target.has_feature(Target::VulkanInt64)) {
-        user_error << "Vulkan: Code requires 64-bit integer support (which is not enabled in the target features)! "
                    << "Either enable the target feature, or adjust the algorithm to avoid using this data type!";
     }
 
