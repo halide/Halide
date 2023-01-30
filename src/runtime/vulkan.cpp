@@ -38,7 +38,9 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
                                        VkQueue *queue,
                                        uint32_t *queue_family_index,
                                        bool create) {
-
+#ifdef DEBUG_RUNTIME
+    halide_start_clock(user_context);
+#endif
     halide_debug_assert(user_context, instance != nullptr);
     halide_debug_assert(user_context, device != nullptr);
     halide_debug_assert(user_context, queue != nullptr);
@@ -46,10 +48,6 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
     while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {}
 
     // If the context has not been initialized, initialize it now.
-    halide_debug_assert(user_context, &cached_instance != nullptr);
-    halide_debug_assert(user_context, &cached_device != nullptr);
-    halide_debug_assert(user_context, &cached_queue != nullptr);
-    halide_debug_assert(user_context, &cached_physical_device != nullptr);
     if ((cached_instance == nullptr) && create) {
         int result = vk_create_context(user_context,
                                        reinterpret_cast<VulkanMemoryAllocator **>(&cached_allocator),
@@ -60,6 +58,7 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
                                        &cached_queue,
                                        &cached_queue_family_index);
         if (result != halide_error_code_success) {
+            debug(user_context) << "halide_vulkan_acquire_context: FAILED to create context!\n"; 
             __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return result;
         }
@@ -258,27 +257,40 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
     }
 
     size_t size = buf->size_in_bytes();
-    halide_debug_assert(user_context, size != 0);
     if (buf->device) {
-        return 0;
+        MemoryRegion *device_region = (MemoryRegion*)(buf->device);
+        if(device_region->size >= size) {
+            debug(user_context) << "Vulkan: Requested allocation for existing device memory ... using existing buffer!\n";
+            return 0;
+        } else {
+            debug(user_context) << "Vulkan: Requested allocation of different size ... reallocating buffer!\n";
+            if (halide_can_reuse_device_allocations(user_context)) {
+                ctx.allocator->release(user_context, device_region);
+            } else {
+                ctx.allocator->reclaim(user_context, device_region);
+            }
+            buf->device = 0;
+        }
     }
 
     for (int i = 0; i < buf->dimensions; i++) {
         halide_debug_assert(user_context, buf->dim[i].stride >= 0);
     }
 
-    debug(user_context) << "    allocating buffer: "
-                        << "extents: " << buf->dim[0].extent << "x"
-                        << buf->dim[1].extent << "x" << buf->dim[2].extent << "x"
-                        << buf->dim[3].extent << " "
-                        << "strides: " << buf->dim[0].stride << "x"
-                        << buf->dim[1].stride << "x" << buf->dim[2].stride << "x"
-                        << buf->dim[3].stride << " "
-                        << "type: " << buf->type << " "
+#ifdef DEBUG_RUNTIME
+    debug(user_context) << "    allocating buffer: ";
+    if(buf && buf->dim) {
+        debug(user_context) << "extents: " << buf->dim[0].extent << "x"
+                            << buf->dim[1].extent << "x" << buf->dim[2].extent << "x"
+                            << buf->dim[3].extent << " "
+                            << "strides: " << buf->dim[0].stride << "x"
+                            << buf->dim[1].stride << "x" << buf->dim[2].stride << "x"
+                            << buf->dim[3].stride << " ";
+    }
+    debug(user_context) << "type: " << buf->type << " "
                         << "size_in_bytes: " << (uint64_t)size << " "
                         << "(or " << (size * 1e-6f) << "MB)\n";
 
-#ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
@@ -335,7 +347,7 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
     }
 
     // fill buffer with zero values
-    vkCmdFillBuffer(command_buffer, *device_buffer, 0, device_region->size, 0);
+    vkCmdFillBuffer(command_buffer, *device_buffer, 0, VK_WHOLE_SIZE, 0);
     debug(user_context) << "    zeroing device_buffer=" << (void *)device_buffer
                         << " size=" << (uint32_t)device_region->size << "\n";
 
