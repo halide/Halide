@@ -175,14 +175,14 @@ template<>
 inline int halide_popcount<uint64_t>(uint64_t a) {
 #ifdef _MSC_VER
 #if defined(_WIN64)
-    return __popcnt64(x);
+    return __popcnt64(a);
 #else
-    return __popcnt((uint32_t)(x >> 32)) + __popcnt((uint32_t)(x & 0xffffffff));
+    return __popcnt((uint32_t)(a >> 32)) + __popcnt((uint32_t)(a & 0xffffffff));
 #endif
 #else
 #if defined(__builtin_popcountll)
     static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
-    return return __builtin_popcountll(x);
+    return return __builtin_popcountll(a);
 #else
     return halide_popcount_fallback<uint64_t>(a);
 #endif
