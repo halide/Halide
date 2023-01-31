@@ -1178,6 +1178,16 @@ HALIDE_ALWAYS_INLINE void store<native_vector_i16, int16_t, VECTOR_WIDTH_I16>(co
 }
 
 template<>
+HALIDE_ALWAYS_INLINE void store<native_vector_i16_x2, int16_t, 2 * VECTOR_WIDTH_I16>(const native_vector_i16_x2& a, void *base, int32_t offset) {
+    valign align = IVP_ZALIGN();
+    xb_vecNx16* ptr = (xb_vecNx16*)((int16_t*)base + offset);
+    IVP_SANX16_IP(a.native_vector[0], align, ptr);
+    IVP_SANX16_IP(a.native_vector[1], align, ptr);
+    // Flush alignment register.
+    IVP_SAPOSNX16_FP(align, ptr);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u16 load<native_vector_u16, uint16_t, VECTOR_WIDTH_U16>(const void *base, int32_t offset) {
     xb_vecNx16U r;
     const xb_vec2Nx8*  __restrict ptr8 = (const xb_vec2Nx8*)((const uint16_t*)base + offset);
