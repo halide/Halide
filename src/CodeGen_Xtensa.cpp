@@ -3076,6 +3076,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         {"halide_xtensa_convert_i48_low_u32", "IVP_CVT32UNX48L"},
         {"halide_xtensa_convert_i48_high_u32", "IVP_CVT32UNX48H"},
         {"halide_xtensa_narrow_i48_with_shift_i16", "IVP_PACKVRNRNX48"},
+        {"halide_xtensa_narrow_i48_with_rounding_shift_i16", "IVP_PACKVRNX48"},
         {"halide_xtensa_sat_narrow_i48_with_shift_i16", "IVP_PACKVRNX48"},
         {"halide_xtensa_full_reduce_add_i8", "IVP_RADD2NX8"},
         {"halide_xtensa_full_reduce_add_i16", "IVP_RADDNX16"},
