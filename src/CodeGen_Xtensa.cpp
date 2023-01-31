@@ -2679,7 +2679,7 @@ HALIDE_ALWAYS_INLINE native_vector_f32_x2 halide_xtensa_concat_from_native(const
 }
 
 template <typename VectorType, typename OffsetType, typename BaseType, int Lanes, bool IsTCM>
-HALIDE_ALWAYS_INLINE VectorType gather_load(const void *base, const OffsetType& offset) {
+VectorType gather_load(const void *base, const OffsetType& offset) {
     BaseType __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[Lanes];
     int offsets[Lanes];
     store<OffsetType, int32_t, Lanes>(offset, &offsets[0], 0);
@@ -2787,6 +2787,19 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 gather_load<native_ve
       xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(offset) << 2
     )
   );
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32_x2 gather_load<native_vector_f32_x2, native_vector_i32_x2, float, 2 * VECTOR_WIDTH_F32, true>(const void *base, const native_vector_i32_x2& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  auto gsr0 = IVP_GATHERAN_2XF32((const float*) base,
+                                  xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(offset.native_vector[0]) << 2);
+  auto gsr1 = IVP_GATHERAN_2XF32((const float*) base,
+                                  xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(offset.native_vector[1]) << 2);
+
+  return native_vector_f32_x2(native_vector_f32_x2::from_native_vector,
+                              IVP_GATHERDN_2XF32(gsr0),
+                              IVP_GATHERDN_2XF32(gsr1));
 }
 
 )INLINE_CODE";
