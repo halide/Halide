@@ -2020,7 +2020,7 @@ HALIDE_ALWAYS_INLINE native_vector_i48 halide_xtensa_widen_add_u48(const native_
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i48 halide_xtensa_widen_quad_add_i48(
-                                      const native_vector_i16& a, const native_vector_i16& b, 
+                                      const native_vector_i16& a, const native_vector_i16& b,
                                       const native_vector_i16& c, const native_vector_i16& d) {
   native_vector_i48 r = IVP_ADDWNX16(a, b);
   IVP_ADDWANX16(r, c, d);
@@ -2523,8 +2523,9 @@ HALIDE_ALWAYS_INLINE native_vector_u8 halide_xtensa_sat_narrow_u8(const native_v
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_sat_narrow_i16(const native_vector_i32_x2& a) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
-  return IVP_PACKVRNX48(wide, 0);
+  native_vector_i32 a0 = IVP_SLSIN_2X32(a.native_vector[0], 16);
+  native_vector_i32 a1 = IVP_SLSIN_2X32(a.native_vector[1], 16);
+  return IVP_MOVNX16_FROMN_2X32(IVP_SELN_2X32I(a1, a0, IVP_SELI_16B_DEINTERLEAVE_1_ODD));
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i8 halide_xtensa_sat_narrow_with_rounding_shift_i8(const native_vector_i16_x2& a, uint32_t shift) {
