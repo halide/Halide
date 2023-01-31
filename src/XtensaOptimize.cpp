@@ -1066,8 +1066,11 @@ private:
             // Replace widening left shift with multiplication.
             const uint64_t *c = as_const_uint(op->args[1]);
             if (c && op->args[1].type().can_represent((uint64_t)1 << *c)) {
-
-                return mutate(widening_mul(op->args[0], bc(UIntImm::make(op->args[1].type().with_lanes(1), (uint64_t)1 << *c), op->args[1].type().lanes())));
+                if (op->args[0].type().is_int() && (*c < op->args[0].type().bits() - 1)) {
+                    return mutate(widening_mul(op->args[0], bc(IntImm::make(op->args[1].type().with_code(halide_type_int).with_lanes(1), (int64_t)1 << *c), op->args[1].type().lanes())));
+                } else {
+                    return mutate(widening_mul(op->args[0], bc(UIntImm::make(op->args[1].type().with_lanes(1), (uint64_t)1 << *c), op->args[1].type().lanes())));
+                }
             }
         }
 
