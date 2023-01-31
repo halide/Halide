@@ -154,13 +154,39 @@ inline float float_from_bits(uint32_t bits) {
 }
 
 template<typename T>
-inline int halide_popcount(T a) {
+inline int halide_popcount_fallback(T a) {
     int bits_set = 0;
     while (a != 0) {
-        bits_set += a & 1;
-        a >>= 1;
+        bits_set += 1;
+        // this is Brian Kernigan's bit counting algorithm
+        // https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan)
+        // removes the least significant one
+        a &= a - 1;
     }
     return bits_set;
+}
+
+template<typename T>
+inline int halide_popcount(T a) {
+    return halide_popcount_fallback<T>(a);
+}
+
+template<>
+inline int halide_popcount<uint64_t>(uint64_t a) {
+#ifdef _MSC_VER
+#if defined(_WIN64)
+    return __popcnt64(x);
+#else
+    return __popcnt((uint32_t)(x >> 32)) + __popcnt((uint32_t)(x & 0xffffffff));
+#endif
+#else
+#if defined(__builtin_popcountll)
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    return return __builtin_popcountll(x);
+#else
+    return halide_popcount_fallback<uint64_t>(a);
+#endif
+#endif
 }
 
 template<typename T>
