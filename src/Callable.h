@@ -385,7 +385,16 @@ public:
      * This function relies on the same calling convention as the argv-based
      * functions generated for ahead-of-time compiled Halide pilelines.
      *
-     * \note The first argument in the first entry in argv must always be a JITUserContext*.
+     * Very rough specifications ofthe calling convention (but check the source
+     * code to be sure):
+     *
+     *   * Arguments are passed in the same order as they appear in the C
+     *     function argument list.
+     *   * The first entry in argv must always be a JITUserContext*. Please,
+     *     note that this means that argv[0] actually contains JITUserContext**.
+     *   * All scalar arguments are passed by pointer, not by value, regardless of size.
+     *   * All buffer arguments (input or output) are passed as halide_buffer_t*.
+     *
      */
     int call_argv_fast(size_t argc, const void *const *argv) const;
 };
