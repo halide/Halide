@@ -608,23 +608,17 @@ private:
         return call;
     }
 
-    static Expr halide_xtensa_narrow_clz_i16(Expr v0) {
-        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_narrow_clz_i16", {std::move(v0)}, Call::PureExtern);
+    static Expr halide_xtensa_widen_pair_mul_i48(Expr v0, Expr v1, Expr v2, Expr v3) {
+        Expr call = Call::make(wild_i48x.type(), "halide_xtensa_widen_pair_mul_i48",
+                               {std::move(v0), std::move(v1), std::move(v2), std::move(v3)},
+                               Call::PureExtern);
         return call;
     }
 
-    static Expr halide_xtensa_sat_add_i16(Expr v0, Expr v1) {
-        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_sat_add_i16", {std::move(v0), std::move(v1)}, Call::PureExtern);
-        return call;
-    }
-
-    static Expr halide_xtensa_sat_sub_i16(Expr v0, Expr v1) {
-        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_sat_sub_i16", {std::move(v0), std::move(v1)}, Call::PureExtern);
-        return call;
-    }
-
-    static Expr halide_xtensa_avg_round_i16(Expr v0, Expr v1) {
-        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_avg_round_i16", {std::move(v0), std::move(v1)}, Call::PureExtern);
+    static Expr halide_xtensa_widen_pair_mul_add_i48(Expr w, Expr v0, Expr v1, Expr v2, Expr v3) {
+        Expr call = Call::make(wild_i48x.type(), "halide_xtensa_widen_pair_mul_add_i48",
+                               {std::move(w), std::move(v0), std::move(v1), std::move(v2), std::move(v3)},
+                               Call::PureExtern);
         return call;
     }
 
@@ -716,8 +710,11 @@ private:
                 {"halide_xtensa_yyyy", (call("halide_xtensa_xxxx", wild_i24x64, {wild_i24x64, wild_i24x128}) + slice(wild_i24x128, 64, 1, 64)), Pattern::SameOp12},
                 {"halide_xtensa_xxxx", (wild_i24x64 + slice(wild_i24x128, 0, 1, 64))},
 
-                {"halide_xtensa_widen_pair_mul_i48", wild_i32x * wild_i32x + wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
-                {"halide_xtensa_widen_pair_mul_u48", wild_u32x * wild_u32x + wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
+                {"halide_xtensa_widen_quad_add_i48", widening_add(wild_i16x, wild_i16x) + widening_add(wild_i16x, wild_i16x), Pattern::AccumulatorOutput48},
+                {"halide_xtensa_widen_quad_add_i48", i32(halide_xtensa_widen_add_i48(wild_i16x, wild_i16x)) + i32(halide_xtensa_widen_add_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput48},
+
+                {"halide_xtensa_widen_pair_mul_i48", widening_mul(wild_i16x, wild_i16x) + widening_mul(wild_i16x, wild_i16x), Pattern::AccumulatorOutput48},
+                {"halide_xtensa_widen_pair_mul_u48", widening_mul(wild_u16x, wild_u16x) + widening_mul(wild_u16x, wild_u16x), Pattern::AccumulatorOutput48},
 
                 {"halide_xtensa_widen_pair_mul_i48", i48(wild_i16x) * i48(wild_i16x) + i48(wild_i16x) * i48(wild_i16x)},
                 {"halide_xtensa_widen_pair_mul_u48", i48(wild_u16x) * i48(wild_u16x) + i48(wild_u16x) * i48(wild_u16x)},
