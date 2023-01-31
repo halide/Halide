@@ -1,4 +1,5 @@
 #include "Halide.h"
+#include "halide_test_dirs.h"
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -15,7 +16,7 @@ int main(int argc, char **argv) {
         t = t.without_feature(feature);
     }
 
-    f.compile_to_llvm_assembly("/dev/null", f.infer_arguments(), "f", t);
+    f.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "unused.ll", f.infer_arguments(), "f", t);
 
     return 0;
 }
