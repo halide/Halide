@@ -2282,6 +2282,114 @@ public:
     SimplifySliceConcat() = default;
 };
 
+// Regroups widening_add and widening_mul within an Add expression to simplify
+// further pattern matching for pair_* and quad_* multiply-and-add intrinsics.
+class RegroupWideningMulAdds : public IRGraphMutator {
+private:
+    using IRGraphMutator::visit;
+
+    bool is_widening_call(const Call *op) {
+        return op->is_intrinsic(Call::widening_add) || op->is_intrinsic(Call::widening_mul);
+    }
+
+    // Recursively split an Add expression into list of expressions.
+    void collect_add_operands_into_array(const Add *op, std::vector<Expr> *operands) {
+        if (const Add *a = op->a.as<Add>()) {
+            collect_add_operands_into_array(a, operands);
+        } else {
+            operands->push_back(op->a);
+        }
+
+        if (const Add *b = op->b.as<Add>()) {
+            collect_add_operands_into_array(b, operands);
+        } else {
+            operands->push_back(op->b);
+        }
+    }
+
+    // Split operands into three sub-groups: widening_adds, widening_muls and the
+    // rest.
+    void sort_operands_by_type(const std::vector<Expr> &operands,
+                               std::vector<Expr> *widening_adds,
+                               std::vector<Expr> *widening_muls,
+                               std::vector<Expr> *rest) {
+        for (const auto &op : operands) {
+            if (const Call *c = op.as<Call>()) {
+                if (c->is_intrinsic(Call::widening_add)) {
+                    widening_adds->push_back(c);
+                    continue;
+                }
+                if (c->is_intrinsic(Call::widening_mul)) {
+                    widening_muls->push_back(c);
+                    continue;
+                }
+            }
+            rest->push_back(op);
+        }
+    }
+
+    Expr add_expr_pairwise(Expr base, const std::vector<Expr> &operands) {
+        int p = 0;
+        while (p + 1 < operands.size()) {
+            Expr add = Add::make(operands[p], operands[p + 1]);
+            if (base.defined()) {
+                base = Add::make(base, add);
+            } else {
+                base = add;
+            }
+            p += 2;
+        }
+
+        if (p < operands.size()) {
+            if (base.defined()) {
+                base = Add::make(base, operands[p]);
+            } else {
+                base = operands[p];
+            }
+        }
+
+        return base;
+    }
+
+    Expr visit(const Add *op) override {
+        if (op->type.is_vector()) {
+            const Call *a = op->a.as<Call>();
+            const Call *b = op->b.as<Call>();
+            if ((a && is_widening_call(a)) || (b && is_widening_call(b))) {
+                std::vector<Expr> operands;
+                //  Recursively split into sub-expressions.
+                collect_add_operands_into_array(op, &operands);
+                std::vector<Expr> mutated_operands;
+                for (const Expr &operand : operands) {
+                    mutated_operands.push_back(mutate(operand));
+                }
+                // Sort by type.
+                std::vector<Expr> widening_adds, widening_muls, rest;
+                sort_operands_by_type(mutated_operands, &widening_adds, &widening_muls, &rest);
+
+                // Rebuild a new Add expression from sorted groups.
+                // widening_add(s) and widening_mul(s) are added pairwise to
+                // simplify pattern matching.
+                Expr new_total_add;
+
+                new_total_add = add_expr_pairwise(new_total_add, widening_adds);
+                new_total_add = add_expr_pairwise(new_total_add, widening_muls);
+
+                for (const Expr &operand : rest) {
+                    if (new_total_add.defined()) {
+                        new_total_add = Add::make(new_total_add, operand);
+                    } else {
+                        new_total_add = operand;
+                    }
+                }
+
+                return new_total_add;
+            }
+        }
+        return IRGraphMutator::visit(op);
+    };
+};
+
 Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     const int alignment = target.natural_vector_size<uint8_t>();
     const int lut_size_in_bytes = 2 * target.natural_vector_size<uint8_t>();
@@ -2296,6 +2404,8 @@ Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     // need to figure out where it goes wrong.
     s = loop_carry(s, 16);
     s = simplify(s);
+    s = RegroupWideningMulAdds().mutate(s);
+
     for (int ix = 0; ix < 10; ix++) {
         s = MatchXtensaPatterns(target).mutate(s);
     }
