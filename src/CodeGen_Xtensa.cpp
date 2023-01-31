@@ -2019,6 +2019,14 @@ HALIDE_ALWAYS_INLINE native_vector_i48 halide_xtensa_widen_add_u48(const native_
   return r;
 }
 
+HALIDE_ALWAYS_INLINE native_vector_i48 halide_xtensa_widen_quad_add_i48(
+                                      const native_vector_i16& a, const native_vector_i16& b, 
+                                      const native_vector_i16& c, const native_vector_i16& d) {
+  native_vector_i48 r = IVP_ADDWNX16(a, b);
+  IVP_ADDWANX16(r, c, d);
+  return r;
+}
+
 template<>
 HALIDE_ALWAYS_INLINE native_vector_u32_x2 convert<native_vector_u32_x2, native_vector_u16>(const native_vector_u16& src);
 
