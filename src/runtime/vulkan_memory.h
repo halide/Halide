@@ -117,6 +117,7 @@ private:
     VulkanMemoryConfig config;
     VkDevice device = nullptr;
     VkPhysicalDevice physical_device = nullptr;
+    VkPhysicalDeviceLimits physical_device_limits = {};
     const VkAllocationCallbacks *alloc_callbacks = nullptr;
     BlockAllocator *block_allocator = nullptr;
 };
@@ -171,6 +172,12 @@ void VulkanMemoryAllocator::initialize(void *user_context,
     block_allocator_config.minimum_block_size = cfg.minimum_block_size;
     block_allocator = BlockAllocator::create(user_context, block_allocator_config, allocators);
     halide_abort_if_false(user_context, block_allocator != nullptr);
+
+    // get the physical device properties to determine limits and allocation requirements
+    VkPhysicalDeviceProperties physical_device_properties = {0};
+    memset(&physical_device_limits, 0, sizeof(VkPhysicalDeviceLimits));
+    vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
+    memcpy(&physical_device_limits, &(physical_device_properties.limits), sizeof(VkPhysicalDeviceLimits));
 }
 
 MemoryRegion *VulkanMemoryAllocator::reserve(void *user_context, MemoryRequest &request) {
@@ -488,14 +495,22 @@ void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *bloc
     vkGetBufferMemoryRequirements(instance->device, buffer, &memory_requirements);
     vkDestroyBuffer(instance->device, buffer, instance->alloc_callbacks);
 
-#if defined(HL_VK_DEBUG_MEM)
+// #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Block allocated ("
                    << "size=" << (uint32_t)block->size << ", "
                    << "alignment=" << (uint32_t)memory_requirements.alignment << ", "
+                   << "uniform_buffer_offset_alignment=" << (uint32_t)instance->physical_device_limits.minUniformBufferOffsetAlignment << ", "
+                   << "storage_buffer_offset_alignment=" << (uint32_t)instance->physical_device_limits.minStorageBufferOffsetAlignment << ", "
                    << "dedicated=" << (block->dedicated ? "true" : "false") << ")\n";
-#endif
+// #endif
 
-    block->properties.alignment = memory_requirements.alignment;
+    if(usage_flags & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) {
+        block->properties.alignment = instance->physical_device_limits.minStorageBufferOffsetAlignment;
+    } else if(usage_flags & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) {
+        block->properties.alignment = instance->physical_device_limits.minUniformBufferOffsetAlignment;
+    } else {
+        block->properties.alignment = memory_requirements.alignment;
+    }
     block->handle = (void *)device_memory;
     instance->block_byte_count += block->size;
     instance->block_count++;
