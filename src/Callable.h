@@ -385,7 +385,7 @@ public:
      * This function relies on the same calling convention as the argv-based
      * functions generated for ahead-of-time compiled Halide pilelines.
      *
-     * Very rough specifications ofthe calling convention (but check the source
+     * Very rough specifications of the calling convention (but check the source
      * code to be sure):
      *
      *   * Arguments are passed in the same order as they appear in the C
