@@ -281,7 +281,6 @@ private:
 
     // Note that the first entry in argv must always be a JITUserContext*.
     int call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_cci) const;
-    int call_argv_fast(size_t argc, const void *const *argv) const;
 
     using FailureFn = std::function<int(JITUserContext *)>;
 
@@ -380,6 +379,15 @@ public:
             };
         }
     }
+
+    /** Unsafe low-overhead way of invoking the Callable.
+     *
+     * This function relies on the same calling convention as the argv-based
+     * functions generated for ahead-of-time compiled Halide pilelines.
+     *
+     * \note The first argument in the first entry in argv must always be a JITUserContext*.
+     */
+    int call_argv_fast(size_t argc, const void *const *argv) const;
 };
 
 }  // namespace Halide
