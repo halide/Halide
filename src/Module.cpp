@@ -19,6 +19,7 @@
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
+#include "StmtToViz.h"
 
 namespace Halide {
 namespace Internal {
@@ -48,6 +49,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {OutputFileType::stmt, {"stmt", ".stmt", IsMulti}},
         {OutputFileType::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
+        {OutputFileType::stmt_viz, {"stmt_viz", ".stmt.viz.html", IsMulti}},
     };
     return ext;
 }
@@ -598,6 +600,12 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
         }
     }
+
+    if (contains(output_files, OutputFileType::stmt_viz)) {
+        debug(1) << "Module.compile(): stmt_viz " << output_files.at(OutputFileType::stmt_viz) << "\n";
+        Internal::print_to_viz(output_files.at(OutputFileType::stmt_viz), *this);
+    }
+
     if (contains(output_files, OutputFileType::c_header)) {
         debug(1) << "Module.compile(): c_header " << output_files.at(OutputFileType::c_header) << "\n";
         std::ofstream file(output_files.at(OutputFileType::c_header));
