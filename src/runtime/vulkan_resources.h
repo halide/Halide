@@ -479,7 +479,7 @@ VkResult vk_update_descriptor_set(void *user_context,
         scalar_args_entry = (VkDescriptorBufferInfo *)descriptor_buffer_info.back();
 
 #ifdef DEBUG_RUNTIME
-    debug(user_context) << "[0] offset=0 (uniform)\n";
+        debug(user_context) << "[0] offset=0 (uniform)\n";
 #endif
         VkWriteDescriptorSet uniform_buffer_write_descriptor_set = {
             VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,  // struct type
@@ -523,7 +523,7 @@ VkResult vk_update_descriptor_set(void *user_context,
             VkDescriptorBufferInfo *device_buffer_entry = (VkDescriptorBufferInfo *)descriptor_buffer_info.back();
 
 #ifdef DEBUG_RUNTIME
-    debug(user_context) << "[" << (uint32_t)write_descriptor_set.size() << "] offset=" << (uint32_t)(range_offset) << " (storage)\n";
+            debug(user_context) << "[" << (uint32_t)write_descriptor_set.size() << "] offset=" << (uint32_t)(range_offset) << " (storage)\n";
 #endif
 
             VkWriteDescriptorSet storage_buffer_write_descriptor_set = {

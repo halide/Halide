@@ -348,8 +348,8 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     vkGetPhysicalDeviceProperties(*physical_device, &device_properties);
     uint32_t major_version = VK_API_VERSION_MAJOR(device_properties.apiVersion);
     uint32_t minor_version = VK_API_VERSION_MINOR(device_properties.apiVersion);
-    bool has_capability_v11 = (major_version >= 1) && (minor_version >= 1); // supports >= v1.1
-    bool has_capability_v12 = (major_version >= 1) && (minor_version >= 2); // supports >= v1.2
+    bool has_capability_v11 = (major_version >= 1) && (minor_version >= 1);  // supports >= v1.1
+    bool has_capability_v12 = (major_version >= 1) && (minor_version >= 2);  // supports >= v1.2
     debug(user_context) << "  found device compute capability v" << major_version << "." << minor_version << " ...\n";
 
     // Get the device features so that all supported features are enabled when device is created
@@ -364,18 +364,19 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     debug(user_context) << "   shader int16 support: " << (device_features.shaderInt16 ? "true" : "false") << "...\n";
 
     // assemble the chain of features to query, but only add the ones that exist in the API version
-    VkPhysicalDeviceShaderFloat16Int8FeaturesKHR shader_f16_i8_ext = { // requires v1.2+
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR,
-        nullptr, VK_FALSE, VK_FALSE};
 
-    VkPhysicalDevice8BitStorageFeaturesKHR storage_8bit_ext = { // requires v1.2+
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR,
-        &shader_f16_i8_ext, VK_FALSE, VK_FALSE, VK_FALSE};
+    // note: requires v1.2+
+    VkPhysicalDeviceShaderFloat16Int8FeaturesKHR shader_f16_i8_ext = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR,
+                                                                      nullptr, VK_FALSE, VK_FALSE};
 
-    VkPhysicalDevice16BitStorageFeaturesKHR storage_16bit_ext = { // requires v1.1+
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES_KHR,
-        (has_capability_v12 ? &storage_8bit_ext : nullptr), 
-        VK_FALSE, VK_FALSE, VK_FALSE, VK_FALSE};
+    // note: requires v1.2+
+    VkPhysicalDevice8BitStorageFeaturesKHR storage_8bit_ext = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR,
+                                                               &shader_f16_i8_ext, VK_FALSE, VK_FALSE, VK_FALSE};
+
+    // note: requires v1.1+
+    VkPhysicalDevice16BitStorageFeaturesKHR storage_16bit_ext = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES_KHR,
+                                                                 (has_capability_v12 ? &storage_8bit_ext : nullptr),
+                                                                 VK_FALSE, VK_FALSE, VK_FALSE, VK_FALSE};
 
     VkPhysicalDeviceFeatures2KHR device_features_ext = {
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR,
@@ -394,7 +395,7 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         vkGetPhysicalDeviceFeatures2KHR(*physical_device, &device_features_ext);
         debug(user_context) << "   shader int8 support: " << (shader_f16_i8_ext.shaderInt8 ? "true" : "false") << "...\n";
         debug(user_context) << "   shader float16 support: " << (shader_f16_i8_ext.shaderFloat16 ? "true" : "false") << "...\n";
-        if(has_capability_v12) {
+        if (has_capability_v12) {
             debug(user_context) << "   storage buffer 8bit access support: " << (storage_8bit_ext.storageBuffer8BitAccess ? "true" : "false") << "...\n";
             debug(user_context) << "   storage buffer 16bit access support: " << (storage_16bit_ext.storageBuffer16BitAccess ? "true" : "false") << "...\n";
         }

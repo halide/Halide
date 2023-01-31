@@ -58,7 +58,7 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
                                        &cached_queue,
                                        &cached_queue_family_index);
         if (result != halide_error_code_success) {
-            debug(user_context) << "halide_vulkan_acquire_context: FAILED to create context!\n"; 
+            debug(user_context) << "halide_vulkan_acquire_context: FAILED to create context!\n";
             __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return result;
         }
@@ -258,8 +258,8 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
 
     size_t size = buf->size_in_bytes();
     if (buf->device) {
-        MemoryRegion *device_region = (MemoryRegion*)(buf->device);
-        if(device_region->size >= size) {
+        MemoryRegion *device_region = (MemoryRegion *)(buf->device);
+        if (device_region->size >= size) {
             debug(user_context) << "Vulkan: Requested allocation for existing device memory ... using existing buffer!\n";
             return 0;
         } else {
@@ -279,7 +279,7 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
 
 #ifdef DEBUG_RUNTIME
     debug(user_context) << "    allocating buffer: ";
-    if(buf && buf->dim) {
+    if (buf && buf->dim) {
         debug(user_context) << "extents: " << buf->dim[0].extent << "x"
                             << buf->dim[1].extent << "x" << buf->dim[2].extent << "x"
                             << buf->dim[3].extent << " "

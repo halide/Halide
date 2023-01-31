@@ -6051,20 +6051,20 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetValidationCacheDataEXT(
 
 // Provided by VK_VERSION_1_1
 typedef struct VkPhysicalDeviceShaderFloat16Int8Features {
-    uint32_t           sType;
-    void               *pNext;
-    VkBool32           shaderFloat16;
-    VkBool32           shaderInt8;
+    uint32_t sType;
+    void *pNext;
+    VkBool32 shaderFloat16;
+    VkBool32 shaderInt8;
 } VkPhysicalDeviceShaderFloat16Int8FeaturesKHR;
 #define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR 1000082000
 
 // Provided by VK_VERSION_1_2
 typedef struct VkPhysicalDevice8BitStorageFeatures {
-    uint32_t           sType;
-    void*              pNext;
-    VkBool32           storageBuffer8BitAccess;
-    VkBool32           uniformAndStorageBuffer8BitAccess;
-    VkBool32           storagePushConstant8;
+    uint32_t sType;
+    void *pNext;
+    VkBool32 storageBuffer8BitAccess;
+    VkBool32 uniformAndStorageBuffer8BitAccess;
+    VkBool32 storagePushConstant8;
 } VkPhysicalDevice8BitStorageFeaturesKHR;
 #define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR 1000177000
 

@@ -495,18 +495,18 @@ void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *bloc
     vkGetBufferMemoryRequirements(instance->device, buffer, &memory_requirements);
     vkDestroyBuffer(instance->device, buffer, instance->alloc_callbacks);
 
-// #if defined(HL_VK_DEBUG_MEM)
+    // #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Block allocated ("
                    << "size=" << (uint32_t)block->size << ", "
                    << "alignment=" << (uint32_t)memory_requirements.alignment << ", "
                    << "uniform_buffer_offset_alignment=" << (uint32_t)instance->physical_device_limits.minUniformBufferOffsetAlignment << ", "
                    << "storage_buffer_offset_alignment=" << (uint32_t)instance->physical_device_limits.minStorageBufferOffsetAlignment << ", "
                    << "dedicated=" << (block->dedicated ? "true" : "false") << ")\n";
-// #endif
+    // #endif
 
-    if(usage_flags & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) {
+    if (usage_flags & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) {
         block->properties.alignment = instance->physical_device_limits.minStorageBufferOffsetAlignment;
-    } else if(usage_flags & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) {
+    } else if (usage_flags & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) {
         block->properties.alignment = instance->physical_device_limits.minUniformBufferOffsetAlignment;
     } else {
         block->properties.alignment = memory_requirements.alignment;

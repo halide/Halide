@@ -2202,8 +2202,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit_glsl_op(SpvId glsl_op_code, Type t
     for (const Expr &e : args) {
         e.accept(this);
         SpvId arg_value_id = builder.current_id();
-        if(builder.type_of(arg_value_id) != type_id) {
-            SpvId casted_value_id = cast_type(type, e.type(), arg_value_id); // all GLSL args must match return type
+        if (builder.type_of(arg_value_id) != type_id) {
+            SpvId casted_value_id = cast_type(type, e.type(), arg_value_id);  // all GLSL args must match return type
             operands.push_back(casted_value_id);
         } else {
             operands.push_back(arg_value_id);
@@ -2586,8 +2586,8 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
     DescriptorSet descriptor_set;
     descriptor_set.entry_point_name = entry_point_name;
 
-    // Add required extension support for storage types which are necessary to 
-    // use smaller bit-width types for any halide buffer *or* device argument 
+    // Add required extension support for storage types which are necessary to
+    // use smaller bit-width types for any halide buffer *or* device argument
     // (passed as a runtime array)
     for (const auto &arg : args) {
         if (arg.type.is_int_or_uint()) {
@@ -2611,7 +2611,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_device_args(const Stmt &s, uint3
             } else if (arg.type.bits() == 16) {
                 builder.require_capability(SpvCapabilityUniformAndStorageBuffer16BitAccess);
             }
-            
+
             SpvId arg_type_id = builder.declare_type(arg.type);
             param_struct_members.push_back(arg_type_id);
         }
