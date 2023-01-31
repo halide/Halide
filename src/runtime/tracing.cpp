@@ -347,7 +347,7 @@ WEAK int halide_get_trace_file(void *user_context) {
     if (halide_trace_file < 0) {
         const char *trace_file_name = getenv("HL_TRACE_FILE");
         if (trace_file_name) {
-            void *file = fopen(trace_file_name, "ab");
+            void *file = halide_fopen(trace_file_name, "ab");
             halide_abort_if_false(user_context, file && "Failed to open trace file\n");
             halide_set_trace_file(fileno(file));
             halide_trace_file_internally_opened = file;

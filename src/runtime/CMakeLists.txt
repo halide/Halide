@@ -18,6 +18,8 @@ set(RUNTIME_CPP
     fake_get_symbol
     fake_thread_pool
     float16_t
+    fopen
+    fopen_lfs
     force_include_types
     fuchsia_clock
     fuchsia_host_cpu_count
@@ -36,7 +38,6 @@ set(RUNTIME_CPP
     metal
     metal_objc_arm
     metal_objc_x86
-    mips_cpu_features
     module_aot_ref_count
     module_jit_ref_count
     msan
@@ -50,6 +51,7 @@ set(RUNTIME_CPP
     osx_host_cpu_count
     osx_opengl_context
     osx_yield
+    posix_aligned_alloc
     posix_allocator
     posix_clock
     posix_error_handler
@@ -79,8 +81,8 @@ set(RUNTIME_CPP
     wasm_cpu_features
     windows_clock
     windows_cuda
-    windows_d3d12compute_x86
     windows_d3d12compute_arm
+    windows_d3d12compute_x86
     windows_get_symbol
     windows_io
     windows_opencl
@@ -97,7 +99,6 @@ set(RUNTIME_LL
     arm
     arm_no_neon
     hvx_128
-    mips
     posix_math
     powerpc
     ptx_dev

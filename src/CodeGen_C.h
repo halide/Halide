@@ -33,6 +33,7 @@ public:
         CPlusPlusImplementation,
         CExternDecl,
         CPlusPlusExternDecl,
+        CPlusPlusFunctionInfoHeader,
     };
 
     /** Initialize a C code generator pointing at a particular output
@@ -133,7 +134,8 @@ protected:
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header() {
         return output_kind == CHeader ||
-               output_kind == CPlusPlusHeader;
+               output_kind == CPlusPlusHeader ||
+               output_kind == CPlusPlusFunctionInfoHeader;
     }
 
     /** Return true if only generating an interface, which may be extern "C" or C++ */
@@ -151,7 +153,8 @@ protected:
     bool is_c_plus_plus_interface() {
         return output_kind == CPlusPlusHeader ||
                output_kind == CPlusPlusImplementation ||
-               output_kind == CPlusPlusExternDecl;
+               output_kind == CPlusPlusExternDecl ||
+               output_kind == CPlusPlusFunctionInfoHeader;
     }
 
     /** Open a new C scope (i.e. throw in a brace, increase the indent) */
@@ -272,6 +275,9 @@ protected:
     void emit_metadata_getter(const std::string &function_name,
                               const std::vector<LoweredArgument> &args,
                               const MetadataNameMap &metadata_name_map);
+    void emit_constexpr_function_info(const std::string &function_name,
+                                      const std::vector<LoweredArgument> &args,
+                                      const MetadataNameMap &metadata_name_map);
 };
 
 }  // namespace Internal

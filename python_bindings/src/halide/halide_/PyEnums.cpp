@@ -85,7 +85,6 @@ void define_enums(py::module &m) {
         .value("ArchUnknown", Target::Arch::ArchUnknown)
         .value("X86", Target::Arch::X86)
         .value("ARM", Target::Arch::ARM)
-        .value("MIPS", Target::Arch::MIPS)
         .value("Hexagon", Target::Arch::Hexagon)
         .value("POWERPC", Target::Arch::POWERPC)
         .value("RISCV", Target::Arch::RISCV)
@@ -165,10 +164,6 @@ void define_enums(py::module &m) {
         .value("HexagonDma", Target::Feature::HexagonDma)
         .value("EmbedBitcode", Target::Feature::EmbedBitcode)
         .value("EnableLLVMLoopOpt", Target::Feature::EnableLLVMLoopOpt)
-        // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-        // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-        // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-        .value("DisableLLVMLoopOpt", Target::Feature::DisableLLVMLoopOpt)
         .value("WasmSimd128", Target::Feature::WasmSimd128)
         .value("WasmSignExt", Target::Feature::WasmSignExt)
         .value("WasmSatFloatToInt", Target::Feature::WasmSatFloatToInt)
@@ -199,6 +194,7 @@ void define_enums(py::module &m) {
         .value("c_source", OutputFileType::c_source)
         .value("cpp_stub", OutputFileType::cpp_stub)
         .value("featurization", OutputFileType::featurization)
+        .value("function_info_header", OutputFileType::function_info_header)
         .value("llvm_assembly", OutputFileType::llvm_assembly)
         .value("object", OutputFileType::object)
         .value("python_extension", OutputFileType::python_extension)

@@ -207,7 +207,7 @@ WEAK halide_hexagon_handle_t shared_runtime = 0;
 // failing on errors).
 WEAK void write_shared_object(void *user_context, const char *path,
                               const uint8_t *code, uint64_t code_size) {
-    void *f = fopen(path, "wb");
+    void *f = halide_fopen(path, "wb");
     if (!f) {
         debug(user_context) << "    failed to write shared object to '" << path << "'\n";
         return;

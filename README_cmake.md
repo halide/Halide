@@ -409,7 +409,6 @@ LLVM component names):
 | `TARGET_AMDGPU`      | `ON`, _if available_ | Enable the AMD GPU backend          |
 | `TARGET_ARM`         | `ON`, _if available_ | Enable the ARM backend              |
 | `TARGET_HEXAGON`     | `ON`, _if available_ | Enable the Hexagon backend          |
-| `TARGET_MIPS`        | `ON`, _if available_ | Enable the MIPS backend             |
 | `TARGET_NVPTX`       | `ON`, _if available_ | Enable the NVidia PTX backend       |
 | `TARGET_POWERPC`     | `ON`, _if available_ | Enable the PowerPC backend          |
 | `TARGET_RISCV`       | `ON`, _if available_ | Enable the RISC V backend           |
@@ -770,14 +769,15 @@ Variables set by the package:
 
 Halide defines the following targets that are available to users:
 
-| Imported target      | Description                                                                                                                          |
-|----------------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| `Halide::Halide`     | this is the JIT-mode library to use when using Halide from C++.                                                                      |
-| `Halide::Generator`  | this is the target to use when defining a generator executable. It supplies a `main()` function.                                     |
-| `Halide::Runtime`    | adds include paths to the Halide runtime headers                                                                                     |
-| `Halide::Tools`      | adds include paths to the Halide tools, including the benchmarking utility.                                                          |
-| `Halide::ImageIO`    | adds include paths to the Halide image IO utility and sets up dependencies to PNG / JPEG if they are available.                      |
-| `Halide::RunGenMain` | used with the `REGISTRATION` parameter of `add_halide_library` to create simple runners and benchmarking tools for Halide libraries. |
+| Imported target      | Description                                                                                                                                                                                    |
+|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Halide::Halide`     | this is the JIT-mode library to use when using Halide from C++.                                                                                                                                |
+| `Halide::Generator`  | this is the target to use when defining a generator executable. It supplies a `main()` function.                                                                                               |
+| `Halide::Runtime`    | adds include paths to the Halide runtime headers                                                                                                                                               |
+| `Halide::Tools`      | adds include paths to the Halide tools, including the benchmarking utility.                                                                                                                    |
+| `Halide::ImageIO`    | adds include paths to the Halide image IO utility. Depends on `PNG::PNG` and `JPEG::JPEG` if they exist or were loaded through the corresponding package components.                           |
+| `Halide::ThreadPool` | adds include paths to the Halide _simple_ thread pool utility library. This is not the same as the runtime's thread pool and is intended only for use by tests. Depends on `Threads::Threads`. |
+| `Halide::RunGenMain` | used with the `REGISTRATION` parameter of `add_halide_library` to create simple runners and benchmarking tools for Halide libraries.                                                           |
 
 The following targets are not guaranteed to be available:
 
@@ -812,10 +812,11 @@ add_halide_library(<target> FROM <generator-target>
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
                    [HEADER OUTVAR]
+                   [FUNCTION_INFO_HEADER OUTVAR]
                    [<extra-output> OUTVAR])
 
-extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | CPP_STUB
-             | FEATURIZATION | LLVM_ASSEMBLY | PYTHON_EXTENSION
+extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | FEATURIZATION
+             | LLVM_ASSEMBLY | PYTHON_EXTENSION
              | PYTORCH_WRAPPER | SCHEDULE | STMT | STMT_HTML
 ```
 
@@ -888,6 +889,16 @@ If `HEADER` is set, the path (relative to `CMAKE_CURRENT_BINARY_DIR`) to the
 generated `.h` header file will be set in `OUTVAR`. This can be used with
 `install(FILES)` to conveniently deploy the generated header along with your
 library.
+
+If `FUNCTION_INFO_HEADER` is set, the path (relative to
+`CMAKE_CURRENT_BINARY_DIR`) to the generated `.function_info.h` header file
+will be set in `OUTVAR`. This produces a file that contains `constexpr`
+descriptions of information about the generated functions (e.g., argument
+type and information). It is generated separately from the normal `HEADER`
+file because `HEADER` is intended to work with basic `extern "C"` linkage,
+while `FUNCTION_INFO_HEADER` requires C++17 or later to use effectively.
+(This can be quite useful for advanced usages, such as producing automatic
+call wrappers, etc.) Examples of usage can be found in the generated file.
 
 Lastly, each of the `extra-output` arguments directly correspond to an extra
 output (via `-e`) from the generator. The value `OUTVAR` names a variable into

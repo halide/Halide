@@ -70,12 +70,6 @@ protected:
     void visit(const Allocate *) override;
     ///@}
 
-    /** We ask for an extra vector on each allocation to enable fast
-     * clamped ramp loads. */
-    int allocation_padding(Type type) const override {
-        return CodeGen_Posix::allocation_padding(type) + native_vector_bits() / 8;
-    }
-
     /** Call an LLVM intrinsic, potentially casting the operands to
      * match the type of the function. */
     ///@{
@@ -123,7 +117,7 @@ private:
      * list of its extents and its size. Fires a runtime assert
      * (halide_error) if the size overflows 2^31 -1, the maximum
      * positive number an int32_t can hold. */
-    llvm::Value *codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);
+    llvm::Value *codegen_cache_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, int padding);
 
     /** Generate a LUT (8/16 bit, max_index < 256) lookup using vlut instructions. */
     llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
@@ -1763,7 +1757,7 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
             fn = fn2;
         }
     }
-    fn->addFnAttr(llvm::Attribute::ReadNone);
+    function_does_not_access_memory(fn);
     fn->addFnAttr(llvm::Attribute::NoUnwind);
     return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
                                       fn, std::move(args));
@@ -1786,7 +1780,7 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
             fn = fn2;
         }
     }
-    fn->addFnAttr(llvm::Attribute::ReadNone);
+    function_does_not_access_memory(fn);
     fn->addFnAttr(llvm::Attribute::NoUnwind);
     return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
                                       fn, std::move(args));
@@ -2099,7 +2093,8 @@ void CodeGen_Hexagon::visit(const Select *op) {
 }
 
 Value *CodeGen_Hexagon::codegen_cache_allocation_size(
-    const std::string &name, Type type, const std::vector<Expr> &extents) {
+    const std::string &name, Type type,
+    const std::vector<Expr> &extents, int padding) {
     // Compute size from list of extents checking for overflow.
 
     Expr overflow = make_zero(UInt(32));
@@ -2131,6 +2126,9 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(
         // is still an 8-bit number.
         overflow = overflow | (total_size_hi >> 24);
     }
+    int padding_bytes = padding * type.bytes();
+    overflow = overflow | (total_size + padding_bytes < total_size);
+    total_size += padding_bytes;
 
     Expr max_size = make_const(UInt(32), target.maximum_buffer_size());
     Expr size_check = (overflow == 0) && (total_size <= max_size);
@@ -2169,7 +2167,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
             llvm_size = codegen(Expr(constant_bytes));
         } else {
             llvm_size = codegen_cache_allocation_size(alloc->name, alloc->type,
-                                                      alloc->extents);
+                                                      alloc->extents, alloc->padding);
         }
 
         // Only allocate memory if the condition is true, otherwise 0.
@@ -2262,13 +2260,13 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         for (const auto &extent : alloc->extents) {
             size *= extent;
         }
-        size += allocation_padding(alloc->type);
+        size += alloc->padding * alloc->type.bytes();
         Expr new_expr =
             Call::make(Handle(), "halide_vtcm_malloc", {size}, Call::Extern);
         string free_function = "halide_vtcm_free";
         Stmt new_alloc = Allocate::make(
             alloc->name, alloc->type, alloc->memory_type, alloc->extents,
-            alloc->condition, alloc->body, new_expr, free_function);
+            alloc->condition, alloc->body, new_expr, free_function, alloc->padding);
         new_alloc.accept(this);
     } else {
         // For all other memory types

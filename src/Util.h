@@ -348,6 +348,15 @@ bool sub_would_overflow(int bits, int64_t a, int64_t b);
 bool mul_would_overflow(int bits, int64_t a, int64_t b);
 // @}
 
+/** Routines to perform arithmetic on signed types without triggering signed
+ * overflow. If overflow would occur, sets result to zero, and returns
+ * false. Otherwise set result to the correct value, and returns true. */
+// @{
+HALIDE_MUST_USE_RESULT bool add_with_overflow(int bits, int64_t a, int64_t b, int64_t *result);
+HALIDE_MUST_USE_RESULT bool sub_with_overflow(int bits, int64_t a, int64_t b, int64_t *result);
+HALIDE_MUST_USE_RESULT bool mul_with_overflow(int bits, int64_t a, int64_t b, int64_t *result);
+// @}
+
 /** Helper class for saving/restoring variable values on the stack, to allow
  * for early-exit that preserves correctness */
 template<typename T>

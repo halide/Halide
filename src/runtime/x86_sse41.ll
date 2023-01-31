@@ -52,35 +52,22 @@ define weak_odr <2 x double> @trunc_f64x2(<2 x double> %x) nounwind uwtable read
 }
 
 define weak_odr <16 x i8> @abs_i8x16(<16 x i8> %x) nounwind uwtable readnone alwaysinline {
-  %1 = sub <16 x i8> zeroinitializer, %x
-  %2 = icmp sgt <16 x i8> %x, zeroinitializer
-  %3 = select <16 x i1> %2, <16 x i8> %x, <16 x i8> %1
-  ret <16 x i8> %3
+  %1 = tail call <16 x i8> @llvm.abs.v16i8(<16 x i8> %x, i1 false)
+  ret <16 x i8> %1
 }
+declare <16 x i8> @llvm.abs.v16i8(<16 x i8>, i1) nounwind readnone
 
 define weak_odr <8 x i16> @abs_i16x8(<8 x i16> %x) nounwind uwtable readnone alwaysinline {
-  %1 = sub <8 x i16> zeroinitializer, %x
-  %2 = icmp sgt <8 x i16> %x, zeroinitializer
-  %3 = select <8 x i1> %2, <8 x i16> %x, <8 x i16> %1
-  ret <8 x i16> %3
+  %1 = tail call <8 x i16> @llvm.abs.v8i16(<8 x i16> %x, i1 false)
+  ret <8 x i16> %1
 }
+declare <8 x i16> @llvm.abs.v8i16(<8 x i16>, i1) nounwind readnone
 
 define weak_odr <4 x i32> @abs_i32x4(<4 x i32> %x) nounwind uwtable readnone alwaysinline {
-  %1 = sub <4 x i32> zeroinitializer, %x
-  %2 = icmp sgt <4 x i32> %x, zeroinitializer
-  %3 = select <4 x i1> %2, <4 x i32> %x, <4 x i32> %1
-  ret <4 x i32> %3
+  %1 = tail call <4 x i32> @llvm.abs.v4i32(<4 x i32> %x, i1 false)
+  ret <4 x i32> %1
 }
-
-define weak_odr <8 x i16> @saturating_pmulhrswx8(<8 x i16> %a, <8 x i16> %b) nounwind uwtable readnone alwaysinline {
-  %1 = tail call <8 x i16> @llvm.x86.ssse3.pmul.hr.sw.128(<8 x i16> %a, <8 x i16> %b)
-  %2 = icmp eq <8 x i16> %a, <i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768>
-  %3 = icmp eq <8 x i16> %b, <i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768>
-  %4 = and <8 x i1> %2, %3
-  %5 = select <8 x i1> %4, <8 x i16> <i16 32767, i16 32767, i16 32767, i16 32767, i16 32767, i16 32767, i16 32767, i16 32767>, <8 x i16> %1
-  ret <8 x i16> %5
-}
-declare <8 x i16> @llvm.x86.ssse3.pmul.hr.sw.128(<8 x i16>, <8 x i16>) nounwind readnone
+declare <4 x i32> @llvm.abs.v4i32(<4 x i32>, i1) nounwind readnone
 
 define weak_odr <8 x i16> @hadd_pmadd_u8_sse3(<16 x i8> %a) nounwind alwaysinline {
   %1 = tail call <8 x i16> @llvm.x86.ssse3.pmadd.ub.sw.128(<16 x i8> %a, <16 x i8> <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>)

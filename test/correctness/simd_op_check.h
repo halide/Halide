@@ -6,6 +6,7 @@
 #include "test_sharding.h"
 
 #include <fstream>
+#include <iostream>
 
 namespace Halide {
 struct TestResult {
@@ -22,6 +23,13 @@ struct Task {
 
 class SimdOpCheckTest {
 public:
+    static constexpr int max_i8 = 127;
+    static constexpr int max_i16 = 32767;
+    static constexpr int max_i32 = 0x7fffffff;
+    static constexpr int max_u8 = 255;
+    static constexpr int max_u16 = 65535;
+    const Expr max_u32 = UInt(32).max();
+
     std::string filter{"*"};
     std::string output_directory{Internal::get_test_tmp_dir()};
     std::vector<Task> tasks;
@@ -63,10 +71,8 @@ public:
     }
 
     virtual bool can_run_code() const {
-        // Assume we are configured to run wasm if requested
-        // (we'll fail further downstream if not)
         if (target.arch == Target::WebAssembly) {
-            return true;
+            return Halide::Internal::WasmModule::can_jit_target(Target("wasm-32-wasmrt"));
         }
         // If we can (target matches host), run the error checking Halide::Func.
         Target host_target = get_host_target();
@@ -76,12 +82,29 @@ public:
              target.os == host_target.os);
         // A bunch of feature flags also need to match between the
         // compiled code and the host in order to run the code.
-        for (Target::Feature f : {Target::SSE41, Target::AVX,
-                                  Target::AVX2, Target::AVX512,
-                                  Target::FMA, Target::FMA4, Target::F16C,
-                                  Target::VSX, Target::POWER_ARCH_2_07,
-                                  Target::ARMv7s, Target::NoNEON,
-                                  Target::WasmSimd128}) {
+        for (Target::Feature f : {
+                 Target::ARMDotProd,
+                 Target::ARMFp16,
+                 Target::ARMv7s,
+                 Target::ARMv81a,
+                 Target::AVX,
+                 Target::AVX2,
+                 Target::AVX512,
+                 Target::AVX512_Cannonlake,
+                 Target::AVX512_KNL,
+                 Target::AVX512_SapphireRapids,
+                 Target::AVX512_Skylake,
+                 Target::F16C,
+                 Target::FMA,
+                 Target::FMA4,
+                 Target::NoNEON,
+                 Target::POWER_ARCH_2_07,
+                 Target::RVV,
+                 Target::SSE41,
+                 Target::SVE,
+                 Target::SVE2,
+                 Target::VSX,
+             }) {
             if (target.has_feature(f) != host_target.has_feature(f)) {
                 can_run_the_code = false;
             }
@@ -107,7 +130,7 @@ public:
         bool found_it = false;
 
         std::ostringstream msg;
-        msg << op << " did not generate for target=" << target.to_string() << " vector_width=" << vector_width << ". Instead we got:\n";
+        msg << op << " did not generate for target=" << get_run_target().to_string() << " vector_width=" << vector_width << ". Instead we got:\n";
 
         std::string line;
         while (getline(asm_file, line)) {
@@ -162,6 +185,13 @@ public:
     // Check if a substring of str matches a pattern p.
     bool wildcard_search(const std::string &p, const std::string &str) const {
         return wildcard_match("*" + p + "*", str);
+    }
+
+    Target get_run_target() const {
+        return target
+            .without_feature(Target::NoRuntime)
+            .without_feature(Target::NoAsserts)
+            .without_feature(Target::NoBoundsQuery);
     }
 
     TestResult check_one(const std::string &op, const std::string &name, int vector_width, Expr e) {
@@ -224,10 +254,7 @@ public:
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
-            Target run_target = target
-                                    .without_feature(Target::NoRuntime)
-                                    .without_feature(Target::NoAsserts)
-                                    .without_feature(Target::NoBoundsQuery);
+            Target run_target = get_run_target();
 
             error.infer_input_bounds({}, run_target);
             // Fill the inputs with noise
@@ -315,13 +342,19 @@ public:
         /* First add some tests based on the target */
         add_tests();
 
+        // Remove irrelevant noise from output
+        const Target run_target = get_run_target();
+        const std::string run_target_str = run_target.to_string();
+
         Sharder sharder;
         bool success = true;
         for (size_t t = 0; t < tasks.size(); t++) {
             if (!sharder.should_run(t)) continue;
             const auto &task = tasks.at(t);
             auto result = check_one(task.op, task.name, task.vector_width, task.expr);
-            std::cout << result.op << "\n";
+            constexpr int tabstop = 32;
+            const int spaces = std::max(1, tabstop - (int)result.op.size());
+            std::cout << result.op << std::string(spaces, ' ') << "(" << run_target_str << ")\n";
             if (!result.error_msg.empty()) {
                 std::cerr << result.error_msg;
                 success = false;
@@ -329,6 +362,51 @@ public:
         }
 
         return success;
+    }
+
+    template<typename SIMDOpCheckT>
+    static int main(int argc, char **argv, const std::vector<Target> &targets_to_test) {
+        Target host = get_host_target();
+        std::cout << "host is:      " << host << "\n";
+
+        const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
+        std::cout << "simd_op_check test seed: " << seed << "\n";
+
+        for (const auto &t : targets_to_test) {
+            SIMDOpCheckT test(t);
+
+            if (argc > 1) {
+                test.filter = argv[1];
+            }
+
+            if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
+                test.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
+            }
+
+            test.set_seed(seed);
+
+            if (argc > 2) {
+                // Don't forget: if you want to run the standard tests to a specific output
+                // directory, you'll need to invoke with the first arg enclosed
+                // in quotes (to avoid it being wildcard-expanded by the shell):
+                //
+                //    correctness_simd_op_check "*" /path/to/output
+                //
+                test.output_directory = argv[2];
+            }
+
+            bool success = test.test_all();
+
+            // Compile a runtime for this target, for use in the static test.
+            compile_standalone_runtime(test.output_directory + "simd_op_check_runtime.o", test.target);
+
+            if (!success) {
+                return -1;
+            }
+        }
+
+        std::cout << "Success!\n";
+        return 0;
     }
 
 private:

@@ -12,7 +12,7 @@ using std::vector;
 
 namespace {
 
-/** A code generator that emits mips code from a given Halide stmt. */
+/** A code generator that emits PowerPC code from a given Halide stmt. */
 class CodeGen_PowerPC : public CodeGen_Posix {
 public:
     /** Create a powerpc code generator. Processor features can be
@@ -117,7 +117,7 @@ void CodeGen_PowerPC::init_module() {
         }
 
         auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
-        fn->addFnAttr(llvm::Attribute::ReadNone);
+        function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }

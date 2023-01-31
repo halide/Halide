@@ -99,9 +99,18 @@ void *memcpy(void *s1, const void *s2, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
 int memcmp(const void *s1, const void *s2, size_t n);
 void *memset(void *s, int val, size_t n);
+
+// No: don't call fopen() directly; some platforms may want to require
+// use of other calls instead, so you should bottleneck all calls to fopen()
+// to halide_fopen() instead, which allows for link-time overriding.
+//
 // Use fopen+fileno+fclose instead of open+close - the value of the
 // flags passed to open are different on every platform
-void *fopen(const char *, const char *);
+//
+// void *fopen(const char *, const char *);
+
+WEAK_INLINE void *halide_fopen(const char *filename, const char *type);
+
 int fileno(void *);
 int fclose(void *);
 int close(int);
@@ -186,11 +195,25 @@ struct halide_pseudostack_slot_t {
 WEAK void halide_use_jit_module();
 WEAK void halide_release_jit_module();
 
-WEAK_INLINE int halide_malloc_alignment();
+// These are all intended to be inlined into other pieces of runtime code;
+// they are not intended to be called or replaced by user code.
+WEAK_INLINE int halide_internal_malloc_alignment();
+WEAK_INLINE void *halide_internal_aligned_alloc(size_t alignment, size_t size);
+WEAK_INLINE void halide_internal_aligned_free(void *ptr);
 
 void halide_thread_yield();
 
 }  // extern "C"
+
+template<typename T>
+ALWAYS_INLINE T align_up(T p, size_t alignment) {
+    return (p + alignment - 1) & ~(alignment - 1);
+}
+
+template<typename T>
+ALWAYS_INLINE T is_power_of_two(T value) {
+    return (value != 0) && ((value & (value - 1)) == 0);
+}
 
 namespace {
 template<typename T>
@@ -215,7 +238,8 @@ ALWAYS_INLINE T min(const T &a, const T &b) {
 // A namespace for runtime modules to store their internal state
 // in. Should not be for things communicated between runtime modules,
 // because it's possible for them to be compiled with different c++
-// name mangling due to mixing and matching target triples.
+// name mangling due to mixing and matching target triples (this usually
+// only affects Windows builds).
 namespace Halide {
 namespace Runtime {
 namespace Internal {

@@ -10,10 +10,16 @@
 #include <atomic>
 #include <cassert>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <memory>
 #include <vector>
+
+#ifdef __APPLE__
+#include <AvailabilityVersions.h>
+#include <TargetConditionals.h>
+#endif
 
 #if defined(__has_feature)
 #if __has_feature(memory_sanitizer)
@@ -38,6 +44,65 @@
 #ifndef HALIDE_RUNTIME_BUFFER_CHECK_INDICES
 #define HALIDE_RUNTIME_BUFFER_CHECK_INDICES 0
 #endif
+
+#ifndef HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT
+// Conservatively align buffer allocations to 128 bytes by default.
+// This is enough alignment for all the platforms currently in use.
+// Redefine this in your compiler settings if you desire more/less alignment.
+#define HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT 128
+#endif
+
+static_assert(((HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT & (HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT - 1)) == 0),
+              "HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT must be a power of 2.");
+
+// Unfortunately, not all C++17 runtimes support aligned_alloc
+// (it may depends on OS/SDK version); this is provided as an opt-out
+// if you are compiling on a platform that doesn't provide a (good)
+// implementation. (Note that we actually use the C11 `::aligned_alloc()`
+// rather than the C++17 `std::aligned_alloc()` because at least one platform
+// we found supports the former but not the latter.)
+#ifndef HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
+
+// clang-format off
+#ifdef _MSC_VER
+
+    // MSVC doesn't implement aligned_alloc(), even in C++17 mode, and
+    // has stated they probably never will, so, always default it off here.
+    #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+
+#elif defined(__ANDROID_API__) && __ANDROID_API__ < 28
+
+    // Android doesn't provide aligned_alloc until API 28
+    #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+
+#elif defined(__APPLE__)
+
+    #if TARGET_OS_OSX && (__MAC_OS_X_VERSION_MIN_REQUIRED < __MAC_10_15)
+
+        // macOS doesn't provide aligned_alloc until 10.15
+        #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+
+    #elif TARGET_OS_IPHONE && (__IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_14_0)
+
+        // iOS doesn't provide aligned_alloc until 14.0
+        #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+
+    #else
+
+        // Assume it's ok on all other Apple targets
+        #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 1
+
+    #endif
+
+#else
+
+    // Not Windows, Android, or Apple: just asuume it's ok
+    #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 1
+
+#endif
+// clang-format on
+
+#endif  // HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
 
 namespace Halide {
 namespace Runtime {
@@ -803,6 +868,36 @@ public:
      * owned memory. */
     void allocate(void *(*allocate_fn)(size_t) = nullptr,
                   void (*deallocate_fn)(void *) = nullptr) {
+        // Drop any existing allocation
+        deallocate();
+
+        // Conservatively align images to (usually) 128 bytes. This is enough
+        // alignment for all the platforms we might use. Also ensure that the allocation
+        // is such that the logical size is an integral multiple of 128 bytes (or a bit more).
+        constexpr size_t alignment = HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT;
+
+        const auto align_up = [=](size_t value) -> size_t {
+            return (value + alignment - 1) & ~(alignment - 1);
+        };
+
+        size_t size = size_in_bytes();
+
+#if HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
+        // Only use aligned_alloc() if no custom allocators are specified.
+        if (!allocate_fn && !deallocate_fn) {
+            // As a practical matter, sizeof(AllocationHeader) is going to be no more than 16 bytes
+            // on any supported platform, so we will just overallocate by 'alignment'
+            // so that the user storage also starts at an aligned point. This is a bit
+            // wasteful, but probably not a big deal.
+            static_assert(sizeof(AllocationHeader) <= alignment);
+            void *alloc_storage = ::aligned_alloc(alignment, align_up(size) + alignment);
+            assert((uintptr_t)alloc_storage == align_up((uintptr_t)alloc_storage));
+            alloc = new (alloc_storage) AllocationHeader(free);
+            buf.host = (uint8_t *)((uintptr_t)alloc_storage + alignment);
+            return;
+        }
+        // else fall thru
+#endif
         if (!allocate_fn) {
             allocate_fn = malloc;
         }
@@ -810,18 +905,19 @@ public:
             deallocate_fn = free;
         }
 
-        // Drop any existing allocation
-        deallocate();
+        static_assert(sizeof(AllocationHeader) <= alignment);
 
-        // Conservatively align images to 128 bytes. This is enough
-        // alignment for all the platforms we might use.
-        size_t size = size_in_bytes();
-        const size_t alignment = 128;
-        size = (size + alignment - 1) & ~(alignment - 1);
-        void *alloc_storage = allocate_fn(size + sizeof(AllocationHeader) + alignment - 1);
+        // malloc() and friends must return a pointer aligned to at least alignof(std::max_align_t);
+        // make sure this is OK for AllocationHeader, since it always goes at the start
+        static_assert(alignof(AllocationHeader) <= alignof(std::max_align_t));
+
+        const size_t requested_size = align_up(size + alignment +
+                                               std::max(0, (int)sizeof(AllocationHeader) -
+                                                               (int)sizeof(std::max_align_t)));
+        void *alloc_storage = allocate_fn(requested_size);
         alloc = new (alloc_storage) AllocationHeader(deallocate_fn);
         uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
-        buf.host = (uint8_t *)((uintptr_t)(unaligned_ptr + alignment - 1) & ~(alignment - 1));
+        buf.host = (uint8_t *)align_up((uintptr_t)unaligned_ptr);
     }
 
     /** Drop reference to any owned host or device memory, possibly

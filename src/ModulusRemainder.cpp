@@ -375,66 +375,66 @@ int64_t lcm(int64_t a, int64_t b) {
     // Remove all of the common factors from one of the operands
     b /= gcd(a, b);
 
-    // Then multiply
-    if (mul_would_overflow(64, a, b)) {
-        return 0;
-    } else {
-        return a * b;
-    }
+    // Then multiply. On overflow this will return zero, so ignore the overflow
+    // flag.
+    int64_t result;
+    (void)mul_with_overflow(64, a, b, &result);
+    return result;
 }
 
 ModulusRemainder operator+(const ModulusRemainder &a, const ModulusRemainder &b) {
-    if (add_would_overflow(64, a.remainder, b.remainder)) {
-        return {1, 0};
-    } else {
-        int64_t modulus = gcd(a.modulus, b.modulus);
-        int64_t remainder = mod(a.remainder + b.remainder, modulus);
-        return {modulus, remainder};
+    int64_t m = 1, r = 0;
+    if (add_with_overflow(64, a.remainder, b.remainder, &r)) {
+        m = gcd(a.modulus, b.modulus);
+        r = mod(r, m);
     }
+    return {m, r};
 }
 
 ModulusRemainder operator-(const ModulusRemainder &a, const ModulusRemainder &b) {
-    if (sub_would_overflow(64, a.remainder, b.remainder)) {
-        return {1, 0};
-    } else {
-        int64_t modulus = gcd(a.modulus, b.modulus);
-        int64_t remainder = mod(a.remainder - b.remainder, modulus);
-        return {modulus, remainder};
+    int64_t m = 1, r = 0;
+    if (sub_with_overflow(64, a.remainder, b.remainder, &r)) {
+        m = gcd(a.modulus, b.modulus);
+        r = mod(r, m);
     }
+    return {m, r};
 }
 
 ModulusRemainder operator*(const ModulusRemainder &a, const ModulusRemainder &b) {
+    int64_t m, r;
     if (a.modulus == 0) {
         // a is constant
-        if (!mul_would_overflow(64, a.remainder, b.modulus) && !mul_would_overflow(64, a.remainder, b.remainder)) {
-            return {a.remainder * b.modulus, a.remainder * b.remainder};
+        if (mul_with_overflow(64, a.remainder, b.modulus, &m) &&
+            mul_with_overflow(64, a.remainder, b.remainder, &r)) {
+            return {m, r};
         }
     } else if (b.modulus == 0) {
         // b is constant
-        if (!mul_would_overflow(64, b.remainder, a.modulus) && !mul_would_overflow(64, a.remainder, b.remainder)) {
-            return {b.remainder * a.modulus, a.remainder * b.remainder};
+        if (mul_with_overflow(64, a.modulus, b.remainder, &m) &&
+            mul_with_overflow(64, a.remainder, b.remainder, &r)) {
+            return {m, r};
         }
     } else if (a.remainder == 0 && b.remainder == 0) {
         // multiple times multiple
-        if (!mul_would_overflow(64, a.modulus, b.modulus)) {
-            return {a.modulus * b.modulus, 0};
+        if (mul_with_overflow(64, a.modulus, b.modulus, &m)) {
+            return {m, 0};
         }
     } else if (a.remainder == 0) {
         int64_t g = gcd(b.modulus, b.remainder);
-        if (!mul_would_overflow(64, a.modulus, g)) {
-            return {a.modulus * g, 0};
+        if (mul_with_overflow(64, a.modulus, g, &m)) {
+            return {m, 0};
         }
     } else if (b.remainder == 0) {
         int64_t g = gcd(a.modulus, a.remainder);
-        if (!mul_would_overflow(64, b.modulus, g)) {
-            return {b.modulus * g, 0};
+        if (mul_with_overflow(64, b.modulus, g, &m)) {
+            return {m, 0};
         }
     } else {
         // Convert them to the same modulus and multiply
-        if (!mul_would_overflow(64, a.remainder, b.remainder)) {
-            int64_t modulus = gcd(a.modulus, b.modulus);
-            int64_t remainder = mod(a.remainder * b.remainder, modulus);
-            return {modulus, remainder};
+        if (mul_with_overflow(64, a.remainder, b.remainder, &r)) {
+            m = gcd(a.modulus, b.modulus);
+            r = mod(r, m);
+            return {m, r};
         }
     }
 
@@ -477,7 +477,8 @@ ModulusRemainder ModulusRemainder::unify(const ModulusRemainder &a, const Modulu
     // Reduce them to the same modulus and the same remainder
     int64_t modulus = gcd(a.modulus, b.modulus);
 
-    if (sub_would_overflow(64, a.remainder, b.remainder)) {
+    int64_t r;
+    if (!sub_with_overflow(64, a.remainder, b.remainder, &r)) {
         // The modulus is not representable as an int64.
         return {0, 1};
     }

@@ -62,6 +62,7 @@
 #include "SkipStages.h"
 #include "SlidingWindow.h"
 #include "SplitTuples.h"
+#include "StageStridedLoads.h"
 #include "StorageFlattening.h"
 #include "StorageFolding.h"
 #include "StrictifyFloat.h"
@@ -335,6 +336,10 @@ void lower_impl(const vector<Function> &output_funcs,
     s = partition_loops(s);
     s = simplify(s);
     log("Lowering after partitioning loops:", s);
+
+    debug(1) << "Staging strided loads...\n";
+    s = stage_strided_loads(s);
+    log("Lowering after staging strided loads:", s);
 
     debug(1) << "Trimming loops to the region over which they do something...\n";
     s = trim_no_ops(s);
