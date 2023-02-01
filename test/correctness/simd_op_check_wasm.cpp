@@ -387,11 +387,18 @@ public:
                 // check("v128.load32_zero", 2 * w, in_u32(0));
                 // check("v128.load64_zero", 2 * w, in_u64(0));
 
-                // Load vector with identical lanes
-                check("v128.load8_splat", 16 * w, in_u8(0));
-                check("v128.load16_splat", 8 * w, in_u16(0));
-                check("v128.load32_splat", 4 * w, in_u32(0));
-                check("v128.load64_splat", 2 * w, in_u64(0));
+                // Load vector with identical lanes generates *.splat.
+                if (Halide::Internal::get_llvm_version() >= 160) {
+                    check("i8x16.splat", 16 * w, in_u8(0));
+                    check("i16x8.splat", 8 * w, in_u16(0));
+                    check("i32x4.splat", 4 * w, in_u32(0));
+                    check("i64x2.splat", 2 * w, in_u64(0));
+                } else {
+                    check("v128.load8_splat", 16 * w, in_u8(0));
+                    check("v128.load16_splat", 8 * w, in_u16(0));
+                    check("v128.load32_splat", 4 * w, in_u32(0));
+                    check("v128.load64_splat", 2 * w, in_u64(0));
+                }
 
                 // Load Lane
                 // TODO: does Halide have any idiom that obviously generates these?
@@ -504,6 +511,8 @@ public:
                 check("i8x16.narrow_i16x8_u", 16 * w, u8_sat(i16_1));
                 check("i16x8.narrow_i32x4_s", 8 * w, i16_sat(i32_1));
                 check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(i32_1));
+                check("i16x8.narrow_i32x4_s", 8 * w, i8_sat(i32_1));
+                check("i16x8.narrow_i32x4_s", 8 * w, u8_sat(i32_1));
 
                 // Integer to integer widening
                 check("i16x8.extend_low_i8x16_s", 16 * w, i16(i8_1));

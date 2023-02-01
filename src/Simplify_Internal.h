@@ -289,9 +289,6 @@ public:
         return f;
     }
 
-    template<typename T>
-    Expr hoist_slice_vector(Expr e);
-
     Stmt mutate_let_body(const Stmt &s, ExprInfo *) {
         return mutate(s);
     }
