@@ -588,7 +588,7 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
         concrete_regions[f_reg.first] = concrete_box;
     }
 
-    regions_required_cache[query].push_back(RegionsRequired(bounds, concrete_regions));
+    regions_required_cache[query].emplace_back(bounds, concrete_regions);
     return concrete_regions;
 }
 
