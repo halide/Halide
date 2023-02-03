@@ -313,8 +313,9 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
     buf->device_interface->impl->use_module();
 
     debug(user_context)
-        << "    allocated device buffer " << (void *)buf->device
-        << " for buffer " << buf << "\n";
+        << "    allocated device region=" << (void *)device_region << "\n"
+        << "    containing device buffer=" << (void *)device_region->handle << "\n"
+        << "    for halide buffer " << buf << "\n";
 
     // retrieve the buffer from the region
     VkBuffer *device_buffer = reinterpret_cast<VkBuffer *>(device_region->handle);
@@ -346,7 +347,7 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
         return result;
     }
 
-    // fill buffer with zero values
+    // fill buffer with zero values up to the size of the buffer
     vkCmdFillBuffer(command_buffer, *device_buffer, 0, VK_WHOLE_SIZE, 0);
     debug(user_context) << "    zeroing device_buffer=" << (void *)device_buffer
                         << " size=" << (uint32_t)device_region->size << "\n";
@@ -466,6 +467,13 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
         error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
         return halide_error_code_internal_error;
     }
+
+#ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << "  copying into device region=" << (void *)device_region << "\n"
+        << "  containing device buffer=" << (void *)device_buffer << "\n"
+        << "  from halide buffer=" << halide_buffer << "\n";
+#endif
 
     // create a command buffer
     VkCommandBuffer command_buffer;
@@ -613,6 +621,13 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
         error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
         return halide_error_code_internal_error;
     }
+
+#ifdef DEBUG_RUNTIME
+    debug(user_context)
+        << "  copying from device region=" << (void *)device_region << "\n"
+        << "  containing device buffer=" << (void *)device_buffer << "\n"
+        << "  into halide buffer=" << halide_buffer << "\n";
+#endif
 
     // create a command buffer
     VkCommandBuffer command_buffer;

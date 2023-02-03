@@ -479,7 +479,10 @@ VkResult vk_update_descriptor_set(void *user_context,
         scalar_args_entry = (VkDescriptorBufferInfo *)descriptor_buffer_info.back();
 
 #ifdef DEBUG_RUNTIME
-        debug(user_context) << "[0] offset=0 (uniform)\n";
+        debug(user_context) << "  [" << (uint32_t)write_descriptor_set.size() << "] UNIFORM_BUFFER : "
+                            << "buffer=" << (void *)scalar_args_buffer << " "
+                            << "offset=" << (uint32_t)(0) << " "
+                            << "size=VK_WHOLE_SIZE\n";
 #endif
         VkWriteDescriptorSet uniform_buffer_write_descriptor_set = {
             VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,  // struct type
@@ -523,7 +526,11 @@ VkResult vk_update_descriptor_set(void *user_context,
             VkDescriptorBufferInfo *device_buffer_entry = (VkDescriptorBufferInfo *)descriptor_buffer_info.back();
 
 #ifdef DEBUG_RUNTIME
-            debug(user_context) << "[" << (uint32_t)write_descriptor_set.size() << "] offset=" << (uint32_t)(range_offset) << " (storage)\n";
+            debug(user_context) << "  [" << (uint32_t)write_descriptor_set.size() << "] STORAGE_BUFFER : "
+                                << "region=" << (void *)device_region << " "
+                                << "buffer=" << (void *)device_buffer << " "
+                                << "offset=" << (uint32_t)(range_offset) << " "
+                                << "size=" << (uint32_t)(range_size) << "\n";
 #endif
 
             VkWriteDescriptorSet storage_buffer_write_descriptor_set = {
@@ -1072,13 +1079,14 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
             shader_bindings[n].dispatch_data.local_size_binding.constant_id[dim] = module_ptr[idx++];
         }
 
-        debug(user_context) << "  [" << n << "] "
-                            << "entry_point_name='" << (const char *)entry_point_name << "'\n";
+#ifdef DEBUG_RUNTIME
 
-        debug(user_context) << "  uniform_buffer_count=" << uniform_buffer_count << "\n"
-                            << "  storage_buffer_count=" << storage_buffer_count << "\n";
+        debug(user_context) << "  [" << n << "] '" << (const char *)entry_point_name << "'\n";
 
-        debug(user_context) << "  specialization_constants_count=" << specialization_constants_count << "\n";
+        debug(user_context) << "   uniform_buffer_count=" << uniform_buffer_count << "\n"
+                            << "   storage_buffer_count=" << storage_buffer_count << "\n";
+
+        debug(user_context) << "   specialization_constants_count=" << specialization_constants_count << "\n";
         for (uint32_t sc = 0; sc < specialization_constants_count; sc++) {
             debug(user_context) << "   [" << sc << "] "
                                 << "constant_name='" << (const char *)specialization_constants[sc].constant_name << "' "
@@ -1086,7 +1094,7 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
                                 << "type_size=" << specialization_constants[sc].type_size << "\n";
         }
 
-        debug(user_context) << "  shared_memory_allocations_count=" << shared_memory_allocations_count << "\n";
+        debug(user_context) << "   shared_memory_allocations_count=" << shared_memory_allocations_count << "\n";
         for (uint32_t sm = 0; sm < shared_memory_allocations_count; sm++) {
             debug(user_context) << "   [" << sm << "] "
                                 << "variable_name='" << (const char *)shared_memory_allocations[sm].variable_name << "' "
@@ -1094,11 +1102,12 @@ VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryA
                                 << "type_size=" << shared_memory_allocations[sm].type_size << " "
                                 << "array_size=" << shared_memory_allocations[sm].array_size << "\n";
         }
-        debug(user_context) << "  local_size_binding=[";
+        debug(user_context) << "   local_size_binding=[";
         for (uint32_t dim = 0; dim < 3 && (idx < module_entries); dim++) {
             debug(user_context) << shader_bindings[n].dispatch_data.local_size_binding.constant_id[dim] << " ";
         }
         debug(user_context) << "]\n";
+#endif
         shader_bindings[n].entry_point_name = entry_point_name;  // NOTE: module owns string data
         shader_bindings[n].uniform_buffer_count = uniform_buffer_count;
         shader_bindings[n].storage_buffer_count = storage_buffer_count;
