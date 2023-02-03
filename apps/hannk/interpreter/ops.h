@@ -593,7 +593,8 @@ public:
     virtual ~OpVisitor() = default;
 
     // public to allow easier experimentation with adding Ops without friend access
-    virtual void visit_leaf(const Op *op) { }
+    virtual void visit_leaf(const Op *op) {
+    }
 
 protected:
     // Only the classes in the list are allowed to call visit() (to implement accept_impl())
@@ -653,7 +654,9 @@ public:
     }
 
     // public to allow easier experimentation with adding Ops without friend access
-    virtual OpPtr visit_leaf(OpPtr op) { return op; }
+    virtual OpPtr visit_leaf(OpPtr op) {
+        return op;
+    }
 
 protected:
     // Only the classes in the list are allowed to call visit() (to implement mutate_impl())
