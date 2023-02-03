@@ -1095,8 +1095,8 @@ WEAK int halide_vulkan_run(void *user_context,
     // 1a. Locate the correct entry point from the cache
     bool found_entry_point = false;
     uint32_t entry_point_index = 0;
-    for (uint32_t n = 0; n < cache_entry->shader_count; ++n) {
-        if (strstr(cache_entry->shader_bindings[n].entry_point_name, entry_name) != nullptr) {
+    for (uint32_t n = 0; (n < cache_entry->shader_count) && !found_entry_point; ++n) {
+        if (strcmp(cache_entry->shader_bindings[n].entry_point_name, entry_name) == 0) {
             entry_point_index = n;
             found_entry_point = true;
         }
@@ -1135,8 +1135,8 @@ WEAK int halide_vulkan_run(void *user_context,
         }
     }
 
-    VulkanShaderBinding *shader_bindings = (cache_entry->shader_bindings + entry_point_index);
-    halide_abort_if_false(user_context, shader_bindings != nullptr);
+    VulkanShaderBinding *entry_point_binding = (cache_entry->shader_bindings + entry_point_index);
+    halide_abort_if_false(user_context, entry_point_binding != nullptr);
 
     VulkanDispatchData dispatch_data = {};
     dispatch_data.shared_mem_bytes = shared_mem_bytes;
@@ -1148,30 +1148,30 @@ WEAK int halide_vulkan_run(void *user_context,
     dispatch_data.local_size[2] = threadsZ;
 
     // 2c. Setup the compute pipeline (eg override any specializations for shared mem or workgroup size)
-    VkResult result = vk_setup_compute_pipeline(user_context, ctx.allocator, shader_bindings, &dispatch_data, cache_entry->shader_module, cache_entry->pipeline_layout, &(shader_bindings->compute_pipeline));
+    VkResult result = vk_setup_compute_pipeline(user_context, ctx.allocator, entry_point_binding, &dispatch_data, cache_entry->shader_module, cache_entry->pipeline_layout, &(entry_point_binding->compute_pipeline));
     if (result != VK_SUCCESS) {
         error(user_context) << "vk_setup_compute_pipeline() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
         return halide_error_code_internal_error;
     }
 
     // 2d. Create a descriptor set
-    if (shader_bindings->descriptor_set == 0) {
+    if (entry_point_binding->descriptor_set == 0) {
 
         // Construct a descriptor pool
         //
         // NOTE: while this could be re-used across multiple pipelines, we only know the storage requirements of this kernel's
         //       inputs and outputs ... so create a pool specific to the number of buffers known at this time
 
-        uint32_t uniform_buffer_count = shader_bindings->uniform_buffer_count;
-        uint32_t storage_buffer_count = shader_bindings->storage_buffer_count;
-        VkResult result = vk_create_descriptor_pool(user_context, ctx.allocator, uniform_buffer_count, storage_buffer_count, &(shader_bindings->descriptor_pool));
+        uint32_t uniform_buffer_count = entry_point_binding->uniform_buffer_count;
+        uint32_t storage_buffer_count = entry_point_binding->storage_buffer_count;
+        VkResult result = vk_create_descriptor_pool(user_context, ctx.allocator, uniform_buffer_count, storage_buffer_count, &(entry_point_binding->descriptor_pool));
         if (result != VK_SUCCESS) {
             error(user_context) << "vk_create_descriptor_pool() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
             return result;
         }
 
         // Create the descriptor set
-        result = vk_create_descriptor_set(user_context, ctx.allocator, cache_entry->descriptor_set_layouts[entry_point_index], shader_bindings->descriptor_pool, &(shader_bindings->descriptor_set));
+        result = vk_create_descriptor_set(user_context, ctx.allocator, cache_entry->descriptor_set_layouts[entry_point_index], entry_point_binding->descriptor_pool, &(entry_point_binding->descriptor_set));
         if (result != VK_SUCCESS) {
             error(user_context) << "vk_create_descriptor_pool() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
             return result;
@@ -1179,11 +1179,11 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     // 3a. Create a buffer for the scalar parameters
-    if ((shader_bindings->args_region == nullptr) && shader_bindings->uniform_buffer_count) {
+    if ((entry_point_binding->args_region == nullptr) && entry_point_binding->uniform_buffer_count) {
         size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context, arg_sizes, args, arg_is_buffer);
         if (scalar_buffer_size > 0) {
-            shader_bindings->args_region = vk_create_scalar_uniform_buffer(user_context, ctx.allocator, scalar_buffer_size);
-            if (shader_bindings->args_region == nullptr) {
+            entry_point_binding->args_region = vk_create_scalar_uniform_buffer(user_context, ctx.allocator, scalar_buffer_size);
+            if (entry_point_binding->args_region == nullptr) {
                 error(user_context) << "vk_create_scalar_uniform_buffer() failed! Unable to create shader module!\n";
                 return halide_error_code_internal_error;
             }
@@ -1192,14 +1192,14 @@ WEAK int halide_vulkan_run(void *user_context,
 
     // 3b. Update uniform buffer with scalar parameters
     VkBuffer *args_buffer = nullptr;
-    if ((shader_bindings->args_region != nullptr) && shader_bindings->uniform_buffer_count) {
-        VkResult result = vk_update_scalar_uniform_buffer(user_context, ctx.allocator, shader_bindings->args_region, arg_sizes, args, arg_is_buffer);
+    if ((entry_point_binding->args_region != nullptr) && entry_point_binding->uniform_buffer_count) {
+        VkResult result = vk_update_scalar_uniform_buffer(user_context, ctx.allocator, entry_point_binding->args_region, arg_sizes, args, arg_is_buffer);
         if (result != VK_SUCCESS) {
             debug(user_context) << "vk_update_scalar_uniform_buffer() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
             return result;
         }
 
-        args_buffer = reinterpret_cast<VkBuffer *>(shader_bindings->args_region->handle);
+        args_buffer = reinterpret_cast<VkBuffer *>(entry_point_binding->args_region->handle);
         if (args_buffer == nullptr) {
             error(user_context) << "Vulkan: Failed to retrieve scalar args buffer for device memory!\n";
             return halide_error_code_internal_error;
@@ -1207,7 +1207,7 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     // 3c. Update buffer bindings for descriptor set
-    result = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, shader_bindings->uniform_buffer_count, shader_bindings->storage_buffer_count, arg_sizes, args, arg_is_buffer, shader_bindings->descriptor_set);
+    result = vk_update_descriptor_set(user_context, ctx.allocator, args_buffer, entry_point_binding->uniform_buffer_count, entry_point_binding->storage_buffer_count, arg_sizes, args, arg_is_buffer, entry_point_binding->descriptor_set);
     if (result != VK_SUCCESS) {
         debug(user_context) << "vk_update_descriptor_set() failed! Unable to proceed! Error: " << vk_get_error_name(result) << "\n";
         return result;
@@ -1224,9 +1224,9 @@ WEAK int halide_vulkan_run(void *user_context,
     // 5. Fill the command buffer
     result = vk_fill_command_buffer_with_dispatch_call(user_context,
                                                        ctx.device, command_buffer,
-                                                       shader_bindings->compute_pipeline,
+                                                       entry_point_binding->compute_pipeline,
                                                        cache_entry->pipeline_layout,
-                                                       shader_bindings->descriptor_set,
+                                                       entry_point_binding->descriptor_set,
                                                        entry_point_index,
                                                        blocksX, blocksY, blocksZ);
     if (result != VK_SUCCESS) {
