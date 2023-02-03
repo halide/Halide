@@ -592,6 +592,9 @@ class OpVisitor {
 public:
     virtual ~OpVisitor() = default;
 
+    // public to allow easier experimentation with adding Ops without friend access
+    virtual void visit_leaf(const Op *op) { }
+
 protected:
     // Only the classes in the list are allowed to call visit() (to implement accept_impl())
     friend class BinaryOp;
@@ -616,7 +619,6 @@ protected:
     friend class OpGroup;
 
     // clang-format off
-    virtual void visit_leaf(const Op *op) { }
     virtual void visit(const BinaryOp *op) { visit_leaf(op); }
     virtual void visit(const ConcatenationOp *op) { visit_leaf(op); }
     virtual void visit(const ConvOp *op) { visit_leaf(op); }
@@ -650,6 +652,9 @@ public:
         return Op::mutate(std::move(op), this);
     }
 
+    // public to allow easier experimentation with adding Ops without friend access
+    virtual OpPtr visit_leaf(OpPtr op) { return op; }
+
 protected:
     // Only the classes in the list are allowed to call visit() (to implement mutate_impl())
     friend class BinaryOp;
@@ -674,7 +679,6 @@ protected:
     friend class OpGroup;
 
     // clang-format off
-    virtual OpPtr visit_leaf(OpPtr op) { return op; }
     virtual OpPtr visit(std::unique_ptr<BinaryOp> op) { return visit_leaf(std::move(op)); }
     virtual OpPtr visit(std::unique_ptr<ConcatenationOp> op) { return visit_leaf(std::move(op)); }
     virtual OpPtr visit(std::unique_ptr<ConvOp> op) { return visit_leaf(std::move(op)); }
