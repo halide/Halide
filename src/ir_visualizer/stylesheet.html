@@ -1,0 +1,806 @@
+<style type='text/css'>    
+    /* Normal CSS */
+	body {
+		font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+		font-size: 12px;
+		background: #f8f8f8;
+		margin-left: 15px;
+	}
+
+	a,
+	a:hover,
+	a:visited,
+	a:active {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	b {
+		font-weight: normal;
+	}
+
+	p.WrapLine {
+		margin: 0px;
+		margin-left: 30px;
+		text-indent: -30px;
+	}
+
+	div.WrapLine {
+		margin-left: 30px;
+		text-indent: -30px;
+	}
+
+	div.Indent {
+		padding-left: 15px;
+	}
+
+	div.ShowHide {
+		position: absolute;
+		left: -12px;
+		width: 12px;
+		height: 12px;
+	}
+
+	span.Comment {
+		color: #998;
+		font-style: italic;
+	}
+
+	span.Keyword {
+		color: #333;
+		font-weight: bold;
+	}
+
+	span.Assign {
+		color: #d14;
+		font-weight: bold;
+	}
+
+	span.Symbol {
+		color: #990073;
+	}
+
+	span.Type {
+		color: #445588;
+		font-weight: bold;
+	}
+
+	span.StringImm {
+		color: #d14;
+	}
+
+	span.IntImm {
+		color: #099;
+	}
+
+	span.FloatImm {
+		color: #099;
+	}
+
+	b.Highlight {
+		font-weight: bold;
+		background-color: #DDD;
+	}
+
+	span.Highlight {
+		font-weight: bold;
+		background-color: #FF0;
+	}
+
+	span.OpF32 {
+		color: hsl(106deg 100% 40%);
+		font-weight: bold;
+	}
+
+	span.OpF64 {
+		color: hsl(106deg 100% 30%);
+		font-weight: bold;
+	}
+
+	span.OpB8 {
+		color: hsl(208deg 100% 80%);
+		font-weight: bold;
+	}
+
+	span.OpB16 {
+		color: hsl(208deg 100% 70%);
+		font-weight: bold;
+	}
+
+	span.OpB32 {
+		color: hsl(208deg 100% 60%);
+		font-weight: bold;
+	}
+
+	span.OpB64 {
+		color: hsl(208deg 100% 50%);
+		font-weight: bold;
+	}
+
+	span.OpI8 {
+		color: hsl(46deg 100% 45%);
+		font-weight: bold;
+	}
+
+	span.OpI16 {
+		color: hsl(46deg 100% 40%);
+		font-weight: bold;
+	}
+
+	span.OpI32 {
+		color: hsl(46deg 100% 34%);
+		font-weight: bold;
+	}
+
+	span.OpI64 {
+		color: hsl(46deg 100% 27%);
+		font-weight: bold;
+	}
+
+	span.OpVec2 {
+		background-color: hsl(100deg 100% 90%);
+		font-weight: bold;
+	}
+
+	span.OpVec4 {
+		background-color: hsl(100deg 100% 80%);
+		font-weight: bold;
+	}
+
+	span.Memory {
+		color: #d22;
+		font-weight: bold;
+	}
+
+	span.Pred {
+		background-color: #ffe8bd;
+		font-weight: bold;
+	}
+
+	span.Label {
+		background-color: #bde4ff;
+		font-weight: bold;
+	}
+
+	code.ptx {
+		tab-size: 26;
+		white-space: pre;
+	}
+
+	.tf-tree {
+		overflow: unset;
+	}
+
+	/* Additional Code Visualization CSS */
+	span.ButtonSpacer {
+		width: 5px;
+		color: transparent;
+		display: inline-block;
+	}
+
+	.infoButton {
+		background-color: rgba(113, 113, 113, 0.1);
+		border: 1px solid rgb(113, 113, 113);
+		color: rgb(113, 113, 113);
+		border-radius: 8px;
+		box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0;
+		box-sizing: border-box;
+		text-align: center;
+		vertical-align: middle;
+		margin-left: 5px;
+		margin-right: 5px;
+		font-size: 15px;
+	}
+
+	.infoButton:hover {
+		background-color: #f7fafa;
+	}
+
+	.colorButton {
+		height: 15px;
+		width: 5px;
+		margin-right: 2px;
+		border: 1px solid rgba(0, 0, 0, 0);
+		vertical-align: middle;
+		border-radius: 2px;
+	}
+
+	.colorButton:hover {
+		border: 1px solid grey;
+	}
+
+	.iconButton {
+		border: 0px;
+		background: transparent;
+		color: black;
+		font-size: 20px;
+		display: inline-block;
+		vertical-align: middle;
+		margin-right: 5px;
+		margin-left: 5px;
+	}
+
+	.iconButton:hover {
+		color: red;
+		background: transparent;
+	}
+
+	.resizeButton {
+		margin: 0px;
+	}
+
+	.assemblyIcon {
+		color: red;
+	}
+
+	.informationBarButton {
+		border: 0px;
+		background: transparent;
+		display: inline-block;
+		vertical-align: middle;
+		margin-right: 5px;
+		margin-top: 5px;
+	}
+
+	.informationBarButton:hover {
+		color: blue;
+	}
+
+	.assemblyIcon {
+		color: red;
+	}
+
+	/* Cost Colors CSS */
+	span.CostColor19,
+	div.CostColor19,
+	.CostColor19 {
+		background-color: rgb(130, 31, 27);
+	}
+
+	span.CostColor18,
+	div.CostColor18,
+	.CostColor18 {
+		background-color: rgb(145, 33, 30);
+	}
+
+	span.CostColor17,
+	div.CostColor17,
+	.CostColor17 {
+		background-color: rgb(160, 33, 32);
+	}
+
+	span.CostColor16,
+	div.CostColor16,
+	.CostColor16 {
+		background-color: rgb(176, 34, 34);
+	}
+
+	span.CostColor15,
+	div.CostColor15,
+	.CostColor15 {
+		background-color: rgb(185, 47, 32);
+	}
+
+	span.CostColor14,
+	div.CostColor14,
+	.CostColor14 {
+		background-color: rgb(193, 59, 30);
+	}
+
+	span.CostColor13,
+	div.CostColor13,
+	.CostColor13 {
+		background-color: rgb(202, 71, 27);
+	}
+
+	span.CostColor12,
+	div.CostColor12,
+	.CostColor12 {
+		background-color: rgb(210, 82, 22);
+	}
+
+	span.CostColor11,
+	div.CostColor11,
+	.CostColor11 {
+		background-color: rgb(218, 93, 16);
+	}
+
+	span.CostColor10,
+	div.CostColor10,
+	.CostColor10 {
+		background-color: rgb(226, 104, 6);
+	}
+
+	span.CostColor9,
+	div.CostColor9,
+	.CostColor9 {
+		background-color: rgb(229, 118, 9);
+	}
+
+	span.CostColor8,
+	div.CostColor8,
+	.CostColor8 {
+		background-color: rgb(230, 132, 15);
+	}
+
+	span.CostColor7,
+	div.CostColor7,
+	.CostColor7 {
+		background-color: rgb(231, 146, 20);
+	}
+
+	span.CostColor6,
+	div.CostColor6,
+	.CostColor6 {
+		background-color: rgb(232, 159, 25);
+	}
+
+	span.CostColor5,
+	div.CostColor5,
+	.CostColor5 {
+		background-color: rgb(233, 172, 30);
+	}
+
+	span.CostColor4,
+	div.CostColor4,
+	.CostColor4 {
+		background-color: rgb(233, 185, 35);
+	}
+
+	span.CostColor3,
+	div.CostColor3,
+	.CostColor3 {
+		background-color: rgb(233, 198, 40);
+	}
+
+	span.CostColor2,
+	div.CostColor2,
+	.CostColor2 {
+		background-color: rgb(232, 211, 45);
+	}
+
+	span.CostColor1,
+	div.CostColor1,
+	.CostColor1 {
+		background-color: rgb(231, 223, 50);
+	}
+
+	span.CostColor0,
+	div.CostColor0,
+	.CostColor0 {
+		background-color: rgb(236, 233, 89);
+	}
+
+	span.CostColorSpacer {
+		width: 2px;
+		color: transparent;
+		display: inline-block;
+	}
+
+	span.CostComputation {
+		width: 13px;
+		display: inline-block;
+		color: transparent;
+	}
+
+	span.CostMovement {
+		width: 13px;
+		display: inline-block;
+		color: transparent;
+	}
+
+	span.smallColorIndent {
+		position: absolute;
+		left: 35px;
+	}
+
+	span.bigColorIndent {
+		position: absolute;
+		left: 65px;
+	}
+
+	/* Flexbox Div Styling CSS */
+	div.outerDiv {
+		height: 100vh;
+		display: flex;
+		flex-direction: column;
+	}
+
+	div.informationBar {
+		display: flex;
+	}
+
+	div.mainContent {
+		display: flex;
+		flex-grow: 1;
+		width: 100%;
+		overflow: hidden;
+		border-top: 1px solid rgb(200, 200, 200)
+	}
+
+	div.IRCode-code {
+		counter-reset: line;
+		padding-left: 50px;
+		padding-top: 20px;
+		overflow-y: scroll;
+		position: relative;
+	}
+
+	div.IRVisualization {
+		overflow-y: scroll;
+		padding-top: 20px;
+		padding-left: 20px;
+		position: relative;
+	}
+
+	div.ResizeBar {
+		background: rgb(201, 231, 190);
+		cursor: col-resize;
+		border-left: 1px solid rgb(0, 0, 0);
+		border-right: 1px solid rgb(0, 0, 0);
+	}
+
+	div.collapseButtons {
+		position: relative;
+		top: 50%;
+	}
+
+	/* Line Numbers CSS */
+	p.WrapLine,
+	div.WrapLine,
+	div.Consumer,
+	div.Produce,
+	div.For,
+	span.IfSpan,
+	div.Evaluate,
+	div.Allocate,
+	div.ClosingBrace,
+	div.Module,
+	div.Function {
+		counter-increment: line;
+	}
+
+	p.WrapLine:before,
+	div.WrapLine:before {
+		content: counter(line) '. ';
+		display: inline-block;
+		position: absolute;
+		left: 30px;
+		color: rgb(175, 175, 175);
+		user-select: none;
+		-webkit-user-select: none;
+	}
+
+	div.Consumer:before,
+	div.Produce:before,
+	div.For:before,
+	span.IfSpan:before,
+	div.Evaluate:before,
+	div.Allocate:before,
+	div.ClosingBrace:before,
+	div.Module:before,
+	div.Function:before {
+		content: counter(line) '. ';
+		display: inline-block;
+		position: absolute;
+		left: 0px;
+		color: rgb(175, 175, 175);
+		user-select: none;
+		-webkit-user-select: none;
+	}
+
+	/* CodeMirror */
+	.CodeMirror {
+		height: 100%;
+		width: 100%;
+	}
+
+	.styled-background {
+		background-color: #ff7;
+	}
+
+	/* Tooltip CSS */
+	.left-table {
+		text-align: right;
+		color: grey;
+		vertical-align: middle;
+		font-size: 12px;
+	}
+
+	.right-table {
+		text-align: left;
+		vertical-align: middle;
+		font-size: 12px;
+		font-weight: bold;
+		padding-left: 3px;
+	}
+
+	.tooltipTable {
+		border: 0px;
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	.tooltip {
+		display: none;
+		position: absolute;
+		top: 0;
+		left: 0;
+		background: white;
+		padding: 5px;
+		font-size: 90%;
+		pointer-events: none;
+		border-radius: 5px;
+		border: 1px dashed #aaa;
+		z-index: 9999;
+		box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0;
+	}
+
+	.CostTooltip {
+		min-width: max-content;
+	}
+
+	.conditionTooltip {
+		width: 300px;
+		padding: 5px;
+		font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+	}
+
+	span.tooltipHelperText {
+		color: red;
+		margin-top: 5px;
+	}
+
+	/* irViz CSS */
+	.tf-custom-irViz .tf-nc {
+		border-radius: 5px;
+		border: 1px solid;
+	}
+
+	.tf-custom-irViz .tf-nc:before,
+	.tf-custom-irViz .tf-nc:after {
+		border-left-width: 1px;
+	}
+
+	.tf-custom-irViz li li:before {
+		border-top-width: 1px;
+	}
+
+	.tf-custom-irViz .end-node {
+		border-style: dashed;
+	}
+
+	.tf-custom-irViz .tf-nc {
+		background-color: #e6eeff;
+	}
+
+	.tf-custom-irViz {
+		font-size: 12px;
+	}
+
+	div.box {
+		border: 1px dashed grey;
+		border-radius: 5px;
+		margin: 5px;
+		padding: 5px;
+		display: flex;
+		width: max-content;
+	}
+
+	div.boxHeader {
+		padding: 5px;
+		display: flex;
+	}
+
+	div.memory-cost-div,
+	div.computation-cost-div {
+		border: 1px solid rgba(0, 0, 0, 0);
+		width: 7px;
+	}
+
+	div.FunctionCallBox {
+		background-color: #fabebe;
+	}
+
+	div.FunctionBox {
+		background-color: #f0f0f0;
+		border: 1px dashed grey;
+		border-radius: 5px;
+		margin-bottom: 15px;
+		padding: 5px;
+		width: max-content;
+	}
+
+	div.functionHeader {
+		display: flex;
+		margin-bottom: 10px;
+	}
+
+	div.ProducerConsumerBox {
+		background-color: #99bbff;
+	}
+
+	div.ForBox {
+		background-color: #b3ccff;
+	}
+
+	div.StoreBox {
+		background-color: #f4f8bf;
+	}
+
+	div.AllocateBox {
+		background-color: #f4f8bf;
+	}
+
+	div.IfBox {
+		background-color: #e6eeff;
+	}
+
+	div.memory-cost-div:hover,
+	div.computation-cost-div:hover {
+		border: 1px solid grey;
+	}
+
+	div.boxBody {
+		margin-left: 5px;
+	}
+
+	div.boxHeaderTable {
+		padding-left: 5px;
+		padding-bottom: 5px;
+	}
+
+	table {
+		border-radius: 5px;
+		font-size: 12px;
+		border: 1px dashed grey;
+		border-collapse: separate;
+		border-spacing: 0;
+	}
+
+	.ifElseTable {
+		border: 0px;
+	}
+
+	.costTable {
+		text-align: center;
+		border: 0px;
+		background-color: rgba(150, 150, 150, 0.2);
+	}
+
+	.costTable td {
+		border-top: 1px dashed grey;
+	}
+
+	.costTableHeader,
+	.costTableData {
+		border-collapse: collapse;
+		padding-top: 3px;
+		padding-bottom: 3px;
+		padding-left: 7px;
+		padding-right: 7px;
+	}
+
+	span.intType {
+		color: #099;
+	}
+
+	span.stringType {
+		color: #990073;
+	}
+
+	.middleCol {
+		border-right: 1px dashed grey;
+	}
+
+	div.content {
+		flex-grow: 1;
+	}
+
+	.irVizColorButton {
+		height: 15px;
+		width: 10px;
+		margin-right: 2px;
+		border: 1px solid rgba(0, 0, 0, 0);
+		vertical-align: middle;
+		border-radius: 2px;
+	}
+
+	.irVizColorButton:hover {
+		border: 1px solid grey;
+	}
+
+	div.boxHeaderTitle {
+		font-weight: bold;
+		margin-top: auto;
+		margin-bottom: auto;
+	}
+
+	.irVizToggle {
+		margin-right: 5px;
+		margin-left: 0px;
+	}
+
+	.dottedIconButton {
+		border: 1px dotted black;
+		border-radius: 3px;
+	}
+
+	.dottedIconButton:hover {
+		border: 1px dotted red;
+	}
+
+	.functionButton {
+		background-color: #fff;
+		border: 1px solid #d5d9d9;
+		border-radius: 8px;
+		box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0;
+		position: relative;
+		text-align: center;
+		vertical-align: middle;
+		margin-left: 5px;
+		font-size: 15px;
+		padding: 3px;
+	}
+
+	.functionButton:hover {
+		background-color: #f7fafa;
+	}
+
+	/* StmtHierarchy CSS */
+	.arrow {
+		border: solid rgb(125, 125, 125);
+		border-width: 0 2px 2px 0;
+		display: inline-block;
+		padding: 3px;
+	}
+
+	.down {
+		transform: rotate(45deg);
+		-webkit-transform: rotate(45deg);
+	}
+
+	.up {
+		transform: rotate(-135deg);
+		-webkit-transform: rotate(-135deg);
+	}
+
+	.stmtHierarchyButton {
+		padding: 3px;
+	}
+
+	.tf-custom-stmtHierarchy .tf-nc {
+		border-radius: 5px;
+		border: 1px solid;
+		font-size: 12px;
+		border-color: rgb(200, 200, 200);
+	}
+
+	.tf-custom-stmtHierarchy .end-node {
+		border-style: dashed;
+		font-size: 12px;
+	}
+
+	.tf-custom-stmtHierarchy .tf-nc:before,
+	.tf-custom-stmtHierarchy .tf-nc:after {
+		border-left-width: 1px;
+		border-color: rgb(200, 200, 200);
+	}
+
+	.tf-custom-stmtHierarchy li li:before {
+		border-top-width: 1px;
+		border-color: rgb(200, 200, 200);
+	}
+
+	.tf-custom-stmtHierarchy {
+		font-size: 12px;
+	}
+
+	div.nodeContent {
+		display: flex;
+	}
+
+	div.nodeName {
+		padding-left: 5px;
+	}
+</style>

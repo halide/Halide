@@ -1,0 +1,500 @@
+<script>
+    $('.Matched').each(function () {
+        this.onmouseover = function () {
+            $('.Matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight');
+        }
+        this.onmouseout = function () {
+            $('.Matched[id^=' + this.id.split('-')[0] + '-]').removeClass('Highlight');
+        }
+    });
+
+    /* Expand/Collapse buttons */
+    function toggle(id, buttonId) {
+        e = document.getElementById(id);
+        show = document.getElementById(id + '-show');
+        hide = document.getElementById(id + '-hide');
+        button1 = document.getElementById('button' + buttonId);
+        button2 = document.getElementById('button' + (buttonId - 1));
+        if (e.style.visibility != 'hidden') {
+            e.style.height = '0px';
+            e.style.visibility = 'hidden';
+            show.style.display = 'block';
+            hide.style.display = 'none';
+            // make inclusive
+            if (button1 != null && button2 != null) {
+                inclusiverange1 = button1.getAttribute('inclusiverange');
+                newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange1);
+                button1.className = newClassName;
+                inclusiverange2 = button2.getAttribute('inclusiverange');
+                newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange2);
+                button2.className = newClassName;
+            }
+        } else {
+            e.style = '';
+            show.style.display = 'none';
+            hide.style.display = 'block';
+            // make exclusive
+            if (button1 != null && button2 != null) {
+                exclusiverange1 = button1.getAttribute('exclusiverange');
+                newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange1);
+                button1.className = newClassName;
+                exclusiverange2 = button2.getAttribute('exclusiverange');
+                newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange2);
+                button2.className = newClassName;
+            }
+        }
+        return false;
+    }
+
+    // scroll to function - code to viz
+    function makeVisibleViz(element) {
+        if (!element) return;
+        if (element.className == 'mainContent') return;
+        if (element.style.visibility == 'hidden') {
+            element.style = '';
+            show = document.getElementById(element.id + '-show');
+            hide = document.getElementById(element.id + '-hide');
+            show.style.display = 'none';
+            hide.style.display = 'block';
+            return;
+        }
+        makeVisibleViz(element.parentNode);
+    }
+
+    function getOffsetTop(element) {
+        if (!element) return 0;
+        if (element.id == 'IRVisualization') return 0;
+        return getOffsetTop(element.offsetParent) + element.offsetTop;
+    }
+
+    function getOffsetLeft(element) {
+        if (!element) return 0;
+        if (element.id == 'IRVisualization') return 0;
+        return getOffsetLeft(element.offsetParent) + element.offsetLeft;
+    }
+
+    function scrollToFunctionCodeToViz(id) {
+        var container = document.getElementById('IRVisualization');
+        var scrollToObject = document.getElementById(id);
+        makeVisibleViz(scrollToObject);
+        container.scrollTo({
+            top: getOffsetTop(scrollToObject) - 20,
+            left: getOffsetLeft(scrollToObject) - 40,
+            behavior: 'smooth'
+        });
+        scrollToObject.style.backgroundColor = 'yellow';
+        scrollToObject.style.fontSize = '20px';
+        // change content for 1 second
+        setTimeout(function () {
+            scrollToObject.style.backgroundColor = 'transparent';
+            scrollToObject.style.fontSize = '12px';
+        }, 1000);
+    }
+
+    // expand code div
+    var codeDiv = document.getElementById('IRCode-code');
+    var resizeBar = document.getElementById('ResizeBar');
+    var irVizDiv = document.getElementById('IRVisualization');
+    var resizeBarAssembly = document.getElementById('ResizeBarAssembly');
+    var assemblyCodeDiv = document.getElementById('assemblyCode');
+
+    codeDiv.style.flexGrow = '0';
+    resizeBar.style.flexGrow = '0';
+    irVizDiv.style.flexGrow = '0';
+    resizeBarAssembly.style.flexGrow = '0';
+    assemblyCodeDiv.style.flexGrow = '0';
+
+    codeDiv.style.flexBasis = 'calc(50% - 6px)';
+    resizeBar.style.flexBasis = '6px';
+    irVizDiv.style.flexBasis = 'calc(50% - 3px)';
+    resizeBarAssembly.style.flexBasis = '6px';
+
+    resizeBar.addEventListener('mousedown', (event) => {
+        document.addEventListener('mousemove', resize, false);
+        document.addEventListener('mouseup', () => {
+            document.removeEventListener('mousemove', resize, false);
+        }, false);
+    });
+
+    resizeBarAssembly.addEventListener('mousedown', (event) => {
+        document.addEventListener('mousemove', resizeAssembly, false);
+        document.addEventListener('mouseup', () => {
+            document.removeEventListener('mousemove', resizeAssembly, false);
+        }, false);
+    });
+
+    function resize(e) {
+        if (e.x < 25) {
+            collapseCode();
+            return;
+        }
+
+        const size = `${e.x}px`;
+        var rect = resizeBarAssembly.getBoundingClientRect();
+
+        if (e.x > rect.left) {
+            collapseViz();
+            return;
+        }
+
+        codeDiv.style.display = 'block';
+        irVizDiv.style.display = 'block';
+        codeDiv.style.flexBasis = size;
+        irVizDiv.style.flexBasis = `calc(${rect.left}px - ${size})`;
+    }
+
+    function resizeAssembly(e) {
+        if (e.x > screen.width - 25) {
+            collapseAssembly();
+            return;
+        }
+
+        var rect = resizeBar.getBoundingClientRect();
+
+        if (e.x < rect.right) {
+            collapseViz();
+            return;
+        }
+
+        const size = `${e.x}px`;
+        irVizDiv.style.display = 'block';
+        assemblyCodeDiv.style.display = 'block';
+        irVizDiv.style.flexBasis = `calc(${size} - ${rect.right}px)`;
+        assemblyCodeDiv.style.flexBasis = `calc(100% - ${size})`;
+
+    }
+
+    function collapseCode() {
+        irVizDiv.style.display = 'block';
+        var rect = resizeBarAssembly.getBoundingClientRect();
+        irVizDiv.style.flexBasis = `${rect.left}px`;
+        codeDiv.style.display = 'none';
+    }
+
+    function collapseViz() {
+        codeDiv.style.display = 'block';
+        var rect = resizeBarAssembly.getBoundingClientRect();
+        codeDiv.style.flexBasis = `${rect.left}px`;
+        irVizDiv.style.display = 'none';
+    }
+
+    function collapseVizAssembly() {
+        assemblyCodeDiv.style.display = 'block';
+        var rect = resizeBar.getBoundingClientRect();
+        assemblyCodeDiv.style.flexBasis = `calc(100% - ${rect.right}px)`;
+        irVizDiv.style.display = 'none';
+    }
+
+    function collapseAssembly() {
+        irVizDiv.style.display = 'block';
+        var rect = resizeBar.getBoundingClientRect();
+        irVizDiv.style.flexBasis = `calc(100% - ${rect.right}px)`;
+        assemblyCodeDiv.style.display = 'none';
+    }
+
+    // CodeMirror
+    function jumpToLine(myCodeMirror, start, end) {
+        start -= 1;
+        end -= 1;
+        var t = myCodeMirror.charCoords({
+            line: start,
+            ch: 0
+        }, 'local').top;
+        var middleHeight = myCodeMirror.getScrollerElement().offsetHeight / 2;
+        myCodeMirror.scrollIntoView({
+            line: start + 40,
+            ch: 0
+        });
+        for (var i = start; i <= end; i++) {
+            myCodeMirror.markText({
+                line: i,
+                ch: 0
+            }, {
+                line: i,
+                ch: 200
+            }, {
+                className: 'styled-background'
+            });
+        }
+        myCodeMirror.markText({
+            line: start,
+            ch: 0
+        }, {
+            line: start,
+            ch: 200
+        }, {
+            className: 'styled-background'
+        });
+        myCodeMirror.markText({
+            line: end,
+            ch: 0
+        }, {
+            line: end,
+            ch: 200
+        }, {
+            className: 'styled-background'
+        });
+        myCodeMirror.focus();
+        myCodeMirror.setCursor({
+            line: start,
+            ch: 0
+        });
+    }
+
+    function populateCodeMirror(lineNumStart, lineNumberEnd) {
+        assemblyCodeDiv.style.display = 'block';
+        var codeHTML = document.getElementById('assemblyContent');
+        var code = codeHTML.textContent;
+        code = code.trimLeft();
+        document.getElementById('assemblyCode').innerHTML = '';
+        var myCodeMirror = CodeMirror(document.getElementById('assemblyCode'), {
+            value: code,
+            lineNumbers: true,
+            lineWrapping: true,
+            mode: {
+                name: 'gas',
+                architecture: 'ARMv6'
+            },
+            readOnly: true,
+        });
+        jumpToLine(myCodeMirror, lineNumStart, lineNumberEnd);
+        document.getElementsByClassName('CodeMirror-sizer')[0].style.minWidth = '0px';
+    }
+    populateCodeMirror(1, 1);
+    collapseAssembly();
+
+
+    // Tooltip JS
+    function update(buttonElement, tooltipElement) {
+        window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, {
+            placement: 'top',
+            middleware: [
+                window.FloatingUIDOM.offset(6),
+                window.FloatingUIDOM.flip(),
+                window.FloatingUIDOM.shift({
+                    padding: 5
+                }),
+            ],
+        }).then(({
+            x,
+            y,
+            placement,
+            middlewareData
+        }) => {
+            Object.assign(tooltipElement.style, {
+                left: `${x}px`,
+                top: `${y}px`,
+            });
+            // Accessing the data 
+            const staticSide = {
+                top: 'bottom',
+                right: 'left',
+                bottom: 'top',
+                left: 'right',
+            }[placement.split('-')[0]];
+        });
+    }
+
+    function showTooltip(buttonElement, tooltipElement) {
+        tooltipElement.style.display = 'block';
+        tooltipElement.style.opacity = '1';
+        update(buttonElement, tooltipElement);
+    }
+
+    function hideTooltip(tooltipElement) {
+        tooltipElement.style.display = '';
+        tooltipElement.style.opacity = '0';
+    }
+    for (let i = 1; i <= {{tooltip_count}}; i++) {
+        const button = document.getElementById('button' + i);
+        const tooltip = document.getElementById('tooltip' + i);
+        if (!button) {
+            console.log('button' + i + ' not found');
+        }
+        button.addEventListener('mouseenter', () => {
+            showTooltip(button, tooltip);
+        });
+        button.addEventListener('mouseleave', () => {
+            hideTooltip(tooltip);
+        });
+        tooltip.addEventListener('focus', () => {
+            showTooltip(button, tooltip);
+        });
+        tooltip.addEventListener('blur', () => {
+            hideTooltip(tooltip);
+        });
+    }
+
+    // collapse/expand js (stmt hierarchy)
+    var nodeExpanded = new Map();
+
+    function collapseAllNodes(startNode, endNode) {
+        for (let i = startNode; i <= endNode; i++) {
+            collapseNodeChildren(i);
+            nodeExpanded.set(i, false);
+            if (document.getElementById('stmtHierarchyButton' + i) != null) {
+                document.getElementById('stmtHierarchyButton' + i).className = 'arrow down';
+            }
+        }
+    }
+
+    function expandNodesUpToDepth(depth, vizNum) {
+        for (let i = 0; i < depth; i++) {
+            const depthChildren = document.getElementsByClassName('viz' + vizNum + ' depth' + i);
+            for (const child of depthChildren) {
+                child.style.display = '';
+                if (child.className.includes('start')) {
+                    continue;
+                }
+                let parentNodeID = child.className.split()[0];
+                parentNodeID = parentNodeID.split('node')[1];
+                parentNodeID = parentNodeID.split('child')[0];
+                const parentNode = parseInt(parentNodeID);
+                nodeExpanded.set(parentNode, true);
+                if (document.getElementById('stmtHierarchyButton' + parentNodeID) != null) {
+                    document.getElementById('stmtHierarchyButton' + parentNodeID).className = 'arrow up';
+                }
+                const dotdotdot = document.getElementById('node' + parentNodeID + 'dotdotdot');
+                if (dotdotdot != null) {
+                    dotdotdot.remove();
+                }
+            }
+        }
+    }
+
+    function handleClick(nodeNum) {
+        if (nodeExpanded.get(nodeNum)) {
+            collapseNodeChildren(nodeNum);
+            nodeExpanded.set(nodeNum, false);
+        } else {
+            expandNodeChildren(nodeNum);
+            nodeExpanded.set(nodeNum, true);
+        }
+    }
+
+    function collapseNodeChildren(nodeNum) {
+        const children = document.getElementsByClassName('node' + nodeNum + 'child');
+        if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {
+            document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow down';
+        }
+        for (const child of children) {
+            child.style.display = 'none';
+        }
+        const list = document.getElementById('list' + nodeNum);
+        const parentNode = document.getElementById('node' + nodeNum);
+        if (list != null && parentNode != null) {
+            const span = parentNode.children[0];
+            list.appendChild(addDotDotDotChild(nodeNum));
+        }
+    }
+
+    function expandNodeChildren(nodeNum) {
+        const children = document.getElementsByClassName('node' + nodeNum + 'child');
+        if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {
+            document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow up';
+        }
+        for (const child of children) {
+            child.style.display = '';
+        }
+        const dotdotdot = document.getElementById('node' + nodeNum + 'dotdotdot');
+        if (dotdotdot != null) {
+            dotdotdot.remove();
+        }
+    }
+
+    function addDotDotDotChild(nodeNum, colorCost) {
+        var liDotDotDot = document.createElement('li');
+        liDotDotDot.id = 'node' + nodeNum + 'dotdotdot';
+        const span = "<span class='tf-nc end-node'>...</span>";
+        liDotDotDot.innerHTML = span;
+        return liDotDotDot;
+    }
+
+    // scroll to function - viz to code
+    function makeVisible(element) {
+        if (!element) return;
+        if (element.className == 'mainContent') return;
+        if (element.style.visibility == 'hidden') {
+            element.style = '';
+            show = document.getElementById(element.id + '-show');
+            hide = document.getElementById(element.id + '-hide');
+            show.style.display = 'none';
+            hide.style.display = 'block';
+            return;
+        }
+        makeVisible(element.parentNode);
+    }
+
+    function scrollToFunctionVizToCode(id) {
+
+        var container = document.getElementById('IRCode-code');
+        var scrollToObject = document.getElementById(id);
+        makeVisible(scrollToObject);
+        container.scrollTo({
+            top: scrollToObject.offsetTop - 10,
+            behavior: 'smooth'
+        });
+        scrollToObject.style.backgroundColor = 'yellow';
+        scrollToObject.style.fontSize = '20px';
+
+        // change content for 1 second   
+        setTimeout(function () {
+
+            scrollToObject.style.backgroundColor = 'transparent';
+            scrollToObject.style.fontSize = '12px';
+        }, 1000);
+    }
+
+    // stmtHierarchy JS
+    for (let i = 1; i <= {{stmt_hierarchy_tooltip_count}}; i++) {
+        const button = document.getElementById('stmtHierarchyButtonTooltip' + i);
+        const tooltip = document.getElementById('stmtHierarchyTooltip' + i);
+        button.addEventListener('mouseenter', () => {
+            showTooltip(button, tooltip);
+        });
+        button.addEventListener('mouseleave', () => {
+            hideTooltip(tooltip);
+        });
+        tooltip.addEventListener('focus', () => {
+            showTooltip(button, tooltip);
+        });
+        tooltip.addEventListener('blur', () => {
+            hideTooltip(tooltip);
+        });
+    }
+
+    // irViz JS
+    for (let i = 1; i <= {{ir_viz_tooltip_count}}; i++) {
+        const button = document.getElementById('irVizButton' + i);
+        const tooltip = document.getElementById('irVizTooltip' + i);
+        button.addEventListener('mouseenter', () => {
+            showTooltip(button, tooltip);
+        });
+        button.addEventListener('mouseleave', () => {
+            hideTooltip(tooltip);
+        });
+        tooltip.addEventListener('focus', () => {
+            showTooltip(button, tooltip);
+        });
+        tooltip.addEventListener('blur', () => {
+            hideTooltip(tooltip);
+        });
+    }
+
+    function toggleCollapse(id) {
+        var buttonShow = document.getElementById('irViz' + id + '-show');
+        var buttonHide = document.getElementById('irViz' + id + '-hide');
+        var body = document.getElementById('irViz' + id);
+        if (body.style.visibility != 'hidden') {
+            body.style.visibility = 'hidden';
+            body.style.height = '0px';
+            body.style.width = '0px';
+            buttonShow.style.display = 'block';
+            buttonHide.style.display = 'none';
+        } else {
+            body.style = '';
+            buttonShow.style.display = 'none';
+            buttonHide.style.display = 'block';
+        }
+    };
+</script>

@@ -66,19 +66,14 @@ private:
 class IRVisualization : public IRVisitor {
 
 public:
-    static const std::string ir_viz_CSS, scroll_to_function_JS_viz_to_code;
-
     IRVisualization(FindStmtCost find_stmt_cost_populated)
-        : find_stmt_cost(std::move(find_stmt_cost_populated)), ir_viz_tooltip_count(0), if_count(0),
+        : find_stmt_cost(std::move(find_stmt_cost_populated)), tooltip_count(0), if_count(0),
           producer_consumer_count(0), for_count(0), store_count(0), allocate_count(0),
           function_count(0) {
     }
 
     // generates the html for the IR Visualization
     std::string generate_ir_visualization_html(const Module &m);
-
-    // returns the JS for the IR Visualization
-    std::string generate_ir_visualization_js();
 
     // generates tooltip tables based on given node
     std::string generate_computation_cost_tooltip(const IRNode *op, const std::string &extraNote);
@@ -90,6 +85,9 @@ public:
     // returns color range when blocks are collapsed in code viz
     int get_combined_color_range(const IRNode *op, bool is_compcost) const;
 
+    // returns tooltip count
+    int get_tooltip_count() const;
+
 private:
     using IRVisitor::visit;
 
@@ -97,7 +95,7 @@ private:
     GetReadWrite get_read_write;  // generates the read/write sizes
     FindStmtCost find_stmt_cost;  // used to determine the color of each statement
     int num_of_nodes;             // keeps track of the number of nodes in the visualization
-    int ir_viz_tooltip_count;     // tooltip count
+    int tooltip_count;            // tooltip count
 
     // used for getting anchor names
     int if_count;

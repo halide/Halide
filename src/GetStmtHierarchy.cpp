@@ -59,6 +59,10 @@ StmtHierarchyInfo GetStmtHierarchy::get_else_hierarchy_html() {
     return info;
 }
 
+int GetStmtHierarchy::get_tooltip_count() {
+    return tooltip_count;
+}
+
 void GetStmtHierarchy::update_num_nodes() {
     num_nodes++;
     curr_node_ID = num_nodes;
@@ -101,44 +105,44 @@ string GetStmtHierarchy::end_tree() const {
 }
 
 string GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
-    stmt_hierarchy_tooltip_count++;
+    tooltip_count++;
 
     ostringstream ss;
     string tooltip_text = ir_viz.generate_computation_cost_tooltip(op, "");
 
     // tooltip span
-    ss << "<span id='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count
+    ss << "<span id='stmtHierarchyTooltip" << tooltip_count
        << "' class='tooltip CostTooltip' "
-       << "role='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count << "'>" << tooltip_text
+       << "role='stmtHierarchyTooltip" << tooltip_count << "'>" << tooltip_text
        << "</span>";
 
     // color div
     int computation_range = ir_viz.get_color_range(op, StmtCostModel::Compute);
     string class_name = "computation-cost-div CostColor" + std::to_string(computation_range);
-    ss << "<div id='stmtHierarchyButtonTooltip" << stmt_hierarchy_tooltip_count << "' ";
-    ss << "aria-describedby='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count << "' ";
+    ss << "<div id='stmtHierarchyButtonTooltip" << tooltip_count << "' ";
+    ss << "aria-describedby='stmtHierarchyTooltip" << tooltip_count << "' ";
     ss << "class='" << class_name << "'>";
     ss << "</div>";
 
     return ss.str();
 }
 string GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
-    stmt_hierarchy_tooltip_count++;
+    tooltip_count++;
 
     ostringstream ss;
     string tooltip_text = ir_viz.generate_data_movement_cost_tooltip(op, "");
 
     // tooltip span
-    ss << "<span id='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count
+    ss << "<span id='stmtHierarchyTooltip" << tooltip_count
        << "' class='tooltip CostTooltip' "
-       << "role='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count << "'>" << tooltip_text
+       << "role='stmtHierarchyTooltip" << tooltip_count << "'>" << tooltip_text
        << "</span>";
 
     // color div
     int data_movement_range = ir_viz.get_color_range(op, StmtCostModel::DataMovement);
     string class_name = "memory-cost-div CostColor" + std::to_string(data_movement_range);
-    ss << "<div id='stmtHierarchyButtonTooltip" << stmt_hierarchy_tooltip_count << "' "
-       << "aria-describedby='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count << "' "
+    ss << "<div id='stmtHierarchyButtonTooltip" << tooltip_count << "' "
+       << "aria-describedby='stmtHierarchyTooltip" << tooltip_count << "' "
        << "class='" << class_name << "'>"
        << "</div>";
 
@@ -600,129 +604,6 @@ void GetStmtHierarchy::visit(const Atomic *op) {
         html << close_node();
     }
 }
-
-string GetStmtHierarchy::generate_stmt_hierarchy_js() {
-    ostringstream stmt_hierarchy_js;
-
-    stmt_hierarchy_js << R"(
-// stmtHierarchy JS
-for (let i = 1; i <= )" << stmt_hierarchy_tooltip_count << R"(; i++) {
-    const button = document.getElementById('stmtHierarchyButtonTooltip' + i);
-    const tooltip = document.getElementById('stmtHierarchyTooltip' + i);
-    button.addEventListener('mouseenter', () => {
-        showTooltip(button, tooltip);
-    });
-    button.addEventListener('mouseleave', () => {
-        hideTooltip(tooltip);
-    });
-    tooltip.addEventListener('focus', () => {
-        showTooltip(button, tooltip);
-    });
-    tooltip.addEventListener('blur', () => {
-        hideTooltip(tooltip);
-    });
-})";
-
-    return stmt_hierarchy_js.str();
-}
-
-const char *GetStmtHierarchy::stmt_hierarchy_css =
-    R"(
-/* StmtHierarchy CSS */
-.arrow { border: solid rgb(125,125,125); border-width: 0 2px 2px 0; display:
-inline-block; padding: 3px; }
-.down { transform: rotate(45deg); -webkit-transform: rotate(45deg); }
-.up { transform: rotate(-135deg); -webkit-transform: rotate(-135deg); }
-.stmtHierarchyButton {padding: 3px;}
-.tf-custom-stmtHierarchy .tf-nc { border-radius: 5px; border: 1px solid; font-size: 12px; border-color: rgb(200, 200, 200);}
-.tf-custom-stmtHierarchy .end-node { border-style: dashed; font-size: 12px; }
-.tf-custom-stmtHierarchy .tf-nc:before, .tf-custom-stmtHierarchy .tf-nc:after { border-left-width: 1px; border-color: rgb(200, 200, 200);}
-.tf-custom-stmtHierarchy li li:before { border-top-width: 1px; border-color: rgb(200, 200, 200);}
-.tf-custom-stmtHierarchy { font-size: 12px; }
-div.nodeContent { display: flex; }
-div.nodeName { padding-left: 5px; }
-)";
-
-const char *GetStmtHierarchy::stmt_hierarchy_collapse_expand_JS = R"(
-// collapse/expand js (stmt hierarchy)
-var nodeExpanded = new Map();
-function collapseAllNodes(startNode, endNode) {
-    for (let i = startNode; i <= endNode; i++) {
-        collapseNodeChildren(i);
-        nodeExpanded.set(i, false);
-        if (document.getElementById('stmtHierarchyButton' + i) != null) {
-            document.getElementById('stmtHierarchyButton' + i).className = 'arrow down';
-        }
-    }
-}
-function expandNodesUpToDepth(depth, vizNum) {
-    for (let i = 0; i < depth; i++) {
-        const depthChildren = document.getElementsByClassName('viz' + vizNum + ' depth' + i);
-        for (const child of depthChildren) {
-            child.style.display = '';
-            if (child.className.includes('start')) {
-                continue;
-            }
-            let parentNodeID = child.className.split()[0];
-            parentNodeID = parentNodeID.split('node')[1];
-            parentNodeID = parentNodeID.split('child')[0];
-            const parentNode = parseInt(parentNodeID);
-            nodeExpanded.set(parentNode, true);
-            if (document.getElementById('stmtHierarchyButton' + parentNodeID) != null) {
-                document.getElementById('stmtHierarchyButton' + parentNodeID).className = 'arrow up';
-            }
-            const dotdotdot = document.getElementById('node' + parentNodeID + 'dotdotdot');
-            if (dotdotdot != null) {
-                dotdotdot.remove();
-            }
-        }
-    }
-}
-function handleClick(nodeNum) {
-    if (nodeExpanded.get(nodeNum)) {
-        collapseNodeChildren(nodeNum);
-        nodeExpanded.set(nodeNum, false);
-    } else {
-        expandNodeChildren(nodeNum);
-        nodeExpanded.set(nodeNum, true);
-    }
-}
-function collapseNodeChildren(nodeNum) {
-    const children = document.getElementsByClassName('node' + nodeNum + 'child');
-    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {
-        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow down';
-    }
-    for (const child of children) {
-        child.style.display = 'none';
-    }
-    const list = document.getElementById('list' + nodeNum);
-    const parentNode = document.getElementById('node' + nodeNum);
-    if (list != null && parentNode != null) {
-        const span = parentNode.children[0];
-        list.appendChild(addDotDotDotChild(nodeNum));
-    }
-}
-function expandNodeChildren(nodeNum) {
-    const children = document.getElementsByClassName('node' + nodeNum + 'child');
-    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {
-        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow up';
-    }
-    for (const child of children) {
-        child.style.display = '';
-    }
-     const dotdotdot = document.getElementById('node' + nodeNum + 'dotdotdot');
-     if (dotdotdot != null) {
-         dotdotdot.remove();
-     }
-}
-function addDotDotDotChild(nodeNum, colorCost) {
-    var liDotDotDot = document.createElement('li');
-    liDotDotDot.id = 'node' + nodeNum + 'dotdotdot';
-    const span ="<span class='tf-nc end-node'>...</span>";
-    liDotDotDot.innerHTML = span;
-    return liDotDotDot;
-}
-)";
 
 }  // namespace Internal
 }  // namespace Halide

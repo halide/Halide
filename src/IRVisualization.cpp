@@ -217,6 +217,10 @@ int IRVisualization::get_combined_color_range(const IRNode *op, bool is_compcost
     return range;
 }
 
+int IRVisualization::get_tooltip_count() const {
+    return tooltip_count;
+}
+
 void IRVisualization::start_module_traversal(const Module &m) {
 
     // print main function first
@@ -645,9 +649,9 @@ string IRVisualization::info_button_with_tooltip(const string &tooltip_text, con
     ostringstream ss;
 
     // infoButton
-    ir_viz_tooltip_count++;
-    ss << "<button id='irVizButton" << ir_viz_tooltip_count << "' ";
-    ss << "aria-describedby='irVizTooltip" << ir_viz_tooltip_count << "' ";
+    tooltip_count++;
+    ss << "<button id='irVizButton" << tooltip_count << "' ";
+    ss << "aria-describedby='irVizTooltip" << tooltip_count << "' ";
     ss << "class='infoButton";
     if (!button_class_name.empty()) {
         ss << " " + button_class_name;
@@ -658,13 +662,13 @@ string IRVisualization::info_button_with_tooltip(const string &tooltip_text, con
     ss << "</button>";
 
     // tooltip span
-    ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' ";
+    ss << "<span id='irVizTooltip" << tooltip_count << "' ";
     ss << "class='tooltip";
     if (!tooltip_class_name.empty()) {
         ss << " " + tooltip_class_name;
     }
     ss << "'";
-    ss << "role='irVizTooltip" << ir_viz_tooltip_count << "'>";
+    ss << "role='irVizTooltip" << tooltip_count << "'>";
     ss << tooltip_text;
     ss << "</span>";
 
@@ -679,20 +683,20 @@ string IRVisualization::generate_computation_cost_div(const IRNode *op) {
         return "";
     }
 
-    ir_viz_tooltip_count++;
+    tooltip_count++;
 
     string tooltip_text = generate_computation_cost_tooltip(op, "");
 
     // tooltip span
-    ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
-    ss << "role='irVizTooltip" << ir_viz_tooltip_count << "'>";
+    ss << "<span id='irVizTooltip" << tooltip_count << "' class='tooltip CostTooltip' ";
+    ss << "role='irVizTooltip" << tooltip_count << "'>";
     ss << tooltip_text;
     ss << "</span>";
 
     int computation_range = get_color_range(op, StmtCostModel::ComputeInclusive);
     string class_name = "computation-cost-div CostColor" + std::to_string(computation_range);
-    ss << "<div id='irVizButton" << ir_viz_tooltip_count << "' ";
-    ss << "aria-describedby='irVizTooltip" << ir_viz_tooltip_count << "' ";
+    ss << "<div id='irVizButton" << tooltip_count << "' ";
+    ss << "aria-describedby='irVizTooltip" << tooltip_count << "' ";
     ss << "class='" << class_name << "'>";
 
     ss << close_div();
@@ -707,20 +711,20 @@ string IRVisualization::generate_memory_cost_div(const IRNode *op) {
         return "";
     }
 
-    ir_viz_tooltip_count++;
+    tooltip_count++;
 
     string tooltip_text = generate_data_movement_cost_tooltip(op, "");
 
     // tooltip span
-    ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
-    ss << "role='irVizTooltip" << ir_viz_tooltip_count << "'>";
+    ss << "<span id='irVizTooltip" << tooltip_count << "' class='tooltip CostTooltip' ";
+    ss << "role='irVizTooltip" << tooltip_count << "'>";
     ss << tooltip_text;
     ss << "</span>";
 
     int data_movement_range = get_color_range(op, StmtCostModel::DataMovementInclusive);
     string class_name = "memory-cost-div CostColor" + std::to_string(data_movement_range);
-    ss << "<div id='irVizButton" << ir_viz_tooltip_count << "' ";
-    ss << "aria-describedby='irVizTooltip" << ir_viz_tooltip_count << "' ";
+    ss << "<div id='irVizButton" << tooltip_count << "' ";
+    ss << "aria-describedby='irVizTooltip" << tooltip_count << "' ";
     ss << "class='" << class_name << "'>";
 
     ss << close_div();
@@ -775,9 +779,9 @@ string IRVisualization::tooltip_table(vector<pair<string, string>> &table, const
 string IRVisualization::IRVisualization::color_button(int color_range) {
     ostringstream ss;
 
-    ir_viz_tooltip_count++;
-    ss << "<button id='irVizButton" << ir_viz_tooltip_count << "' ";
-    ss << "aria-describedby='irVizTooltip" << ir_viz_tooltip_count << "' ";
+    tooltip_count++;
+    ss << "<button id='irVizButton" << tooltip_count << "' ";
+    ss << "aria-describedby='irVizTooltip" << tooltip_count << "' ";
     ss << "class='irVizColorButton CostColor" << color_range << "' role='button' ";
     ss << ">";
     ss << "</button>";
@@ -794,8 +798,8 @@ string IRVisualization::computation_div(const IRNode *op) {
     string tooltip_text = generate_computation_cost_tooltip(op, "");
 
     // tooltip span
-    ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
-    ss << "role='irVizTooltip" << ir_viz_tooltip_count << "'>";
+    ss << "<span id='irVizTooltip" << tooltip_count << "' class='tooltip CostTooltip' ";
+    ss << "role='irVizTooltip" << tooltip_count << "'>";
     ss << tooltip_text;
     ss << "</span>";
 
@@ -811,8 +815,8 @@ string IRVisualization::data_movement_div(const IRNode *op) {
     string tooltip_text = generate_data_movement_cost_tooltip(op, "");
 
     // tooltip span
-    ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
-    ss << "role='irVizTooltip" << ir_viz_tooltip_count << "'>";
+    ss << "<span id='irVizTooltip" << tooltip_count << "' class='tooltip CostTooltip' ";
+    ss << "role='irVizTooltip" << tooltip_count << "'>";
     ss << tooltip_text;
     ss << "</span>";
 
@@ -1260,49 +1264,6 @@ void IRVisualization::visit(const Allocate *op) {
     html << close_box_div();
 }
 
-string IRVisualization::generate_ir_visualization_js() {
-    ostringstream ir_viz_js;
-
-    ir_viz_js << "\n// irViz JS\n"
-              << "for (let i = 1; i <= " << ir_viz_tooltip_count << "; i++) { \n"
-              << "    const button = document.getElementById('irVizButton' + i); \n"
-              << "    const tooltip = document.getElementById('irVizTooltip' + i); \n"
-              << "    button.addEventListener('mouseenter', () => { \n"
-              << "        showTooltip(button, tooltip); \n"
-              << "    }); \n"
-              << "    button.addEventListener('mouseleave', () => { \n"
-              << "        hideTooltip(tooltip); \n"
-              << "    } \n"
-              << "    ); \n"
-              << "    tooltip.addEventListener('focus', () => { \n"
-              << "        showTooltip(button, tooltip); \n"
-              << "    } \n"
-              << "    ); \n"
-              << "    tooltip.addEventListener('blur', () => { \n"
-              << "        hideTooltip(tooltip); \n"
-              << "    } \n"
-              << "    ); \n"
-              << "} \n"
-              << "function toggleCollapse(id) {\n "
-              << "    var buttonShow = document.getElementById('irViz' + id + '-show');\n"
-              << "    var buttonHide = document.getElementById('irViz' + id + '-hide');\n"
-              << "    var body = document.getElementById('irViz' + id);\n"
-              << "    if (body.style.visibility != 'hidden') {\n"
-              << "        body.style.visibility = 'hidden';\n"
-              << "        body.style.height = '0px';\n"
-              << "        body.style.width = '0px';\n"
-              << "        buttonShow.style.display = 'block';\n"
-              << "        buttonHide.style.display = 'none';\n"
-              << "    } else {\n"
-              << "        body.style = '';\n"
-              << "        buttonShow.style.display = 'none';\n"
-              << "        buttonHide.style.display = 'block';\n"
-              << "    }\n"
-              << "}\n ";
-
-    return ir_viz_js.str();
-}
-
 /*
  * PRINT NODE
  */
@@ -1429,185 +1390,6 @@ string GetReadWrite::print_node(const IRNode *node) const {
 
     return ss.str();
 }
-
-const string IRVisualization::scroll_to_function_JS_viz_to_code = "\n \
-// scroll to function - viz to code\n \
-function makeVisible(element) { \n \
-    if (!element) return; \n \
-    if (element.className == 'mainContent') return; \n \
-    if (element.style.visibility == 'hidden') { \n \
-        element.style = ''; \n \
-        show = document.getElementById(element.id + '-show'); \n \
-        hide = document.getElementById(element.id + '-hide'); \n \
-        show.style.display = 'none'; \n \
-        hide.style.display = 'block'; \n \
-        return; \n \
-    } \n \
-    makeVisible(element.parentNode); \n \
-} \n \
- \n \
-function scrollToFunctionVizToCode(id) { \n \
-    var container = document.getElementById('IRCode-code'); \n \
-    var scrollToObject = document.getElementById(id); \n \
-    makeVisible(scrollToObject); \n \
-    container.scrollTo({ \n \
-        top: scrollToObject.offsetTop - 10, \n \
-        behavior: 'smooth' \n \
-    }); \n \
-    scrollToObject.style.backgroundColor = 'yellow'; \n \
-    scrollToObject.style.fontSize = '20px'; \n \
- \n \
-    // change content for 1 second   \n \
-    setTimeout(function () { \n \
-        scrollToObject.style.backgroundColor = 'transparent'; \n \
-        scrollToObject.style.fontSize = '12px'; \n \
-    }, 1000); \n \
-} \n \
-";
-
-const string IRVisualization::ir_viz_CSS = "\n \
-/* irViz CSS */\n \
-.tf-custom-irViz .tf-nc { border-radius: 5px; border: 1px solid; }\n \
-.tf-custom-irViz .tf-nc:before, .tf-custom-irViz .tf-nc:after { border-left-width: 1px; }\n \
-.tf-custom-irViz li li:before { border-top-width: 1px; }\n \
-.tf-custom-irViz .end-node { border-style: dashed; }\n \
-.tf-custom-irViz .tf-nc { background-color: #e6eeff; }\n \
-.tf-custom-irViz { font-size: 12px; } \n \
-div.box { \n \
-    border: 1px dashed grey; \n \
-    border-radius: 5px; \n \
-    margin: 5px; \n \
-    padding: 5px; \n \
-    display: flex; \n \
-    width: max-content; \n \
-} \n \
-div.boxHeader { \n \
-    padding: 5px; \n \
-    display: flex; \n \
-} \n \
-div.memory-cost-div, \n \
-div.computation-cost-div { \n \
-    border: 1px solid rgba(0, 0, 0, 0); \n \
-     width: 7px; \n \
-} \n \
-div.FunctionCallBox { \n \
-    background-color: #fabebe; \n \
-} \n \
-div.FunctionBox { \n \
-    background-color: #f0f0f0; \n \
-    border: 1px dashed grey; \n \
-    border-radius: 5px; \n \
-    margin-bottom: 15px; \n \
-    padding: 5px; \n \
-    width: max-content; \n \
-} \n \
-div.functionHeader { \n \
-    display: flex; \n \
-    margin-bottom: 10px; \n \
-} \n \
-div.ProducerConsumerBox { \n \
-    background-color: #99bbff; \n \
-} \n \
-div.ForBox { \n \
-    background-color: #b3ccff; \n \
-} \n \
-div.StoreBox { \n \
-    background-color: #f4f8bf; \n \
-} \n \
-div.AllocateBox { \n \
-    background-color: #f4f8bf; \n \
-} \n \
-div.IfBox { \n \
-    background-color: #e6eeff; \n \
-} \n \
-div.memory-cost-div:hover, \n \
-div.computation-cost-div:hover { \n \
-    border: 1px solid grey; \n \
-} \n \
-div.boxBody { \n \
-    margin-left: 5px; \n \
-} \n \
-div.boxHeaderTable { \n \
-    padding-left: 5px; \n \
-    padding-bottom: 5px; \n \
-} \n \
-table { \n \
-    border-radius: 5px; \n \
-    font-size: 12px; \n \
-    border: 1px dashed grey; \n \
-    border-collapse: separate; \n \
-    border-spacing: 0; \n \
-} \n \
-.ifElseTable { \n \
-    border: 0px; \n \
-}  \n \
-.costTable { \n \
-    text-align: center; \n \
-    border: 0px; \n \
-    background-color: rgba(150, 150, 150, 0.2); \n \
-} \n \
-.costTable td { \n \
-    border-top: 1px dashed grey; \n \
-} \n \
-.costTableHeader, \n \
-.costTableData { \n \
-    border-collapse: collapse; \n \
-    padding-top: 3px; \n \
-    padding-bottom: 3px; \n \
-    padding-left: 7px; \n \
-    padding-right: 7px; \n \
-} \n \
-span.intType { color: #099; } \n \
-span.stringType { color: #990073; } \n \
-.middleCol { \n \
-    border-right: 1px dashed grey; \n \
-} \n \
-div.content { \n \
-    flex-grow: 1; \n \
-} \n \
-.irVizColorButton { \n \
-    height: 15px; \n \
-    width: 10px; \n \
-    margin-right: 2px; \n \
-    border: 1px solid rgba(0, 0, 0, 0); \n \
-    vertical-align: middle; \n \
-    border-radius: 2px; \n \
-} \n \
-.irVizColorButton:hover { \n \
-    border: 1px solid grey; \n \
-} \n \
-div.boxHeaderTitle { \n \
-    font-weight: bold; \n \
-    margin-top: auto; \n \
-    margin-bottom: auto; \n \
-} \n \
-.irVizToggle { \n \
-    margin-right: 5px; \n \
-    margin-left: 0px; \n \
-} \n \
-.dottedIconButton { \n \
-    border: 1px dotted black; \n \
-    border-radius: 3px; \n \
-} \n \
-.dottedIconButton:hover { \n \
-    border: 1px dotted red; \n \
-} \n \
-.functionButton { \n \
-    background-color: #fff; \n \
-    border: 1px solid #d5d9d9; \n \
-    border-radius: 8px; \n \
-    box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
-    position: relative; \n \
-    text-align: center; \n \
-    vertical-align: middle; \n \
-    margin-left: 5px; \n \
-    font-size: 15px; \n \
-    padding: 3px; \n \
-} \n \
-.functionButton:hover { \n \
-    background-color: #f7fafa; \n \
-} \n \
-";
 
 }  // namespace Internal
 }  // namespace Halide

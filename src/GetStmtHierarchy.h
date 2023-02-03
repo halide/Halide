@@ -19,12 +19,9 @@ struct StmtHierarchyInfo {
 class GetStmtHierarchy : public IRVisitor {
 
 public:
-    static const char *stmt_hierarchy_css;
-    static const char *stmt_hierarchy_collapse_expand_JS;
-
     GetStmtHierarchy(const FindStmtCost &find_stmt_cost_populated)
         : find_stmt_cost(find_stmt_cost_populated), ir_viz(find_stmt_cost_populated),
-          curr_node_ID(0), num_nodes(0), viz_counter(0), stmt_hierarchy_tooltip_count(0) {
+          curr_node_ID(0), num_nodes(0), viz_counter(0), tooltip_count(0) {
     }
 
     // returns the generated hierarchy's html
@@ -34,8 +31,8 @@ public:
     // special case for else case (node with just "else")
     StmtHierarchyInfo get_else_hierarchy_html();
 
-    // generates the JS that is needed to add the tooltips
-    std::string generate_stmt_hierarchy_js();
+    // get tooltip count
+    int get_tooltip_count();
 
 private:
     std::ostringstream html;      // html string
@@ -48,7 +45,7 @@ private:
     int start_node_id;                 // ID of the start node of the current tree
     int node_depth;                    // depth of the current node in the tree
     int viz_counter;                   // counter for the number of visualizations
-    int stmt_hierarchy_tooltip_count;  // tooltip count
+    int tooltip_count;                 // tooltip count
 
     // updates the curr_node_ID to be the next available node ID (num_nodes)
     // and increases num_nodes by 1

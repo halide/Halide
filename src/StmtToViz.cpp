@@ -19,6 +19,10 @@
 #include <sstream>
 #include <utility>
 
+// Can use std::source_location once C++-17 is deprecated
+#define __DIR__  \
+    std::string_view(__FILE__).substr(0, std::string_view(__FILE__).rfind('/')+1)
+
 namespace Halide {
 namespace Internal {
 
@@ -28,15 +32,6 @@ using std::string;
 const char *StmtToViz_canIgnoreVariableName_string = "canIgnoreVariableName";
 
 class StmtToViz : public IRVisitor {
-
-    // CSS strings
-    static const string ir_code_css, code_viz_css, cost_colors_css, flexbox_div_css,
-        line_numbers_css, code_mirror_css, tooltip_css;
-
-    // JS strings
-    static const string ir_code_js, scroll_to_function_code_to_viz_js, expand_code_js,
-        code_mirror_js;
-
     // This allows easier access to individual elements.
     int id_count;
 
@@ -1473,112 +1468,6 @@ public:
         scope.pop(m.name());
     }
 
-    void start_stream(const string &filename) {
-        stream.open(filename.c_str());
-        stream << "<head>";
-
-        // bootstrap links
-        stream << "<!-- Bootstrap links -->\n";
-        stream << "<link "
-                  "href='https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css' "
-                  "rel='stylesheet' "
-                  "integrity='sha384-gH2yIJqKdNHPEq0n4Mqa/HGKIhSkIHeL5AyhkYV8i59U5AR6csBvApHHNl/"
-                  "vI1Bx' crossorigin='anonymous'>\n";
-        stream
-            << "<script "
-               "src='https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js' "
-               "integrity='sha384-A3rJD856KowSb7dwlZdYEkO39Gagi7vIsF0jrRAoQmDKKtQBHUuLZ9AsSv4jD4Xa'"
-               " crossorigin='anonymous'></script>\n";
-        stream
-            << "<link rel='stylesheet' "
-               "href='https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css'>\n";
-        stream << "<link rel='stylesheet' "
-                  "href='https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/"
-                  "bootstrap-icons.css'>\n";
-        stream << "\n";
-
-        //   tooltip links
-        stream << "<!-- Tooltip links -->\n";
-        stream << "<script src='https://cdn.jsdelivr.net/npm/@floating-ui/core@1.0.1'></script>";
-        stream << "<script src='https://cdn.jsdelivr.net/npm/@floating-ui/dom@1.0.1'></script>";
-        stream << "\n";
-
-        // hierarchy links
-        stream << "<!-- Hierarchy links -->\n";
-        stream
-            << "<link rel='stylesheet' href='https://unpkg.com/treeflex/dist/css/treeflex.css'>\n";
-        stream << "\n";
-
-        // expand button links
-        stream << "<!-- Expand Button links -->\n";
-        stream << "<link "
-                  "href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/"
-                  "font-awesome.min.css' rel='stylesheet'>\n";
-        stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
-        stream << "\n";
-
-        // assembly code links
-        stream << "<!-- Assembly Code links -->\n";
-        stream << "<link rel='stylesheet' "
-                  "href='https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/"
-                  "codemirror.min.css'></link>\n";
-        stream << "<script "
-                  "src='https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/"
-                  "codemirror.min.js'></script>\n";
-        stream << "<script "
-                  "src='https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/gas/"
-                  "gas.min.js'></script>\n";
-        stream << "<script "
-                  "src='https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/selection/"
-                  "mark-selection.min.js'></script>\n";
-        stream << "<script "
-                  "src='https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/search/"
-                  "searchcursor.min.js'></script>\n";
-        stream << "<script "
-                  "src='https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/search/"
-                  "search.min.js'></script>\n";
-
-        stream << "\n<style type='text/css'>";
-        stream << ir_code_css;
-        stream << code_viz_css;
-        stream << cost_colors_css;
-        stream << flexbox_div_css;
-        stream << line_numbers_css;
-        stream << code_mirror_css;
-        stream << tooltip_css;
-        stream << IRVisualization::ir_viz_CSS;
-        stream << GetStmtHierarchy::stmt_hierarchy_css;
-        stream << "</style>\n";
-        stream << "</head>\n";
-        stream << "<body>\n";
-    }
-
-    void end_stream() {
-        stream << "<div class='popups'>\n";
-        stream << popups;
-        stream << "</div>\n";
-
-        stream << "<script>\n";
-        stream << "$( '.Matched' ).each( function() {\n"
-               << "    this.onmouseover = function() { $('.Matched[id^=' + this.id.split('-')[0] + "
-                  "'-]').addClass('Highlight'); }\n"
-               << "    this.onmouseout = function() { $('.Matched[id^=' + this.id.split('-')[0] + "
-                  "'-]').removeClass('Highlight'); }\n"
-               << "} );\n";
-
-        stream << ir_code_js;
-        stream << scroll_to_function_code_to_viz_js;
-        stream << expand_code_js;
-        stream << code_mirror_js;
-        stream << generate_tooltip_JS(tooltip_count);
-        stream << GetStmtHierarchy::stmt_hierarchy_collapse_expand_JS;
-        stream << IRVisualization::scroll_to_function_JS_viz_to_code;
-        stream << get_stmt_hierarchy.generate_stmt_hierarchy_js();
-        stream << ir_visualization.generate_ir_visualization_js();
-        stream << "</script>\n";
-        stream << "</body>";
-    }
-
     string information_popup() {
 
         ostringstream popup;
@@ -1776,11 +1665,60 @@ public:
         return resize_bar_ss.str();
     }
 
-    void generate_html(const string &filename, const Module &m) {
-        get_assembly_info_viz.generate_assembly_information(m, filename);
+    // Loads the html code responsible for linking with various js/css libraries from
+    // `ir_visualizer/dependencies.html`
+    void generate_dependency_links() {
+        std::ifstream deps_file(std::string(__DIR__) + "ir_visualizer/dependencies.html");
+        internal_assert(!deps_file.fail()) << "Failed to find `dependencies.html` inside "
+                                           << std::string(__DIR__)
+                                           << "ir_visualizer directory.\n ";
+        stream << deps_file.rdbuf();
+    }
 
-        // opening parts of the html
-        start_stream(filename);
+    // Loads the stylesheet code from `ir_visualizer/stylesheet.html`
+    void generate_stylesheet() {
+        std::ifstream css_file(std::string(__DIR__) + "ir_visualizer/stylesheet.html");
+        internal_assert(!css_file.fail()) << "Failed to find `stylesheet.html` inside "
+                                          << std::string(__DIR__) 
+                                          << "ir_visualizer directory.\n ";
+        stream << css_file.rdbuf();
+    }
+
+    // Loads and initializes the javascript template from `ir_visualizer / javascript_template.html`
+    void generate_javascript() {
+        // 1. Load the javascript code template
+        std::ifstream js_template_file(std::string(__DIR__) + "ir_visualizer/javascript_template.html");
+        internal_assert(!js_template_file.fail()) << "Failed to find `javascript_template.html` inside "
+                                                  << std::string(__DIR__) 
+                                                  << "ir_visualizer directory.\n ";
+        ostringstream js_template;
+        js_template << js_template_file.rdbuf();
+        js_template_file.close();
+
+        // 2. Initialize template with concrete values for `tooltip_count`,
+        // `stmt_hierarchy_tooltip_count` and `ir_viz_tooltip_count`.
+        std::string js = js_template.str();
+        std::regex r1("\\{\\{tooltip_count\\}\\}");
+        js = std::regex_replace(js, r1, std::to_string(tooltip_count));
+        std::regex r2("\\{\\{stmt_hierarchy_tooltip_count\\}\\}");
+        js = std::regex_replace(js, r2, std::to_string(get_stmt_hierarchy.get_tooltip_count()));
+        std::regex r3("\\{\\{ir_viz_tooltip_count\\}\\}");
+        js = std::regex_replace(js, r3, std::to_string(ir_visualization.get_tooltip_count()));
+
+        // 3. Write initialized template to stream
+        stream << js;
+    }
+
+    void generate_head() {
+        stream << "<head>";
+        // TODO: Generate title, author and other metadata
+        generate_dependency_links();
+        generate_stylesheet();
+        stream << "</head>\n";
+    }
+
+    void generate_body(const Module &m) {
+        stream << "<body>\n";
 
         stream << "<div class='outerDiv'>\n";
 
@@ -1814,7 +1752,25 @@ public:
         stream << get_assembly_info_viz.get_assembly_html();
 
         // closing parts of the html
-        end_stream();
+        stream << "<div class='popups'>\n";
+        stream << popups;
+        stream << "</div>\n";
+
+        // Include javascript template.
+        generate_javascript();
+
+        stream << "</body>";
+    }
+
+    void generate_html(const string &filename, const Module &m) {
+        get_assembly_info_viz.generate_assembly_information(m, filename);
+
+        // Create the output file
+        stream.open(filename.c_str());
+
+        generate_head();
+
+        generate_body(m);
     }
 
     StmtToViz(const string &filename, const Module &m)
@@ -1822,541 +1778,7 @@ public:
           if_count(0), producer_consumer_count(0), for_count(0), store_count(0), allocate_count(0),
           functionCount(0), tooltip_count(0), popup_count(0), context_stack(1, 0) {
     }
-
-    string generate_tooltip_JS(int &tooltip_count) {
-        ostringstream tooltip_JS;
-        tooltip_JS << "\n// Tooltip JS\n"
-                   << "function update(buttonElement, tooltipElement) { \n"
-                   << "    window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, { \n"
-                   << "        placement: 'top', \n"
-                   << "        middleware: [ \n"
-                   << "            window.FloatingUIDOM.offset(6), \n"
-                   << "            window.FloatingUIDOM.flip(), \n"
-                   << "            window.FloatingUIDOM.shift({ padding: 5 }), \n"
-                   << "        ], \n"
-                   << "    }).then(({ x, y, placement, middlewareData }) => { \n"
-                   << "        Object.assign(tooltipElement.style, { \n"
-                   << "            left: `${x}px`, \n"
-                   << "            top: `${y}px`, \n"
-                   << "        }); \n"
-                   << "        // Accessing the data \n"
-                   << "        const staticSide = { \n"
-                   << "            top: 'bottom', \n"
-                   << "            right: 'left', \n"
-                   << "            bottom: 'top', \n"
-                   << "            left: 'right', \n"
-                   << "        }[placement.split('-')[0]]; \n"
-                   << "    }); \n"
-                   << "} \n"
-                   << "function showTooltip(buttonElement, tooltipElement) { \n"
-                   << "    tooltipElement.style.display = 'block'; \n"
-                   << "    tooltipElement.style.opacity = '1'; \n"
-                   << "    update(buttonElement, tooltipElement); \n"
-                   << "} \n"
-                   << "function hideTooltip(tooltipElement) { \n"
-                   << "    tooltipElement.style.display = ''; \n"
-                   << "    tooltipElement.style.opacity = '0'; \n"
-                   << "} \n"
-                   << "for (let i = 1; i <= " << tooltip_count << "; i++) { \n"
-                   << "    const button = document.getElementById('button' + i); \n"
-                   << "    const tooltip = document.getElementById('tooltip' + i); \n"
-                   << "    if (!button) { \n"
-                   << "        console.log('button' + i + ' not found'); \n"
-                   << "    } \n"
-                   << "    button.addEventListener('mouseenter', () => { \n"
-                   << "        showTooltip(button, tooltip); \n"
-                   << "    }); \n"
-                   << "    button.addEventListener('mouseleave', () => { \n"
-                   << "        hideTooltip(tooltip); \n"
-                   << "    } \n"
-                   << "    ); \n"
-                   << "    tooltip.addEventListener('focus', () => { \n"
-                   << "        showTooltip(button, tooltip); \n"
-                   << "    } \n"
-                   << "    ); \n"
-                   << "    tooltip.addEventListener('blur', () => { \n"
-                   << "        hideTooltip(tooltip); \n"
-                   << "    } \n"
-                   << "    ); \n"
-                   << "} \n";
-
-        return tooltip_JS.str();
-    }
 };
-
-const string StmtToViz::ir_code_css = "\n \
-/* Normal CSS */\n \
-body { font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 12px; background: #f8f8f8; margin-left:15px; } \n \
-a, a:hover, a:visited, a:active { color: inherit; text-decoration: none; } \n \
-b { font-weight: normal; }\n \
-p.WrapLine { margin: 0px; margin-left: 30px; text-indent:-30px; } \n \
-div.WrapLine { margin-left: 30px; text-indent:-30px; } \n \
-div.Indent { padding-left: 15px; }\n \
-div.ShowHide { position:absolute; left:-12px; width:12px; height:12px; } \n \
-span.Comment { color: #998; font-style: italic; }\n \
-span.Keyword { color: #333; font-weight: bold; }\n \
-span.Assign { color: #d14; font-weight: bold; }\n \
-span.Symbol { color: #990073; }\n \
-span.Type { color: #445588; font-weight: bold; }\n \
-span.StringImm { color: #d14; }\n \
-span.IntImm { color: #099; }\n \
-span.FloatImm { color: #099; }\n \
-b.Highlight { font-weight: bold; background-color: #DDD; }\n \
-span.Highlight { font-weight: bold; background-color: #FF0; }\n \
-span.OpF32 { color: hsl(106deg 100% 40%); font-weight: bold; }\n \
-span.OpF64 { color: hsl(106deg 100% 30%); font-weight: bold; }\n \
-span.OpB8  { color: hsl(208deg 100% 80%); font-weight: bold; }\n \
-span.OpB16 { color: hsl(208deg 100% 70%); font-weight: bold; }\n \
-span.OpB32 { color: hsl(208deg 100% 60%); font-weight: bold; }\n \
-span.OpB64 { color: hsl(208deg 100% 50%); font-weight: bold; }\n \
-span.OpI8  { color: hsl( 46deg 100% 45%); font-weight: bold; }\n \
-span.OpI16 { color: hsl( 46deg 100% 40%); font-weight: bold; }\n \
-span.OpI32 { color: hsl( 46deg 100% 34%); font-weight: bold; }\n \
-span.OpI64 { color: hsl( 46deg 100% 27%); font-weight: bold; }\n \
-span.OpVec2 { background-color: hsl(100deg 100% 90%); font-weight: bold; }\n \
-span.OpVec4 { background-color: hsl(100deg 100% 80%); font-weight: bold; }\n \
-span.Memory { color: #d22; font-weight: bold; }\n \
-span.Pred { background-color: #ffe8bd; font-weight: bold; }\n \
-span.Label { background-color: #bde4ff; font-weight: bold; }\n \
-code.ptx { tab-size: 26; white-space: pre; }\n \
-.tf-tree { overflow: unset; }\n \
-";
-
-const string StmtToViz::code_viz_css = "\n \
-/* Additional Code Visualization CSS */\n \
-span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
-.infoButton { \n \
-    background-color: rgba(113, 113, 113, 0.1); \n \
-    border: 1px solid rgb(113, 113, 113); \n \
-    color: rgb(113, 113, 113); \n \
-    border-radius: 8px; \n \
-    box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
-    box-sizing: border-box; \n \
-    text-align: center; \n \
-    vertical-align: middle; \n \
-    margin-left: 5px; \n \
-    margin-right: 5px; \n \
-    font-size: 15px; \n \
-} \n \
-.infoButton:hover { \n \
-    background-color: #f7fafa; \n \
-} \n \
-.colorButton { \n \
-    height: 15px; \n \
-    width: 5px; \n \
-    margin-right: 2px; \n \
-    border: 1px solid rgba(0, 0, 0, 0); \n \
-    vertical-align: middle; \n \
-    border-radius: 2px; \n \
-} \n \
-.colorButton:hover { \n \
-    border: 1px solid grey; \n \
-} \n \
-.iconButton { \n \
-    border: 0px; \n \
-    background: transparent; \n \
-    color: black; \n \
-    font-size: 20px; \n \
-    display: inline-block; \n \
-    vertical-align: middle; \n \
-    margin-right: 5px; \n \
-    margin-left: 5px; \n \
-} \n \
-.iconButton:hover { \n \
-    color: red; \n \
-    background: transparent; \n \
-} \n \
-.resizeButton { \n \
-    margin: 0px; \n \
-} \n \
-.assemblyIcon { \n \
-    color: red; \n \
-} \n \
-.informationBarButton { \n \
-    border: 0px; \n \
-    background: transparent; \n \
-    display: inline-block; \n \
-    vertical-align: middle; \n \
-    margin-right: 5px; \n \
-    margin-top: 5px; \n \
-} \n \
-.informationBarButton:hover { \n \
-    color: blue; \n \
-} \n \
-.assemblyIcon { \n \
-    color: red; \n \
-} \n \
-";
-
-const string StmtToViz::cost_colors_css = "\n \
-/* Cost Colors CSS */\n \
-span.CostColor19, div.CostColor19, .CostColor19 { background-color: rgb(130,31,27); } \n \
-span.CostColor18, div.CostColor18, .CostColor18 { background-color: rgb(145,33,30); } \n \
-span.CostColor17, div.CostColor17, .CostColor17 { background-color: rgb(160,33,32); } \n \
-span.CostColor16, div.CostColor16, .CostColor16 { background-color: rgb(176,34,34); } \n \
-span.CostColor15, div.CostColor15, .CostColor15 { background-color: rgb(185,47,32); } \n \
-span.CostColor14, div.CostColor14, .CostColor14 { background-color: rgb(193,59,30); } \n \
-span.CostColor13, div.CostColor13, .CostColor13 { background-color: rgb(202,71,27); } \n \
-span.CostColor12, div.CostColor12, .CostColor12 { background-color: rgb(210,82,22); } \n \
-span.CostColor11, div.CostColor11, .CostColor11 { background-color: rgb(218,93,16); } \n \
-span.CostColor10, div.CostColor10, .CostColor10 { background-color: rgb(226,104,6); } \n \
-span.CostColor9, div.CostColor9, .CostColor9 { background-color: rgb(229,118,9); } \n \
-span.CostColor8, div.CostColor8, .CostColor8 { background-color: rgb(230,132,15); } \n \
-span.CostColor7, div.CostColor7, .CostColor7 { background-color: rgb(231,146,20); } \n \
-span.CostColor6, div.CostColor6, .CostColor6 { background-color: rgb(232,159,25); } \n \
-span.CostColor5, div.CostColor5, .CostColor5 { background-color: rgb(233,172,30); } \n \
-span.CostColor4, div.CostColor4, .CostColor4 { background-color: rgb(233,185,35); } \n \
-span.CostColor3, div.CostColor3, .CostColor3 { background-color: rgb(233,198,40); } \n \
-span.CostColor2, div.CostColor2, .CostColor2 { background-color: rgb(232,211,45); } \n \
-span.CostColor1, div.CostColor1, .CostColor1 { background-color: rgb(231,223,50); } \n \
-span.CostColor0, div.CostColor0, .CostColor0 { background-color: rgb(236,233,89); } \n \
-span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\n \
-span.CostComputation { width: 13px; display: inline-block; color: transparent; } \n \
-span.CostMovement { width: 13px; display: inline-block;  color: transparent; } \n \
-span.smallColorIndent { position: absolute; left: 35px; } \n \
-span.bigColorIndent { position: absolute; left: 65px; } \n \
-";
-
-const string StmtToViz::flexbox_div_css = "\n \
-/* Flexbox Div Styling CSS */ \n \
-div.outerDiv { \n \
-    height: 100vh; \n \
-    display: flex; \n \
-    flex-direction: column; \n \
-} \n \
-div.informationBar { \n \
-    display: flex; \n \
-} \n \
-div.mainContent { \n \
-    display: flex; \n \
-    flex-grow: 1; \n \
-    width: 100%; \n \
-    overflow: hidden; \n \
-    border-top: 1px solid rgb(200,200,200) \n \
-} \n \
-div.IRCode-code { \n \
-    counter-reset: line; \n \
-    padding-left: 50px; \n \
-    padding-top: 20px; \n \
-    overflow-y: scroll; \n \
-    position: relative; \n \
-} \n \
-div.IRVisualization { \n \
-    overflow-y: scroll; \n \
-    padding-top: 20px; \n \
-    padding-left: 20px; \n \
-    position: relative; \n \
-} \n \
-div.ResizeBar { \n \
-    background: rgb(201, 231, 190); \n \
-    cursor: col-resize; \n \
-    border-left: 1px solid rgb(0, 0, 0); \n \
-    border-right: 1px solid rgb(0, 0, 0); \n \
-} \n \
-div.collapseButtons { \n \
-    position: relative; \n \
-    top: 50%; \n \
-} \n \
-";
-
-const string StmtToViz::line_numbers_css = "\n \
-/* Line Numbers CSS */\n \
-p.WrapLine,\n\
-div.WrapLine,\n\
-div.Consumer,\n\
-div.Produce,\n\
-div.For,\n\
-span.IfSpan,\n\
-div.Evaluate,\n\
-div.Allocate,\n\
-div.ClosingBrace,\n\
-div.Module,\n\
-div.Function {\n\
-    counter-increment: line;\n\
-}\n\
-p.WrapLine:before,\n\
-div.WrapLine:before {\n\
-    content: counter(line) '. ';\n\
-    display: inline-block;\n\
-    position: absolute;\n\
-    left: 30px;\n\
-    color: rgb(175, 175, 175);\n\
-    user-select: none;\n\
-    -webkit-user-select: none;\n\
-}\n\
-div.Consumer:before,\n\
-div.Produce:before,\n\
-div.For:before,\n\
-span.IfSpan:before,\n\
-div.Evaluate:before,\n\
-div.Allocate:before, \n\
-div.ClosingBrace:before,\n\
-div.Module:before, \n\
-div.Function:before {\n\
-    content: counter(line) '. ';\n\
-    display: inline-block;\n\
-    position: absolute;\n\
-    left: 0px;\n\
-    color: rgb(175, 175, 175);\n\
-    user-select: none;\n\
-    -webkit-user-select: none;\n\
-}\n\
-";
-
-const string StmtToViz::code_mirror_css = "\n \
-/* CodeMirror */ \n \
-.CodeMirror { \n \
-    height: 100%; \n \
-    width: 100%; \n \
-} \n \
-.styled-background { \n \
-    background-color: #ff7; \n \
-} \n \
-";
-
-const string StmtToViz::tooltip_css = "\n \
-/* Tooltip CSS */\n \
-.left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
-.right-table { text-align: left; vertical-align: middle; font-size: 12px; font-weight: bold; padding-left: 3px; }\n \
-.tooltipTable { border: 0px; margin-left: auto; margin-right: auto; } \n \
-.tooltip { \n \
-    display: none; \n \
-    position: absolute; \n \
-    top: 0; \n \
-    left: 0; \n \
-    background: white; \n \
-    padding: 5px; \n \
-    font-size: 90%; \n \
-    pointer-events: none; \n \
-    border-radius: 5px; \n \
-    border: 1px dashed #aaa; \n \
-    z-index: 9999; \n \
-    box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0; \n \
-} \n \
-.CostTooltip { \n \
-    min-width: max-content; \n \
-} \n \
-.conditionTooltip { \n \
-    width: 300px; \n \
-    padding: 5px; \n \
-    font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; \n \
-} \n \
-span.tooltipHelperText { \n \
-    color: red; \n \
-    margin-top: 5px; \n \
-} \n \
-";
-
-const string StmtToViz::ir_code_js = "\n \
-/* Expand/Collapse buttons */\n \
-function toggle(id, buttonId) { \n \
-    e = document.getElementById(id); \n \
-    show = document.getElementById(id + '-show'); \n \
-    hide = document.getElementById(id + '-hide'); \n \
-    button1 = document.getElementById('button' + buttonId); \n \
-    button2 = document.getElementById('button' + (buttonId - 1)); \n \
-    if (e.style.visibility != 'hidden') { \n \
-        e.style.height = '0px'; \n \
-        e.style.visibility = 'hidden'; \n \
-        show.style.display = 'block'; \n \
-        hide.style.display = 'none'; \n \
-        // make inclusive  \n \
-        if (button1 != null && button2 != null) { \n \
-            inclusiverange1 = button1.getAttribute('inclusiverange'); \n \
-            newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange1); \n \
-            button1.className = newClassName; \n \
-            inclusiverange2 = button2.getAttribute('inclusiverange'); \n \
-            newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange2); \n \
-            button2.className = newClassName; \n \
-        } \n \
-    } else { \n \
-        e.style = ''; \n \
-        show.style.display = 'none'; \n \
-        hide.style.display = 'block'; \n \
-        // make exclusive  \n \
-        if (button1 != null && button2 != null) { \n \
-            exclusiverange1 = button1.getAttribute('exclusiverange'); \n \
-            newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange1); \n \
-            button1.className = newClassName; \n \
-            exclusiverange2 = button2.getAttribute('exclusiverange'); \n \
-            newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange2); \n \
-            button2.className = newClassName; \n \
-        } \n \
-    } \n \
-    return false; \n \
-} \n \
-";
-
-const string StmtToViz::scroll_to_function_code_to_viz_js = "\n \
-// scroll to function - code to viz \n \
-function makeVisibleViz(element) { \n \
-    if (!element) return; \n \
-    if (element.className == 'mainContent') return; \n \
-    if (element.style.visibility == 'hidden') { \n \
-        element.style = ''; \n \
-        show = document.getElementById(element.id + '-show'); \n \
-        hide = document.getElementById(element.id + '-hide'); \n \
-        show.style.display = 'none'; \n \
-        hide.style.display = 'block'; \n \
-        return; \n \
-    } \n \
-    makeVisibleViz(element.parentNode); \n \
-} \n \
-function getOffsetTop(element) { \n \
-    if (!element) return 0; \n \
-    if (element.id == 'IRVisualization') return 0; \n \
-    return getOffsetTop(element.offsetParent) + element.offsetTop; \n \
-} \n \
-function getOffsetLeft(element) { \n \
-    if (!element) return 0; \n \
-    if (element.id == 'IRVisualization') return 0; \n \
-    return getOffsetLeft(element.offsetParent) + element.offsetLeft; \n \
-} \n \
-function scrollToFunctionCodeToViz(id) { \n \
-    var container = document.getElementById('IRVisualization'); \n \
-    var scrollToObject = document.getElementById(id); \n \
-    makeVisibleViz(scrollToObject); \n \
-    container.scrollTo({ \n \
-        top: getOffsetTop(scrollToObject) - 20, \n \
-        left: getOffsetLeft(scrollToObject) - 40, \n \
-        behavior: 'smooth' \n \
-    }); \n \
-    scrollToObject.style.backgroundColor = 'yellow'; \n \
-    scrollToObject.style.fontSize = '20px'; \n \
-    // change content for 1 second   \n \
-    setTimeout(function () { \n \
-        scrollToObject.style.backgroundColor = 'transparent'; \n \
-        scrollToObject.style.fontSize = '12px'; \n \
-    }, 1000); \n \
-} \n \
-";
-
-const string StmtToViz::expand_code_js = "\n \
-// expand code div\n \
-var codeDiv = document.getElementById('IRCode-code'); \n \
-var resizeBar = document.getElementById('ResizeBar'); \n \
-var irVizDiv = document.getElementById('IRVisualization'); \n \
-var resizeBarAssembly = document.getElementById('ResizeBarAssembly'); \n \
-var assemblyCodeDiv = document.getElementById('assemblyCode'); \n \
- \n \
-codeDiv.style.flexGrow = '0'; \n \
-resizeBar.style.flexGrow = '0'; \n \
-irVizDiv.style.flexGrow = '0'; \n \
-resizeBarAssembly.style.flexGrow = '0'; \n \
-assemblyCodeDiv.style.flexGrow = '0'; \n \
- \n \
-codeDiv.style.flexBasis = 'calc(50% - 6px)'; \n \
-resizeBar.style.flexBasis = '6px'; \n \
-irVizDiv.style.flexBasis = 'calc(50% - 3px)'; \n \
-resizeBarAssembly.style.flexBasis = '6px'; \n \
- \n \
-resizeBar.addEventListener('mousedown', (event) => { \n \
-    document.addEventListener('mousemove', resize, false); \n \
-    document.addEventListener('mouseup', () => { \n \
-        document.removeEventListener('mousemove', resize, false); \n \
-    }, false); \n \
-}); \n \
- \n \
-resizeBarAssembly.addEventListener('mousedown', (event) => { \n \
-    document.addEventListener('mousemove', resizeAssembly, false); \n \
-    document.addEventListener('mouseup', () => { \n \
-        document.removeEventListener('mousemove', resizeAssembly, false); \n \
-    }, false); \n \
-}); \n \
-function resize(e) { \n \
-    if (e.x < 25) { \n \
-        collapseCode(); \n \
-        return; \n \
-    } \n \
- \n \
-    const size = `${e.x}px`; \n \
-    var rect = resizeBarAssembly.getBoundingClientRect(); \n \
- \n \
-    if (e.x > rect.left) { \n \
-        collapseViz(); \n \
-        return; \n \
-    } \n \
- \n \
-    codeDiv.style.display = 'block'; \n \
-    irVizDiv.style.display = 'block'; \n \
-    codeDiv.style.flexBasis = size; \n \
-    irVizDiv.style.flexBasis = `calc(${rect.left}px - ${size})`; \n \
-} \n \
-function resizeAssembly(e) { \n \
-    if (e.x > screen.width - 25) { \n \
-        collapseAssembly(); \n \
-        return; \n \
-    } \n \
- \n \
-    var rect = resizeBar.getBoundingClientRect(); \n \
- \n \
-    if (e.x < rect.right) {\n \
-        collapseViz();\n \
-        return;\n \
-    }\n \
- \n \
-    const size = `${e.x}px`; \n \
-    irVizDiv.style.display = 'block'; \n \
-    assemblyCodeDiv.style.display = 'block'; \n \
-    irVizDiv.style.flexBasis = `calc(${size} - ${rect.right}px)`; \n \
-    assemblyCodeDiv.style.flexBasis = `calc(100% - ${size})`; \n \
- \n \
-} \n \
-function collapseCode() { \n \
-    irVizDiv.style.display = 'block'; \n \
-    var rect = resizeBarAssembly.getBoundingClientRect(); \n \
-    irVizDiv.style.flexBasis = `${rect.left}px`; \n \
-    codeDiv.style.display = 'none'; \n \
-} \n \
-function collapseViz() { \n \
-    codeDiv.style.display = 'block'; \n \
-    var rect = resizeBarAssembly.getBoundingClientRect(); \n \
-    codeDiv.style.flexBasis = `${rect.left}px`; \n \
-    irVizDiv.style.display = 'none'; \n \
-} \n \
-function collapseVizAssembly() { \n \
-    assemblyCodeDiv.style.display = 'block'; \n \
-    var rect = resizeBar.getBoundingClientRect(); \n \
-    assemblyCodeDiv.style.flexBasis = `calc(100% - ${rect.right}px)`; \n \
-    irVizDiv.style.display = 'none'; \n \
-} \n \
-function collapseAssembly() { \n \
-    irVizDiv.style.display = 'block'; \n \
-    var rect = resizeBar.getBoundingClientRect(); \n \
-    irVizDiv.style.flexBasis = `calc(100% - ${rect.right}px)`; \n \
-    assemblyCodeDiv.style.display = 'none'; \n \
-} \n \
-";
-
-const string StmtToViz::code_mirror_js = "\n \
-// CodeMirror \n \
-function jumpToLine(myCodeMirror, start, end) {\n \
-    start -= 1;\n \
-    end -= 1;\n \
-    var t = myCodeMirror.charCoords({ line: start, ch: 0 }, 'local').top;\n \
-    var middleHeight = myCodeMirror.getScrollerElement().offsetHeight / 2;\n \
-    myCodeMirror.scrollIntoView({ line: start+40, ch: 0 });\n \
-    for(var i = start; i <= end; i++) {\n \
-        myCodeMirror.markText({ line: i, ch: 0 }, { line: i, ch: 200 }, { className: 'styled-background' });\n \
-    }\n \
-    myCodeMirror.markText({ line: start, ch: 0 }, { line: start, ch: 200 }, { className: 'styled-background' });\n \
-    myCodeMirror.markText({ line: end, ch: 0 }, { line: end, ch: 200 }, { className: 'styled-background' });\n \
-    myCodeMirror.focus();\n \
-    myCodeMirror.setCursor({line: start, ch: 0});\n \
-}\n \
-function populateCodeMirror(lineNumStart, lineNumberEnd) { \n \
-    assemblyCodeDiv.style.display = 'block'; \n \
-    var codeHTML = document.getElementById('assemblyContent'); \n \
-    var code = codeHTML.textContent; \n \
-    code = code.trimLeft(); \n \
-    document.getElementById('assemblyCode').innerHTML = ''; \n \
-    var myCodeMirror = CodeMirror(document.getElementById('assemblyCode'), { value: code, lineNumbers: true, lineWrapping: true, mode: { name: 'gas', architecture: 'ARMv6' }, readOnly: true, }); \n \
-    jumpToLine(myCodeMirror, lineNumStart, lineNumberEnd); \n \
-    document.getElementsByClassName('CodeMirror-sizer')[0].style.minWidth = '0px'; \n \
-} \n \
-populateCodeMirror(1, 1); \n \
-collapseAssembly(); \n \
-";
 
 void print_to_viz(const string &filename, const Stmt &s) {
     internal_assert(false) << "\n\n"
