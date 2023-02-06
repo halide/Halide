@@ -301,7 +301,7 @@ protected:
         if (enable_synthesized_rules() &&
             (rewrite(widen_right_add(x, y) + widen_right_add(z, w), widening_add(y, w) + x + z) ||
              // TODO: should be a simplifier rule.
-             rewrite(reinterpret(op->type, x) + reinterpret(op->type, y), reinterpret(op->type, x + y), types_match(x, y)) || // TODO: need x and y same type.
+             rewrite(reinterpret(op->type, x) + reinterpret(op->type, y), reinterpret(op->type, x + y), types_match(x, y)) ||  // TODO: need x and y same type.
              rewrite(widening_shift_left(x, c0) + widening_shift_left(y, c0), shift_left(widening_add(x, y), c0)) ||
              rewrite(widening_shift_left(x, c0) + (widening_shift_left(y, c0) + z), z + shift_left(widening_add(x, y), c0)) ||
              rewrite((z + widening_shift_left(x, c0)) + widening_shift_left(y, c0), z + shift_left(widening_add(x, y), c0)) ||
@@ -310,18 +310,18 @@ protected:
                      cast(op->type, shift_left(widening_add(x, y), c0)),
                      // If the cast is simply a reinterpret.
                      (is_int(x, bits / 2) && is_int(y, bits / 2)) ||
-                     (is_int(x, bits / 2) && is_uint(y, bits / 2))) ||
+                         (is_int(x, bits / 2) && is_uint(y, bits / 2))) ||
              rewrite(cast(op->type, widening_shift_left(x, c0)) + (cast(op->type, widening_shift_left(y, c0)) + z),
                      z + cast(op->type, shift_left(widening_add(x, y), c0)),
                      // If the cast is simply a reinterpret.
                      (is_int(x, bits / 2) && is_int(y, bits / 2)) ||
-                     (is_uint(x, bits / 2) && is_uint(y, bits / 2))) ||
+                         (is_uint(x, bits / 2) && is_uint(y, bits / 2))) ||
              // mul is more expensive than add.
              rewrite(widening_mul(x, y) + widening_mul(z, y),
                      y * widening_add(x, z),
                      // TODO: could be a better notation for this.
                      types_match(x, z)) ||
-            
+
              rewrite(reinterpret(op->type, x) + reinterpret(op->type, y),
                      reinterpret(op->type, x + y),
                      types_match(x, y)) ||
@@ -399,13 +399,11 @@ protected:
             }
         }
 
-
         auto rewrite = IRMatcher::rewriter<decltype(IRMatcher::sub(a, b)), false>(IRMatcher::sub(a, b), op->type);
 
         // synthesized rules.
         if (enable_synthesized_rules() &&
-            (
-             rewrite(reinterpret(op->type, x) - reinterpret(op->type, y),
+            (rewrite(reinterpret(op->type, x) - reinterpret(op->type, y),
                      reinterpret(op->type, x - y),
                      types_match(x, y)) ||
 
@@ -459,7 +457,7 @@ protected:
         if (narrow_a.defined() && narrow_b.defined() &&
             (narrow_a.type().is_int_or_uint() == narrow_b.type().is_int_or_uint() ||
              narrow_a.type().is_float() == narrow_b.type().is_float())) {
-            
+
             Expr result;
             // Enforce a normalization of widening_mul
             // widening_mul(u8, i8)
@@ -522,8 +520,7 @@ protected:
 
         // synthesized rules.
         if (enable_synthesized_rules() &&
-            (
-             rewrite(reinterpret(op->type, x) * reinterpret(op->type, y),
+            (rewrite(reinterpret(op->type, x) * reinterpret(op->type, y),
                      reinterpret(op->type, x * y),
                      types_match(x, y)) ||
 
@@ -843,14 +840,14 @@ protected:
         const Type narrow_type = (bits > 8) ? op->type.narrow() : op->type;
 
         const auto x_is_small_narrow_reinterpret = (bits > 8) &&
-                   // Checks that the MSB is 0, so widening is irrelevant.
-                  ((op->type.is_int() && is_uint(x) && upper_bounded(x, max_uint(bits / 2) / 2, this)) ||
-                   (op->type.is_uint() && is_int(x) && lower_bounded(x, (int64_t)0, this)));
+                                                   // Checks that the MSB is 0, so widening is irrelevant.
+                                                   ((op->type.is_int() && is_uint(x) && upper_bounded(x, max_uint(bits / 2) / 2, this)) ||
+                                                    (op->type.is_uint() && is_int(x) && lower_bounded(x, (int64_t)0, this)));
 
         const auto y_is_small_narrow_reinterpret = (bits > 8) &&
-                   // Checks that the MSB is 0, so widening is irrelevant.
-                  ((op->type.is_int() && is_uint(y) && upper_bounded(y, max_uint(bits / 2) / 2, this)) ||
-                   (op->type.is_uint() && is_int(y) && lower_bounded(y, (int64_t)0, this)));
+                                                   // Checks that the MSB is 0, so widening is irrelevant.
+                                                   ((op->type.is_int() && is_uint(y) && upper_bounded(y, max_uint(bits / 2) / 2, this)) ||
+                                                    (op->type.is_uint() && is_int(y) && lower_bounded(y, (int64_t)0, this)));
 
         if (
             // Simplify extending patterns.
@@ -920,39 +917,38 @@ protected:
                        saturating_cast(op->type, x),
                        is_x_wider_opposite_int) ||
                false))) ||
-            
 
             // Synthesized rules.
             (enable_synthesized_rules() &&
              (rewrite(
-                widening_mul(x, c0),
-                reinterpret(op->type,
-                 typed(op->type.with_code(halide_type_uint),
-                  widening_mul(x, cast(unsigned_narrow_type, c0)))),
-                (c0 > 0) && (is_uint(x) && is_int(c0))) ||
+                  widening_mul(x, c0),
+                  reinterpret(op->type,
+                              typed(op->type.with_code(halide_type_uint),
+                                    widening_mul(x, cast(unsigned_narrow_type, c0)))),
+                  (c0 > 0) && (is_uint(x) && is_int(c0))) ||
               rewrite(
-                widening_add(
-                    reinterpret(narrow_type, x),
-                    reinterpret(narrow_type, y)),
-                reinterpret(op->type, widening_add(x, y)),
-                types_match(x, y) &&
-                // Need bounds! what are the appropriate bounds?
-                x_is_small_narrow_reinterpret && y_is_small_narrow_reinterpret) ||
+                  widening_add(
+                      reinterpret(narrow_type, x),
+                      reinterpret(narrow_type, y)),
+                  reinterpret(op->type, widening_add(x, y)),
+                  types_match(x, y) &&
+                      // Need bounds! what are the appropriate bounds?
+                      x_is_small_narrow_reinterpret && y_is_small_narrow_reinterpret) ||
 
-                /*
-                widening_add(reinterpret(x), widen_z(y))
-                -> reinterpret(widening_add(x, widen_z(y)))
-                if x can be reinterpreted to unsigned safely and is_uint(y) and types_match(x, widen_z(y))
-                */
+              /*
+              widening_add(reinterpret(x), widen_z(y))
+              -> reinterpret(widening_add(x, widen_z(y)))
+              if x can be reinterpreted to unsigned safely and is_uint(y) and types_match(x, widen_z(y))
+              */
 
               (op->type.is_int() &&
                rewrite(
-                widening_add(reinterpret(narrow_type, x), cast(narrow_type, y)),
-                reinterpret(op->type, widening_add(x, cast(unsigned_narrow_type, y))),
-                // y must be double-widened
-                is_uint(y, bits / 4) && x_is_small_narrow_reinterpret)) ||
+                   widening_add(reinterpret(narrow_type, x), cast(narrow_type, y)),
+                   reinterpret(op->type, widening_add(x, cast(unsigned_narrow_type, y))),
+                   // y must be double-widened
+                   is_uint(y, bits / 4) && x_is_small_narrow_reinterpret)) ||
 
-             false)) ||
+              false)) ||
 
             false) {
             return mutate(rewrite.result);
@@ -1147,7 +1143,9 @@ private:
     std::map<Expr, Interval, IRDeepCompare> bounds_cache;
 
 public:
-    FindIntrinsics(const FuncValueBounds &_fvb = empty_func_value_bounds()) : fvb(_fvb) {}
+    FindIntrinsics(const FuncValueBounds &_fvb = empty_func_value_bounds())
+        : fvb(_fvb) {
+    }
 };
 
 // Substitute in let values than have an output vector
@@ -1294,11 +1292,10 @@ class SubstituteInWideningLets : public IRMutator {
     }
 };
 
-
 class LowerForLLVM : public IRGraphMutator {
 protected:
     using IRGraphMutator::visit;
-    Expr visit(const Div *op) override{
+    Expr visit(const Div *op) override {
         if (op->type.is_vector() && op->type.is_int_or_uint()) {
             // Lower division here in order to do pattern-matching on intrinsics.
             return mutate(lower_int_uint_div(op->a, op->b));
@@ -1540,8 +1537,8 @@ Expr lower_absd(const Expr &a, const Expr &b) {
     Expr a_var = Variable::make(a.type(), a_name);
     Expr b_var = Variable::make(b.type(), b_name);
     return Let::make(a_name, a,
-                        Let::make(b_name, b,
-                                Select::make(a_var < b_var, b_var - a_var, a_var - b_var)));
+                     Let::make(b_name, b,
+                               Select::make(a_var < b_var, b_var - a_var, a_var - b_var)));
 }
 
 Expr lower_mul_shift_right(const Expr &a, const Expr &b, const Expr &q) {
@@ -1662,8 +1659,8 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
     // TODO: && (get_env_variable("HL_ENABLE_RAKE_RULES") == "1")
     if (is_const(q, 31) && a.type().element_of() == Int(32)) {
         return emulate_signed_rounding_mul_shift_right_31(a, b);
-    // } else {
-    //     std::cout << "other rounding_mul_shift_right:\n" << a << "\n" << b << "\n" << q << "\n";
+        // } else {
+        //     std::cout << "other rounding_mul_shift_right:\n" << a << "\n" << b << "\n" << q << "\n";
     }
 
     int full_q = a.type().bits();
@@ -1788,7 +1785,7 @@ Expr lower_intrinsic(const Call *op) {
 //     if (e.defined() && contains_int64(e)) {
 //         std::cerr << "Failed in lowering:\n" << Expr(op) << "\n";
 //         std::cerr << "Lowered to:\n  " << e << "\n";
-//         internal_error << "done\n"; 
+//         internal_error << "done\n";
 //     }
 //     return e;
 // }
@@ -1823,7 +1820,7 @@ Expr lower_intrinsic_semantically(const Call *op) {
             return lower_intrinsic(op);
         }
         internal_assert(op->args.size() == 2);
-        return saturating_narrow(widening_sub(op->args[0], op->args[1]));
+        return saturating_cast(op->type, widening_sub(op->args[0], op->args[1]));
     } else if (op->is_intrinsic(Call::saturating_cast)) {
         internal_assert(op->args.size() == 1);
         return lower_saturating_cast(op->type, op->args[0]);

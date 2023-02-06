@@ -144,23 +144,23 @@ protected:
 
              false)) {
             return mutate(rewrite.result);
-        // } else if (
-        //     rewrite(
-        //         widening_mul(x, y) + (z + widening_mul(w, u)),
-        //         (widening_mul(x, y) + widening_mul(w, u)) + z,
-        //         !is_intrin(z, Call::widening_mul) &&
-        //         is_int(x, 16) && is_int(y, 16) &&
-        //         is_int(w, 16) && is_int(u, 16)) ||
-            
-        //     rewrite(
-        //         widening_mul(x, y) + (widening_mul(w, u) + z),
-        //         (widening_mul(x, y) + widening_mul(w, u)) + z,
-        //         !is_intrin(z, Call::widening_mul) &&
-        //         is_int(x, 16) && is_int(y, 16) &&
-        //         is_int(w, 16) && is_int(u, 16)) ||
+            // } else if (
+            //     rewrite(
+            //         widening_mul(x, y) + (z + widening_mul(w, u)),
+            //         (widening_mul(x, y) + widening_mul(w, u)) + z,
+            //         !is_intrin(z, Call::widening_mul) &&
+            //         is_int(x, 16) && is_int(y, 16) &&
+            //         is_int(w, 16) && is_int(u, 16)) ||
 
-        //     false) {
-        //     return mutate(rewrite.result);
+            //     rewrite(
+            //         widening_mul(x, y) + (widening_mul(w, u) + z),
+            //         (widening_mul(x, y) + widening_mul(w, u)) + z,
+            //         !is_intrin(z, Call::widening_mul) &&
+            //         is_int(x, 16) && is_int(y, 16) &&
+            //         is_int(w, 16) && is_int(u, 16)) ||
+
+            //     false) {
+            //     return mutate(rewrite.result);
         }
 
         if ((op->type.lanes() % 4 == 0) && should_use_dot_product(op->a, op->b, matches)) {
@@ -230,11 +230,10 @@ protected:
 
             (target.has_feature(Target::SSE41) &&
              (rewrite(
-                cast(Int(32, lanes), widening_mul(x, y)),
-                v_instr(VectorInstruction::dot_product, reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), x)),
-                                                        reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), y))),
-                is_uint(x, 8) && is_uint(y, 8)))) ||
-
+                 cast(Int(32, lanes), widening_mul(x, y)),
+                 v_instr(VectorInstruction::dot_product, reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), x)),
+                         reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), y))),
+                 is_uint(x, 8) && is_uint(y, 8)))) ||
 
             // TODO: check for cases of using saturating cast safely.
 
@@ -244,33 +243,33 @@ protected:
                 cast(Int(16, lanes), x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 32) &&
-                upper_bounded(x, (int64_t)std::numeric_limits<int16_t>::max(), this) &&
-                lower_bounded(x, (int64_t)std::numeric_limits<int16_t>::min(), this)) ||
-            
+                    upper_bounded(x, (int64_t)std::numeric_limits<int16_t>::max(), this) &&
+                    lower_bounded(x, (int64_t)std::numeric_limits<int16_t>::min(), this)) ||
+
             rewrite(
                 cast(Int(8, lanes), x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 16) &&
-                upper_bounded(x, (int64_t)std::numeric_limits<int8_t>::max(), this) &&
-                lower_bounded(x, (int64_t)std::numeric_limits<int8_t>::min(), this)) ||
+                    upper_bounded(x, (int64_t)std::numeric_limits<int8_t>::max(), this) &&
+                    lower_bounded(x, (int64_t)std::numeric_limits<int8_t>::min(), this)) ||
 
             rewrite(
                 cast(UInt(8, lanes), x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 16) &&
-                upper_bounded(x, (int64_t)std::numeric_limits<uint8_t>::max(), this) &&
-                lower_bounded(x, (int64_t)std::numeric_limits<uint8_t>::min(), this)) ||
+                    upper_bounded(x, (int64_t)std::numeric_limits<uint8_t>::max(), this) &&
+                    lower_bounded(x, (int64_t)std::numeric_limits<uint8_t>::min(), this)) ||
 
             // i32 -> u16 is supported via SSE41
             (target.has_feature(Target::SSE41) &&
              (rewrite(
-                cast(UInt(16, lanes), x),
-                v_instr(VectorInstruction::saturating_narrow, x),
-                is_int(x, 32) &&
-                upper_bounded(x, (int64_t)std::numeric_limits<uint16_t>::max(), this) &&
-                lower_bounded(x, (int64_t)std::numeric_limits<uint16_t>::min(), this)) ||
+                  cast(UInt(16, lanes), x),
+                  v_instr(VectorInstruction::saturating_narrow, x),
+                  is_int(x, 32) &&
+                      upper_bounded(x, (int64_t)std::numeric_limits<uint16_t>::max(), this) &&
+                      lower_bounded(x, (int64_t)std::numeric_limits<uint16_t>::min(), this)) ||
 
-            false)) ||
+              false)) ||
 
             false) {
             return mutate(rewrite.result);
@@ -378,27 +377,27 @@ protected:
             // i32 -> u16 is supported via SSE41
             (target.has_feature(Target::SSE41) &&
              (rewrite(
-                 saturating_cast(UInt(16, lanes), x),
-                 v_instr(VectorInstruction::saturating_narrow, x),
-                 is_int(x, 32)) ||
+                  saturating_cast(UInt(16, lanes), x),
+                  v_instr(VectorInstruction::saturating_narrow, x),
+                  is_int(x, 32)) ||
 
-            //   // Can also do faster widening_mul(u8, i8) on x86 via 2 pmovzxbw and pmaddubsw
-            //   rewrite(widening_mul(x, y),
-            //           v_instr(VectorInstruction::widening_mul, x, y),
-            //         //   v_instr(VectorInstruction::saturating_dot_product, x_zext_u8, y_zext_i8),
-            //           is_uint(x, 8) && is_int(y, 8)) ||
-            
-            //   rewrite(widening_mul(x, c0),
-            //           reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::widening_mul, x, c0_i8))),
-            //         //   reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::saturating_dot_product, x_zext_u8, c0_wide_i8))),
-            //           is_uint(x, 8) && is_uint(c0, 8) && c0 <= 127) ||
-            
-            //   rewrite(widening_mul(c0, x),
-            //           reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::widening_mul, x, c0_i8))),
-            //         //   reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::saturating_dot_product, x_zext_u8, c0_wide_i8))),
-            //           is_uint(x, 8) && is_uint(c0, 8) && c0 <= 127) ||
-                 
-            false)) ||
+              //   // Can also do faster widening_mul(u8, i8) on x86 via 2 pmovzxbw and pmaddubsw
+              //   rewrite(widening_mul(x, y),
+              //           v_instr(VectorInstruction::widening_mul, x, y),
+              //         //   v_instr(VectorInstruction::saturating_dot_product, x_zext_u8, y_zext_i8),
+              //           is_uint(x, 8) && is_int(y, 8)) ||
+
+              //   rewrite(widening_mul(x, c0),
+              //           reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::widening_mul, x, c0_i8))),
+              //         //   reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::saturating_dot_product, x_zext_u8, c0_wide_i8))),
+              //           is_uint(x, 8) && is_uint(c0, 8) && c0 <= 127) ||
+
+              //   rewrite(widening_mul(c0, x),
+              //           reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::widening_mul, x, c0_i8))),
+              //         //   reinterpret(op->type, typed(signed_type, v_instr(VectorInstruction::saturating_dot_product, x_zext_u8, c0_wide_i8))),
+              //           is_uint(x, 8) && is_uint(c0, 8) && c0 <= 127) ||
+
+              false)) ||
 
             // Rewrite double saturating casts for supported types.
             // int32 -> uint8 and int32 -> int8 are always possible.
@@ -481,22 +480,22 @@ protected:
             // always supported (via SSE2).
             ((op->type.is_int() && (bits == 32)) &&
              (rewrite(
-                 widening_mul(x, cast(Int(16, lanes), y)),
-                 v_instr(VectorInstruction::dot_product, reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), x)),
-                                                         reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), y))),
-                 is_int(x, 16) && is_uint(y, 8)) ||
+                  widening_mul(x, cast(Int(16, lanes), y)),
+                  v_instr(VectorInstruction::dot_product, reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), x)),
+                          reinterpret(Int(16, lanes * 2), cast(Int(32, lanes), y))),
+                  is_int(x, 16) && is_uint(y, 8)) ||
 
-                // don't do this if one or more operands is a load, it's faster to load wide + do pmulld
-                // rewrite(
-                //  widening_mul(x, y),
-                //  cast(op->type, x) * cast(op->type, y),
-                //  is_load(x) || is_load(y)) ||
+              // don't do this if one or more operands is a load, it's faster to load wide + do pmulld
+              // rewrite(
+              //  widening_mul(x, y),
+              //  cast(op->type, x) * cast(op->type, y),
+              //  is_load(x) || is_load(y)) ||
 
-                // rewrite(
-                //  widening_mul(x, y),
-                //  v_instr(VectorInstruction::widening_mul, x, y),
-                //  is_int(x, 16) && is_int(y, 16))
-                 false)) ||
+              // rewrite(
+              //  widening_mul(x, y),
+              //  v_instr(VectorInstruction::widening_mul, x, y),
+              //  is_int(x, 16) && is_int(y, 16))
+              false)) ||
 
             (target.has_feature(Target::AVX512_SapphireRapids) &&
              (op->type.is_int() && (bits == 32)) &&
@@ -529,7 +528,7 @@ protected:
               false)) ||
 
             false) {
-                // std::cerr << Expr(op) << " -> " << rewrite.result << "\n";
+            // std::cerr << Expr(op) << " -> " << rewrite.result << "\n";
             return mutate(rewrite.result);
         }
 
@@ -715,15 +714,11 @@ protected:
                 auto rewrite = IRMatcher::rewriter(value, op->type);
 
                 if ((factor % 2 == 0) &&
-                    (
-                     rewrite(widening_mul(x, y), widening_mul(x, y), is_int(x, 16) && is_int(y, 16)) ||
-                    false)) {
+                    (rewrite(widening_mul(x, y), widening_mul(x, y), is_int(x, 16) && is_int(y, 16)) ||
+                     false)) {
                     return mutate(break_up_reduction(op, 2));
                 }
-
             }
-
-
 
             break;
         }
@@ -758,9 +753,6 @@ private:
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
-    IRMatcher::Wild<3> w;
-    IRMatcher::Wild<4> u;
-    // IRMatcher::WildConst<0> c0;
 };
 
 }  // namespace
