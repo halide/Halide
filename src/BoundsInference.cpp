@@ -321,9 +321,9 @@ public:
                                                   {likely(predicates[i]), cond_val},
                                                   Internal::Call::PureIntrinsic);
                         }
-                        result[i].push_back(CondValue(const_true(), cond_val));
+                        result[i].emplace_back(const_true(), cond_val);
                     } else {
-                        result[i].push_back(CondValue(const_true(), val));
+                        result[i].emplace_back(const_true(), val);
                     }
                 }
             }
