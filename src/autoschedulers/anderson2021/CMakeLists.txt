@@ -59,7 +59,7 @@ add_autoscheduler(
     $<TARGET_OBJECTS:anderson2021_weights_obj>
 )
 
-target_include_directories(Halide_Anderson2021 PUBLIC "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
+target_include_directories(Halide_Anderson2021 PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
 target_link_libraries(Halide_Anderson2021 PRIVATE ASLog ParamParser
     anderson2021_cost_model anderson2021_train_cost_model)
 
