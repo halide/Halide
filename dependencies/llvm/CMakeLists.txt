@@ -31,8 +31,15 @@ endif ()
 # LLVM_DEFINITIONS is a space-separated list instead of a more typical
 # CMake semicolon-separated list. For a long time, CMake could handle
 # this transparently but, since LLVM 17, the flag -D_FILE_OFFSET_BITS=64
-# appears twice on 32-bit systems. Somehow, this messes with CMake's
-# argument de-duplication and we wind up with a corrupted command line.
+# appears on 32-bit Linux. The presence of the `=` here stops CMake
+# from splitting on spaces, instead corrupting the command line by
+# folding the other flags into the value of -D_FILE_OFFSET_BITS=64.
+# For better or worse, since the flag also appears twice, the second
+# `=` is folded into the value of the first and we get errors of the
+# form:
+#
+#   <command-line>: error: token "=" is not valid in preprocessor expressions
+#
 separate_arguments(LLVM_DEFINITIONS NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 set(Halide_LLVM_DEFS ${LLVM_DEFINITIONS} $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
 
