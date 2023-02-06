@@ -28,6 +28,12 @@ if (LLVM_PACKAGE_VERSION VERSION_GREATER 17.0)
     message(WARNING "Halide is not tested on LLVM versions beyond 17.0")
 endif ()
 
+# LLVM_DEFINITIONS is a space-separated list instead of a more typical
+# CMake semicolon-separated list. For a long time, CMake could handle
+# this transparently but, since LLVM 17, the flag -D_FILE_OFFSET_BITS=64
+# appears twice on 32-bit systems. Somehow, this messes with CMake's
+# argument de-duplication and we wind up with a corrupted command line.
+separate_arguments(LLVM_DEFINITIONS NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 set(Halide_LLVM_DEFS ${LLVM_DEFINITIONS} $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
 
 ##
