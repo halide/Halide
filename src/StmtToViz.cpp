@@ -318,7 +318,7 @@ private:
 
     // Prints a button to sync text with visualization
     void print_visualization_button(int id) {
-        stream << "<button class='sync-btn' onclick='scrollToFunctionCodeToViz(\"" << id << "_viz\")'>"
+        stream << "<button class='icon-btn sync-btn' onclick='scrollToFunctionCodeToViz(\"" << id << "_viz\")'>"
                << "  <i class='bi bi-arrow-right-square'></i>"
                << "</button>";
     }
