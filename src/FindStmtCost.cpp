@@ -126,10 +126,11 @@ int FindStmtCost::get_computation_cost(const IRNode *node, bool inclusive) const
 
         // this happens when visualizing cost of else_case in StmtToViz.cpp
         else if (type == IRNodeType::Variable) {
-            const Variable *var = (const Variable *)node;
-            if (var->name == StmtToViz_canIgnoreVariableName_string) {
+            //const Variable *var = (const Variable *)node;
+            // todo refactor
+            //if (var->name == StmtToViz_canIgnoreVariableName_string) {
                 cost = StmtCost::NormalNodeCC;
-            }
+            //}
         }
 
         else {
@@ -173,10 +174,11 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node, bool inclusive) con
 
         // this happens when visualizing cost of else_case in StmtToViz.cpp
         else if (type == IRNodeType::Variable) {
-            const Variable *var = (const Variable *)node;
-            if (var->name == StmtToViz_canIgnoreVariableName_string) {
+            //const Variable *var = (const Variable *)node;
+            // todo refactor
+            //if (var->name == StmtToViz_canIgnoreVariableName_string) {
                 cost = StmtCost::NormalNodeDMC;
-            }
+            //}
         } else {
             internal_assert(false) << "\n"
                                    << "FindStmtCost::get_data_movement_cost: " << print_node(node)

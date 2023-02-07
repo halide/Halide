@@ -6,6 +6,7 @@
 #include "GetStmtHierarchy.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "IRPrinter.h"
 #include "IRVisualization.h"
 #include "Module.h"
 #include "Scope.h"
@@ -19,15 +20,1730 @@
 #include <sstream>
 #include <utility>
 
-// Can use std::source_location once C++-17 is deprecated
-#define __DIR__  \
-    std::string_view(__FILE__).substr(0, std::string_view(__FILE__).rfind('/')+1)
-
 namespace Halide {
 namespace Internal {
 
 using std::ostringstream;
 using std::string;
+
+// Classes define within this file
+class HTMLCodePrinter;
+class HTMLVisualizationPrinter;
+class IRVisualizer;
+
+/************** HTMLCodePrinter Class **************/
+
+class HTMLCodePrinter : public IRVisitor {
+public:
+    HTMLCodePrinter(std::ofstream &os)
+        : stream(os), _id(0), context_stack(1, 0) {
+    }
+
+    void print(const Module &m) {
+        // Generate a unique ID for this module
+        int id = gen_unique_id();
+
+        // Enter new scope for this module
+        scope.push(m.name(), id);
+
+        // The implementation currently does not support submodules.
+        // TODO: test it out on a benchmark with submodules
+        internal_assert(m.submodules().empty()) << "StmtToViz does not yet support submodules.";
+        
+        // Open div to hold this module
+        print_opening_tag("div", "Module");
+
+        // Generate the show hide icon/text buttons
+        print_toggle_anchor_opening_tag(id);
+
+        // -- print icon
+        print_show_hide_icon(id);
+
+        // -- print text
+        print_opening_tag("span", "matched");
+        print_html_element("span", "keyword", "module");
+        print_text(" name=" + m.name() + ", target=" + m.target().to_string());
+        print_closing_tag("span");
+
+        print_toggle_anchor_closing_tag();
+        
+        // Open code block to hold module body
+        print_html_element("span", "matched", " {");
+
+        // Open indented div to hold body code
+        print_opening_tag("div", "indent ModuleBody", id);
+
+        // Print module buffers
+        for (const auto &buf : m.buffers()) {
+            print(buf);
+        }
+
+        // Print module functions
+        for (const auto &fn : m.functions()) {
+            print(fn);
+        }
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding module body
+        print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
+
+        // Close div holding this module
+        print_closing_tag("div");
+        
+        // Pop out to outer scope
+        scope.pop(m.name());
+    }
+
+    void print(const Buffer<> &buf) {
+        // Generate a unique ID for this module
+        int id = gen_unique_id();
+
+        // Determine whether to print buffer data
+        bool print_data = ends_with(buf.name(), "_gpu_source_kernels");
+
+        // Open div to hold this buffer
+        print_opening_tag("div", "Buffer");
+
+        if (print_data) {
+            // Generate the show hide icon/text buttons
+            print_toggle_anchor_opening_tag(id);
+
+            // -- print icon
+            print_show_hide_icon(id);
+
+            // -- print text
+            print_html_element("span", "keyword", "buffer ");
+            print_variable(buf.name());
+
+            print_toggle_anchor_closing_tag();
+
+            // Print data
+            print_text(" = ");
+            
+            // Open code block to hold module body
+            print_html_element("span", "matched", " {");
+            
+            // Open indented div to hold buffer data
+            print_opening_tag("div", "indent BufferData", id);
+            
+            string str((const char *)buf.data(), buf.size_in_bytes());
+            if (starts_with(buf.name(), "cuda_")) 
+                print_cuda_gpu_source_kernels(str);
+            else 
+                stream << "<pre>\n" << str << "</pre>\n";
+            
+            print_closing_tag("div");
+
+            // Close code block holding buffer body
+            print_html_element("span", "matched ClosingBrace", " }", "cb-" + std::to_string(id));
+        } 
+        else {
+            // Print buffer name and move on
+            print_html_element("span", "keyword", "buffer ");
+            print_variable(buf.name());
+        }
+
+        // Close div holding this buffer
+        print_closing_tag("div");
+    }
+
+    void print(const LoweredFunc &fn) {
+        // Generate a unique ID for this function
+        int id = gen_unique_id();
+
+        // Enter new scope for this function
+        scope.push(fn.name, id);
+
+        // Open div to hold this buffer
+        print_opening_tag("div", "Function");
+
+        // Generate the show hide icon/text buttons
+        print_toggle_anchor_opening_tag(id);
+
+        // -- print icon
+        print_show_hide_icon(id);
+
+        // -- print text (fn name and args)
+        //    Note: We wrap the show/hide buttons in a navigation anchor
+        //    that lets us sync text and visualization tabs.
+        print_opening_tag("span", "matched");
+        print_html_element("span", "keyword nav-anchor", "func ", "lowered-func-" + std::to_string(id));
+        print_text(fn.name + "(");
+        print_closing_tag("span");
+        print_fndecl_args(fn.args);
+        print_html_element("span", "matched", ")");
+
+        print_toggle_anchor_closing_tag();
+
+        // Add a button to jump to this function in the viz
+        print_visualization_button(id);
+
+        // Open code block to hold function body
+        print_html_element("span", "matched", "{");
+
+        // Open indented div to hold body code
+        print_opening_tag("div", "indent FunctionBody", id);
+
+        // Print function body
+        print(fn.body);
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding func body
+        print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
+
+        // Close div holding this function
+        print_closing_tag("div");
+
+        // Pop out to outer scope
+        scope.pop(fn.name);
+    }
+
+    void print(const Expr &ir) {
+        ir.accept(this);
+    }
+
+    void print(const Stmt &ir) {
+        ir.accept(this);
+    }
+
+private:
+    // Handle to output file stream
+    std::ofstream &stream;
+
+    // Used to generate unique ids
+    int _id;
+
+    // Used to track scope during IR traversal
+    Scope<int> scope;
+
+    /* All spans and divs will have an id of the form "x-y", where x
+     * is shared among all spans/divs in the same context, and y is unique.
+     * These variables are used to track the context within generated HTML */
+    std::vector<int> context_stack;
+    std::vector<string> context_stack_tags;
+
+    /* Misc methods used for generating common HTML elements*/
+    
+    // Prints the opening tag for the specified html element. A unique ID is 
+    // auto-generated unless provided.
+    void print_opening_tag(const string &tag, const string &cls, int id = -1) {
+        stream << "<" << tag << " class='" << cls << "' id='";
+        if (id == -1) {
+            stream << context_stack.back() << "-";
+            stream << gen_unique_id();
+        } else {
+            stream << id;
+        }
+        stream << "'>";
+        context_stack.push_back(gen_unique_id());
+        context_stack_tags.push_back(tag);
+    }
+
+    void print_opening_tag(const string &tag, const string &cls, string id) {
+        stream << "<" << tag << " class='" << cls << "' id='" << id << "'>";
+        context_stack.push_back(gen_unique_id());
+        context_stack_tags.push_back(tag);
+    }
+
+    // Prints the closing tag for the specified html element.
+    void print_closing_tag(const string &tag) {
+        internal_assert(!context_stack.empty() && tag == context_stack_tags.back()) << tag << " " << context_stack_tags.back();
+        context_stack.pop_back();
+        context_stack_tags.pop_back();
+        stream << "</" + tag + ">";
+    }
+
+    // Prints an html element: opening tag, body and closing tag
+    void print_html_element(const string &tag, const string &cls, const string &body, int id = -1) {
+        print_opening_tag(tag, cls, id);
+        stream << body;
+        print_closing_tag(tag);
+    }
+
+    void print_html_element(const string &tag, const string &cls, const string &body, string id) {
+        print_opening_tag(tag, cls, id);
+        stream << body;
+        print_closing_tag(tag);
+    }
+
+    // Prints the opening/closing tags for an anchor that toggles code block view
+    void print_toggle_anchor_opening_tag(int id) {
+        stream << "<a onclick='return toggle(" << id << ");' href=_blank>";
+    }
+
+    void print_toggle_anchor_closing_tag() {
+        stream << "</a>";
+    }
+
+    // Prints a variable to stream
+    void print_variable(const string &x) {
+        stream << variable(x);
+    }
+
+    string variable(const string &x) {
+        int id;
+        if (scope.contains(x)) {
+            id = scope.get(x);
+        } else {
+            id = gen_unique_id();
+            scope.push(x, id);
+        }
+        ostringstream s;
+        s << "<b class='variable matched' id='" << id << "-" << gen_unique_id() << "'>";
+        s << x;
+        s << "</b>";
+        return s.str();
+    }
+
+    // Prints text to stream
+    void print_text(const string &x) {
+        stream << x;
+    }
+
+    // Prints the button to show or hide a code scope
+    void print_show_hide_icon(int id) {
+        stream << "<div class='show-hide-btn-wrapper'>"
+               << "  <div class='show-hide-btn' style='display:none;' id=" << id << "-show>"
+               << "    <i class='fa fa-plus-square-o'></i>"
+               << "  </div>"
+               << "  <div class='show-hide-btn' id=" << id << "-hide>"
+               << "    <i class='fa fa-minus-square-o'></i>"
+               << "  </div>"
+               << "</div>";
+    }
+
+    // Prints a button to sync text with visualization
+    void print_visualization_button(int id) {
+        stream << "<button class='sync-btn' onclick='scrollToFunctionCodeToViz(\"" << id << "_viz\")'>"
+               << "  <i class='bi bi-arrow-right-square'></i>"
+               << "</button>";
+    }
+
+    // Maaz: This is a legacy function from the old html generator. I made sure it works
+    // with the refactored code but I did not dig into why this function does what it does.
+    void print_cuda_gpu_source_kernels(const string &str) {
+        print_opening_tag("code", "ptx");
+
+        int current_id = -1;
+        bool in_braces = false;
+        bool in_func_signature = false;
+        
+        string current_kernel;
+        std::istringstream ss(str);
+
+        for (string line; std::getline(ss, line);) {
+            if (line.empty()) {
+                stream << "\n";
+                continue;
+            }
+            line = replace_all(line, "&", "&amp;");
+            line = replace_all(line, "<", "&lt;");
+            line = replace_all(line, ">", "&gt;");
+            line = replace_all(line, "\"", "&quot;");
+            line = replace_all(line, "/", "&#x2F;");
+            line = replace_all(line, "'", "&#39;");
+
+            if (starts_with(line, ".visible .entry")) {
+                std::vector<string> parts = split_string(line, " ");
+                if (parts.size() == 3) {
+                    in_func_signature = true;
+                    current_id = gen_unique_id();
+                    print_toggle_anchor_opening_tag(current_id);
+                    print_show_hide_icon(current_id);
+                    string kernel_name = parts[2].substr(0, parts[2].length() - 1);
+                    line = "<span class='keyword'>.visible</span> <span class='keyword'>.entry</span> ";
+                    line += variable(kernel_name) + " <span class='matched'>(</span>";
+                    current_kernel = kernel_name;
+                }
+            } else if (starts_with(line, ")") && in_func_signature) {
+                print_toggle_anchor_closing_tag();
+                in_func_signature = false;
+                line = "<span class='matched'>)</span>" + line.substr(1);
+            } else if (starts_with(line, "{") && !in_braces) {
+                in_braces = true;
+                print_toggle_anchor_closing_tag();
+                print_html_element("span", "matched", "{");
+                internal_assert(current_id != -1);
+                print_opening_tag("div", "indent", current_id);
+                current_id = -1;
+                line = line.substr(1);
+                scope.push(current_kernel, gen_unique_id());
+            } else if (starts_with(line, "}") && in_braces) {
+                print_closing_tag("div");
+                line = "<span class='matched'>}</span>" + line.substr(1);
+                in_braces = false;
+                scope.pop(current_kernel);
+            }
+
+            bool indent = false;
+
+            if (line[0] == '\t') {
+                // Replace first tab with four spaces.
+                line = line.substr(1);
+                indent = true;
+            }
+
+            line = replace_all(line, ".f32", ".<span class='OpF32'>f32</span>");
+            line = replace_all(line, ".f64", ".<span class='OpF64'>f64</span>");
+
+            line = replace_all(line, ".s8", ".<span class='OpI8'>s8</span>");
+            line = replace_all(line, ".s16", ".<span class='OpI16'>s16</span>");
+            line = replace_all(line, ".s32", ".<span class='OpI32'>s32</span>");
+            line = replace_all(line, ".s64", ".<span class='OpI64'>s64</span>");
+
+            line = replace_all(line, ".u8", ".<span class='OpI8'>u8</span>");
+            line = replace_all(line, ".u16", ".<span class='OpI16'>u16</span>");
+            line = replace_all(line, ".u32", ".<span class='OpI32'>u32</span>");
+            line = replace_all(line, ".u64", ".<span class='OpI64'>u64</span>");
+
+            line = replace_all(line, ".b8", ".<span class='OpB8'>b8</span>");
+            line = replace_all(line, ".b16", ".<span class='OpB16'>b16</span>");
+            line = replace_all(line, ".b32", ".<span class='OpB32'>b32</span>");
+            line = replace_all(line, ".b64", ".<span class='OpB64'>b64</span>");
+
+            line = replace_all(line, ".v2", ".<span class='OpVec2'>v2</span>");
+            line = replace_all(line, ".v4", ".<span class='OpVec4'>v4</span>");
+
+            line = replace_all(line, "ld.", "<span class='Memory'>ld</span>.");
+            line = replace_all(line, "st.", "<span class='Memory'>st</span>.");
+
+            size_t idx;
+            if ((idx = line.find("&#x2F;&#x2F")) != string::npos) {
+                line.insert(idx, "<span class='Comment'>");
+                line += "</span>";
+            }
+
+            // Predicated instructions
+            if (line.front() == '@' && indent) {
+                idx = line.find(' ');
+                string pred = line.substr(1, idx - 1);
+                line = "<span class='Pred'>@" + variable(pred) + "</span>" + line.substr(idx);
+            }
+
+            // Labels
+            if (line.front() == 'L' && !indent && (idx = line.find(':')) != string::npos) {
+                string label = line.substr(0, idx);
+                line = "<span class='Label'>" + variable(label) + "</span>:" + line.substr(idx + 1);
+            }
+
+            // Highlight operands
+            if ((idx = line.find(" \t")) != string::npos && line.back() == ';') {
+                string operands_str = line.substr(idx + 2);
+                operands_str = operands_str.substr(0, operands_str.length() - 1);
+                std::vector<string> operands = split_string(operands_str, ", ");
+                operands_str = "";
+                for (size_t opidx = 0; opidx < operands.size(); ++opidx) {
+                    string op = operands[opidx];
+                    internal_assert(!op.empty());
+                    if (opidx != 0) {
+                        operands_str += ", ";
+                    }
+                    if (op.back() == '}') {
+                        string reg = op.substr(0, op.size() - 1);
+                        operands_str += variable(reg) + '}';
+                    } else if (op.front() == '%') {
+                        operands_str += variable(op);
+                    } else if (op.find_first_not_of("-0123456789") == string::npos) {
+                        operands_str += "<span class='IntImm Imm'>";
+                        operands_str += op;
+                        operands_str += "</span>";
+                    } else if (starts_with(op, "0f") &&
+                               op.find_first_not_of("0123456789ABCDEF", 2) == string::npos) {
+                        operands_str += "<span class='FloatImm Imm'>";
+                        operands_str += op;
+                        operands_str += "</span>";
+                    } else if (op.front() == '[' && op.back() == ']') {
+                        size_t idx = op.find('+');
+                        if (idx == string::npos) {
+                            string reg = op.substr(1, op.size() - 2);
+                            operands_str += '[' + variable(reg) + ']';
+                        } else {
+                            string reg = op.substr(1, idx - 1);
+                            string offset = op.substr(idx + 1);
+                            offset = offset.substr(0, offset.size() - 1);
+                            operands_str += '[' + variable(reg) + "+";
+                            operands_str += "<span class='IntImm Imm'>";
+                            operands_str += offset;
+                            operands_str += "</span>";
+                            operands_str += ']';
+                        }
+                    } else if (op.front() == '{') {
+                        string reg = op.substr(1);
+                        operands_str += '{' + variable(reg);
+                    } else if (op.front() == 'L') {
+                        // Labels
+                        operands_str += "<span class='Label'>" + variable(op) + "</span>";
+                    } else {
+                        operands_str += op;
+                    }
+                }
+                operands_str += ";";
+                line = line.substr(0, idx + 2) + operands_str;
+            }
+
+            if (indent) {
+                stream << "    ";
+            }
+            stream << line << "\n";
+        }
+        stream << "</code>";
+    }
+
+    // Prints the args in a function declaration
+    void print_fndecl_args(std::vector<LoweredArgument> args) {
+        bool print_delim = false;
+        for (const auto arg : args) {
+            if (print_delim) {
+                print_html_element("span", "matched", ",");
+                print_text(" ");
+            }
+            print_variable(arg.name);
+            print_delim = true;
+        }
+    }
+
+    /* Misc utility methods */
+    int gen_unique_id() {
+        return _id++;
+    }
+
+private:
+    /* All visitor functions inherited from IRVisitor*/
+
+    void visit(const IntImm *op) override {
+        print_constant("IntImm Imm", Expr(op));
+    }
+
+    void visit(const UIntImm *op) override {
+        print_constant("UIntImm Imm", Expr(op));
+    }
+
+    void visit(const FloatImm *op) override {
+        print_constant("FloatImm Imm", Expr(op));
+    }
+
+    void visit(const StringImm *op) override {
+        print_constant("StringImm Imm", Expr(op));
+    }
+
+    void visit(const Variable *op) override {
+        print_variable(op->name);
+    }
+
+    void visit(const Cast *op) override {
+        print_opening_tag("span", "Cast");
+        print_opening_tag("span", "matched");
+        print_type(op->type);
+        print_text("(");
+        print_closing_tag("span");
+        print(op->value);
+        print_html_element("span", "matched", ")");
+        print_closing_tag("span");
+    }
+
+    void visit(const Reinterpret *op) override {
+        print_opening_tag("span", "Reinterpret");
+        print_opening_tag("span", "matched");
+        print_type(op->type);
+        print_text("(");
+        print_closing_tag("span");
+        print(op->value);
+        print_html_element("span", "matched", ")");
+        print_closing_tag("span");
+    }
+
+    void visit(const Add *op) override {
+        print_binary_op(op->a, op->b, "+");
+    }
+
+    void visit(const Sub *op) override {
+        print_binary_op(op->a, op->b, "-");
+    }
+
+    void visit(const Mul *op) override {
+        print_binary_op(op->a, op->b, "*");
+    }
+    
+    void visit(const Div *op) override {
+        print_binary_op(op->a, op->b, "/");
+    }
+
+    void visit(const Mod *op) override {
+        print_binary_op(op->a, op->b, "%");
+    }
+
+    void visit(const Min *op) override {
+        print_opening_tag("span", "Min");
+        print_function_call("min", {op->a, op->b});
+        print_closing_tag("span");
+    }
+
+    void visit(const Max *op) override {
+        print_opening_tag("span", "Max");
+        print_function_call("max", {op->a, op->b});
+        print_closing_tag("span");
+    }
+    
+    void visit(const EQ *op) override {
+        print_binary_op(op->a, op->b, "==");
+    }
+    
+    void visit(const NE *op) override {
+        print_binary_op(op->a, op->b, "!=");
+    }
+
+    void visit(const LT *op) override {
+        print_binary_op(op->a, op->b, "&lt;");
+    }
+
+    void visit(const LE *op) override {
+        print_binary_op(op->a, op->b, "&lt=");
+    }
+
+    void visit(const GT *op) override {
+        print_binary_op(op->a, op->b, "&gt;");
+    }
+
+    void visit(const GE *op) override {
+        print_binary_op(op->a, op->b, "&gt;=");
+    }
+    
+    void visit(const And *op) override {
+        print_binary_op(op->a, op->b, "&amp;&amp;");
+    }
+
+    void visit(const Or *op) override {
+        print_binary_op(op->a, op->b, "||");
+    }
+
+    void visit(const Not *op) override {
+        print_opening_tag("span", "Not");
+        print_text("!");
+        print(op->a);
+        print_closing_tag("span");
+    }
+
+    void visit(const Select *op) override {
+        print_opening_tag("span", "Select");
+        print_function_call("select", {op->condition, op->true_value, op->false_value});
+        print_closing_tag("span");
+    }
+
+    void visit(const Load *op) override {
+        print_opening_tag("span", "Load");
+        print_opening_tag("span", "matched");
+        print_variable(op->name);
+        print_text("[");
+        print_closing_tag("span");
+        print(op->index);
+        print_html_element("span", "matched", "]");
+        if (!is_const_one(op->predicate)) {
+            print_html_element("span", "keyword", " if ");
+            print(op->predicate);
+        }
+        print_closing_tag("span");
+    }
+
+    void visit(const Ramp *op) override {
+        print_opening_tag("span", "Ramp");
+        print_function_call("ramp", {op->base, op->stride, Expr(op->lanes)});
+        print_closing_tag("span");
+    }
+
+    void visit(const Broadcast *op) override {
+        print_opening_tag("span", "Broadcast");
+        print_opening_tag("span", "matched");
+        print_text("x" + std::to_string(op->lanes) + "(");
+        print_closing_tag("span");
+        print(op->value);
+        print_html_element("span", "matched", ")");
+        print_closing_tag("span");
+    }
+
+    void visit(const Call *op) override {
+        print_opening_tag("span", "Call");
+        print_function_call(op->name, op->args);
+        print_closing_tag("span");
+    }
+
+    void visit(const Let *op) override {
+        scope.push(op->name, gen_unique_id());
+        print_opening_tag("span", "Let");
+        print_opening_tag("span", "matched");
+        print_text("(");
+        print_html_element("span", "keyword", "let ");
+        print_variable(op->name);
+        print_html_element("span", "Operator Assign", " = ");
+        print_closing_tag("span");
+        print(op->value);
+        print_html_element("span", "matched keyword", " in ");
+        print(op->body);
+        print_html_element("span", "matched", ")");
+        print_closing_tag("span");
+        scope.pop(op->name);
+    }
+
+    void visit(const LetStmt *op) override {
+        scope.push(op->name, gen_unique_id());
+        print_opening_tag("div", "LetStmt");
+        print_opening_tag("p", "WrapLine");
+        //stream << open_cost_span(op);
+        print_opening_tag("span", "matched");
+        print_html_element("span", "keyword", "let ");
+        print_variable(op->name);
+        print_html_element("span", "Operator Assign", " = ");
+        print_closing_tag("span");
+        print(op->value);
+        //stream << close_cost_span();
+        print_closing_tag("p");        
+        print(op->body); 
+        print_closing_tag("div");
+        scope.pop(op->name);
+    }
+
+    void visit(const AssertStmt *op) override {
+        print_opening_tag("div", "AssertStmt WrapLine");
+        //stream << open_cost_span(op);
+        print_function_call("assert", {op->condition, op->message});
+        //stream << close_cost_span();
+        print_closing_tag("div");
+    }
+
+    void visit(const ProducerConsumer *op) override {
+        // Give this Producer/Consumer a unique id
+        int id = gen_unique_id();
+
+        // Push a new scope
+        scope.push(op->name, id);
+
+        // Start a dive to hold code for this Producer/Consumer
+        print_opening_tag("div", op->is_producer ? "Produce" : "Consumer");
+
+        // TODO: Assembly support
+        // int assembly_line_num = get_assembly_info_viz.get_line_number_prod_cons(op);
+
+        //stream << open_cost_span(op);
+
+        // Generate the show hide icon/text buttons
+        print_toggle_anchor_opening_tag(id);
+
+        // -- print icon
+        print_show_hide_icon(id);
+
+        // -- print text
+        print_opening_tag("span", "matched");
+        print_html_element("span", "keyword nav-anchor", op->is_producer ? "produce " : "consume ", 
+            "for-loop-" + std::to_string(id));
+        print_variable(op->name);
+        print_closing_tag("span");
+
+        print_toggle_anchor_closing_tag();
+
+        //stream << close_cost_span();
+
+        // Add a button to jump to this producer/consumer in the viz
+        print_visualization_button(id);
+
+        //if (assembly_line_num != -1) {
+        //stream << see_assembly_button(assembly_line_num);
+        //}
+        //stream << see_viz_button(anchor_name);
+
+        // Open code block to hold function body
+        print_html_element("span", "matched", "{");
+
+        // Open indented div to hold body code
+        print_opening_tag("div", "indent ProducerConsumerBody", id);
+
+        // Print producer/consumer body
+        print(op->body);
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding producer/consumer body
+        print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
+
+        // Close div holding this producer/consumer
+        print_closing_tag("div");
+
+        // Pop out of loop scope
+        scope.pop(op->name);
+    }
+
+    void visit(const For *op) override {
+        // Give this loop a unique id
+        int id = gen_unique_id();
+
+        // Push scope
+        scope.push(op->name, id);
+
+        // TODO: Connect with Assembly Code
+        // ForLoopLineNumber assembly_line_info = get_assembly_info_viz.get_line_numbers_for_loops(op);
+        // int assembly_line_num_start = assembly_line_info.start_line;
+        // int assembly_line_num_end = assembly_line_info.end_line;
+        
+        // Start a dive to hold code for this allocate
+        print_opening_tag("div", "For");
+
+        // stream << open_cost_span(op);
+
+        // Generate the show hide icon/text buttons
+        print_toggle_anchor_opening_tag(id);
+
+        // -- print icon
+        print_show_hide_icon(id);
+
+        // -- print text
+        print_opening_tag("span", "matched");
+        print_opening_tag("span", "keyword nav-anchor", "for-loop-" + std::to_string(id));
+        stream << op->for_type << op->device_api;
+        print_closing_tag("span");
+        print_text(" (");
+        print_closing_tag("span");
+        print_variable(op->name);
+        print_html_element("span", "matched", ", ");
+        print(op->min);
+        print_html_element("span", "matched", ", ");
+        print(op->extent);
+        print_html_element("span", "matched", ")");
+
+        print_toggle_anchor_closing_tag();
+
+        //stream << close_cost_span();
+
+        // Add a button to jump to this loop in the viz
+        print_visualization_button(id);
+
+        //if (assembly_line_num_start != -1) {
+        //  stream << see_assembly_button(assembly_line_num_start, assembly_line_num_end);
+        //}
+
+        // Open code block to hold function body
+        print_html_element("span", "matched", "{");
+
+        // Open indented div to hold body code
+        print_opening_tag("div", "indent ForBody", id);
+
+        // Print loop body
+        print(op->body);
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding loop body
+        print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
+
+        // Close div holding this for loop
+        print_closing_tag("div");
+
+        // Pop out of loop scope
+        scope.pop(op->name);
+    }
+
+    void visit(const Acquire *op) override {
+        // Give this acquire a unique id
+        int id = gen_unique_id();
+
+        // Start a dive to hold code for this acquire
+        print_opening_tag("div", "Acquire");
+
+        // Generate the show hide icon/text buttons
+        print_toggle_anchor_opening_tag(id);
+
+        // -- print icon
+        print_show_hide_icon(id);
+
+        // -- print text
+        print_opening_tag("span", "matched");
+        print_html_element("span", "keyword", "acquire");
+        print_text(" (");
+        print_closing_tag("span");
+        print(op->semaphore);
+        print_html_element("span", "matched", ", ");
+        print(op->count);
+        print_html_element("span", "matched", ")");
+
+        print_toggle_anchor_closing_tag();
+
+        //stream << close_cost_span();
+
+        // Add a button to jump to this acquire in the viz
+        print_visualization_button(id);
+
+        // Open code block to hold function body
+        print_html_element("span", "matched", "{");
+
+        // Open indented div to hold body code
+        print_opening_tag("div", "indent AcquireBody", id);
+
+        // Print aquire body
+        print(op->body);
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding acquire body
+        print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
+
+        // Close div holding this acquire
+        print_closing_tag("div");
+    }
+
+    void visit(const Store *op) override {
+        // Give this store a unique id
+        int id = gen_unique_id();
+
+        // Start a dive to hold code for this acquire
+        print_opening_tag("div", "Store WrapLine");
+
+        //stream << open_cost_span(op);
+
+        // Print store target
+        print_opening_tag("span", "matched");
+        print_variable(op->name);
+        print_html_element("span", "nav-anchor", "[", "store-" + std::to_string(id));
+        print_closing_tag("span");
+        print(op->index);
+        print_html_element("span", "matched", "]");
+        print_html_element("span", "Operator Assign Matched", " = ");
+
+        // Print store value
+        print_opening_tag("span", "StoreValue");
+        print(op->value);
+        if (!is_const_one(op->predicate)) {
+            print_html_element("span", "keyword", " if ");
+            print(op->predicate);
+        }
+        print_closing_tag("span");
+
+        // Close div holding this store
+        print_closing_tag("div");
+    }
+
+    void visit(const Provide *op) override {
+        print_opening_tag("div", "Provide WrapLine");
+        print_function_call(op->name, op->args);
+        if (op->values.size() > 1) {
+            print_html_element("span", "matched", " = {");
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (i > 0) {
+                    print_html_element("span", "matched", ", ");
+                }
+                print(op->args[i]);
+            }
+            print_html_element("span", "matched", "}");
+        } else {
+            print(op->values[0]);
+        }
+        print_closing_tag("div");
+    }
+
+    void visit(const Allocate *op) override {
+        // Give this allocation a unique id
+        int id = gen_unique_id();
+
+        // Push scope
+        scope.push(op->name, gen_unique_id());
+
+        // Start a dive to hold code for this allocate
+        print_opening_tag("div", "Allocate");
+
+        //stream << open_cost_span(op);
+
+        //  Print allocation name, type and extents
+        print_opening_tag("span", "matched");
+        print_html_element("span", "keyword nav-anchor", "allocate ", "allocate-" + std::to_string(id));
+        print_variable(op->name);
+        print_text("[");
+        print_closing_tag("span");
+        print_type(op->type);
+        for (const auto &extent : op->extents) {
+            print_text(" * ");
+            print(extent);
+        }
+        print_html_element("span", "matched", "]");
+        
+        // Print memory type
+        if (op->memory_type != MemoryType::Auto) {
+            print_html_element("span", "keyword", " in ");
+            stream << op->memory_type;
+        }
+
+        // Print allocation condition
+        if (!is_const_one(op->condition)) {
+            print_html_element("span", "keyword", " if ");
+            print(op->condition);
+        }
+
+        // Print custom new and free expressions
+        if (op->new_expr.defined()) {
+            print_opening_tag("span", "matched");
+            print_html_element("span", "keyword", "custom_new");
+            print_text(" {");
+            print_closing_tag("span");
+            print(op->new_expr);
+            print_html_element("span", "matched", "}");
+        }
+
+        if (!op->free_function.empty()) {
+            print_opening_tag("span", "matched");
+            print_html_element("span", "keyword", "custom_free");
+            print_text(" {");
+            print_closing_tag("span");
+            print_text(" " + op->free_function + "(); ");
+            print_html_element("span", "matched", "}");
+        }
+        
+        //stream << close_cost_span();
+
+        // Add a button to jump to this allocation in the viz
+        print_visualization_button(id);
+
+        // Print allocation body
+        print_opening_tag("div", "AllocateBody");
+        print(op->body);
+        print_closing_tag("div");
+
+        // Close dive holding the allocate
+        print_closing_tag("div");
+
+        // Pop out of allocate scope
+        scope.pop(op->name);
+    }
+    
+    void visit(const Free *op) override {
+        print_opening_tag("div", "Free WrapLine");
+        //stream << open_cost_span(op);
+        print_html_element("span", "keyword", "free ");
+        print_variable(op->name);
+        //stream << close_cost_span();
+        print_closing_tag("div");
+    }
+
+    void visit(const Realize *op) override {
+        // Give this acquire a unique id
+        int id = gen_unique_id();
+
+        // Push scope
+        scope.push(op->name, id);
+
+        // Start a dive to hold code for this realize
+        print_opening_tag("div", "Realize");
+
+        // Generate the show hide icon/text buttons
+        print_toggle_anchor_opening_tag(id);
+
+        // -- print icon
+        print_show_hide_icon(id);
+
+        // -- print text
+        print_opening_tag("span", "matched");
+        print_html_element("span", "keyword", "realize");
+        print_variable(op->name);
+        print_text(" (");
+        for (size_t i = 0; i < op->bounds.size(); i++) {
+            print_html_element("span", "matched", "[");
+            print(op->bounds[i].min);
+            print_html_element("span", "matched", ", ");
+            print(op->bounds[i].extent);
+            print_html_element("span", "matched", "]");
+            if (i < op->bounds.size() - 1) {
+                print_html_element("span", "matched", ", ");
+            }
+        }
+        print_html_element("span", "matched", ")");
+
+        // Print predicate
+        if (!is_const_one(op->condition)) {
+            print_html_element("span", "keyword", " if ");
+            print(op->condition);
+        }
+
+        print_toggle_anchor_closing_tag();
+
+        //stream << close_cost_span();
+
+        // Add a button to jump to this realize in the viz
+        print_visualization_button(id);
+
+        // Open code block to hold function body
+        print_html_element("span", "matched", " {");
+
+        // Open indented div to hold body code
+        print_opening_tag("div", "indent RealizeBody", id);
+
+        // Print realization body
+        print(op->body);
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding realize body
+        print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
+
+        // Close div holding this realize
+        print_closing_tag("div");
+
+        // Pop out of this scope
+        scope.pop(op->name);
+    }
+
+    void visit(const Block *op) override {
+        print_opening_tag("div", "Block");
+        print_block_stmt(op->first);
+        print_block_stmt(op->rest);
+        print_closing_tag("div");
+    }
+
+    void visit(const Fork *op) override {
+        // Give this acquire a unique id
+        int id = gen_unique_id();
+
+        // Start a dive to hold code for this realize
+        print_opening_tag("div", "Fork");
+
+        // Generate the show hide icon/text buttons
+        print_toggle_anchor_opening_tag(id);
+
+        // -- print icon
+        print_show_hide_icon(id);
+
+        // -- print text
+        print_html_element("span", "keyword matched", "fork");
+        
+        print_toggle_anchor_closing_tag();
+
+        // Open code block to hold fork body
+        print_html_element("span", "matched", " {");
+
+        // Open indented div to hold body code
+        print_opening_tag("div", "indent ForkBody", id);
+
+        // Print fork body
+        visit_fork_stmt(op->first);
+        visit_fork_stmt(op->rest);
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding fork body
+        print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
+
+        // Close div holding this fork
+        print_closing_tag("div");
+    }
+
+    void visit(const IfThenElse *op) override {
+        // Give this acquire a unique id
+        int id = gen_unique_id();
+
+        // Start a dive to hold code for this conditional
+        print_opening_tag("div", "IfThenElse");
+
+        //stream << open_cost_span(op);
+
+        // Generate the show hide icon/text buttons
+        print_toggle_anchor_opening_tag(id);
+
+        // -- print icon
+        print_show_hide_icon(id);
+
+        // -- print text
+        print_opening_tag("span", "matched");
+        print_html_element("span", "keyword nav-anchor IfSpan", "if", "conditional-" + std::to_string(id));
+        print_text(" (");
+        print_closing_tag("span");
+        print(op->condition);
+        print_html_element("span", "matched", ")");
+
+        print_toggle_anchor_closing_tag();
+
+        // Add a button to jump to this conditional in the viz
+        print_visualization_button(id);
+
+        // Flatten nested if's in the else case as an 
+        // `if-then-else_if-else` sequence
+        while (true) {
+            /* Handle the `then` case */
+
+            // Open code block to hold `then` case
+            print_html_element("span", "matched", " {");
+
+            // stream << close_cost_span();
+
+            // Open indented div to hold code for the `then` case
+            print_opening_tag("div", "indent ThenBody", id);
+
+            // Print then case body
+            print(op->then_case);
+
+            // Close indented div holding `then` case
+            print_closing_tag("div");
+
+            // Close code block holding `then` case
+            print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
+
+            // If there is no `else` case, we are done!
+            if (!op->else_case.defined())
+                break;
+
+            /* Handle the `else` case */
+
+            // If the else-case is another if-then-else, flatten it
+            if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
+                // Generate a new id for the `else-if` case
+                id = gen_unique_id();
+
+                // stream << open_cost_span(nested_if);
+
+                // Generate the show hide icon/text buttons
+                print_toggle_anchor_opening_tag(id);
+
+                // -- print icon
+                print_show_hide_icon(id);
+
+                // -- print text
+                print_opening_tag("span", "matched");
+                print_html_element("span", "keyword nav-anchor IfSpan", "else if", "conditional-" + std::to_string(id));
+                print_text(" (");
+                print_closing_tag("span");
+                print(nested_if->condition);
+                print_html_element("span", "matched", ")");
+
+                print_toggle_anchor_closing_tag();
+
+                // Add a button to jump to this conditional branch in the viz
+                print_visualization_button(id);
+
+                // Update op to the nested if for next loop iteration
+                op = nested_if;
+            }
+            // Otherwise, print it and we are done!
+            else {
+                int else_id = gen_unique_id();
+
+                // stream << open_cost_span_else_case(op->else_case);
+
+                // Generate the show hide icon/text buttons
+                print_toggle_anchor_opening_tag(else_id);
+
+                // -- print icon
+                print_show_hide_icon(else_id);
+
+                // -- print text
+                print_opening_tag("span", "matched");
+                print_html_element("span", "keyword nav-anchor IfSpan", "else", "conditional-" + std::to_string(else_id));
+                
+                print_toggle_anchor_closing_tag();
+
+                // Add a button to jump to this conditional branch in the viz
+                print_visualization_button(else_id);
+
+                // Open code block to hold `else` case
+                print_html_element("span", "matched", " {");
+
+                // stream << close_cost_span();
+
+                // Open indented div to hold code for the `then` case
+                print_opening_tag("div", "indent ElseBody", else_id);
+
+                // Print `else` case body
+                print(op->else_case);
+
+                // Close indented div holding `else` case
+                print_closing_tag("div");
+
+                // Close code block holding `else` case
+                print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(else_id));
+
+                break;
+            }
+        }
+
+        // Close div holding the conditional
+        print_closing_tag("div");
+    }
+
+    void visit(const Evaluate *op) override {
+        print_opening_tag("div", "Block");
+        //stream << open_cost_span(op);
+        print(op->value);
+        //stream << close_cost_span();
+        print_closing_tag("div");
+    }
+
+    void visit(const Shuffle *op) override {
+        print_opening_tag("div", "Block");
+        if (op->is_concat()) {
+            print_function_call("concat_vectors", op->vectors);
+        } else if (op->is_interleave()) {
+            print_function_call("interleave_vectors", op->vectors);
+        } else if (op->is_extract_element()) {
+            std::vector<Expr> args = op->vectors;
+            args.emplace_back(op->slice_begin());
+            print_function_call("extract_element", args);
+        } else if (op->is_slice()) {
+            std::vector<Expr> args = op->vectors;
+            args.emplace_back(op->slice_begin());
+            args.emplace_back(op->slice_stride());
+            args.emplace_back(static_cast<int>(op->indices.size()));
+            print_function_call("slice_vectors", args);
+        } else {
+            std::vector<Expr> args = op->vectors;
+            for (int i : op->indices) {
+                args.emplace_back(i);
+            }
+            print_function_call("shuffle", args);
+        }
+        print_closing_tag("div");
+    }
+
+    void visit(const VectorReduce *op) override {
+        print_opening_tag("div", "VectorReduce");
+        print_type(op->type);
+        print_function_call("vector_reduce", {op->op, op->value});
+        print_closing_tag("div");
+    }
+
+    void visit(const Prefetch *op) override {
+        print_opening_tag("div", "Prefetch");
+
+        // Print prefetch
+        print_html_element("span", "matched keyword", "prefetch ");
+        print_variable(op->name);
+        print_html_element("span", "matched", "(");
+        for (size_t i = 0; i < op->bounds.size(); i++) {
+            print_html_element("span", "matched", "[");
+            print(op->bounds[i].min);
+            print_html_element("span", "matched", ",");
+            print(op->bounds[i].extent);
+            print_html_element("span", "matched", "]");
+            if (i < op->bounds.size() - 1) {
+                print_html_element("span", "matched", ", ");
+            }
+        }
+        print_html_element("span", "matched", ")");
+        
+        // Print condition
+        if (!is_const_one(op->condition)) {
+            print_html_element("span", "keyword", " if ");
+            print(op->condition);
+        }
+
+        // Print prefetch body
+        print_opening_tag("div", "indent PrefetchBody");
+        print(op->body);
+        print_closing_tag("div");
+
+        print_closing_tag("div");
+    }
+
+    void visit(const Atomic *op) override {
+        // Give this node a unique id
+        int id = gen_unique_id();
+
+        // Start a dive to hold code for this atomic
+        print_opening_tag("div", "Atomic");
+
+        // Generate the show hide icon/text buttons
+        print_toggle_anchor_opening_tag(id);
+
+        // -- print icon
+        print_show_hide_icon(id);
+
+        // -- print text
+        print_html_element("span", "matched keyword", "atomic");
+        if (!op->mutex_name.empty()) {
+            print_html_element("span", "matched", "(");
+            print_html_element("span", "Symbol", op->mutex_name);
+            print_html_element("span", "matched", ")");
+        }
+        
+        print_toggle_anchor_closing_tag();
+
+         // Open code block to hold atomic body
+        print_html_element("span", "matched", " {");
+
+        // Open indented div to hold atomic code
+        print_opening_tag("div", "indent AtomicBody", id);
+
+        // Print atomic body
+        print(op->body);
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding fork body
+        print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
+
+        // Close div holding this atomic
+        print_closing_tag("div");
+    }
+
+    /* Helper functions for printing IR nodes */
+    void print_constant(string cls, Expr c) {
+        print_opening_tag("span", cls);
+        stream << c;
+        print_closing_tag("span");
+    }
+
+    void print_type(Type t) {
+        print_opening_tag("span", "Type");
+        stream << t;
+        print_closing_tag("span");
+    }
+
+    void print_binary_op(const Expr &a, const Expr &b, string op) {
+        print_opening_tag("span", "BinaryOp");
+        print_html_element("span", "matched", "(");
+        print(a);
+        print_text(" ");
+        print_html_element("span", "matched Operator", op);
+        print_text(" ");
+        print(b);
+        print_html_element("span", "matched", ")");
+        print_closing_tag("span");
+    }
+
+    void print_function_call(string fn_name, const std::vector<Expr> &args) {
+        print_opening_tag("span", "matched");
+        print_html_element("span", "Symbol", fn_name);
+        print_text("(");
+        print_closing_tag("span");
+        bool print_delim = false;
+        for (auto arg : args) {
+            if (print_delim) {
+                print_html_element("span", "matched", ", ");
+            }
+            print(arg);
+            print_delim = true;
+        }
+        print_html_element("span", "matched", ")");
+    }
+
+    // To avoid generating ridiculously deep DOMs, we flatten blocks here.
+    void print_block_stmt(const Stmt &stmt) {
+        if (const Block *b = stmt.as<Block>()) {
+            print_block_stmt(b->first);
+            print_block_stmt(b->rest);
+        } else if (stmt.defined()) {
+            print(stmt);
+        }
+    }
+
+    // We also flatten forks
+    void visit_fork_stmt(const Stmt &stmt) {
+        if (const Fork *f = stmt.as<Fork>()) {
+            visit_fork_stmt(f->first);
+            visit_fork_stmt(f->rest);
+        } else if (stmt.defined()) {
+            // Give task a unique id
+            int id = gen_unique_id();
+
+            // Start a dive to hold code for this task
+            print_opening_tag("div", "ForkTask");
+
+            // Generate the show hide icon/text buttons
+            print_toggle_anchor_opening_tag(id);
+
+            // -- print icon
+            print_show_hide_icon(id);
+
+            // -- print text
+            print_html_element("span", "keyword matched", "task");
+
+            print_toggle_anchor_closing_tag();
+
+            // Open code block to hold task body
+            print_html_element("span", "matched", " {");
+
+            // Open indented div to hold body code
+            print_opening_tag("div", "indent ForkTask", id);
+
+            // Print task body
+            print(stmt);
+
+            // Close indented div holding body code
+            print_closing_tag("div");
+
+            // Close code block holding task body
+            print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
+
+            // Close div holding this fork task
+            print_closing_tag("div");
+        }
+    }
+};
+
+
+/************** HTMLVisualizationPrinter Class **************/
+
+class HTMLVisualizationPrinter {
+public:
+    HTMLVisualizationPrinter(std::ofstream &os)
+        : stream(os) {
+    }
+
+private:
+    // Handle to output file stream
+    std::ofstream &stream;
+};
+
+/************** IRVisualizer Class **************/
+
+// We use this macro to get the absolute path to resource files
+// Can use std::source_location once C++-17 is deprecated
+#define __DIR__ \
+    std::string_view(__FILE__).substr(0, std::string_view(__FILE__).rfind('/') + 1)
+
+class IRVisualizer {
+public:
+    // Construct the visualizer and point it to the output file
+    IRVisualizer(const string &filename)
+        : _popup_id(0), html_code_printer(stream), html_viz_printer(stream) {
+        stream.open(filename.c_str());
+    }
+
+    // Generate the html visualization of the input module
+    void generate_html(const Module &m) {
+        stream << "<html>\n";
+        generate_head(m);
+        generate_body(m);
+        stream << "</html>";
+    }
+
+private:
+    // Handle to output file stream
+    std::ofstream stream;
+
+    // Used to generate unique popup ids
+    int _popup_id;
+
+    // Used to translate IR to code in HTML
+    HTMLCodePrinter html_code_printer;
+
+    // Used to translate IR to visualization in HTML
+    HTMLVisualizationPrinter html_viz_printer;
+
+    /* Methods for generating the <head> section of the html file */
+    void generate_head(const Module &m) {
+        stream << "<head>\n";
+        stream << "<title>Visualizing Module: " << m.name() << "</title>\n";
+        generate_dependency_links();
+        generate_stylesheet();
+        stream << "</head>\n";
+    }
+
+    // Loads the html code responsible for linking with various js/css libraries from
+    // `ir_visualizer/dependencies.html`
+    void generate_dependency_links() {
+        std::ifstream deps_file(string(__DIR__) + "ir_visualizer/dependencies.html");
+        internal_assert(!deps_file.fail()) << "Failed to find `dependencies.html` inside "
+                                           << string(__DIR__)
+                                           << "ir_visualizer directory.\n ";
+        stream << deps_file.rdbuf();
+    }
+
+    // Loads the stylesheet code from `ir_visualizer/stylesheet.html`
+    void generate_stylesheet() {
+        std::ifstream css_file(string(__DIR__) + "ir_visualizer/stylesheet.html");
+        internal_assert(!css_file.fail()) << "Failed to find `stylesheet.html` inside "
+                                          << string(__DIR__) 
+                                          << "ir_visualizer directory.\n ";
+        stream << css_file.rdbuf();
+    }
+
+    /* Methods for generating the <body> section of the html file */
+    void generate_body(const Module &m) {
+        stream << "<body>\n";
+        stream << "  <div id='page-container'>\n";
+        generate_information_bar(m);
+        generate_visualization_tabs(m);
+        stream << "  </div>\n";
+        stream << "</body>";
+        
+        
+
+        
+
+        // put assembly code in an invisible div
+        //stream << get_assembly_info_viz.get_assembly_html();
+
+        // closing parts of the html
+        //stream << "<div class='popups'>\n";
+        //stream << popups;
+        //stream << "</div>\n";
+
+        // Include javascript template.
+        generate_javascript();
+
+        
+    }
+
+    // Generate the information bar
+    void generate_information_bar(const Module &m) {
+        //popups += information_popup();
+
+        // We can use std::format once migrated to C++-20
+        stream << R"(<div id='info-bar'>
+                       <div id='info-bar-title'>
+                         <h3>Visualizing Module: )" << m.name() << R"(</h3>
+                       </div>
+                       <div id='info-bar-spacing'></div>
+                       <div id='info-bar-button'>
+                         <h3>
+                           <button id='show-info'>
+                             <i class='bi bi-info-square' data-bs-toggle='modal' 
+                                data-bs-target='#info-popup)" << gen_popup_id() << R"('></i>
+                           </button>
+                         </h3>
+                       </div>
+                     </div>)";
+    }
+
+    // Generate the three visualization tabs
+    void generate_visualization_tabs(const Module &m) {
+        stream << "<div id='visualization-tabs'>\n";
+        generate_ir_tab(m);
+        generate_resize_bar_1();
+        generate_visualization_tab();
+        generate_resize_bar_2();
+        generate_assembly_tab();
+        stream << "</div>\n";
+
+        // Generatize the resizing bar for the IR Code and Visualization tabs
+        //stream << resize_bar();
+
+        // Generate the IR Visualization tab
+        //stream << "<div class='IRVisualization' id='IRVisualization'>\n";
+        //stream << generate_ir_visualization(m);
+        //stream << "</div>\n";
+
+        // Generatize the resizing bar for the Visualization and Assembly Code tabs
+        //stream << resize_bar_assembly();
+
+        // Generate the IR Code tab
+        //stream << "<div id='assemblyCode'>\n";
+        //stream << "</div>\n";
+    }
+
+    // Generate tab 1/3: Lowered IR code with syntax highlighting in HTML
+    void generate_ir_tab(const Module &m) {
+        stream << "<div id='ir-code-tab'>\n";
+        html_code_printer.print(m);
+        stream << "</div>\n";
+    }
+
+    // Generate tab 2/3: Lowered IR code with syntax highlighting in HTML
+    void generate_visualization_tab() {
+        stream << "<div id='ir-visualization-tab'>\n";
+        //stream << generate_ir_visualization(m);
+        stream << "</div>\n";
+    }
+
+    // Generate tab 3/3: Generated assembly code
+    void generate_assembly_tab() {
+        stream << "<div id='assembly-tab'>\n";
+        stream << "</div>\n";
+    }
+
+    // Generate a resizing bar to control the width of code and visualization tabs
+    void generate_resize_bar_1() {
+        stream << R"(<div class='resize-bar' id='resize-bar-1'>
+                       <div class='collapse-btns'>
+                         <div>
+                           <button class='icon-btn resize-btn' onclick='collapse_code_tab()'>
+                             <i class='bi bi-arrow-bar-left'></i>
+                           </button>
+                         </div>                         
+                         <div>
+                           <button class='icon-btn resize-btn' onclick='collapseR_visualization_tab()'>
+                             <i class='bi bi-arrow-bar-right'></i>
+                           </button>
+                         </div>
+                       </div>
+                     </div>)";
+    }
+
+    // Generate a resizing bar to control the width of visualization and assembly tabs
+    void generate_resize_bar_2() {
+        stream << R"(<div class='resize-bar' id='resize-bar-2'>
+                       <div class='collapse-btns'>
+                         <div>
+                           <button class='icon-btn resize-btn' onclick='collapseL_visualization_tab()'>
+                             <i class='bi bi-arrow-bar-left'></i>
+                           </button>
+                         </div>
+                         <div>
+                           <button class='icon-btn resize-btn' onclick='collapse_assembly_tab()'>
+                             <i class='bi bi-arrow-bar-right'></i>
+                           </button>
+                         </div>
+                       </div>
+                     </div>)";
+    }
+
+    // Loads and initializes the javascript template from `ir_visualizer / javascript_template.html`
+    void generate_javascript() {
+        // 1. Load the javascript code template
+        std::ifstream js_template_file(string(__DIR__) + "ir_visualizer/javascript_template.html");
+        internal_assert(!js_template_file.fail()) << "Failed to find `javascript_template.html` inside "
+                                                  << string(__DIR__)
+                                                  << "ir_visualizer directory.\n ";
+        ostringstream js_template;
+        js_template << js_template_file.rdbuf();
+        js_template_file.close();
+
+        // 2. Initialize template with concrete values for `tooltip_count`,
+        // `stmt_hierarchy_tooltip_count` and `ir_viz_tooltip_count`.
+        string js = js_template.str();
+        std::regex r1("\\{\\{tooltip_count\\}\\}");
+        //js = std::regex_replace(js, r1, std::to_string(tooltip_count));
+        js = std::regex_replace(js, r1, "0");
+        std::regex r2("\\{\\{stmt_hierarchy_tooltip_count\\}\\}");
+        //js = std::regex_replace(js, r2, std::to_string(get_stmt_hierarchy.get_tooltip_count()));
+        js = std::regex_replace(js, r2, "0");
+        std::regex r3("\\{\\{ir_viz_tooltip_count\\}\\}");
+        //js = std::regex_replace(js, r3, std::to_string(ir_visualization.get_tooltip_count()));
+        js = std::regex_replace(js, r3, "0");
+
+        // 3. Write initialized template to stream
+        stream << js;
+    }
+
+    /* Misc helper methods */
+
+    // Returns a new unique popup id
+    int gen_popup_id() {
+        return _popup_id++;
+    }
+};
+
+/************** The external interface to this module **************/
+
+void print_to_viz(const string &filename, const Stmt &s) {
+    internal_assert(false) << "\n\n"
+                           << "Exiting early: print_to_viz cannot be called from a Stmt node - it must be "
+                              "called from a Module node.\n"
+                           << "\n\n\n";
+}
+
+void print_to_viz(const string &filename, const Module &m) {
+
+    IRVisualizer visualizer(filename);
+    visualizer.generate_html(m);
+    debug(1) << "Done generating HTML IR Visualization - printed to: " << filename << "\n";
+}
+
+/************** Legacy StmtToViz Class Implementation **************/
+
+/* 
+// Commenting out but keeping legacy code around until refactor is complete 
 
 const char *StmtToViz_canIgnoreVariableName_string = "canIgnoreVariableName";
 
@@ -330,7 +2046,7 @@ private:
         s << "<button class='iconButton dottedIconButton' ";
         s << "style='padding: 0px;' ";
         s << "onclick='scrollToFunctionCodeToViz(\"" + anchor_name + "_viz\")'>";
-        s << "<i class='bi bi-arrow-right-short'></i>";
+        s << "<i class='bi bi-arrow-right-square'></i>";
         s << "</button>";
 
         return s.str();
@@ -1473,7 +3189,7 @@ public:
         ostringstream popup;
 
         popup_count++;
-        popup << "<div class='modal fade' id='stmtHierarchyModal" << popup_count
+        popup << "<div class='modal fade' id='info-popup" << popup_count
               << "' tabindex='-1' aria-labelledby='stmtHierarchyModalLabel' aria-hidden='true'>\n";
         popup << "<div class='modal-dialog modal-dialog-scrollable modal-xl'>\n";
         popup << "<div class='modal-content'>\n";
@@ -1668,18 +3384,18 @@ public:
     // Loads the html code responsible for linking with various js/css libraries from
     // `ir_visualizer/dependencies.html`
     void generate_dependency_links() {
-        std::ifstream deps_file(std::string(__DIR__) + "ir_visualizer/dependencies.html");
+        std::ifstream deps_file(string(__DIR__) + "ir_visualizer/dependencies.html");
         internal_assert(!deps_file.fail()) << "Failed to find `dependencies.html` inside "
-                                           << std::string(__DIR__)
+                                           << string(__DIR__)
                                            << "ir_visualizer directory.\n ";
         stream << deps_file.rdbuf();
     }
 
     // Loads the stylesheet code from `ir_visualizer/stylesheet.html`
     void generate_stylesheet() {
-        std::ifstream css_file(std::string(__DIR__) + "ir_visualizer/stylesheet.html");
+        std::ifstream css_file(string(__DIR__) + "ir_visualizer/stylesheet.html");
         internal_assert(!css_file.fail()) << "Failed to find `stylesheet.html` inside "
-                                          << std::string(__DIR__) 
+                                          << string(__DIR__)
                                           << "ir_visualizer directory.\n ";
         stream << css_file.rdbuf();
     }
@@ -1687,9 +3403,9 @@ public:
     // Loads and initializes the javascript template from `ir_visualizer / javascript_template.html`
     void generate_javascript() {
         // 1. Load the javascript code template
-        std::ifstream js_template_file(std::string(__DIR__) + "ir_visualizer/javascript_template.html");
+        std::ifstream js_template_file(string(__DIR__) + "ir_visualizer/javascript_template.html");
         internal_assert(!js_template_file.fail()) << "Failed to find `javascript_template.html` inside "
-                                                  << std::string(__DIR__) 
+                                                  << string(__DIR__) 
                                                   << "ir_visualizer directory.\n ";
         ostringstream js_template;
         js_template << js_template_file.rdbuf();
@@ -1697,7 +3413,7 @@ public:
 
         // 2. Initialize template with concrete values for `tooltip_count`,
         // `stmt_hierarchy_tooltip_count` and `ir_viz_tooltip_count`.
-        std::string js = js_template.str();
+        string js = js_template.str();
         std::regex r1("\\{\\{tooltip_count\\}\\}");
         js = std::regex_replace(js, r1, std::to_string(tooltip_count));
         std::regex r2("\\{\\{stmt_hierarchy_tooltip_count\\}\\}");
@@ -1780,20 +3496,7 @@ public:
     }
 };
 
-void print_to_viz(const string &filename, const Stmt &s) {
-    internal_assert(false) << "\n\n"
-                           << "Exiting early: print_to_viz cannot be called from a Stmt node - it must be "
-                              "called from a Module node.\n"
-                           << "\n\n\n";
-}
-
-void print_to_viz(const string &filename, const Module &m) {
-
-    StmtToViz sth(filename, m);
-
-    sth.generate_html(filename, m);
-    debug(1) << "Done generating HTML IR Visualization - printed to: " << filename << "\n";
-}
+*/
 
 }  // namespace Internal
 }  // namespace Halide
