@@ -1329,7 +1329,7 @@ $(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(BIN_DIR)/libHalide.$(SHARED_E
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 # Runtime tests that test internals
 RUNTIME_TESTS_CXXFLAGS = -fno-rtti -fno-exceptions -fno-threadsafe-statics -Wno-builtin-declaration-mismatch -DCOMPILING_HALIDE_RUNTIME -DCOMPILING_HALIDE_RUNTIME_TESTS

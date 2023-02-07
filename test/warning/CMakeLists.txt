@@ -4,6 +4,7 @@ tests(GROUPS warning
       require_const_false.cpp
       sliding_vectors.cpp
       unscheduled_update_def.cpp
+      emulated_float16.cpp
       )
 
 # Don't look for "Success!" in warning tests, look for "Warning:" instead.
