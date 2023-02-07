@@ -96,8 +96,17 @@ static_assert(((HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT & (HALIDE_RUNTIME_BUF
 
 #else
 
-    // Not Windows, Android, or Apple: just asuume it's ok
-    #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 1
+    #if defined(__GLIBCXX__) && !defined(_GLIBCXX_HAVE_ALIGNED_ALLOC)
+
+        // ARM GNU-A baremetal compiler doesn't provide aligned_alloc as of 12.2
+        #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 0
+
+    #else
+
+        // Not Windows, Android, or Apple: just assume it's ok
+        #define HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC 1
+
+    #endif
 
 #endif
 // clang-format on
