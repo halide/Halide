@@ -1,36 +1,25 @@
 <script>
-    $('.Matched').each(function () {
+    $('.matched').each(function () {
         this.onmouseover = function () {
-            $('.Matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight');
+            $('.matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight');
         }
         this.onmouseout = function () {
-            $('.Matched[id^=' + this.id.split('-')[0] + '-]').removeClass('Highlight');
+            $('.matched[id^=' + this.id.split('-')[0] + '-]').removeClass('Highlight');
         }
     });
 
     /* Expand/Collapse buttons */
     function toggle(id, buttonId) {
         e = document.getElementById(id);
+        e_cb = document.getElementById("cb-" + id);
         show = document.getElementById(id + '-show');
         hide = document.getElementById(id + '-hide');
         button1 = document.getElementById('button' + buttonId);
         button2 = document.getElementById('button' + (buttonId - 1));
-        if (e.style.visibility != 'hidden') {
-            e.style.height = '0px';
-            e.style.visibility = 'hidden';
-            show.style.display = 'block';
-            hide.style.display = 'none';
-            // make inclusive
-            if (button1 != null && button2 != null) {
-                inclusiverange1 = button1.getAttribute('inclusiverange');
-                newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange1);
-                button1.className = newClassName;
-                inclusiverange2 = button2.getAttribute('inclusiverange');
-                newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange2);
-                button2.className = newClassName;
-            }
-        } else {
-            e.style = '';
+        if (e.classList.contains("collapsed-block")) {
+            //e.style = '';
+            e.classList.remove("collapsed-block");
+            e_cb.classList.add("ClosingBrace");
             show.style.display = 'none';
             hide.style.display = 'block';
             // make exclusive
@@ -42,6 +31,22 @@
                 newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange2);
                 button2.className = newClassName;
             }
+        } else {
+            //e.style.height = '0px';
+            //e.style.display = 'none';
+            e.classList.add("collapsed-block");
+            e_cb.classList.remove("ClosingBrace");
+            show.style.display = 'block';
+            hide.style.display = 'none';
+            // make inclusive
+            if (button1 != null && button2 != null) {
+                inclusiverange1 = button1.getAttribute('inclusiverange');
+                newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange1);
+                button1.className = newClassName;
+                inclusiverange2 = button2.getAttribute('inclusiverange');
+                newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange2);
+                button2.className = newClassName;
+            }
         }
         return false;
     }
@@ -49,7 +54,7 @@
     // scroll to function - code to viz
     function makeVisibleViz(element) {
         if (!element) return;
-        if (element.className == 'mainContent') return;
+        if (element.className == 'visualization-tabs') return; // todo
         if (element.style.visibility == 'hidden') {
             element.style = '';
             show = document.getElementById(element.id + '-show');
@@ -63,18 +68,18 @@
 
     function getOffsetTop(element) {
         if (!element) return 0;
-        if (element.id == 'IRVisualization') return 0;
+        if (element.id == 'ir-visualization-tab') return 0;
         return getOffsetTop(element.offsetParent) + element.offsetTop;
     }
 
     function getOffsetLeft(element) {
         if (!element) return 0;
-        if (element.id == 'IRVisualization') return 0;
+        if (element.id == 'ir-visualization-tab') return 0;
         return getOffsetLeft(element.offsetParent) + element.offsetLeft;
     }
 
     function scrollToFunctionCodeToViz(id) {
-        var container = document.getElementById('IRVisualization');
+        var container = document.getElementById('ir-visualization-tab');
         var scrollToObject = document.getElementById(id);
         makeVisibleViz(scrollToObject);
         container.scrollTo({
@@ -92,11 +97,11 @@
     }
 
     // expand code div
-    var codeDiv = document.getElementById('IRCode-code');
-    var resizeBar = document.getElementById('ResizeBar');
-    var irVizDiv = document.getElementById('IRVisualization');
+    var codeDiv = document.getElementById('ir-code-tab');
+    var resizeBar = document.getElementById('resize-bar');
+    var irVizDiv = document.getElementById('ir-visualization-tab');
     var resizeBarAssembly = document.getElementById('ResizeBarAssembly');
-    var assemblyCodeDiv = document.getElementById('assemblyCode');
+    var assemblyCodeDiv = document.getElementById('assembly-tab');
 
     codeDiv.style.flexGrow = '0';
     resizeBar.style.flexGrow = '0';
@@ -125,7 +130,7 @@
 
     function resize(e) {
         if (e.x < 25) {
-            collapseCode();
+            collapse_code_tab();
             return;
         }
 
@@ -133,7 +138,7 @@
         var rect = resizeBarAssembly.getBoundingClientRect();
 
         if (e.x > rect.left) {
-            collapseViz();
+            collapse_visualization_tab();
             return;
         }
 
@@ -145,14 +150,14 @@
 
     function resizeAssembly(e) {
         if (e.x > screen.width - 25) {
-            collapseAssembly();
+            collapse_assembly_tab();
             return;
         }
 
         var rect = resizeBar.getBoundingClientRect();
 
         if (e.x < rect.right) {
-            collapseViz();
+            collapse_visualization_tab();
             return;
         }
 
@@ -164,28 +169,28 @@
 
     }
 
-    function collapseCode() {
+    function collapse_code_tab() {
         irVizDiv.style.display = 'block';
         var rect = resizeBarAssembly.getBoundingClientRect();
         irVizDiv.style.flexBasis = `${rect.left}px`;
         codeDiv.style.display = 'none';
     }
 
-    function collapseViz() {
+    function collapseR_visualization_tab() {
         codeDiv.style.display = 'block';
         var rect = resizeBarAssembly.getBoundingClientRect();
         codeDiv.style.flexBasis = `${rect.left}px`;
         irVizDiv.style.display = 'none';
     }
 
-    function collapseVizAssembly() {
+    function collapseL_visualization_tab() {
         assemblyCodeDiv.style.display = 'block';
         var rect = resizeBar.getBoundingClientRect();
         assemblyCodeDiv.style.flexBasis = `calc(100% - ${rect.right}px)`;
         irVizDiv.style.display = 'none';
     }
 
-    function collapseAssembly() {
+    function collapse_assembly_tab() {
         irVizDiv.style.display = 'block';
         var rect = resizeBar.getBoundingClientRect();
         irVizDiv.style.flexBasis = `calc(100% - ${rect.right}px)`;
@@ -246,8 +251,8 @@
         var codeHTML = document.getElementById('assemblyContent');
         var code = codeHTML.textContent;
         code = code.trimLeft();
-        document.getElementById('assemblyCode').innerHTML = '';
-        var myCodeMirror = CodeMirror(document.getElementById('assemblyCode'), {
+        document.getElementById('assembly-tab').innerHTML = '';
+        var myCodeMirror = CodeMirror(document.getElementById('assembly-tab'), {
             value: code,
             lineNumbers: true,
             lineWrapping: true,
@@ -261,7 +266,7 @@
         document.getElementsByClassName('CodeMirror-sizer')[0].style.minWidth = '0px';
     }
     populateCodeMirror(1, 1);
-    collapseAssembly();
+    collapse_assembly_tab();
 
 
     // Tooltip JS
@@ -413,7 +418,7 @@
     // scroll to function - viz to code
     function makeVisible(element) {
         if (!element) return;
-        if (element.className == 'mainContent') return;
+        if (element.className == 'viz-tabs') return;
         if (element.style.visibility == 'hidden') {
             element.style = '';
             show = document.getElementById(element.id + '-show');
@@ -426,8 +431,7 @@
     }
 
     function scrollToFunctionVizToCode(id) {
-
-        var container = document.getElementById('IRCode-code');
+        var container = document.getElementById('ir-code-tab');
         var scrollToObject = document.getElementById(id);
         makeVisible(scrollToObject);
         container.scrollTo({
@@ -485,8 +489,8 @@
         var buttonShow = document.getElementById('irViz' + id + '-show');
         var buttonHide = document.getElementById('irViz' + id + '-hide');
         var body = document.getElementById('irViz' + id);
-        if (body.style.visibility != 'hidden') {
-            body.style.visibility = 'hidden';
+        if (body.style.display != 'none') {
+            body.style.visibility = 'none';
             body.style.height = '0px';
             body.style.width = '0px';
             buttonShow.style.display = 'block';

@@ -1,5 +1,4 @@
 <style type='text/css'>    
-    /* Normal CSS */
 	body {
 		font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
 		font-size: 12px;
@@ -7,74 +6,226 @@
 		margin-left: 15px;
 	}
 
+    div#page-container {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+	/* Info bar */
+    div#info-bar {
+        display: flex;
+    }
+
+    div#info-bar-spacing {
+         flex-grow: 1;
+    }
+
+    button#show-info {
+        border: 0px;
+        background: transparent;
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 5px;
+        margin-top: 5px;
+    }
+
+    button#show-info:hover {
+        color: blue;
+    }
+
+	/* Visualization tabs */
+    div#visualization-tabs {
+        display: flex;
+        flex-grow: 1;
+        width: 100%;
+        overflow: hidden;
+        border-top: 1px solid rgb(200, 200, 200)
+    }
+
+    div#ir-code-tab {
+        counter-reset: line;
+        padding-left: 50px;
+        padding-top: 20px;
+        overflow-y: scroll;
+        position: relative;
+    }
+
+    div#ir-visualization-tab {
+        overflow-y: scroll;
+        padding-top: 20px;
+        padding-left: 20px;
+        position: relative;
+    }
+
+    /* Resize bars */
+    div#visualization-tabs div.resize-bar {
+        background: rgb(201, 231, 190);
+        cursor: col-resize;
+        border-left: 1px solid rgb(0, 0, 0);
+        border-right: 1px solid rgb(0, 0, 0);
+    }
+
+    div#visualization-tabs div.resize-bar div.collapse-btns {
+        position: relative;
+        top: 50%;
+    }
+
+    div#visualization-tabs div.resize-bar div.collapse-btns button.resize-btn {
+        margin: 0px;
+    }
+
+	/* IR Code CSS */
+    div.show-hide-btn-wrapper {
+        position: relative;
+        width: 0;
+        height: 0;
+    }
+
+    div.show-hide-btn {
+        position: absolute;
+        left: -12px;
+        width: 12px;
+        height: 12px;
+    }
+
+    button.sync-btn {
+        border: 0px;
+        background: transparent;
+        color: black;
+        font-size: 11pt;
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 5px;
+        margin-left: 5px;
+        padding: 0px;
+    }
+
+    button.sync-btn:hover {
+        color: #c30000;
+    }
+
+    code.ptx {
+        tab-size: 26;
+        white-space: pre;
+    }
+
+    div.indent {
+        padding-left: 15px;
+    }
+
+    span.comment {
+        color: #998;
+        font-style: italic;
+    }
+
+    span.keyword {
+        color: #333;
+        font-weight: bold;
+    }
+
+	span.IntImm {
+        color: #099;
+    }
+
+    span.UIntImm {
+        color: #099;
+    }
+
+    span.FloatImm {
+        color: #099;
+    }
+
+    span.StringImm {
+        color: #d14;
+    }
+
+    span.Type {
+        color: #445588;
+        font-weight: bold;
+    }
+
+    span.Symbol {
+        color: #990073;
+    }
+
+    span.Assign {
+        color: #d14;
+        font-weight: bold;
+    }
+
+    p.WrapLine {
+        margin: 0px;
+        margin-left: 30px;
+        text-indent: -30px;
+    }
+
+    div.WrapLine {
+        margin-left: 30px;
+        text-indent: -30px;
+    }
+
+    /* Line Numbers CSS */
+    p.WrapLine,
+    span.IfSpan,
+    span.ClosingBrace,
+    div.Module,
+    div.WrapLine,
+    div.Consumer,
+    div.Produce,
+    div.For,
+    div.Evaluate,
+    div.Allocate,
+    div.Function {
+        counter-increment: line;
+    }
+
+    p.WrapLine:before,
+    span.IfSpan:before,
+    span.ClosingBrace:before,
+    div.WrapLine:before,
+    div.Consumer:before,
+    div.Produce:before,
+    div.For:before,
+    div.Evaluate:before,
+    div.Allocate:before,
+    div.Module:before,
+    div.Function:before {
+        content: counter(line) '. ';
+        display: inline-block;
+        position: absolute;
+        left: 0px;
+        color: rgb(175, 175, 175);
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+    p.WrapLine:before,
+    div.WrapLine:before {
+        left: 30px;
+    }
+
+    .collapsed-block {
+        position: absolute;
+        left: -9999px;
+        max-height: 0px;
+        overflow: hidden;
+        opacity: 0;
+    }
+
+    /* ========================================================================= */
+    /* Normal CSS */
+    
 	a,
-	a:hover,
-	a:visited,
-	a:active {
-		color: inherit;
-		text-decoration: none;
-	}
+    a:hover,
+    a:visited,
+    a:active {
+        color: inherit;
+        text-decoration: none;
+    }
 
 	b {
 		font-weight: normal;
-	}
-
-	p.WrapLine {
-		margin: 0px;
-		margin-left: 30px;
-		text-indent: -30px;
-	}
-
-	div.WrapLine {
-		margin-left: 30px;
-		text-indent: -30px;
-	}
-
-	div.Indent {
-		padding-left: 15px;
-	}
-
-	div.ShowHide {
-		position: absolute;
-		left: -12px;
-		width: 12px;
-		height: 12px;
-	}
-
-	span.Comment {
-		color: #998;
-		font-style: italic;
-	}
-
-	span.Keyword {
-		color: #333;
-		font-weight: bold;
-	}
-
-	span.Assign {
-		color: #d14;
-		font-weight: bold;
-	}
-
-	span.Symbol {
-		color: #990073;
-	}
-
-	span.Type {
-		color: #445588;
-		font-weight: bold;
-	}
-
-	span.StringImm {
-		color: #d14;
-	}
-
-	span.IntImm {
-		color: #099;
-	}
-
-	span.FloatImm {
-		color: #099;
 	}
 
 	b.Highlight {
@@ -162,11 +313,6 @@
 		font-weight: bold;
 	}
 
-	code.ptx {
-		tab-size: 26;
-		white-space: pre;
-	}
-
 	.tf-tree {
 		overflow: unset;
 	}
@@ -209,41 +355,8 @@
 		border: 1px solid grey;
 	}
 
-	.iconButton {
-		border: 0px;
-		background: transparent;
-		color: black;
-		font-size: 20px;
-		display: inline-block;
-		vertical-align: middle;
-		margin-right: 5px;
-		margin-left: 5px;
-	}
-
-	.iconButton:hover {
-		color: red;
-		background: transparent;
-	}
-
-	.resizeButton {
-		margin: 0px;
-	}
-
 	.assemblyIcon {
 		color: red;
-	}
-
-	.informationBarButton {
-		border: 0px;
-		background: transparent;
-		display: inline-block;
-		vertical-align: middle;
-		margin-right: 5px;
-		margin-top: 5px;
-	}
-
-	.informationBarButton:hover {
-		color: blue;
 	}
 
 	.assemblyIcon {
@@ -397,96 +510,6 @@
 	span.bigColorIndent {
 		position: absolute;
 		left: 65px;
-	}
-
-	/* Flexbox Div Styling CSS */
-	div.outerDiv {
-		height: 100vh;
-		display: flex;
-		flex-direction: column;
-	}
-
-	div.informationBar {
-		display: flex;
-	}
-
-	div.mainContent {
-		display: flex;
-		flex-grow: 1;
-		width: 100%;
-		overflow: hidden;
-		border-top: 1px solid rgb(200, 200, 200)
-	}
-
-	div.IRCode-code {
-		counter-reset: line;
-		padding-left: 50px;
-		padding-top: 20px;
-		overflow-y: scroll;
-		position: relative;
-	}
-
-	div.IRVisualization {
-		overflow-y: scroll;
-		padding-top: 20px;
-		padding-left: 20px;
-		position: relative;
-	}
-
-	div.ResizeBar {
-		background: rgb(201, 231, 190);
-		cursor: col-resize;
-		border-left: 1px solid rgb(0, 0, 0);
-		border-right: 1px solid rgb(0, 0, 0);
-	}
-
-	div.collapseButtons {
-		position: relative;
-		top: 50%;
-	}
-
-	/* Line Numbers CSS */
-	p.WrapLine,
-	div.WrapLine,
-	div.Consumer,
-	div.Produce,
-	div.For,
-	span.IfSpan,
-	div.Evaluate,
-	div.Allocate,
-	div.ClosingBrace,
-	div.Module,
-	div.Function {
-		counter-increment: line;
-	}
-
-	p.WrapLine:before,
-	div.WrapLine:before {
-		content: counter(line) '. ';
-		display: inline-block;
-		position: absolute;
-		left: 30px;
-		color: rgb(175, 175, 175);
-		user-select: none;
-		-webkit-user-select: none;
-	}
-
-	div.Consumer:before,
-	div.Produce:before,
-	div.For:before,
-	span.IfSpan:before,
-	div.Evaluate:before,
-	div.Allocate:before,
-	div.ClosingBrace:before,
-	div.Module:before,
-	div.Function:before {
-		content: counter(line) '. ';
-		display: inline-block;
-		position: absolute;
-		left: 0px;
-		color: rgb(175, 175, 175);
-		user-select: none;
-		-webkit-user-select: none;
 	}
 
 	/* CodeMirror */
@@ -719,15 +742,6 @@
 	.irVizToggle {
 		margin-right: 5px;
 		margin-left: 0px;
-	}
-
-	.dottedIconButton {
-		border: 1px dotted black;
-		border-radius: 3px;
-	}
-
-	.dottedIconButton:hover {
-		border: 1px dotted red;
 	}
 
 	.functionButton {

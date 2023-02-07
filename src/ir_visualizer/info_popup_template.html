@@ -1,0 +1,110 @@
+<div class='modal fade' id='stmtHierarchyModal{{popup_count}}' tabindex='-1' aria-labelledby='stmtHierarchyModalLabel' aria-hidden='true'>
+    <div class='modal-dialog modal-dialog-scrollable modal-xl'>
+        <div class='modal-content'>
+            <div class='modal-header'>
+                <h5 class='modal-title' id='stmtHierarchyModalLabel'>
+                    How to read this document
+                </h5>
+                <button type='button' class='btn-close' data-bs-dismiss='modal' aria-label='Close'></button>
+            </div>
+            <div class='modal-body'>
+                <p style='font-size: 20px;'><b style='font-weight: bold;'>Three Columns</b></p>
+                <p>There are 3 columns on this page:</p>
+                <ul>
+                    <li>
+                        <b style='font-weight: bold;'>Left side:</b> Halide Intermediate Representation (IR) - the code that Halide generates.
+                    </li>
+                    <li>
+                        <b style='font-weight: bold;'>Middle:</b> Visualization - represents, at a high level, the structure of the IR.
+                    </li>
+                    <li>
+                        <b style='font-weight: bold;'>Right side:</b> Assembly - the code that the compiler generates.
+                    </li>
+                </ul>
+                <p>
+                    You can adjust the size of the columns using the 2 green resize bars in between first two and second two columns. The buttons in the middle of this bar will also expand either left or right column completely.
+                </p>
+                <p style='font-size: 20px;'>
+                    <b style='font-weight: bold;'>Left Column Functionality</b>
+                </p>
+                <p>Here are the different features of the left column: </p>
+                <ul>
+                    <li>
+                        <button style='height: 20px; width: 10px; padding-left: 0px;' class='colorButton CostColor0' role='button' inclusiverange='0' exclusiverange='0'></button>
+                        <b style='font-weight: bold;'>Cost Colors:</b>
+                        Next to every line, there are 2 buttons that are colored based on the cost of the line. Hovering over them will give more information about the cost of that line. If you click on the button, a hierarchy of that line will appear, which you can explore to see the contents of the line. There are 2 buttons because they each represent a different type of color:
+                        <ul>
+                            <li>
+                                <b style='font-weight: bold;'>Computation Cost:</b>
+                                This is the cost associated with how much computation went into that line of code.
+                            </li>
+                            <li>
+                                <b style='font-weight: bold;'>Data Movement Cost:</b> This is the cost associated with how much data was moved around in that line of code (read/written).
+                            </li>
+                        </ul>
+                    </li>
+                    <br />
+                    <li>
+                        <button class='iconButton dottedIconButton' style='padding: 0px; margin: 0px; margin-right: 5px;'>
+                            <i class='bi bi-arrow-right-short'></i>
+                        </button>
+                        <b style='font-weight: bold;'>See Visualization:</b>
+                        If you click this button, the right column will scroll to the related block of that line of code.
+                    </li>
+                    <li>
+                        <button class='iconButton assemblyIcon' style='padding-left: 0px; margin-left: 0px;'>
+                            <svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='currentColor' class='bi bi-filetype-raw' viewBox='0 0 16 16'>
+                                <path fill-rule='evenodd' d='M14 4.5V14a2 2 0 0 1-2 2v-1a1 1 0 0 0 1-1V4.5h-2A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v9H2V2a2 2 0 0 1 2-2h5.5L14 4.5ZM1.597 11.85H0v3.999h.782v-1.491h.71l.7 1.491h1.651l.313-1.028h1.336l.314 1.028h.84L5.31 11.85h-.925l-1.329 3.96-.783-1.572A1.18 1.18 0 0 0 3 13.116c0-.256-.056-.479-.167-.668a1.098 1.098 0 0 0-.478-.44 1.669 1.669 0 0 0-.758-.158Zm-.815 1.913v-1.292h.7a.74.74 0 0 1 .507.17c.13.113.194.276.194.49 0 .21-.065.368-.194.474-.127.105-.3.158-.518.158H.782Zm4.063-1.148.489 1.617H4.32l.49-1.617h.035Zm4.006.445-.74 2.789h-.73L6.326 11.85h.855l.601 2.903h.038l.706-2.903h.683l.706 2.903h.04l.596-2.903h.858l-1.055 3.999h-.73l-.74-2.789H8.85Z' />
+                            </svg>
+                        </button>
+                        <b style='font-weight: bold;'>See Assembly:</b>
+                        If you click this button, a new tab will open with the assembly scrolled to the related assembly instruction of that line of code.
+                    </li>
+                </ul>
+                <p style='font-size: 20px;'>
+                    <b style='font-weight: bold;'>
+                        Middle Column Functionality
+                    </b>
+                </p>
+                <p>Here are the different features of the middle column: </p>
+                <ul>
+                    <li>
+                        <button style='height: 20px; width: 10px; padding-left: 0px;' class='colorButton CostColor0' role='button' inclusiverange='0' exclusiverange='0'></button>
+                        <b style='font-weight: bold;'>Cost Colors:</b>
+                        Cost colors on the right work the same way as they do on the left - hovering over them will give information about the cost.
+                    </li>
+                    <li>
+                        <button class='iconButton dottedIconButton' style='padding: 0px; margin: 0px; margin-right: 5px;'>
+                            <i class='bi bi-arrow-left-short'></i>
+                        </button>
+                        <b style='font-weight: bold;'>See Code:</b>
+                        If you click this button, the left column will scroll to the related line of code of that block in the visualization.
+                    </li>
+                    <li>
+                        <button class='infoButton' style='padding: 0; margin: 0; margin-right: 5px;'>
+                            <i class='bi bi-info'></i>
+                        </button>
+                        <b style='font-weight: bold;'>Info Button:</b>
+                        If you hover over these buttons, they will offer more information about that block (eg. load/store size, allocation type, etc.)
+                    </li>
+                </ul>
+                <p style='font-size: 20px;'>
+                    <b style='font-weight: bold;'>
+                        Right Column Functionality
+                    </b>
+                </p>
+                <p>Here are the different features of the right column: </p>
+                <ul>
+                    <li>
+                        <b style='font-weight: bold;'>Search:</b>
+                        You can search the Assembly, but you have to do it using CodeMirror specific key bindings:
+                        <ul>
+                            <li><i>Start Searching:</i> Ctrl-F / Cmd-F </li>
+                            <li><i>Find Next:</i> Ctrl-G / Cmd-G</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
