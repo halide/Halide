@@ -77,7 +77,7 @@ void CodeGen_Xtensa::add_platform_prologue() {
 extern "C" {
 #endif
 
-extern void *halide_tcm_malloc(void *user_context, size_t x) __attribute__ ((__malloc__));
+extern void *halide_tcm_malloc(void *user_context, size_t x) __attribute__((malloc));
 extern void halide_tcm_free(void *user_context, void *ptr);
 extern void **halide_init_dma(int32_t channel_count);
 extern int32_t halide_xtensa_copy_1d(int32_t channel, void* dst, int32_t dst_base, void* src, int32_t src_base, int32_t extent, int32_t item_size);
@@ -1178,6 +1178,16 @@ HALIDE_ALWAYS_INLINE void store<native_vector_i16, int16_t, VECTOR_WIDTH_I16>(co
 }
 
 template<>
+HALIDE_ALWAYS_INLINE void store<native_vector_i16_x2, int16_t, 2 * VECTOR_WIDTH_I16>(const native_vector_i16_x2& a, void *base, int32_t offset) {
+    valign align = IVP_ZALIGN();
+    xb_vecNx16* ptr = (xb_vecNx16*)((int16_t*)base + offset);
+    IVP_SANX16_IP(a.native_vector[0], align, ptr);
+    IVP_SANX16_IP(a.native_vector[1], align, ptr);
+    // Flush alignment register.
+    IVP_SAPOSNX16_FP(align, ptr);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u16 load<native_vector_u16, uint16_t, VECTOR_WIDTH_U16>(const void *base, int32_t offset) {
     xb_vecNx16U r;
     const xb_vec2Nx8*  __restrict ptr8 = (const xb_vec2Nx8*)((const uint16_t*)base + offset);
@@ -1338,6 +1348,14 @@ template <typename VectorType, typename BaseType, int Lanes>
 HALIDE_ALWAYS_INLINE void store_narrowing(const VectorType& a, void *base, int32_t offset) = delete;
 
 template<>
+HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_i16, int8_t, VECTOR_WIDTH_I16>(const native_vector_i16& a, void *base, int32_t offset) {
+    valign align = IVP_ZALIGN();
+    xb_vecNx8* __restrict ptr  = (xb_vecNx8*)((int8_t*)base + offset);
+    IVP_SANX8S_IP(a, align, ptr);
+    IVP_SAPOSNX8S_FP(align, ptr);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_i16, uint8_t, VECTOR_WIDTH_I16>(const native_vector_i16& a, void *base, int32_t offset) {
     valign align = IVP_ZALIGN();
     xb_vecNx8U* __restrict ptr  = (xb_vecNx8U*)((uint8_t*)base + offset);
@@ -1351,6 +1369,22 @@ HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_u16, uint8_t, VECTOR_WID
     xb_vecNx8U* __restrict ptr  = (xb_vecNx8U*)((uint8_t*)base + offset);
     IVP_SANX8U_IP(a, align, ptr);
     IVP_SAPOSNX8U_FP(align, ptr);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_i32, int16_t, VECTOR_WIDTH_I32>(const native_vector_i32& a, void *base, int32_t offset) {
+    valign align = IVP_ZALIGN();
+    xb_vecN_2x16* __restrict ptr  = (xb_vecN_2x16*)((int16_t*)base + offset);
+    IVP_SAN_2X16S_IP(a, align, ptr);
+    IVP_SAPOSN_2X16S_FP(align, ptr);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_u32, uint16_t, VECTOR_WIDTH_U32>(const native_vector_u32& a, void *base, int32_t offset) {
+    valign align = IVP_ZALIGN();
+    xb_vecN_2x16U* __restrict ptr  = (xb_vecN_2x16U*)((uint16_t*)base + offset);
+    IVP_SAN_2X16U_IP(a, align, ptr);
+    IVP_SAPOSN_2X16U_FP(align, ptr);
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i16_x2 halide_xtensa_interleave_i16(const native_vector_i16& a, const native_vector_i16& b) {
@@ -1999,6 +2033,14 @@ HALIDE_ALWAYS_INLINE native_vector_i48 halide_xtensa_widen_add_u48(const native_
   return r;
 }
 
+HALIDE_ALWAYS_INLINE native_vector_i48 halide_xtensa_widen_quad_add_i48(
+                                      const native_vector_i16& a, const native_vector_i16& b,
+                                      const native_vector_i16& c, const native_vector_i16& d) {
+  native_vector_i48 r = IVP_ADDWNX16(a, b);
+  IVP_ADDWANX16(r, c, d);
+  return r;
+}
+
 template<>
 HALIDE_ALWAYS_INLINE native_vector_u32_x2 convert<native_vector_u32_x2, native_vector_u16>(const native_vector_u16& src);
 
@@ -2502,8 +2544,9 @@ HALIDE_ALWAYS_INLINE native_vector_u8 halide_xtensa_sat_narrow_u8(const native_v
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_sat_narrow_i16(const native_vector_i32_x2& a) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
-  return IVP_PACKVRNX48(wide, 0);
+  native_vector_i32 a0 = IVP_SLSIN_2X32(a.native_vector[0], 16);
+  native_vector_i32 a1 = IVP_SLSIN_2X32(a.native_vector[1], 16);
+  return IVP_MOVNX16_FROMN_2X32(IVP_SELN_2X32I(a1, a0, IVP_SELI_16B_DEINTERLEAVE_1_ODD));
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i8 halide_xtensa_sat_narrow_with_rounding_shift_i8(const native_vector_i16_x2& a, uint32_t shift) {
@@ -2657,7 +2700,7 @@ HALIDE_ALWAYS_INLINE native_vector_f32_x2 halide_xtensa_concat_from_native(const
 }
 
 template <typename VectorType, typename OffsetType, typename BaseType, int Lanes, bool IsTCM>
-HALIDE_ALWAYS_INLINE VectorType gather_load(const void *base, const OffsetType& offset) {
+VectorType gather_load(const void *base, const OffsetType& offset) {
     BaseType __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[Lanes];
     int offsets[Lanes];
     store<OffsetType, int32_t, Lanes>(offset, &offsets[0], 0);
@@ -2768,24 +2811,16 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 gather_load<native_ve
 }
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u8 gather_load<native_vector_u8, native_vector_i16_x2, uint8_t, VECTOR_WIDTH_U8, true>(const void *base, const native_vector_i16_x2& offset) {
-  auto addresses1 = xb_vecNx16_rtor_xb_vecNx16U(offset.native_vector[0]);
-  auto output1 = IVP_GATHERDNX8U(
-    IVP_GATHERANX8U(
-     (const uint8_t*) base,
-      (addresses1)
-    )
-  );
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32_x2 gather_load<native_vector_f32_x2, native_vector_i32_x2, float, 2 * VECTOR_WIDTH_F32, true>(const void *base, const native_vector_i32_x2& offset) {
+  // NOTE(aelphy): the shift is needed because offests are expected to be in bytes
+  auto gsr0 = IVP_GATHERAN_2XF32((const float*) base,
+                                  xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(offset.native_vector[0]) << 2);
+  auto gsr1 = IVP_GATHERAN_2XF32((const float*) base,
+                                  xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(offset.native_vector[1]) << 2);
 
-  auto addresses2 = xb_vecNx16_rtor_xb_vecNx16U(offset.native_vector[1]);
-  auto output2 = IVP_GATHERDNX8U(
-    IVP_GATHERANX8U(
-      (const uint8_t*) base,
-      (addresses2)
-    )
-  );
-
-  return convert<native_vector_u8, native_vector_u16_x2>(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, output1, output2));
+  return native_vector_f32_x2(native_vector_f32_x2::from_native_vector,
+                              IVP_GATHERDN_2XF32(gsr0),
+                              IVP_GATHERDN_2XF32(gsr1));
 }
 
 )INLINE_CODE";
@@ -3068,6 +3103,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         {"halide_xtensa_convert_i48_low_u32", "IVP_CVT32UNX48L"},
         {"halide_xtensa_convert_i48_high_u32", "IVP_CVT32UNX48H"},
         {"halide_xtensa_narrow_i48_with_shift_i16", "IVP_PACKVRNRNX48"},
+        {"halide_xtensa_narrow_i48_with_rounding_shift_i16", "IVP_PACKVRNX48"},
         {"halide_xtensa_sat_narrow_i48_with_shift_i16", "IVP_PACKVRNX48"},
         {"halide_xtensa_full_reduce_add_i8", "IVP_RADD2NX8"},
         {"halide_xtensa_full_reduce_add_i16", "IVP_RADDNX16"},

@@ -608,23 +608,17 @@ private:
         return call;
     }
 
-    static Expr halide_xtensa_narrow_clz_i16(Expr v0) {
-        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_narrow_clz_i16", {std::move(v0)}, Call::PureExtern);
+    static Expr halide_xtensa_widen_pair_mul_i48(Expr v0, Expr v1, Expr v2, Expr v3) {
+        Expr call = Call::make(wild_i48x.type(), "halide_xtensa_widen_pair_mul_i48",
+                               {std::move(v0), std::move(v1), std::move(v2), std::move(v3)},
+                               Call::PureExtern);
         return call;
     }
 
-    static Expr halide_xtensa_sat_add_i16(Expr v0, Expr v1) {
-        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_sat_add_i16", {std::move(v0), std::move(v1)}, Call::PureExtern);
-        return call;
-    }
-
-    static Expr halide_xtensa_sat_sub_i16(Expr v0, Expr v1) {
-        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_sat_sub_i16", {std::move(v0), std::move(v1)}, Call::PureExtern);
-        return call;
-    }
-
-    static Expr halide_xtensa_avg_round_i16(Expr v0, Expr v1) {
-        Expr call = Call::make(wild_i16x.type(), "halide_xtensa_avg_round_i16", {std::move(v0), std::move(v1)}, Call::PureExtern);
+    static Expr halide_xtensa_widen_pair_mul_add_i48(Expr w, Expr v0, Expr v1, Expr v2, Expr v3) {
+        Expr call = Call::make(wild_i48x.type(), "halide_xtensa_widen_pair_mul_add_i48",
+                               {std::move(w), std::move(v0), std::move(v1), std::move(v2), std::move(v3)},
+                               Call::PureExtern);
         return call;
     }
 
@@ -716,8 +710,11 @@ private:
                 {"halide_xtensa_yyyy", (call("halide_xtensa_xxxx", wild_i24x64, {wild_i24x64, wild_i24x128}) + slice(wild_i24x128, 64, 1, 64)), Pattern::SameOp12},
                 {"halide_xtensa_xxxx", (wild_i24x64 + slice(wild_i24x128, 0, 1, 64))},
 
-                {"halide_xtensa_widen_pair_mul_i48", wild_i32x * wild_i32x + wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
-                {"halide_xtensa_widen_pair_mul_u48", wild_u32x * wild_u32x + wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
+                {"halide_xtensa_widen_quad_add_i48", widening_add(wild_i16x, wild_i16x) + widening_add(wild_i16x, wild_i16x), Pattern::AccumulatorOutput48},
+                {"halide_xtensa_widen_quad_add_i48", i32(halide_xtensa_widen_add_i48(wild_i16x, wild_i16x)) + i32(halide_xtensa_widen_add_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput48},
+
+                {"halide_xtensa_widen_pair_mul_i48", widening_mul(wild_i16x, wild_i16x) + widening_mul(wild_i16x, wild_i16x), Pattern::AccumulatorOutput48},
+                {"halide_xtensa_widen_pair_mul_u48", widening_mul(wild_u16x, wild_u16x) + widening_mul(wild_u16x, wild_u16x), Pattern::AccumulatorOutput48},
 
                 {"halide_xtensa_widen_pair_mul_i48", i48(wild_i16x) * i48(wild_i16x) + i48(wild_i16x) * i48(wild_i16x)},
                 {"halide_xtensa_widen_pair_mul_u48", i48(wild_u16x) * i48(wild_u16x) + i48(wild_u16x) * i48(wild_u16x)},
@@ -1075,8 +1072,11 @@ private:
             // Replace widening left shift with multiplication.
             const uint64_t *c = as_const_uint(op->args[1]);
             if (c && op->args[1].type().can_represent((uint64_t)1 << *c)) {
-
-                return mutate(widening_mul(op->args[0], bc(UIntImm::make(op->args[1].type().with_lanes(1), (uint64_t)1 << *c), op->args[1].type().lanes())));
+                if (op->args[0].type().is_int() && (*c < op->args[0].type().bits() - 1)) {
+                    return mutate(widening_mul(op->args[0], bc(IntImm::make(op->args[1].type().with_code(halide_type_int).with_lanes(1), (int64_t)1 << *c), op->args[1].type().lanes())));
+                } else {
+                    return mutate(widening_mul(op->args[0], bc(UIntImm::make(op->args[1].type().with_lanes(1), (uint64_t)1 << *c), op->args[1].type().lanes())));
+                }
             }
         }
 
@@ -1171,6 +1171,8 @@ private:
             // {"halide_xtensa_rounding_shift_right_u16", rounding_shift_right(wild_u16x, bc(wild_u16))},
             {"halide_xtensa_rounding_shift_right_i32", rounding_shift_right(wild_i32x, bc(wild_u32))},
             // {"halide_xtensa_rounding_shift_right_u32", rounding_shift_right(wild_u32x, bc(wild_u32))},
+
+            {"halide_xtensa_narrow_i48_with_rounding_shift_i16", call("halide_xtensa_narrow_with_rounding_shift_i16", wild_i16x, {i32(wild_i48x), wild_u32})},
 
             {"halide_xtensa_widen_pair_mul_add_u24",
              call("halide_xtensa_yyyy", wild_i24x, {wild_i24x, halide_xtensa_concat_from_native_i24(halide_xtensa_widen_mul_u24(wild_u8x, wild_u8x), halide_xtensa_widen_mul_u24(wild_u8x, wild_u8x))})},
