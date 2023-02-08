@@ -28,7 +28,7 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/StringMap.h>
 #include <llvm/ADT/StringRef.h>
-#if LLVM_VERSION < 17
+#if LLVM_VERSION < 170
 #include <llvm/ADT/Triple.h>
 #endif
 #include <llvm/ADT/Twine.h>
@@ -83,7 +83,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
-#if LLVM_VERSION >= 17
+#if LLVM_VERSION >= 170
 #include <llvm/TargetParser/Triple.h>
 #endif
 #include <llvm/Transforms/IPO.h>
