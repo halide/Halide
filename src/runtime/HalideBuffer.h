@@ -2172,9 +2172,10 @@ private:
         }
     }
 
+    // Return pair is <new_dimensions, innermost_strides_are_one>
     template<int N>
-    HALIDE_NEVER_INLINE static bool for_each_value_prep(for_each_value_task_dim<N> *t,
-                                                        const halide_buffer_t **buffers) {
+    HALIDE_NEVER_INLINE static std::pair<int, bool> for_each_value_prep(for_each_value_task_dim<N> *t,
+                                                                        const halide_buffer_t **buffers) {
         // Check the buffers all have clean host allocations
         for (int i = 0; i < N; i++) {
             if (buffers[i]->device) {
@@ -2189,6 +2190,9 @@ private:
         }
 
         const int dimensions = buffers[0]->dimensions;
+
+        // Caller currently enforces this
+        assert(dimensions > 0);
 
         // Extract the strides in all the dimensions
         for (int i = 0; i < dimensions; i++) {
@@ -2219,7 +2223,7 @@ private:
             }
             if (flat) {
                 t[i - 1].extent *= t[i].extent;
-                for (int j = i; j < d; j++) {
+                for (int j = i; j < d - 1; j++) {
                     t[j] = t[j + 1];
                 }
                 i--;
@@ -2235,26 +2239,30 @@ private:
             }
         }
 
-        return innermost_strides_are_one;
+        return {d, innermost_strides_are_one};
     }
 
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
     void for_each_value_impl(Fn &&f, Args &&...other_buffers) const {
         if (dimensions() > 0) {
+            const size_t alloc_size = dimensions() * sizeof(for_each_value_task_dim<N>);
             Buffer<>::for_each_value_task_dim<N> *t =
-                (Buffer<>::for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions() + 1) * sizeof(for_each_value_task_dim<N>));
+                (Buffer<>::for_each_value_task_dim<N> *)HALIDE_ALLOCA(alloc_size);
             // Move the preparatory code into a non-templated helper to
             // save code size.
             const halide_buffer_t *buffers[] = {&buf, (&other_buffers.buf)...};
-            bool innermost_strides_are_one = Buffer<>::for_each_value_prep(t, buffers);
-
-            Buffer<>::for_each_value_helper(f, dimensions() - 1,
-                                            innermost_strides_are_one,
-                                            t,
-                                            data(), (other_buffers.data())...);
-        } else {
-            f(*data(), (*other_buffers.data())...);
+            auto [new_dims, innermost_strides_are_one] = Buffer<>::for_each_value_prep(t, buffers);
+            if (new_dims > 0) {
+                Buffer<>::for_each_value_helper(f, new_dims - 1,
+                                                innermost_strides_are_one,
+                                                t,
+                                                data(), (other_buffers.data())...);
+            }
+            // else fall thru
         }
+
+        // zero-dimensional case
+        f(*data(), (*other_buffers.data())...);
     }
     // @}
 
