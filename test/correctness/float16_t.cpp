@@ -192,7 +192,7 @@ int run_test() {
                 float f16 = float(Buffer<float16_t>(r[j + 4])(i));
                 if (f32 != f16) {
                     fprintf(stderr, "%s outputs do not match: %f %f\n",
-                           names[j], f32, f16);
+                            names[j], f32, f16);
                     return -1;
                 }
             }
@@ -224,7 +224,7 @@ int run_test() {
                 float16_t correct = float16_t((x * y) / 2.0f);
                 if (buf(x, y).to_bits() != correct.to_bits()) {
                     fprintf(stderr, "buf(%d, %d) = 0x%x instead of 0x%x\n",
-                           x, y, buf(x, y).to_bits(), correct.to_bits());
+                            x, y, buf(x, y).to_bits(), correct.to_bits());
                     return -1;
                 }
             }
@@ -338,7 +338,7 @@ int run_test() {
     return 0;
 }
 
-}
+}  // namespace
 
 int main(int argc, char **argv) {
     MyCustomErrorReporter reporter;
