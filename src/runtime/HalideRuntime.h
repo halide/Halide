@@ -75,20 +75,31 @@ extern "C" {
 #endif
 #endif
 
+#ifndef COMPILING_HALIDE_RUNTIME
+
 // clang had _Float16 added as a reserved name in clang 8, but
 // doesn't actually support it on most platforms until clang 15.
 // Ideally there would be a better way to detect if the type
 // is supported, even in a compiler independent fashion, but
 // coming up with one has proven elusive.
-#ifndef COMPILING_HALIDE_RUNTIME
-#if !defined(__clang__) || (__clang_major__ >= 16)
+#if defined(__clang__) && (__clang_major__ >= 16)
 #if defined(__is_identifier)
 #if !__is_identifier(_Float16)
 #define HALIDE_CPP_COMPILER_HAS_FLOAT16
 #endif
 #endif
 #endif
+
+// Similarly, detecting _Float16 for gcc is problematic.
+// For now, we say that if >= v12, and compiling on x86 or arm,
+// we assume support. This may need revision.
+#if defined(__GNUC__) && (__GNUC__ >= 12)
+#if defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__)
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16
 #endif
+#endif
+
+#endif  // !COMPILING_HALIDE_RUNTIME
 
 /** \file
  *

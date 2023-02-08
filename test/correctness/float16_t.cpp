@@ -357,6 +357,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+#ifdef __clang__
     {
         float16_t f(1.0f16);
         _Float16 f2 = (_Float16)f;
@@ -365,6 +366,10 @@ int main(int argc, char **argv) {
             return -1;
         }
     }
+#else
+    printf("Only clang supports _Float16 literals, skipping roundtrip test\n");
+#endif
+
 #else
     printf("[Compiler does not support _Float16, skipping]\n");
 #endif
