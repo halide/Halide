@@ -378,8 +378,10 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     // Make sure things marked as always-inline get inlined
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
 
+#if LLVM_VERSION < 17
     // Remove any stale debug info
     pass_manager.add(llvm::createStripDeadDebugInfoPass());
+#endif
 
     // Enable symbol rewriting. This allows code outside libHalide to
     // use symbol rewriting when compiling Halide code (for example, by
