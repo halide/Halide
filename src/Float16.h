@@ -5,19 +5,6 @@
 #include <cstdint>
 #include <string>
 
-// clang had _Float16 added as a reserved name in clang 8, but
-// doesn't actually support it on most platforms until clang 15.
-// Ideally there would be a better way to detect if the type
-// is supported, even in a compiler independent fashion, but
-// coming up with one has proven elusive.
-#if !defined(__clang__) || (__clang_major__ >= 16)
-#if defined(__is_identifier)
-#if !__is_identifier(_Float16)
-#define HALIDE_CPP_COMPILER_HAS_FLOAT16
-#endif
-#endif
-#endif
-
 namespace Halide {
 
 /** Class that provides a type that implements half precision
