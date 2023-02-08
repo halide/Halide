@@ -40,8 +40,10 @@ struct float16_t {
 
 #ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
     /** Construct a float16_t from compiler's built-in _Float16 type. */
-    explicit float16_t(_Float16 value) {
-        data = *(uint16_t *)&value;
+    explicit float16_t(_Float16 value) const {
+        float16_t result;
+        memcpy(&result, &data, sizeof(float16_t));
+        return result;
     }
 #endif
 
@@ -58,7 +60,9 @@ struct float16_t {
 #ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
     /** Cast to compiler's built-in _Float16 type. */
     explicit operator _Float16() const {
-        return *(const _Float16 *)&data;
+        _Float16 result;
+        memcpy(&result, &data, sizeof(_Float16));
+        return result;
     }
 #endif
 
