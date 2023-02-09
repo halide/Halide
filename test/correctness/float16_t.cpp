@@ -367,7 +367,7 @@ int main(int argc, char **argv) {
         }
     }
 #else
-    printf("Only clang supports _Float16 literals, skipping roundtrip test\n");
+    printf("Only clang supports _Float16 constant literal 'f16' suffix, skipping roundtrip test\n");
 #endif
 
 #else
