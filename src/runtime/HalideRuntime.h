@@ -75,6 +75,32 @@ extern "C" {
 #endif
 #endif
 
+#ifndef COMPILING_HALIDE_RUNTIME
+
+// clang had _Float16 added as a reserved name in clang 8, but
+// doesn't actually support it on most platforms until clang 15.
+// Ideally there would be a better way to detect if the type
+// is supported, even in a compiler independent fashion, but
+// coming up with one has proven elusive.
+#if defined(__clang__) && (__clang_major__ >= 16) && !defined(__EMSCRIPTEN__)
+#if defined(__is_identifier)
+#if !__is_identifier(_Float16)
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16
+#endif
+#endif
+#endif
+
+// Similarly, detecting _Float16 for gcc is problematic.
+// For now, we say that if >= v12, and compiling on x86 or arm,
+// we assume support. This may need revision.
+#if defined(__GNUC__) && (__GNUC__ >= 12)
+#if defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__)
+#define HALIDE_CPP_COMPILER_HAS_FLOAT16
+#endif
+#endif
+
+#endif  // !COMPILING_HALIDE_RUNTIME
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its
@@ -1988,6 +2014,13 @@ HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of() {
     static_assert(check_is_pointer<T>::value, "Expected a pointer type here");
     return halide_type_t(halide_type_handle, 64);
 }
+
+#ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+template<>
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<_Float16>() {
+    return halide_type_t(halide_type_float, 16);
+}
+#endif
 
 template<>
 HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<float>() {
