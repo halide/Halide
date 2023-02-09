@@ -2228,7 +2228,6 @@ private:
                 }
                 i--;
                 d--;
-                t[d].extent = 1;
             }
         }
 
