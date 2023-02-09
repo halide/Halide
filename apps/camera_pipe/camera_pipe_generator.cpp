@@ -541,7 +541,7 @@ void CameraPipe::generate() {
             denoised.prefetch(input, y, 2);
         }
 
-        int deinterleaved_vector_size = get_target().has_feature(Target::Xtensa) ? vec : vec * 2;
+        const int deinterleaved_vector_size = get_target().has_feature(Target::Xtensa) ? vec : vec * 2;
 
         deinterleaved
             .compute_at(processed, yi)
