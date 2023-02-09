@@ -3506,7 +3506,7 @@ HALIDE_FUNCTION_ATTRS
 int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
  void * const _ucon = const_cast<void *>(__user_context);
  halide_maybe_unused(_ucon);
- auto *_0 = _halide_buffer_get_host(_buf_buffer);
+ auto * __restrict _0 = _halide_buffer_get_host(_buf_buffer);
  auto _buf = _0;
  halide_maybe_unused(_buf);
  {
@@ -3534,7 +3534,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
    {
     char b0[1024];
     snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
-    auto *_8 = b0;
+    auto * __restrict _8 = b0;
     halide_print(_ucon, _8);
     int32_t _9 = 0;
     int32_t _10 = return_second(_9, 3);
