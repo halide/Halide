@@ -2257,6 +2257,7 @@ private:
                                                 innermost_strides_are_one,
                                                 t,
                                                 data(), (other_buffers.data())...);
+                return;
             }
             // else fall thru
         }
