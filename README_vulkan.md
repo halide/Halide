@@ -181,9 +181,17 @@ to the first compute device it can find.
 `HL_VK_ALLOC_CONFIG=...` will tell Halide to configure the Vulkan memory
 allocator use the given constraints specified as three integer values 
 separated by the appropriate environment variable list delimiter 
-(e.g. `N:N:N` on Linux/OSX/Posix, or `N;N;N` on Windows). These values 
-correspond to `minimum_block_size`, `maximum_block_size` and 
-`maximum_block_count`. 
+(e.g. `N:N:N:N` on Linux/OSX/Posix, or `N;N;N;N` on Windows). These values 
+correspond to `maximum_pool_size`, `minimum_block_size`, `maximum_block_size` 
+and `maximum_block_count`. 
+
+The `maximum_pool_size` constraint will tell Halide to configure the 
+Vulkan memory allocator to never request more than N megabytes for the
+entire pool of allocations for the context. This includes all resource 
+blocks used for suballocations. Setting this to a non-zero value will 
+limit the amount device memory used by Halide, which may be useful when
+other applications and frameworks are competing for resources. 
+Default is 0 ... meaning no limit.
 
 The `minimum_block_size` constraint will tell Halide to configure the 
 Vulkan memory allocator to always request a minimum of N megabytes for 
