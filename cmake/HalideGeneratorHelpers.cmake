@@ -591,12 +591,12 @@ function(add_halide_runtime RT)
         endif()
     endif()
 
-    # The default of NO_THREADS/NO_DL_LIBS is OFF unless HALIDE_RUNTIME_NO_THREADS/NO_DL_LIBS is defined globally
+    # The default of NO_THREADS/NO_DL_LIBS is OFF unless Halide_RUNTIME_NO_THREADS/NO_DL_LIBS is defined globally
     if (NOT DEFINED ARG_NO_THREADS)
-        set(ARG_NO_THREADS ${HALIDE_RUNTIME_NO_THREADS})
+        set(ARG_NO_THREADS ${Halide_RUNTIME_NO_THREADS})
     endif ()
     if (NOT DEFINED ARG_NO_DL_LIBS)
-        set(ARG_NO_DL_LIBS ${HALIDE_RUNTIME_NO_DL_LIBS})
+        set(ARG_NO_DL_LIBS ${Halide_RUNTIME_NO_DL_LIBS})
     endif ()
 
     # Ensure _Halide_gengen is defined

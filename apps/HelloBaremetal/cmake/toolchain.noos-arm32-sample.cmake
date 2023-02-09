@@ -29,8 +29,8 @@ set(CMAKE_EXE_LINKER_FLAGS "-z noexecstack")
 set(Halide_TARGET "arm-32-noos-semihosting")
 
 # To prevent Threads and DL libs from being linked to runtime, as this toolchain doesn't have them
-set(HALIDE_RUNTIME_NO_THREADS ON)
-set(HALIDE_RUNTIME_NO_DL_LIBS ON)
+set(Halide_RUNTIME_NO_THREADS ON)
+set(Halide_RUNTIME_NO_DL_LIBS ON)
 
 # Switch for baremetal specific build steps
 set(BAREMETAL ON)
