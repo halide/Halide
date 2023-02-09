@@ -13,7 +13,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         internal_assert(index >= 0);
         for (const Expr &vector : op->vectors) {
             if (index < vector.type().lanes()) {
-                if (vector.as<Variable>()) {
+                if (vector.as<Variable>() || vector.as<VectorInstruction>()) {
                     // If we try to extract_lane of a variable, we'll just get
                     // the same shuffle back.
                     break;
