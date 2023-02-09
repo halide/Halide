@@ -2176,6 +2176,9 @@ private:
     template<int N>
     HALIDE_NEVER_INLINE static std::pair<int, bool> for_each_value_prep(for_each_value_task_dim<N> *t,
                                                                         const halide_buffer_t **buffers) {
+        const int dimensions = buffers[0]->dimensions;
+        assert(dimensions > 0);
+
         // Check the buffers all have clean host allocations
         for (int i = 0; i < N; i++) {
             if (buffers[i]->device) {
@@ -2188,11 +2191,6 @@ private:
                        "Buffer passed to for_each_value has no host or device allocation");
             }
         }
-
-        const int dimensions = buffers[0]->dimensions;
-
-        // Caller currently enforces this
-        assert(dimensions > 0);
 
         // Extract the strides in all the dimensions
         for (int i = 0; i < dimensions; i++) {
@@ -2231,11 +2229,12 @@ private:
             }
         }
 
+        // Note that we assert() that dimensions > 0 above
+        // (our one-and-only caller will only call us that way)
+        // so the unchecked access to t[0] should be safe.
         bool innermost_strides_are_one = true;
-        if (dimensions > 0) {
-            for (int i = 0; i < N; i++) {
-                innermost_strides_are_one &= (t[0].stride[i] == 1);
-            }
+        for (int i = 0; i < N; i++) {
+            innermost_strides_are_one &= (t[0].stride[i] == 1);
         }
 
         return {d, innermost_strides_are_one};
