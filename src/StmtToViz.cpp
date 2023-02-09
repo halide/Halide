@@ -31,7 +31,9 @@ class HTMLCodePrinter;
 class HTMLVisualizationPrinter;
 class IRVisualizer;
 
-/************** HTMLCodePrinter Class **************/
+/******************* HTMLCodePrinter Class *******************/
+// Prints IR code in HTML. Very similar to generating a stmt
+// file, except that the generated html is more interactive.
 
 class HTMLCodePrinter : public IRVisitor {
 public:
@@ -96,6 +98,23 @@ public:
         scope.pop(m.name());
     }
 
+private:
+    // Handle to output file stream
+    std::ofstream &stream;
+
+    // Used to generate unique ids
+    int _id;
+
+    // Used to track scope during IR traversal
+    Scope<int> scope;
+
+    /* All spans and divs will have an id of the form "x-y", where x
+     * is shared among all spans/divs in the same context, and y is unique.
+     * These variables are used to track the context within generated HTML */
+    std::vector<int> context_stack;
+    std::vector<string> context_stack_tags;
+
+    /* Private print functions to handle various IR types */
     void print(const Buffer<> &buf) {
         // Generate a unique ID for this module
         int id = gen_unique_id();
@@ -121,25 +140,25 @@ public:
 
             // Print data
             print_text(" = ");
-            
+
             // Open code block to hold module body
             print_html_element("span", "matched", " {");
-            
+
             // Open indented div to hold buffer data
             print_opening_tag("div", "indent BufferData", id);
-            
+
             string str((const char *)buf.data(), buf.size_in_bytes());
-            if (starts_with(buf.name(), "cuda_")) 
+            if (starts_with(buf.name(), "cuda_"))
                 print_cuda_gpu_source_kernels(str);
-            else 
-                stream << "<pre>\n" << str << "</pre>\n";
-            
+            else
+                stream << "<pre>\n"
+                       << str << "</pre>\n";
+
             print_closing_tag("div");
 
             // Close code block holding buffer body
             print_html_element("span", "matched ClosingBrace", " }", "cb-" + std::to_string(id));
-        } 
-        else {
+        } else {
             // Print buffer name and move on
             print_html_element("span", "keyword", "buffer ");
             print_variable(buf.name());
@@ -169,7 +188,7 @@ public:
         //    Note: We wrap the show/hide buttons in a navigation anchor
         //    that lets us sync text and visualization tabs.
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword nav-anchor", "func ", "lowered-func-" + std::to_string(id));
+        print_html_element("span", "keyword nav-anchor", "func ", "lowered-func-" + std::to_string((int64_t) &fn));
         print_text(fn.name + "(");
         print_closing_tag("span");
         print_fndecl_args(fn.args);
@@ -178,7 +197,7 @@ public:
         print_toggle_anchor_closing_tag();
 
         // Add a button to jump to this function in the viz
-        print_visualization_button(id);
+        print_visualization_button("lowered-func-viz-" + std::to_string((int64_t)&fn));
 
         // Open code block to hold function body
         print_html_element("span", "matched", "{");
@@ -210,23 +229,7 @@ public:
         ir.accept(this);
     }
 
-private:
-    // Handle to output file stream
-    std::ofstream &stream;
-
-    // Used to generate unique ids
-    int _id;
-
-    // Used to track scope during IR traversal
-    Scope<int> scope;
-
-    /* All spans and divs will have an id of the form "x-y", where x
-     * is shared among all spans/divs in the same context, and y is unique.
-     * These variables are used to track the context within generated HTML */
-    std::vector<int> context_stack;
-    std::vector<string> context_stack_tags;
-
-    /* Misc methods used for generating common HTML elements*/
+    /* Methods used for emit common HTML patterns */
     
     // Prints the opening tag for the specified html element. A unique ID is 
     // auto-generated unless provided.
@@ -251,7 +254,7 @@ private:
 
     // Prints the closing tag for the specified html element.
     void print_closing_tag(const string &tag) {
-        internal_assert(!context_stack.empty() && tag == context_stack_tags.back()) << tag << " " << context_stack_tags.back();
+        internal_assert(!context_stack.empty() && tag == context_stack_tags.back());
         context_stack.pop_back();
         context_stack_tags.pop_back();
         stream << "</" + tag + ">";
@@ -308,17 +311,17 @@ private:
     void print_show_hide_icon(int id) {
         stream << "<div class='show-hide-btn-wrapper'>"
                << "  <div class='show-hide-btn' style='display:none;' id=" << id << "-show>"
-               << "    <i class='fa fa-plus-square-o'></i>"
+               << "    <i class='bi bi-plus-square'></i>"
                << "  </div>"
                << "  <div class='show-hide-btn' id=" << id << "-hide>"
-               << "    <i class='fa fa-minus-square-o'></i>"
+               << "    <i class='bi bi-dash-square'></i>"
                << "  </div>"
                << "</div>";
     }
 
     // Prints a button to sync text with visualization
-    void print_visualization_button(int id) {
-        stream << "<button class='icon-btn sync-btn' onclick='scrollToFunctionCodeToViz(\"" << id << "_viz\")'>"
+    void print_visualization_button(string id) {
+        stream << "<button class='icon-btn sync-btn' onclick='scrollToViz(\"" << id << "\")'>"
                << "  <i class='bi bi-arrow-right-square'></i>"
                << "</button>";
     }
@@ -503,6 +506,100 @@ private:
             }
             print_variable(arg.name);
             print_delim = true;
+        }
+    }
+
+    /* Helper functions for printing IR nodes */
+    void print_constant(string cls, Expr c) {
+        print_opening_tag("span", cls);
+        stream << c;
+        print_closing_tag("span");
+    }
+
+    void print_type(Type t) {
+        print_opening_tag("span", "Type");
+        stream << t;
+        print_closing_tag("span");
+    }
+
+    void print_binary_op(const Expr &a, const Expr &b, string op) {
+        print_opening_tag("span", "BinaryOp");
+        print_html_element("span", "matched", "(");
+        print(a);
+        print_text(" ");
+        print_html_element("span", "matched Operator", op);
+        print_text(" ");
+        print(b);
+        print_html_element("span", "matched", ")");
+        print_closing_tag("span");
+    }
+
+    void print_function_call(string fn_name, const std::vector<Expr> &args) {
+        print_opening_tag("span", "matched");
+        print_html_element("span", "Symbol", fn_name);
+        print_text("(");
+        print_closing_tag("span");
+        bool print_delim = false;
+        for (auto arg : args) {
+            if (print_delim) {
+                print_html_element("span", "matched", ", ");
+            }
+            print(arg);
+            print_delim = true;
+        }
+        print_html_element("span", "matched", ")");
+    }
+
+    // To avoid generating ridiculously deep DOMs, we flatten blocks here.
+    void print_block_stmt(const Stmt &stmt) {
+        if (const Block *b = stmt.as<Block>()) {
+            print_block_stmt(b->first);
+            print_block_stmt(b->rest);
+        } else if (stmt.defined()) {
+            print(stmt);
+        }
+    }
+
+    // We also flatten forks
+    void visit_fork_stmt(const Stmt &stmt) {
+        if (const Fork *f = stmt.as<Fork>()) {
+            visit_fork_stmt(f->first);
+            visit_fork_stmt(f->rest);
+        } else if (stmt.defined()) {
+            // Give task a unique id
+            int id = gen_unique_id();
+
+            // Start a dive to hold code for this task
+            print_opening_tag("div", "ForkTask");
+
+            // Generate the show hide icon/text buttons
+            print_toggle_anchor_opening_tag(id);
+
+            // -- print icon
+            print_show_hide_icon(id);
+
+            // -- print text
+            print_html_element("span", "keyword matched", "task");
+
+            print_toggle_anchor_closing_tag();
+
+            // Open code block to hold task body
+            print_html_element("span", "matched", " {");
+
+            // Open indented div to hold body code
+            print_opening_tag("div", "indent ForkTask", id);
+
+            // Print task body
+            print(stmt);
+
+            // Close indented div holding body code
+            print_closing_tag("div");
+
+            // Close code block holding task body
+            print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
+
+            // Close div holding this fork task
+            print_closing_tag("div");
         }
     }
 
@@ -746,7 +843,7 @@ private:
         //stream << close_cost_span();
 
         // Add a button to jump to this producer/consumer in the viz
-        print_visualization_button(id);
+        print_visualization_button("prodcons-viz-" + std::to_string((int64_t)op));
 
         //if (assembly_line_num != -1) {
         //stream << see_assembly_button(assembly_line_num);
@@ -817,7 +914,7 @@ private:
         //stream << close_cost_span();
 
         // Add a button to jump to this loop in the viz
-        print_visualization_button(id);
+        print_visualization_button("loop-viz-" + std::to_string((int64_t)op));
 
         //if (assembly_line_num_start != -1) {
         //  stream << see_assembly_button(assembly_line_num_start, assembly_line_num_end);
@@ -873,7 +970,7 @@ private:
         //stream << close_cost_span();
 
         // Add a button to jump to this acquire in the viz
-        print_visualization_button(id);
+        print_visualization_button("acquire-viz-" + std::to_string((int64_t)op));
 
         // Open code block to hold function body
         print_html_element("span", "matched", "{");
@@ -1002,7 +1099,7 @@ private:
         //stream << close_cost_span();
 
         // Add a button to jump to this allocation in the viz
-        print_visualization_button(id);
+        print_visualization_button("allocate-viz-" + std::to_string((int64_t)op));
 
         // Print allocation body
         print_opening_tag("div", "AllocateBody");
@@ -1069,7 +1166,7 @@ private:
         //stream << close_cost_span();
 
         // Add a button to jump to this realize in the viz
-        print_visualization_button(id);
+        print_visualization_button("realize-viz-" + std::to_string((int64_t)op));
 
         // Open code block to hold function body
         print_html_element("span", "matched", " {");
@@ -1164,7 +1261,7 @@ private:
         print_toggle_anchor_closing_tag();
 
         // Add a button to jump to this conditional in the viz
-        print_visualization_button(id);
+        print_visualization_button("cond-viz-" + std::to_string((int64_t)op));
 
         // Flatten nested if's in the else case as an 
         // `if-then-else_if-else` sequence
@@ -1218,7 +1315,7 @@ private:
                 print_toggle_anchor_closing_tag();
 
                 // Add a button to jump to this conditional branch in the viz
-                print_visualization_button(id);
+                print_visualization_button("cond-viz-" + std::to_string((int64_t)nested_if));
 
                 // Update op to the nested if for next loop iteration
                 op = nested_if;
@@ -1242,7 +1339,7 @@ private:
                 print_toggle_anchor_closing_tag();
 
                 // Add a button to jump to this conditional branch in the viz
-                print_visualization_button(else_id);
+                print_visualization_button("cond-viz-" + std::to_string((int64_t)&op->else_case));
 
                 // Open code block to hold `else` case
                 print_html_element("span", "matched", " {");
@@ -1384,117 +1481,169 @@ private:
         // Close div holding this atomic
         print_closing_tag("div");
     }
-
-    /* Helper functions for printing IR nodes */
-    void print_constant(string cls, Expr c) {
-        print_opening_tag("span", cls);
-        stream << c;
-        print_closing_tag("span");
-    }
-
-    void print_type(Type t) {
-        print_opening_tag("span", "Type");
-        stream << t;
-        print_closing_tag("span");
-    }
-
-    void print_binary_op(const Expr &a, const Expr &b, string op) {
-        print_opening_tag("span", "BinaryOp");
-        print_html_element("span", "matched", "(");
-        print(a);
-        print_text(" ");
-        print_html_element("span", "matched Operator", op);
-        print_text(" ");
-        print(b);
-        print_html_element("span", "matched", ")");
-        print_closing_tag("span");
-    }
-
-    void print_function_call(string fn_name, const std::vector<Expr> &args) {
-        print_opening_tag("span", "matched");
-        print_html_element("span", "Symbol", fn_name);
-        print_text("(");
-        print_closing_tag("span");
-        bool print_delim = false;
-        for (auto arg : args) {
-            if (print_delim) {
-                print_html_element("span", "matched", ", ");
-            }
-            print(arg);
-            print_delim = true;
-        }
-        print_html_element("span", "matched", ")");
-    }
-
-    // To avoid generating ridiculously deep DOMs, we flatten blocks here.
-    void print_block_stmt(const Stmt &stmt) {
-        if (const Block *b = stmt.as<Block>()) {
-            print_block_stmt(b->first);
-            print_block_stmt(b->rest);
-        } else if (stmt.defined()) {
-            print(stmt);
-        }
-    }
-
-    // We also flatten forks
-    void visit_fork_stmt(const Stmt &stmt) {
-        if (const Fork *f = stmt.as<Fork>()) {
-            visit_fork_stmt(f->first);
-            visit_fork_stmt(f->rest);
-        } else if (stmt.defined()) {
-            // Give task a unique id
-            int id = gen_unique_id();
-
-            // Start a dive to hold code for this task
-            print_opening_tag("div", "ForkTask");
-
-            // Generate the show hide icon/text buttons
-            print_toggle_anchor_opening_tag(id);
-
-            // -- print icon
-            print_show_hide_icon(id);
-
-            // -- print text
-            print_html_element("span", "keyword matched", "task");
-
-            print_toggle_anchor_closing_tag();
-
-            // Open code block to hold task body
-            print_html_element("span", "matched", " {");
-
-            // Open indented div to hold body code
-            print_opening_tag("div", "indent ForkTask", id);
-
-            // Print task body
-            print(stmt);
-
-            // Close indented div holding body code
-            print_closing_tag("div");
-
-            // Close code block holding task body
-            print_html_element("span", "matched ClosingBrace", "}", "cb-" + std::to_string(id));
-
-            // Close div holding this fork task
-            print_closing_tag("div");
-        }
-    }
 };
 
+/************** HTMLVisualizationPrinter Class ***************/
+// Visualizes the IR in HTML. The visualization is essentially
+// an abstracted version of the code, highlighting the higher
+// level execution pipeline along with key properties of the
+// execution performed at each stage.
 
-/************** HTMLVisualizationPrinter Class **************/
-
-class HTMLVisualizationPrinter {
+class HTMLVisualizationPrinter : public IRVisitor {
 public:
     HTMLVisualizationPrinter(std::ofstream &os)
         : stream(os) {
     }
 
+    void print(const Module &m) {
+        //get_read_write.generate_sizes(m);
+
+        //html.str("");
+        //num_of_nodes = 0;
+        //start_module_traversal(m);
+
+        // Print all functions in this module
+        for (const auto &fn : m.functions()) {
+            print(fn);
+        }
+
+        //return html.str();
+    }
+
 private:
     // Handle to output file stream
     std::ofstream &stream;
+
+    // Used to track the context within generated HTML
+    std::vector<string> context_stack_tags;
+
+    // Generate unique ids
+    int _id;
+    int gen_unique_id() {
+        return _id++;
+    }
+
+    // Override visitation of functions
+    void print(const LoweredFunc &fn) {
+        // Assign this fn a unique id
+        //int id = gen_unique_id();
+
+        print_opening_tag("div", "center fn-wrapper");
+        print_opening_tag("div", "fn-header");
+        print_code_button("lowered-func-" + std::to_string((int64_t)&fn));
+        print_html_element("span", "fn-title", "Fn: " + fn.name, "lowered-func-viz-" + std::to_string((int64_t)&fn));
+        print_closing_tag("div");
+        
+        print_opening_tag("div", "fn-body");
+        fn.body.accept(this);
+        print_closing_tag("div");
+
+        print_closing_tag("div");
+        //html << close_function_box_div();*/
+    }
+
+    /* Methods used for emit common HTML patterns */
+
+    // Prints the opening tag for the specified html element.
+    void print_opening_tag(const string &tag, const string &cls) {
+        stream << "<" << tag << " class='" << cls << "'>";
+        context_stack_tags.push_back(tag);
+    }
+
+    void print_opening_tag(const string &tag, const string &cls, string id) {
+        stream << "<" << tag << " class='" << cls << "' id='" << id << "'>";
+        context_stack_tags.push_back(tag);
+    }
+
+    // Prints the closing tag for the specified html element.
+    void print_closing_tag(const string &tag) {
+        internal_assert(tag == context_stack_tags.back());
+        context_stack_tags.pop_back();
+        stream << "</" + tag + ">";
+    }
+
+    // Prints an html element: opening tag, body and closing tag
+    void print_html_element(const string &tag, const string &cls, const string &body) {
+        print_opening_tag(tag, cls);
+        stream << body;
+        print_closing_tag(tag);
+    }
+
+    void print_html_element(const string &tag, const string &cls, const string &body, string id) {
+        print_opening_tag(tag, cls, id);
+        stream << body;
+        print_closing_tag(tag);
+    }
+
+    // Prints text to stream
+    void print_text(const string &x) {
+        stream << x;
+    }
+
+    // Prints the button to show or hide a code scope
+    void print_show_hide_icon(int id) {
+        stream << "<div class='show-hide-btn-wrapper'>"
+               << "  <div class='show-hide-btn' style='display:none;' id=" << id << "-show>"
+               << "    <i class='bi bi-plus-square'></i>"
+               << "  </div>"
+               << "  <div class='show-hide-btn' id=" << id << "-hide>"
+               << "    <i class='bi bi-dash-square'></i>"
+               << "  </div>"
+               << "</div>";
+    }
+
+    // Prints a button to sync text with visualization
+    void print_code_button(string id) {
+        stream << "<button class='icon-btn sync-btn' onclick='scrollToCode(\"" << id << "\")'>"
+               << "  <i class='bi bi-arrow-left-square'></i>"
+               << "</button>";
+    }
+
+    void print_fn_button(string name, string id) {
+        stream << "<button class='icon-btn sync-btn' onclick='scrollToCode(\"" << id << "\")'>"
+               << "  <i class='bi bi-arrow-left-square'></i>"
+               << "</button>";
+
+        stream << "<button role='button' onclick='scrollToViz(\""
+               << "lowered-func-viz-" + std::to_string((int64_t)&fn) << "\")'>"
+               << name
+               << "</button>";
+    }
+
+private:
+
+    /* Override key visit functions */
+    
+    void visit(const Call *op) {
+        if (op->call_type == Halide) {
+            print_opening_tag("div", "box center fn-call");
+            print_text("Function Call: ");
+            print_fn_button(op->name, )
+            print_closing_tag("div");
+            
+            html << "Function Call";
+            
+
+            html << "</div>";
+        }
+    }
+    
+    //void visit(const Variable *op) override;
+    //void visit(const ProducerConsumer *op) override;
+    //std::string get_loop_iterator_binary(const IRNodeType &type, const Expr &a, const Expr &b) const;
+    //std::string get_loop_iterator(const For *op) const;
+    //void visit(const For *op) override;
+    //void visit(const IfThenElse *op) override;
+    //void visit(const Store *op) override;
+    //void visit(const Load *op) override;
+    //std::string get_memory_type(MemoryType mem_type) const;
+    //void visit(const Allocate *op) override;
 };
 
 /************** IRVisualizer Class **************/
+// Generates the output html page. Currently the html page has
+// three key tabs: IR code, Visualized pipeline and the generated
+// assembly.
 
 // We use this macro to get the absolute path to resource files
 // Can use std::source_location once C++-17 is deprecated
@@ -1611,9 +1760,9 @@ private:
         stream << "<div id='visualization-tabs'>\n";
         generate_ir_tab(m);
         generate_resize_bar_1();
-        generate_visualization_tab();
+        generate_visualization_tab(m);
         generate_resize_bar_2();
-        generate_assembly_tab();
+        generate_assembly_tab(m);
         stream << "</div>\n";
 
         // Generatize the resizing bar for the IR Code and Visualization tabs
@@ -1640,14 +1789,14 @@ private:
     }
 
     // Generate tab 2/3: Lowered IR code with syntax highlighting in HTML
-    void generate_visualization_tab() {
+    void generate_visualization_tab(const Module &m) {
         stream << "<div id='ir-visualization-tab'>\n";
-        //stream << generate_ir_visualization(m);
+        html_viz_printer.print(m);
         stream << "</div>\n";
     }
 
     // Generate tab 3/3: Generated assembly code
-    void generate_assembly_tab() {
+    void generate_assembly_tab(const Module &m) {
         stream << "<div id='assembly-tab'>\n";
         stream << "</div>\n";
     }

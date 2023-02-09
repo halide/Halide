@@ -1,4 +1,5 @@
-<style type='text/css'>    
+<style type='text/css'>   
+	/* General CSS Rules*/
 	body {
 		font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
 		font-size: 12px;
@@ -10,6 +11,18 @@
         height: 100vh;
         display: flex;
         flex-direction: column;
+    }
+
+    a,
+    a:hover,
+    a:visited,
+    a:active {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    b {
+        font-weight: normal;
     }
 
 	/* Info bar */
@@ -80,7 +93,92 @@
         font-size: 18px;
     }
 
-	/* IR Code CSS */
+	/* IR Code Section CSS */
+    b.Highlight {
+        font-weight: bold;
+        background-color: #DDD;
+    }
+
+    span.Highlight {
+        font-weight: bold;
+        background-color: #FF0;
+    }
+
+    span.OpF32 {
+        color: hsl(106deg 100% 40%);
+        font-weight: bold;
+    }
+
+    span.OpF64 {
+        color: hsl(106deg 100% 30%);
+        font-weight: bold;
+    }
+
+    span.OpB8 {
+        color: hsl(208deg 100% 80%);
+        font-weight: bold;
+    }
+
+    span.OpB16 {
+        color: hsl(208deg 100% 70%);
+        font-weight: bold;
+    }
+
+    span.OpB32 {
+        color: hsl(208deg 100% 60%);
+        font-weight: bold;
+    }
+
+    span.OpB64 {
+        color: hsl(208deg 100% 50%);
+        font-weight: bold;
+    }
+
+    span.OpI8 {
+        color: hsl(46deg 100% 45%);
+        font-weight: bold;
+    }
+
+    span.OpI16 {
+        color: hsl(46deg 100% 40%);
+        font-weight: bold;
+    }
+
+    span.OpI32 {
+        color: hsl(46deg 100% 34%);
+        font-weight: bold;
+    }
+
+    span.OpI64 {
+        color: hsl(46deg 100% 27%);
+        font-weight: bold;
+    }
+
+    span.OpVec2 {
+        background-color: hsl(100deg 100% 90%);
+        font-weight: bold;
+    }
+
+    span.OpVec4 {
+        background-color: hsl(100deg 100% 80%);
+        font-weight: bold;
+    }
+
+    span.Memory {
+        color: #d22;
+        font-weight: bold;
+    }
+
+    span.Pred {
+        background-color: #ffe8bd;
+        font-weight: bold;
+    }
+
+    span.Label {
+        background-color: #bde4ff;
+        font-weight: bold;
+    }
+
     div.show-hide-btn-wrapper {
         position: relative;
         width: 0;
@@ -89,9 +187,13 @@
 
     div.show-hide-btn {
         position: absolute;
-        left: -12px;
-        width: 12px;
-        height: 12px;
+        left: -14px;
+        top: 4px;
+        font-size: 8pt;
+    }
+
+    div.show-hide-btn:hover {
+        color: #c30000;
     }
 
     button.icon-btn {
@@ -170,7 +272,6 @@
         text-indent: -30px;
     }
 
-    /* Line Numbers CSS */
     p.WrapLine,
     span.IfSpan,
     span.ClosingBrace,
@@ -218,112 +319,57 @@
         opacity: 0;
     }
 
-    /* ========================================================================= */
-    /* Normal CSS */
-    
-	a,
-    a:hover,
-    a:visited,
-    a:active {
-        color: inherit;
-        text-decoration: none;
+    /* IR Viz Section CSS */
+    div.fn-wrapper {
+        background-color: #f0f0f0;
+        border: 1px dashed grey;
+        border-radius: 5px;
+        margin-bottom: 15px;
+        padding: 5px;
+        width: max-content;
     }
 
-	b {
-		font-weight: normal;
-	}
+    div.box {
+        border: 1px dashed grey;
+        border-radius: 5px;
+        margin: 5px;
+        padding: 5px;
+        display: flex;
+        width: max-content;
+    }
 
-	b.Highlight {
-		font-weight: bold;
-		background-color: #DDD;
-	}
+    div.fn-header {
+        display: flex;
+        margin-bottom: 10px;
+    }
 
-	span.Highlight {
-		font-weight: bold;
-		background-color: #FF0;
-	}
+    div.fn-call {
+        background-color: #fabebe;
+    }
 
-	span.OpF32 {
-		color: hsl(106deg 100% 40%);
-		font-weight: bold;
-	}
+    div.fn-call button {
+        background-color: #fff;
+        border: 1px solid #d5d9d9;
+        border-radius: 8px;
+        box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0;
+        position: relative;
+        text-align: center;
+        vertical-align: middle;
+        margin-left: 5px;
+        font-size: 15px;
+        padding: 3px;
+    }
 
-	span.OpF64 {
-		color: hsl(106deg 100% 30%);
-		font-weight: bold;
-	}
+    div.fn-call button {
+        background-color: #f7fafa;
+    }
 
-	span.OpB8 {
-		color: hsl(208deg 100% 80%);
-		font-weight: bold;
-	}
+    .tf-tree {
+        overflow: unset;
+    }
 
-	span.OpB16 {
-		color: hsl(208deg 100% 70%);
-		font-weight: bold;
-	}
-
-	span.OpB32 {
-		color: hsl(208deg 100% 60%);
-		font-weight: bold;
-	}
-
-	span.OpB64 {
-		color: hsl(208deg 100% 50%);
-		font-weight: bold;
-	}
-
-	span.OpI8 {
-		color: hsl(46deg 100% 45%);
-		font-weight: bold;
-	}
-
-	span.OpI16 {
-		color: hsl(46deg 100% 40%);
-		font-weight: bold;
-	}
-
-	span.OpI32 {
-		color: hsl(46deg 100% 34%);
-		font-weight: bold;
-	}
-
-	span.OpI64 {
-		color: hsl(46deg 100% 27%);
-		font-weight: bold;
-	}
-
-	span.OpVec2 {
-		background-color: hsl(100deg 100% 90%);
-		font-weight: bold;
-	}
-
-	span.OpVec4 {
-		background-color: hsl(100deg 100% 80%);
-		font-weight: bold;
-	}
-
-	span.Memory {
-		color: #d22;
-		font-weight: bold;
-	}
-
-	span.Pred {
-		background-color: #ffe8bd;
-		font-weight: bold;
-	}
-
-	span.Label {
-		background-color: #bde4ff;
-		font-weight: bold;
-	}
-
-	.tf-tree {
-		overflow: unset;
-	}
-
-	/* Additional Code Visualization CSS */
-	span.ButtonSpacer {
+    /* Currently Unused */
+    span.ButtonSpacer {
 		width: 5px;
 		color: transparent;
 		display: inline-block;
@@ -364,7 +410,7 @@
 		color: red;
 	}
 
-	.assemblyIcon {
+	.assemblyIcon:hover {
 		color: red;
 	}
 
@@ -606,14 +652,7 @@
 		font-size: 12px;
 	}
 
-	div.box {
-		border: 1px dashed grey;
-		border-radius: 5px;
-		margin: 5px;
-		padding: 5px;
-		display: flex;
-		width: max-content;
-	}
+	
 
 	div.boxHeader {
 		padding: 5px;
@@ -626,23 +665,7 @@
 		width: 7px;
 	}
 
-	div.FunctionCallBox {
-		background-color: #fabebe;
-	}
-
-	div.FunctionBox {
-		background-color: #f0f0f0;
-		border: 1px dashed grey;
-		border-radius: 5px;
-		margin-bottom: 15px;
-		padding: 5px;
-		width: max-content;
-	}
-
-	div.functionHeader {
-		display: flex;
-		margin-bottom: 10px;
-	}
+	
 
 	div.ProducerConsumerBox {
 		background-color: #99bbff;
@@ -749,22 +772,7 @@
 		margin-left: 0px;
 	}
 
-	.functionButton {
-		background-color: #fff;
-		border: 1px solid #d5d9d9;
-		border-radius: 8px;
-		box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0;
-		position: relative;
-		text-align: center;
-		vertical-align: middle;
-		margin-left: 5px;
-		font-size: 15px;
-		padding: 3px;
-	}
-
-	.functionButton:hover {
-		background-color: #f7fafa;
-	}
+	
 
 	/* StmtHierarchy CSS */
 	.arrow {
