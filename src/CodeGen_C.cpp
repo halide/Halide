@@ -2201,6 +2201,10 @@ string CodeGen_C::print_expr(const Expr &e) {
 
 string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
     string value = print_expr(e);
+    if (e.type() == t) {
+        // This is uncommon but does happen occasionally
+        return value;
+    }
     string type = print_type(t);
     if (t.is_vector() &&
         t.lanes() == e.type().lanes() &&
@@ -2405,12 +2409,16 @@ void CodeGen_C::visit(const IntImm *op) {
 }
 
 void CodeGen_C::visit(const UIntImm *op) {
-    static const char *const suffixes[3] = {
-        "ull",  // PlainC
-        "ul",   // OpenCL
-        "",     // HLSL
-    };
-    print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
+    if (op->type == UInt(1)) {
+        id = op->value ? "true" : "false";
+    } else {
+        static const char *const suffixes[3] = {
+            "ull",  // PlainC
+            "ul",   // OpenCL
+            "",     // HLSL
+        };
+        print_assignment(op->type, "static_cast<" + print_type(op->type) + ">(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
+    }
 }
 
 void CodeGen_C::visit(const StringImm *op) {
