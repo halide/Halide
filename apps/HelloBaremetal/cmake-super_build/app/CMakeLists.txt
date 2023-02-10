@@ -12,11 +12,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
-if (BAREMETAL)
-    # Avoid handling Threads library as mandatory dependency in find_package()
-    set(Halide_NO_THREADS ON)
-endif()
-
 # Import Halide. Instead of the package Halide, HalideHelpers is enough as we don't use JIT mode.
 find_package(HalideHelpers REQUIRED)
 
