@@ -1387,7 +1387,7 @@ string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     // If we are generating a typed nullptr, just emit that as a literal, with no intermediate,
     // to avoid ugly code like
     //
-    //      uint64_t _32 = static_cast<uint64_t>(0ull);
+    //      uint64_t _32 = (uint64_t)(0ull);
     //      auto *_33 = (void *)(_32);
     //
     // and instead just do
@@ -2429,7 +2429,7 @@ void CodeGen_C::visit(const UIntImm *op) {
             "ul",   // OpenCL
             "",     // HLSL
         };
-        print_assignment(op->type, "static_cast<" + print_type(op->type) + ">(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
+        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
     }
 }
 
