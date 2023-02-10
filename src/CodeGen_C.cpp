@@ -2439,24 +2439,10 @@ void CodeGen_C::visit(const StringImm *op) {
     id = oss.str();
 }
 
-// NaN is the only float/double for which this is true... and
-// surprisingly, there doesn't seem to be a portable isnan function
-// (dsharlet).
-template<typename T>
-static bool isnan(T x) {
-    return x != x;
-}
-
-template<typename T>
-static bool isinf(T x) {
-    return std::numeric_limits<T>::has_infinity && (x == std::numeric_limits<T>::infinity() ||
-                                                    x == -std::numeric_limits<T>::infinity());
-}
-
 void CodeGen_C::visit(const FloatImm *op) {
-    if (isnan(op->value)) {
+    if (std::isnan(op->value)) {
         id = "nan_f32()";
-    } else if (isinf(op->value)) {
+    } else if (std::isinf(op->value)) {
         if (op->value > 0) {
             id = "inf_f32()";
         } else {
