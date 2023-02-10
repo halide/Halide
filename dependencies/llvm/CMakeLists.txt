@@ -43,6 +43,9 @@ endif ()
 separate_arguments(LLVM_DEFINITIONS NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 set(Halide_LLVM_DEFS ${LLVM_DEFINITIONS} $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
 
+# Note, removing -D_GLIBCXX_ASSERTIONS is a workaround for https://reviews.llvm.org/D142279
+list(REMOVE_ITEM Halide_LLVM_DEFS "-D_GLIBCXX_ASSERTIONS")
+
 ##
 # Options for which version of LLVM to use
 ##
