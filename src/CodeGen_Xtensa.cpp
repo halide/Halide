@@ -116,6 +116,13 @@ class ScopedDmaInitializer {
     stream << headers;
 }
 
+void CodeGen_Xtensa::compile(const Module &module) {
+    CodeGen_C::compile(module);
+}
+
+void CodeGen_Xtensa::compile(const Buffer<> &buffer) {
+    CodeGen_C::compile(buffer);
+}
 void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, std::string> &metadata_name_map) {
     // Don't put non-external function declarations in headers.
     if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
