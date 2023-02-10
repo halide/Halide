@@ -329,19 +329,21 @@ inline int GetCycleCount() {
 #define HALIDE_MAYBE_UNUSED __attribute__ ((unused))
 
 #if XCHAL_VISION_TYPE == 7
-typedef int8_t common_int8x64_t __attribute__((ext_vector_type(64)));
-typedef uint8_t common_uint8x64_t __attribute__((ext_vector_type(64)));
-typedef int16_t common_int16x32_t __attribute__((ext_vector_type(32)));
-typedef uint16_t common_uint16x32_t __attribute__((ext_vector_type(32)));
-typedef int32_t common_int32x16_t __attribute__((ext_vector_type(16)));
-typedef uint32_t common_uint32x16_t __attribute__((ext_vector_type(16)));
+using common_int8x64_t __attribute__((ext_vector_type(64))) = int8_t;
+using common_uint8x64_t __attribute__((ext_vector_type(64))) = uint8_t;
+using common_int16x32_t __attribute__((ext_vector_type(32))) = int16_t;
+using common_uint16x32_t __attribute__((ext_vector_type(32))) = uint16_t;
+using common_int32x16_t __attribute__((ext_vector_type(16))) = int32_t;
+using common_uint32x16_t __attribute__((ext_vector_type(16))) = uint32_t;
 #elif XCHAL_VISION_TYPE == 8
-typedef int8_t common_int8x128_t __attribute__((ext_vector_type(128)));
-typedef uint8_t common_uint8x128_t __attribute__((ext_vector_type(128)));
-typedef int16_t common_int16x64_t __attribute__((ext_vector_type(64)));
-typedef uint16_t common_uint16x64_t __attribute__((ext_vector_type(64)));
-typedef int32_t common_int32x32_t __attribute__((ext_vector_type(32)));
-typedef uint32_t common_uint32x32_t __attribute__((ext_vector_type(32)));
+using common_int8x128_t __attribute__((ext_vector_type(128))) = int8_t;
+using common_uint8x128_t __attribute__((ext_vector_type(128))) = uint8_t;
+using common_int16x64_t __attribute__((ext_vector_type(64))) = int16_t;
+using common_uint16x64_t __attribute__((ext_vector_type(64))) = uint16_t;
+using common_int32x32_t __attribute__((ext_vector_type(32))) = int32_t;
+using common_uint32x32_t __attribute__((ext_vector_type(32))) = uint32_t;
+#else
+#error "Unsupported value for XCHAL_VISION_TYPE"
 #endif
 
 using int48_t = xb_int48;
@@ -838,7 +840,10 @@ template<>
 HALIDE_ALWAYS_INLINE native_mask_i16_x2 convert<native_mask_i16_x2, native_mask_i8>(const native_mask_i8& src);
 
 template <>
-HALIDE_ALWAYS_INLINE native_vector_i16_x2 load_predicated<native_vector_i16_x2, native_vector_i32_x4, native_mask_i8 , int16_t, 2 * VECTOR_WIDTH_I16>(const void *base, const native_vector_i32_x4& offset, const native_mask_i8& predicate) {
+HALIDE_ALWAYS_INLINE
+native_vector_i16_x2
+load_predicated<native_vector_i16_x2, native_vector_i32_x4, native_mask_i8 , int16_t, 2 * VECTOR_WIDTH_I16>(
+        const void *base, const native_vector_i32_x4& offset, const native_mask_i8& predicate) {
     native_mask_i16_x2 c_predicate = convert<native_mask_i16_x2, native_mask_i8>(predicate);
     native_vector_i16 p1 = load_predicated<native_vector_i16, native_vector_i32_x2, native_mask_i16, int16_t, VECTOR_WIDTH_I16>(
         base,
@@ -3338,14 +3343,13 @@ void CodeGen_Xtensa::visit(const Div *op) {
         string sa = print_expr(op->a);
         string sb = print_expr(op->b);
         // Just cast to clang vector types and use division defined on them.
-        if (is_native_xtensa_vector<uint8_t>(op->type, target)) {
-            print_assignment(op->type, "(common_uint8x" + std::to_string(op->type.lanes()) + "_t)" + sa + " / (common_uint8x" + std::to_string(op->type.lanes()) + "_t)" + sb);
-        } else if (is_native_xtensa_vector<int8_t>(op->type, target)) {
-            print_assignment(op->type, "(common_int8x" + std::to_string(op->type.lanes()) + "_t)" + sa + " / (common_int8x" + std::to_string(op->type.lanes()) + "_t)" + sb);
-        } else if (is_native_xtensa_vector<int32_t>(op->type, target)) {
-            print_assignment(op->type, "(common_int32x" + std::to_string(op->type.lanes()) + "_t)" + sa + " / (common_int32x" + std::to_string(op->type.lanes()) + "_t)" + sb);
-        } else if (is_native_xtensa_vector<uint32_t>(op->type, target)) {
-            print_assignment(op->type, "(common_uint32x" + std::to_string(op->type.lanes()) + "_t)" + sa + " / (common_uint32x" + std::to_string(op->type.lanes()) + "_t)" + sb);
+        if (is_native_xtensa_vector<uint8_t>(op->type, target) ||
+            is_native_xtensa_vector<int8_t>(op->type, target) ||
+            is_native_xtensa_vector<int32_t>(op->type, target) ||
+            is_native_xtensa_vector<uint32_t>(op->type, target)) {
+            print_assignment(
+                op->type,
+                "(common_" + print_type(op->type) + ")" + sa + " / (common_" + print_type(op->type) + ")" + sb);
         } else {
             print_assignment(op->type, sa + " / " + sb);
         }
@@ -3356,7 +3360,7 @@ void CodeGen_Xtensa::visit(const Mod *op) {
     if (is_native_xtensa_vector<int32_t>(op->type, target)) {
         string sa = print_expr(op->a);
         string sb = print_expr(op->b);
-        string common_type = "common_int32x" + std::to_string(op->type.lanes()) + "_t";
+        string common_type = "common_" + print_type(op->type);
         print_assignment(op->type, "(" + common_type + ")" + sa + " % (" + common_type + ")" + sb);
     } else {
         CodeGen_C::visit(op);
