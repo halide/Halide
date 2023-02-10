@@ -143,14 +143,14 @@ inline bool is_finite_f32(float x) {return isfinite(x);}
 inline bool is_finite_f64(double x) {return isfinite(x);}
 
 template<typename A, typename B>
-inline A reinterpret(const B &b) {
+inline A halide_reinterpret_bits(const B &b) {
     static_assert(sizeof(A) == sizeof(B), "type size mismatch");
     A a;
     memcpy(&a, &b, sizeof(a));
     return a;
 }
 inline float float_from_bits(uint32_t bits) {
-    return reinterpret<float, uint32_t>(bits);
+    return halide_reinterpret_bits<float, uint32_t>(bits);
 }
 
 template<typename T>
@@ -1375,14 +1375,14 @@ string CodeGen_C::print_type(Type type, AppendSpaceIfNeeded space_option) {
 string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     ostringstream oss;
     if (type.is_handle() || e.type().is_handle()) {
-        // Use a c-style cast if either src or dest is a handle --
+        // Use a reinterpret_cast<> if either src or dest is a handle --
         // note that although Halide declares a "Handle" to always be 64 bits,
         // the source "handle" might actually be a 32-bit pointer (from
-        // a function parameter), so calling reinterpret<> (which just memcpy's)
+        // a function parameter), so calling halide_reinterpret_bits<> (which just memcpy's)
         // would be garbage-producing.
-        oss << "(" << print_type(type) << ")";
+        oss << "reinterpret_cast<" << print_type(type) << ">";
     } else {
-        oss << "reinterpret<" << print_type(type) << ">";
+        oss << "halide_reinterpret_bits<" << print_type(type) << ">";
     }
     oss << "(" << print_expr(e) << ")";
     return oss.str();
@@ -2206,8 +2206,10 @@ string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
         t.lanes() == e.type().lanes() &&
         t != e.type()) {
         return print_assignment(t, type + "_ops::convert_from<" + print_type(e.type()) + ">(" + value + ")");
+    } else if (t.is_handle()) {
+        return print_assignment(t, "reinterpret_cast<" + type + ">(" + value + ")");
     } else {
-        return print_assignment(t, "(" + type + ")(" + value + ")");
+        return print_assignment(t, "static_cast<" + type + ">(" + value + ")");
     }
 }
 
@@ -2400,7 +2402,7 @@ void CodeGen_C::visit(const IntImm *op) {
             "l",   // OpenCL
             "",    // HLSL
         };
-        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
+        print_assignment(op->type, "static_cast<" + print_type(op->type) + ">(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
     }
 }
 
@@ -2478,7 +2480,7 @@ void CodeGen_C::visit(const Call *op) {
         rhs << "halide_debug_to_file(_ucon, "
             << "\"" << filename << "\", "
             << typecode
-            << ", (struct halide_buffer_t *)" << buffer << ")";
+            << ", reinterpret_cast<struct halide_buffer_t *>(" << buffer << ")";
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
@@ -2594,8 +2596,7 @@ void CodeGen_C::visit(const Call *op) {
             string buf_name = unique_name('b');
             stream << "halide_buffer_t " << buf_name << ";\n";
             rhs << "&" << buf_name;
-        } else if (op->type == type_of<struct halide_semaphore_t *>() &&
-                   sz && *sz == 16) {
+        } else if (op->type == type_of<struct halide_semaphore_t *>() && sz && *sz == 16) {
             stream << get_indent();
             string semaphore_name = unique_name("sema");
             stream << "halide_semaphore_t " << semaphore_name << ";\n";
@@ -2606,13 +2607,13 @@ void CodeGen_C::visit(const Call *op) {
             stream << get_indent();
             string array_name = unique_name('a');
             stream << "uint64_t " << array_name << "[" << size << "];\n";
-            rhs << "(" << print_type(op->type) << ")(&" << array_name << ")";
+            rhs << "reinterpret_cast<" << print_type(op->type) << ">(&" << array_name << ")";
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
         if (op->args.empty()) {
             internal_assert(op->type.handle_type);
             // Add explicit cast so that different structs can't cache to the same value
-            rhs << "(" << print_type(op->type) << ")(NULL)";
+            rhs << "static_cast<" << print_type(op->type) << ">(nullptr)";
         } else if (op->type == type_of<halide_dimension_t *>()) {
             // Emit a shape
 
@@ -2681,7 +2682,7 @@ void CodeGen_C::visit(const Call *op) {
             // find a better way to do this. We dodge the problem for
             // the specific case of buffer shapes in the case above.
             if (op->type.handle_type) {
-                rhs << "(" << print_type(op->type) << ")";
+                rhs << "reinterpret_cast<" << print_type(op->type) << ">";
             }
             rhs << "(&" << struct_name << ")";
         }
@@ -2700,7 +2701,7 @@ void CodeGen_C::visit(const Call *op) {
         std::string struct_prototype = print_expr(op->args[1]);
         const int64_t *index = as_const_int(op->args[2]);
         internal_assert(index != nullptr);
-        rhs << "((decltype(" << struct_prototype << "))"
+        rhs << "reinterpret_cast<decltype(" << struct_prototype << ")>("
             << struct_instance << ")->f_" << *index;
     } else if (op->is_intrinsic(Call::get_user_context)) {
         internal_assert(op->args.empty());
