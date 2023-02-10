@@ -168,10 +168,6 @@ public:
                 .unroll(c);
         } else {
             int vec = get_target().natural_vector_size(UInt(16));
-            if (get_target().has_feature(Target::Xtensa)) {
-                // Native vector size for 16-bit data.
-                vec = 32;
-            }
             bool use_hexagon = get_target().has_feature(Target::HVX);
 
             for (Func f : intermediates) {
@@ -522,10 +518,6 @@ void CameraPipe::generate() {
         if (get_target().has_feature(Target::HVX)) {
             vec = 64;
         }
-        if (get_target().has_feature(Target::Xtensa)) {
-            // Native vector size for 16-bit data.
-            vec = 32;
-        }
 
         processed
             .compute_root()
@@ -549,7 +541,7 @@ void CameraPipe::generate() {
             denoised.prefetch(input, y, 2);
         }
 
-        int deinterleaved_vector_size = get_target().has_feature(Target::Xtensa) ? vec : vec * 2;
+        const int deinterleaved_vector_size = get_target().has_feature(Target::Xtensa) ? vec : vec * 2;
 
         deinterleaved
             .compute_at(processed, yi)
