@@ -1384,7 +1384,19 @@ string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     } else {
         oss << "reinterpret<" << print_type(type) << ">";
     }
-    oss << "(" << print_expr(e) << ")";
+    // If we are generating a typed nullptr, just emit that as a literal, with no intermediate,
+    // to avoid ugly code like
+    //
+    //      uint64_t _32 = static_cast<uint64_t>(0ull);
+    //      auto *_33 = (void *)(_32);
+    //
+    // and instead just do
+    //      auto *_33 = (void *)(nullptr);
+    if (type.is_handle() && is_const_zero(e)) {
+        oss << "(nullptr)";
+    } else {
+        oss << "(" << print_expr(e) << ")";
+    }
     return oss.str();
 }
 
