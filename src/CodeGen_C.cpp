@@ -1934,6 +1934,10 @@ void CodeGen_C::compile(const Module &input) {
     }
 }
 
+Stmt CodeGen_C::preprocess_function_body(const Stmt &stmt) {
+    return stmt;
+}
+
 void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_name_map) {
     // Don't put non-external function declarations in headers.
     if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
@@ -2020,7 +2024,8 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
                 stream << get_indent() << "halide_maybe_unused(_ucon);\n";
 
                 // Emit the body
-                print(f.body);
+                Stmt body_to_print = preprocess_function_body(f.body);
+                print(body_to_print);
 
                 // Return success.
                 stream << get_indent() << "return 0;\n";

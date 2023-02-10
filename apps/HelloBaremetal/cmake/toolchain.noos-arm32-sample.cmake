@@ -22,11 +22,15 @@ set(CMAKE_CXX_FLAGS "${C_COMMON_FLAGS}")
 set(CMAKE_C_FLAGS "${C_COMMON_FLAGS}")
 set(CMAKE_ASM_FLAGS "${C_COMMON_FLAGS}")
 
-# To surpress linker warning "missing .note.GNU-stack section" by GCC 12
+# To suppress linker warning "missing .note.GNU-stack section" by GCC 12
 set(CMAKE_EXE_LINKER_FLAGS "-z noexecstack")
 
 # Halide target for Halide Generator
 set(Halide_TARGET "arm-32-noos-semihosting")
+
+# To prevent Threads and DL libs from being linked to runtime, as this toolchain doesn't have them
+set(Halide_RUNTIME_NO_THREADS ON)
+set(Halide_RUNTIME_NO_DL_LIBS ON)
 
 # Switch for baremetal specific build steps
 set(BAREMETAL ON)

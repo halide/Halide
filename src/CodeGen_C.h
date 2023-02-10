@@ -70,6 +70,18 @@ protected:
     virtual void compile(const Buffer<> &buffer);
     // @}
 
+    /** This is a hook that subclasses can use to transform a function body
+     * just before it is emitted -- e.g., to transform the IR to code that
+     * is easier to recognize and emit. The default implementation simply
+     * returns the input unchanged.
+     *
+     * This hook will always be called after the function declaration and
+     * opening brace is emitted, so in addition to (possibly) returning
+     * a modified Stmt, this function may also emit C++ code to the default
+     * stream if it wishes to add some prologue at the start of the function.
+     */
+    virtual Stmt preprocess_function_body(const Stmt &stmt);
+
     /** An ID for the most recently generated ssa variable */
     std::string id;
 
