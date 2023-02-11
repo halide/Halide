@@ -66,8 +66,8 @@ protected:
 
     /** Emit a declaration. */
     // @{
-    virtual void compile(const LoweredFunc &func, const MetadataNameMap &metadata_name_map);
-    virtual void compile(const Buffer<> &buffer);
+    void compile(const LoweredFunc &func, const MetadataNameMap &metadata_name_map);
+    void compile(const Buffer<> &buffer);
     // @}
 
     /** This is a hook that subclasses can use to transform a function body
