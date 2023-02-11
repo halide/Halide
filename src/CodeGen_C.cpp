@@ -1384,7 +1384,19 @@ string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     } else {
         oss << "reinterpret<" << print_type(type) << ">";
     }
-    oss << "(" << print_expr(e) << ")";
+    // If we are generating a typed nullptr, just emit that as a literal, with no intermediate,
+    // to avoid ugly code like
+    //
+    //      uint64_t _32 = (uint64_t)(0ull);
+    //      auto *_33 = (void *)(_32);
+    //
+    // and instead just do
+    //      auto *_33 = (void *)(nullptr);
+    if (type.is_handle() && is_const_zero(e)) {
+        oss << "(nullptr)";
+    } else {
+        oss << "(" << print_expr(e) << ")";
+    }
     return oss.str();
 }
 
@@ -2206,6 +2218,10 @@ string CodeGen_C::print_expr(const Expr &e) {
 
 string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
     string value = print_expr(e);
+    if (e.type() == t) {
+        // This is uncommon but does happen occasionally
+        return value;
+    }
     string type = print_type(t);
     if (t.is_vector() &&
         t.lanes() == e.type().lanes() &&
@@ -2410,12 +2426,16 @@ void CodeGen_C::visit(const IntImm *op) {
 }
 
 void CodeGen_C::visit(const UIntImm *op) {
-    static const char *const suffixes[3] = {
-        "ull",  // PlainC
-        "ul",   // OpenCL
-        "",     // HLSL
-    };
-    print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
+    if (op->type == UInt(1)) {
+        id = op->value ? "true" : "false";
+    } else {
+        static const char *const suffixes[3] = {
+            "ull",  // PlainC
+            "ul",   // OpenCL
+            "",     // HLSL
+        };
+        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
+    }
 }
 
 void CodeGen_C::visit(const StringImm *op) {
@@ -2424,24 +2444,10 @@ void CodeGen_C::visit(const StringImm *op) {
     id = oss.str();
 }
 
-// NaN is the only float/double for which this is true... and
-// surprisingly, there doesn't seem to be a portable isnan function
-// (dsharlet).
-template<typename T>
-static bool isnan(T x) {
-    return x != x;
-}
-
-template<typename T>
-static bool isinf(T x) {
-    return std::numeric_limits<T>::has_infinity && (x == std::numeric_limits<T>::infinity() ||
-                                                    x == -std::numeric_limits<T>::infinity());
-}
-
 void CodeGen_C::visit(const FloatImm *op) {
-    if (isnan(op->value)) {
+    if (std::isnan(op->value)) {
         id = "nan_f32()";
-    } else if (isinf(op->value)) {
+    } else if (std::isinf(op->value)) {
         if (op->value > 0) {
             id = "inf_f32()";
         } else {
