@@ -120,18 +120,6 @@ class ScopedDmaInitializer {
     stream << headers;
 }
 
-void CodeGen_Xtensa::compile(const Module &module) {
-    CodeGen_C::compile(module);
-}
-
-void CodeGen_Xtensa::compile(const Buffer<> &buffer) {
-    CodeGen_C::compile(buffer);
-}
-
-void CodeGen_Xtensa::compile(const LoweredFunc &func, const MetadataNameMap &metadata_name_map) {
-    CodeGen_C::compile(func, metadata_name_map);
-}
-
 Stmt CodeGen_Xtensa::preprocess_function_body(const Stmt &stmt) {
     Stmt new_body = match_xtensa_patterns(stmt, target);
 
