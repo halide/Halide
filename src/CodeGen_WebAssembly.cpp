@@ -6,10 +6,12 @@
 #include "IRMatch.h"
 #include "IROperator.h"
 #include "LLVM_Headers.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
 
+using std::pair;
 using std::string;
 using std::vector;
 
@@ -193,6 +195,12 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
         {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
     };
+    static const vector<pair<Expr, Expr>> cast_rewrites = {
+        // Some double-narrowing saturating casts can be better expressed as
+        // combinations of single-narrowing saturating casts.
+        {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
+        {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
+    };
     // clang-format on
 
     if (op->type.is_vector()) {
@@ -206,6 +214,14 @@ void CodeGen_WebAssembly::visit(const Call *op) {
                 if (value) {
                     return;
                 }
+            }
+        }
+
+        for (const auto &i : cast_rewrites) {
+            if (expr_match(i.first, op, matches)) {
+                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
+                value = codegen(replacement);
+                return;
             }
         }
     }

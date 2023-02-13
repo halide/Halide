@@ -38,7 +38,6 @@ set(RUNTIME_CPP
     metal
     metal_objc_arm
     metal_objc_x86
-    mips_cpu_features
     module_aot_ref_count
     module_jit_ref_count
     msan
@@ -52,6 +51,7 @@ set(RUNTIME_CPP
     osx_host_cpu_count
     osx_opengl_context
     osx_yield
+    posix_aligned_alloc
     posix_allocator
     posix_clock
     posix_error_handler
@@ -82,8 +82,8 @@ set(RUNTIME_CPP
     wasm_cpu_features
     windows_clock
     windows_cuda
-    windows_d3d12compute_x86
     windows_d3d12compute_arm
+    windows_d3d12compute_x86
     windows_get_symbol
     windows_io
     windows_opencl
@@ -101,7 +101,6 @@ set(RUNTIME_LL
     arm
     arm_no_neon
     hvx_128
-    mips
     posix_math
     powerpc
     ptx_dev
@@ -253,14 +252,14 @@ foreach (i IN LISTS RUNTIME_CPP)
                 target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
             else()
                 add_custom_command(OUTPUT "${LL}"
-                                   COMMAND ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
+                                   COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
                                    DEPENDS "${SOURCE}"
                                    DEPFILE "${basename}.d"
                                    VERBATIM)
             endif()
 
             add_custom_command(OUTPUT "${BC}"
-                               COMMAND llvm-as "${LL}" -o "${BC}"
+                               COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL}" -o "${BC}"
                                DEPENDS "${LL}"
                                VERBATIM)
 
@@ -287,7 +286,7 @@ foreach (i IN LISTS RUNTIME_LL)
                        VERBATIM)
 
     add_custom_command(OUTPUT "${BC}"
-                       COMMAND llvm-as "${LL_TRANSFORMED}" -o "${BC}"
+                       COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL_TRANSFORMED}" -o "${BC}"
                        DEPENDS "${LL_TRANSFORMED}"
                        VERBATIM)
     add_custom_command(OUTPUT "${INITMOD}"

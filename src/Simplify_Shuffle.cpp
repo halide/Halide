@@ -321,47 +321,5 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
     }
 }
 
-template<typename T>
-Expr Simplify::hoist_slice_vector(Expr e) {
-    const T *op = e.as<T>();
-    internal_assert(op);
-
-    const Shuffle *shuffle_a = op->a.template as<Shuffle>();
-    const Shuffle *shuffle_b = op->b.template as<Shuffle>();
-
-    internal_assert(shuffle_a && shuffle_b &&
-                    shuffle_a->is_slice() &&
-                    shuffle_b->is_slice());
-
-    if (shuffle_a->indices != shuffle_b->indices) {
-        return e;
-    }
-
-    const std::vector<Expr> &slices_a = shuffle_a->vectors;
-    const std::vector<Expr> &slices_b = shuffle_b->vectors;
-    if (slices_a.size() != slices_b.size()) {
-        return e;
-    }
-
-    for (size_t i = 0; i < slices_a.size(); i++) {
-        if (slices_a[i].type() != slices_b[i].type()) {
-            return e;
-        }
-    }
-
-    vector<Expr> new_slices;
-    for (size_t i = 0; i < slices_a.size(); i++) {
-        new_slices.push_back(T::make(slices_a[i], slices_b[i]));
-    }
-
-    return Shuffle::make(new_slices, shuffle_a->indices);
-}
-
-template Expr Simplify::hoist_slice_vector<Add>(Expr);
-template Expr Simplify::hoist_slice_vector<Sub>(Expr);
-template Expr Simplify::hoist_slice_vector<Mul>(Expr);
-template Expr Simplify::hoist_slice_vector<Min>(Expr);
-template Expr Simplify::hoist_slice_vector<Max>(Expr);
-
 }  // namespace Internal
 }  // namespace Halide

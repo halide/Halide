@@ -268,6 +268,7 @@ tests(GROUPS correctness
       simd_op_check_arm.cpp
       simd_op_check_hvx.cpp
       simd_op_check_powerpc.cpp
+      simd_op_check_riscv.cpp
       simd_op_check_wasm.cpp
       simd_op_check_x86.cpp
       simplified_away_embedded_image.cpp
@@ -287,6 +288,7 @@ tests(GROUPS correctness
       split_reuse_inner_name_bug.cpp
       split_store_compute.cpp
       stack_allocations.cpp
+      stage_strided_loads.cpp
       stencil_chain_in_update_definitions.cpp
       stmt_to_html.cpp
       storage_folding.cpp
@@ -380,8 +382,11 @@ tests(GROUPS correctness multithreaded
       unroll_huge_mux.cpp
       )
 
-# Make sure the test that needs image_io has it
+# Make sure the test that needs Halide::ImageIO has it
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
+
+# Make sure the test that needs Halide::ThreadPool has it
+target_link_libraries(correctness_gpu_allocation_cache PRIVATE Halide::ThreadPool)
 
 # Tests which use external funcs need to enable exports.
 set_target_properties(correctness_async

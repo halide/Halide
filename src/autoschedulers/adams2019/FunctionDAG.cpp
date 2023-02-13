@@ -874,8 +874,11 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                 // Get the bounds estimate
                 map<string, Span> estimates;
                 for (const auto &b : consumer.schedule().estimates()) {
-                    int64_t i_min = *as_const_int(b.min);
-                    int64_t i_extent = *as_const_int(b.extent);
+                    const int64_t *i_min = as_const_int(b.min);
+                    const int64_t *i_extent = as_const_int(b.extent);
+                    user_assert(i_min && i_extent)
+                        << "Min/extent of estimate or bound is not constant in \"" << consumer.name()
+                        << "\", var:" << b.var << ", min:" << b.min << ", extent:" << b.extent;
 
                     if ((false)) {  // Intentional dead code. Extra parens to pacify clang-tidy.
                         // Some methods we compare to compile for
@@ -891,9 +894,9 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                         // like unroll across color channels, so
                         // it affects the scheduling space.
                         Func(node.func).bound(b.var, b.min, b.extent);
-                        estimates[b.var] = Span(i_min, i_min + i_extent - 1, true);
+                        estimates[b.var] = Span(*i_min, *i_min + *i_extent - 1, true);
                     } else {
-                        estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
+                        estimates[b.var] = Span(*i_min, *i_min + *i_extent - 1, false);
                     }
                 }
                 for (const auto &b : consumer.schedule().bounds()) {

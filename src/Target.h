@@ -40,7 +40,6 @@ struct Target {
         ArchUnknown = 0,
         X86,
         ARM,
-        MIPS,
         Hexagon,
         POWERPC,
         WebAssembly,
@@ -123,7 +122,6 @@ struct Target {
         HVX_v62 = halide_target_feature_hvx_v62,
         HVX_v65 = halide_target_feature_hvx_v65,
         HVX_v66 = halide_target_feature_hvx_v66,
-        HVX_shared_object = halide_target_feature_hvx_use_shared_object,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
         MSAN = halide_target_feature_msan,
@@ -143,10 +141,6 @@ struct Target {
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
         EmbedBitcode = halide_target_feature_embed_bitcode,
         EnableLLVMLoopOpt = halide_target_feature_enable_llvm_loop_opt,
-        // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-        // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-        // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-        DisableLLVMLoopOpt = halide_target_feature_disable_llvm_loop_opt,
         WasmSimd128 = halide_target_feature_wasm_simd128,
         WasmSignExt = halide_target_feature_wasm_signext,
         WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
@@ -171,6 +165,7 @@ struct Target {
         VulkanV10 = halide_target_feature_vulkan_version10,
         VulkanV12 = halide_target_feature_vulkan_version12,
         VulkanV13 = halide_target_feature_vulkan_version13,
+        Semihosting = halide_target_feature_semihosting,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

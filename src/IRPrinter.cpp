@@ -30,11 +30,8 @@ ostream &operator<<(ostream &out, const Type &type) {
         out << "float";
         break;
     case Type::Handle:
-        if (type.handle_type) {
-            out << "(" << type.handle_type->inner_name.name << " *)";
-        } else {
-            out << "(void *)";
-        }
+        // ensure that 'const' (etc) qualifiers are emitted when appropriate
+        out << "(" << type_to_c_type(type, false) << ")";
         break;
     case Type::BFloat:
         out << "bfloat";
@@ -887,9 +884,17 @@ void IRPrinter::visit(const Provide *op) {
 void IRPrinter::visit(const Allocate *op) {
     ScopedBinding<> bind(known_type, op->name);
     stream << get_indent() << "allocate " << op->name << "[" << op->type;
+    bool first = true;
     for (const auto &extent : op->extents) {
         stream << " * ";
+        if (first && op->padding) {
+            stream << "(";
+            first = false;
+        }
         print(extent);
+    }
+    if (op->padding) {
+        stream << " + " << op->padding << ")";
     }
     stream << "]";
     if (op->memory_type != MemoryType::Auto) {

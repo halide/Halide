@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.22)
 function(_Halide_cmake_target OUTVAR)
     # Get arch from CMake
     string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" arch)
-    list(TRANSFORM arch REPLACE "^.*(x86|arm|mips|powerpc|hexagon|wasm|riscv).*$" "\\1")
+    list(TRANSFORM arch REPLACE "^.*(x86|arm|powerpc|hexagon|wasm|riscv).*$" "\\1")
     list(TRANSFORM arch REPLACE "^i.?86.*$" "x86")
     list(TRANSFORM arch REPLACE "^(amd|ia|em)64t?$" "x86")
     list(TRANSFORM arch REPLACE "^ppc(64(le)?)?$" "powerpc")

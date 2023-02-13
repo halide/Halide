@@ -97,7 +97,7 @@ std::string mangle_vector_argument_type(const Type &arg_type, bool scalable, int
     return result;
 }
 
-/** A code generator that emits mips code from a given Halide stmt. */
+/** A code generator that emits RISC-V code from a given Halide stmt. */
 class CodeGen_RISCV : public CodeGen_Posix {
 public:
     /** Create a RISC-V code generator. Processor features can be
@@ -146,6 +146,11 @@ string CodeGen_RISCV::mattrs() const {
 
     if (target.has_feature(Target::RVV)) {
         arch_flags += ",+v";
+#if LLVM_VERSION >= 160
+        if (target.vector_bits != 0) {
+            arch_flags += ",+zvl" + std::to_string(target.vector_bits) + "b";
+        }
+#endif
     }
     return arch_flags;
 }

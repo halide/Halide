@@ -174,9 +174,6 @@ Target calculate_host_target() {
 #if __riscv
     Target::Arch arch = Target::RISCV;
 #else
-#if __mips__ || __mips || __MIPS__
-    Target::Arch arch = Target::MIPS;
-#else
 #if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
 #else
@@ -295,7 +292,6 @@ Target calculate_host_target() {
 #endif
 #endif
 #endif
-#endif
 
     return {os, arch, bits, processor, initial_features, vector_bits};
 }
@@ -306,7 +302,6 @@ bool is_using_hexagon(const Target &t) {
             t.has_feature(Target::HVX_v65) ||
             t.has_feature(Target::HVX_v66) ||
             t.has_feature(Target::HexagonDma) ||
-            t.has_feature(Target::HVX_shared_object) ||
             t.arch == Target::Hexagon);
 }
 
@@ -422,7 +417,6 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arch_unknown", Target::ArchUnknown},
     {"x86", Target::X86},
     {"arm", Target::ARM},
-    {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
     {"wasm", Target::WebAssembly},
@@ -512,7 +506,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"hvx_v62", Target::HVX_v62},
     {"hvx_v65", Target::HVX_v65},
     {"hvx_v66", Target::HVX_v66},
-    {"hvx_shared_object", Target::HVX_shared_object},
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
@@ -532,10 +525,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"check_unsafe_promises", Target::CheckUnsafePromises},
     {"hexagon_dma", Target::HexagonDma},
     {"embed_bitcode", Target::EmbedBitcode},
-    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-    {"disable_llvm_loop_opt", Target::DisableLLVMLoopOpt},
     {"enable_llvm_loop_opt", Target::EnableLLVMLoopOpt},
     {"wasm_simd128", Target::WasmSimd128},
     {"wasm_signext", Target::WasmSignExt},
@@ -561,6 +550,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"vk_v10", Target::VulkanV10},
     {"vk_v12", Target::VulkanV12},
     {"vk_v13", Target::VulkanV13},
+    {"semihosting", Target::Semihosting},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -882,9 +872,6 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_X86)
     bad |= arch == Target::X86;
-#endif
-#if !defined(WITH_MIPS)
-    bad |= arch == Target::MIPS;
 #endif
 #if !defined(WITH_POWERPC)
     bad |= arch == Target::POWERPC;
@@ -1292,7 +1279,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         Debug,
         HexagonDma,
         HVX,
-        HVX_shared_object,
         MSAN,
         SoftFloatABI,
         TSAN,
@@ -1326,7 +1312,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, HVX_shared_object, SanitizerCoverage\n"
+        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, SanitizerCoverage\n"
                            << "  this:  " << *this << "\n"
                            << "  other: " << other << "\n";
         return false;

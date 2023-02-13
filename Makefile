@@ -73,7 +73,8 @@ LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir | sed -e 's/\\/\//g' -e 's/\([a-zA
 LLVM_SYSTEM_LIBS=$(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g' | sed 's/-llibxml2.tbd/-lxml2/')
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
-LLVM_CXX_FLAGS = -std=c++17  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/;s/c++14/c++17/g'))
+# Note, removing -D_GLIBCXX_ASSERTIONS is a workaround for https://reviews.llvm.org/D142279
+LLVM_CXX_FLAGS = -std=c++17  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/ -D_GLIBCXX_ASSERTIONS / /g' -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/;s/c++14/c++17/g'))
 OPTIMIZE ?= -O3
 OPTIMIZE_FOR_BUILD_TIME ?= -O0
 
@@ -118,7 +119,6 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
 WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
-WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_RISCV ?= $(findstring riscv, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
@@ -152,9 +152,6 @@ X86_LLVM_CONFIG_LIB=$(if $(WITH_X86), x86, )
 
 ARM_CXX_FLAGS=$(if $(WITH_ARM), -DWITH_ARM, )
 ARM_LLVM_CONFIG_LIB=$(if $(WITH_ARM), arm, )
-
-MIPS_CXX_FLAGS=$(if $(WITH_MIPS), -DWITH_MIPS, )
-MIPS_LLVM_CONFIG_LIB=$(if $(WITH_MIPS), mips, )
 
 POWERPC_CXX_FLAGS=$(if $(WITH_POWERPC), -DWITH_POWERPC, )
 POWERPC_LLVM_CONFIG_LIB=$(if $(WITH_POWERPC), powerpc, )
@@ -229,7 +226,6 @@ CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
 CXX_FLAGS += $(OPENGLCOMPUTE_CXX_FLAGS)
 CXX_FLAGS += $(D3D12_CXX_FLAGS)
-CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
@@ -260,7 +256,6 @@ LLVM_STATIC_LIBFILES = \
 	$(METAL_LLVM_CONFIG_LIB) \
 	$(PTX_LLVM_CONFIG_LIB) \
 	$(AARCH64_LLVM_CONFIG_LIB) \
-	$(MIPS_LLVM_CONFIG_LIB) \
 	$(POWERPC_LLVM_CONFIG_LIB) \
 	$(HEXAGON_LLVM_CONFIG_LIB) \
 	$(AMDGPU_LLVM_CONFIG_LIB) \
@@ -475,7 +470,6 @@ SOURCE_FILES = \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_Metal_Dev.cpp \
-  CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
   CodeGen_Vulkan_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
@@ -602,6 +596,7 @@ SOURCE_FILES = \
   Solve.cpp \
   SpirvIR.cpp \
   SplitTuples.cpp \
+  StageStridedLoads.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
@@ -769,13 +764,13 @@ HEADER_FILES = \
   SlidingWindow.h \
   Solve.h \
   SplitTuples.h \
+  StageStridedLoads.h \
   StmtToHtml.h \
   StorageFlattening.h \
   StorageFolding.h \
   StrictifyFloat.h \
   Substitute.h \
   Target.h \
-  ThreadPool.h \
   Tracing.h \
   TrimNoOps.h \
   Tuple.h \
@@ -797,8 +792,8 @@ RUNTIME_CPP_COMPONENTS = \
   aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
-  allocation_cache \
   alignment_64 \
+  allocation_cache \
   android_clock \
   android_host_cpu_count \
   android_io \
@@ -822,8 +817,8 @@ RUNTIME_CPP_COMPONENTS = \
   halide_buffer_t \
   hexagon_cache_allocator \
   hexagon_cpu_features \
-  hexagon_dma_pool \
   hexagon_dma \
+  hexagon_dma_pool \
   hexagon_host \
   ios_io \
   linux_clock \
@@ -832,20 +827,20 @@ RUNTIME_CPP_COMPONENTS = \
   metal \
   metal_objc_arm \
   metal_objc_x86 \
-  mips_cpu_features \
   module_aot_ref_count \
   module_jit_ref_count \
   msan \
   msan_stubs \
   opencl \
-  openglcompute \
   opengl_egl_context \
   opengl_glx_context \
+  openglcompute \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
   osx_opengl_context \
   osx_yield \
+  posix_aligned_alloc \
   posix_allocator \
   posix_clock \
   posix_error_handler \
@@ -894,7 +889,6 @@ RUNTIME_LL_COMPONENTS = \
   arm \
   arm_no_neon \
   hvx_128 \
-  mips \
   posix_math \
   powerpc \
   ptx_dev \
@@ -1241,37 +1235,23 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_multitarget,$(GENERATOR_
 # remove AOT-CPP tests that don't (yet) work for C++ backend
 # (each tagged with the *known* blocking issue(s))
 
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_texture,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_acquire_release,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_define_extern_opencl,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_object_lifetime,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_only,$(GENERATOR_AOTCPP_TESTS))
+# sanitizercoverage relies on LLVM-specific hooks, so it will never work with the C backend
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_sanitizercoverage,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled))
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
+#GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_buffer_copy,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2075
+# https://github.com/halide/Halide/issues/7273
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2075
+# https://github.com/halide/Halide/issues/7272
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/4916
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
 
+# Build requirements are finicky, testing non-C++ backend is good enough here
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_multi_context_threaded,$(GENERATOR_AOTCPP_TESTS))
 
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
@@ -1398,7 +1378,7 @@ $(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(BIN_DIR)/libHalide.$(SHARED_E
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 # Runtime tests that test internals
 RUNTIME_TESTS_CXXFLAGS = -fno-rtti -fno-exceptions -fno-threadsafe-statics -Wno-builtin-declaration-mismatch -DCOMPILING_HALIDE_RUNTIME -DCOMPILING_HALIDE_RUNTIME_TESTS
@@ -1677,7 +1657,7 @@ $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(BIN_MULLAPUDI201
 # all have the form nested_externs_*).
 $(FILTERS_DIR)/nested_externs_%.a: $(BIN_DIR)/nested_externs.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g nested_externs_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+	$(CURDIR)/$< -g nested_externs_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context-c_plus_plus_name_mangling
 
 # Similarly, gpu_multi needs two different kernels to test compilation caching.
 # Also requies user-context.
@@ -1714,6 +1694,11 @@ $(BIN_DIR)/$(TARGET)/generator_aot_sanitizercoverage: $(ROOT_DIR)/test/generator
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter-out %.h,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
+# SanitizerCoverage test will never work with C++ backend
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_sanitizercoverage: $(ROOT_DIR)/test/generator/sanitizercoverage_aottest.cpp
+	@mkdir -p $(@D)
+	echo "SanitizerCoverage test will never work with C++ backend"
+	exit 1
 
 # alias has additional deps to link in
 $(BIN_DIR)/$(TARGET)/generator_aot_alias: $(ROOT_DIR)/test/generator/alias_aottest.cpp $(FILTERS_DIR)/alias.a $(FILTERS_DIR)/alias_with_offset_42.a $(FILTERS_DIR)/alias_Adams2019.a $(FILTERS_DIR)/alias_Li2018.a $(FILTERS_DIR)/alias_Mullapudi2016.a  $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
@@ -2242,6 +2227,10 @@ ifneq (,$(findstring clang version 16.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 17.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2262,7 +2251,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 140 150 160))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 140 150 160 170))
 LLVM_OK=yes
 endif
 
@@ -2319,6 +2308,7 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(PREFIX)/share/halide/tools
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(PREFIX)/lib/libHalide.$(SHARED_EXT) $(PREFIX)/lib/libHalide.$(SHARED_EXT)
 endif
@@ -2397,6 +2387,7 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)

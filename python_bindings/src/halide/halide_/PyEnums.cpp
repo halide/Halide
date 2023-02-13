@@ -86,7 +86,6 @@ void define_enums(py::module &m) {
         .value("ArchUnknown", Target::Arch::ArchUnknown)
         .value("X86", Target::Arch::X86)
         .value("ARM", Target::Arch::ARM)
-        .value("MIPS", Target::Arch::MIPS)
         .value("Hexagon", Target::Arch::Hexagon)
         .value("POWERPC", Target::Arch::POWERPC)
         .value("RISCV", Target::Arch::RISCV)
@@ -146,7 +145,6 @@ void define_enums(py::module &m) {
         .value("HVX_v62", Target::Feature::HVX_v62)
         .value("HVX_v65", Target::Feature::HVX_v65)
         .value("HVX_v66", Target::Feature::HVX_v66)
-        .value("HVX_shared_object", Target::Feature::HVX_shared_object)
         .value("FuzzFloatStores", Target::Feature::FuzzFloatStores)
         .value("SoftFloatABI", Target::Feature::SoftFloatABI)
         .value("MSAN", Target::Feature::MSAN)
@@ -166,10 +164,6 @@ void define_enums(py::module &m) {
         .value("HexagonDma", Target::Feature::HexagonDma)
         .value("EmbedBitcode", Target::Feature::EmbedBitcode)
         .value("EnableLLVMLoopOpt", Target::Feature::EnableLLVMLoopOpt)
-        // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-        // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-        // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-        .value("DisableLLVMLoopOpt", Target::Feature::DisableLLVMLoopOpt)
         .value("WasmSimd128", Target::Feature::WasmSimd128)
         .value("WasmSignExt", Target::Feature::WasmSignExt)
         .value("WasmSatFloatToInt", Target::Feature::WasmSatFloatToInt)
@@ -194,6 +188,7 @@ void define_enums(py::module &m) {
         .value("VulkanV10", Target::VulkanV10)
         .value("VulkanV12", Target::VulkanV12)
         .value("VulkanV13", Target::VulkanV13)
+        .value("Semihosting", Target::Feature::Semihosting)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

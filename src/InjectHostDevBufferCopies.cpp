@@ -693,7 +693,7 @@ class InjectBufferCopies : public IRMutator {
             }
 
             return Allocate::make(op->name, op->type, op->memory_type, op->extents,
-                                  condition, body, op->new_expr, op->free_function);
+                                  condition, body, op->new_expr, op->free_function, op->padding);
         }
     }
 

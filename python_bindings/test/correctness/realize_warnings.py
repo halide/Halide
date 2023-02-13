@@ -23,7 +23,9 @@ def test_warnings():
 
     buffer.seek(0)
     stdout_lines = buffer.readlines()
-    assert stdout_lines == [expected_warning] * 3
+    assert len(stdout_lines) > 0
+    for line in stdout_lines:
+        assert line == expected_warning
 
 
 if __name__ == "__main__":

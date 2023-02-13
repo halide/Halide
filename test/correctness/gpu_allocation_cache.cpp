@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
+#include "halide_thread_pool.h"
 
 using namespace Halide;
 
@@ -136,7 +137,7 @@ int main(int argc, char **argv) {
     // issues. Probably due to using the GL context on the wrong
     // thread.
     if (!target.has_feature(Target::OpenGLCompute)) {
-        Halide::Internal::ThreadPool<void> pool(1);
+        Halide::Tools::ThreadPool<void> pool(1);
         std::vector<std::future<void>> futures;
         futures.emplace_back(pool.async(test1, true));
         futures.emplace_back(pool.async(test1, true));
