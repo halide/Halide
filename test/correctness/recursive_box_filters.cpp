@@ -22,7 +22,6 @@ int main(int argc, char **argv) {
     Expr blur2 = f(r) + f(r - 1);
     h(r) = {blur2, blur2 + h(r - 2)[0]};
 
-    Var xo, xi;
     // This is safe to vectorize, but it's not associative/commutative, so we
     // have to pass 'true' to the atomic call to tell it to skip the check.
     h.update(2).atomic(true).vectorize(r, 16);
