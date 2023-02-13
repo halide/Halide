@@ -97,7 +97,7 @@ std::string mangle_vector_argument_type(const Type &arg_type, bool scalable, int
     return result;
 }
 
-/** A code generator that emits mips code from a given Halide stmt. */
+/** A code generator that emits RISC-V code from a given Halide stmt. */
 class CodeGen_RISCV : public CodeGen_Posix {
 public:
     /** Create a RISC-V code generator. Processor features can be

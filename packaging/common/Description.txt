@@ -2,7 +2,7 @@
  high-performance image and array processing code on modern machines. Halide
  currently targets:
 
- * CPU architectures: X86, ARM, MIPS, Hexagon, PowerPC, RISC-V, WebAssembly
+ * CPU architectures: X86, ARM, Hexagon, PowerPC, RISC-V, WebAssembly
  * Operating systems: Linux, Windows, macOS, Android, iOS, Qualcomm QuRT
  * GPU APIs: CUDA, OpenCL, OpenGL Compute Shaders, Apple Metal, Direct X 12
 

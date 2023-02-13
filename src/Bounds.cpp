@@ -1723,7 +1723,7 @@ Region region_union(const Region &a, const Region &b) {
         Expr max_b = b[i].min + b[i].extent;
         Expr max_plus_one = Max::make(max_a, max_b);
         Expr extent = max_plus_one - min;
-        result.push_back(Range(simplify(min), simplify(extent)));
+        result.emplace_back(simplify(min), simplify(extent));
     }
     return result;
 }

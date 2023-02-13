@@ -1987,7 +1987,7 @@ Derivative propagate_adjoints(const Func &output) {
     Region output_bounds;
     output_bounds.reserve(output.dimensions());
     for (int i = 0; i < output.dimensions(); i++) {
-        output_bounds.push_back({0, 0});
+        output_bounds.emplace_back(0, 0);
     }
     return propagate_adjoints(output, adjoint, output_bounds);
 }
