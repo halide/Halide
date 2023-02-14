@@ -147,6 +147,9 @@ public:
         check("IVP_NSAUN_2X32", vector_width / 4, count_leading_zeros(u32_1));
         check("IVP_NSAUN_2X32", vector_width / 4, count_leading_zeros(i32_1));
 
+        //  Shifts
+        check("IVP_PACKVRNRNX48", vector_width / 2, i16(widening_mul(i16_1, i16_2) >> 4));
+
         // These are not generated right now, because vectors are split now, so comment out for now.
         // Narrowing with shifting.
         // check("halide_xtensa_narrow_with_shift_i16", vector_width / 2, i16(i32_1 >> i32_2));
