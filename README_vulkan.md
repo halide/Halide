@@ -13,7 +13,7 @@ See [below](#current-status) for details.
 
 # Compiling Halide w/Vulkan Support
 
-You'll need to configure Halide and enable the cmake option TARGET_VULKAN.
+You'll need to configure Halide and enable the cmake option TARGET_VULKAN (which is now ON by default).
 
 For example, on Linux & OSX:
 
@@ -94,8 +94,22 @@ graphics driver, which can cause problems if installed on an NVIDIA-only system.
 You're better off using Halide's Metal backend instead, but it is possible to run 
 Vulkan apps on a Mac via the MoltenVK library:
 
-MoltenVK:
+MoltenVK Project:
 https://github.com/KhronosGroup/MoltenVK
+
+The easiest way to get the necessary dependencies is to use the official MoltenVK SDK
+installer provided by LunarG:
+
+MoltenVK SDK (Latest Release):
+https://sdk.lunarg.com/sdk/download/latest/mac/vulkan-sdk.dmg
+
+Alternatively, if you have the [Homebrew][https://brew.sh/] package manager installed 
+for MacOS, you can use it to install the Vulkan Loader and MoltenVK compatibility 
+layer:
+
+```
+$ brew install vulkan-loader molten-vk
+```
 
 # Testing Your Vulkan Environment
 
