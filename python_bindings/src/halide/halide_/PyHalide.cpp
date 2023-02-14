@@ -111,5 +111,19 @@ std::vector<Expr> collect_print_args(const py::args &args) {
     return v;
 }
 
+Target to_jit_target(const Target &target) {
+    if (target != Target()) {
+        return target;
+    }
+    return get_jit_target_from_environment();
+}
+
+Target to_aot_target(const Target &target) {
+    if (target != Target()) {
+        return target;
+    }
+    return get_target_from_environment();
+}
+
 }  // namespace PythonBindings
 }  // namespace Halide

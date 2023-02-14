@@ -77,40 +77,98 @@ void define_pipeline(py::module &m) {
                  py::arg("index"))
             .def("print_loop_nest", &Pipeline::print_loop_nest)
 
-            .def("compile_to", &Pipeline::compile_to,
-                 py::arg("outputs"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
+            .def(
+                "compile_to", [](Pipeline &p, const std::map<OutputFileType, std::string> &output_files, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
+                    p.compile_to(output_files, args, fn_name, to_aot_target(target));
+                },
+                py::arg("outputs"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
 
-            .def("compile_to_bitcode", &Pipeline::compile_to_bitcode,
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
-            .def("compile_to_llvm_assembly", &Pipeline::compile_to_llvm_assembly,
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
-            .def("compile_to_object", &Pipeline::compile_to_object,
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
-            .def("compile_to_header", &Pipeline::compile_to_header,
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
-            .def("compile_to_assembly", &Pipeline::compile_to_assembly,
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
-            .def("compile_to_c", &Pipeline::compile_to_c,
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
-            .def("compile_to_file", &Pipeline::compile_to_file,
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
-            .def("compile_to_static_library", &Pipeline::compile_to_static_library,
-                 py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
+            .def(
+                "compile_to_bitcode", [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
+                    p.compile_to_bitcode(filename, args, fn_name, to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
+            .def(
+                "compile_to_bitcode", [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const Target &target) {
+                    p.compile_to_bitcode(filename, args, "", to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
+            .def(
+                "compile_to_llvm_assembly", [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
+                    p.compile_to_llvm_assembly(filename, args, fn_name, to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
+            .def(
+                "compile_to_llvm_assembly", [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const Target &target) {
+                    p.compile_to_llvm_assembly(filename, args, "", to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
+            .def(
+                "compile_to_object", [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
+                    p.compile_to_object(filename, args, fn_name, to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
+            .def(
+                "compile_to_object", [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const Target &target) {
+                    p.compile_to_object(filename, args, "", to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
+            .def(
+                "compile_to_header", [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
+                    p.compile_to_header(filename, args, fn_name, to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
+            .def(
+                "compile_to_assembly", [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
+                    p.compile_to_assembly(filename, args, fn_name, to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target())
+            .def(
+                "compile_to_assembly", [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const Target &target) {
+                    p.compile_to_assembly(filename, args, "", to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("target") = Target())
+            .def(
+                "compile_to_c", [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
+                    p.compile_to_c(filename, args, fn_name, to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
+            .def(
+                "compile_to_lowered_stmt", [](Pipeline &p, const std::string &filename, const std::vector<Argument> &args, StmtOutputFormat fmt, const Target &target) {
+                    p.compile_to_lowered_stmt(filename, args, fmt, to_aot_target(target));
+                },
+                py::arg("filename"), py::arg("arguments"), py::arg("fmt") = Text, py::arg("target") = Target())
+            .def(
+                "compile_to_file", [](Pipeline &p, const std::string &filename_prefix, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
+                    p.compile_to_file(filename_prefix, args, fn_name, to_aot_target(target));
+                },
+                py::arg("filename_prefix"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
+            .def(
+                "compile_to_static_library", [](Pipeline &p, const std::string &filename_prefix, const std::vector<Argument> &args, const std::string &fn_name, const Target &target) {
+                    p.compile_to_static_library(filename_prefix, args, fn_name, to_aot_target(target));
+                },
+                py::arg("filename_prefix"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = Target())
 
-            .def("compile_to_lowered_stmt", &Pipeline::compile_to_lowered_stmt,
-                 py::arg("filename"), py::arg("arguments"), py::arg("format") = StmtOutputFormat::Text, py::arg("target") = get_target_from_environment())
+            .def("compile_to_multitarget_static_library", &Pipeline::compile_to_multitarget_static_library, py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"))
+            .def("compile_to_multitarget_object_files", &Pipeline::compile_to_multitarget_object_files, py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"), py::arg("suffixes"))
 
-            .def("compile_to_multitarget_static_library", &Pipeline::compile_to_multitarget_static_library,
-                 py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"))
-            .def("compile_to_multitarget_object_files", &Pipeline::compile_to_multitarget_object_files,
-                 py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"), py::arg("suffixes"))
+            .def(
+                "compile_to_module", [](Pipeline &p, const std::vector<Argument> &args, const std::string &fn_name, const Target &target, LinkageType linkage_type) -> Module {
+                    return p.compile_to_module(args, fn_name, to_aot_target(target), linkage_type);
+                },
+                py::arg("arguments"), py::arg("fn_name"), py::arg("target") = Target(), py::arg("linkage") = LinkageType::ExternalPlusMetadata)
 
-            .def("compile_to_module", &Pipeline::compile_to_module,
-                 py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment(), py::arg("linkage") = LinkageType::ExternalPlusMetadata)
+            .def(
+                "compile_jit", [](Pipeline &p, const Target &target) {
+                    p.compile_jit(to_jit_target(target));
+                },
+                py::arg("target") = Target())
 
-            .def("compile_jit", &Pipeline::compile_jit, py::arg("target") = get_jit_target_from_environment())
-
-            .def("compile_to_callable", &Pipeline::compile_to_callable, py::arg("arguments"), py::arg("target") = get_jit_target_from_environment())
+            .def(
+                "compile_to_callable", [](Pipeline &p, const std::vector<Argument> &args, const Target &target) {
+                    return p.compile_to_callable(args, to_jit_target(target));
+                },
+                py::arg("arguments"), py::arg("target") = Target())
 
             .def(
                 "realize", [](Pipeline &p, Buffer<> buffer, const Target &target) -> void {
@@ -146,10 +204,11 @@ void define_pipeline(py::module &m) {
 
             .def(
                 "infer_input_bounds", [](Pipeline &p, const py::object &dst, const Target &target) -> void {
+                    const Target t = to_jit_target(target);
                     // dst could be Buffer<>, vector<Buffer>, or vector<int>
                     try {
                         Buffer<> b = dst.cast<Buffer<>>();
-                        p.infer_input_bounds(b, target);
+                        p.infer_input_bounds(b, t);
                         return;
                     } catch (...) {
                         // fall thru
@@ -157,7 +216,7 @@ void define_pipeline(py::module &m) {
 
                     try {
                         std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
-                        p.infer_input_bounds(Realization(std::move(v)), target);
+                        p.infer_input_bounds(Realization(std::move(v)), t);
                         return;
                     } catch (...) {
                         // fall thru
@@ -165,7 +224,7 @@ void define_pipeline(py::module &m) {
 
                     try {
                         std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
-                        p.infer_input_bounds(v, target);
+                        p.infer_input_bounds(v, t);
                         return;
                     } catch (...) {
                         // fall thru
@@ -173,7 +232,7 @@ void define_pipeline(py::module &m) {
 
                     throw py::value_error("Invalid arguments to infer_input_bounds");
                 },
-                py::arg("dst"), py::arg("target") = get_jit_target_from_environment())
+                py::arg("dst"), py::arg("target") = Target())
 
             .def("infer_arguments", [](Pipeline &p) -> std::vector<Argument> {
                 return p.infer_arguments();
