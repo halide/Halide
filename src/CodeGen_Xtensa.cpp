@@ -2699,7 +2699,7 @@ string CodeGen_Xtensa::print_assignment(Type t, const std::string &rhs) {
         const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
         if (t.is_handle()) {
             // Don't print void *, which might lose useful type information. just use auto.
-            stream << get_indent() << "auto * __restrict ";
+            stream << get_indent() << "auto * ";
         } else {
             stream << get_indent() << print_type(t, AppendSpace);
         }
