@@ -51,15 +51,9 @@ https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe
 
 For Vulkan device drivers, consult the appropriate hardware vendor for your device.  A few common ones are listed below.
 
-AMD:
-https://www.amd.com/en/technologies/vulkan
-
-NVIDIA:
-https://developer.nvidia.com/vulkan-driver
-
-INTEL:
-https://www.intel.com/content/www/us/en/download-center/home.html
-
+-   [AMD Vulkan Driver](https://www.amd.com/en/technologies/vulkan)
+-   [NVIDIA Vulkan Driver](https://developer.nvidia.com/vulkan-driver)
+-   [INTEL Vulkan Driver](https://www.intel.com/content/www/us/en/download-center/home.html)
 
 ## Linux 
 
@@ -94,16 +88,14 @@ graphics driver, which can cause problems if installed on an NVIDIA-only system.
 You're better off using Halide's Metal backend instead, but it is possible to run 
 Vulkan apps on a Mac via the MoltenVK library:
 
-MoltenVK Project:
-https://github.com/KhronosGroup/MoltenVK
+-   [MoltenVK Project](https://github.com/KhronosGroup/MoltenVK)
 
 The easiest way to get the necessary dependencies is to use the official MoltenVK SDK
 installer provided by LunarG:
 
-MoltenVK SDK (Latest Release):
-https://sdk.lunarg.com/sdk/download/latest/mac/vulkan-sdk.dmg
+-   [MoltenVK SDK (Latest Release)](https://sdk.lunarg.com/sdk/download/latest/mac/vulkan-sdk.dmg)
 
-Alternatively, if you have the [Homebrew][https://brew.sh/] package manager installed 
+Alternatively, if you have the [Homebrew](https://brew.sh/) package manager installed 
 for MacOS, you can use it to install the Vulkan Loader and MoltenVK compatibility 
 layer:
 
