@@ -587,27 +587,27 @@ void define_buffer(py::module &m) {
             })
 
             .def(
-                "copy_to_device", [](Buffer<> &b, const Target &t) -> int {
-                    return b.copy_to_device(t);
+                "copy_to_device", [](Buffer<> &b, const Target &target) -> int {
+                    return b.copy_to_device(to_jit_target(target));
                 },
-                py::arg("target") = get_jit_target_from_environment())
+                py::arg("target") = Target())
 
             .def(
-                "copy_to_device", [](Buffer<> &b, const DeviceAPI &d, const Target &t) -> int {
-                    return b.copy_to_device(d, t);
+                "copy_to_device", [](Buffer<> &b, const DeviceAPI &d, const Target &target) -> int {
+                    return b.copy_to_device(d, to_jit_target(target));
                 },
-                py::arg("device_api"), py::arg("target") = get_jit_target_from_environment())
+                py::arg("device_api"), py::arg("target") = Target())
             .def(
-                "device_malloc", [](Buffer<> &b, const Target &t) -> int {
-                    return b.device_malloc(t);
+                "device_malloc", [](Buffer<> &b, const Target &target) -> int {
+                    return b.device_malloc(to_jit_target(target));
                 },
-                py::arg("target") = get_jit_target_from_environment())
+                py::arg("target") = Target())
 
             .def(
-                "device_malloc", [](Buffer<> &b, const DeviceAPI &d, const Target &t) -> int {
-                    return b.device_malloc(d, t);
+                "device_malloc", [](Buffer<> &b, const DeviceAPI &d, const Target &target) -> int {
+                    return b.device_malloc(d, to_jit_target(target));
                 },
-                py::arg("device_api"), py::arg("target") = get_jit_target_from_environment())
+                py::arg("device_api"), py::arg("target") = Target())
 
             .def(
                 "set_min", [](Buffer<> &b, const std::vector<int> &mins) -> void {
