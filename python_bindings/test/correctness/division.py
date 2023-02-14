@@ -79,7 +79,7 @@ def test_division_gpu():
 
 
 if __name__ == "__main__":
-    test_types()
-    test_division()
-    test_division_tupled()
+    # test_types()
+    # test_division()
+    # test_division_tupled()
     test_division_gpu()

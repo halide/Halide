@@ -6,7 +6,10 @@ namespace PythonBindings {
 namespace {
 
 void halide_python_error(JITUserContext *, const char *msg) {
-    throw Error(msg);
+    fprintf(stderr, "halide_python_error1: %s\n", msg);
+    fflush(stderr);
+    abort();
+    // throw Error(msg);
 }
 
 void halide_python_print(JITUserContext *, const char *msg) {

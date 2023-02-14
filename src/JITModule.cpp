@@ -127,6 +127,16 @@ void load_vulkan() {
 #elif defined(__APPLE__)
         llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.1.dylib", &error);
         user_assert(error.empty()) << "Could not find libvulkan.1.dylib\n";
+        // llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.1.dylib", &error);
+        // if (!error.empty()) {
+        //     user_warning << "libvulkan error: " << error << "\n";
+        //     error = "";
+        //     llvm::sys::DynamicLibrary::LoadLibraryPermanently("libMoltenVK.dylib", &error);
+        //     if (!error.empty()) {
+        //         user_warning << "libMoltenVK error: " << error << "\n";
+        //     }
+        // }
+        // user_assert(error.empty()) << "Could not find libvulkan.1.dylib or libMoltenVK.dylib\n";
 #elif defined(_WIN32)
         llvm::sys::DynamicLibrary::LoadLibraryPermanently("vulkan-1.dll", &error);
         user_assert(error.empty()) << "Could not find vulkan-1.dll\n";

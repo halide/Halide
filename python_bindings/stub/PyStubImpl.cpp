@@ -32,7 +32,10 @@ namespace {
 // in case the Stub builder links in a separate copy of libHalide, rather
 // sharing the same halide.so that is built by default.
 void halide_python_error(JITUserContext *, const char *msg) {
-    throw Halide::Error(msg);
+    fprintf(stderr, "halide_python_error_stub: %s\n", msg);
+    fflush(stderr);
+    abort();
+    // throw Halide::Error(msg);
 }
 
 void halide_python_print(JITUserContext *, const char *msg) {

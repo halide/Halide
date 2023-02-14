@@ -15,7 +15,7 @@ def test_compiletime_error():
         assert (
             "Output buffer f has type uint16 but type of the buffer passed in is uint8"
             in str(e)
-        )
+        ), str(e)
     else:
         assert False, "Did not see expected exception!"
 
