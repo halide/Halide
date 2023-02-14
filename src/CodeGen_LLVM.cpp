@@ -4162,42 +4162,67 @@ void CodeGen_LLVM::visit(const VectorReduce *op) {
 
 void CodeGen_LLVM::visit(const VectorScan *op) {
     Expr (*binop)(Expr, Expr) = nullptr;
+    Expr id;
     switch (op->op) {
     case VectorReduce::Add:
         binop = Add::make;
+        id = make_zero(op->type);
         break;
     case VectorReduce::Mul:
         binop = Mul::make;
+        id = make_one(op->type);
         break;
     case VectorReduce::Min:
         binop = Min::make;
+        id = op->type.max();
         break;
     case VectorReduce::Max:
         binop = Max::make;
+        id = op->type.min();
         break;
     case VectorReduce::And:
         binop = And::make;
+        id = make_one(op->type);
         break;
     case VectorReduce::Or:
         binop = Or::make;
+        id = make_zero(op->type);
         break;
     case VectorReduce::SaturatingAdd:
         binop = saturating_add;
+        id = make_zero(op->type);
         break;
     }
 
-    // Just scalarize it for now
-    Expr prev;
-    Value *result = PoisonValue::get(llvm_type_of(op->type));
-    for (int i = 0; i < op->type.lanes(); i++) {
-        Expr e = extract_lane(op->value, i);
-        if (prev.defined()) {
-            e = binop(prev, e);
+    const int lanes = op->type.lanes();
+
+    if (id.defined() &&
+        (lanes & (lanes - 1)) == 0) {
+        Expr vec = op->value;
+        std::vector<int> indices(lanes);
+        for (int step = 1; step < lanes; step *= 2) {
+            const int mask = ~(2 * step - 1);
+            for (int i = 0; i < lanes; i++) {
+                indices[i] = (step & i) ? ((i & mask) + step - 1) : (i + lanes);
+            }
+            vec = binop(vec, Shuffle::make({vec, id}, indices));
         }
-        prev = e;
-        result = builder->CreateInsertElement(result, codegen(e), ConstantInt::get(i32_t, i));
+        vec = common_subexpression_elimination(vec);
+        codegen(vec);
+    } else {
+        // Just scalarize it for now
+        Expr prev;
+        Value *result = PoisonValue::get(llvm_type_of(op->type));
+        for (int i = 0; i < lanes; i++) {
+            Expr e = extract_lane(op->value, i);
+            if (prev.defined()) {
+                e = binop(prev, e);
+            }
+            prev = e;
+            result = builder->CreateInsertElement(result, codegen(e), ConstantInt::get(i32_t, i));
+        }
+        value = result;
     }
-    value = result;
 }
 
 void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
