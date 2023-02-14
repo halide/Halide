@@ -94,6 +94,7 @@ tests(GROUPS error
       thread_id_outside_block_id.cpp
       too_many_args.cpp
       tuple_arg_select_undef.cpp
+      tuple_output_bounds_check.cpp
       tuple_val_select_undef.cpp
       unbounded_input.cpp
       unbounded_output.cpp

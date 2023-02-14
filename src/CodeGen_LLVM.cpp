@@ -710,6 +710,11 @@ void CodeGen_LLVM::compile_func(const LoweredFunc &f, const std::string &simple_
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
     f.body.accept(this);
 
+    // Show one time warning and clear it.
+    for (auto it = onetime_warnings.begin(); it != onetime_warnings.end(); it = onetime_warnings.erase(it)) {
+        user_warning << "In function " << f.name << ", " << it->second;
+    }
+
     // Clean up and return.
     end_func(f.args);
 }
@@ -1439,6 +1444,11 @@ void CodeGen_LLVM::visit(const Cast *op) {
         debug(4) << "Emulating cast from " << src << " to " << dst << "\n";
         if ((src.is_float() && src.bits() < 32) ||
             (dst.is_float() && dst.bits() < 32)) {
+            string warn_msg =
+                "(b)float16 type operation is emulated, which is likely to slow down the performance. "
+                "If your target supports native (b)float16 operations, "
+                "it could be improved by adding Target feature to enable it.\n";
+            onetime_warnings.try_emplace(WarningKind::EmulatedFloat16, warn_msg);
             Expr equiv = lower_float16_cast(op);
             internal_assert(equiv.type() == op->type);
             codegen(equiv);
