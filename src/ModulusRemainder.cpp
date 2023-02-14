@@ -75,6 +75,7 @@ public:
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
     void visit(const VectorReduce *) override;
+    void visit(const VectorScan *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
 };
@@ -215,6 +216,11 @@ void ComputeModulusRemainder::visit(const Shuffle *op) {
 
 void ComputeModulusRemainder::visit(const VectorReduce *op) {
     internal_assert(op->type.is_scalar()) << "modulus_remainder of vector\n";
+    result = ModulusRemainder{};
+}
+
+void ComputeModulusRemainder::visit(const VectorScan *op) {
+    internal_error << "modulus_remainder of vector\n";
     result = ModulusRemainder{};
 }
 

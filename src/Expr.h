@@ -58,6 +58,7 @@ enum class IRNodeType {
     Let,
     Shuffle,
     VectorReduce,
+    VectorScan,
     // Stmts
     LetStmt,
     AssertStmt,

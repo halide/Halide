@@ -948,6 +948,17 @@ struct VectorReduce : public ExprNode<VectorReduce> {
     static const IRNodeType _node_type = IRNodeType::VectorReduce;
 };
 
+/** Horizontally scan a vector given an operator. Used for computing sum-scans
+ * of individual vectors and the like. */
+struct VectorScan : public ExprNode<VectorScan> {
+    Expr value;
+    VectorReduce::Operator op;
+
+    static Expr make(VectorReduce::Operator op, Expr vec);
+
+    static const IRNodeType _node_type = IRNodeType::VectorScan;
+};
+
 }  // namespace Internal
 }  // namespace Halide
 

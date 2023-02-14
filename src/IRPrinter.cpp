@@ -1088,6 +1088,14 @@ void IRPrinter::visit(const VectorReduce *op) {
            << ")";
 }
 
+void IRPrinter::visit(const VectorScan *op) {
+    stream << "vector_scan("
+           << op->op
+           << ", "
+           << op->value
+           << ")";
+}
+
 void IRPrinter::visit(const Atomic *op) {
     if (op->mutex_name.empty()) {
         stream << get_indent() << "atomic {\n";

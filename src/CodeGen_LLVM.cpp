@@ -4160,6 +4160,46 @@ void CodeGen_LLVM::visit(const VectorReduce *op) {
     codegen_vector_reduce(op, Expr());
 }
 
+void CodeGen_LLVM::visit(const VectorScan *op) {
+    Expr (*binop)(Expr, Expr) = nullptr;
+    switch (op->op) {
+    case VectorReduce::Add:
+        binop = Add::make;
+        break;
+    case VectorReduce::Mul:
+        binop = Mul::make;
+        break;
+    case VectorReduce::Min:
+        binop = Min::make;
+        break;
+    case VectorReduce::Max:
+        binop = Max::make;
+        break;
+    case VectorReduce::And:
+        binop = And::make;
+        break;
+    case VectorReduce::Or:
+        binop = Or::make;
+        break;
+    case VectorReduce::SaturatingAdd:
+        binop = saturating_add;
+        break;
+    }
+
+    // Just scalarize it for now
+    Expr prev;
+    Value *result = PoisonValue::get(llvm_type_of(op->type));
+    for (int i = 0; i < op->type.lanes(); i++) {
+        Expr e = extract_lane(op->value, i);
+        if (prev.defined()) {
+            e = binop(prev, e);
+        }
+        prev = e;
+        result = builder->CreateInsertElement(result, codegen(e), ConstantInt::get(i32_t, i));
+    }
+    value = result;
+}
+
 void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     Expr val = op->value;
     const int output_lanes = op->type.lanes();

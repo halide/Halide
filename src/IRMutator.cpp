@@ -335,6 +335,14 @@ Expr IRMutator::visit(const VectorReduce *op) {
     return VectorReduce::make(op->op, std::move(value), op->type.lanes());
 }
 
+Expr IRMutator::visit(const VectorScan *op) {
+    Expr value = mutate(op->value);
+    if (value.same_as(op->value)) {
+        return op;
+    }
+    return VectorScan::make(op->op, std::move(value));
+}
+
 Stmt IRMutator::visit(const Fork *op) {
     Stmt first = mutate(op->first);
     Stmt rest = mutate(op->rest);

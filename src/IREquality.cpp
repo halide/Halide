@@ -99,6 +99,7 @@ private:
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
     void visit(const VectorReduce *) override;
+    void visit(const VectorScan *) override;
 };
 
 template<typename T>
@@ -634,6 +635,13 @@ void IRComparer::visit(const VectorReduce *op) {
 
     compare_scalar(op->op, e->op);
     // We've already compared types, so it's enough to compare the value
+    compare_expr(op->value, e->value);
+}
+
+void IRComparer::visit(const VectorScan *op) {
+    const VectorScan *e = expr.as<VectorScan>();
+
+    compare_scalar(op->op, e->op);
     compare_expr(op->value, e->value);
 }
 

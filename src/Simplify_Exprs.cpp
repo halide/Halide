@@ -220,6 +220,20 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     }
 }
 
+Expr Simplify::visit(const VectorScan *op, ExprInfo *bounds) {
+    clear_bounds_info(bounds);
+    // TODO: Update bounds and alignment
+
+    Expr value = mutate(op->value, nullptr);
+    if (value.same_as(op->value)) {
+        return op;
+    } else {
+        return VectorScan::make(op->op, value);
+    }
+
+    return op;
+}
+
 Expr Simplify::visit(const Variable *op, ExprInfo *bounds) {
     if (bounds_and_alignment_info.contains(op->name)) {
         const ExprInfo &b = bounds_and_alignment_info.get(op->name);

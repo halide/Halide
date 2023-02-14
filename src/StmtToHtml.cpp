@@ -719,6 +719,12 @@ private:
         stream << close_span();
     }
 
+    void visit(const VectorScan *op) override {
+        stream << open_span("VectorScan");
+        print_list(symbol("vector_scan") + "(", {op->op, op->value}, ")");
+        stream << close_span();
+    }
+
     void visit(const Atomic *op) override {
         stream << open_div("Atomic");
         int id = unique_id();

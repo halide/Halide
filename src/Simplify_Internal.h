@@ -330,6 +330,7 @@ public:
     Expr visit(const Call *op, ExprInfo *bounds);
     Expr visit(const Shuffle *op, ExprInfo *bounds);
     Expr visit(const VectorReduce *op, ExprInfo *bounds);
+    Expr visit(const VectorScan *op, ExprInfo *bounds);
     Expr visit(const Let *op, ExprInfo *bounds);
     Stmt visit(const LetStmt *op);
     Stmt visit(const AssertStmt *op);

@@ -933,6 +933,21 @@ Expr VectorReduce::make(VectorReduce::Operator op,
     return node;
 }
 
+Expr VectorScan::make(VectorReduce::Operator op,
+                      Expr vec) {
+    if (vec.type().is_bool()) {
+        internal_assert(op == VectorReduce::And || op == VectorReduce::Or)
+            << "The only legal operators for VectorScan on a Bool"
+            << "vector are VectorReduce::And and VectorReduce::Or\n";
+    }
+    internal_assert(!vec.type().is_handle()) << "VectorScan of handle type";
+    VectorScan *node = new VectorScan;
+    node->type = vec.type();
+    node->op = op;
+    node->value = std::move(vec);
+    return node;
+}
+
 namespace {
 
 // Helper function to determine if a sequence of indices is a
@@ -1093,6 +1108,10 @@ void ExprNode<Shuffle>::accept(IRVisitor *v) const {
 template<>
 void ExprNode<VectorReduce>::accept(IRVisitor *v) const {
     v->visit((const VectorReduce *)this);
+}
+template<>
+void ExprNode<VectorScan>::accept(IRVisitor *v) const {
+    v->visit((const VectorScan *)this);
 }
 template<>
 void ExprNode<Let>::accept(IRVisitor *v) const {
@@ -1282,6 +1301,10 @@ Expr ExprNode<Shuffle>::mutate_expr(IRMutator *v) const {
 template<>
 Expr ExprNode<VectorReduce>::mutate_expr(IRMutator *v) const {
     return v->visit((const VectorReduce *)this);
+}
+template<>
+Expr ExprNode<VectorScan>::mutate_expr(IRMutator *v) const {
+    return v->visit((const VectorScan *)this);
 }
 template<>
 Expr ExprNode<Let>::mutate_expr(IRMutator *v) const {

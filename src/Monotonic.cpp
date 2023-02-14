@@ -570,6 +570,27 @@ class DerivativeBounds : public IRVisitor {
         }
     }
 
+    void visit(const VectorScan *op) override {
+        op->value.accept(this);
+        switch (op->op) {
+        case VectorReduce::Add:
+        case VectorReduce::SaturatingAdd:
+            result = multiply(result, op->type.lanes());
+            break;
+        case VectorReduce::Min:
+        case VectorReduce::Max:
+            // These reductions are monotonic in the arg
+            break;
+        case VectorReduce::Mul:
+        case VectorReduce::And:
+        case VectorReduce::Or:
+            // These ones are not
+            if (!is_constant(result)) {
+                result = ConstantInterval::everything();
+            }
+        }
+    }
+
     void visit(const LetStmt *op) override {
         internal_error << "Monotonic of statement\n";
     }

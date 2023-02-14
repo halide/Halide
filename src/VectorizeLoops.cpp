@@ -1167,26 +1167,35 @@ class VectorSubs : public IRMutator {
             // The load and store indices must be the same interleaved
             // ramp (or the same scalar, in the total reduction case).
             InterleavedRamp store_ir, load_ir;
-            Expr test;
+            Expr scalar_match, strides_match, base_delta;
             if (store_index.type().is_scalar()) {
-                test = simplify(load_index == store_index);
+                scalar_match = simplify(load_index == store_index);
             } else if (is_interleaved_ramp(store_index, vector_scope, &store_ir) &&
                        is_interleaved_ramp(load_index, vector_scope, &load_ir) &&
                        store_ir.inner_repetitions == load_ir.inner_repetitions &&
                        store_ir.outer_repetitions == load_ir.outer_repetitions &&
                        store_ir.lanes == load_ir.lanes) {
-                test = simplify(store_ir.base == load_ir.base &&
-                                store_ir.stride == load_ir.stride);
+                base_delta = simplify(store_ir.base - load_ir.base);
+                strides_match = simplify(store_ir.stride == load_ir.stride);
             }
 
-            if (!test.defined()) {
-                break;
-            }
+            debug(0) << store_index << " " << load_index << "\n";
 
-            if (is_const_zero(test)) {
+            const int64_t *scan_stride = as_const_int(base_delta);
+            if (scalar_match.defined() && !is_const_one(scalar_match)) {
                 break;
-            } else if (!is_const_one(test)) {
-                // TODO: try harder by substituting in more things in scope
+            } else if (strides_match.defined() && !is_const_one(strides_match)) {
+                break;
+            } else if (store_ir.inner_repetitions * store_ir.outer_repetitions != 1 &&
+                       !is_const_zero(base_delta)) {
+                // May be a combination scan + reduce. Not handled for now.
+                break;
+            } else if (!scan_stride) {
+                // Non-constant stride on the scan. scan_stride is zero for
+                // reductions.
+                break;
+            } else if (!(*scan_stride == 0 || *scan_stride == 1)) {
+                // TODO: Handle scan strides != 1
                 break;
             }
 
@@ -1210,54 +1219,68 @@ class VectorSubs : public IRMutator {
                 return Expr();
             };
 
-            int output_lanes = 1;
-            if (store_index.type().is_scalar()) {
-                // The index doesn't depend on the value being
-                // vectorized, so it's a total reduction.
+            if (*scan_stride == 0) {
+                int output_lanes = 1;
+                if (store_index.type().is_scalar()) {
+                    // The index doesn't depend on the value being
+                    // vectorized, so it's a total reduction.
 
-                b = VectorReduce::make(reduce_op, b, 1);
-            } else {
+                    b = VectorReduce::make(reduce_op, b, 1);
+                } else {
 
-                output_lanes = store_index.type().lanes() / (store_ir.inner_repetitions * store_ir.outer_repetitions);
+                    output_lanes = store_index.type().lanes() / (store_ir.inner_repetitions * store_ir.outer_repetitions);
 
-                store_index = Ramp::make(store_ir.base, store_ir.stride, output_lanes / store_ir.base.type().lanes());
-                if (store_ir.inner_repetitions > 1) {
-                    b = VectorReduce::make(reduce_op, b, output_lanes * store_ir.outer_repetitions);
-                }
-
-                // Handle outer repetitions by unrolling the reduction
-                // over slices.
-                if (store_ir.outer_repetitions > 1) {
-                    // First remove all powers of two with a binary reduction tree.
-                    int reps = store_ir.outer_repetitions;
-                    while (reps % 2 == 0) {
-                        int l = b.type().lanes() / 2;
-                        Expr b0 = Shuffle::make_slice(b, 0, 1, l);
-                        Expr b1 = Shuffle::make_slice(b, l, 1, l);
-                        b = binop(b0, b1);
-                        reps /= 2;
+                    store_index = Ramp::make(store_ir.base, store_ir.stride, output_lanes / store_ir.base.type().lanes());
+                    if (store_ir.inner_repetitions > 1) {
+                        b = VectorReduce::make(reduce_op, b, output_lanes * store_ir.outer_repetitions);
                     }
 
-                    // Then reduce linearly over slices for the rest.
-                    if (reps > 1) {
-                        Expr v = Shuffle::make_slice(b, 0, 1, output_lanes);
-                        for (int i = 1; i < reps; i++) {
-                            Expr slice = simplify(Shuffle::make_slice(b, i * output_lanes, 1, output_lanes));
-                            v = binop(v, slice);
+                    // Handle outer repetitions by unrolling the reduction
+                    // over slices.
+                    if (store_ir.outer_repetitions > 1) {
+                        // First remove all powers of two with a binary reduction tree.
+                        int reps = store_ir.outer_repetitions;
+                        while (reps % 2 == 0) {
+                            int l = b.type().lanes() / 2;
+                            Expr b0 = Shuffle::make_slice(b, 0, 1, l);
+                            Expr b1 = Shuffle::make_slice(b, l, 1, l);
+                            b = binop(b0, b1);
+                            reps /= 2;
                         }
-                        b = v;
+
+                        // Then reduce linearly over slices for the rest.
+                        if (reps > 1) {
+                            Expr v = Shuffle::make_slice(b, 0, 1, output_lanes);
+                            for (int i = 1; i < reps; i++) {
+                                Expr slice = simplify(Shuffle::make_slice(b, i * output_lanes, 1, output_lanes));
+                                v = binop(v, slice);
+                            }
+                            b = v;
+                        }
                     }
                 }
+
+                Expr new_load = Load::make(load_a->type.with_lanes(output_lanes),
+                                           load_a->name, store_index, load_a->image,
+                                           load_a->param, const_true(output_lanes),
+                                           ModulusRemainder{});
+
+                Expr lhs = cast(b.type(), new_load);
+                b = binop(lhs, b);
+                b = cast(new_load.type(), b);
+            } else {
+                // We have f[ramp] = f[ramp - 1] <op> b
+                // Rewrite to: f[ramp] = broadcast(f[ramp_base - 1]) <op> vector_scan(<op> b)
+                debug(0) << "Would insert a scan here\n";
+                Expr new_load = Load::make(load_a->type.element_of(),
+                                           load_a->name, load_ir.base, load_a->image,
+                                           load_a->param, const_true(), ModulusRemainder{});
+                Type t = b.type();
+                Expr lhs = cast(t, Broadcast::make(new_load, t.lanes()));
+                b = VectorScan::make(reduce_op, b);
+                b = binop(lhs, b);
+                b = cast(t, b);
             }
-
-            Expr new_load = Load::make(load_a->type.with_lanes(output_lanes),
-                                       load_a->name, store_index, load_a->image,
-                                       load_a->param, const_true(output_lanes),
-                                       ModulusRemainder{});
-
-            Expr lhs = cast(b.type(), new_load);
-            b = binop(lhs, b);
-            b = cast(new_load.type(), b);
 
             Stmt s = Store::make(store->name, b, store_index, store->param,
                                  const_true(b.type().lanes()), store->alignment);
@@ -1441,7 +1464,12 @@ public:
         poison = false;
         IRMutator::mutate(e);
         if (!poison) {
-            liftable.insert(e);
+            // Don't lift x + constant
+            const Add *a = e.as<Add>();
+            if (a && is_const(a->b)) {
+            } else {
+                liftable.insert(e);
+            }
         }
         poison |= old_poison;
         // We're not actually mutating anything. This class is only a
@@ -1637,6 +1665,7 @@ Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env) {
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
     Stmt s = LiftVectorizableExprsOutOfAllAtomicNodes(env).mutate(stmt);
+    debug(0) << s << "\n";
     s = vectorize_statement(s);
     s = RemoveUnnecessaryAtomics().mutate(s);
     return s;

@@ -305,6 +305,16 @@ public:
             result = false;
         }
     }
+
+    void visit(const VectorScan *op) override {
+        const VectorScan *e = expr.as<VectorScan>();
+        if (result && e && op->op == e->op) {
+            expr = e->value;
+            op->value.accept(this);
+        } else {
+            result = false;
+        }
+    }
 };
 
 }  // namespace
@@ -523,6 +533,9 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
         // a reduction of a 16-vector down to a 4-vector.
         return (((const VectorReduce &)a).op == ((const VectorReduce &)b).op &&
                 equal(((const VectorReduce &)a).value, ((const VectorReduce &)b).value));
+    case IRNodeType::VectorScan:
+        return (((const VectorScan &)a).op == ((const VectorScan &)b).op &&
+                equal_helper(((const VectorScan &)a).value, ((const VectorScan &)b).value));
 
     // Explicitly list all the Stmts instead of using a default
     // clause so that if new Exprs are added without being handled

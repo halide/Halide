@@ -91,6 +91,9 @@ protected:
     void visit(const VectorReduce *op) override {
         internal_error << "Encounter unexpected expression \"VectorReduce\" when differentiating.";
     }
+    void visit(const VectorScan *op) override {
+        internal_error << "Encounter unexpected expression \"VectorScan\" when differentiating.";
+    }
     void visit(const LetStmt *op) override {
         internal_error << "Encounter unexpected statement \"LetStmt\" when differentiating.";
     }
