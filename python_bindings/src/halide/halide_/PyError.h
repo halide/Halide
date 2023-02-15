@@ -12,7 +12,6 @@ struct PyJITUserContext : public JITUserContext {
     PyJITUserContext();
 };
 
-
 }  // namespace PythonBindings
 }  // namespace Halide
 

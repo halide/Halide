@@ -28,7 +28,8 @@ public:
 
 }  // namespace
 
-PyJITUserContext::PyJITUserContext() : JITUserContext() {
+PyJITUserContext::PyJITUserContext()
+    : JITUserContext() {
     handlers.custom_print = halide_python_print;
     // No: we don't want a custom error function.
     // If we leave it as the default, realize() and infer_input_bounds()
