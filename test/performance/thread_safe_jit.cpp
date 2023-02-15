@@ -58,7 +58,7 @@ void separate_func_per_thread_executor(int index) {
             int64_t left = ((j - 1) * (int64_t)bufs[index](std::min(std::max(0, j - 1), 9)) + index * 75);
             int64_t middle = (j * (int64_t)bufs[index](std::min(std::max(0, j), 9)) + index * 75);
             int64_t right = ((j + 1) * (int64_t)bufs[index](std::min(std::max(0, j + 1), 9)) + index * 75);
-            assert(output(j) == (int32_t)(left + middle + right +));
+            assert(output(j) == (int32_t)(left + middle + right));
         }
     }
 }
