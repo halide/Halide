@@ -287,7 +287,7 @@ void CodeGen_LLVM::initialize_llvm() {
 
 void CodeGen_LLVM::init_context() {
     // Ensure our IRBuilder is using the current context.
-    builder.reset(new IRBuilder<>(*context));
+    builder = std::make_unique<IRBuilder<>>(*context);
 
     // Branch weights for very likely branches
     llvm::MDBuilder md_builder(*context);
