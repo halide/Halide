@@ -12,6 +12,7 @@
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "EmulateFloat16Math.h"
+#include "ExternFuncArgument.h"
 #include "ExprUsesVar.h"
 #include "FindIntrinsics.h"
 #include "IREquality.h"

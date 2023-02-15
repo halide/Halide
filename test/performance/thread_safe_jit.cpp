@@ -12,11 +12,15 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
+// The Halide compiler is currently not guaranteed to be thread safe.
+std::mutex compiler_mutex;
+
 struct test_func {
     Param<int32_t> p;
     ImageParam in{Int(32), 1};
-    Func f;
+    Func func;
     Var x;
+    std::function<int(Buffer<int32_t, 1>, int32_t, Buffer<int32_t, 1>)> f;
 
     test_func() {
         Expr big = 0;
@@ -25,34 +29,36 @@ struct test_func {
         }
         Func inner;
         inner(x) = x * in(clamp(x, 0, 9)) + big;
-        f(x) = inner(x - 1) + inner(x) + inner(x + 1);
-        inner.compute_at(f, x);
+        func(x) = inner(x - 1) + inner(x) + inner(x + 1);
+        inner.compute_at(func, x);
+
+        {
+            // In this program, only one thread can call into the compiler
+            // at this point. The mutex guard is still included both to show that in
+            // general Halide compilation is not thread safe and also to keep
+            // the performance comparison slightly more equal by including
+            // (minimal) mutex cost on both paths.
+            std::lock_guard<std::mutex> lock(compiler_mutex);
+
+            f = func.compile_to_callable({in, p}).make_std_function<Buffer<int32_t, 1>, int32_t, Buffer<int32_t, 1>>();
+        }
     }
 };
-
-// The Halide compiler is currently not guaranteed to be thread safe.
-std::mutex compiler_mutex;
 
 Buffer<int32_t> bufs[16];
 
 void separate_func_per_thread_executor(int index) {
     test_func test;
 
-    {
-        std::lock_guard<std::mutex> lock(compiler_mutex);
-
-        test.f.compile_jit();
-    }
-
-    test.p.set(index);
-    test.in.set(bufs[index]);
+    Buffer<int32_t> output(10);
     for (int i = 0; i < 10; i++) {
-        Buffer<int32_t> result = test.f.realize({10});
+        int result = test.f(bufs[index], index, output);
+        assert(result == 0);
         for (int j = 0; j < 10; j++) {
             int64_t left = ((j - 1) * (int64_t)bufs[index](std::min(std::max(0, j - 1), 9)) + index * 75);
             int64_t middle = (j * (int64_t)bufs[index](std::min(std::max(0, j), 9)) + index * 75);
             int64_t right = ((j + 1) * (int64_t)bufs[index](std::min(std::max(0, j + 1), 9)) + index * 75);
-            assert(result(j) == (int32_t)(left + middle + right));
+            assert(output(j) == (int32_t)(left + middle + right +));
         }
     }
 }
@@ -71,15 +77,15 @@ void separate_func_per_thread() {
 }
 
 void same_func_per_thread_executor(int index, test_func &test) {
+    Buffer<int32_t> output(10);
     for (int i = 0; i < 10; i++) {
-        Buffer<int32_t> result = test.f.realize({10}, get_jit_target_from_environment(),
-                                                {{test.p, index},
-                                                 {test.in, bufs[index]}});
+        int result = test.f(bufs[index], index, output);
+        assert(result == 0);
         for (int j = 0; j < 10; j++) {
             int64_t left = ((j - 1) * (int64_t)bufs[index](std::min(std::max(0, j - 1), 9)) + index * 75);
             int64_t middle = (j * (int64_t)bufs[index](std::min(std::max(0, j), 9)) + index * 75);
             int64_t right = ((j + 1) * (int64_t)bufs[index](std::min(std::max(0, j + 1), 9)) + index * 75);
-            assert(result(j) == (int32_t)(left + middle + right));
+            assert(output(j) == (int32_t)(left + middle + right));
         }
     }
 }
@@ -87,17 +93,6 @@ void same_func_per_thread_executor(int index, test_func &test) {
 void same_func_per_thread() {
     std::thread threads[16];
     test_func test;
-
-    // In this program, only one thread can call into the compiler
-    // at this point. The mutex guard is still included both to show that in
-    // general Halide compilation is not thread ssafe and also to keep
-    // the performance comparison slightly more equal by including
-    // (minimal) mutex cost on both paths.
-    {
-        std::lock_guard<std::mutex> lock(compiler_mutex);
-
-        test.f.compile_jit();
-    }
 
     for (auto &thread : threads) {
         thread = std::thread(same_func_per_thread_executor,

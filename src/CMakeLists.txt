@@ -114,7 +114,6 @@ set(HEADER_FILES
     ParallelRVar.h
     Param.h
     Parameter.h
-    ParamMap.h
     PartitionLoops.h
     Pipeline.h
     Prefetch.h
@@ -273,7 +272,6 @@ set(SOURCE_FILES
     OutputImageParam.cpp
     ParallelRVar.cpp
     Parameter.cpp
-    ParamMap.cpp
     PartitionLoops.cpp
     Pipeline.cpp
     Prefetch.cpp

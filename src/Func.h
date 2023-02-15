@@ -23,7 +23,6 @@
 namespace Halide {
 
 class OutputImageParam;
-class ParamMap;
 
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
@@ -773,50 +772,6 @@ public:
      Buffer<float> im1 = r[1];
      \endcode
      *
-     * In Halide formal arguments of a computation are specified using
-     * Param<T> and ImageParam objects in the expressions defining the
-     * computation. The param_map argument to realize allows
-     * specifying a set of per-call parameters to be used for a
-     * specific computation. This method is thread-safe where the
-     * globals used by Param<T> and ImageParam are not. Any parameters
-     * that are not in the param_map are taken from the global values,
-     * so those can continue to be used if they are not changing
-     * per-thread.
-     *
-     * One can explicitly construct a ParamMap and
-     * use its set method to insert Parameter to scalar or Buffer
-     * value mappings:
-     *
-     \code
-     Param<int32> p(42);
-     ImageParam img(Int(32), 1);
-     f(x) = img(x) + p;
-
-     Buffer<int32_t) arg_img(10, 10);
-     <fill in arg_img...>
-     ParamMap params;
-     params.set(p, 17);
-     params.set(img, arg_img);
-
-     Target t = get_jit_target_from_environment();
-     Buffer<int32_t> result = f.realize({10, 10}, t, params);
-     \endcode
-     *
-     * Alternatively, an initializer list can be used
-     * directly in the realize call to pass this information:
-     *
-     \code
-     Param<int32> p(42);
-     ImageParam img(Int(32), 1);
-     f(x) = img(x) + p;
-
-     Buffer<int32_t) arg_img(10, 10);
-     <fill in arg_img...>
-
-     Target t = get_jit_target_from_environment();
-     Buffer<int32_t> result = f.realize({10, 10}, t, { { p, 17 }, { img, arg_img } });
-     \endcode
-     *
      * If the Func cannot be realized into a buffer of the given size
      * due to scheduling constraints on scattering update definitions,
      * it will be realized into a larger buffer of the minimum size
@@ -828,8 +783,7 @@ public:
      * instead.
      *
      */
-    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target());
 
     /** Same as above, but takes a custom user-provided context to be
      * passed to runtime functions. This can be used to pass state to
@@ -838,8 +792,7 @@ public:
      * that does not take a context. */
     Realization realize(JITUserContext *context,
                         std::vector<int32_t> sizes = {},
-                        const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+                        const Target &target = Target());
 
     /** Evaluate this function into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
@@ -847,8 +800,7 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
-    void realize(Pipeline::RealizationArg outputs, const Target &target = Target(),
-                 const ParamMap &param_map = ParamMap::empty_map());
+    void realize(Pipeline::RealizationArg outputs, const Target &target = Target());
 
     /** Same as above, but takes a custom user-provided context to be
      * passed to runtime functions. This can be used to pass state to
@@ -857,39 +809,19 @@ public:
      * that does not take a context. */
     void realize(JITUserContext *context,
                  Pipeline::RealizationArg outputs,
-                 const Target &target = Target(),
-                 const ParamMap &param_map = ParamMap::empty_map());
+                 const Target &target = Target());
 
     /** For a given size of output, or a given output buffer,
      * determine the bounds required of all unbound ImageParams
      * referenced. Communicates the result by allocating new buffers
      * of the appropriate size and binding them to the unbound
      * ImageParams.
-     *
-     * Set the documentation for Func::realize regarding the
-     * ParamMap. There is one difference in that input Buffer<>
-     * arguments that are being inferred are specified as a pointer to
-     * the Buffer<> in the ParamMap. E.g.
-     *
-     \code
-     Param<int32> p(42);
-     ImageParam img(Int(32), 1);
-     f(x) = img(x) + p;
-
-     Target t = get_jit_target_from_environment();
-     Buffer<> in;
-     f.infer_input_bounds({10, 10}, t, { { img, &in } });
-     \endcode
-     * On return, in will be an allocated buffer of the correct size
-     * to evaulate f over a 10x10 region.
      */
     // @{
     void infer_input_bounds(const std::vector<int32_t> &sizes,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     void infer_input_bounds(Pipeline::RealizationArg outputs,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     // @}
 
     /** Versions of infer_input_bounds that take a custom user context
@@ -897,12 +829,10 @@ public:
     // @{
     void infer_input_bounds(JITUserContext *context,
                             const std::vector<int32_t> &sizes,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     void infer_input_bounds(JITUserContext *context,
                             Pipeline::RealizationArg outputs,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     // @}
     /** Statically compile this function to llvm bitcode, with the
      * given filename (which should probably end in .bc), type
