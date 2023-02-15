@@ -636,6 +636,12 @@ protected:
      * vectors. Used by CodeGen_ARM to help with vld2/3/4 emission. */
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
+    /** Warning messages which we want to avoid displaying number of times */
+    enum class WarningKind {
+        EmulatedFloat16,
+    };
+    std::map<WarningKind, std::string> onetime_warnings;
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */

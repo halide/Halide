@@ -912,6 +912,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.arch == Target::Hexagon) {
                     modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
                     modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
+                } else if (t.arch == Target::ARM && t.has_feature(Target::Semihosting)) {
+                    add_allocator();
+                    modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::Fuchsia) {

@@ -156,7 +156,7 @@ private:
             Region new_bounds;
             for (size_t i = 0; i < prefetch_box.size(); i++) {
                 Expr extent = prefetch_box[i].max - prefetch_box[i].min + 1;
-                new_bounds.push_back(Range(simplify(prefetch_box[i].min), simplify(extent)));
+                new_bounds.emplace_back(simplify(prefetch_box[i].min), simplify(extent));
             }
             Expr condition = op->condition;
             if (prefetch_box.maybe_unused()) {

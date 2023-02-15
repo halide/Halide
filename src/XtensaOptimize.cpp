@@ -1172,6 +1172,7 @@ private:
             {"halide_xtensa_rounding_shift_right_i32", rounding_shift_right(wild_i32x, bc(wild_u32))},
             // {"halide_xtensa_rounding_shift_right_u32", rounding_shift_right(wild_u32x, bc(wild_u32))},
 
+            {"halide_xtensa_narrow_i48_with_shift_i16", call("halide_xtensa_narrow_with_shift_i16", wild_i16x, {i32(wild_i48x), wild_i32})},
             {"halide_xtensa_narrow_i48_with_rounding_shift_i16", call("halide_xtensa_narrow_with_rounding_shift_i16", wild_i16x, {i32(wild_i48x), wild_u32})},
 
             {"halide_xtensa_widen_pair_mul_add_u24",

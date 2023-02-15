@@ -24,6 +24,8 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
+namespace {
+
 std::string intrinsic_suffix_for_type(Type t) {
     if (t.is_int() && (t.bits() == 8)) {
         return "2NX8";
@@ -64,6 +66,8 @@ public:
     bool uses_dma = false;
     int max_channel_no = 0;
 };
+
+}  // namespace
 
 void CodeGen_Xtensa::add_platform_prologue() {
     const char *headers = R"INLINE_CODE(
@@ -116,193 +120,20 @@ class ScopedDmaInitializer {
     stream << headers;
 }
 
-void CodeGen_Xtensa::compile(const Module &module) {
-    CodeGen_C::compile(module);
-}
+Stmt CodeGen_Xtensa::preprocess_function_body(const Stmt &stmt) {
+    Stmt new_body = match_xtensa_patterns(stmt, target);
 
-void CodeGen_Xtensa::compile(const Buffer<> &buffer) {
-    CodeGen_C::compile(buffer);
-}
-void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, std::string> &metadata_name_map) {
-    // Don't put non-external function declarations in headers.
-    if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
-        return;
+    UsesDmaCopy uses_dma;
+    new_body.accept(&uses_dma);
+    if (uses_dma.uses_dma) {
+        stream << get_indent() << "ScopedDmaInitializer dma_initializer(" << (uses_dma.max_channel_no) + 1 << ");\n";
+        stream << get_indent() << "if (!dma_initializer.is_valid()) {\n";
+        stream << get_indent() << "halide_error(_ucon, \"DMA initialization failed\");\n";
+        stream << get_indent() << "return halide_error_code_generic_error;\n";
+        stream << get_indent() << "}\n";
     }
 
-    const std::vector<LoweredArgument> &args = f.args;
-
-    have_user_context = false;
-    for (const auto &arg : args) {
-        // TODO: check that its type is void *?
-        have_user_context |= (arg.name == "__user_context");
-    }
-
-    NameMangling name_mangling = f.name_mangling;
-    if (name_mangling == NameMangling::Default) {
-        name_mangling = (target.has_feature(Target::CPlusPlusMangling) ? NameMangling::CPlusPlus : NameMangling::C);
-    }
-
-    set_name_mangling_mode(name_mangling);
-
-    std::vector<std::string> namespaces;
-    std::string simple_name = extract_namespaces(f.name, namespaces);
-    if (!is_c_plus_plus_interface()) {
-        user_assert(namespaces.empty()) << "Namespace qualifiers not allowed on function name if not compiling with Target::CPlusPlusNameMangling.\n";
-    }
-
-    if (!namespaces.empty()) {
-        for (const auto &ns : namespaces) {
-            stream << "namespace " << ns << " {\n";
-        }
-        stream << "\n";
-    }
-
-    Stmt body = match_xtensa_patterns(f.body, target);
-
-    const auto emit_arg_decls = [&](const Type &ucon_type = Type()) {
-        const char *comma = "";
-        for (const auto &arg : args) {
-            stream << comma;
-            if (arg.is_buffer()) {
-                stream << "struct halide_buffer_t *"
-                       << print_name(arg.name)
-                       << "_buffer";
-            } else {
-                // If this arg is the user_context value, *and* ucon_type is valid,
-                // use ucon_type instead of arg.type.
-                const Type &t = (arg.name == "__user_context" && ucon_type.bits() != 0) ? ucon_type : arg.type;
-                stream << print_type(t, AppendSpace) << print_name(arg.name);
-            }
-            comma = ", ";
-        }
-    };
-
-    // Emit the function prototype
-    if (f.linkage == LinkageType::Internal) {
-        // If the function isn't public, mark it static.
-        stream << "static ";
-    }
-    stream << "HALIDE_FUNCTION_ATTRS\n";
-    stream << "int " << simple_name << "(";
-    emit_arg_decls();
-
-    if (is_header_or_extern_decl()) {
-        stream << ");\n";
-    } else {
-        stream << ") ";
-        open_scope();
-
-        if (uses_gpu_for_loops) {
-            stream << get_indent() << "halide_error("
-                   << (have_user_context ? "__user_context_" : "nullptr")
-                   << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
-                   << "this function will always fail at runtime\");\n";
-            stream << get_indent() << "return halide_error_code_device_malloc_failed;\n";
-        } else {
-            // Emit a local user_context we can pass in all cases, either
-            // aliasing __user_context or nullptr.
-            stream << get_indent() << "void * const _ucon = "
-                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
-                   << ";\n";
-
-            if (target.has_feature(Target::NoAsserts)) {
-                stream << get_indent() << "halide_maybe_unused(_ucon);";
-            }
-
-            UsesDmaCopy uses_dma;
-            body.accept(&uses_dma);
-            if (uses_dma.uses_dma) {
-                stream << get_indent() << "ScopedDmaInitializer dma_initializer(" << uses_dma.max_channel_no + 1 << ");\n";
-                stream << get_indent() << "if (!dma_initializer.is_valid()) {\n";
-                stream << get_indent() << "halide_error(_ucon, \"DMA initialization failed\");\n";
-                stream << get_indent() << "return halide_error_code_generic_error;\n";
-                stream << get_indent() << "}\n";
-            }
-            // stream << "printf(\"" << simple_name << "\\n\");";
-            // Emit the body
-            print(body);
-            // stream << "printf(\"[end]" << simple_name << "\\n\");";
-
-            // Return success.
-            stream << get_indent() << "return 0;\n";
-            cache.clear();
-        }
-
-        // Ensure we use open/close_scope, so that the cache doesn't try to linger
-        // across function boundaries for internal closures.
-        close_scope("");
-    }
-
-    // Workaround for https://github.com/halide/Halide/issues/635:
-    // For historical reasons, Halide-generated AOT code
-    // defines user_context as `void const*`, but expects all
-    // define_extern code with user_context usage to use `void *`. This
-    // usually isn't an issue, but if both the caller and callee of the
-    // pass a user_context, *and* c_plus_plus_name_mangling is enabled,
-    // we get link errors because of this dichotomy. Fixing this
-    // "correctly" (ie so that everything always uses identical types for
-    // user_context in all cases) will require a *lot* of downstream
-    // churn (see https://github.com/halide/Halide/issues/7298),
-    // so this is a workaround: Add a wrapper with `void*`
-    // ucon -> `void const*` ucon. In most cases this will be ignored
-    // (and probably dead-stripped), but in these cases it's critical.
-    //
-    // (Note that we don't check to see if c_plus_plus_name_mangling is
-    // enabled, since that would have to be done on the caller side, and
-    // this is purely a callee-side fix.)
-    if (f.linkage != LinkageType::Internal &&
-        output_kind == CPlusPlusImplementation &&
-        target.has_feature(Target::CPlusPlusMangling) &&
-        get_target().has_feature(Target::UserContext)) {
-
-        Type ucon_type = Type();
-        for (const auto &arg : args) {
-            if (arg.name == "__user_context") {
-                ucon_type = arg.type;
-                break;
-            }
-        }
-        if (ucon_type == type_of<void const *>()) {
-            stream << "\nHALIDE_FUNCTION_ATTRS\n";
-            stream << "int " << simple_name << "(";
-            emit_arg_decls(type_of<void *>());
-            stream << ") ";
-            open_scope();
-            stream << get_indent() << "    return " << simple_name << "(";
-            const char *comma = "";
-            for (const auto &arg : args) {
-                if (arg.name == "__user_context") {
-                    // Add an explicit cast here so we won't call ourselves into oblivion
-                    stream << "(void const *)";
-                }
-                stream << comma << print_name(arg.name);
-                if (arg.is_buffer()) {
-                    stream << "_buffer";
-                }
-                comma = ", ";
-            }
-            stream << ");\n";
-            close_scope("");
-        }
-    }
-
-    if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
-        // Emit the argv version
-        emit_argv_wrapper(simple_name, args);
-    }
-
-    if (f.linkage == LinkageType::ExternalPlusMetadata) {
-        // Emit the metadata.
-        emit_metadata_getter(simple_name, args, metadata_name_map);
-    }
-
-    if (!namespaces.empty()) {
-        stream << "\n";
-        for (size_t i = namespaces.size(); i > 0; i--) {
-            stream << "}  // namespace " << namespaces[i - 1] << "\n";
-        }
-        stream << "\n";
-    }
+    return new_body;
 }
 
 void CodeGen_Xtensa::add_vector_typedefs(const std::set<Type> &vector_types) {
@@ -2889,7 +2720,7 @@ string CodeGen_Xtensa::print_assignment(Type t, const std::string &rhs) {
         const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
         if (t.is_handle()) {
             // Don't print void *, which might lose useful type information. just use auto.
-            stream << get_indent() << "auto * __restrict ";
+            stream << get_indent() << "auto * ";
         } else {
             stream << get_indent() << print_type(t, AppendSpace);
         }
