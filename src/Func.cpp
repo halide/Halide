@@ -3346,10 +3346,10 @@ void Func::compile_to_assembly(const string &filename, const vector<Argument> &a
 // JIT-related code
 
 namespace {
-    template<typename A, typename B>
-    void set_handler(A & a, B b) {
-        a = (A)b;
-    }
+template<typename A, typename B>
+void set_handler(A &a, B b) {
+    a = (A)b;
+}
 }  // namespace
 
 void Func::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
