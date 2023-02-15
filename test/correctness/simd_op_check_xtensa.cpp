@@ -147,6 +147,9 @@ public:
         check("IVP_NSAUN_2X32", vector_width / 4, count_leading_zeros(u32_1));
         check("IVP_NSAUN_2X32", vector_width / 4, count_leading_zeros(i32_1));
 
+        //  Shifts
+        check("IVP_PACKVRNRNX48", vector_width / 2, i16(widening_mul(i16_1, i16_2) >> 4));
+
         // These are not generated right now, because vectors are split now, so comment out for now.
         // Narrowing with shifting.
         // check("halide_xtensa_narrow_with_shift_i16", vector_width / 2, i16(i32_1 >> i32_2));
@@ -168,7 +171,7 @@ int main(int argc, char **argv) {
     printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
 
     if (!hl_target.has_feature(Target::Xtensa)) {
-        printf("Skipping the simd_op_check_xtensa test, because target doesn't have xtensa feature flag enabled\n");
+        printf("[SKIP] Skipping the simd_op_check_xtensa test, because target doesn't have xtensa feature flag enabled\n");
         return 0;
     }
     SimdOpCheckXtensa test_xtensa(hl_target);

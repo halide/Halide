@@ -8,11 +8,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
-if (BAREMETAL)
-    # Avoid handling Threads library as mandatory dependency in find_package()
-    set(Halide_NO_THREADS ON)
-endif()
-
 if (NOT DEFINED GEN_PACKAGE)
     set(GEN_PACKAGE "HelloBaremetal-add_generator")
 endif()

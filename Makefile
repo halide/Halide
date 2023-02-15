@@ -67,7 +67,8 @@ LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir | sed -e 's/\\/\//g' -e 's/\([a-zA
 LLVM_SYSTEM_LIBS=$(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g' | sed 's/-llibxml2.tbd/-lxml2/')
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
-LLVM_CXX_FLAGS = -std=c++17  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/;s/c++14/c++17/g'))
+# Note, removing -D_GLIBCXX_ASSERTIONS is a workaround for https://reviews.llvm.org/D142279
+LLVM_CXX_FLAGS = -std=c++17  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/ -D_GLIBCXX_ASSERTIONS / /g' -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/;s/c++14/c++17/g'))
 OPTIMIZE ?= -O3
 OPTIMIZE_FOR_BUILD_TIME ?= -O0
 

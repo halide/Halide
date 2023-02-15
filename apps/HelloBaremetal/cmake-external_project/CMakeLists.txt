@@ -29,10 +29,6 @@ ExternalProject_Add(gen_project
 # Step 2
 # Build application with cross compiler,
 # where the generator executable built in Step 1 is imported and called
-if (BAREMETAL)
-    # Avoid handling Threads library as mandatory dependency in find_package()
-    set(Halide_NO_THREADS ON)
-endif()
 
 # Import Halide. Instead of the package Halide, HalideHelpers is enough as we don't use JIT mode.
 find_package(HalideHelpers REQUIRED)

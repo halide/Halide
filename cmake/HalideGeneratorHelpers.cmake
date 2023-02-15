@@ -216,7 +216,7 @@ function(add_halide_library TARGET)
     ##
 
     set(options C_BACKEND GRADIENT_DESCENT)
-    set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER HEADER ${extra_output_names})
+    set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER HEADER ${extra_output_names} NO_THREADS NO_DL_LIBS)
     set(multiValueArgs TARGETS FEATURES PARAMS PLUGINS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -314,7 +314,16 @@ function(add_halide_library TARGET)
         set(ARG_USE_RUNTIME Halide::Runtime)
     elseif (NOT ARG_USE_RUNTIME)
         # If we're not using an existing runtime, create one.
-        add_halide_runtime("${TARGET}.runtime" TARGETS ${ARG_TARGETS} FROM ${ARG_FROM})
+
+        # To forward NO_THREADS/NO_DL_LIBS args to add_halide_runtime()
+        if (DEFINED ARG_NO_THREADS)
+            set(CALL_ARG_NO_THREADS NO_THREADS ${ARG_NO_THREADS})
+        endif ()
+        if (DEFINED ARG_NO_DL_LIBS)
+            set(CALL_ARG_NO_DL_LIBS NO_DL_LIBS ${ARG_NO_DL_LIBS})
+        endif ()
+
+        add_halide_runtime("${TARGET}.runtime" TARGETS ${ARG_TARGETS} FROM ${ARG_FROM} ${CALL_ARG_NO_THREADS} ${CALL_ARG_NO_DL_LIBS})
         set(ARG_USE_RUNTIME "${TARGET}.runtime")
     elseif (NOT TARGET ${ARG_USE_RUNTIME})
         message(FATAL_ERROR "Invalid runtime target ${ARG_USE_RUNTIME}")
@@ -556,7 +565,7 @@ endfunction()
 
 function(add_halide_runtime RT)
     set(options "")
-    set(oneValueArgs FROM)
+    set(oneValueArgs FROM NO_THREADS NO_DL_LIBS)
     set(multiValueArgs TARGETS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -581,6 +590,15 @@ function(add_halide_runtime RT)
             add_executable(_Halide_gengen ALIAS ${ARG_FROM})
         endif()
     endif()
+
+    # The default of NO_THREADS/NO_DL_LIBS is OFF unless Halide_RUNTIME_NO_THREADS/NO_DL_LIBS is defined globally
+    if (NOT DEFINED ARG_NO_THREADS)
+        set(ARG_NO_THREADS ${Halide_RUNTIME_NO_THREADS})
+    endif ()
+    if (NOT DEFINED ARG_NO_DL_LIBS)
+        set(ARG_NO_DL_LIBS ${Halide_RUNTIME_NO_DL_LIBS})
+    endif ()
+
     # Ensure _Halide_gengen is defined
     _Halide_gengen_ensure()
 
@@ -620,7 +638,14 @@ function(add_halide_runtime RT)
         _Halide_fix_xcode("${RT}")
     endif ()
 
-    target_link_libraries("${RT}" INTERFACE Halide::Runtime Threads::Threads ${CMAKE_DL_LIBS})
+    # Take care of the runtime/toolchain which doesn't have Threads or DL libs
+    if (NOT ARG_NO_THREADS AND NOT TARGET Threads::Threads)
+        find_package(Threads REQUIRED)
+    endif ()
+    target_link_libraries("${RT}" INTERFACE
+                          Halide::Runtime
+                          $<$<NOT:$<BOOL:${ARG_NO_THREADS}>>:Threads::Threads>
+                          $<$<NOT:$<BOOL:${ARG_NO_DL_LIBS}>>:${CMAKE_DL_LIBS}>)
     _Halide_add_targets_to_runtime("${RT}" TARGETS ${ARG_TARGETS})
 endfunction()
 

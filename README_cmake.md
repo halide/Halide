@@ -750,6 +750,8 @@ Variables that control package loading:
 | Variable             | Description                                                                                                                                                                   |
 |----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Halide_SHARED_LIBS` | override `BUILD_SHARED_LIBS` when loading the Halide package via `find_package`. Has no effect when using Halide via `add_subdirectory` as a Git or `FetchContent` submodule. |
+| `Halide_RUNTIME_NO_THREADS` | skip linking of Threads libraray to runtime. Should be set if your toolchain does not support it (e.g. baremetal). |
+| `Halide_RUNTIME_NO_DL_LIBS` | skip linking of DL libraray to runtime. Should be set if your toolchain does not support it (e.g. baremetal). |
 
 Variables set by the package:
 
