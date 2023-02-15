@@ -935,10 +935,8 @@ private:
             {"halide_xtensa_narrow_i48_with_rounding_shift_i16", i16(rounding_shift_right(i32(wild_i48x), wild_i32))},
             {"halide_xtensa_narrow_i48_with_rounding_shift_u16", u16(rounding_shift_right(u32(wild_i48x), wild_u32))},
 
-#if 0  // Somehow this pattern is preventing a i16(i32(i48x) >> wild_i32) to be recognized as a PACKVRNRNX48
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
-#endif
 
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
