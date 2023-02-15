@@ -2200,6 +2200,12 @@ HALIDE_ALWAYS_INLINE native_vector_i16_x2 convert<native_vector_i16_x2, native_v
 }
 
 template<>
+HALIDE_ALWAYS_INLINE native_vector_u16_x2 convert<native_vector_u16_x2, native_vector_i24>(const native_vector_i24& wide) {
+  return native_vector_u16_x2(native_vector_u16_x2::from_native_vector,
+                        IVP_CVT16U2NX24L(wide), IVP_CVT16U2NX24H(wide));
+}
+
+template<>
 HALIDE_ALWAYS_INLINE native_vector_i8 convert<native_vector_i8, native_vector_i16_x2>(const native_vector_i16_x2& src) {
   xb_vec2Nx24 wide = IVP_CVT24S2NX16(src.native_vector[1], src.native_vector[0]);
   return IVP_PACKL2NX24(wide);
