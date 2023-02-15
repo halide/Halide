@@ -88,8 +88,8 @@ public:
         check("IVP_MULUUPNX16", vector_width / 2, u32(u16_1) * u32(u16_2) + u32(u16_3) * u32(u16_4));
         check("IVP_MULUUPNX16", vector_width / 2, i48(u16_1) * i48(u16_2) + i48(u16_3) * i48(u16_4));
 
-        // check("halide_xtensa_widen_add_i48", vector_width / 2, i32(i16_1) + i32(i16_2));
-        // check("halide_xtensa_widen_add_u48", vector_width / 2, u32(u16_1) + u32(u16_2));
+        check("halide_xtensa_widen_add_i48", vector_width / 2, i32(i16_1) + i32(i16_2));
+        check("halide_xtensa_widen_add_u48", vector_width / 2, u32(u16_1) + u32(u16_2));
 
         // Multiplications.
         check("IVP_MULNX16PACKL", vector_width / 2, i16_1 * i16_2);
