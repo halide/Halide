@@ -70,10 +70,13 @@ private:
 public:
     ParamMap() = default;
 
-    ParamMap(const std::initializer_list<ParamMapping> &init);
+    [[deprecated("ParamMap is deprecated in Halide 16 and will be removed in Halide 17. "
+                 "Callers requiring threadsafe JIT calls should migrate to use compile_to_callable() instead.")]] ParamMap(const std::initializer_list<ParamMapping> &init);
 
     template<typename T>
-    void set(const Param<T> &p, T val) {
+    [[deprecated("ParamMap is deprecated in Halide 16 and will be removed in Halide 17. "
+                 "Callers requiring threadsafe JIT calls should migrate to use compile_to_callable() instead.")]] void
+    set(const Param<T> &p, T val) {
         Internal::Parameter v(p.type(), false, 0, p.name());
         v.set_scalar<T>(val);
         ParamArg pa;
@@ -82,7 +85,9 @@ public:
         mapping[p.parameter()] = pa;
     }
 
-    void set(const ImageParam &p, const Buffer<> &buf) {
+    [[deprecated("ParamMap is deprecated in Halide 16 and will be removed in Halide 17. "
+                 "Callers requiring threadsafe JIT calls should migrate to use compile_to_callable() instead.")]] void
+    set(const ImageParam &p, const Buffer<> &buf) {
         set(p, buf, nullptr);
     }
 

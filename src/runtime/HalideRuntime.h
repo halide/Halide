@@ -1624,18 +1624,6 @@ typedef struct halide_buffer_t {
 extern "C" {
 #endif
 
-#ifndef HALIDE_ATTRIBUTE_DEPRECATED
-#ifdef HALIDE_ALLOW_DEPRECATED
-#define HALIDE_ATTRIBUTE_DEPRECATED(x)
-#else
-#ifdef _MSC_VER
-#define HALIDE_ATTRIBUTE_DEPRECATED(x) __declspec(deprecated(x))
-#else
-#define HALIDE_ATTRIBUTE_DEPRECATED(x) __attribute__((deprecated(x)))
-#endif
-#endif
-#endif
-
 /** halide_scalar_value_t is a simple union able to represent all the well-known
  * scalar values in a filter argument. Note that it isn't tagged with a type;
  * you must ensure you know the proper type before accessing. Most user
