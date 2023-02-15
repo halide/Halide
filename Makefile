@@ -1152,6 +1152,10 @@ clean:
 	rm -rf $(DISTRIB_DIR)
 	rm -rf $(ROOT_DIR)/apps/*/bin
 
+.PHONY: clean_xtensa
+clean_xtensa:
+	rm -rf $(XTENSA_RUNTIME_OBJS) $(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a
+
 CORRECTNESS_TESTS = $(shell ls $(ROOT_DIR)/test/correctness/*.cpp) $(shell ls $(ROOT_DIR)/test/correctness/*.c)
 PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)
 ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
@@ -2388,21 +2392,22 @@ $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT)
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT) autoschedulers
 
-$(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a:
-	@mkdir -p $(@D)
-	@rm -f $(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a
+XTENSA_RUNTIME_SRC=$(ROOT_DIR)/src/runtime/alignment_128.cpp \
+                   $(ROOT_DIR)/src/runtime/errors.cpp \
+                   $(ROOT_DIR)/src/runtime/posix_error_handler.cpp \
+                   $(ROOT_DIR)/src/runtime/msan_stubs.cpp \
+                   $(ROOT_DIR)/src/runtime/to_string.cpp \
+                   $(ROOT_DIR)/src/runtime/posix_print.cpp \
+                   $(ROOT_DIR)/src/runtime/posix_io.cpp \
+                   $(ROOT_DIR)/src/runtime/xtensa_dma.cpp \
 
-	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/alignment_64.cpp -o $(BIN_DIR)/xtensa_runtime_alignment_64.o
-	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/errors.cpp -o $(BIN_DIR)/xtensa_runtime_errors.o
-	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/posix_allocator.cpp -o $(BIN_DIR)/xtensa_runtime_posix_allocator.o
-	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/posix_error_handler.cpp -o $(BIN_DIR)/xtensa_runtime_posix_error_handler.o
-	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/msan_stubs.cpp -o $(BIN_DIR)/xtensa_runtime_msan_stubs.o
-	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/to_string.cpp -o $(BIN_DIR)/xtensa_runtime_to_string.o
-	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/posix_print.cpp -o $(BIN_DIR)/xtensa_runtime_posix_print.o
-	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/posix_io.cpp -o $(BIN_DIR)/xtensa_runtime_posix_io.o
-	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/xtensa_dma_stubs.cpp -o $(BIN_DIR)/xtensa_runtime_xtensa_dma_stubs.o
+XTENSA_RUNTIME_OBJS=$(patsubst $(ROOT_DIR)/src/runtime/%,$(BIN_DIR)/%,$(patsubst %.cpp,%.o,$(XTENSA_RUNTIME_SRC)))
 
-	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-ar rcs $@ $(BIN_DIR)/xtensa_runtime_alignment_64.o $(BIN_DIR)/xtensa_runtime_errors.o $(BIN_DIR)/xtensa_runtime_posix_error_handler.o $(BIN_DIR)/xtensa_runtime_posix_print.o $(BIN_DIR)/xtensa_runtime_posix_io.o $(BIN_DIR)/xtensa_runtime_msan_stubs.o $(BIN_DIR)/xtensa_runtime_to_string.o $(BIN_DIR)/xtensa_runtime_xtensa_dma_stubs.o
+$(XTENSA_RUNTIME_OBJS): $(BIN_DIR)/%.o: $(ROOT_DIR)/src/runtime/%.cpp
+	xt-clang++ -O2 -mlongcalls -c -std=c++17 -stdlib=libc++ -D COMPILING_HALIDE_RUNTIME -DBITS_32 -ffreestanding $< -o $@
+
+$(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a: $(XTENSA_RUNTIME_OBJS)
+	xt-ar rcs $@ $^
 
 xtensa-runtime: distrib $(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a
 

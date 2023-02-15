@@ -1676,10 +1676,24 @@ HALIDE_ALWAYS_INLINE native_vector_i24 halide_xtensa_widen_mul_add_u24(const nat
   return r;
 }
 
+HALIDE_ALWAYS_INLINE native_vector_i24 halide_xtensa_widen_mul_sub_u24(const native_vector_i24& a, const native_vector_u8& b, const native_vector_u8& c) {
+  native_vector_i24 r = a;
+  IVP_MULUUS2NX8(r, b, c);
+  return r;
+}
+
 HALIDE_ALWAYS_INLINE native_vector_i24 halide_xtensa_widen_mul_add_i24(const native_vector_i24& a, const native_vector_i8& b, const native_vector_i8& c) {
   native_vector_i24 r = a;
   IVP_MULA2NX8(r, b, c);
   return r;
+}
+
+HALIDE_ALWAYS_INLINE native_vector_i24 halide_xtensa_widen_mul_i24(const native_vector_i8& a, const native_vector_i8& b ) {
+  return IVP_MUL2NX8(a, b);
+}
+
+HALIDE_ALWAYS_INLINE native_vector_i24 halide_xtensa_widen_mul_u24(const native_vector_u8& a, const native_vector_u8& b ) {
+  return IVP_MULUU2NX8(a, b);
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i24 halide_xtensa_widen_quad_mul_add_i24(
@@ -1901,6 +1915,10 @@ HALIDE_ALWAYS_INLINE native_vector_i8 halide_xtensa_narrow_i24_with_shift_i8(con
   return IVP_PACKVR2NX24(a, shift);
 }
 
+HALIDE_ALWAYS_INLINE native_vector_u8 halide_xtensa_narrow_i24_with_shift_u8(const native_vector_i24& a, int shift) {
+  return IVP_PACKVRU2NX24(a, shift);
+}
+
 HALIDE_ALWAYS_INLINE native_vector_i32_x2 halide_xtensa_narrow_i48_with_shift_i32(const native_vector_i48& a, int shift) {
     native_vector_i32 even = IVP_PACKVRNRNX48_0(a, shift);
     native_vector_i32 odd = IVP_PACKVRNRNX48_1(a, shift);
@@ -2021,8 +2039,9 @@ HALIDE_ALWAYS_INLINE native_vector_u8 convert<native_vector_u8, native_vector_i3
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_u8 convert<native_vector_u8, native_vector_u16_x2>(const native_vector_u16_x2& src) {
-  xb_vec2Nx24 wide = IVP_CVT24U2NX16(src.native_vector[1], src.native_vector[0]);
-  return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));
+  return IVP_SEL2NX8UI(IVP_MOV2NX8U_FROMNX16(src.native_vector[1]),
+                       IVP_MOV2NX8U_FROMNX16(src.native_vector[0]),
+                       IVP_SELI_8B_EXTRACT_1_OF_2_OFF_0);
 }
 
 template<>
@@ -2129,9 +2148,11 @@ HALIDE_ALWAYS_INLINE native_vector_i32_x4 convert<native_vector_i32_x4, native_v
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i32_x2 convert<native_vector_i32_x2, native_vector_i16>(const native_vector_i16& src) {
-    xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src);
     return native_vector_i32_x2(native_vector_i32_x2::from_native_vector,
-                      IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide));
+      IVP_MOVN_2X32_FROMNX16(
+        IVP_SELNX16UI(native_vector_i16(0), src, IVP_SELI_16B_INTERLEAVE_1_LO)),
+      IVP_MOVN_2X32_FROMNX16(
+        IVP_SELNX16UI(native_vector_i16(0), src, IVP_SELI_16B_INTERLEAVE_1_HI)));
 }
 
 template<>
@@ -2741,6 +2762,10 @@ void CodeGen_Xtensa::visit(const Mul *op) {
             string sa = print_expr(op->a);
             string sb = print_expr(op->b);
             print_assignment(op->type, "IVP_MULNX16PACKL(" + sa + ", " + sb + ")");
+        } else if (is_native_xtensa_vector<uint16_t>(op->type, target)) {
+            string sa = print_expr(op->a);
+            string sb = print_expr(op->b);
+            print_assignment(op->type, "IVP_MULNX16UPACKL(" + sa + ", " + sb + ")");
         } else if (is_native_xtensa_vector<int32_t>(op->type, target)) {
             string sa = print_expr(op->a);
             string sb = print_expr(op->b);
@@ -2897,6 +2922,8 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         {"halide_xtensa_avg_round_u8", "IVP_AVGRU2NX8U"},
         {"halide_xtensa_avg_round_i16", "IVP_AVGRNX16"},
         {"halide_xtensa_avg_round_u16", "IVP_AVGRUNX16U"},
+        {"halide_xtensa_widen_mul_i24", "IVP_MUL2NX8"},
+        {"halide_xtensa_widen_mul_u24", "IVP_MULUU2NX8"},
         {"halide_xtensa_widen_mul_i48", "IVP_MULNX16"},
         {"halide_xtensa_widen_mul_u48", "IVP_MULUUNX16"},
         {"halide_xtensa_mul_i32", "IVP_MULN_2X32"},

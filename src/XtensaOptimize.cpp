@@ -777,6 +777,7 @@ private:
                 // {"halide_xtensa_pred_sub_i8", wild_i8x - select(wild_u1x, wild_i8x, wild_i8x)},
                 // {"halide_xtensa_pred_sub_i16", wild_i16x - select(wild_u1x, wild_i16x, wild_i16x)},
                 // {"halide_xtensa_pred_sub_i32", wild_i32x - select(wild_u1x, wild_i32x, wild_i32x)},
+                {"halide_xtensa_widen_mul_sub_u24", wild_i24x - halide_xtensa_widen_mul_u24(wild_u8x, wild_u8x)},
             };
 
             Expr new_expr = apply_patterns(op, subs, this);
@@ -951,6 +952,8 @@ private:
 
             {"halide_xtensa_narrow_i24_with_shift_i8", i8(wild_i24x >> wild_i24)},
             {"halide_xtensa_narrow_i24_with_shift_i8", i8(wild_i24x / wild_i24), Pattern::ExactLog2Op1},
+            {"halide_xtensa_narrow_i24_with_shift_u8", u8(wild_i24x >> wild_i24)},
+            {"halide_xtensa_narrow_i24_with_shift_u8", u8(wild_i24x / wild_i24), Pattern::ExactLog2Op1},
 
             {"halide_xtensa_narrow_high_i32", i32(wild_i64x >> 32)},
             {"halide_xtensa_narrow_high_i32", i32(wild_i64x / IntImm::make(Int(64), 4294967296ll))},
@@ -1104,6 +1107,9 @@ private:
             {"halide_xtensa_sat_add_i16", saturating_add(wild_i16x, wild_i16x)},
             {"halide_xtensa_sat_add_i32", saturating_add(wild_i32x, wild_i32x)},
             {"halide_xtensa_sat_sub_i16", saturating_sub(wild_i16x, wild_i16x)},
+
+            {"halide_xtensa_widen_mul_i24", widening_mul(wild_i8x, wild_i8x), Pattern::AccumulatorOutput24},
+            {"halide_xtensa_widen_mul_u24", widening_mul(wild_u8x, wild_u8x), Pattern::AccumulatorOutput24},
 
             {"halide_xtensa_widen_mul_i48", widening_mul(wild_i16x, wild_i16x), Pattern::AccumulatorOutput48},
             {"halide_xtensa_widen_mul_ui48", widening_mul(wild_u16x, wild_i16x), Pattern::AccumulatorOutput48},
