@@ -1079,12 +1079,27 @@ class VectorSubs : public IRMutator {
                 break;
             }
 
-            // f[x] = f[x] <op> y
             const Store *store = op->body.as<Store>();
             if (!store) {
                 break;
             }
 
+            // f[x] = y
+            if (!expr_uses_var(store->value, store->name) &&
+                !expr_uses_var(store->predicate, store->name)) {
+                // This can be naively vectorized just fine. If there are
+                // repeated values in the vectorized store index, the ordering
+                // of writes may be undetermined and backend-dependent, but
+                // they'll be atomic.
+                Stmt s = mutate(store);
+
+                // We may still need the atomic node, if there was more
+                // parallelism than just the vectorization.
+                s = Atomic::make(op->producer_name, op->mutex_name, s);
+                return s;
+            }
+
+            // f[x] = f[x] <op> y
             VectorReduce::Operator reduce_op = VectorReduce::Add;
             Expr a, b;
             if (const Add *add = store->value.as<Add>()) {
