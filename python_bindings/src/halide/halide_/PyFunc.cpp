@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "PyBuffer.h"
+#include "PyError.h"
 #include "PyExpr.h"
 #include "PyFuncRef.h"
 #include "PyLoopLevel.h"
@@ -92,7 +93,8 @@ py::object evaluate_impl(const py::object &expr, bool may_gpu) {
     {
         py::gil_scoped_release release;
 
-        r = f.realize();
+        PyJITUserContext juc;
+        r = f.realize(&juc);
     }
     if (r->size() == 1) {
         return buffer_getitem_operator((*r)[0], {});
@@ -144,7 +146,9 @@ void define_func(py::module &m) {
                 "realize",
                 [](Func &f, Buffer<> buffer, const Target &target) -> void {
                     py::gil_scoped_release release;
-                    f.realize(buffer, target);
+
+                    PyJITUserContext juc;
+                    f.realize(&juc, buffer, target);
                 },
                 py::arg("dst"), py::arg("target") = Target())
 
@@ -160,7 +164,9 @@ void define_func(py::module &m) {
                     std::optional<Realization> r;
                     {
                         py::gil_scoped_release release;
-                        r = f.realize(sizes, target);
+
+                        PyJITUserContext juc;
+                        r = f.realize(&juc, sizes, target);
                     }
                     return realization_to_object(*r);
                 },
@@ -171,7 +177,9 @@ void define_func(py::module &m) {
                 "realize",
                 [](Func &f, std::vector<Buffer<>> buffers, const Target &t) -> void {
                     py::gil_scoped_release release;
-                    f.realize(Realization(std::move(buffers)), t);
+
+                    PyJITUserContext juc;
+                    f.realize(&juc, Realization(std::move(buffers)), t);
                 },
                 py::arg("dst"), py::arg("target") = Target())
 
@@ -345,10 +353,12 @@ void define_func(py::module &m) {
             .def(
                 "infer_input_bounds", [](Func &f, const py::object &dst, const Target &target) -> void {
                     const Target t = to_jit_target(target);
+                    PyJITUserContext juc;
+
                     // dst could be Buffer<>, vector<Buffer>, or vector<int>
                     try {
                         Buffer<> b = dst.cast<Buffer<>>();
-                        f.infer_input_bounds(b, t);
+                        f.infer_input_bounds(&juc, b, t);
                         return;
                     } catch (...) {
                         // fall thru
@@ -356,7 +366,7 @@ void define_func(py::module &m) {
 
                     try {
                         std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
-                        f.infer_input_bounds(Realization(std::move(v)), t);
+                        f.infer_input_bounds(&juc, Realization(std::move(v)), t);
                         return;
                     } catch (...) {
                         // fall thru
@@ -364,7 +374,7 @@ void define_func(py::module &m) {
 
                     try {
                         std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
-                        f.infer_input_bounds(v, t);
+                        f.infer_input_bounds(&juc, v, t);
                         return;
                     } catch (...) {
                         // fall thru

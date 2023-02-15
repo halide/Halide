@@ -2,6 +2,7 @@
 
 #include <utility>
 
+#include "PyError.h"
 #include "PyTuple.h"
 
 namespace Halide {
@@ -173,7 +174,9 @@ void define_pipeline(py::module &m) {
             .def(
                 "realize", [](Pipeline &p, Buffer<> buffer, const Target &target) -> void {
                     py::gil_scoped_release release;
-                    p.realize(Realization(std::move(buffer)), target);
+
+                    PyJITUserContext juc;
+                    p.realize(&juc, Realization(std::move(buffer)), target);
                 },
                 py::arg("dst"), py::arg("target") = Target())
 
@@ -188,7 +191,9 @@ void define_pipeline(py::module &m) {
                     std::optional<Realization> r;
                     {
                         py::gil_scoped_release release;
-                        r = p.realize(std::move(sizes), target);
+
+                        PyJITUserContext juc;
+                        r = p.realize(&juc, std::move(sizes), target);
                     }
                     return realization_to_object(*r);
                 },
@@ -198,17 +203,21 @@ void define_pipeline(py::module &m) {
             .def(
                 "realize", [](Pipeline &p, std::vector<Buffer<>> buffers, const Target &t) -> void {
                     py::gil_scoped_release release;
-                    p.realize(Realization(std::move(buffers)), t);
+
+                    PyJITUserContext juc;
+                    p.realize(&juc, Realization(std::move(buffers)), t);
                 },
                 py::arg("dst"), py::arg("target") = Target())
 
             .def(
                 "infer_input_bounds", [](Pipeline &p, const py::object &dst, const Target &target) -> void {
                     const Target t = to_jit_target(target);
+                    PyJITUserContext juc;
+
                     // dst could be Buffer<>, vector<Buffer>, or vector<int>
                     try {
                         Buffer<> b = dst.cast<Buffer<>>();
-                        p.infer_input_bounds(b, t);
+                        p.infer_input_bounds(&juc, b, t);
                         return;
                     } catch (...) {
                         // fall thru
@@ -216,7 +225,7 @@ void define_pipeline(py::module &m) {
 
                     try {
                         std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
-                        p.infer_input_bounds(Realization(std::move(v)), t);
+                        p.infer_input_bounds(&juc, Realization(std::move(v)), t);
                         return;
                     } catch (...) {
                         // fall thru
@@ -224,7 +233,7 @@ void define_pipeline(py::module &m) {
 
                     try {
                         std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
-                        p.infer_input_bounds(v, t);
+                        p.infer_input_bounds(&juc, v, t);
                         return;
                     } catch (...) {
                         // fall thru

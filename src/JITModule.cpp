@@ -1137,7 +1137,8 @@ std::string JITErrorBuffer::str() const {
 
 JITFuncCallContext::JITFuncCallContext(JITUserContext *context, const JITHandlers &pipeline_handlers)
     : context(context) {
-    custom_error_handler = (context->handlers.custom_error != nullptr ||
+    custom_error_handler = ((context->handlers.custom_error != nullptr &&
+                             context->handlers.custom_error != JITErrorBuffer::handler) ||
                             pipeline_handlers.custom_error != nullptr);
     // Hook the error handler if not set
     if (!custom_error_handler) {
