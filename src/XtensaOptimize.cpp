@@ -937,7 +937,6 @@ private:
 
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
-
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
 
