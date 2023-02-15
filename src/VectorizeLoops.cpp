@@ -336,26 +336,6 @@ public:
     }
 };
 
-class UsesGPUVars : public IRVisitor {
-private:
-    using IRVisitor::visit;
-    void visit(const Variable *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            debug(3) << "Found gpu loop var: " << op->name << "\n";
-            uses_gpu = true;
-        }
-    }
-
-public:
-    bool uses_gpu = false;
-};
-
-bool uses_gpu_vars(const Expr &s) {
-    UsesGPUVars uses;
-    s.accept(&uses);
-    return uses.uses_gpu;
-}
-
 class SerializeLoops : public IRMutator {
     using IRMutator::visit;
 
