@@ -188,10 +188,6 @@ int main(int argc, char **argv) {
     }
     bool success = test_xtensa.test_all();
 
-    // Compile a runtime for this target, for use in the static test.
-    // TODO(vksnk): that's going to be different for xtensa?
-    compile_standalone_runtime(test_xtensa.output_directory + "simd_op_check_runtime.o", test_xtensa.target);
-
     if (!success) {
         return -1;
     }
