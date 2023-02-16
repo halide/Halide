@@ -366,7 +366,7 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event_t *e) {
     return (*halide_custom_trace)(user_context, e);
 }
 
-WEAK int halide_shutdown_trace() {
+WEAK halide_error_code_t halide_shutdown_trace() {
     if (halide_trace_file_internally_opened) {
         int ret = fclose(halide_trace_file_internally_opened);
         halide_trace_file = 0;
@@ -375,10 +375,12 @@ WEAK int halide_shutdown_trace() {
         if (halide_trace_buffer) {
             free(halide_trace_buffer);
         }
-        return ret;
-    } else {
-        return 0;
+        if (ret != 0) {
+            return halide_error_code_trace_failed;
+        }
+        // else fall thru
     }
+    return halide_error_code_success;
 }
 
 namespace {

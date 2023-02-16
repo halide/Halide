@@ -224,7 +224,8 @@ enum halide_error_code_t {
     /** This part of the Halide runtime is unimplemented on this platform. */
     halide_error_code_unimplemented = -20,
 
-    /* unused = -21, */
+    /** Failure recording trace packets for one of the halide_target_feature_trace features. */
+    halide_error_code_trace_failed = -21,
 
     /** There is a bug in the Halide compiler. */
     halide_error_code_internal_error = -22,
@@ -254,9 +255,11 @@ enum halide_error_code_t {
     /** At least one of the buffer's extents are negative. */
     halide_error_code_buffer_extents_negative = -28,
 
-    halide_error_code_unused_29 = -29,
+    /** Attempt to read from filesystem failed. */
+    halide_error_code_file_read_failed = -29,
 
-    halide_error_code_unused_30 = -30,
+    /** Attempt to write from filesystem failed. */
+    halide_error_code_file_write_failed = -30,
 
     /** A specialize_fail() schedule branch was selected at runtime. */
     halide_error_code_specialize_fail = -31,
@@ -939,8 +942,8 @@ extern void halide_set_trace_file(int fd);
 extern int halide_get_trace_file(void *user_context);
 
 /** If tracing is writing to a file. This call closes that file
- * (flushing the trace). Returns zero on success. */
-extern int halide_shutdown_trace();
+ * (flushing the trace). */
+extern enum halide_error_code_t halide_shutdown_trace();
 
 /** All Halide GPU or device backend implementations provide an
  * interface to be used with halide_device_malloc, etc. This is
