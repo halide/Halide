@@ -34,9 +34,8 @@ struct test_func {
         // shared across thread boundaries without being guarded by a
         // mutex. Since we don't share any such objects here, we don't
         // need any synchronization
-        f = func.compile_to_callable(
-        {in, p}).make_std_function<Buffer<int32_t, 1>, int32_t,
-        Buffer<int32_t, 1>>(); }
+        f = func.compile_to_callable({in, p}).make_std_function<Buffer<int32_t, 1>, int32_t, Buffer<int32_t, 1>>();
+    }
 
     test_func(const test_func &copy) = delete;
     test_func &operator=(const test_func &) = delete;
