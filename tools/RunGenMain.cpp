@@ -533,9 +533,9 @@ int main(int argc, char **argv) {
 
     // This is a single-purpose binary to benchmark this filter, so we
     // shouldn't be eagerly returning device memory.
-    int result = halide_reuse_device_allocations(nullptr, true);
-    if (result != 0) {
-        std::cerr << "halide_reuse_device_allocations() returned an error: " << result << "\n";
+    halide_error_code_t result = halide_reuse_device_allocations(nullptr, true);
+    if (result != halide_error_code_success) {
+        std::cerr << "halide_reuse_device_allocations() returned an error: " << (int)result << "\n";
     }
 
     if (benchmark) {

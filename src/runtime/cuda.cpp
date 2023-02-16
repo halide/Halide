@@ -595,7 +595,7 @@ WEAK void halide_cuda_finalize_kernels(void *user_context, void *state_ptr) {
     }
 }
 
-WEAK int halide_cuda_release_unused_device_allocations(void *user_context) {
+WEAK halide_error_code_t halide_cuda_release_unused_device_allocations(void *user_context) {
     FreeListItem *to_free;
     {
         ScopedMutexLock lock(&free_list_lock);
@@ -609,7 +609,7 @@ WEAK int halide_cuda_release_unused_device_allocations(void *user_context) {
         free(to_free);
         to_free = next;
     }
-    return 0;
+    return halide_error_code_success;
 }
 
 namespace Halide {

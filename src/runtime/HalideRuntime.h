@@ -1901,7 +1901,8 @@ extern struct halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state
  * interrupt handler if timer based profiling is being used.
  *  State argument is acquired via halide_profiler_get_pipeline_state.
  * prev_t argument is the previous time and can be used to set a more
- * accurate time interval if desired. */
+ * accurate time interval if desired. Should return the sleep time in ms,
+ * or -1 if the sampling should be stopped. */
 extern int halide_profiler_sample(struct halide_profiler_state *s, uint64_t *prev_t);
 
 /** Reset profiler state cheaply. May leave threads running or some
@@ -1917,7 +1918,7 @@ extern void halide_profiler_reset();
  * running; halide_profiler_memory_allocate/free and
  * halide_profiler_stack_peak_update update the profiler pipeline's
  * state without grabbing the global profiler state's lock. */
-void halide_profiler_shutdown();
+extern void halide_profiler_shutdown();
 
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
@@ -1977,7 +1978,7 @@ extern double halide_float16_bits_to_double(uint16_t);
  * If set to false, releases all unused device allocations back to the
  * underlying device APIs. For finer-grained control, see specific
  * methods in each device api runtime. */
-extern int halide_reuse_device_allocations(void *user_context, bool);
+extern enum halide_error_code_t halide_reuse_device_allocations(void *user_context, bool);
 
 /** Determines whether on device_free the memory is returned
  * immediately to the device API, or placed on a free list for future
@@ -1987,7 +1988,7 @@ extern int halide_reuse_device_allocations(void *user_context, bool);
 extern bool halide_can_reuse_device_allocations(void *user_context);
 
 struct halide_device_allocation_pool {
-    int (*release_unused)(void *user_context);
+    enum halide_error_code_t (*release_unused)(void *user_context);
     struct halide_device_allocation_pool *next;
 };
 

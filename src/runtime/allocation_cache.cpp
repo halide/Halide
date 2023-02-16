@@ -17,14 +17,14 @@ WEAK halide_device_allocation_pool *device_allocation_pools = nullptr;
 
 extern "C" {
 
-WEAK int halide_reuse_device_allocations(void *user_context, bool flag) {
+WEAK halide_error_code_t halide_reuse_device_allocations(void *user_context, bool flag) {
     halide_reuse_device_allocations_flag = flag;
 
-    int err = 0;
+    halide_error_code_t err = halide_error_code_success;
     if (!flag) {
         ScopedMutexLock lock(&allocation_pools_lock);
         for (halide_device_allocation_pool *p = device_allocation_pools; p != nullptr; p = p->next) {
-            int ret = p->release_unused(user_context);
+            halide_error_code_t ret = p->release_unused(user_context);
             if (ret) {
                 err = ret;
             }
