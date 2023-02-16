@@ -12,9 +12,6 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-// The Halide compiler is currently not guaranteed to be thread safe.
-std::mutex compiler_mutex;
-
 struct test_func {
     Param<int32_t> p;
     ImageParam in{Int(32), 1};
@@ -32,17 +29,19 @@ struct test_func {
         func(x) = inner(x - 1) + inner(x) + inner(x + 1);
         inner.compute_at(func, x);
 
-        {
-            // In this program, only one thread can call into the compiler
-            // at this point. The mutex guard is still included both to show that in
-            // general Halide compilation is not thread safe and also to keep
-            // the performance comparison slightly more equal by including
-            // (minimal) mutex cost on both paths.
-            std::lock_guard<std::mutex> lock(compiler_mutex);
+        // The Halide compiler is threadsafe, with the important caveat
+        // that mutable objects like Funcs and ImageParams cannot be
+        // shared across thread boundaries without being guarded by a
+        // mutex. Since we don't share any such objects here, we don't
+        // need any synchronization
+        f = func.compile_to_callable(
+        {in, p}).make_std_function<Buffer<int32_t, 1>, int32_t,
+        Buffer<int32_t, 1>>(); }
 
-            f = func.compile_to_callable({in, p}).make_std_function<Buffer<int32_t, 1>, int32_t, Buffer<int32_t, 1>>();
-        }
-    }
+    test_func(const test_func &copy) = delete;
+    test_func &operator=(const test_func &) = delete;
+    test_func(test_func &&) = delete;
+    test_func &operator=(test_func &&) = delete;
 };
 
 Buffer<int32_t> bufs[16];
