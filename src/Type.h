@@ -76,6 +76,8 @@ struct halide_cplusplus_type_name {
  * Although this is in the global namespace, it should be considered "Halide Internal"
  * and subject to change; code outside Halide should avoid referencing it.
  */
+// TODO(srj-error-code): consider renaming this type, since it can now include info
+// for an enum rather than just a handle type.
 struct halide_handle_cplusplus_type {
     halide_cplusplus_type_name inner_name;
     std::vector<std::string> namespaces;
@@ -151,6 +153,7 @@ struct halide_c_type_to_name {
 #define HALIDE_DECLARE_EXTERN_STRUCT_TYPE(T) HALIDE_DECLARE_EXTERN_TYPE(Struct, T)
 #define HALIDE_DECLARE_EXTERN_CLASS_TYPE(T) HALIDE_DECLARE_EXTERN_TYPE(Class, T)
 #define HALIDE_DECLARE_EXTERN_UNION_TYPE(T) HALIDE_DECLARE_EXTERN_TYPE(Union, T)
+#define HALIDE_DECLARE_EXTERN_ENUM_TYPE(T) HALIDE_DECLARE_EXTERN_TYPE(Enum, T)
 
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(char);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(bool);
@@ -175,6 +178,7 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_acquire_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
+HALIDE_DECLARE_EXTERN_ENUM_TYPE(halide_error_code_t);
 
 // You can make arbitrary user-defined types be "Known" using the
 // macro above. This is useful for making Param<> arguments for
@@ -256,7 +260,8 @@ struct halide_handle_traits {
     HALIDE_ALWAYS_INLINE static const halide_handle_cplusplus_type *type_info() {
         if (std::is_pointer<T>::value ||
             std::is_lvalue_reference<T>::value ||
-            std::is_rvalue_reference<T>::value) {
+            std::is_rvalue_reference<T>::value ||
+            std::is_enum<T>::value) {
             static const halide_handle_cplusplus_type the_info = halide_handle_cplusplus_type::make<T>();
             return &the_info;
         }

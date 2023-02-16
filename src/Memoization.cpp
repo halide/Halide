@@ -383,7 +383,7 @@ private:
                                                    Cast::make(Bool(), Variable::make(Int(32), cache_result_name)),
                                                    has_eviction_key ? eviction_key_marker : mutated_body);
             Stmt cache_lookup_check = Block::make(AssertStmt::make(NE::make(Variable::make(Int(32), cache_result_name), -1),
-                                                                   Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern)),
+                                                                   Call::make(type_of<halide_error_code_t>(), "halide_error_out_of_memory", {}, Call::Extern)),
                                                   cache_miss_marker);
 
             Stmt cache_lookup = LetStmt::make(cache_result_name,

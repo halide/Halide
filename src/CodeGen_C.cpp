@@ -2866,6 +2866,12 @@ string CodeGen_C::print_extern_call(const Call *op) {
         if (args[i] == "__user_context") {
             args[i] = "_ucon";
         }
+        // TODO(srj-error-code): this is a temporary hack to allow
+        // converting all halide_error_*() calls without having to
+        // first adapt all define_extern() calls.
+        if (i == 1 && (op->name == "halide_error_bounds_inference_call_failed" || op->name == "halide_error_extern_stage_failed")) {
+            args[i] = "((enum halide_error_code_t)(" + args[i] + "))";
+        }
     }
     if (function_takes_user_context(op->name)) {
         args.insert(args.begin(), "_ucon");
@@ -3348,7 +3354,7 @@ void CodeGen_C::visit(const Allocate *op) {
                 check << " || (!" << op_condition << ")";
             }
         }
-        create_assertion("(" + check.str() + ")", Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
+        create_assertion("(" + check.str() + ")", Call::make(type_of<halide_error_code_t>(), "halide_error_out_of_memory", {}, Call::Extern));
 
         stream << get_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;

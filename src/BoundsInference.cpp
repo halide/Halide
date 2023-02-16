@@ -811,8 +811,8 @@ public:
 
             // Check if it succeeded
             string result_name = unique_name('t');
-            Expr result = Variable::make(Int(32), result_name);
-            Expr error = Call::make(Int(32), "halide_error_bounds_inference_call_failed",
+            Expr result = Variable::make(type_of<halide_error_code_t>(), result_name);
+            Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_bounds_inference_call_failed",
                                     {extern_name, result}, Call::Extern);
             Stmt check = AssertStmt::make(EQ::make(result, 0), error);
 

@@ -133,6 +133,202 @@ extern "C" {
 // Forward-declare to suppress warnings if compiling as C.
 struct halide_buffer_t;
 
+/** The error codes that may be returned by a Halide pipeline. */
+enum halide_error_code_t {
+    /** An unused value that exists solely to ensure that sizeof(halide_error_code_t)
+     * is at least sizeof(int32_t). */
+    _halide_error_code_ensure_int32_sizing = 2147483647,
+
+    /** There was no error. This is the value returned by Halide on success. */
+    halide_error_code_success = 0,
+
+    /** An uncategorized error occurred. Refer to the string passed to halide_error. */
+    halide_error_code_generic_error = -1,
+
+    /** A Func was given an explicit bound via Func::bound, but this
+     * was not large enough to encompass the region that is used of
+     * the Func by the rest of the pipeline. */
+    halide_error_code_explicit_bounds_too_small = -2,
+
+    /** The elem_size field of a halide_buffer_t does not match the size in
+     * bytes of the type of that ImageParam. Probable type mismatch. */
+    halide_error_code_bad_type = -3,
+
+    /** A pipeline would access memory outside of the halide_buffer_t passed
+     * in. */
+    halide_error_code_access_out_of_bounds = -4,
+
+    /** A halide_buffer_t was given that spans more than 2GB of memory. */
+    halide_error_code_buffer_allocation_too_large = -5,
+
+    /** A halide_buffer_t was given with extents that multiply to a number
+     * greater than 2^31-1 */
+    halide_error_code_buffer_extents_too_large = -6,
+
+    /** Applying explicit constraints on the size of an input or
+     * output buffer shrank the size of that buffer below what will be
+     * accessed by the pipeline. */
+    halide_error_code_constraints_make_required_region_smaller = -7,
+
+    /** A constraint on a size or stride of an input or output buffer
+     * was not met by the halide_buffer_t passed in. */
+    halide_error_code_constraint_violated = -8,
+
+    /** A scalar parameter passed in was smaller than its minimum
+     * declared value. */
+    halide_error_code_param_too_small = -9,
+
+    /** A scalar parameter passed in was greater than its minimum
+     * declared value. */
+    halide_error_code_param_too_large = -10,
+
+    /** A call to halide_malloc returned NULL. */
+    halide_error_code_out_of_memory = -11,
+
+    /** A halide_buffer_t pointer passed in was NULL. */
+    halide_error_code_buffer_argument_is_null = -12,
+
+    /** debug_to_file failed to open or write to the specified
+     * file. */
+    halide_error_code_debug_to_file_failed = -13,
+
+    /** The Halide runtime encountered an error while trying to copy
+     * from device to host. Turn on -debug in your target string to
+     * see more details. */
+    halide_error_code_copy_to_host_failed = -14,
+
+    /** The Halide runtime encountered an error while trying to copy
+     * from host to device. Turn on -debug in your target string to
+     * see more details. */
+    halide_error_code_copy_to_device_failed = -15,
+
+    /** The Halide runtime encountered an error while trying to
+     * allocate memory on device. Turn on -debug in your target string
+     * to see more details. */
+    halide_error_code_device_malloc_failed = -16,
+
+    /** The Halide runtime encountered an error while trying to
+     * synchronize with a device. Turn on -debug in your target string
+     * to see more details. */
+    halide_error_code_device_sync_failed = -17,
+
+    /** The Halide runtime encountered an error while trying to free a
+     * device allocation. Turn on -debug in your target string to see
+     * more details. */
+    halide_error_code_device_free_failed = -18,
+
+    /** Buffer has a non-zero device but no device interface, which
+     * violates a Halide invariant. */
+    halide_error_code_no_device_interface = -19,
+
+    /* unused = -20, */
+    /* unused = -21, */
+
+    /** There is a bug in the Halide compiler. */
+    halide_error_code_internal_error = -22,
+
+    /** The Halide runtime encountered an error while trying to launch
+     * a GPU kernel. Turn on -debug in your target string to see more
+     * details. */
+    halide_error_code_device_run_failed = -23,
+
+    /** The Halide runtime encountered a host pointer that violated
+     * the alignment set for it by way of a call to
+     * set_host_alignment */
+    halide_error_code_unaligned_host_ptr = -24,
+
+    /** A fold_storage directive was used on a dimension that is not
+     * accessed in a monotonically increasing or decreasing fashion. */
+    halide_error_code_bad_fold = -25,
+
+    /** A fold_storage directive was used with a fold factor that was
+     * too small to store all the values of a producer needed by the
+     * consumer. */
+    halide_error_code_fold_factor_too_small = -26,
+
+    /** User-specified require() expression was not satisfied. */
+    halide_error_code_requirement_failed = -27,
+
+    /** At least one of the buffer's extents are negative. */
+    halide_error_code_buffer_extents_negative = -28,
+
+    halide_error_code_unused_29 = -29,
+
+    halide_error_code_unused_30 = -30,
+
+    /** A specialize_fail() schedule branch was selected at runtime. */
+    halide_error_code_specialize_fail = -31,
+
+    /** The Halide runtime encountered an error while trying to wrap a
+     * native device handle.  Turn on -debug in your target string to
+     * see more details. */
+    halide_error_code_device_wrap_native_failed = -32,
+
+    /** The Halide runtime encountered an error while trying to detach
+     * a native device handle.  Turn on -debug in your target string
+     * to see more details. */
+    halide_error_code_device_detach_native_failed = -33,
+
+    /** The host field on an input or output was null, the device
+     * field was not zero, and the pipeline tries to use the buffer on
+     * the host. You may be passing a GPU-only buffer to a pipeline
+     * which is scheduled to use it on the CPU. */
+    halide_error_code_host_is_null = -34,
+
+    /** A folded buffer was passed to an extern stage, but the region
+     * touched wraps around the fold boundary. */
+    halide_error_code_bad_extern_fold = -35,
+
+    /** Buffer has a non-null device_interface but device is 0, which
+     * violates a Halide invariant. */
+    halide_error_code_device_interface_no_device = -36,
+
+    /** Buffer has both host and device dirty bits set, which violates
+     * a Halide invariant. */
+    halide_error_code_host_and_device_dirty = -37,
+
+    /** The halide_buffer_t * passed to a halide runtime routine is
+     * nullptr and this is not allowed. */
+    halide_error_code_buffer_is_null = -38,
+
+    /** The Halide runtime encountered an error while trying to copy
+     * from one buffer to another. Turn on -debug in your target
+     * string to see more details. */
+    halide_error_code_device_buffer_copy_failed = -39,
+
+    /** Attempted to make cropped/sliced alias of a buffer with a device
+     * field, but the device_interface does not support cropping. */
+    halide_error_code_device_crop_unsupported = -40,
+
+    /** Cropping/slicing a buffer failed for some other reason. Turn on -debug
+     * in your target string. */
+    halide_error_code_device_crop_failed = -41,
+
+    /** An operation on a buffer required an allocation on a
+     * particular device interface, but a device allocation already
+     * existed on a different device interface. Free the old one
+     * first. */
+    halide_error_code_incompatible_device_interface = -42,
+
+    /** The dimensions field of a halide_buffer_t does not match the dimensions of that ImageParam. */
+    halide_error_code_bad_dimensions = -43,
+
+    /** A buffer with the device_dirty flag set was passed to a
+     * pipeline compiled with no device backends enabled, so it
+     * doesn't know how to copy the data back from device memory to
+     * host memory. Either call copy_to_host before calling the Halide
+     * pipeline, or enable the appropriate device backend. */
+    halide_error_code_device_dirty_with_no_device_support = -44,
+
+    /** An explicit storage bound provided is too small to store
+     * all the values produced by the function. */
+    halide_error_code_storage_bound_too_small = -45,
+};
+
+#ifdef __cplusplus
+static_assert(sizeof(halide_error_code_t) == sizeof(int32_t));
+#endif
+
 /** Print a message to stderr. Main use is to support tracing
  * functionality, print, and print_when calls. Also called by the default
  * halide_error.  This function can be replaced in JITed code by using
@@ -1033,194 +1229,6 @@ extern int halide_msan_annotate_memory_is_initialized(void *user_context, const 
 extern int halide_msan_annotate_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
 extern void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_context, void *buffer);
 
-/** The error codes that may be returned by a Halide pipeline. */
-enum halide_error_code_t {
-    /** There was no error. This is the value returned by Halide on success. */
-    halide_error_code_success = 0,
-
-    /** An uncategorized error occurred. Refer to the string passed to halide_error. */
-    halide_error_code_generic_error = -1,
-
-    /** A Func was given an explicit bound via Func::bound, but this
-     * was not large enough to encompass the region that is used of
-     * the Func by the rest of the pipeline. */
-    halide_error_code_explicit_bounds_too_small = -2,
-
-    /** The elem_size field of a halide_buffer_t does not match the size in
-     * bytes of the type of that ImageParam. Probable type mismatch. */
-    halide_error_code_bad_type = -3,
-
-    /** A pipeline would access memory outside of the halide_buffer_t passed
-     * in. */
-    halide_error_code_access_out_of_bounds = -4,
-
-    /** A halide_buffer_t was given that spans more than 2GB of memory. */
-    halide_error_code_buffer_allocation_too_large = -5,
-
-    /** A halide_buffer_t was given with extents that multiply to a number
-     * greater than 2^31-1 */
-    halide_error_code_buffer_extents_too_large = -6,
-
-    /** Applying explicit constraints on the size of an input or
-     * output buffer shrank the size of that buffer below what will be
-     * accessed by the pipeline. */
-    halide_error_code_constraints_make_required_region_smaller = -7,
-
-    /** A constraint on a size or stride of an input or output buffer
-     * was not met by the halide_buffer_t passed in. */
-    halide_error_code_constraint_violated = -8,
-
-    /** A scalar parameter passed in was smaller than its minimum
-     * declared value. */
-    halide_error_code_param_too_small = -9,
-
-    /** A scalar parameter passed in was greater than its minimum
-     * declared value. */
-    halide_error_code_param_too_large = -10,
-
-    /** A call to halide_malloc returned NULL. */
-    halide_error_code_out_of_memory = -11,
-
-    /** A halide_buffer_t pointer passed in was NULL. */
-    halide_error_code_buffer_argument_is_null = -12,
-
-    /** debug_to_file failed to open or write to the specified
-     * file. */
-    halide_error_code_debug_to_file_failed = -13,
-
-    /** The Halide runtime encountered an error while trying to copy
-     * from device to host. Turn on -debug in your target string to
-     * see more details. */
-    halide_error_code_copy_to_host_failed = -14,
-
-    /** The Halide runtime encountered an error while trying to copy
-     * from host to device. Turn on -debug in your target string to
-     * see more details. */
-    halide_error_code_copy_to_device_failed = -15,
-
-    /** The Halide runtime encountered an error while trying to
-     * allocate memory on device. Turn on -debug in your target string
-     * to see more details. */
-    halide_error_code_device_malloc_failed = -16,
-
-    /** The Halide runtime encountered an error while trying to
-     * synchronize with a device. Turn on -debug in your target string
-     * to see more details. */
-    halide_error_code_device_sync_failed = -17,
-
-    /** The Halide runtime encountered an error while trying to free a
-     * device allocation. Turn on -debug in your target string to see
-     * more details. */
-    halide_error_code_device_free_failed = -18,
-
-    /** Buffer has a non-zero device but no device interface, which
-     * violates a Halide invariant. */
-    halide_error_code_no_device_interface = -19,
-
-    /* unused = -20, */
-    /* unused = -21, */
-
-    /** There is a bug in the Halide compiler. */
-    halide_error_code_internal_error = -22,
-
-    /** The Halide runtime encountered an error while trying to launch
-     * a GPU kernel. Turn on -debug in your target string to see more
-     * details. */
-    halide_error_code_device_run_failed = -23,
-
-    /** The Halide runtime encountered a host pointer that violated
-     * the alignment set for it by way of a call to
-     * set_host_alignment */
-    halide_error_code_unaligned_host_ptr = -24,
-
-    /** A fold_storage directive was used on a dimension that is not
-     * accessed in a monotonically increasing or decreasing fashion. */
-    halide_error_code_bad_fold = -25,
-
-    /** A fold_storage directive was used with a fold factor that was
-     * too small to store all the values of a producer needed by the
-     * consumer. */
-    halide_error_code_fold_factor_too_small = -26,
-
-    /** User-specified require() expression was not satisfied. */
-    halide_error_code_requirement_failed = -27,
-
-    /** At least one of the buffer's extents are negative. */
-    halide_error_code_buffer_extents_negative = -28,
-
-    halide_error_code_unused_29 = -29,
-
-    halide_error_code_unused_30 = -30,
-
-    /** A specialize_fail() schedule branch was selected at runtime. */
-    halide_error_code_specialize_fail = -31,
-
-    /** The Halide runtime encountered an error while trying to wrap a
-     * native device handle.  Turn on -debug in your target string to
-     * see more details. */
-    halide_error_code_device_wrap_native_failed = -32,
-
-    /** The Halide runtime encountered an error while trying to detach
-     * a native device handle.  Turn on -debug in your target string
-     * to see more details. */
-    halide_error_code_device_detach_native_failed = -33,
-
-    /** The host field on an input or output was null, the device
-     * field was not zero, and the pipeline tries to use the buffer on
-     * the host. You may be passing a GPU-only buffer to a pipeline
-     * which is scheduled to use it on the CPU. */
-    halide_error_code_host_is_null = -34,
-
-    /** A folded buffer was passed to an extern stage, but the region
-     * touched wraps around the fold boundary. */
-    halide_error_code_bad_extern_fold = -35,
-
-    /** Buffer has a non-null device_interface but device is 0, which
-     * violates a Halide invariant. */
-    halide_error_code_device_interface_no_device = -36,
-
-    /** Buffer has both host and device dirty bits set, which violates
-     * a Halide invariant. */
-    halide_error_code_host_and_device_dirty = -37,
-
-    /** The halide_buffer_t * passed to a halide runtime routine is
-     * nullptr and this is not allowed. */
-    halide_error_code_buffer_is_null = -38,
-
-    /** The Halide runtime encountered an error while trying to copy
-     * from one buffer to another. Turn on -debug in your target
-     * string to see more details. */
-    halide_error_code_device_buffer_copy_failed = -39,
-
-    /** Attempted to make cropped/sliced alias of a buffer with a device
-     * field, but the device_interface does not support cropping. */
-    halide_error_code_device_crop_unsupported = -40,
-
-    /** Cropping/slicing a buffer failed for some other reason. Turn on -debug
-     * in your target string. */
-    halide_error_code_device_crop_failed = -41,
-
-    /** An operation on a buffer required an allocation on a
-     * particular device interface, but a device allocation already
-     * existed on a different device interface. Free the old one
-     * first. */
-    halide_error_code_incompatible_device_interface = -42,
-
-    /** The dimensions field of a halide_buffer_t does not match the dimensions of that ImageParam. */
-    halide_error_code_bad_dimensions = -43,
-
-    /** A buffer with the device_dirty flag set was passed to a
-     * pipeline compiled with no device backends enabled, so it
-     * doesn't know how to copy the data back from device memory to
-     * host memory. Either call copy_to_host before calling the Halide
-     * pipeline, or enable the appropriate device backend. */
-    halide_error_code_device_dirty_with_no_device_support = -44,
-
-    /** An explicit storage bound provided is too small to store
-     * all the values produced by the function. */
-    halide_error_code_storage_bound_too_small = -45,
-};
-
 /** Halide calls the functions below on various error conditions. The
  * default implementations construct an error message, call
  * halide_error, then return the matching error code above. On
@@ -1229,70 +1237,70 @@ enum halide_error_code_t {
 
 /** A call into an extern stage for the purposes of bounds inference
  * failed. Returns the error code given by the extern stage. */
-extern int halide_error_bounds_inference_call_failed(void *user_context, const char *extern_stage_name, int result);
+extern enum halide_error_code_t halide_error_bounds_inference_call_failed(void *user_context, const char *extern_stage_name, enum halide_error_code_t result);
 
 /** A call to an extern stage failed. Returned the error code given by
  * the extern stage. */
-extern int halide_error_extern_stage_failed(void *user_context, const char *extern_stage_name, int result);
+extern enum halide_error_code_t halide_error_extern_stage_failed(void *user_context, const char *extern_stage_name, enum halide_error_code_t result);
 
 /** Various other error conditions. See the enum above for a
  * description of each. */
 // @{
-extern int halide_error_explicit_bounds_too_small(void *user_context, const char *func_name, const char *var_name,
-                                                  int min_bound, int max_bound, int min_required, int max_required);
-extern int halide_error_bad_type(void *user_context, const char *func_name,
-                                 uint32_t type_given, uint32_t correct_type);  // N.B. The last two args are the bit representation of a halide_type_t
-extern int halide_error_bad_dimensions(void *user_context, const char *func_name,
-                                       int32_t dimensions_given, int32_t correct_dimensions);
-extern int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
-                                             int dimension, int min_touched, int max_touched,
-                                             int min_valid, int max_valid);
-extern int halide_error_buffer_allocation_too_large(void *user_context, const char *buffer_name,
-                                                    uint64_t allocation_size, uint64_t max_size);
-extern int halide_error_buffer_extents_negative(void *user_context, const char *buffer_name, int dimension, int extent);
-extern int halide_error_buffer_extents_too_large(void *user_context, const char *buffer_name,
-                                                 int64_t actual_size, int64_t max_size);
-extern int halide_error_constraints_make_required_region_smaller(void *user_context, const char *buffer_name,
-                                                                 int dimension,
-                                                                 int constrained_min, int constrained_extent,
-                                                                 int required_min, int required_extent);
-extern int halide_error_constraint_violated(void *user_context, const char *var, int val,
-                                            const char *constrained_var, int constrained_val);
-extern int halide_error_param_too_small_i64(void *user_context, const char *param_name,
-                                            int64_t val, int64_t min_val);
-extern int halide_error_param_too_small_u64(void *user_context, const char *param_name,
-                                            uint64_t val, uint64_t min_val);
-extern int halide_error_param_too_small_f64(void *user_context, const char *param_name,
-                                            double val, double min_val);
-extern int halide_error_param_too_large_i64(void *user_context, const char *param_name,
-                                            int64_t val, int64_t max_val);
-extern int halide_error_param_too_large_u64(void *user_context, const char *param_name,
-                                            uint64_t val, uint64_t max_val);
-extern int halide_error_param_too_large_f64(void *user_context, const char *param_name,
-                                            double val, double max_val);
-extern int halide_error_out_of_memory(void *user_context);
-extern int halide_error_buffer_argument_is_null(void *user_context, const char *buffer_name);
-extern int halide_error_debug_to_file_failed(void *user_context, const char *func,
-                                             const char *filename, int error_code);
-extern int halide_error_unaligned_host_ptr(void *user_context, const char *func_name, int alignment);
-extern int halide_error_host_is_null(void *user_context, const char *func_name);
-extern int halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
-                                 const char *loop_name);
-extern int halide_error_bad_extern_fold(void *user_context, const char *func_name,
-                                        int dim, int min, int extent, int valid_min, int fold_factor);
+extern enum halide_error_code_t halide_error_explicit_bounds_too_small(void *user_context, const char *func_name, const char *var_name,
+                                                                       int min_bound, int max_bound, int min_required, int max_required);
+extern enum halide_error_code_t halide_error_bad_type(void *user_context, const char *func_name,
+                                                      uint32_t type_given, uint32_t correct_type);  // N.B. The last two args are the bit representation of a halide_type_t
+extern enum halide_error_code_t halide_error_bad_dimensions(void *user_context, const char *func_name,
+                                                            int32_t dimensions_given, int32_t correct_dimensions);
+extern enum halide_error_code_t halide_error_access_out_of_bounds(void *user_context, const char *func_name,
+                                                                  int dimension, int min_touched, int max_touched,
+                                                                  int min_valid, int max_valid);
+extern enum halide_error_code_t halide_error_buffer_allocation_too_large(void *user_context, const char *buffer_name,
+                                                                         uint64_t allocation_size, uint64_t max_size);
+extern enum halide_error_code_t halide_error_buffer_extents_negative(void *user_context, const char *buffer_name, int dimension, int extent);
+extern enum halide_error_code_t halide_error_buffer_extents_too_large(void *user_context, const char *buffer_name,
+                                                                      int64_t actual_size, int64_t max_size);
+extern enum halide_error_code_t halide_error_constraints_make_required_region_smaller(void *user_context, const char *buffer_name,
+                                                                                      int dimension,
+                                                                                      int constrained_min, int constrained_extent,
+                                                                                      int required_min, int required_extent);
+extern enum halide_error_code_t halide_error_constraint_violated(void *user_context, const char *var, int val,
+                                                                 const char *constrained_var, int constrained_val);
+extern enum halide_error_code_t halide_error_param_too_small_i64(void *user_context, const char *param_name,
+                                                                 int64_t val, int64_t min_val);
+extern enum halide_error_code_t halide_error_param_too_small_u64(void *user_context, const char *param_name,
+                                                                 uint64_t val, uint64_t min_val);
+extern enum halide_error_code_t halide_error_param_too_small_f64(void *user_context, const char *param_name,
+                                                                 double val, double min_val);
+extern enum halide_error_code_t halide_error_param_too_large_i64(void *user_context, const char *param_name,
+                                                                 int64_t val, int64_t max_val);
+extern enum halide_error_code_t halide_error_param_too_large_u64(void *user_context, const char *param_name,
+                                                                 uint64_t val, uint64_t max_val);
+extern enum halide_error_code_t halide_error_param_too_large_f64(void *user_context, const char *param_name,
+                                                                 double val, double max_val);
+extern enum halide_error_code_t halide_error_out_of_memory(void *user_context);
+extern enum halide_error_code_t halide_error_buffer_argument_is_null(void *user_context, const char *buffer_name);
+extern enum halide_error_code_t halide_error_debug_to_file_failed(void *user_context, const char *func,
+                                                                  const char *filename, int error_code);
+extern enum halide_error_code_t halide_error_unaligned_host_ptr(void *user_context, const char *func_name, int alignment);
+extern enum halide_error_code_t halide_error_host_is_null(void *user_context, const char *func_name);
+extern enum halide_error_code_t halide_error_bad_fold(void *user_context, const char *func_name, const char *var_name,
+                                                      const char *loop_name);
+extern enum halide_error_code_t halide_error_bad_extern_fold(void *user_context, const char *func_name,
+                                                             int dim, int min, int extent, int valid_min, int fold_factor);
 
-extern int halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
-                                              int fold_factor, const char *loop_name, int required_extent);
-extern int halide_error_requirement_failed(void *user_context, const char *condition, const char *message);
-extern int halide_error_specialize_fail(void *user_context, const char *message);
-extern int halide_error_no_device_interface(void *user_context);
-extern int halide_error_device_interface_no_device(void *user_context);
-extern int halide_error_host_and_device_dirty(void *user_context);
-extern int halide_error_buffer_is_null(void *user_context, const char *routine);
-extern int halide_error_device_dirty_with_no_device_support(void *user_context, const char *buffer_name);
-extern int halide_error_storage_bound_too_small(void *user_context, const char *func_name, const char *var_name,
-                                                int provided_size, int required_size);
-extern int halide_error_device_crop_failed(void *user_context);
+extern enum halide_error_code_t halide_error_fold_factor_too_small(void *user_context, const char *func_name, const char *var_name,
+                                                                   int fold_factor, const char *loop_name, int required_extent);
+extern enum halide_error_code_t halide_error_requirement_failed(void *user_context, const char *condition, const char *message);
+extern enum halide_error_code_t halide_error_specialize_fail(void *user_context, const char *message);
+extern enum halide_error_code_t halide_error_no_device_interface(void *user_context);
+extern enum halide_error_code_t halide_error_device_interface_no_device(void *user_context);
+extern enum halide_error_code_t halide_error_host_and_device_dirty(void *user_context);
+extern enum halide_error_code_t halide_error_buffer_is_null(void *user_context, const char *routine);
+extern enum halide_error_code_t halide_error_device_dirty_with_no_device_support(void *user_context, const char *buffer_name);
+extern enum halide_error_code_t halide_error_storage_bound_too_small(void *user_context, const char *func_name, const char *var_name,
+                                                                     int provided_size, int required_size);
+extern enum halide_error_code_t halide_error_device_crop_failed(void *user_context);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -2020,7 +2028,7 @@ template<>
 HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<_Float16>() {
     return halide_type_t(halide_type_float, 16);
 }
-#endif
+#endif  // HALIDE_CPP_COMPILER_HAS_FLOAT16
 
 template<>
 HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<float>() {
@@ -2075,6 +2083,12 @@ HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int32_t>() {
 template<>
 HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int64_t>() {
     return halide_type_t(halide_type_int, 64);
+}
+
+// halide_error_code_t is modeled as an int32 for halide_type_t.
+template<>
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<enum halide_error_code_t>() {
+    return halide_type_t(halide_type_int, 32);
 }
 
 #ifndef COMPILING_HALIDE_RUNTIME

@@ -305,35 +305,40 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
             }
         }
     } else {
-        // This ends up using different type names than OpenCL does
-        // for the integer vector types. E.g. uint16x8_t rather than
-        // OpenCL's short8. Should be fine as CodeGen_C introduces
-        // typedefs for them and codegen always goes through this
-        // routine or its override in CodeGen_OpenCL to make the
-        // names. This may be the better bet as the typedefs are less
-        // likely to collide with built-in types (e.g. the OpenCL
-        // ones for a C compiler that decides to compile OpenCL).
-        // This code also supports arbitrary vector sizes where the
-        // OpenCL ones must be one of 2, 3, 4, 8, 16, which is too
-        // restrictive for already existing architectures.
-        switch (type.bits()) {
-        case 1:
-            // bool vectors are always emitted as uint8 in the C++ backend
-            if (type.is_vector()) {
-                oss << "uint8x" << type.lanes() << "_t";
-            } else {
-                oss << "bool";
+        if (type.handle_type != nullptr) {
+            internal_assert(type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Enum);
+            oss << "enum " << type.handle_type->inner_name.name;
+        } else {
+            // This ends up using different type names than OpenCL does
+            // for the integer vector types. E.g. uint16x8_t rather than
+            // OpenCL's short8. Should be fine as CodeGen_C introduces
+            // typedefs for them and codegen always goes through this
+            // routine or its override in CodeGen_OpenCL to make the
+            // names. This may be the better bet as the typedefs are less
+            // likely to collide with built-in types (e.g. the OpenCL
+            // ones for a C compiler that decides to compile OpenCL).
+            // This code also supports arbitrary vector sizes where the
+            // OpenCL ones must be one of 2, 3, 4, 8, 16, which is too
+            // restrictive for already existing architectures.
+            switch (type.bits()) {
+            case 1:
+                // bool vectors are always emitted as uint8 in the C++ backend
+                if (type.is_vector()) {
+                    oss << "uint8x" << type.lanes() << "_t";
+                } else {
+                    oss << "bool";
+                }
+                break;
+            default:
+                if (type.is_uint()) {
+                    oss << "u";
+                }
+                oss << "int" << type.bits();
+                if (type.is_vector()) {
+                    oss << "x" << type.lanes();
+                }
+                oss << "_t";
             }
-            break;
-        default:
-            if (type.is_uint()) {
-                oss << "u";
-            }
-            oss << "int" << type.bits();
-            if (type.is_vector()) {
-                oss << "x" << type.lanes();
-            }
-            oss << "_t";
         }
     }
     if (include_space && needs_space) {

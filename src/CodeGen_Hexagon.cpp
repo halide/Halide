@@ -2138,7 +2138,7 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(
     if (!is_const_one(size_check)) {
         create_assertion(
             codegen(size_check),
-            Call::make(Int(32), "halide_error_buffer_allocation_too_large",
+            Call::make(type_of<halide_error_code_t>(), "halide_error_buffer_allocation_too_large",
                        {name, Cast::make(UInt(64), total_size),
                         Cast::make(UInt(64), max_size)},
                        Call::Extern));
@@ -2217,7 +2217,7 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
             Value *zero_size = builder->CreateIsNull(llvm_size);
             check = builder->CreateOr(check, zero_size);
         }
-        create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
+        create_assertion(check, Call::make(type_of<halide_error_code_t>(), "halide_error_out_of_memory",
                                            std::vector<Expr>(), Call::Extern));
 
         std::string free_function_string;

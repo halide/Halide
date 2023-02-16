@@ -830,7 +830,7 @@ class InjectHexagonRpc : public IRMutator {
             // to 128 bytes.
             if (!device_code.target().has_feature(Target::NoAsserts)) {
                 Expr host_ptr = reinterpret<uint64_t>(Variable::make(Handle(), i.first));
-                Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
+                Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_unaligned_host_ptr",
                                         {i.first, alignment}, Call::Extern);
                 body = Block::make(AssertStmt::make(host_ptr % alignment == 0, error), body);
             }

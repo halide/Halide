@@ -211,7 +211,7 @@ void IRPrinter::test() {
     Stmt consumer = ProducerConsumer::make_consume("buf", for_loop2);
     Stmt pipeline = Block::make(producer, consumer);
 
-    Stmt assertion = AssertStmt::make(y >= 3, Call::make(Int(32), "halide_error_param_too_small_i64",
+    Stmt assertion = AssertStmt::make(y >= 3, Call::make(type_of<halide_error_code_t>(), "halide_error_param_too_small_i64",
                                                          {string("y"), y, 3}, Call::Extern));
     Stmt block = Block::make(assertion, pipeline);
     Stmt let_stmt = LetStmt::make("y", 17, block);

@@ -18,7 +18,7 @@ class LowerUnsafePromises : public IRMutator {
                 promise_expr_text << is_clamped;
                 Expr cond_as_string = StringImm::make(promise_expr_text.str());
                 Expr promise_broken_error =
-                    Call::make(Int(32),
+                    Call::make(type_of<halide_error_code_t>(),
                                "halide_error_requirement_failed",
                                {cond_as_string, StringImm::make("from unsafe_promise_clamped")},
                                Call::Extern);

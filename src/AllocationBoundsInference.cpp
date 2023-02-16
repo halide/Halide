@@ -109,7 +109,7 @@ class AllocationInference : public IRMutator {
             internal_assert(min_var.type() == min.type());
             internal_assert(max_var.type() == max.type());
 
-            Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
+            Expr error_msg = Call::make(type_of<halide_error_code_t>(), "halide_error_explicit_bounds_too_small",
                                         {f_args[i], f.name(), min_var, max_var, b[i].min, b[i].max},
                                         Call::Extern);
 

@@ -1089,7 +1089,7 @@ Expr unwrap_tags(const Expr &e) {
 }
 
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
-    return Internal::Call::make(Int(32),
+    return Internal::Call::make(type_of<halide_error_code_t>(),
                                 "halide_error_requirement_failed",
                                 {stringify({std::move(condition)}), combine_strings(args)},
                                 Internal::Call::Extern);

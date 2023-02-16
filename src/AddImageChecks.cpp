@@ -336,7 +336,7 @@ Stmt add_image_checks_inner(Stmt s,
             Expr type_var = Variable::make(UInt(32), type_name, image, param, rdom);
             uint32_t correct_type_bits = ((halide_type_t)type).as_u32();
             Expr correct_type_expr = make_const(UInt(32), correct_type_bits);
-            Expr error = Call::make(Int(32), "halide_error_bad_type",
+            Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_bad_type",
                                     {error_name, type_var, correct_type_expr},
                                     Call::Extern);
             Stmt type_check = AssertStmt::make(type_var == correct_type_expr, error);
@@ -347,7 +347,7 @@ Stmt add_image_checks_inner(Stmt s,
         {
             string dimensions_name = name + ".dimensions";
             Expr dimensions_given = Variable::make(Int(32), dimensions_name, image, param, rdom);
-            Expr error = Call::make(Int(32), "halide_error_bad_dimensions",
+            Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_bad_dimensions",
                                     {error_name,
                                      dimensions_given, make_const(Int(32), dimensions)},
                                     Call::Extern);
@@ -411,7 +411,7 @@ Stmt add_image_checks_inner(Stmt s,
 
             Expr oob_condition = actual_min <= min_required_var && actual_max >= max_required;
 
-            Expr oob_error = Call::make(Int(32), "halide_error_access_out_of_bounds",
+            Expr oob_error = Call::make(type_of<halide_error_code_t>(), "halide_error_access_out_of_bounds",
                                         {error_name, j, min_required_var, max_required, actual_min, actual_max},
                                         Call::Extern);
 
@@ -443,7 +443,7 @@ Stmt add_image_checks_inner(Stmt s,
             Expr max_size = make_const(UInt(64), t.maximum_buffer_size());
             Expr max_extent = make_const(UInt(64), 0x7fffffff);
             Expr actual_size = abs(cast<int64_t>(actual_extent) * actual_stride);
-            Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
+            Expr allocation_size_error = Call::make(type_of<halide_error_code_t>(), "halide_error_buffer_allocation_too_large",
                                                     {name, actual_size, max_size}, Call::Extern);
             Stmt check = AssertStmt::make(actual_size <= max_size, allocation_size_error);
             dims_no_overflow_asserts.push_back(check);
@@ -458,7 +458,7 @@ Stmt add_image_checks_inner(Stmt s,
                     Expr this_dim = actual_extent * last_dim;
                     Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
                     lets_overflow.emplace_back(name + ".total_extent." + dim, this_dim);
-                    Expr error = Call::make(Int(32), "halide_error_buffer_extents_too_large",
+                    Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_buffer_extents_too_large",
                                             {name, this_dim_var, max_size}, Call::Extern);
                     Stmt check = AssertStmt::make(this_dim_var <= max_size, error);
                     dims_no_overflow_asserts.push_back(check);
@@ -466,7 +466,7 @@ Stmt add_image_checks_inner(Stmt s,
 
                 // It is never legal to have a negative buffer extent.
                 Expr negative_extent_condition = actual_extent >= 0;
-                Expr negative_extent_error = Call::make(Int(32), "halide_error_buffer_extents_negative",
+                Expr negative_extent_error = Call::make(type_of<halide_error_code_t>(), "halide_error_buffer_extents_negative",
                                                         {error_name, j, actual_extent}, Call::Extern);
                 asserts_required.push_back(AssertStmt::make(negative_extent_condition, negative_extent_error));
             }
@@ -585,7 +585,7 @@ Stmt add_image_checks_inner(Stmt s,
             Expr max_proposed = min_proposed + extent_proposed - 1;
             Expr max_required = min_required + extent_required - 1;
             Expr check = (min_proposed <= min_required) && (max_proposed >= max_required);
-            Expr error = Call::make(Int(32), "halide_error_constraints_make_required_region_smaller",
+            Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_constraints_make_required_region_smaller",
                                     {error_name, i, min_proposed, max_proposed, min_required, max_required},
                                     Call::Extern);
             asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error));
@@ -620,7 +620,7 @@ Stmt add_image_checks_inner(Stmt s,
 
             Expr error = 0;
             if (!no_asserts) {
-                error = Call::make(Int(32), "halide_error_constraint_violated",
+                error = Call::make(type_of<halide_error_code_t>(), "halide_error_constraint_violated",
                                    {name, var, constrained_var_str, constrained_var},
                                    Call::Extern);
             }
@@ -632,7 +632,7 @@ Stmt add_image_checks_inner(Stmt s,
         // For the buffers used on host, check the host field is non-null
         Expr host_ptr = Variable::make(Handle(), name, image, param, ReductionDomain());
         if (used_on_host) {
-            Expr error = Call::make(Int(32), "halide_error_host_is_null",
+            Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_host_is_null",
                                     {error_name}, Call::Extern);
             Expr check = (host_ptr != make_zero(host_ptr.type()));
             if (touched.maybe_unused()) {
@@ -644,7 +644,7 @@ Stmt add_image_checks_inner(Stmt s,
                 Expr device_dirty = Variable::make(Bool(), name + ".device_dirty",
                                                    image, param, ReductionDomain());
 
-                Expr error = Call::make(Int(32), "halide_error_device_dirty_with_no_device_support",
+                Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_device_dirty_with_no_device_support",
                                         {error_name}, Call::Extern);
 
                 // If we have no device support, we can't handle
@@ -658,7 +658,7 @@ Stmt add_image_checks_inner(Stmt s,
             int alignment_required = param.host_alignment();
             Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
             Expr align_condition = (u64t_host_ptr % alignment_required) == 0;
-            Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
+            Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_unaligned_host_ptr",
                                     {name, alignment_required}, Call::Extern);
             asserts_host_alignment.push_back(AssertStmt::make(align_condition, error));
         }

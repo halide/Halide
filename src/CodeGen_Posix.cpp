@@ -66,7 +66,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     size_check = common_subexpression_elimination(simplify(size_check));
     if (!is_const_one(size_check)) {
         create_assertion(codegen(size_check || !condition),
-                         Call::make(Int(32), "halide_error_buffer_allocation_too_large",
+                         Call::make(type_of<halide_error_code_t>(), "halide_error_buffer_allocation_too_large",
                                     {name, total_size, max_size}, Call::Extern));
     }
 
@@ -300,7 +300,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             check = builder->CreateOr(check, condition_is_false);
         }
 
-        create_assertion(check, Call::make(Int(32), "halide_error_out_of_memory",
+        create_assertion(check, Call::make(type_of<halide_error_code_t>(), "halide_error_out_of_memory",
                                            std::vector<Expr>(), Call::Extern));
 
         // Register a destructor for this allocation.

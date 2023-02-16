@@ -513,7 +513,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
             // specialize_fail() should only be possible on the final specialization
             internal_assert(i == specializations.size());
             Expr specialize_fail_error =
-                Internal::Call::make(Int(32),
+                Internal::Call::make(type_of<halide_error_code_t>(),
                                      "halide_error_specialize_fail",
                                      {StringImm::make(s.failure_message)},
                                      Internal::Call::Extern);
@@ -777,8 +777,8 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
 
     // Check if it succeeded
     string result_name = unique_name('t');
-    Expr result = Variable::make(Int(32), result_name);
-    Expr error = Call::make(Int(32), "halide_error_extern_stage_failed",
+    Expr result = Variable::make(type_of<halide_error_code_t>(), result_name);
+    Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_extern_stage_failed",
                             {extern_name, result}, Call::Extern);
     Stmt check = AssertStmt::make(EQ::make(result, 0), error);
 
@@ -787,7 +787,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
         for (const auto &p : cropped_buffers) {
             Expr cropped = p.first;
             Expr cropped_u64 = reinterpret(UInt(64), cropped);
-            Expr error = Call::make(Int(32), "halide_error_device_crop_failed", std::vector<Expr>(), Call::Extern);
+            Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_device_crop_failed", std::vector<Expr>(), Call::Extern);
             Stmt assertion = AssertStmt::make(cropped_u64 != 0, error);
 
             if (!is_no_op(pre_call)) {
@@ -869,7 +869,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr min_val = b.min;
 
             Expr check = (min_val <= min_var) && (max_val >= max_var);
-            Expr error_msg = Call::make(Int(32), "halide_error_explicit_bounds_too_small",
+            Expr error_msg = Call::make(type_of<halide_error_code_t>(), "halide_error_explicit_bounds_too_small",
                                         {b.var, func.name(), min_val, max_val, min_var, max_var},
                                         Call::Extern);
             body = Block::make(AssertStmt::make(check, error_msg), body);

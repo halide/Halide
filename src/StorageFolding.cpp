@@ -123,7 +123,7 @@ class FoldStorageOfFunction : public IRMutator {
                     no_wraparound = no_wraparound && check;
                 }
 
-                Expr error = Call::make(Int(32), "halide_error_bad_extern_fold",
+                Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_bad_extern_fold",
                                         {Expr(func), Expr(dim), old_min, old_extent, valid_min, factor},
                                         Call::Extern);
                 expr = Call::make(op->type, Call::require,
@@ -202,7 +202,7 @@ class InjectFoldingCheck : public IRMutator {
                     // iteration lies within the range of coordinates
                     // currently represented.
                     Expr fold_non_monotonic_error =
-                        Call::make(Int(32), "halide_error_bad_fold",
+                        Call::make(type_of<halide_error_code_t>(), "halide_error_bad_fold",
                                    {func.name(), storage_dim.var, loop_var},
                                    Call::Extern);
 
@@ -219,7 +219,7 @@ class InjectFoldingCheck : public IRMutator {
 
                     // Separately check the extent for *this* loop iteration fits.
                     Expr fold_too_small_error =
-                        Call::make(Int(32), "halide_error_fold_factor_too_small",
+                        Call::make(type_of<halide_error_code_t>(), "halide_error_fold_factor_too_small",
                                    {func.name(), storage_dim.var, storage_dim.fold_factor, loop_var, extent},
                                    Call::Extern);
 
@@ -290,7 +290,7 @@ class InjectFoldingCheck : public IRMutator {
                         } else {
                             check = (b[dim].max < leading_edge + storage_dim.fold_factor && b[dim].min >= leading_edge);
                         }
-                        Expr bad_fold_error = Call::make(Int(32), "halide_error_bad_fold",
+                        Expr bad_fold_error = Call::make(type_of<halide_error_code_t>(), "halide_error_bad_fold",
                                                          {func.name(), storage_dim.var, loop_var},
                                                          Call::Extern);
                         body = Block::make(AssertStmt::make(check, bad_fold_error), body);
@@ -707,7 +707,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // assertion for maximum extent. In many cases
                     // it will simplify away. For async schedules
                     // it gets dynamically tracked anyway.
-                    Expr error = Call::make(Int(32), "halide_error_fold_factor_too_small",
+                    Expr error = Call::make(type_of<halide_error_code_t>(), "halide_error_fold_factor_too_small",
                                             {func.name(), storage_dim.var, explicit_factor, op->name, extent},
                                             Call::Extern);
                     body = Block::make(AssertStmt::make(extent <= explicit_factor, error), body);
@@ -825,7 +825,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     Expr to_acquire_var = Variable::make(Int(32), to_acquire_name);
 
                     Expr bad_fold_error =
-                        Call::make(Int(32), "halide_error_bad_fold",
+                        Call::make(type_of<halide_error_code_t>(), "halide_error_bad_fold",
                                    {func.name(), storage_dim.var, op->name},
                                    Call::Extern);
 
