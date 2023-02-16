@@ -1157,11 +1157,11 @@ extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *ca
  * If has_eviction_key is true, the entry is marked with eviction_key to
  * allow removing the key with halide_memoization_cache_evict.
  */
-extern int halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                          struct halide_buffer_t *realized_bounds,
-                                          int32_t tuple_count,
-                                          struct halide_buffer_t **tuple_buffers,
-                                          bool has_eviction_key, uint64_t eviction_key);
+extern enum halide_error_code_t halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
+                                                               struct halide_buffer_t *realized_bounds,
+                                                               int32_t tuple_count,
+                                                               struct halide_buffer_t **tuple_buffers,
+                                                               bool has_eviction_key, uint64_t eviction_key);
 
 /** Evict all cache entries that were tagged with the given
  *  eviction_key in the memoize scheduling directive.

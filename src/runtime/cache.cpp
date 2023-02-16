@@ -425,10 +425,10 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
     return 1;
 }
 
-WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                        halide_buffer_t *computed_bounds,
-                                        int32_t tuple_count, halide_buffer_t **tuple_buffers,
-                                        bool has_eviction_key, uint64_t eviction_key) {
+WEAK halide_error_code_t halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
+                                                        halide_buffer_t *computed_bounds,
+                                                        int32_t tuple_count, halide_buffer_t **tuple_buffers,
+                                                        bool has_eviction_key, uint64_t eviction_key) {
     debug(user_context) << "halide_memoization_cache_store has_eviction_key: " << has_eviction_key << " eviction_key " << eviction_key << " .\n";
 
     uint32_t h = get_pointer_to_header(tuple_buffers[0]->host)->hash;
@@ -475,7 +475,7 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
                 for (int32_t i = 0; i < tuple_count; i++) {
                     get_pointer_to_header(tuple_buffers[i]->host)->entry = nullptr;
                 }
-                return 0;
+                return halide_error_code_success;
             }
         }
         entry = entry->next;
@@ -509,7 +509,7 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
         if (new_entry) {
             halide_free(user_context, new_entry);
         }
-        return 0;
+        return halide_error_code_success;
     }
 
     new_entry->next = cache_entries[index];
@@ -534,7 +534,7 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
 #endif
     debug(user_context) << "Exiting halide_memoization_cache_store\n";
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK void halide_memoization_cache_release(void *user_context, void *host) {

@@ -314,7 +314,7 @@ public:
             args.push_back(make_const(UInt(64), 0));
         }
         // This is actually a void call. How to indicate that? Look at Extern_ stuff.
-        return Evaluate::make(Call::make(Int(32), "halide_memoization_cache_store", args, Call::Extern));
+        return Evaluate::make(Call::make(type_of<halide_error_code_t>(), "halide_memoization_cache_store", args, Call::Extern));
     }
 };
 
