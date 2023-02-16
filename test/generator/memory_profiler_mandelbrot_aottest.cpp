@@ -59,13 +59,12 @@ void validate(halide_profiler_state *s) {
     }
 }
 
-int launcher_task(void *user_context, int index, uint8_t *closure) {
+halide_error_code_t launcher_task(void *user_context, int index, uint8_t *closure) {
     Buffer<int, 2> output(width, height);
     float fx = cos(index / 10.0f), fy = sin(index / 10.0f);
-    memory_profiler_mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters,
-                               output.width(), output.height(), output);
-
-    return 0;
+    // TODO(srj-error-code): temporary hack
+    return (halide_error_code_t)memory_profiler_mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters,
+                                                           output.width(), output.height(), output);
 }
 
 }  // namespace
@@ -84,8 +83,8 @@ int main(int argc, char **argv) {
 
     // Note that launcher_task() always returns zero, thus halide_do_par_for()
     // should always return zero, but since this is a test, let's verify that.
-    int result = halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
-    assert(result == 0);
+    halide_error_code_t result = halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
+    assert(result == halide_error_code_success);
     (void)result;
 
     halide_profiler_state *state = halide_profiler_get_state();

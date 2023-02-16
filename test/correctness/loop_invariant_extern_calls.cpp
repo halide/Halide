@@ -19,11 +19,11 @@ extern "C" HALIDE_EXPORT_SYMBOL int my_impure_func(int counter, int x) {
 HalideExtern_2(int, my_impure_func, int, int);
 
 // A parallel for loop runner that isn't actually parallel
-int not_really_parallel_for(JITUserContext *ctx, int (*f)(JITUserContext *, int, uint8_t *), int min, int extent, uint8_t *closure) {
+halide_error_code_t not_really_parallel_for(JITUserContext *ctx, halide_error_code_t (*f)(JITUserContext *, int, uint8_t *), int min, int extent, uint8_t *closure) {
     for (int i = min; i < min + extent; i++) {
         f(ctx, i, closure);
     }
-    return 0;
+    return halide_error_code_success;
 }
 
 int main(int argc, char **argv) {

@@ -8,33 +8,33 @@ struct halide_mutex_array {
     halide_mutex *mutex;
 };
 
-WEAK int halide_default_do_task(void *user_context, halide_task_t f, int idx,
-                                uint8_t *closure) {
+WEAK halide_error_code_t halide_default_do_task(void *user_context, halide_task_t f, int idx,
+                                                uint8_t *closure) {
     return f(user_context, idx, closure);
 }
 
-WEAK int halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
-                                     int min, int extent, uint8_t *closure,
-                                     void *task_parent) {
+WEAK halide_error_code_t halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
+                                                     int min, int extent, uint8_t *closure,
+                                                     void *task_parent) {
     return f(user_context, min, extent, closure, task_parent);
 }
 
-WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
-                                   int min, int size, uint8_t *closure) {
+WEAK halide_error_code_t halide_default_do_par_for(void *user_context, halide_task_t f,
+                                                   int min, int size, uint8_t *closure) {
     for (int x = min; x < min + size; x++) {
-        int result = halide_do_task(user_context, f, x, closure);
+        halide_error_code_t result = halide_do_task(user_context, f, x, closure);
         if (result) {
             return result;
         }
     }
-    return 0;
+    return halide_error_code_success;
 }
 
-WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
-                                          struct halide_parallel_task_t *tasks,
-                                          void *task_parent) {
+WEAK halide_error_code_t halide_default_do_parallel_tasks(void *user_context, int num_tasks,
+                                                          struct halide_parallel_task_t *tasks,
+                                                          void *task_parent) {
     halide_error(nullptr, "halide_default_do_parallel_tasks not implemented on this platform.");
-    return -1;
+    return halide_error_code_unimplemented;
 }
 
 WEAK int halide_default_semaphore_init(halide_semaphore_t *s, int n) {
@@ -103,12 +103,12 @@ WEAK void halide_mutex_array_destroy(void *user_context, void *array) {
     // Don't destroy the array! It's just halide_fake_mutex_array!
 }
 
-WEAK int halide_mutex_array_lock(halide_mutex_array *array, int entry) {
-    return 0;
+WEAK halide_error_code_t halide_mutex_array_lock(halide_mutex_array *array, int entry) {
+    return halide_error_code_success;
 }
 
-WEAK int halide_mutex_array_unlock(halide_mutex_array *array, int entry) {
-    return 0;
+WEAK halide_error_code_t halide_mutex_array_unlock(halide_mutex_array *array, int entry) {
+    return halide_error_code_success;
 }
 
 WEAK void halide_shutdown_thread_pool() {
@@ -133,24 +133,24 @@ WEAK halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t f) {
     return result;
 }
 
-WEAK int halide_do_task(void *user_context, halide_task_t f, int idx,
-                        uint8_t *closure) {
+WEAK halide_error_code_t halide_do_task(void *user_context, halide_task_t f, int idx,
+                                        uint8_t *closure) {
     return (*custom_do_task)(user_context, f, idx, closure);
 }
 
-WEAK int halide_do_par_for(void *user_context, halide_task_t f,
-                           int min, int size, uint8_t *closure) {
+WEAK halide_error_code_t halide_do_par_for(void *user_context, halide_task_t f,
+                                           int min, int size, uint8_t *closure) {
     return (*custom_do_par_for)(user_context, f, min, size, closure);
 }
 
-WEAK int halide_do_loop_task(void *user_context, halide_loop_task_t f,
-                             int min, int size, uint8_t *closure, void *task_parent) {
+WEAK halide_error_code_t halide_do_loop_task(void *user_context, halide_loop_task_t f,
+                                             int min, int size, uint8_t *closure, void *task_parent) {
     return custom_do_loop_task(user_context, f, min, size, closure, task_parent);
 }
 
-WEAK int halide_do_parallel_tasks(void *user_context, int num_tasks,
-                                  struct halide_parallel_task_t *tasks,
-                                  void *task_parent) {
+WEAK halide_error_code_t halide_do_parallel_tasks(void *user_context, int num_tasks,
+                                                  struct halide_parallel_task_t *tasks,
+                                                  void *task_parent) {
     return custom_do_parallel_tasks(user_context, num_tasks, tasks, task_parent);
 }
 

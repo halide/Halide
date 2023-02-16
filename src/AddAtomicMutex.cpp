@@ -426,12 +426,12 @@ protected:
         // If a thread locks the mutex and throws an exception,
         // halide_mutex_array_destroy will be called and cleanup the mutex locks.
         body = Block::make(
-            Evaluate::make(Call::make(type_of<int>(),
+            Evaluate::make(Call::make(type_of<halide_error_code_t>(),
                                       "halide_mutex_array_lock",
                                       {mutex_array, index},
                                       Call::CallType::Extern)),
             Block::make(std::move(body),
-                        Evaluate::make(Call::make(type_of<int>(),
+                        Evaluate::make(Call::make(type_of<halide_error_code_t>(),
                                                   "halide_mutex_array_unlock",
                                                   {mutex_array, index},
                                                   Call::CallType::Extern))));

@@ -2677,7 +2677,16 @@ void CodeGen_C::visit(const Call *op) {
             // List the values.
             indent++;
             for (size_t i = 0; i < op->args.size(); i++) {
-                stream << get_indent() << values[i];
+                // TODO(srj-error-code): this is a temporary hack to allow
+                // converting all halide_do_par_for() and related calls without having to
+                // first adapt all AOT codegen() calls.
+                if (op->args[i].type() == type_of<halide_task_t>()) {
+                    stream << get_indent() << "(halide_task_t)" << values[i];
+                } else if (op->args[i].type() == type_of<halide_loop_task_t>()) {
+                    stream << get_indent() << "(halide_loop_task_t)" << values[i];
+                } else {
+                    stream << get_indent() << values[i];
+                }
                 if (i < op->args.size() - 1) {
                     stream << ",";
                 }
@@ -2871,6 +2880,12 @@ string CodeGen_C::print_extern_call(const Call *op) {
         // first adapt all define_extern() calls.
         if (i == 1 && (op->name == "halide_error_bounds_inference_call_failed" || op->name == "halide_error_extern_stage_failed")) {
             args[i] = "((enum halide_error_code_t)(" + args[i] + "))";
+        }
+        // TODO(srj-error-code): this is a temporary hack to allow
+        // converting all halide_do_par_for() and related calls without having to
+        // first adapt all AOT codegen() calls.
+        if (i == 0 && (op->name == "halide_do_par_for")) {
+            args[i] = "((halide_task_t)(" + args[i] + "))";
         }
     }
     if (function_takes_user_context(op->name)) {
@@ -3538,7 +3553,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
   int32_t *_tmp_heap = (int32_t  *)halide_malloc(_ucon, sizeof(int32_t )*_3);
   if (!((_tmp_heap != nullptr) || (_3 == 0)))
   {
-   int32_t _4 = halide_error_out_of_memory(_ucon);
+   enum halide_error_code_t _4 = halide_error_out_of_memory(_ucon);
    return _4;
   }
   HalideFreeHelper _tmp_heap_free(_ucon, _tmp_heap, halide_free);

@@ -320,7 +320,7 @@ struct LowerParallelTasks : public IRMutator {
                     t.min,
                     t.extent,
                     std::move(closure_struct_arg)};
-                result = Call::make(Int(32), "halide_do_par_for", args, Call::Extern);
+                result = Call::make(type_of<halide_error_code_t>(), "halide_do_par_for", args, Call::Extern);
             } else {
                 const int semaphores_size = (int)t.semaphores.size();
                 std::vector<Expr> semaphore_args(semaphores_size * 2);
@@ -347,7 +347,7 @@ struct LowerParallelTasks : public IRMutator {
             Expr tasks_list = Call::make(type_of<halide_parallel_task_t *>(), Call::make_struct, tasks_array_args, Call::PureIntrinsic);
             Expr user_context = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
             Expr task_parent = has_task_parent ? task_parents.top() : make_zero(Handle());
-            result = Call::make(Int(32), "halide_do_parallel_tasks",
+            result = Call::make(type_of<halide_error_code_t>(), "halide_do_parallel_tasks",
                                 {user_context, make_const(Int(32), num_tasks), tasks_list, task_parent},
                                 Call::Extern);
         }

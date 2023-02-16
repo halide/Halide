@@ -582,8 +582,8 @@ void free_handler(JITUserContext *context, void *ptr) {
     }
 }
 
-int do_task_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *), int idx,
-                    uint8_t *closure) {
+halide_error_code_t do_task_handler(JITUserContext *context, halide_error_code_t (*f)(JITUserContext *, int, uint8_t *), int idx,
+                                    uint8_t *closure) {
     if (context && context->handlers.custom_do_task) {
         return context->handlers.custom_do_task(context, f, idx, closure);
     } else {
@@ -591,8 +591,8 @@ int do_task_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uin
     }
 }
 
-int do_par_for_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *),
-                       int min, int size, uint8_t *closure) {
+halide_error_code_t do_par_for_handler(JITUserContext *context, halide_error_code_t (*f)(JITUserContext *, int, uint8_t *),
+                                       int min, int size, uint8_t *closure) {
     if (context && context->handlers.custom_do_par_for) {
         return context->handlers.custom_do_par_for(context, f, min, size, closure);
     } else {

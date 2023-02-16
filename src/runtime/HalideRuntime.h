@@ -221,7 +221,9 @@ enum halide_error_code_t {
      * violates a Halide invariant. */
     halide_error_code_no_device_interface = -19,
 
-    /* unused = -20, */
+    /** This part of the Halide runtime is unimplemented on this platform. */
+    halide_error_code_unimplemented = -20,
+
     /* unused = -21, */
 
     /** There is a bug in the Halide compiler. */
@@ -384,8 +386,8 @@ struct halide_mutex_array;
 //@{
 extern struct halide_mutex_array *halide_mutex_array_create(int sz);
 extern void halide_mutex_array_destroy(void *user_context, void *array);
-extern int halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
-extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
+extern enum halide_error_code_t halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
+extern enum halide_error_code_t halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
@@ -397,16 +399,16 @@ extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry
  * jobs otherwise.
  */
 //@{
-typedef int (*halide_task_t)(void *user_context, int task_number, uint8_t *closure);
-extern int halide_do_par_for(void *user_context,
-                             halide_task_t task,
-                             int min, int size, uint8_t *closure);
+typedef enum halide_error_code_t (*halide_task_t)(void *user_context, int task_number, uint8_t *closure);
+extern enum halide_error_code_t halide_do_par_for(void *user_context,
+                                                  halide_task_t task,
+                                                  int min, int size, uint8_t *closure);
 extern void halide_shutdown_thread_pool();
 //@}
 
 /** Set a custom method for performing a parallel for loop. Returns
  * the old do_par_for handler. */
-typedef int (*halide_do_par_for_t)(void *, halide_task_t, int, int, uint8_t *);
+typedef enum halide_error_code_t (*halide_do_par_for_t)(void *, halide_task_t, int, int, uint8_t *);
 extern halide_do_par_for_t halide_set_custom_do_par_for(halide_do_par_for_t do_par_for);
 
 /** An opaque struct representing a semaphore. Used by the task system for async tasks. */
@@ -431,8 +433,8 @@ typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int)
  * Note that task_parent is a pass through argument that should be
  * passed to any dependent taks that are invoked using halide_do_parallel_tasks
  * underneath this call. */
-typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
-                                  uint8_t *closure, void *task_parent);
+typedef enum halide_error_code_t (*halide_loop_task_t)(void *user_context, int min, int extent,
+                                                       uint8_t *closure, void *task_parent);
 
 /** A parallel task to be passed to halide_do_parallel_tasks. This
  * task may recursively call halide_do_parallel_tasks, and there may
@@ -491,26 +493,26 @@ struct halide_parallel_task_t {
  * system. Note that task_parent should be NULL for top-level calls
  * and the pass through argument if this call is being made from
  * another task. */
-extern int halide_do_parallel_tasks(void *user_context, int num_tasks,
-                                    struct halide_parallel_task_t *tasks,
-                                    void *task_parent);
+extern enum halide_error_code_t halide_do_parallel_tasks(void *user_context, int num_tasks,
+                                                         struct halide_parallel_task_t *tasks,
+                                                         void *task_parent);
 
 /** If you use the default do_par_for, you can still set a custom
  * handler to perform each individual task. Returns the old handler. */
 //@{
-typedef int (*halide_do_task_t)(void *, halide_task_t, int, uint8_t *);
+typedef enum halide_error_code_t (*halide_do_task_t)(void *, halide_task_t, int, uint8_t *);
 extern halide_do_task_t halide_set_custom_do_task(halide_do_task_t do_task);
-extern int halide_do_task(void *user_context, halide_task_t f, int idx,
-                          uint8_t *closure);
+extern enum halide_error_code_t halide_do_task(void *user_context, halide_task_t f, int idx,
+                                               uint8_t *closure);
 //@}
 
 /** The version of do_task called for loop tasks. By default calls the
  * loop task with the same arguments. */
 // @{
-typedef int (*halide_do_loop_task_t)(void *, halide_loop_task_t, int, int, uint8_t *, void *);
+typedef enum halide_error_code_t (*halide_do_loop_task_t)(void *, halide_loop_task_t, int, int, uint8_t *, void *);
 extern halide_do_loop_task_t halide_set_custom_do_loop_task(halide_do_loop_task_t do_task);
-extern int halide_do_loop_task(void *user_context, halide_loop_task_t f, int min, int extent,
-                               uint8_t *closure, void *task_parent);
+extern enum halide_error_code_t halide_do_loop_task(void *user_context, halide_loop_task_t f, int min, int extent,
+                                                    uint8_t *closure, void *task_parent);
 //@}
 
 /** Provide an entire custom tasking runtime via function
@@ -520,8 +522,8 @@ extern int halide_do_loop_task(void *user_context, halide_loop_task_t f, int min
  * those if you are mixing in the default implementations of
  * do_par_for and do_parallel_tasks. */
 // @{
-typedef int (*halide_do_parallel_tasks_t)(void *, int, struct halide_parallel_task_t *,
-                                          void *task_parent);
+typedef enum halide_error_code_t (*halide_do_parallel_tasks_t)(void *, int, struct halide_parallel_task_t *,
+                                                               void *task_parent);
 extern void halide_set_custom_parallel_runtime(
     halide_do_par_for_t,
     halide_do_task_t,
@@ -534,18 +536,18 @@ extern void halide_set_custom_parallel_runtime(
 
 /** The default versions of the parallel runtime functions. */
 // @{
-extern int halide_default_do_par_for(void *user_context,
-                                     halide_task_t task,
-                                     int min, int size, uint8_t *closure);
-extern int halide_default_do_parallel_tasks(void *user_context,
-                                            int num_tasks,
-                                            struct halide_parallel_task_t *tasks,
-                                            void *task_parent);
-extern int halide_default_do_task(void *user_context, halide_task_t f, int idx,
-                                  uint8_t *closure);
-extern int halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
-                                       int min, int extent,
-                                       uint8_t *closure, void *task_parent);
+extern enum halide_error_code_t halide_default_do_par_for(void *user_context,
+                                                          halide_task_t task,
+                                                          int min, int size, uint8_t *closure);
+extern enum halide_error_code_t halide_default_do_parallel_tasks(void *user_context,
+                                                                 int num_tasks,
+                                                                 struct halide_parallel_task_t *tasks,
+                                                                 void *task_parent);
+extern enum halide_error_code_t halide_default_do_task(void *user_context, halide_task_t f, int idx,
+                                                       uint8_t *closure);
+extern enum halide_error_code_t halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
+                                                            int min, int extent,
+                                                            uint8_t *closure, void *task_parent);
 extern int halide_default_semaphore_init(struct halide_semaphore_t *, int n);
 extern int halide_default_semaphore_release(struct halide_semaphore_t *, int n);
 extern bool halide_default_semaphore_try_acquire(struct halide_semaphore_t *, int n);

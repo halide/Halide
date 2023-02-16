@@ -1069,13 +1069,13 @@ WEAK void halide_mutex_array_destroy(void *user_context, void *array) {
     halide_free(user_context, arr_ptr);
 }
 
-WEAK int halide_mutex_array_lock(struct halide_mutex_array *array, int entry) {
+WEAK halide_error_code_t halide_mutex_array_lock(struct halide_mutex_array *array, int entry) {
     halide_mutex_lock(&array->array[entry]);
-    return 0;
+    return halide_error_code_success;
 }
 
-WEAK int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry) {
+WEAK halide_error_code_t halide_mutex_array_unlock(struct halide_mutex_array *array, int entry) {
     halide_mutex_unlock(&array->array[entry]);
-    return 0;
+    return halide_error_code_success;
 }
 }

@@ -60,19 +60,19 @@ struct JITHandlers {
      * If you're trying to use a custom parallel runtime, you probably
      * don't want to call this. See instead custom_do_par_for.
     */
-    int (*custom_do_task)(JITUserContext *, int (*)(JITUserContext *, int, uint8_t *), int, uint8_t *){nullptr};
+    halide_error_code_t (*custom_do_task)(JITUserContext *, halide_error_code_t (*)(JITUserContext *, int, uint8_t *), int, uint8_t *){nullptr};
 
     /** A custom parallel for loop launcher. Useful if your app
      * already manages a thread pool. The default implementation is
      * equivalent to this:
      \code
-     extern "C" int halide_do_par_for(JITUserContext *user_context,
-                                      int (*f)(void *, int, uint8_t *),
+     extern "C" halide_error_code_t halide_do_par_for(JITUserContext *user_context,
+                                      halide_error_code_t (*f)(void *, int, uint8_t *),
                                       int min, int extent, uint8_t *state) {
-         int exit_status = 0;
+         halide_error_code_t exit_status = halide_error_code_success;
          parallel for (int idx = min; idx < min+extent; idx++) {
-             int job_status = halide_do_task(user_context, f, idx, state);
-             if (job_status) exit_status = job_status;
+             halide_error_code_t job_status = halide_do_task(user_context, f, idx, state);
+             if (job_status != halide_error_code_success) exit_status = job_status;
          }
          return exit_status;
      }
@@ -82,7 +82,7 @@ struct JITHandlers {
      * fails, we may skip over other tasks, and if two tasks return
      * different error codes, we may select one arbitrarily to return.
      */
-    int (*custom_do_par_for)(JITUserContext *, int (*)(JITUserContext *, int, uint8_t *), int, int, uint8_t *){nullptr};
+    halide_error_code_t (*custom_do_par_for)(JITUserContext *, halide_error_code_t (*)(JITUserContext *, int, uint8_t *), int, int, uint8_t *){nullptr};
 
     /** The error handler function that be called in the case of
      * runtime errors during halide pipelines. */

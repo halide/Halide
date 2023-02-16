@@ -20,7 +20,7 @@ int32_t my_halide_trace(void *context, const halide_trace_event_t *e) {
     return 0;
 }
 
-int launcher_task(void *user_context, int index, uint8_t *closure) {
+halide_error_code_t launcher_task(void *user_context, int index, uint8_t *closure) {
     Buffer<float, 2> input(10, 10);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
@@ -29,9 +29,8 @@ int launcher_task(void *user_context, int index, uint8_t *closure) {
     }
     Buffer<float, 2> output(10, 10);
 
-    user_context_insanity(&got_context[index], input, output);
-
-    return 0;
+    // TODO(srj-error-code): temporary hack
+    return (halide_error_code_t)user_context_insanity(&got_context[index], input, output);
 }
 
 int main(int argc, char **argv) {
@@ -41,8 +40,8 @@ int main(int argc, char **argv) {
     // in parallel.
     // Note that launcher_task() always returns zero, thus halide_do_par_for()
     // should always return zero, but since this is a test, let's verify that.
-    int result = halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
-    assert(result == 0);
+    halide_error_code_t result = halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
+    assert(result == halide_error_code_success);
     (void)result;
 
     for (int i = 0; i < num_launcher_tasks; ++i) {
