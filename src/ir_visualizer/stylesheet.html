@@ -25,6 +25,10 @@
         font-weight: normal;
     }
 
+    table {
+        font-size: 12px;
+    }
+
 	/* Info bar */
     div#info-bar {
         display: flex;
@@ -208,6 +212,10 @@
         padding: 0px;
     }
 
+    div#ir-visualization-tab button.icon-btn {
+        margin-left: 1px;
+    }
+
     button.icon-btn:hover {
         color: #c30000;
     }
@@ -320,52 +328,211 @@
     }
 
     /* IR Viz Section CSS */
+    .collapsed-viz {
+        display: none;
+    }
+
     div.fn-wrapper {
         background-color: #f0f0f0;
         border: 1px dashed grey;
-        border-radius: 5px;
         margin-bottom: 15px;
-        padding: 5px;
-        width: max-content;
-    }
-
-    div.box {
-        border: 1px dashed grey;
-        border-radius: 5px;
-        margin: 5px;
-        padding: 5px;
-        display: flex;
         width: max-content;
     }
 
     div.fn-header {
         display: flex;
-        margin-bottom: 10px;
+        font-weight: bold;
+        padding: 5px 7px;
+        background-color: #dfdede;
+    }
+
+    span.fn-title {
+        margin-right: 10px;
+        margin-left: 3px;
+    }
+
+    div.fn-body {
+        padding: 7px;
     }
 
     div.fn-call {
-        background-color: #fabebe;
+        padding: 3px 5px;
+        background: #f1daeb;
+        border: 1px dashed gray;
     }
 
-    div.fn-call button {
-        background-color: #fff;
-        border: 1px solid #d5d9d9;
-        border-radius: 8px;
-        box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0;
-        position: relative;
-        text-align: center;
+    div.box {
+        border: 1px dashed grey;
+        width: max-content;
+        min-width: -webkit-fill-available;
+        display: flex;
+        flex-direction: column;
+    }
+
+    div.box:not(:last-child) {
+        margin-bottom: 15px;
+    }
+
+    div.box-header {
+        padding: 5px 7px;
+        display: flex;
+    }
+
+    div.box-title {
+        font-weight: bold;
+        margin-top: auto;
+        margin-bottom: auto;
+        margin-left: 3px;
+    }
+
+    div.box-body {
+        padding: 7px;
+    }
+
+    div.ProducerBox {
+        background-color: #e9fbe4;
+    }
+
+    div.ProducerBox > div.box-header {
+        background-color: #c6edbb;
+    }
+
+    div.ConsumerBox {
+        background-color: #ffe6e8;
+    }
+
+    div.ConsumerBox > div.box-header {
+        background-color: #f1c8cc;
+    }
+
+    div.ForBox {
+        background-color: #f0e9f9;
+    }
+
+    div.ForBox > div.box-header {
+        background-color: #ddc6fb;
+    } 
+
+    div.IfBox {
+        background-color: #e6eeff;
+    }
+
+    div.IfBox > div.box-header {
+        background-color: #c0d4ff;
+    }
+
+    div.AllocateBox {
+        background-color: #f4f8bf;
+    }
+
+    div.AllocateBox > div.box-header{
+        background-color: #f5e790;
+    }
+
+    div.LoadBox {
+        background-color: #fff4e6;
+    }
+
+    div.LoadBox > div.box-header {
+        background-color: #fbe3c6;
+    }
+
+    div.StoreBox {
+        background-color: #ddf3e9;
+    }
+
+    div.StoreBox > div.box-header {
+        background-color: #bcedd6;
+    }
+    
+    .allocate-table {
+        background-color: rgba(197, 195, 195, 0.2);
+        min-width: -webkit-fill-available;
+    }
+
+    .allocate-table:not(:last-child) {
+        margin-bottom: 10px;
+    }
+
+    .allocate-table td, .allocate-table th {
+        padding: 5px;
+        border: 1px dashed gray;
+    }
+
+    button.trunc-cond {
+        font-size: 12px;
         vertical-align: middle;
-        margin-left: 5px;
-        font-size: 15px;
-        padding: 3px;
+        padding: 0px;
+        line-height: 1.5;
+        background: none;
+        border: none;
     }
 
-    div.fn-call button {
-        background-color: #f7fafa;
+    span.tooltip {
+        display: none;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: max-content;
+        padding: 8px;
+        background: #fff7e0;
+        font-size: 12px;
+        border-radius: 5px;
+        border: 1px solid #aaa;
+        z-index: 9999;
+        box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0;
     }
 
+    .conditionTooltip {
+        width: 300px;
+        padding: 5px;
+        font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    }
+
+	/* TreeFlex CSS */
     .tf-tree {
         overflow: unset;
+    }
+
+    .tf-tree ul {
+        width: -webkit-fill-available;
+    }
+
+    .tf-custom-ir-viz li {
+        padding: 0px !important;
+        flex-grow: 1;
+    }
+
+    .tf-tree.tf-gap-sm li > .tf-nc:after, .tf-tree.tf-gap-sm li > .tf-node-content:after {
+        height: 1em;
+    }
+
+    .tf-custom-ir-viz {
+        font-size: 12px;
+    }
+
+    .tf-custom-ir-viz:not(:last-child) {
+        margin-bottom: 15px;
+    }
+
+    .tf-custom-ir-viz .tf-nc {
+        border: none;
+        margin: 0px;
+        padding: 0px;
+        width: -webkit-fill-available;
+    }
+
+    .tf-custom-ir-viz .tf-nc:before,
+    .tf-custom-ir-viz .tf-nc:after {
+        border-left-width: 1px;
+    }
+
+    .tf-custom-ir-viz li li:before {
+        border-top-width: 1px;
+    }
+
+    .tf-custom-ir-viz .end-node {
+        border-style: dashed;
     }
 
     /* Currently Unused */
@@ -595,30 +762,11 @@
 		margin-right: auto;
 	}
 
-	.tooltip {
-		display: none;
-		position: absolute;
-		top: 0;
-		left: 0;
-		background: white;
-		padding: 5px;
-		font-size: 90%;
-		pointer-events: none;
-		border-radius: 5px;
-		border: 1px dashed #aaa;
-		z-index: 9999;
-		box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0;
-	}
-
 	.CostTooltip {
 		min-width: max-content;
 	}
 
-	.conditionTooltip {
-		width: 300px;
-		padding: 5px;
-		font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-	}
+	
 
 	span.tooltipHelperText {
 		color: red;
@@ -626,38 +774,11 @@
 	}
 
 	/* irViz CSS */
-	.tf-custom-irViz .tf-nc {
-		border-radius: 5px;
-		border: 1px solid;
-	}
-
-	.tf-custom-irViz .tf-nc:before,
-	.tf-custom-irViz .tf-nc:after {
-		border-left-width: 1px;
-	}
-
-	.tf-custom-irViz li li:before {
-		border-top-width: 1px;
-	}
-
-	.tf-custom-irViz .end-node {
-		border-style: dashed;
-	}
-
-	.tf-custom-irViz .tf-nc {
-		background-color: #e6eeff;
-	}
-
-	.tf-custom-irViz {
-		font-size: 12px;
-	}
+	
 
 	
 
-	div.boxHeader {
-		padding: 5px;
-		display: flex;
-	}
+	
 
 	div.memory-cost-div,
 	div.computation-cost-div {
@@ -665,32 +786,15 @@
 		width: 7px;
 	}
 
-	
-
-	div.ProducerConsumerBox {
-		background-color: #99bbff;
-	}
-
-	div.ForBox {
-		background-color: #b3ccff;
-	}
-
-	div.StoreBox {
-		background-color: #f4f8bf;
-	}
-
-	div.AllocateBox {
-		background-color: #f4f8bf;
-	}
-
-	div.IfBox {
-		background-color: #e6eeff;
-	}
-
 	div.memory-cost-div:hover,
 	div.computation-cost-div:hover {
 		border: 1px solid grey;
 	}
+
+    div.boxHeader {
+        padding: 5px;
+        display: flex;
+    }
 
 	div.boxBody {
 		margin-left: 5px;
@@ -701,13 +805,7 @@
 		padding-bottom: 5px;
 	}
 
-	table {
-		border-radius: 5px;
-		font-size: 12px;
-		border: 1px dashed grey;
-		border-collapse: separate;
-		border-spacing: 0;
-	}
+	
 
 	.ifElseTable {
 		border: 0px;
@@ -761,16 +859,7 @@
 		border: 1px solid grey;
 	}
 
-	div.boxHeaderTitle {
-		font-weight: bold;
-		margin-top: auto;
-		margin-bottom: auto;
-	}
-
-	.irVizToggle {
-		margin-right: 5px;
-		margin-left: 0px;
-	}
+	
 
 	
 
@@ -797,8 +886,6 @@
 	}
 
 	.tf-custom-stmtHierarchy .tf-nc {
-		border-radius: 5px;
-		border: 1px solid;
 		font-size: 12px;
 		border-color: rgb(200, 200, 200);
 	}

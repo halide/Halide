@@ -1,18 +1,44 @@
 <script>
     /* Highlighting 'matched' elements in IR code */
-    $('.matched').each(function () {
+    $('#ir-code-tab .matched').each(function () {
         this.onmouseover = function () {
-            $('.matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight');
+            $('#ir-code-tab .matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight');
         }
         this.onmouseout = function () {
-            $('.matched[id^=' + this.id.split('-')[0] + '-]').removeClass('Highlight');
+            $('#ir-code-tab .matched[id^=' + this.id.split('-')[0] + '-]').removeClass('Highlight');
+        }
+    });
+
+    /* Highlighting 'matched' elements in Viz code */
+    $('#ir-visualization-tab .matched').each(function () {
+        this.onmouseover = function () {
+            $('#ir-visualization-tab .matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight');
+        }
+        this.onmouseout = function () {
+            $('#ir-visualization-tab .matched[id^=' + this.id.split('-')[0] + '-]').removeClass('Highlight');
+        }
+    });
+
+    /* Cross highlighting 'matched' variables (only) */
+    $('#ir-visualization-tab .matched.variable').each(function () {
+        this.onmouseover = function () {
+            var name = this.outerText;
+            $('.matched.variable').filter((idx, val) => {
+                return val.outerText === name;
+            }).addClass('Highlight');
+        }
+        this.onmouseout = function () {
+            var name = this.outerText;
+            $('.matched.variable').filter((idx, val) => {
+                return val.outerText === name;
+            }).removeClass('Highlight');
         }
     });
 
     /* Expand/Collapse buttons in IR code */
     function toggle(id) {
         e = document.getElementById(id);
-        e_cb = document.getElementById("cb-" + id);
+        e_cb = document.getElementsByClassName("cb-" + id)[0];
         show = document.getElementById(id + '-show');
         hide = document.getElementById(id + '-hide');
         if (e.classList.contains("collapsed-block")) {
@@ -29,23 +55,36 @@
         return false;
     }
 
+    /* Expand/Collapse buttons in Viz */
+    function toggleViz(id) {
+        var buttonShow = document.getElementById(id + '-show');
+        var buttonHide = document.getElementById(id + '-hide');
+        var body = document.getElementById(id);
+        if (body.classList.contains("collapsed-viz")) {
+            body.classList.remove("collapsed-viz");
+            buttonShow.style.display = 'none';
+            buttonHide.style.display = 'block';
+        } else {
+            body.classList.add("collapsed-viz");
+            buttonShow.style.display = 'block';
+            buttonHide.style.display = 'none';
+        }
+    };
+
     /* Scroll to visualization from IR code */
     function scrollToViz(id) {
         var container = document.getElementById('ir-visualization-tab');
         var scrollToObject = document.getElementById(id);
         makeVizVisible(scrollToObject);
         container.scrollTo({
-            top: getOffsetTop(scrollToObject) - 45,
-            left: getOffsetLeft(scrollToObject) - 40,
+            top: getOffsetTop(scrollToObject) - 8,
+            left: getOffsetLeft(scrollToObject),
             behavior: 'smooth'
         });
-        //scrollToObject.style.backgroundColor = 'yellow';
-        //scrollToObject.style.fontSize = '20px';
-        // change content for 1 second
-        //setTimeout(function () {
-        //scrollToObject.style.backgroundColor = 'transparent';
-        //scrollToObject.style.fontSize = '12px';
-        //}, 1000);
+        scrollToObject.style.backgroundColor = 'white';
+        setTimeout(function () {
+            scrollToObject.style.backgroundColor = 'transparent';
+        }, 1000);
     }
 
     function getOffsetTop(element) {
@@ -64,16 +103,11 @@
     // a collapsed parent block, uncollapse it
     function makeVizVisible(element) {
         if (!element) return;
-        if (element.className == 'viz-tabs') return;
-        if (element.style.visibility == 'hidden') {
-            element.style = '';
-            show = document.getElementById(element.id + '-show');
-            hide = document.getElementById(element.id + '-hide');
-            show.style.display = 'none';
-            hide.style.display = 'block';
-            return;
+        if (element == document) return;
+        if (element.classList.contains("collapsed-viz")) {
+            toggleViz(element.id);
         }
-        makeVisible(element.parentNode);
+        makeVizVisible(element.parentNode);
     }
 
     /* Scroll to code from visualization */
@@ -203,6 +237,90 @@
         assemblyCodeDiv.style.display = 'none';
     }
 
+    // Tooltips
+    function update(buttonElement, tooltipElement) {
+        window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, {
+            placement: 'top',
+            middleware: [
+                window.FloatingUIDOM.offset(6),
+                window.FloatingUIDOM.flip(),
+                window.FloatingUIDOM.shift({
+                    padding: 5
+                }),
+            ],
+        }).then(({
+            x,
+            y,
+            placement,
+            middlewareData
+        }) => {
+            Object.assign(tooltipElement.style, {
+                left: `${x}px`,
+                top: `${y}px`,
+            });
+            // Accessing the data 
+            const staticSide = {
+                top: 'bottom',
+                right: 'left',
+                bottom: 'top',
+                left: 'right',
+            }[placement.split('-')[0]];
+        });
+    }
+
+    function showTooltip(buttonElement, tooltipElement) {
+        tooltipElement.style.display = 'block';
+        tooltipElement.style.opacity = '1';
+        update(buttonElement, tooltipElement);
+    }
+
+    function hideTooltip(tooltipElement) {
+        tooltipElement.style.display = '';
+        tooltipElement.style.opacity = '0';
+    }
+
+    var re = /(?:\-([^-]+))?$/;
+    var tooltip_btns = $('button[id^="cond-"]');
+    for (var i = 0; i < tooltip_btns.size(); i++) {
+        const button = tooltip_btns[i];
+        const tooltip = $("span#cond-tooltip-" + re.exec(button.id)[1])[0];
+        button.is_clicked = false;
+        button.addEventListener('mouseenter', () => {
+            if (!button.is_clicked)
+                showTooltip(button, tooltip);
+        });
+        button.addEventListener('mouseleave', () => {
+            if (!button.is_clicked)
+                hideTooltip(tooltip);
+        });
+        button.addEventListener('click', () => {
+            if (button.is_clicked) {
+                hideTooltip(tooltip);
+                button.is_clicked = false;
+            } else {
+                showTooltip(button, tooltip);
+                button.is_clicked = true;
+            }
+        });
+    }
+
+    function depth(elem) {
+        if ($(elem).is("div#ir-visualization-tab"))
+            return 0;
+        else if ($(elem).is("div.box"))
+            return 1 + depth(elem.parentNode);
+        else
+            return depth(elem.parentNode);
+    }
+
+    // Collapse viz boxes beyond at depth > 1
+    $('div[id^="viz-"]').filter((idx, val) => {
+        return depth(val) > 1;
+    }).each((idx, val) => {
+        //toggleViz(val.id);
+    });
+
+
     // CodeMirror
     function jumpToLine(myCodeMirror, start, end) {
         start -= 1;
@@ -275,69 +393,10 @@
     collapse_assembly_tab();
 
 
-    // Tooltip JS
-    function update(buttonElement, tooltipElement) {
-        window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, {
-            placement: 'top',
-            middleware: [
-                window.FloatingUIDOM.offset(6),
-                window.FloatingUIDOM.flip(),
-                window.FloatingUIDOM.shift({
-                    padding: 5
-                }),
-            ],
-        }).then(({
-            x,
-            y,
-            placement,
-            middlewareData
-        }) => {
-            Object.assign(tooltipElement.style, {
-                left: `${x}px`,
-                top: `${y}px`,
-            });
-            // Accessing the data 
-            const staticSide = {
-                top: 'bottom',
-                right: 'left',
-                bottom: 'top',
-                left: 'right',
-            }[placement.split('-')[0]];
-        });
-    }
-
-    function showTooltip(buttonElement, tooltipElement) {
-        tooltipElement.style.display = 'block';
-        tooltipElement.style.opacity = '1';
-        update(buttonElement, tooltipElement);
-    }
-
-    function hideTooltip(tooltipElement) {
-        tooltipElement.style.display = '';
-        tooltipElement.style.opacity = '0';
-    }
-    for (let i = 1; i <= {{tooltip_count}}; i++) {
-        const button = document.getElementById('button' + i);
-        const tooltip = document.getElementById('tooltip' + i);
-        if (!button) {
-            console.log('button' + i + ' not found');
-        }
-        button.addEventListener('mouseenter', () => {
-            showTooltip(button, tooltip);
-        });
-        button.addEventListener('mouseleave', () => {
-            hideTooltip(tooltip);
-        });
-        tooltip.addEventListener('focus', () => {
-            showTooltip(button, tooltip);
-        });
-        tooltip.addEventListener('blur', () => {
-            hideTooltip(tooltip);
-        });
-    }
+    
 
     // collapse/expand js (stmt hierarchy)
-    var nodeExpanded = new Map();
+    /*var nodeExpanded = new Map();
 
     function collapseAllNodes(startNode, endNode) {
         for (let i = startNode; i <= endNode; i++) {
@@ -437,40 +496,9 @@
         tooltip.addEventListener('blur', () => {
             hideTooltip(tooltip);
         });
-    }
+    }*/
 
-    // irViz JS
-    for (let i = 1; i <= {{ir_viz_tooltip_count}}; i++) {
-        const button = document.getElementById('irVizButton' + i);
-        const tooltip = document.getElementById('irVizTooltip' + i);
-        button.addEventListener('mouseenter', () => {
-            showTooltip(button, tooltip);
-        });
-        button.addEventListener('mouseleave', () => {
-            hideTooltip(tooltip);
-        });
-        tooltip.addEventListener('focus', () => {
-            showTooltip(button, tooltip);
-        });
-        tooltip.addEventListener('blur', () => {
-            hideTooltip(tooltip);
-        });
-    }
+    
 
-    function toggleCollapse(id) {
-        var buttonShow = document.getElementById('irViz' + id + '-show');
-        var buttonHide = document.getElementById('irViz' + id + '-hide');
-        var body = document.getElementById('irViz' + id);
-        if (body.style.display != 'none') {
-            body.style.visibility = 'none';
-            body.style.height = '0px';
-            body.style.width = '0px';
-            buttonShow.style.display = 'block';
-            buttonHide.style.display = 'none';
-        } else {
-            body.style = '';
-            buttonShow.style.display = 'none';
-            buttonHide.style.display = 'block';
-        }
-    };
+    
 </script>
