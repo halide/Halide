@@ -2763,7 +2763,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::compile(std::vector<char> &module) {
     }
 
     if (builder.is_capability_required(SpvCapabilityFloat64) && !target.has_feature(Target::VulkanFloat64)) {
-        user_error << "Vulkan: Code requires 16-bit floating-point support (which is not enabled in the target features)! "
+        user_error << "Vulkan: Code requires 64-bit floating-point support (which is not enabled in the target features)! "
                    << "Either enable the target feature, or adjust the algorithm to avoid using this data type!";
     }
 
