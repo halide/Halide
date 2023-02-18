@@ -185,7 +185,7 @@ Halide will search for the first 'gpu' like device it can find, or fall back
 to the first compute device it can find.
 
 `HL_VK_ALLOC_CONFIG=...` will tell Halide to configure the Vulkan memory
-allocator use the given constraints specified as three integer values 
+allocator use the given constraints specified as four integer values 
 separated by the appropriate environment variable list delimiter 
 (e.g. `N:N:N:N` on Linux/OSX/Posix, or `N;N;N;N` on Windows). These values 
 correspond to `maximum_pool_size`, `minimum_block_size`, `maximum_block_size` 
