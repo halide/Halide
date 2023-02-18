@@ -52,12 +52,12 @@ public:
 
     // Public interface methods
     MemoryRegion *reserve(void *user_context, const MemoryRequest &request);
-    void release(void *user_context, MemoryRegion *region);  //< unmark and cache the region for reuse
-    void reclaim(void *user_context, MemoryRegion *region);  //< free the region and consolidate
-    void retain(void *user_context, MemoryRegion *region);   //< retain the region and increase the usage count
-    bool collect(void *user_context);                        //< returns true if any blocks were removed
-    void release(void *user_context);
-    void destroy(void *user_context);
+    int release(void *user_context, MemoryRegion *region);  //< unmark and cache the region for reuse
+    int reclaim(void *user_context, MemoryRegion *region);  //< free the region and consolidate
+    int retain(void *user_context, MemoryRegion *region);   //< retain the region and increase the usage count
+    bool collect(void *user_context);                       //< returns true if any blocks were removed
+    int release(void *user_context);
+    int destroy(void *user_context);
 
     // Access methods
     const MemoryAllocators &current_allocators() const;
@@ -80,7 +80,7 @@ private:
     RegionAllocator *create_region_allocator(void *user_context, BlockResource *block);
 
     // Destroys the given region allocator and all associated memory regions
-    void destroy_region_allocator(void *user_context, RegionAllocator *region_allocator);
+    int destroy_region_allocator(void *user_context, RegionAllocator *region_allocator);
 
     // Reserves a block of memory for the requested size and returns the corresponding block entry, or nullptr on failure
     BlockEntry *reserve_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated);
@@ -92,16 +92,16 @@ private:
     BlockEntry *create_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated);
 
     // Releases the block entry from being used, and makes it available for further allocations
-    void release_block_entry(void *user_context, BlockEntry *block_entry);
+    int release_block_entry(void *user_context, BlockEntry *block_entry);
 
     // Destroys the block entry and removes it from the list
-    void destroy_block_entry(void *user_context, BlockEntry *block_entry);
+    int destroy_block_entry(void *user_context, BlockEntry *block_entry);
 
     // Invokes the allocation callback to allocate memory for the block region
-    void alloc_memory_block(void *user_context, BlockResource *block);
+    int alloc_memory_block(void *user_context, BlockResource *block);
 
     // Invokes the deallocation callback to free memory for the memory block
-    void free_memory_block(void *user_context, BlockResource *block);
+    int free_memory_block(void *user_context, BlockResource *block);
 
     // Returns a constrained size for the requested size based on config parameters
     size_t constrain_requested_size(size_t size) const;
@@ -190,31 +190,37 @@ MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &r
     return result;
 }
 
-void BlockAllocator::release(void *user_context, MemoryRegion *memory_region) {
-    halide_abort_if_false(user_context, memory_region != nullptr);
+int BlockAllocator::release(void *user_context, MemoryRegion *memory_region) {
+    if (memory_region == nullptr) {
+        return halide_error_code_internal_error;
+    }
     RegionAllocator *allocator = RegionAllocator::find_allocator(user_context, memory_region);
     if (allocator == nullptr) {
-        return;
+        return halide_error_code_internal_error;
     }
-    allocator->release(user_context, memory_region);
+    return allocator->release(user_context, memory_region);
 }
 
-void BlockAllocator::reclaim(void *user_context, MemoryRegion *memory_region) {
-    halide_abort_if_false(user_context, memory_region != nullptr);
+int BlockAllocator::reclaim(void *user_context, MemoryRegion *memory_region) {
+    if (memory_region == nullptr) {
+        return halide_error_code_internal_error;
+    }
     RegionAllocator *allocator = RegionAllocator::find_allocator(user_context, memory_region);
     if (allocator == nullptr) {
-        return;
+        return halide_error_code_internal_error;
     }
-    allocator->reclaim(user_context, memory_region);
+    return allocator->reclaim(user_context, memory_region);
 }
 
-void BlockAllocator::retain(void *user_context, MemoryRegion *memory_region) {
-    halide_abort_if_false(user_context, memory_region != nullptr);
+int BlockAllocator::retain(void *user_context, MemoryRegion *memory_region) {
+    if (memory_region == nullptr) {
+        return halide_error_code_internal_error;
+    }
     RegionAllocator *allocator = RegionAllocator::find_allocator(user_context, memory_region);
     if (allocator == nullptr) {
-        return;
+        return halide_error_code_internal_error;
     }
-    allocator->retain(user_context, memory_region);
+    return allocator->retain(user_context, memory_region);
 }
 
 bool BlockAllocator::collect(void *user_context) {
@@ -252,16 +258,17 @@ bool BlockAllocator::collect(void *user_context) {
     return result;
 }
 
-void BlockAllocator::release(void *user_context) {
+int BlockAllocator::release(void *user_context) {
     BlockEntry *block_entry = block_list.back();
     while (block_entry != nullptr) {
         BlockEntry *prev_entry = block_entry->prev_ptr;
         release_block_entry(user_context, block_entry);
         block_entry = prev_entry;
     }
+    return 0;
 }
 
-void BlockAllocator::destroy(void *user_context) {
+int BlockAllocator::destroy(void *user_context) {
     BlockEntry *block_entry = block_list.back();
     while (block_entry != nullptr) {
         BlockEntry *prev_entry = block_entry->prev_ptr;
@@ -269,6 +276,7 @@ void BlockAllocator::destroy(void *user_context) {
         block_entry = prev_entry;
     }
     block_list.destroy(user_context);
+    return 0;
 }
 
 MemoryRegion *BlockAllocator::reserve_memory_region(void *user_context, RegionAllocator *allocator, const MemoryRequest &request) {
@@ -424,16 +432,16 @@ BlockAllocator::create_region_allocator(void *user_context, BlockResource *block
     return region_allocator;
 }
 
-void BlockAllocator::destroy_region_allocator(void *user_context, RegionAllocator *region_allocator) {
+int BlockAllocator::destroy_region_allocator(void *user_context, RegionAllocator *region_allocator) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "BlockAllocator: Destroying region allocator ("
                                     << "user_context=" << (void *)(user_context) << " "
                                     << "region_allocator=" << (void *)(region_allocator) << ")...\n";
 #endif
     if (region_allocator == nullptr) {
-        return;
+        return 0;
     }
-    RegionAllocator::destroy(user_context, region_allocator);
+    return RegionAllocator::destroy(user_context, region_allocator);
 }
 
 BlockAllocator::BlockEntry *
@@ -475,7 +483,7 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
     return block_entry;
 }
 
-void BlockAllocator::release_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
+int BlockAllocator::release_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "BlockAllocator: Releasing block entry ("
                                     << "block_entry=" << (void *)(block_entry) << " "
@@ -483,11 +491,12 @@ void BlockAllocator::release_block_entry(void *user_context, BlockAllocator::Blo
 #endif
     BlockResource *block = static_cast<BlockResource *>(block_entry->value);
     if (block->allocator) {
-        block->allocator->release(user_context);
+        return block->allocator->release(user_context);
     }
+    return 0;
 }
 
-void BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
+int BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "BlockAllocator: Destroying block entry ("
                                     << "block_entry=" << (void *)(block_entry) << " "
@@ -501,9 +510,10 @@ void BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::Blo
     }
     free_memory_block(user_context, block);
     block_list.remove(user_context, block_entry);
+    return 0;
 }
 
-void BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block) {
+int BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "BlockAllocator: Allocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.allocate << ")...\n";
 #endif
@@ -511,9 +521,10 @@ void BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block
     MemoryBlock *memory_block = &(block->memory);
     allocators.block.allocate(user_context, memory_block);
     block->reserved = 0;
+    return 0;
 }
 
-void BlockAllocator::free_memory_block(void *user_context, BlockResource *block) {
+int BlockAllocator::free_memory_block(void *user_context, BlockResource *block) {
 #ifdef DEBUG_INTERNAL
     StackBasicPrinter<256>(nullptr) << "BlockAllocator: Deallocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.deallocate << ")...\n";
 #endif
@@ -523,6 +534,7 @@ void BlockAllocator::free_memory_block(void *user_context, BlockResource *block)
     memory_block->handle = nullptr;
     block->reserved = 0;
     block->memory.size = 0;
+    return 0;
 }
 
 size_t BlockAllocator::constrain_requested_size(size_t size) const {

@@ -46,7 +46,7 @@ public:
     VkPhysicalDevice physical_device;
     VkQueue queue;
     uint32_t queue_family_index;  // used for operations requiring queue family
-    VkResult error;
+    halide_error_code_t error;
 
     HALIDE_ALWAYS_INLINE VulkanContext(void *user_context)
         : user_context(user_context),
@@ -57,12 +57,13 @@ public:
           physical_device(nullptr),
           queue(nullptr),
           queue_family_index(0),
-          error(VK_SUCCESS) {
+          error(halide_error_code_success) {
 
         int result = halide_vulkan_acquire_context(user_context,
                                                    reinterpret_cast<halide_vulkan_memory_allocator **>(&allocator),
                                                    &instance, &device, &physical_device, &command_pool, &queue, &queue_family_index);
         if (result != halide_error_code_success) {
+            error = halide_error_code_device_interface_no_device;
             halide_error_no_device_interface(user_context);
         }
         halide_debug_assert(user_context, allocator != nullptr);
@@ -178,7 +179,7 @@ int vk_create_instance(void *user_context, const StringTable &requested_layers, 
     VkResult result = vkCreateInstance(&create_info, alloc_callbacks, instance);
     if (result != VK_SUCCESS) {
         debug(user_context) << "Vulkan: vkCreateInstance failed with return code: " << vk_get_error_name(result) << "\n";
-        return halide_error_code_incompatible_device_interface;
+        return halide_error_code_device_interface_no_device;
     }
 
     return halide_error_code_success;
@@ -199,11 +200,11 @@ int vk_select_device_for_context(void *user_context,
     VkResult result = vkEnumeratePhysicalDevices(*instance, &device_count, nullptr);
     if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) {
         debug(user_context) << "Vulkan: vkEnumeratePhysicalDevices failed with return code: " << vk_get_error_name(result) << "\n";
-        return halide_error_code_incompatible_device_interface;
+        return halide_error_code_device_interface_no_device;
     }
     if (device_count == 0) {
         debug(user_context) << "Vulkan: No devices found.\n";
-        return halide_error_code_incompatible_device_interface;
+        return halide_error_code_device_interface_no_device;
     }
 
     // allocate enough storage for the physical device query results
@@ -221,7 +222,7 @@ int vk_select_device_for_context(void *user_context,
     result = vkEnumeratePhysicalDevices(*instance, &device_count, avail_devices);
     if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) {
         debug(user_context) << "Vulkan: vkEnumeratePhysicalDevices failed with return code: " << vk_get_error_name(result) << "\n";
-        return halide_error_code_incompatible_device_interface;
+        return halide_error_code_device_interface_no_device;
     }
 
     // get the configurable device type to search for (e.g. 'cpu', 'gpu', 'integrated-gpu', 'discrete-gpu', ...)
@@ -315,7 +316,7 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     bool valid_device = vk_validate_required_extension_support(user_context, required_device_extensions, supported_device_extensions);
     if (!valid_device) {
         debug(user_context) << "Vulkan: Unable to validate required extension support!\n";
-        return halide_error_code_incompatible_device_interface;
+        return halide_error_code_device_interface_no_device;
     }
 
     debug(user_context) << "  found " << (uint32_t)required_device_extensions.size() << " required extensions for device!\n";
@@ -418,7 +419,7 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     VkResult result = vkCreateDevice(*physical_device, &device_create_info, alloc_callbacks, device);
     if (result != VK_SUCCESS) {
         debug(user_context) << "Vulkan: vkCreateDevice failed with return code: " << vk_get_error_name(result) << "\n";
-        return halide_error_code_incompatible_device_interface;
+        return halide_error_code_device_interface_no_device;
     }
 
     vkGetDeviceQueue(cached_device, *queue_family_index, 0, queue);
@@ -440,26 +441,26 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
     }
 
     const VkAllocationCallbacks *alloc_callbacks = halide_vulkan_get_allocation_callbacks(user_context);
-    int status = vk_create_instance(user_context, requested_layers, instance, alloc_callbacks);
-    if (status != halide_error_code_success) {
+    int error_code = vk_create_instance(user_context, requested_layers, instance, alloc_callbacks);
+    if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to create instance for context!\n";
-        return halide_error_code_generic_error;
+        return error_code;
     }
 
     if (vkCreateDevice == nullptr) {
         vk_load_vulkan_functions(*instance);
     }
 
-    status = vk_select_device_for_context(user_context, instance, device, physical_device, queue_family_index);
-    if (status != halide_error_code_success) {
+    error_code = vk_select_device_for_context(user_context, instance, device, physical_device, queue_family_index);
+    if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to select device for context!\n";
-        return halide_error_code_generic_error;
+        return error_code;
     }
 
-    status = vk_create_device(user_context, requested_layers, instance, device, queue, physical_device, queue_family_index, alloc_callbacks);
-    if (status != halide_error_code_success) {
+    error_code = vk_create_device(user_context, requested_layers, instance, device, queue, physical_device, queue_family_index, alloc_callbacks);
+    if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to create device for context!\n";
-        return halide_error_code_generic_error;
+        return error_code;
     }
 
     *allocator = vk_create_memory_allocator(user_context, *device, *physical_device, alloc_callbacks);
@@ -468,10 +469,10 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
         return halide_error_code_generic_error;
     }
 
-    VkResult result = vk_create_command_pool(user_context, *allocator, *queue_family_index, command_pool);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: Failed to create command pool for context! Error: " << vk_get_error_name(result) << "\n";
-        return result;
+    error_code = vk_create_command_pool(user_context, *allocator, *queue_family_index, command_pool);
+    if (error_code != halide_error_code_success) {
+        error(user_context) << "Vulkan: Failed to create command pool for context!\n";
+        return error_code;
     }
 
     return halide_error_code_success;

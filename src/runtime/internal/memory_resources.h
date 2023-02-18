@@ -184,16 +184,16 @@ struct HalideSystemAllocatorFns {
     DeallocateSystemFn deallocate = halide_free;
 };
 
-typedef void (*AllocateBlockFn)(void *, MemoryBlock *);
-typedef void (*DeallocateBlockFn)(void *, MemoryBlock *);
+typedef int (*AllocateBlockFn)(void *, MemoryBlock *);
+typedef int (*DeallocateBlockFn)(void *, MemoryBlock *);
 
 struct MemoryBlockAllocatorFns {
     AllocateBlockFn allocate = nullptr;
     DeallocateBlockFn deallocate = nullptr;
 };
 
-typedef void (*AllocateRegionFn)(void *, MemoryRegion *);
-typedef void (*DeallocateRegionFn)(void *, MemoryRegion *);
+typedef int (*AllocateRegionFn)(void *, MemoryRegion *);
+typedef int (*DeallocateRegionFn)(void *, MemoryRegion *);
 
 struct MemoryRegionAllocatorFns {
     AllocateRegionFn allocate = nullptr;

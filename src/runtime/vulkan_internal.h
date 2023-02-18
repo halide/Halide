@@ -85,23 +85,23 @@ bool vk_validate_required_extension_support(void *user_context,
 // --------------------------------------------------------------------------
 
 // -- Command Pool
-VkResult vk_create_command_pool(void *user_context, VulkanMemoryAllocator *allocator, uint32_t queue_index, VkCommandPool *command_pool);
-void vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool);
+int vk_create_command_pool(void *user_context, VulkanMemoryAllocator *allocator, uint32_t queue_index, VkCommandPool *command_pool);
+int vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool);
 
 // -- Command Buffer
-VkResult vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool pool, VkCommandBuffer *command_buffer);
-void vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool, VkCommandBuffer command_buffer);
+int vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool pool, VkCommandBuffer *command_buffer);
+int vk_destroy_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool, VkCommandBuffer command_buffer);
 
-VkResult vk_fill_command_buffer_with_dispatch_call(void *user_context,
-                                                   VkDevice device,
-                                                   VkCommandBuffer command_buffer,
-                                                   VkPipeline compute_pipeline,
-                                                   VkPipelineLayout pipeline_layout,
-                                                   VkDescriptorSet descriptor_set,
-                                                   uint32_t descriptor_set_index,
-                                                   int blocksX, int blocksY, int blocksZ);
+int vk_fill_command_buffer_with_dispatch_call(void *user_context,
+                                              VkDevice device,
+                                              VkCommandBuffer command_buffer,
+                                              VkPipeline compute_pipeline,
+                                              VkPipelineLayout pipeline_layout,
+                                              VkDescriptorSet descriptor_set,
+                                              uint32_t descriptor_set_index,
+                                              int blocksX, int blocksY, int blocksZ);
 
-VkResult vk_submit_command_buffer(void *user_context, VkQueue queue, VkCommandBuffer command_buffer);
+int vk_submit_command_buffer(void *user_context, VkQueue queue, VkCommandBuffer command_buffer);
 
 // -- Scalar Uniform Buffer
 bool vk_needs_scalar_uniform_buffer(void *user_context,
@@ -118,25 +118,25 @@ MemoryRegion *vk_create_scalar_uniform_buffer(void *user_context,
                                               VulkanMemoryAllocator *allocator,
                                               size_t scalar_buffer_size);
 
-VkResult vk_update_scalar_uniform_buffer(void *user_context,
-                                         VulkanMemoryAllocator *allocator,
-                                         MemoryRegion *region,
-                                         size_t arg_sizes[],
-                                         void *args[],
-                                         int8_t arg_is_buffer[]);
-
-void vk_destroy_scalar_uniform_buffer(void *user_context, VulkanMemoryAllocator *allocator,
-                                      MemoryRegion *scalar_args_region);
-// -- Descriptor Pool
-VkResult vk_create_descriptor_pool(void *user_context,
-                                   VulkanMemoryAllocator *allocator,
-                                   uint32_t uniform_buffer_count,
-                                   uint32_t storage_buffer_count,
-                                   VkDescriptorPool *descriptor_pool);
-
-VkResult vk_destroy_descriptor_pool(void *user_context,
+int vk_update_scalar_uniform_buffer(void *user_context,
                                     VulkanMemoryAllocator *allocator,
-                                    VkDescriptorPool descriptor_pool);
+                                    MemoryRegion *region,
+                                    size_t arg_sizes[],
+                                    void *args[],
+                                    int8_t arg_is_buffer[]);
+
+int vk_destroy_scalar_uniform_buffer(void *user_context, VulkanMemoryAllocator *allocator,
+                                     MemoryRegion *scalar_args_region);
+// -- Descriptor Pool
+int vk_create_descriptor_pool(void *user_context,
+                              VulkanMemoryAllocator *allocator,
+                              uint32_t uniform_buffer_count,
+                              uint32_t storage_buffer_count,
+                              VkDescriptorPool *descriptor_pool);
+
+int vk_destroy_descriptor_pool(void *user_context,
+                               VulkanMemoryAllocator *allocator,
+                               VkDescriptorPool descriptor_pool);
 
 // -- Descriptor Set Layout
 uint32_t vk_count_bindings_for_descriptor_set(void *user_context,
@@ -144,62 +144,62 @@ uint32_t vk_count_bindings_for_descriptor_set(void *user_context,
                                               void *args[],
                                               int8_t arg_is_buffer[]);
 
-VkResult vk_create_descriptor_set_layout(void *user_context,
-                                         VulkanMemoryAllocator *allocator,
-                                         uint32_t uniform_buffer_count,
-                                         uint32_t storage_buffer_count,
-                                         VkDescriptorSetLayout *layout);
+int vk_create_descriptor_set_layout(void *user_context,
+                                    VulkanMemoryAllocator *allocator,
+                                    uint32_t uniform_buffer_count,
+                                    uint32_t storage_buffer_count,
+                                    VkDescriptorSetLayout *layout);
 
-VkResult vk_destroy_descriptor_set_layout(void *user_context,
-                                          VulkanMemoryAllocator *allocator,
-                                          VkDescriptorSetLayout descriptor_set_layout);
+int vk_destroy_descriptor_set_layout(void *user_context,
+                                     VulkanMemoryAllocator *allocator,
+                                     VkDescriptorSetLayout descriptor_set_layout);
 
 // -- Descriptor Set
-VkResult vk_create_descriptor_set(void *user_context,
-                                  VulkanMemoryAllocator *allocator,
-                                  VkDescriptorSetLayout descriptor_set_layout,
-                                  VkDescriptorPool descriptor_pool,
-                                  VkDescriptorSet *descriptor_set);
+int vk_create_descriptor_set(void *user_context,
+                             VulkanMemoryAllocator *allocator,
+                             VkDescriptorSetLayout descriptor_set_layout,
+                             VkDescriptorPool descriptor_pool,
+                             VkDescriptorSet *descriptor_set);
 
-VkResult vk_update_descriptor_set(void *user_context,
-                                  VulkanMemoryAllocator *allocator,
-                                  VkBuffer *scalar_args_buffer,
-                                  size_t uniform_buffer_count,
-                                  size_t storage_buffer_count,
-                                  size_t arg_sizes[],
-                                  void *args[],
-                                  int8_t arg_is_buffer[],
-                                  VkDescriptorSet descriptor_set);
+int vk_update_descriptor_set(void *user_context,
+                             VulkanMemoryAllocator *allocator,
+                             VkBuffer *scalar_args_buffer,
+                             size_t uniform_buffer_count,
+                             size_t storage_buffer_count,
+                             size_t arg_sizes[],
+                             void *args[],
+                             int8_t arg_is_buffer[],
+                             VkDescriptorSet descriptor_set);
 
 // -- Pipeline Layout
-VkResult vk_create_pipeline_layout(void *user_context,
-                                   VulkanMemoryAllocator *allocator,
-                                   uint32_t descriptor_set_count,
-                                   VkDescriptorSetLayout *descriptor_set_layouts,
-                                   VkPipelineLayout *pipeline_layout);
+int vk_create_pipeline_layout(void *user_context,
+                              VulkanMemoryAllocator *allocator,
+                              uint32_t descriptor_set_count,
+                              VkDescriptorSetLayout *descriptor_set_layouts,
+                              VkPipelineLayout *pipeline_layout);
 
-VkResult vk_destroy_pipeline_layout(void *user_context,
-                                    VulkanMemoryAllocator *allocator,
-                                    VkPipelineLayout pipeline_layout);
+int vk_destroy_pipeline_layout(void *user_context,
+                               VulkanMemoryAllocator *allocator,
+                               VkPipelineLayout pipeline_layout);
 // -- Compute Pipeline
-VkResult vk_create_compute_pipeline(void *user_context,
-                                    VulkanMemoryAllocator *allocator,
-                                    const char *pipeline_name,
-                                    VkShaderModule shader_module,
-                                    VkPipelineLayout pipeline_layout,
-                                    VkSpecializationInfo *specialization_info,
-                                    VkPipeline *compute_pipeline);
+int vk_create_compute_pipeline(void *user_context,
+                               VulkanMemoryAllocator *allocator,
+                               const char *pipeline_name,
+                               VkShaderModule shader_module,
+                               VkPipelineLayout pipeline_layout,
+                               VkSpecializationInfo *specialization_info,
+                               VkPipeline *compute_pipeline);
 
-VkResult vk_setup_compute_pipeline(void *user_context,
-                                   VulkanMemoryAllocator *allocator,
-                                   VulkanShaderBinding *shader_bindings,
-                                   VkShaderModule shader_module,
-                                   VkPipelineLayout pipeline_layout,
-                                   VkPipeline *compute_pipeline);
+int vk_setup_compute_pipeline(void *user_context,
+                              VulkanMemoryAllocator *allocator,
+                              VulkanShaderBinding *shader_bindings,
+                              VkShaderModule shader_module,
+                              VkPipelineLayout pipeline_layout,
+                              VkPipeline *compute_pipeline);
 
-VkResult vk_destroy_compute_pipeline(void *user_context,
-                                     VulkanMemoryAllocator *allocator,
-                                     VkPipeline compute_pipeline);
+int vk_destroy_compute_pipeline(void *user_context,
+                                VulkanMemoryAllocator *allocator,
+                                VkPipeline compute_pipeline);
 
 // -- Shader Module
 VulkanShaderBinding *vk_decode_shader_bindings(void *user_context, VulkanMemoryAllocator *allocator,

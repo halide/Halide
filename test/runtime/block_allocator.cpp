@@ -10,7 +10,7 @@ namespace {
 size_t allocated_region_memory = 0;
 size_t allocated_block_memory = 0;
 
-void allocate_block(void *user_context, MemoryBlock *block) {
+int allocate_block(void *user_context, MemoryBlock *block) {
     block->handle = allocate_system(user_context, block->size);
     allocated_block_memory += block->size;
 
@@ -19,9 +19,11 @@ void allocate_block(void *user_context, MemoryBlock *block) {
                         << "block_size=" << int32_t(block->size) << " "
                         << "allocated_block_memory=" << int32_t(allocated_block_memory) << " "
                         << ") !\n";
+
+    return halide_error_code_success;
 }
 
-void deallocate_block(void *user_context, MemoryBlock *block) {
+int deallocate_block(void *user_context, MemoryBlock *block) {
     deallocate_system(user_context, block->handle);
     allocated_block_memory -= block->size;
 
@@ -30,9 +32,11 @@ void deallocate_block(void *user_context, MemoryBlock *block) {
                         << "block_size=" << int32_t(block->size) << " "
                         << "allocated_block_memory=" << int32_t(allocated_block_memory) << " "
                         << ") !\n";
+
+    return halide_error_code_success;
 }
 
-void allocate_region(void *user_context, MemoryRegion *region) {
+int allocate_region(void *user_context, MemoryRegion *region) {
     region->handle = (void *)1;
     allocated_region_memory += region->size;
 
@@ -41,9 +45,11 @@ void allocate_region(void *user_context, MemoryRegion *region) {
                         << "region_size=" << int32_t(region->size) << " "
                         << "allocated_region_memory=" << int32_t(allocated_region_memory) << " "
                         << ") !\n";
+
+    return halide_error_code_success;
 }
 
-void deallocate_region(void *user_context, MemoryRegion *region) {
+int deallocate_region(void *user_context, MemoryRegion *region) {
     region->handle = (void *)0;
     allocated_region_memory -= region->size;
 
@@ -52,6 +58,8 @@ void deallocate_region(void *user_context, MemoryRegion *region) {
                         << "region_size=" << int32_t(region->size) << " "
                         << "allocated_region_memory=" << int32_t(allocated_region_memory) << " "
                         << ") !\n";
+
+    return halide_error_code_success;
 }
 
 }  // end namespace

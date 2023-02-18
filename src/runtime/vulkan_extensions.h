@@ -204,6 +204,7 @@ uint32_t vk_get_optional_device_extensions(void *user_context, StringTable &ext_
     }
     return optional_ext_count;
 }
+
 uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalDevice physical_device, StringTable &ext_table) {
     debug(user_context) << "vk_get_supported_device_extensions\n";
     if (vkEnumerateDeviceExtensionProperties == nullptr) {
