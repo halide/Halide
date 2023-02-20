@@ -2134,32 +2134,10 @@ private:
     void generate_body(const Module &m) {
         stream << "<body>\n";
         stream << "  <div id='page-container'>\n";
-        generate_information_bar(m);
         generate_visualization_tabs(m);
         stream << "  </div>\n";
         stream << "</body>";
         generate_javascript();
-    }
-
-    // Generate the information bar
-    void generate_information_bar(const Module &m) {
-        //popups += information_popup();
-
-        // We can use std::format once migrated to C++-20
-        stream << R"(<div id='info-bar'>
-                       <div id='info-bar-title'>
-                         <h3>Visualizing Module: )" << m.name() << R"(</h3>
-                       </div>
-                       <div id='info-bar-spacing'></div>
-                       <div id='info-bar-button'>
-                         <h3>
-                           <button id='show-info'>
-                             <i class='bi bi-info-square' data-bs-toggle='modal' 
-                                data-bs-target='#info-popup)" << gen_popup_id() << R"('></i>
-                           </button>
-                         </h3>
-                       </div>
-                     </div>)";
     }
 
     // Generate the three visualization tabs
@@ -2236,30 +2214,11 @@ private:
 
     // Loads and initializes the javascript template from `ir_visualizer / javascript_template.html`
     void generate_javascript() {
-        // 1. Load the javascript code template
-        std::ifstream js_template_file(string(__DIR__) + "ir_visualizer/javascript_template.html");
-        internal_assert(!js_template_file.fail()) << "Failed to find `javascript_template.html` inside "
-                                                  << string(__DIR__)
-                                                  << "ir_visualizer directory.\n ";
-        ostringstream js_template;
-        js_template << js_template_file.rdbuf();
-        js_template_file.close();
-
-        // 2. Initialize template with concrete values for `tooltip_count`,
-        // `stmt_hierarchy_tooltip_count` and `ir_viz_tooltip_count`.
-        string js = js_template.str();
-        std::regex r1("\\{\\{tooltip_count\\}\\}");
-        //js = std::regex_replace(js, r1, std::to_string(tooltip_count));
-        js = std::regex_replace(js, r1, "0");
-        std::regex r2("\\{\\{stmt_hierarchy_tooltip_count\\}\\}");
-        //js = std::regex_replace(js, r2, std::to_string(get_stmt_hierarchy.get_tooltip_count()));
-        js = std::regex_replace(js, r2, "0");
-        std::regex r3("\\{\\{ir_viz_tooltip_count\\}\\}");
-        //js = std::regex_replace(js, r3, std::to_string(ir_visualization.get_tooltip_count()));
-        js = std::regex_replace(js, r3, "0");
-
-        // 3. Write initialized template to stream
-        stream << js;
+        std::ifstream js_file(string(__DIR__) + "ir_visualizer/javascript.html");
+        internal_assert(!js_file.fail()) << "Failed to find `javascript.html` inside "
+                                           << string(__DIR__)
+                                           << "ir_visualizer directory.\n ";
+        stream << js_file.rdbuf();
     }
 
     /* Misc helper methods */
