@@ -178,7 +178,7 @@
         var rect = resizeBarAssembly.getBoundingClientRect();
 
         if (e.x > rect.left) {
-            collapse_visualization_tab();
+            collapseR_visualization_tab();
             return;
         }
 
@@ -197,7 +197,7 @@
         var rect = resizeBar.getBoundingClientRect();
 
         if (e.x < rect.right) {
-            collapse_visualization_tab();
+            collapseL_visualization_tab();
             return;
         }
 
@@ -317,188 +317,44 @@
     $('div[id^="viz-"]').filter((idx, val) => {
         return depth(val) > 1;
     }).each((idx, val) => {
-        //toggleViz(val.id);
+        toggleViz(val.id);
     });
 
+    // CodeMirror Js
 
-    // CodeMirror
-    function jumpToLine(myCodeMirror, start, end) {
-        start -= 1;
-        end -= 1;
-        var t = myCodeMirror.charCoords({
-            line: start,
-            ch: 0
-        }, 'local').top;
-        var middleHeight = myCodeMirror.getScrollerElement().offsetHeight / 2;
-        myCodeMirror.scrollIntoView({
-            line: start + 40,
+    // Populate assembly code
+    assemblyCodeDiv.style.display = 'block';
+    var codeHTML = document.getElementById('assemblyContent');
+    var code = codeHTML.textContent;
+    code = code.trimLeft();
+    document.getElementById('assembly-tab').innerHTML = '';
+    var assemblyCM = CodeMirror(document.getElementById('assembly-tab'), {
+        value: code,
+        lineNumbers: true,
+        lineWrapping: true,
+        mode: {
+            name: 'gas',
+            architecture: 'ARMv6'
+        },
+        readOnly: true,
+    });
+
+    function scrollToAsm(lno) {
+        assemblyCM.scrollIntoView({
+            line: assemblyCM.lineCount()-1,
             ch: 0
         });
-        for (var i = start; i <= end; i++) {
-            myCodeMirror.markText({
-                line: i,
-                ch: 0
-            }, {
-                line: i,
-                ch: 200
-            }, {
-                className: 'styled-background'
-            });
-        }
-        myCodeMirror.markText({
-            line: start,
+        assemblyCM.scrollIntoView({
+            line: lno - 1,
             ch: 0
-        }, {
-            line: start,
-            ch: 200
-        }, {
-            className: 'styled-background'
         });
-        myCodeMirror.markText({
-            line: end,
-            ch: 0
-        }, {
-            line: end,
-            ch: 200
-        }, {
-            className: 'styled-background'
-        });
-        myCodeMirror.focus();
-        myCodeMirror.setCursor({
-            line: start,
+        assemblyCM.focus();
+        assemblyCM.setCursor({
+            line: lno,
             ch: 0
         });
     }
 
-    function populateCodeMirror(lineNumStart, lineNumberEnd) {
-        assemblyCodeDiv.style.display = 'block';
-        var codeHTML = document.getElementById('assemblyContent');
-        var code = codeHTML.textContent;
-        code = code.trimLeft();
-        document.getElementById('assembly-tab').innerHTML = '';
-        var myCodeMirror = CodeMirror(document.getElementById('assembly-tab'), {
-            value: code,
-            lineNumbers: true,
-            lineWrapping: true,
-            mode: {
-                name: 'gas',
-                architecture: 'ARMv6'
-            },
-            readOnly: true,
-        });
-        jumpToLine(myCodeMirror, lineNumStart, lineNumberEnd);
-        document.getElementsByClassName('CodeMirror-sizer')[0].style.minWidth = '0px';
-    }
-    //populateCodeMirror(1, 1);
+    scrollToAsm(1);
     collapse_assembly_tab();
-
-
-    
-
-    // collapse/expand js (stmt hierarchy)
-    /*var nodeExpanded = new Map();
-
-    function collapseAllNodes(startNode, endNode) {
-        for (let i = startNode; i <= endNode; i++) {
-            collapseNodeChildren(i);
-            nodeExpanded.set(i, false);
-            if (document.getElementById('stmtHierarchyButton' + i) != null) {
-                document.getElementById('stmtHierarchyButton' + i).className = 'arrow down';
-            }
-        }
-    }
-
-    function expandNodesUpToDepth(depth, vizNum) {
-        for (let i = 0; i < depth; i++) {
-            const depthChildren = document.getElementsByClassName('viz' + vizNum + ' depth' + i);
-            for (const child of depthChildren) {
-                child.style.display = '';
-                if (child.className.includes('start')) {
-                    continue;
-                }
-                let parentNodeID = child.className.split()[0];
-                parentNodeID = parentNodeID.split('node')[1];
-                parentNodeID = parentNodeID.split('child')[0];
-                const parentNode = parseInt(parentNodeID);
-                nodeExpanded.set(parentNode, true);
-                if (document.getElementById('stmtHierarchyButton' + parentNodeID) != null) {
-                    document.getElementById('stmtHierarchyButton' + parentNodeID).className = 'arrow up';
-                }
-                const dotdotdot = document.getElementById('node' + parentNodeID + 'dotdotdot');
-                if (dotdotdot != null) {
-                    dotdotdot.remove();
-                }
-            }
-        }
-    }
-
-    function handleClick(nodeNum) {
-        if (nodeExpanded.get(nodeNum)) {
-            collapseNodeChildren(nodeNum);
-            nodeExpanded.set(nodeNum, false);
-        } else {
-            expandNodeChildren(nodeNum);
-            nodeExpanded.set(nodeNum, true);
-        }
-    }
-
-    function collapseNodeChildren(nodeNum) {
-        const children = document.getElementsByClassName('node' + nodeNum + 'child');
-        if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {
-            document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow down';
-        }
-        for (const child of children) {
-            child.style.display = 'none';
-        }
-        const list = document.getElementById('list' + nodeNum);
-        const parentNode = document.getElementById('node' + nodeNum);
-        if (list != null && parentNode != null) {
-            const span = parentNode.children[0];
-            list.appendChild(addDotDotDotChild(nodeNum));
-        }
-    }
-
-    function expandNodeChildren(nodeNum) {
-        const children = document.getElementsByClassName('node' + nodeNum + 'child');
-        if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {
-            document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow up';
-        }
-        for (const child of children) {
-            child.style.display = '';
-        }
-        const dotdotdot = document.getElementById('node' + nodeNum + 'dotdotdot');
-        if (dotdotdot != null) {
-            dotdotdot.remove();
-        }
-    }
-
-    function addDotDotDotChild(nodeNum, colorCost) {
-        var liDotDotDot = document.createElement('li');
-        liDotDotDot.id = 'node' + nodeNum + 'dotdotdot';
-        const span = "<span class='tf-nc end-node'>...</span>";
-        liDotDotDot.innerHTML = span;
-        return liDotDotDot;
-    }
-
-    // stmtHierarchy JS
-    for (let i = 1; i <= {{stmt_hierarchy_tooltip_count}}; i++) {
-        const button = document.getElementById('stmtHierarchyButtonTooltip' + i);
-        const tooltip = document.getElementById('stmtHierarchyTooltip' + i);
-        button.addEventListener('mouseenter', () => {
-            showTooltip(button, tooltip);
-        });
-        button.addEventListener('mouseleave', () => {
-            hideTooltip(tooltip);
-        });
-        tooltip.addEventListener('focus', () => {
-            showTooltip(button, tooltip);
-        });
-        tooltip.addEventListener('blur', () => {
-            hideTooltip(tooltip);
-        });
-    }*/
-
-    
-
-    
 </script>
