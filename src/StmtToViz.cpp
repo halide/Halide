@@ -1,13 +1,9 @@
 #include "StmtToViz.h"
 #include "Debug.h"
 #include "Error.h"
-#include "FindStmtCost.h"
-#include "GetAssemblyInfoViz.h"
-#include "GetStmtHierarchy.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "IRPrinter.h"
-#include "IRVisualization.h"
 #include "Module.h"
 #include "Scope.h"
 #include "Substitute.h"
@@ -19,18 +15,121 @@
 #include <iterator>
 #include <sstream>
 #include <utility>
+#include <regex>
 
 namespace Halide {
 namespace Internal {
 
+using std::istringstream;
 using std::ostringstream;
 using std::string;
 
 // Classes define within this file
-template <typename T>
-class HTMLCodePrinter;
+class AssemblyInfo;
+template<typename T> class HTMLCodePrinter;
 class HTMLVisualizationPrinter;
 class IRVisualizer;
+
+/******************* GetAssemblyInfo *******************/
+// Used to map some Halide IR nodes to line-numbers in the
+// assembly file marking the corresponding generated code.
+class AssemblyInfo : public IRVisitor {
+public:
+    AssemblyInfo()
+        : _loop_id(0), _prodcons_id(0) {
+    }
+
+    void generate(string code, const Module &m) {
+        // Traverse the module to populate the list of
+        // nodes we need to map and generate their assembly
+        // markers (comments that appear in the assembly code
+        // associating the code with this node)
+        for (const auto &fn : m.functions()) {
+            fn.body.accept(this);
+        }
+        
+        // Find markers in asm code
+        istringstream _asm(code);
+        string line;
+        int lno = 1;
+        while (getline(_asm, line)) {
+            // Try all markers
+            std::vector<uint64_t> matched_nodes;
+            for (auto const &[node, regex] : _markers) {
+                if (std::regex_search(line, regex)) {
+                    // Save line number
+                    _lnos[node] = lno;
+                    // Save this node's id
+                    matched_nodes.push_back(node);
+                }
+            }
+            // We map to the first match, stop
+            // checking matched nodes
+            for (auto const node : matched_nodes)
+                _markers.erase(node);
+
+            lno++;
+        }
+        
+    }
+
+    int get_asm_lno(uint64_t node_id) {
+        if (_lnos.count(node_id))
+            return _lnos[node_id];
+        return -1;
+    }
+
+private:
+    // Generate asm markers for Halide loops
+    int _loop_id;
+    int gen_loop_id() {
+        return ++_loop_id;
+    }
+
+    std::regex gen_loop_asm_marker(int id, string loop_var) {
+        std::regex dollar("\\$");
+        string marker = "%\"" + std::to_string(id) + "_for " + loop_var;
+        marker = std::regex_replace(marker, dollar, "\\$");
+        return std::regex(marker);
+    }
+
+    // Generate asm markers for Halide producer/consumer ndoes
+    int _prodcons_id;
+    int gen_prodcons_id() {
+        return ++_prodcons_id;
+    }
+
+    std::regex gen_prodcons_asm_marker(int id, string var, bool is_producer) {
+        std::regex dollar("\\$");
+        string marker = "%\"" + std::to_string(id) + (is_producer ? "_produce " : "_consume ") + var;
+        marker = std::regex_replace(marker, dollar, "\\$");
+        return std::regex(marker);
+    }
+
+    // Mapping of IR nodes to their asm markers
+    std::map<uint64_t, std::regex> _markers;
+
+    // Mapping of IR nodes to their asm line numbers
+    std::map<uint64_t, int> _lnos;
+
+private:
+    using IRVisitor::visit;
+
+    void visit(const ProducerConsumer *op) override {
+        // Generate asm marker
+        _markers[(uint64_t)op] = gen_prodcons_asm_marker(gen_prodcons_id(), op->name, op->is_producer);
+        // Continue traversal
+        IRVisitor::visit(op);
+    }
+
+    
+    void visit(const For *op) override {
+        // Generate asm marker
+        _markers[(uint64_t)op] = gen_loop_asm_marker(gen_loop_id(), op->name);
+        // Continue traversal
+        IRVisitor::visit(op);
+    }
+};
 
 /******************* HTMLCodePrinter Class *******************/
 // Prints IR code in HTML. Very similar to generating a stmt
@@ -313,10 +412,10 @@ private:
     void print_show_hide_icon(int id) {
         stream << "<div class='show-hide-btn-wrapper'>"
                << "  <div class='show-hide-btn' style='display:none;' id=" << id << "-show>"
-               << "    <i class='bi bi-plus-square'></i>"
+               << "    <i class='bi bi-plus-square' title='Expand code block'></i>"
                << "  </div>"
                << "  <div class='show-hide-btn' id=" << id << "-hide>"
-               << "    <i class='bi bi-dash-square'></i>"
+               << "    <i class='bi bi-dash-square' title='Collapse code block'></i>"
                << "  </div>"
                << "</div>";
     }
@@ -324,7 +423,7 @@ private:
     // Prints a button to sync text with visualization
     void print_visualization_button(string id) {
         stream << "<button class='icon-btn sync-btn' onclick='scrollToViz(\"" << id << "\")'>"
-               << "  <i class='bi bi-arrow-right-square'></i>"
+               << "  <i class='bi bi-arrow-right-square' title='Jump to visualization'></i>"
                << "</button>";
     }
 
@@ -796,14 +895,12 @@ private:
         scope.push(op->name, gen_unique_id());
         print_opening_tag("div", "LetStmt");
         print_opening_tag("p", "WrapLine");
-        //stream << open_cost_span(op);
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "let ");
         print_variable(op->name);
         print_html_element("span", "Operator Assign", " = ");
         print_closing_tag("span");
         print(op->value);
-        //stream << close_cost_span();
         print_closing_tag("p");        
         print(op->body); 
         print_closing_tag("div");
@@ -812,9 +909,7 @@ private:
 
     void visit(const AssertStmt *op) override {
         print_opening_tag("div", "AssertStmt WrapLine");
-        //stream << open_cost_span(op);
         print_function_call("assert", {op->condition, op->message});
-        //stream << close_cost_span();
         print_closing_tag("div");
     }
 
@@ -827,11 +922,6 @@ private:
 
         // Start a dive to hold code for this Producer/Consumer
         print_opening_tag("div", op->is_producer ? "Produce" : "Consumer");
-
-        // TODO: Assembly support
-        // int assembly_line_num = get_assembly_info_viz.get_line_number_prod_cons(op);
-
-        //stream << open_cost_span(op);
 
         // Generate the show hide icon/text buttons
         print_toggle_anchor_opening_tag(id);
@@ -848,15 +938,8 @@ private:
 
         print_toggle_anchor_closing_tag();
 
-        //stream << close_cost_span();
-
         // Add a button to jump to this producer/consumer in the viz
         print_visualization_button("prodcons-viz-" + std::to_string((uint64_t)op));
-
-        //if (assembly_line_num != -1) {
-        //stream << see_assembly_button(assembly_line_num);
-        //}
-        //stream << see_viz_button(anchor_name);
 
         // Open code block to hold function body
         print_html_element("span", "matched", "{");
@@ -886,16 +969,9 @@ private:
 
         // Push scope
         scope.push(op->name, id);
-
-        // TODO: Connect with Assembly Code
-        // ForLoopLineNumber assembly_line_info = get_assembly_info_viz.get_line_numbers_for_loops(op);
-        // int assembly_line_num_start = assembly_line_info.start_line;
-        // int assembly_line_num_end = assembly_line_info.end_line;
         
         // Start a dive to hold code for this allocate
         print_opening_tag("div", "For");
-
-        // stream << open_cost_span(op);
 
         // Generate the show hide icon/text buttons
         print_toggle_anchor_opening_tag(id);
@@ -919,14 +995,8 @@ private:
 
         print_toggle_anchor_closing_tag();
 
-        //stream << close_cost_span();
-
         // Add a button to jump to this loop in the viz
         print_visualization_button("loop-viz-" + std::to_string((uint64_t)op));
-
-        //if (assembly_line_num_start != -1) {
-        //  stream << see_assembly_button(assembly_line_num_start, assembly_line_num_end);
-        //}
 
         // Open code block to hold function body
         print_html_element("span", "matched", "{");
@@ -975,8 +1045,6 @@ private:
 
         print_toggle_anchor_closing_tag();
 
-        //stream << close_cost_span();
-
         // Add a button to jump to this acquire in the viz
         print_visualization_button("acquire-viz-" + std::to_string((uint64_t)op));
 
@@ -1002,8 +1070,6 @@ private:
     void visit(const Store *op) override {
         // Start a dive to hold code for this acquire
         print_opening_tag("div", "Store WrapLine");
-
-        //stream << open_cost_span(op);
 
         // Print store target
         print_opening_tag("span", "matched");
@@ -1054,8 +1120,6 @@ private:
         // Start a dive to hold code for this allocate
         print_opening_tag("div", "Allocate");
 
-        //stream << open_cost_span(op);
-
         //  Print allocation name, type and extents
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword nav-anchor", "allocate ", "allocate-" + std::to_string((uint64_t)op));
@@ -1099,8 +1163,6 @@ private:
             print_text(" " + op->free_function + "(); ");
             print_html_element("span", "matched", "}");
         }
-        
-        //stream << close_cost_span();
 
         // Add a button to jump to this allocation in the viz
         print_visualization_button("allocate-viz-" + std::to_string((uint64_t)op));
@@ -1119,10 +1181,8 @@ private:
     
     void visit(const Free *op) override {
         print_opening_tag("div", "Free WrapLine");
-        //stream << open_cost_span(op);
         print_html_element("span", "keyword", "free ");
         print_variable(op->name);
-        //stream << close_cost_span();
         print_closing_tag("div");
     }
 
@@ -1166,8 +1226,6 @@ private:
         }
 
         print_toggle_anchor_closing_tag();
-
-        //stream << close_cost_span();
 
         // Add a button to jump to this realize in the viz
         print_visualization_button("realize-viz-" + std::to_string((uint64_t)op));
@@ -1246,8 +1304,6 @@ private:
         // Start a dive to hold code for this conditional
         print_opening_tag("div", "IfThenElse");
 
-        //stream << open_cost_span(op);
-
         // Generate the show hide icon/text buttons
         print_toggle_anchor_opening_tag(id);
 
@@ -1275,8 +1331,6 @@ private:
             // Open code block to hold `then` case
             print_html_element("span", "matched", " {");
 
-            // stream << close_cost_span();
-
             // Open indented div to hold code for the `then` case
             print_opening_tag("div", "indent ThenBody", id);
 
@@ -1299,8 +1353,6 @@ private:
             if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
                 // Generate a new id for the `else-if` case
                 id = gen_unique_id();
-
-                // stream << open_cost_span(nested_if);
 
                 // Generate the show hide icon/text buttons
                 print_toggle_anchor_opening_tag(id);
@@ -1328,8 +1380,6 @@ private:
             else {
                 int else_id = gen_unique_id();
 
-                // stream << open_cost_span_else_case(op->else_case);
-
                 // Generate the show hide icon/text buttons
                 print_toggle_anchor_opening_tag(else_id);
 
@@ -1347,8 +1397,6 @@ private:
 
                 // Open code block to hold `else` case
                 print_html_element("span", "matched", " {");
-
-                // stream << close_cost_span();
 
                 // Open indented div to hold code for the `then` case
                 print_opening_tag("div", "indent ElseBody", else_id);
@@ -1372,9 +1420,7 @@ private:
 
     void visit(const Evaluate *op) override {
         print_opening_tag("div", "Block");
-        //stream << open_cost_span(op);
         print(op->value);
-        //stream << close_cost_span();
         print_closing_tag("div");
     }
 
@@ -1499,7 +1545,8 @@ public:
         : stream(os), printer(ss), _id(0) {
     }
 
-    void print(const Module &m) {
+    void print(const Module &m, AssemblyInfo asm_info) {
+        _assembly_info = asm_info;
         for (const auto &fn : m.functions()) {
             print(fn);
         }
@@ -1515,6 +1562,9 @@ private:
     // Used to translate IR to code in HTML
     ostringstream ss;
     HTMLCodePrinter<ostringstream> printer;
+
+    // Assembly line number info
+    AssemblyInfo _assembly_info;
 
     // Generate unique ids
     int _id;
@@ -1586,7 +1636,14 @@ private:
     // Prints a button to sync visualization with code
     void print_code_button(string id) {
         stream << "<button class='icon-btn sync-btn' onclick='scrollToCode(\"" << id << "\")'>"
-               << "  <i class='bi bi-arrow-left-square'></i>"
+               << "  <i class='bi bi-arrow-left-square' title='Jump to code'></i>"
+               << "</button>";
+    }
+
+    // Prints a button to sync visualization with assembly
+    void print_asm_button(string id) {
+        stream << "<button class='icon-btn sync-btn' onclick='scrollToAsm(\"" << id << "\")'>"
+               << "  <i class='bi bi-arrow-right-square' title='Jump to assembly'></i>"
                << "</button>";
     }
 
@@ -1601,10 +1658,10 @@ private:
     // Prints a button to collapse or expand a visualization box
     void print_collapse_expand_btn(int id) {
         stream << "<button class='icon-btn' id='viz-" << id << "-hide' onclick='return toggleViz(\"viz-" << id << "\");'>"
-               << "  <i class='bi bi-dash-square'></i>"
+               << "  <i class='bi bi-dash-square' title='Collapse block'></i>"
                << "</button>"
                << "<button class='icon-btn' id='viz-" << id << "-show' style = 'display:none;' onclick='return toggleViz(\"viz-" << id << "\");'>"
-               << "  <i class='bi bi-plus-square'></i>"
+               << "  <i class='bi bi-plus-square' title='Expand block'></i>"
                << "</button>";
     }
 
@@ -1620,6 +1677,16 @@ private:
         print_opening_tag("div", "box-header");
         print_collapse_expand_btn(id);
         print_code_button(code_anchor);
+        print_box_title(title, anchor);
+        print_closing_tag("div");
+    }
+
+    // Prints the box .box-header within div.box, contains the asm info button
+    void print_box_header_asm(int id, string anchor, string code_anchor, string asm_anchor, string title) {
+        print_opening_tag("div", "box-header");
+        print_collapse_expand_btn(id);
+        print_code_button(code_anchor);
+        print_asm_button(asm_anchor);
         print_box_title(title, anchor);
         print_closing_tag("div");
     }
@@ -1664,7 +1731,7 @@ private:
         ostringstream ss;
 
         // Show condition expression button
-        ss << "<button id='cond-" << id << "' aria-describedby='cond-tooltip-" << id << "' class='trunc-cond' role='button'>"
+        ss << "<button title='Click to see path condition' id='cond-" << id << "' aria-describedby='cond-tooltip-" << id << "' class='trunc-cond' role='button'>"
            << "..."
            << "</button>";
 
@@ -1687,8 +1754,6 @@ private:
 
         // Start a box to hold viz
         print_opening_tag("div", "box center IfBox");
-
-        // Todo: create cost bars
 
         // Create viz content
         string aid = std::to_string((uint64_t)&node);
@@ -1763,7 +1828,11 @@ private:
 
         // Print box header
         string aid = std::to_string((uint64_t)op);
-        print_box_header(id, "loop-viz-" + aid, "loop-" + aid, "For: " + get_as_var(op->name));
+        int asm_lno = _assembly_info.get_asm_lno((uint64_t)op);
+        if (asm_lno == -1)
+            print_box_header(id, "loop-viz-" + aid, "loop-" + aid, "For: " + get_as_var(op->name));
+        else
+            print_box_header_asm(id, "loop-viz-" + aid, "loop-" + aid, std::to_string(asm_lno), "For: " + get_as_var(op->name));
 
         // Start a box to hold viz
         print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
@@ -1842,7 +1911,11 @@ private:
         // Print box header
         string aid = std::to_string((uint64_t)op);
         string prefix = op->is_producer ? "Produce: " : "Consume: ";
-        print_box_header(id, "prodcons-viz-" + aid, "prodcons-" + aid, prefix + get_as_var(op->name));
+        int asm_lno = _assembly_info.get_asm_lno((uint64_t)op);
+        if (asm_lno == -1)
+            print_box_header(id, "prodcons-viz-" + aid, "prodcons-" + aid, prefix + get_as_var(op->name));
+        else
+            print_box_header_asm(id, "prodcons-viz-" + aid, "prodcons-" + aid, std::to_string(asm_lno), prefix + get_as_var(op->name));
 
         // Print the body
         print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
@@ -1988,11 +2061,25 @@ public:
     // Construct the visualizer and point it to the output file
     IRVisualizer(const string &filename)
         : _popup_id(0), html_code_printer(stream), html_viz_printer(stream) {
+        // Open output file
         stream.open(filename.c_str());
+
+        // Load assembly code
+        string asm_file = filename;
+        asm_file.replace(asm_file.find(".stmt.viz.html"), 15, ".s");
+        load_asm_code(asm_file);
     }
 
     // Generate the html visualization of the input module
     void generate_html(const Module &m) {
+        // Before we generate any html, we annotate IR nodes with
+        // line numbers containing corresponding assembly code. This
+        // code is based on darya-ver's original implementation. We
+        // use comments in the generated assembly to infer association 
+        // between Halide IR and assembly -- unclear how reliable this is.
+        _asm_info.generate(_asm.str(), m);
+
+        // Generate html page
         stream << "<html>\n";
         generate_head(m);
         generate_body(m);
@@ -2002,6 +2089,9 @@ public:
 private:
     // Handle to output file stream
     std::ofstream stream;
+
+    // Handle to assembly file stream
+    std::ifstream assembly;
 
     // Used to generate unique popup ids
     int _popup_id;
@@ -2048,23 +2138,7 @@ private:
         generate_visualization_tabs(m);
         stream << "  </div>\n";
         stream << "</body>";
-        
-        
-
-        
-
-        // put assembly code in an invisible div
-        //stream << get_assembly_info_viz.get_assembly_html();
-
-        // closing parts of the html
-        //stream << "<div class='popups'>\n";
-        //stream << popups;
-        //stream << "</div>\n";
-
-        // Include javascript template.
         generate_javascript();
-
-        
     }
 
     // Generate the information bar
@@ -2097,21 +2171,6 @@ private:
         generate_resize_bar_2();
         generate_assembly_tab(m);
         stream << "</div>\n";
-
-        // Generatize the resizing bar for the IR Code and Visualization tabs
-        //stream << resize_bar();
-
-        // Generate the IR Visualization tab
-        //stream << "<div class='IRVisualization' id='IRVisualization'>\n";
-        //stream << generate_ir_visualization(m);
-        //stream << "</div>\n";
-
-        // Generatize the resizing bar for the Visualization and Assembly Code tabs
-        //stream << resize_bar_assembly();
-
-        // Generate the IR Code tab
-        //stream << "<div id='assemblyCode'>\n";
-        //stream << "</div>\n";
     }
 
     // Generate tab 1/3: Lowered IR code with syntax highlighting in HTML
@@ -2124,13 +2183,18 @@ private:
     // Generate tab 2/3: Lowered IR code with syntax highlighting in HTML
     void generate_visualization_tab(const Module &m) {
         stream << "<div id='ir-visualization-tab'>\n";
-        html_viz_printer.print(m);
+        html_viz_printer.print(m, _asm_info);
         stream << "</div>\n";
     }
 
     // Generate tab 3/3: Generated assembly code
     void generate_assembly_tab(const Module &m) {
         stream << "<div id='assembly-tab'>\n";
+        stream << "<div id='assemblyContent' style='display: none;'>\n";
+        stream << "<pre>\n";
+        stream << _asm.str();
+        stream << "</pre>\n";
+        stream << "</div>\n";
         stream << "</div>\n";
     }
 
@@ -2140,12 +2204,12 @@ private:
                        <div class='collapse-btns'>
                          <div>
                            <button class='icon-btn resize-btn' onclick='collapse_code_tab()'>
-                             <i class='bi bi-arrow-bar-left'></i>
+                             <i class='bi bi-arrow-bar-left' title='Collapse code tab'></i>
                            </button>
                          </div>                         
                          <div>
                            <button class='icon-btn resize-btn' onclick='collapseR_visualization_tab()'>
-                             <i class='bi bi-arrow-bar-right'></i>
+                             <i class='bi bi-arrow-bar-right' title='Collapse visualization tab'></i>
                            </button>
                          </div>
                        </div>
@@ -2158,12 +2222,12 @@ private:
                        <div class='collapse-btns'>
                          <div>
                            <button class='icon-btn resize-btn' onclick='collapseL_visualization_tab()'>
-                             <i class='bi bi-arrow-bar-left'></i>
+                             <i class='bi bi-arrow-bar-left' title='Collapse visualization tab'></i>
                            </button>
                          </div>
                          <div>
                            <button class='icon-btn resize-btn' onclick='collapse_assembly_tab()'>
-                             <i class='bi bi-arrow-bar-right'></i>
+                             <i class='bi bi-arrow-bar-right' title='Collapse assembly tab'></i>
                            </button>
                          </div>
                        </div>
@@ -2204,6 +2268,23 @@ private:
     int gen_popup_id() {
         return _popup_id++;
     }
+
+private:
+    ostringstream _asm;
+    AssemblyInfo _asm_info;
+
+    // Load assembly code from file
+    void load_asm_code(string asm_file) {
+        // Open assembly file
+        assembly.open(asm_file.c_str());
+
+        // Slurp the code into _asm
+        string line;
+        while (getline(assembly, line)) {
+            _asm << line << "\n";
+        }
+    }
+    
 };
 
 /************** The external interface to this module **************/
