@@ -1179,23 +1179,26 @@ class VectorSubs : public IRMutator {
                 strides_match = simplify(store_ir.stride == load_ir.stride);
             }
 
-            debug(0) << store_index << " " << load_index << "\n";
-
-            const int64_t *scan_stride = as_const_int(base_delta);
-            if (scalar_match.defined() && !is_const_one(scalar_match)) {
+            bool reduce = false;
+            bool scan = false;
+            if (scalar_match.defined() && is_const_one(scalar_match)) {
+                reduce = true;
+                // Scalar total reduction
+            } else if (scalar_match.defined()) {
                 break;
-            } else if (strides_match.defined() && !is_const_one(strides_match)) {
+            } else if (!is_const_one(strides_match)) {
+                // Strides must match
                 break;
-            } else if (store_ir.inner_repetitions * store_ir.outer_repetitions != 1 &&
-                       !is_const_zero(base_delta)) {
-                // May be a combination scan + reduce. Not handled for now.
+            } else if (is_const_zero(base_delta)) {
+                reduce = true;
+                // Partial reduction
+            } else if (store_ir.inner_repetitions * store_ir.outer_repetitions != 1) {
+                // Some combination of scan and reduce. Not handled for now.
                 break;
-            } else if (!scan_stride) {
-                // Non-constant stride on the scan. scan_stride is zero for
-                // reductions.
-                break;
-            } else if (!(*scan_stride == 0 || *scan_stride == 1)) {
-                // TODO: Handle scan strides != 1
+            } else if (can_prove(base_delta == store_ir.stride)) {
+                // Vector scan that looks back one
+                scan = true;
+            } else {
                 break;
             }
 
@@ -1219,7 +1222,7 @@ class VectorSubs : public IRMutator {
                 return Expr();
             };
 
-            if (*scan_stride == 0) {
+            if (reduce) {
                 int output_lanes = 1;
                 if (store_index.type().is_scalar()) {
                     // The index doesn't depend on the value being
@@ -1269,8 +1272,9 @@ class VectorSubs : public IRMutator {
                 b = binop(lhs, b);
                 b = cast(new_load.type(), b);
             } else {
-                // We have f[ramp] = f[ramp - 1] <op> b
-                // Rewrite to: f[ramp] = broadcast(f[ramp_base - 1]) <op> vector_scan(<op> b)
+                internal_assert(scan);
+                // We have f[ramp] = f[ramp - stride] <op> b
+                // Rewrite to: f[ramp] = broadcast(f[ramp_base - stride]) <op> vector_scan(<op> b)
                 debug(0) << "Would insert a scan here\n";
                 Expr new_load = Load::make(load_a->type.element_of(),
                                            load_a->name, load_ir.base, load_a->image,
