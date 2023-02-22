@@ -1880,7 +1880,7 @@ void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
 
 void CodeGen_C::emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function) {
     stream << get_indent() << "HalideFreeHelper<" << free_function << "> "
-            << alloc_name << "_free(_ucon, " << alloc_name << ");\n";
+           << alloc_name << "_free(_ucon, " << alloc_name << ");\n";
 }
 
 void CodeGen_C::compile(const Module &input) {
