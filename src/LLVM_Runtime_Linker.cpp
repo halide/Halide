@@ -250,14 +250,6 @@ DECLARE_NO_INITMOD(x86_sse41)
 DECLARE_NO_INITMOD(x86_cpu_features)
 #endif  // WITH_X86
 
-#ifdef WITH_MIPS
-DECLARE_LL_INITMOD(mips)
-DECLARE_CPP_INITMOD(mips_cpu_features)
-#else
-DECLARE_NO_INITMOD(mips)
-DECLARE_NO_INITMOD(mips_cpu_features)
-#endif  // WITH_MIPS
-
 #ifdef WITH_POWERPC
 DECLARE_LL_INITMOD(powerpc)
 DECLARE_CPP_INITMOD(powerpc_cpu_features)
@@ -339,12 +331,6 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 return llvm::DataLayout("e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128");
             }
         }
-    } else if (target.arch == Target::MIPS) {
-        if (target.bits == 32) {
-            return llvm::DataLayout("e-m:m-p:32:32-i8:8:32-i16:16:32-i64:64-n32-S64");
-        } else {
-            return llvm::DataLayout("e-m:m-i8:8:32-i16:16:32-i64:64-n32:64-S128");
-        }
     } else if (target.arch == Target::POWERPC) {
         if (target.bits == 32) {
             return llvm::DataLayout("E-m:e-p:32:32-i64:64-n32");
@@ -362,7 +348,6 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             return llvm::DataLayout("e-m:e-p:64:64-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20");
         }
     } else if (target.arch == Target::RISCV) {
-        // TODO: Validate this data layout is correct for RISCV. Assumption is it is like MIPS.
         if (target.bits == 32) {
             return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32-S128");
         } else {
@@ -463,21 +448,6 @@ llvm::Triple get_triple_for_target(const Target &target) {
 
         } else {
             user_error << "No arm support for this OS\n";
-        }
-    } else if (target.arch == Target::MIPS) {
-        // Currently MIPS support is only little-endian.
-        if (target.bits == 32) {
-            triple.setArch(llvm::Triple::mipsel);
-        } else {
-            user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
-            triple.setArch(llvm::Triple::mips64el);
-        }
-
-        if (target.os == Target::Android) {
-            triple.setOS(llvm::Triple::Linux);
-            triple.setEnvironment(llvm::Triple::Android);
-        } else {
-            user_error << "No mips support for this OS\n";
         }
     } else if (target.arch == Target::POWERPC) {
 #ifdef WITH_POWERPC
@@ -943,6 +913,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.arch == Target::Hexagon) {
                     modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
                     modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
+                } else if (t.arch == Target::ARM && t.has_feature(Target::Semihosting)) {
+                    add_allocator();
+                    modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::Fuchsia) {
@@ -1027,7 +1003,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
             // Some environments don't support the atomics the profiler requires.
-            if (t.arch != Target::MIPS && t.os != Target::NoOS && t.os != Target::QuRT) {
+            if (t.os != Target::NoOS && t.os != Target::QuRT) {
                 if (t.has_feature(Target::ProfileByTimer)) {
                     user_assert(!t.has_feature(Target::Profile)) << "Can only use one of Target::Profile and Target::ProfileByTimer.";
                     // TODO(zvookin): This should work on all Posix like systems, but needs to be tested.
@@ -1077,9 +1053,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_arm_no_neon_ll(c));
                 }
-            }
-            if (t.arch == Target::MIPS) {
-                modules.push_back(get_initmod_mips_ll(c));
             }
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_ll(c));
@@ -1140,9 +1113,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_arm_cpu_features(c, bits_64, debug));
                 }
-            }
-            if (t.arch == Target::MIPS) {
-                modules.push_back(get_initmod_mips_cpu_features(c, bits_64, debug));
             }
             if (t.arch == Target::POWERPC) {
                 modules.push_back(get_initmod_powerpc_cpu_features(c, bits_64, debug));

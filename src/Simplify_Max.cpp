@@ -189,6 +189,13 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
 
              rewrite(max(select(x, y, z), select(x, w, u)), select(x, max(y, w), max(z, u))) ||
 
+             // Hoist shuffles. The Shuffle visitor wants to sink
+             // extract_elements to the leaves, and those count as degenerate
+             // slices, so only hoist shuffles that grab more than one lane.
+             rewrite(max(slice(x, c0, c1, c2), slice(y, c0, c1, c2)), slice(max(x, y), c0, c1, c2), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+             rewrite(max(slice(x, c0, c1, c2), max(slice(y, c0, c1, c2), z)), max(slice(max(x, y), c0, c1, c2), z), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+             rewrite(max(slice(x, c0, c1, c2), max(z, slice(y, c0, c1, c2))), max(slice(max(x, y), c0, c1, c2), z), c2 > 1 && lanes_of(x) == lanes_of(y)) ||
+
              (no_overflow(op->type) &&
               (rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||
                rewrite(max(max(x, y) + c0, x), max(x, y) + c0, c0 > 0) ||
@@ -297,18 +304,6 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
             return mutate(rewrite.result, bounds);
         }
         // clang-format on
-    }
-
-    const Shuffle *shuffle_a = a.as<Shuffle>();
-    const Shuffle *shuffle_b = b.as<Shuffle>();
-    if (shuffle_a && shuffle_b &&
-        shuffle_a->is_slice() &&
-        shuffle_b->is_slice()) {
-        if (a.same_as(op->a) && b.same_as(op->b)) {
-            return hoist_slice_vector<Max>(op);
-        } else {
-            return hoist_slice_vector<Max>(Max::make(a, b));
-        }
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {

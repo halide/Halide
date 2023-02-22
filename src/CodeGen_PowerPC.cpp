@@ -12,7 +12,7 @@ using std::vector;
 
 namespace {
 
-/** A code generator that emits mips code from a given Halide stmt. */
+/** A code generator that emits PowerPC code from a given Halide stmt. */
 class CodeGen_PowerPC : public CodeGen_Posix {
 public:
     /** Create a powerpc code generator. Processor features can be

@@ -247,6 +247,7 @@ tests(GROUPS correctness
       realize_condition_depends_on_tuple.cpp
       realize_larger_than_two_gigs.cpp
       realize_over_shifted_domain.cpp
+      recursive_box_filters.cpp
       reduction_chain.cpp
       reduction_predicate_racing.cpp
       reduction_non_rectangular.cpp
@@ -382,8 +383,11 @@ tests(GROUPS correctness multithreaded
       unroll_huge_mux.cpp
       )
 
-# Make sure the test that needs image_io has it
+# Make sure the test that needs Halide::ImageIO has it
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
+
+# Make sure the test that needs Halide::ThreadPool has it
+target_link_libraries(correctness_gpu_allocation_cache PRIVATE Halide::ThreadPool)
 
 # Tests which use external funcs need to enable exports.
 set_target_properties(correctness_async

@@ -201,7 +201,7 @@ class RDom {
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE void initialize_from_region(Region &region, const Expr &min, const Expr &extent, Args &&...args) {
         validate_min_extent(min, extent);
-        region.push_back({min, extent});
+        region.emplace_back(min, extent);
         initialize_from_region(region, std::forward<Args>(args)...);
     }
 

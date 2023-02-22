@@ -227,6 +227,8 @@ public:
             check(std::string("packssdw") + check_suffix, 4 * w, i16_sat(i32_1));
             check(std::string("packsswb") + check_suffix, 8 * w, i8_sat(i16_1));
             check(std::string("packuswb") + check_suffix, 8 * w, u8_sat(i16_1));
+            check(std::string("packssdw") + check_suffix, 8 * w, u8_sat(i32_1));
+            check(std::string("packssdw") + check_suffix, 8 * w, i8_sat(i32_1));
 
             // Sum-of-absolute-difference ops
             {

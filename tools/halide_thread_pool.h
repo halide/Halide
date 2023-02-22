@@ -1,6 +1,7 @@
 #ifndef HALIDE_THREAD_POOL_H
 #define HALIDE_THREAD_POOL_H
 
+#include <cassert>
 #include <condition_variable>
 #include <functional>
 #include <future>
@@ -35,7 +36,7 @@
  * *not* intended to be the underlying implementation for Halide runtime threads
  */
 namespace Halide {
-namespace Internal {
+namespace Tools {
 
 template<typename T>
 class ThreadPool {
@@ -154,7 +155,7 @@ inline void ThreadPool<void>::Job::run_unlocked(std::unique_lock<std::mutex> &un
     result.set_value();
 }
 
-}  // namespace Internal
+}  // namespace Tools
 }  // namespace Halide
 
 #endif  // HALIDE_THREAD_POOL_H

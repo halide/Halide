@@ -33,7 +33,7 @@ install(TARGETS Halide Halide_Generator Halide_LanguageOptions
 
 if (TARGET Halide_Adams2019)
     install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016
-            EXPORT Halide_Targets
+            EXPORT Halide_Interfaces
             LIBRARY DESTINATION ${Halide_INSTALL_PLUGINDIR} COMPONENT Halide_Runtime
             NAMELINK_COMPONENT Halide_Development)
 endif ()
@@ -51,7 +51,7 @@ endforeach ()
 
 target_sources(Halide_RunGenMain INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/RunGenMain.cpp>)
 
-install(TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain
+install(TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain Halide_ThreadPool
         EXPORT Halide_Interfaces
         INCLUDES DESTINATION ${Halide_INSTALL_TOOLSDIR})
 

@@ -153,7 +153,6 @@ set(HEADER_FILES
     StrictifyFloat.h
     Substitute.h
     Target.h
-    ThreadPool.h
     Tracing.h
     TrimNoOps.h
     Tuple.h
@@ -200,7 +199,6 @@ set(SOURCE_FILES
     CodeGen_Internal.cpp
     CodeGen_LLVM.cpp
     CodeGen_Metal_Dev.cpp
-    CodeGen_MIPS.cpp
     CodeGen_OpenCL_Dev.cpp
     CodeGen_OpenGLCompute_Dev.cpp
     CodeGen_Posix.cpp
@@ -381,7 +379,6 @@ add_library(Halide
             $<TARGET_OBJECTS:Halide_initmod>)
 add_library(Halide::Halide ALIAS Halide)
 
-target_link_libraries(Halide PUBLIC Threads::Threads)
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
 target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
