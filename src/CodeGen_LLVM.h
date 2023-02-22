@@ -14,8 +14,7 @@ class Function;
 class FunctionType;
 class IRBuilderDefaultInserter;
 class ConstantFolder;
-template<typename, typename>
-class IRBuilder;
+class IRBuilderBase;
 class LLVMContext;
 class Type;
 class StructType;
@@ -60,8 +59,6 @@ class CodeGen_LLVM : public IRVisitor {
 public:
     /** Create an instance of CodeGen_LLVM suitable for the target. */
     static std::unique_ptr<CodeGen_LLVM> new_for_target(const Target &target, llvm::LLVMContext &context);
-
-    ~CodeGen_LLVM() override;
 
     /** Takes a halide Module and compiles it to an llvm Module. */
     virtual std::unique_ptr<llvm::Module> compile(const Module &module);
@@ -166,7 +163,7 @@ protected:
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
-    llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder;
+    std::unique_ptr<llvm::IRBuilderBase> builder;
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
     llvm::MDNode *default_fp_math_md;
