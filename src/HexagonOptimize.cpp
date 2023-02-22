@@ -30,6 +30,10 @@ static bool enable_synthesized_rules() {
     return get_env_variable("HL_ENABLE_RAKE_RULES") == "1";
 }
 
+static bool sobel_cross_validation() {
+    return get_env_variable("HL_CROSS_VALIDATION") == "1";
+}
+
 using namespace Halide::ConciseCasts;
 
 Expr native_interleave(const Expr &x) {
@@ -821,9 +825,12 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
         }
 
         static const vector<Pattern> synthesized_adds = {
+            // Both conv benchmarks and gaussian3x3
             {"halide.hexagon.acc_add_2mpy.vh.vub.vub.b.b", wild_u16x + halide_hexagon_add_2mpy(UInt(16, 0), ".vub.vub.b.b", wild_u8x, wild_u8x, wild_i8, wild_i8), Pattern::ReinterleaveOp0, Int(16)},
             {"halide.hexagon.acc_add_2mpy.vh.vub.b", wild_u16x + halide_hexagon_add_2mpy(UInt(16, 0), ".vub.b", wild_u8x, wild_i32), 0, Int(16)},
-            {"halide.hexagon.acc_add_3mpy.vh.vub.b", wild_u16x + native_interleave(halide_hexagon_add_3mpy(UInt(16, 0), ".vub.b", wild_u8x, wild_i32)), Pattern::ReinterleaveOp0, Int(16)},
+            // This didn't match any benchmark. Where did it come from?
+            // {"halide.hexagon.acc_add_3mpy.vh.vub.b", wild_u16x + native_interleave(halide_hexagon_add_3mpy(UInt(16, 0), ".vub.b", wild_u8x, wild_i32)), Pattern::ReinterleaveOp0, Int(16)},
+            // add / mul
             {"halide.hexagon.add_mpy.vuh.vub.ub", wild_i16x + cast(Int(16, 0), widening_mul(wild_u8x, wild_u8)), Pattern::ReinterleaveOp0, Int(16)},
         };
 
@@ -895,6 +902,7 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
                 Expr new_expr = apply_commutative_patterns(op, synthesized_adds, target, this);
                 if (!new_expr.same_as(op)) {
                     // std::cerr << "Optimized Add (synth): " << new_expr << "\n";
+                    // std::cerr << "was: " << Expr(op) << "\n";
                     return new_expr;
                 }
             }
@@ -942,6 +950,7 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
 
     Expr visit(const Cast *op) override {
 
+        // average_pool and gaussian3x3
         static const vector<Pattern> synthesized_casts = {
             // Saturating narrowing casts
             {"halide.hexagon.trunc_satub_shr.vh.uh", u8(wild_i16x >> wild_u16), Pattern::DeinterleaveOp0 | Pattern::RequireSafeCasting},
@@ -1023,6 +1032,7 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
                 Expr new_expr = apply_patterns(cast, synthesized_casts, target, this);
                 if (!new_expr.same_as(op)) {
                     // std::cerr << "Optimized Cast (synth): " << new_expr << "\n";
+                    // std::cerr << "was: " << cast << "\n";
                     return new_expr;
                 }
             }
@@ -1063,7 +1073,10 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
         if (op->is_intrinsic(Call::widen_right_add)) {
             if (enable_synthesized_rules() && op->type.element_of() == UInt(16) && !is_const(op->args[1])) {
                 // use vmpy-acc
+                // Found via average_pool and camera_pipe
                 Expr lowered = Add::make(op->args[0], widening_mul(op->args[1], make_one(op->args[1].type())));
+                // std::cerr << "Optimized widen_right_add (synth): " << lowered << "\n";
+                // std::cerr << "was: " << Expr(op) << "\n";
                 return mutate(lowered);
             } else {
                 Expr lowered = Add::make(op->args[0], cast(op->type, op->args[1]));
@@ -1090,17 +1103,19 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
             }
         }
 
-        static const vector<Pattern> synthesized_calls = {
-
+        static const vector<Pattern> synthesized_calls0 = {
+            // These are only from sobel3x3
             {"halide.hexagon.pack_satub.vh", u8_sat(wild_u16x), Pattern::RequireSafeReintepretOp0},
             {"halide.hexagon.pack_satuh.vw", u16_sat(wild_u32x), Pattern::RequireSafeReintepretOp0},
             {"halide.hexagon.pack_satb.vh", i8_sat(wild_u16x), Pattern::RequireSafeReintepretOp0},
             {"halide.hexagon.pack_sath.vw", i16_sat(wild_u32x), Pattern::RequireSafeReintepretOp0},
+        };
 
-            // types??
+        static const vector<Pattern> synthesized_calls1 = {
+            // camera_pipe / gaussian5x5 / gaussian7x7
             {"halide.hexagon.mul.vw.v", widen_right_mul(wild_i32x, wild_i16x), Pattern::ReinterleaveOp0 | Pattern::RequireSafeReintepretOp1},
             {"halide.hexagon.mul.vw.v", widen_right_mul(wild_u32x, wild_u16x), Pattern::ReinterleaveOp0 | Pattern::RequireSafeReintepretOp1},
-        };           
+        };
 
         static const vector<Pattern> calls = {
             // Non-widening scalar multiplication.
@@ -1205,9 +1220,19 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, co
             // std::cerr << "Optimizing Call: " << Expr(op) << "\n";
 
             if (enable_synthesized_rules()) {
-                Expr new_expr = apply_patterns(op, synthesized_calls, target, this);
+                if (!sobel_cross_validation()) {
+                    // Can only apply these rules if not doing sobel cross-validation.
+                    Expr new_expr = apply_patterns(op, synthesized_calls0, target, this);
+                    if (!new_expr.same_as(op)) {
+                        // std::cerr << "Optimized Call (synth): " << new_expr << "\n";
+                        // std::cerr << "was: " << Expr(op) << "\n";
+                        return new_expr;
+                    }
+                }
+                Expr new_expr = apply_patterns(op, synthesized_calls1, target, this);
                 if (!new_expr.same_as(op)) {
                     // std::cerr << "Optimized Call (synth): " << new_expr << "\n";
+                    // std::cerr << "was: " << Expr(op) << "\n";
                     return new_expr;
                 }
             }
@@ -2430,8 +2455,11 @@ private:
                 bool is_widening_cast = cast_a && cast_a->type.bits() >= cast_a->value.type().bits() * 2;
                 if (is_widening_cast || Call::as_intrinsic(a, {Call::widening_add, Call::widening_mul, Call::widening_sub})) {
                     if (enable_synthesized_rules()) {
+                        // Found via gaussian3x3 and gaussian5x5
                         const uint64_t const_m = 1ull << *const_b;
                         Expr b = make_const(a.type(), const_m);
+                        // std::cerr << "Optimized shl (synth): " << (a * b) << "\n";
+                        // std::cerr << "was: " << Expr(op) << "\n";
                         return mutate(distribute(a, b));
                     } else {
                         return mutate(distribute(a, make_one(a.type()) << *const_b));
@@ -2441,9 +2469,12 @@ private:
         } else if (op->is_intrinsic(Call::widening_shift_left)) {
             if (const uint64_t *const_b = as_const_uint(op->args[1])) {
                 if (enable_synthesized_rules()) {
+                    // Found via add / average_pool / camera_pipe / gaussian3x3 / mul / sobel3x3
                     const uint64_t const_m = 1ull << *const_b;
                     Expr b = make_const(op->type, const_m);
                     Expr a = Cast::make(op->type, op->args[0]);
+                    // std::cerr << "Optimized widening_shl (synth): " << (a * b) << "\n";
+                    // std::cerr << "was: " << Expr(op) << "\n";
                     return mutate(distribute(a, b));
                 } else {
                     Expr a = Cast::make(op->type, op->args[0]);

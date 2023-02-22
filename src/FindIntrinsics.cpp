@@ -299,29 +299,39 @@ protected:
 
         // synthesized rules.
         if (enable_synthesized_rules() &&
+            // Multiple gaussian benchmarks.
             (rewrite(widen_right_add(x, y) + widen_right_add(z, w), widening_add(y, w) + x + z) ||
              // TODO: should be a simplifier rule.
+             // Multiple gaussian benchmarks.
              rewrite(reinterpret(op->type, x) + reinterpret(op->type, y), reinterpret(op->type, x + y), types_match(x, y)) || // TODO: need x and y same type.
+             // Multiple gaussian benchmarks.
              rewrite(widening_shift_left(x, c0) + widening_shift_left(y, c0), shift_left(widening_add(x, y), c0)) ||
+             // Multiple gaussian benchmarks.
              rewrite(widening_shift_left(x, c0) + (widening_shift_left(y, c0) + z), z + shift_left(widening_add(x, y), c0)) ||
+             // Multiple gaussian benchmarks.
              rewrite((z + widening_shift_left(x, c0)) + widening_shift_left(y, c0), z + shift_left(widening_add(x, y), c0)) ||
+             // Multiple gaussian benchmarks.
              rewrite((widening_shift_left(x, c0) + z) + widening_shift_left(y, c0), z + shift_left(widening_add(x, y), c0)) ||
+             // Multiple gaussian benchmarks.
              rewrite(cast(op->type, widening_shift_left(x, c0)) + cast(op->type, widening_shift_left(y, c0)),
                      cast(op->type, shift_left(widening_add(x, y), c0)),
                      // If the cast is simply a reinterpret.
                      (is_int(x, bits / 2) && is_int(y, bits / 2)) ||
                      (is_int(x, bits / 2) && is_uint(y, bits / 2))) ||
+             // Multiple gaussian benchmarks.
              rewrite(cast(op->type, widening_shift_left(x, c0)) + (cast(op->type, widening_shift_left(y, c0)) + z),
                      z + cast(op->type, shift_left(widening_add(x, y), c0)),
                      // If the cast is simply a reinterpret.
                      (is_int(x, bits / 2) && is_int(y, bits / 2)) ||
                      (is_uint(x, bits / 2) && is_uint(y, bits / 2))) ||
              // mul is more expensive than add.
+             // Multiple gaussian benchmarks.
              rewrite(widening_mul(x, y) + widening_mul(z, y),
                      y * widening_add(x, z),
                      // TODO: could be a better notation for this.
                      types_match(x, z)) ||
             
+             // Multiple gaussian benchmarks.
              rewrite(reinterpret(op->type, x) + reinterpret(op->type, y),
                      reinterpret(op->type, x + y),
                      types_match(x, y)) ||
@@ -405,6 +415,7 @@ protected:
         // synthesized rules.
         if (enable_synthesized_rules() &&
             (
+             // Add and mul benchmarks
              rewrite(reinterpret(op->type, x) - reinterpret(op->type, y),
                      reinterpret(op->type, x - y),
                      types_match(x, y)) ||
@@ -523,6 +534,7 @@ protected:
         // synthesized rules.
         if (enable_synthesized_rules() &&
             (
+             // Multiple gaussian benchmarks
              rewrite(reinterpret(op->type, x) * reinterpret(op->type, y),
                      reinterpret(op->type, x * y),
                      types_match(x, y)) ||
@@ -924,12 +936,14 @@ protected:
 
             // Synthesized rules.
             (enable_synthesized_rules() &&
+             // Multiple gaussian benchmarks
              (rewrite(
                 widening_mul(x, c0),
                 reinterpret(op->type,
                  typed(op->type.with_code(halide_type_uint),
                   widening_mul(x, cast(unsigned_narrow_type, c0)))),
                 (c0 > 0) && (is_uint(x) && is_int(c0))) ||
+              // Multiple gaussian benchmarks
               rewrite(
                 widening_add(
                     reinterpret(narrow_type, x),
@@ -945,6 +959,7 @@ protected:
                 if x can be reinterpreted to unsigned safely and is_uint(y) and types_match(x, widen_z(y))
                 */
 
+              // Multiple gaussian benchmarks
               (op->type.is_int() &&
                rewrite(
                 widening_add(reinterpret(narrow_type, x), cast(narrow_type, y)),
@@ -1018,6 +1033,7 @@ protected:
                 return mutate(result);
             }
 
+            // From both add and mul benchmarks. Cross-validation always includes.
             if (enable_synthesized_rules() && op->type.is_int() && bits >= 16) {
                 Type uint_type = op->type.narrow().with_code(halide_type_uint);
                 Expr a_narrow = lossless_cast(uint_type, op->args[0]);

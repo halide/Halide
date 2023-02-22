@@ -20,6 +20,11 @@ $(GENERATOR_BIN)/$(APP_NAME)_rake.generator: $(APP_NAME)_generator.cpp $(GENERAT
 	export HL_ENABLE_RAKE=1 && \
 	$(CXX) $(CXXFLAGS) -g  $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
+$(GENERATOR_BIN)/$(APP_NAME)_cross.generator: $(APP_NAME)_generator.cpp $(GENERATOR_DEPS)
+	@mkdir -p $(@D)
+	export HL_CROSS_VALIDATION=1 && \
+	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
+
 $(BIN)/%/$(APP_NAME)_llvm.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	@mkdir -p $(@D)
 	export HL_ENABLE_RAKE=0 && \
@@ -44,6 +49,15 @@ $(BIN)/%/$(APP_NAME)_pitchfork.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	export HL_DISABLE_HALIDE_LOWERING=0 && \
 	/usr/bin/time  $< -g $(APP_NAME) -f $(APP_NAME)_pitchfork -e stmt,assembly,static_library,c_header,llvm_assembly -o $(BIN)/$* target=$*
 
+$(BIN)/%/$(APP_NAME)_cross.a: $(GENERATOR_BIN)/$(APP_NAME)_cross.generator
+	@mkdir -p $(@D)
+	export HL_CROSS_VALIDATION=1 && \
+	export HL_ENABLE_RAKE=0 && \
+	export HL_ENABLE_RAKE_RULES=1 && \
+	export HL_DISABLE_INTRINISICS=0 && \
+	export HL_DISABLE_HALIDE_LOWERING=0 && \
+	/usr/bin/time  $< -g $(APP_NAME) -f $(APP_NAME)_cross -e stmt,assembly,static_library,c_header,llvm_assembly -o $(BIN)/$* target=$*
+
 $(BIN)/%/$(APP_NAME)_rake.a: $(GENERATOR_BIN)/$(APP_NAME)_rake.generator
 	@mkdir -p $(@D)
 	export HL_RAKE_BENCHMARK_NAME=rake && \
@@ -57,7 +71,7 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/$(APP_NAME).generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$* target=$*
 
-$(BIN)/%/filter: filter.cpp $(BIN)/%/$(APP_NAME)_rake.a $(BIN)/%/$(APP_NAME)_halide.a $(BIN)/%/$(APP_NAME)_pitchfork.a $(BIN)/%/$(APP_NAME)_llvm.a $(BIN)/%/runtime.a
+$(BIN)/%/filter: filter.cpp $(BIN)/%/$(APP_NAME)_rake.a $(BIN)/%/$(APP_NAME)_halide.a $(BIN)/%/$(APP_NAME)_pitchfork.a $(BIN)/%/$(APP_NAME)_llvm.a $(BIN)/%/$(APP_NAME)_cross.a $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
@@ -73,7 +87,7 @@ HEXAGON_CLANG ?= /home/aroot/Qualcomm/Hexagon_SDK/3.5.4/tools/HEXAGON_Tools/8.3.
 HALIDE_DIR ?= /home/aroot/Halide
 
 # TODO: $(BIN)/$(HVX_TARGET)/$(APP_NAME)_rake.a
-hvx: $(BIN)/$(HVX_TARGET)/$(APP_NAME)_halide.a $(BIN)/$(HVX_TARGET)/$(APP_NAME)_pitchfork.a $(BIN)/$(HVX_TARGET)/$(APP_NAME)_llvm.a $(BIN)/$(HVX_TARGET)/runtime.a
+hvx: $(BIN)/$(HVX_TARGET)/$(APP_NAME)_halide.a $(BIN)/$(HVX_TARGET)/$(APP_NAME)_pitchfork.a $(BIN)/$(HVX_TARGET)/$(APP_NAME)_llvm.a $(BIN)/$(HVX_TARGET)/$(APP_NAME)_cross.a $(BIN)/$(HVX_TARGET)/runtime.a
 	$(HEXAGON_CLANG) \
         -D$(APP_NAME) \
         --std=c++17 -mhvx -mv66 -mhvx-length=128B \

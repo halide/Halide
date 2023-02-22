@@ -758,8 +758,8 @@ private:
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
-    IRMatcher::Wild<3> w;
-    IRMatcher::Wild<4> u;
+    // IRMatcher::Wild<3> w;
+    // IRMatcher::Wild<4> u;
     // IRMatcher::WildConst<0> c0;
 };
 

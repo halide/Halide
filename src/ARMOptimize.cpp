@@ -301,7 +301,9 @@ protected:
                         // valid if the cast is not bit-changing (i.e. a reinterpret)
                         is_int(y, bits / 2, lanes) || is_uint(y, bits / 2, lanes)) ||
 
-                // TODO: is this safe? what if we have two widening_muls?
+                // This is only safe if `x` is not a widening_mul
+                // TODO: when merging into Halide, this should be
+                // a pass similar to https://github.com/halide/Halide/pull/7316
                 rewrite(widening_mul(y, z) + x,
                         x + widening_mul(y, z),
                         !is_intrin(x, Call::widening_mul)) ||
