@@ -2687,24 +2687,15 @@ void CodeGen_C::visit(const Call *op) {
                        << " = (decltype(" << struct_name << "))halide_malloc(_ucon, sizeof(*"
                        << struct_name << "));\n";
 
-                // TODO: Check for nullptr return?
+                create_assertion("(" + struct_name + ")", Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
                 // Assign the values.
                 for (size_t i = 0; i < op->args.size(); i++) {
-                    stream << get_indent() << struct_name << "->f_" << i << " = " << values[i] << "\n;";
+                    stream << get_indent() << struct_name << "->f_" << i << " = " << values[i] << ";\n";
                 }
 
                 // Insert destructor.
-                string destructor_struct_name = unique_name('s');
-                string destructor_instance_name = unique_name('d');
-                stream << get_indent() << "struct " << destructor_struct_name << " {";
-                indent++;
-                stream << get_indent() << "void * const ucon_save;\n";
-                stream << get_indent() << "void *struct_save;\n";
-                stream << get_indent() << destructor_struct_name << "(void *const ucon_save, void *struct_save) : ucon_save(ucon_save), struct_save(struct_save) { }\n";
-                stream << get_indent() << "~" << destructor_struct_name << "() { halide_free(ucon_save, struct_save); }";
-                indent--;
-                stream << get_indent() << "} " << destructor_instance_name << "(_ucon, " << struct_name << ");\n";
+                emit_halide_free_helper(struct_name, "halide_free");
 
                 // Return the pointer, casting to appropriate type if necessary.
 

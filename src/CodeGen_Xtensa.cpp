@@ -4322,9 +4322,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
                                    (op->memory_type != MemoryType::VTCM ? "halide_free" : "halide_tcm_free") :
                                    op->free_function;
 
-        stream << get_indent();
-        stream << "HalideFreeHelper " << op_name << "_free(_ucon, "
-               << op_name << ", " << free_function << ");\n";
+        emit_halide_free_helper(op_name, free_function);
     }
 
     op->body.accept(this);
