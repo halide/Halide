@@ -150,6 +150,9 @@ void CodeGen_WebGPU_Dev::init_module() {
         << "fn floor_f32(x : f32) -> f32 {return floor(x);}\n"
         << "fn fast_inverse_f32(x : f32) -> f32 {return 1.0 / x;}\n"
         << "fn fast_inverse_sqrt_f32(x : f32) -> f32 {return inverseSqrt(x);}\n"
+        << "fn is_finite_f32(x : f32) -> f32 {return isFinite(x);}\n"
+        << "fn is_inf_f32(x : f32) -> f32 {return isInf(x);}\n"
+        << "fn is_nan_f32(x : f32) -> f32 {return isNan(x);}\n"
         << "fn log_f32(x : f32) -> f32 {return log(x);}\n"
         // pow() in WGSL has the same semantics as C if x > 0.
         // Otherwise, we need to emulate the behavior.
