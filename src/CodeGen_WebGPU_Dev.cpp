@@ -179,9 +179,11 @@ void CodeGen_WebGPU_Dev::init_module() {
         << "fn tanh_f32(x : f32) -> f32 {return tanh(x);}\n"
         << "fn trunc_f32(x : f32) -> f32 {return trunc(x);}\n"
         // WGSL doesn't provide these by default, but we can exploit the nature
-        // of comparison ops to construct them. (Note that this approach is likely
-        // to break when -ffast-math is enabled, but in those cases, these functions
-        // should be avoided in the first place.)
+        // of comparison ops to construct them... although they are of dubious value
+        // (since the WGSL spec says that "Implementations may assume that NaNs
+        // and infinities are not present at runtime"), we'll provide these to
+        // prevent outright compilation failure, and also as a convenience
+        // if generating code for an implementaton that is known to preserve them.
         << "fn is_nan_f32(x : f32) -> bool {return x != x;}\n"
         << "fn is_inf_f32(x : f32) -> bool {return !is_nan_f32(x) && is_nan_f32(x - x);}\n"
         << "fn is_finite_f32(x : f32) -> bool {return !is_nan_f32(x) && !is_inf_f32(x);}\n";
