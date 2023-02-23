@@ -229,20 +229,17 @@ const B &return_second(const A &a, const B &b) {
 }
 
 namespace {
+template<void(*FreeFn)(void *, void *)>
 class HalideFreeHelper {
-    typedef void (*FreeFunction)(void *user_context, void *p);
-    void * user_context;
-    void *p;
-    FreeFunction free_function;
+    void * const user_context;
+    void * ptr;
 public:
-    HalideFreeHelper(void *user_context, void *p, FreeFunction free_function)
-        : user_context(user_context), p(p), free_function(free_function) {}
+    HalideFreeHelper(void *user_context, void *ptr) : user_context(user_context), ptr(ptr) {}
     ~HalideFreeHelper() { free(); }
     void free() {
-        if (p) {
-            // TODO: do all free_functions guarantee to ignore a nullptr?
-            free_function(user_context, p);
-            p = nullptr;
+        if (ptr) {
+            FreeFn(user_context, ptr);
+            ptr = nullptr;
         }
     }
 };
@@ -1885,6 +1882,11 @@ void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
     stream << "}\n";
 }
 
+void CodeGen_C::emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function) {
+    stream << get_indent() << "HalideFreeHelper<" << free_function << "> "
+           << alloc_name << "_free(_ucon, " << alloc_name << ");\n";
+}
+
 void CodeGen_C::compile(const Module &input) {
     TypeInfoGatherer type_info;
     for (const auto &f : input.functions()) {
@@ -2612,7 +2614,7 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->type == type_of<struct halide_semaphore_t *>() &&
                    sz && *sz == 16) {
             stream << get_indent();
-            string semaphore_name = unique_name("sema");
+            string semaphore_name = unique_name('m');
             stream << "halide_semaphore_t " << semaphore_name << ";\n";
             rhs << "&" << semaphore_name;
         } else {
@@ -2627,7 +2629,7 @@ void CodeGen_C::visit(const Call *op) {
         if (op->args.empty()) {
             internal_assert(op->type.handle_type);
             // Add explicit cast so that different structs can't cache to the same value
-            rhs << "(" << print_type(op->type) << ")(NULL)";
+            rhs << "(" << print_type(op->type) << ")(nullptr)";
         } else if (op->type == type_of<halide_dimension_t *>()) {
             // Emit a shape
 
@@ -2763,20 +2765,10 @@ void CodeGen_C::visit(const Call *op) {
         rhs << buf_name;
     } else if (op->is_intrinsic(Call::register_destructor)) {
         internal_assert(op->args.size() == 2);
-        const StringImm *fn = op->args[0].as<StringImm>();
-        internal_assert(fn);
+        const StringImm *free_fn = op->args[0].as<StringImm>();
+        internal_assert(free_fn);
         string arg = print_expr(op->args[1]);
-
-        stream << get_indent();
-        // Make a struct on the stack that calls the given function as a destructor
-        string struct_name = unique_name('s');
-        string instance_name = unique_name('d');
-        stream << "struct " << struct_name << " { "
-               << "void * const ucon; "
-               << "void * const arg; "
-               << "" << struct_name << "(void *ucon, void *a) : ucon(ucon), arg(a) {} "
-               << "~" << struct_name << "() { " << fn->value + "(ucon, arg); } "
-               << "} " << instance_name << "(_ucon, " << arg << ");\n";
+        emit_halide_free_helper(arg, free_fn->value);
         rhs << "(void *)nullptr";
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
@@ -3354,10 +3346,8 @@ void CodeGen_C::visit(const Allocate *op) {
         }
         create_assertion("(" + check.str() + ")", Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
-        stream << get_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
-        stream << "HalideFreeHelper " << op_name << "_free(_ucon, "
-               << op_name << ", " << free_function << ");\n";
+        emit_halide_free_helper(op_name, free_function);
     }
 
     op->body.accept(this);
@@ -3539,7 +3529,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
    int32_t _4 = halide_error_out_of_memory(_ucon);
    return _4;
   }
-  HalideFreeHelper _tmp_heap_free(_ucon, _tmp_heap, halide_free);
+  HalideFreeHelper<halide_free> _tmp_heap_free(_ucon, _tmp_heap);
   {
    int32_t _tmp_stack[127];
    int32_t _5 = _beta + 1;
