@@ -76,7 +76,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-
     // ---- is_nan()
     {
         Func f;
