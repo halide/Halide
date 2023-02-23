@@ -58,6 +58,11 @@ else ()
 
     target_link_libraries(lesson_10_halide PRIVATE Halide::Runtime)
 
+    # Undocumented function in HalideGeneratorHelpers. Do not call in external code.
+    # Users of the AOT functions (as opposed to Generators) should link to the relevant
+    # GPU libraries manually.
+    _Halide_target_link_gpu_libs(lesson_10_halide PRIVATE ${Halide_TARGET})
+
     # The fixture "py_lesson_10" orchestrates running the generator part of the lesson first, then the build for the
     # library, and finally runs python_tutorial_lesson_10_aot_compilation_run. The ..._compile test invokes CMake on
     # the current build for the above library.
