@@ -77,14 +77,14 @@ Next, get Dawn and its dependencies:
     gclient sync
 
     # Other dependencies that must be installed manually:
-    # - go
+    # - golang
 
 Finally, build Dawn, enabling both the Node.js bindings and shared libraries:
 
     mkdir -p <build_dir>
     cd <build_dir>
 
-    cmake <dawn_root_dir> -G Ninja
+    cmake <dawn_root_dir> -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DDAWN_BUILD_NODE_BINDINGS=1 \
         -DDAWN_ENABLE_PIC=1 \
@@ -94,7 +94,7 @@ Finally, build Dawn, enabling both the Node.js bindings and shared libraries:
 
 This will produce the following artifacts:
 - Node.js bindings: `<build_dir>/dawn.node`
-- Native library: `<build_dir>/src/dawn_native/libwebgpu_dawn.{so,dylib,dll}`
+- Native library: `<build_dir>/src/dawn/native/libwebgpu_dawn.{so,dylib,dll}`
 
 These paths can then be used for the `-DWEBGPU_NODE_BINDINGS` and
 `-DWEBGPU_NATIVE_LIB` CMake options when configuring Halide.
