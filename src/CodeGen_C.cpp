@@ -2610,7 +2610,7 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->type == type_of<struct halide_semaphore_t *>() &&
                    sz && *sz == 16) {
             stream << get_indent();
-            string semaphore_name = unique_name("sema");
+            string semaphore_name = unique_name('m');
             stream << "halide_semaphore_t " << semaphore_name << ";\n";
             rhs << "&" << semaphore_name;
         } else {
