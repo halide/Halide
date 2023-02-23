@@ -2625,7 +2625,7 @@ void CodeGen_C::visit(const Call *op) {
         if (op->args.empty()) {
             internal_assert(op->type.handle_type);
             // Add explicit cast so that different structs can't cache to the same value
-            rhs << "(" << print_type(op->type) << ")(NULL)";
+            rhs << "(" << print_type(op->type) << ")(nullptr)";
         } else if (op->type == type_of<halide_dimension_t *>()) {
             // Emit a shape
 
@@ -2761,20 +2761,10 @@ void CodeGen_C::visit(const Call *op) {
         rhs << buf_name;
     } else if (op->is_intrinsic(Call::register_destructor)) {
         internal_assert(op->args.size() == 2);
-        const StringImm *fn = op->args[0].as<StringImm>();
-        internal_assert(fn);
+        const StringImm *free_fn = op->args[0].as<StringImm>();
+        internal_assert(free_fn);
         string arg = print_expr(op->args[1]);
-
-        stream << get_indent();
-        // Make a struct on the stack that calls the given function as a destructor
-        string struct_name = unique_name('s');
-        string instance_name = unique_name('d');
-        stream << "struct " << struct_name << " { "
-               << "void * const ucon; "
-               << "void * const arg; "
-               << "" << struct_name << "(void *ucon, void *a) : ucon(ucon), arg(a) {} "
-               << "~" << struct_name << "() { " << fn->value + "(ucon, arg); } "
-               << "} " << instance_name << "(_ucon, " << arg << ");\n";
+        emit_halide_free_helper(arg, free_fn->value);
         rhs << "(void *)nullptr";
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
