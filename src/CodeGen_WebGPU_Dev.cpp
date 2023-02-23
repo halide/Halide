@@ -136,6 +136,8 @@ void CodeGen_WebGPU_Dev::init_module() {
     src_stream
         << "fn float_from_bits(x : u32) -> f32 {return bitcast<f32>(x);}\n"
         << "fn nan_f32() -> f32 {return float_from_bits(0x7fc00000);}\n"
+        << "fn neg_inf_f32() -> f32 {return float_from_bits(0xff800000);}\n"
+        << "fn inf_f32() -> f32 {return float_from_bits(0x7f800000);}\n"
         << "fn acos_f32(x : f32) -> f32 {return acos(x);}\n"
         << "fn acosh_f32(x : f32) -> f32 {return acosh(x);}\n"
         << "fn asin_f32(x : f32) -> f32 {return asin(x);}\n"
@@ -150,9 +152,6 @@ void CodeGen_WebGPU_Dev::init_module() {
         << "fn floor_f32(x : f32) -> f32 {return floor(x);}\n"
         << "fn fast_inverse_f32(x : f32) -> f32 {return 1.0 / x;}\n"
         << "fn fast_inverse_sqrt_f32(x : f32) -> f32 {return inverseSqrt(x);}\n"
-        << "fn is_finite_f32(x : f32) -> f32 {return isFinite(x);}\n"
-        << "fn is_inf_f32(x : f32) -> f32 {return isInf(x);}\n"
-        << "fn is_nan_f32(x : f32) -> f32 {return isNan(x);}\n"
         << "fn log_f32(x : f32) -> f32 {return log(x);}\n"
         // pow() in WGSL has the same semantics as C if x > 0.
         // Otherwise, we need to emulate the behavior.
@@ -178,7 +177,14 @@ void CodeGen_WebGPU_Dev::init_module() {
         << "fn sqrt_f32(x : f32) -> f32 {return sqrt(x);}\n"
         << "fn tan_f32(x : f32) -> f32 {return tan(x);}\n"
         << "fn tanh_f32(x : f32) -> f32 {return tanh(x);}\n"
-        << "fn trunc_f32(x : f32) -> f32 {return trunc(x);}\n";
+        << "fn trunc_f32(x : f32) -> f32 {return trunc(x);}\n"
+        // WGSL doesn't provide these by default, but we can exploit the nature
+        // of comparison ops to construct them. (Note that this approach is likely
+        // to break when -ffast-math is enabled, but in those cases, these functions
+        // should be avoided in the first place.)
+        << "fn is_nan_f32(x : f32) -> bool {return x != x;}\n"
+        << "fn is_inf_f32(x : f32) -> bool {return !is_nan_f32(x) && is_nan_f32(x - x);}\n"
+        << "fn is_finite_f32(x : f32) -> bool {return !is_nan_f32(x) && !is_inf_f32(x);}\n";
 
     // Create pipeline-overridable constants for the workgroup size and
     // workgroup array size.
