@@ -7,6 +7,8 @@
 #include "HalideRuntimeOpenCL.h"
 #elif defined(TEST_CUDA)
 #include "HalideRuntimeCuda.h"
+#elif defined(TEST_METAL)
+#include "HalideRuntimeMetal.h"
 #endif
 
 #include "gpu_only.h"
