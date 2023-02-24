@@ -747,6 +747,8 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(Interval::make_min(a.min, b.min));
         } else {
             interval = Interval(Interval::make_min(a.min, b.min),
                                 Interval::make_min(a.max, b.max));
@@ -763,6 +765,8 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(Interval::make_max(a.min, b.min));
         } else {
             interval = Interval(Interval::make_max(a.min, b.min),
                                 Interval::make_max(a.max, b.max));
