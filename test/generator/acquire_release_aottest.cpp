@@ -104,6 +104,41 @@ int halide_metal_acquire_context(void *user_context, id<MTLDevice> *device_ret,
 int halide_metal_release_context(void *user_context) {
     return 0;
 }
+#elif defined(TEST_WEBGPU)
+
+struct gpu_context {
+    WGPUInstance instance = nullptr;
+    WGPUAdapter adapter = nullptr;
+    WGPUDevice device = nullptr;
+} webgpu_context;
+
+bool init_context() {
+    return create_webgpu_context(&webgpu_context.instance, &webgpu_context.adapter, &webgpu_context.device);
+}
+
+void destroy_context() {
+    destroy_webgpu_context(webgpu_context.instance, webgpu_context.adapter, webgpu_context.device);
+    webgpu_context.instance = nullptr;
+    webgpu_context.adapter = nullptr;
+    webgpu_context.device = nullptr;
+}
+
+extern "C" int halide_webgpu_acquire_context(void *user_context,
+                                             WGPUInstance *instance_ret,
+                                             WGPUAdapter *adapter_ret,
+                                             WGPUDevice *device_ret,
+                                             bool create) {
+    *instance_ret = webgpu_context.instance;
+    *adapter_ret = webgpu_context.adapter;
+    *device_ret = webgpu_context.device;
+    return 0;
+}
+
+extern "C" int halide_webgpu_release_context(void *user_context) {
+    return 0;
+}
+
+#define HAS_MULTIPLE_CONTEXTS true
 #else
 // Just use the default implementation of acquire/release.
 bool init_context() {

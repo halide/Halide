@@ -378,7 +378,7 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
         desc.size = kWebGpuStagingBufferSize;
         desc.mappedAtCreation = false;
 
-        staging_buffer = wgpuDeviceCreateBuffer(global_device, &desc);
+        staging_buffer = wgpuDeviceCreateBuffer(context.device, &desc);
 
         int error_code = error_scope.wait();
         if (error_code != halide_error_code_success) {
