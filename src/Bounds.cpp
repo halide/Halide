@@ -747,6 +747,8 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(Interval::make_min(a.min, b.min));
         } else {
             interval = Interval(Interval::make_min(a.min, b.min),
                                 Interval::make_min(a.max, b.max));
@@ -763,6 +765,8 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(Interval::make_max(a.min, b.min));
         } else {
             interval = Interval(Interval::make_max(a.min, b.min),
                                 Interval::make_max(a.max, b.max));
@@ -3705,6 +3709,17 @@ void bounds_test() {
         Expr e4 = Let::make("t42", u16(x) >> u16(1), e3);
 
         check_constant_bound(e4, u16(0), u16(65535));
+    }
+
+    // Test case from https://github.com/halide/Halide/pull/7377
+    {
+        Var x;
+        Expr e = Load::make(Int(32), "buf", max(x, -x), Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+        e = Let::make(x.name(), 37, e);
+        Scope<Interval> scope;
+        scope.push("y", {0, 100});
+        Interval in = bounds_of_expr_in_scope(e, scope);
+        internal_assert(in.is_single_point());
     }
 
     std::cout << "Bounds test passed" << std::endl;
