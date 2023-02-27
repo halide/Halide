@@ -111,15 +111,16 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
 
 namespace {
 // The maximum total number of DMA channels allowed.
-static const int kMaxNumberOfDmaChannels = 4;
+const int kMaxNumberOfDmaChannels = 4;
 // We want to use a separate channel(s) for the output copies, so it can be
 // overlapped with input copies and the rest of the processing.
-static const int kNumberOfChannelsForOutputs = 1;
-// Start channel indexing for input copues from this channel.
-static const int kOffsetOfChannelForInputs = kNumberOfChannelsForOutputs;
+const int kNumberOfChannelsForOutputs = 1;
+// Start channel indexing for input copies from this channel.
+const int kOffsetOfChannelForInputs = kNumberOfChannelsForOutputs;
 // Use remaining channels for input copies.
-static const int kNumberOfChannelsForInputs = kMaxNumberOfDmaChannels - kNumberOfChannelsForOutputs;
+const int kNumberOfChannelsForInputs = kMaxNumberOfDmaChannels - kNumberOfChannelsForOutputs;
 }  // namespace
+
 // Replace indirect loads with dma_transfer intrinsics where
 // possible.
 class InjectDmaTransferIntoProducer : public IRMutator {
