@@ -50,6 +50,7 @@
   #include "sobel3x3_halide.h"
   #include "sobel3x3_pitchfork.h"
   #include "sobel3x3_hvx128.h"
+  #include "sobel3x3_cross.h"
 #elif sobel3x3_sdk
   #include "sobel3x3_sdk_hvx128.h"
 #elif blur3x3
@@ -1153,6 +1154,23 @@ int main(int argc, char **argv) {
     //         printf("(x: %d, y: %d) ==> input-val: %d   output-val: %d\n", x, y, input_buf(x, y), output_buf(x, y));
 
     printf("Pitchfork: AppReported (HVX128B-mode): Image %dx%d - sobel3x3(128B): %lld cycles (%0.4f cycles/pixel)\n", (int)width, (int)height, cycles, (float)cycles / (width * height));
+
+    SIM_ACQUIRE_HVX;
+    SIM_SET_HVX_DOUBLE_MODE;
+
+    cycles = benchmark([&]() {
+        int error = sobel3x3_cross(input_buf, output_buf);
+        if (error != 0) {
+            printf("sobel3x3_cross pipeline failed: %d\n", error);
+        }
+        });
+    SIM_RELEASE_HVX;
+
+    // for (int x = 0; x < 10; x++)
+    //     for (int y = 0; y < 10; y++)
+    //         printf("(x: %d, y: %d) ==> input-val: %d   output-val: %d\n", x, y, input_buf(x, y), output_buf(x, y));
+
+    printf("Cross: AppReported (HVX128B-mode): Image %dx%d - sobel3x3(128B): %lld cycles (%0.4f cycles/pixel)\n", (int)width, (int)height, cycles, (float)cycles / (width * height));
 
 
     SIM_ACQUIRE_HVX;
