@@ -3724,6 +3724,17 @@ void bounds_test() {
         internal_assert(in.is_single_point());
     }
 
+    // Test case from https://github.com/halide/Halide/pull/7379
+    {
+        Var x;
+        Expr e = Load::make(Int(32), "buf", -x / x, Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+        e = Let::make(x.name(), 37, e);
+        Scope<Interval> scope;
+        scope.push("y", {0, 100});
+        Interval in = bounds_of_expr_in_scope(e, scope);
+        internal_assert(in.is_single_point());
+    }
+
     std::cout << "Bounds test passed" << std::endl;
 }
 
