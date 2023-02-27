@@ -7,6 +7,8 @@
 #include "HalideRuntimeOpenCL.h"
 #elif defined(TEST_CUDA)
 #include "HalideRuntimeCuda.h"
+#elif defined(TEST_METAL)
+#include "HalideRuntimeMetal.h"
 #elif defined(TEST_WEBGPU)
 #include "HalideRuntimeWebGPU.h"
 #endif
@@ -47,7 +49,7 @@ using namespace Halide::Runtime;
 #endif
 
 int main(int argc, char **argv) {
-#if defined(TEST_OPENCL) || defined(TEST_CUDA) || defined(TEST_WEBGPU)
+#if defined(TEST_OPENCL) || defined(TEST_CUDA) || defined(TEST_METAL) || defined(TEST_WEBGPU)
     const int W = 32, H = 32;
     Buffer<int, 2> input(W, H);
     for (int y = 0; y < input.height(); y++) {
@@ -57,26 +59,29 @@ int main(int argc, char **argv) {
     }
 
     // Explicitly copy data to the GPU.
-    input.set_host_dirty();
+    const halide_device_interface_t *interface = nullptr;
 #if defined(TEST_OPENCL)
-    input.copy_to_device(halide_opencl_device_interface());
+    interface = halide_opencl_device_interface();
 #elif defined(TEST_CUDA)
-    input.copy_to_device(halide_cuda_device_interface());
+    interface = halide_cuda_device_interface();
+#elif defined(TEST_METAL)
+    interface = halide_metal_device_interface();
 #elif defined(TEST_WEBGPU)
-    input.copy_to_device(halide_webgpu_device_interface());
+    interface = halide_webgpu_device_interface();
 #endif
 
     Buffer<int, 2> output(W, H);
+
+    input.set_host_dirty();
+    input.copy_to_device(interface);
+    output.device_malloc(interface);
 
     // Create halide_buffer_ts without host pointers.
     halide_buffer_t input_no_host = *((halide_buffer_t *)input);
     input_no_host.host = nullptr;
 
     halide_buffer_t output_no_host = *((halide_buffer_t *)output);
-    // We need a fake pointer here to trick Halide into creating the
-    // device buffer (and not do bounds inference instead of running
-    // the pipeline). Halide will not dereference this pointer.
-    output_no_host.host = (uint8_t *)1;
+    output_no_host.host = (uint8_t *)nullptr;
 
     gpu_only(&input_no_host, &output_no_host);
 
