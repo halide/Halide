@@ -273,7 +273,6 @@ private:
         }
     };
 
-    Callable();
     Callable(const std::string &name,
              const JITHandlers &jit_handlers,
              const std::map<std::string, JITExtern> &jit_externs,
@@ -303,6 +302,13 @@ private:
     const std::vector<Argument> &arguments() const;
 
 public:
+    /** Construct a default Callable. This is not usable (trying to call it will fail).
+     * The defined() method will return false. */
+    Callable();
+
+    /** Return true if the Callable is well-defined and usable, false if it is a default-constructed empty Callable. */
+    bool defined() const;
+
     template<typename... Args>
     HALIDE_FUNCTION_ATTRS int
     operator()(JITUserContext *context, Args &&...args) const {
