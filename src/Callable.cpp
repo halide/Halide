@@ -140,7 +140,7 @@ Callable::FailureFn Callable::check_qcci(size_t argc, const QuickCallCheckInfo *
 }
 
 Callable::FailureFn Callable::check_fcci(size_t argc, const FullCallCheckInfo *actual_fcci) const {
-    internal_assert(defined());
+    user_assert(defined()) << "Cannot call() a default-constructed Callable.";
 
     // Lazily create full_call_check_info upon the first call to make_std_function().
     if (contents->full_call_check_info.empty()) {
@@ -203,7 +203,7 @@ Callable::FailureFn Callable::check_fcci(size_t argc, const FullCallCheckInfo *a
 }
 
 int Callable::call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_qcci) const {
-    internal_assert(defined());
+    user_assert(defined()) << "Cannot call() a default-constructed Callable.";
 
     // It's *essential* we call this for safety.
     const auto failure_fn = check_qcci(argc, actual_qcci);
