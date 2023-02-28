@@ -28,6 +28,9 @@ constexpr int kWebGpuStagingBufferSize = 4 * 1024 * 1024;
 // A staging buffer used for host<->device copies.
 WGPUBuffer WEAK staging_buffer = nullptr;
 
+// A flag to signify that the WebGPU device was lost.
+bool device_was_lost = false;
+
 }  // namespace WebGPU
 }  // namespace Internal
 }  // namespace Runtime
@@ -80,6 +83,10 @@ WEAK int halide_webgpu_acquire_context(void *user_context,
             __atomic_clear(&context_lock, __ATOMIC_RELEASE);
             return status;
         }
+    }
+
+    if (device_was_lost) {
+        return halide_error_code_generic_error;
     }
 
     *instance_ret = global_instance;
@@ -234,11 +241,12 @@ void request_device_callback(WGPURequestDeviceStatus status,
                              char const *message,
                              void *user_context) {
     if (status != WGPURequestDeviceStatus_Success) {
-        debug(user_context) << "wgpuAdapterRequestDevice failed ("
+        error(user_context) << "wgpuAdapterRequestDevice failed ("
                             << status << "): " << message << "\n";
         init_error_code = halide_error_code_generic_error;
         return;
     }
+    device_was_lost = false;
     wgpuDeviceSetDeviceLostCallback(device, device_lost_callback, user_context);
     global_device = device;
 }
@@ -456,9 +464,11 @@ WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
         wgpuDeviceTick(context.device);
     }
 
-    return result.status == WGPUQueueWorkDoneStatus_Success ?
-               halide_error_code_success :
-               halide_error_code_device_sync_failed;
+    if (result.status != WGPUQueueWorkDoneStatus_Success) {
+        halide_error(user_context, "wgpuQueueOnSubmittedWorkDone failed");
+        return halide_error_code_device_sync_failed;
+    }
+    return halide_error_code_success;
 }
 
 WEAK int halide_webgpu_device_release(void *user_context) {
@@ -565,7 +575,7 @@ int do_copy_to_host(void *user_context, WgpuContext *context, uint8_t *dst,
             wgpuDeviceTick(context->device);
         }
         if (result.map_status != WGPUBufferMapAsyncStatus_Success) {
-            debug(user_context) << "wgpuBufferMapAsync failed: "
+            error(user_context) << "wgpuBufferMapAsync failed: "
                                 << result.map_status << "\n";
             return halide_error_code_copy_to_host_failed;
         }
@@ -587,7 +597,7 @@ int do_multidimensional_copy(void *user_context, WgpuContext *context,
     if (d > MAX_COPY_DIMS) {
         error(user_context)
             << "Buffer has too many dimensions to copy to/from GPU\n";
-        return -1;
+        return halide_error_code_bad_dimensions;
     } else if (d == 0) {
         int err = 0;
 
