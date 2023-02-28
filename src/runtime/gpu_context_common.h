@@ -116,23 +116,8 @@ class GPUCompilationCache {
         return true;
     }
 
-public:
-    HALIDE_MUST_USE_RESULT bool lookup(ContextT context, void *state_ptr, ModuleStateT &module_state) {
-        ScopedMutexLock lock_guard(&mutex);
-
-        uintptr_t id = (uintptr_t)state_ptr;
-        ModuleStateT *mod_ptr;
-        if (find_internal(context, id, mod_ptr, 0)) {
-            module_state = *mod_ptr;
-            return true;
-        }
-        return false;
-    }
-
     template<typename FreeModuleT>
-    void release_context(void *user_context, bool all, ContextT context, FreeModuleT &f) {
-        ScopedMutexLock lock_guard(&mutex);
-
+    void release_context_already_locked(void *user_context, bool all, ContextT context, FreeModuleT &f) {
         if (count == 0) {
             return;
         }
@@ -152,19 +137,38 @@ public:
         }
     }
 
+public:
+    HALIDE_MUST_USE_RESULT bool lookup(ContextT context, void *state_ptr, ModuleStateT &module_state) {
+        ScopedMutexLock lock_guard(&mutex);
+
+        uintptr_t id = (uintptr_t)state_ptr;
+        ModuleStateT *mod_ptr;
+        if (find_internal(context, id, mod_ptr, 0)) {
+            module_state = *mod_ptr;
+            return true;
+        }
+        return false;
+    }
+
+    template<typename FreeModuleT>
+    void release_context(void *user_context, bool all, ContextT context, FreeModuleT &f) {
+        ScopedMutexLock lock_guard(&mutex);
+
+        release_context_already_locked(user_context, all, context, f);
+    }
+
     template<typename FreeModuleT>
     void delete_context(void *user_context, ContextT context, FreeModuleT &f) {
-        // No: release_context() will acquire the mutex.
-        // ScopedMutexLock lock_guard(&mutex);
+        ScopedMutexLock lock_guard(&mutex);
 
-        release_context(user_context, false, context, f);
+        release_context_already_locked(user_context, false, context, f);
     }
 
     template<typename FreeModuleT>
     void release_all(void *user_context, FreeModuleT &f) {
         ScopedMutexLock lock_guard(&mutex);
 
-        release_context(user_context, true, nullptr, f);
+        release_context_already_locked(user_context, true, nullptr, f);
         // Some items may have been in use, so can't free.
         if (count == 0) {
             free(compilations);
