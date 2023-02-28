@@ -921,6 +921,9 @@ private:
             // Narrowing multiply with shift.
             // {"halide_xtensa_sat_mul_with_shift_i32", i32(wild_i64x * wild_i64x / wild_i64), Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::ExactLog2Op2},
 
+            // Casts from bool.
+            {"halide_xtensa_convert_u1_to_i16", i16(i8(wild_u1x))},
+
             // Narrowing with shifting.
             {"halide_xtensa_narrow_i48_with_shift_i16", i16(i32(wild_i48x) >> wild_i32)},
             {"halide_xtensa_narrow_i48_with_shift_i16", i16(i32(wild_i48x) / wild_i32), Pattern::ExactLog2Op1},
@@ -1158,9 +1161,7 @@ private:
             {"halide_xtensa_sat_narrow_i8", i8_sat(wild_i16x)},
             {"halide_xtensa_sat_narrow_u8", u8_sat(wild_i16x)},
             {"halide_xtensa_sat_narrow_i16", i16_sat(wild_i32x)},
-            // TODO(vksnk): looks like there is no such instruction for unsigned types, but need to
-            // double-check.
-            // {"halide_xtensa_sat_narrow_u16", u16_sat(wild_i32x)},
+            {"halide_xtensa_sat_narrow_u16", u16_sat(wild_u32x)},
 
             {"halide_xtensa_rounding_shift_right_i8", rounding_shift_right(wild_i8x, bc(wild_u8))},
             // {"halide_xtensa_rounding_shift_right_u8", rounding_shift_right(wild_u8x, bc(wild_u8))},

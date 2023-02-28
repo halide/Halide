@@ -1092,6 +1092,10 @@ HALIDE_ALWAYS_INLINE native_mask_i8 halide_xtensa_pad_to_native<native_mask_i32,
     return IVP_JOINBN(IVP_JOINBN_2(a, a), IVP_JOINBN_2(a, a));
 }
 
+HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_convert_u1_to_i16(const native_mask_i16& a) {
+    return IVP_MOVNX16T(native_vector_i16(1), native_vector_i16(0), a);
+}
+
 template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x4_t load<int8x4_t, int8_t, 4>(const void *base, int32_t offset) {
     return *((const int8x4_t*)((const int8_t*)base + offset));
@@ -2609,6 +2613,11 @@ HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_sat_narrow_i16(const native
   return IVP_MOVNX16_FROMN_2X32(IVP_SELN_2X32I(a1, a0, IVP_SELI_16B_DEINTERLEAVE_1_ODD));
 }
 
+HALIDE_ALWAYS_INLINE native_vector_u16 halide_xtensa_sat_narrow_u16(const native_vector_u32_x2& a) {
+  xb_vecNx48 wide = IVP_CVT48UNX32(a.native_vector[1], a.native_vector[0]);
+  return IVP_PACKVRNX48(wide, 0);
+}
+
 HALIDE_ALWAYS_INLINE native_vector_i8 halide_xtensa_sat_narrow_with_rounding_shift_i8(const native_vector_i16_x2& a, uint32_t shift) {
   xb_vec2Nx24 wide = IVP_CVT24S2NX16(a.native_vector[1], a.native_vector[0]);
   return IVP_PACKVR2NX24(wide, shift);
@@ -2645,10 +2654,6 @@ HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_sat_narrow_with_signed_roun
             native_vector_i32_x2(native_vector_i32_x2::from_native_vector,
                         IVP_SLAN_2X32(a.native_vector[0], -shift),
                         IVP_SLAN_2X32(a.native_vector[1], -shift)));
-}
-
-HALIDE_ALWAYS_INLINE native_vector_i32 halide_xtensa_sat_narrow_with_rounding_shift_i32(const native_vector_i64& a, uint32_t shift) {
-  return IVP_PACKVRN_2X64W(a, shift);
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_rounding_mul_shift_right_i16(const native_vector_i16& a, const native_vector_i16& b, uint16_t shift) {
@@ -3161,6 +3166,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         {"halide_xtensa_narrow_i48_with_shift_i16", "IVP_PACKVRNRNX48"},
         {"halide_xtensa_narrow_i48_with_rounding_shift_i16", "IVP_PACKVRNX48"},
         {"halide_xtensa_sat_narrow_i48_with_shift_i16", "IVP_PACKVRNX48"},
+        {"halide_xtensa_sat_narrow_with_rounding_shift_i32", "IVP_PACKVRN_2X64W"},
         {"halide_xtensa_full_reduce_add_i8", "IVP_RADD2NX8"},
         {"halide_xtensa_full_reduce_add_i16", "IVP_RADDNX16"},
         {"halide_xtensa_full_reduce_add_i32", "IVP_RADDN_2X32"},
