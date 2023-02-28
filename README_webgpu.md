@@ -25,7 +25,7 @@ device codegen may be required before it becomes profitable to use.
 
 ## Running with WebAssembly via Emscripten: `HL_TARGET=wasm-32-wasmrt-webgpu`
 
-> _Tested with top-of-tree Emscripten as of 2022-11-18, against Chrome v110._
+> _Tested with top-of-tree Emscripten as of 2023-02-23, against Chrome v113._
 
 Halide can generate WebGPU code that can be integrated with WASM code using
 Emscripten.
