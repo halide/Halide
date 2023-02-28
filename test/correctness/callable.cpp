@@ -45,6 +45,15 @@ int main(int argc, char **argv) {
     const Target t = get_jit_target_from_environment();
 
     {
+        // Check that we can default-construct a Callable.
+        Callable c;
+        assert(!c.defined());
+
+        // This will assert-fail.
+        // c(0,1,2);
+    }
+
+    {
         Param<int32_t> p_int(42);
         Param<float> p_float(1.0f);
         ImageParam p_img(UInt(8), 2);
