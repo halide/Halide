@@ -109,6 +109,18 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     }
 }
 
+namespace {
+// The maximum total number of DMA channels allowed.
+const int kMaxNumberOfDmaChannels = 4;
+// We want to use a separate channel(s) for the output copies, so it can be
+// overlapped with input copies and the rest of the processing.
+const int kNumberOfChannelsForOutputs = 1;
+// Start channel indexing for input copies from this channel.
+const int kOffsetOfChannelForInputs = kNumberOfChannelsForOutputs;
+// Use remaining channels for input copies.
+const int kNumberOfChannelsForInputs = kMaxNumberOfDmaChannels - kNumberOfChannelsForOutputs;
+}  // namespace
+
 // Replace indirect loads with dma_transfer intrinsics where
 // possible.
 class InjectDmaTransferIntoProducer : public IRMutator {
@@ -269,7 +281,9 @@ class InjectDmaTransferIntoProducer : public IRMutator {
                  << value_base << "\n>>>" << v_inner.extent << "\n";
 
         Expr copy_call = Call::make(Int(32), "halide_xtensa_copy_2d",
-                                    {index,
+                                    {is_output_dma ?
+                                         (index % kNumberOfChannelsForOutputs) :
+                                         ((index % kNumberOfChannelsForInputs) + kOffsetOfChannelForInputs),
                                      Variable::make(type_of<void *>(), op->name), store_base, store_stride,
                                      Variable::make(type_of<void *>(), maybe_load->name), value_base, value_stride,
                                      dma_extents[0], dma_extents[1], op->value.type().bytes()},
@@ -321,14 +335,14 @@ class InjectDmaTransfer : public IRMutator {
                         // Add a wait in the *end* of the producer node for the
                         // case when there any outstanding DMA transactions.
                         Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy",
-                                                      {function_name_to_index[op->name]}, Call::Intrinsic);
+                                                      {(function_name_to_index[op->name] % kNumberOfChannelsForInputs) + kOffsetOfChannelForInputs}, Call::Intrinsic);
                         Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
                         body = Block::make(body, wait_is_done);
                     } else {
                         // For the output nodes collect all of the corresponding
                         // producers, so we can add required waits in a separate
                         // pass later.
-                        producers_to_wait[injector.source_name] = function_name_to_index[op->name];
+                        producers_to_wait[injector.source_name] = function_name_to_index[op->name] % kNumberOfChannelsForOutputs;
                     }
                     return ProducerConsumer::make_produce(op->name, body);
                 }
