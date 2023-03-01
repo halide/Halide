@@ -5,6 +5,15 @@
 #include <cmath>
 #include <list>
 
+#define WEAK __attribute__((weak))
+
+// Weak symbol functions for Op profiling.
+extern "C" WEAK void HannkOpInvokeStart() {
+}
+
+extern "C" WEAK void HannkOpInvokeEnd(const char *name, const int node_idx) {
+}
+
 namespace hannk {
 
 Op::Op(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs)
@@ -84,7 +93,9 @@ bool OpGroup::prepare() {
 
 void OpGroup::execute() {
     for (int i = 0; i < op_count(); i++) {
+        HannkOpInvokeStart();
         op(i)->execute();
+        HannkOpInvokeEnd(op(i)->name().c_str(), i);
     }
 }
 
