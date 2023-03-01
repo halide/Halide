@@ -129,7 +129,7 @@ extern "C" int halide_webgpu_acquire_context(void *user_context,
                                              WGPUInstance *instance_ret,
                                              WGPUAdapter *adapter_ret,
                                              WGPUDevice *device_ret,
-                                             WGPUBuffer* staging_buffer_ret,
+                                             WGPUBuffer *staging_buffer_ret,
                                              bool create) {
     *instance_ret = webgpu_context.instance;
     *adapter_ret = webgpu_context.adapter;
