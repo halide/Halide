@@ -23,10 +23,8 @@ WEAK WGPUDevice global_device = nullptr;
 // Lock to synchronize access to the global WebGPU context.
 volatile ScopedSpinLock::AtomicFlag WEAK context_lock = 0;
 
-// Size of the staging buffer used for host<->device copies.
-constexpr int kWebGpuStagingBufferSize = 4 * 1024 * 1024;
 // A staging buffer used for host<->device copies.
-WGPUBuffer WEAK staging_buffer = nullptr;
+WEAK WGPUBuffer global_staging_buffer = nullptr;
 
 // A flag to signify that the WebGPU device was lost.
 bool device_was_lost = false;
@@ -72,6 +70,7 @@ WEAK int halide_webgpu_acquire_context(void *user_context,
                                        WGPUInstance *instance_ret,
                                        WGPUAdapter *adapter_ret,
                                        WGPUDevice *device_ret,
+                                       WGPUBuffer *staging_buffer_ret,
                                        bool create = true) {
     halide_abort_if_false(user_context, &context_lock != nullptr);
     while (__atomic_test_and_set(&context_lock, __ATOMIC_ACQUIRE)) {
@@ -92,6 +91,7 @@ WEAK int halide_webgpu_acquire_context(void *user_context,
     *instance_ret = global_instance;
     *adapter_ret = global_adapter;
     *device_ret = global_device;
+    *staging_buffer_ret = global_staging_buffer;
 
     return halide_error_code_success;
 }
@@ -117,12 +117,16 @@ public:
     WGPUAdapter adapter = nullptr;
     WGPUDevice device = nullptr;
     WGPUQueue queue = nullptr;
+
+    // A staging buffer used for host<->device copies.
+    WGPUBuffer staging_buffer = nullptr;
+
     int error_code = 0;
 
     ALWAYS_INLINE WgpuContext(void *user_context)
         : user_context(user_context) {
         error_code = halide_webgpu_acquire_context(
-            user_context, &instance, &adapter, &device);
+            user_context, &instance, &adapter, &device, &staging_buffer);
         if (error_code == halide_error_code_success) {
             queue = wgpuDeviceGetQueue(device);
         }
@@ -157,7 +161,7 @@ public:
 
     // Wait for all error callbacks in this scope to fire.
     // Returns the error code (or success).
-    int wait() {
+    halide_error_code_t wait() {
         if (callbacks_remaining == 0) {
             error(user_context) << "no outstanding error scopes\n";
             return halide_error_code_internal_error;
@@ -180,7 +184,7 @@ private:
     WGPUDevice device;
 
     // The error code reported by the callback functions.
-    volatile int error_code;
+    volatile halide_error_code_t error_code;
 
     // Used to track outstanding error callbacks.
     volatile int callbacks_remaining = 0;
@@ -249,6 +253,24 @@ void request_device_callback(WGPURequestDeviceStatus status,
     device_was_lost = false;
     wgpuDeviceSetDeviceLostCallback(device, device_lost_callback, user_context);
     global_device = device;
+
+    // Create a staging buffer for transfers.
+    constexpr int kStagingBufferSize = 4 * 1024 * 1024;
+    WGPUBufferDescriptor desc{};
+    desc.nextInChain = nullptr;
+    desc.label = nullptr;
+    desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
+    desc.size = kStagingBufferSize;
+    desc.mappedAtCreation = false;
+
+    ErrorScope error_scope(user_context, global_device);
+    global_staging_buffer = wgpuDeviceCreateBuffer(device, &desc);
+
+    halide_error_code_t error_code = error_scope.wait();
+    if (error_code != halide_error_code_success) {
+        global_staging_buffer = nullptr;
+        init_error_code = error_code;
+    }
 }
 
 void request_adapter_callback(WGPURequestAdapterStatus status,
@@ -375,26 +397,6 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
         return error_code;
     }
 
-    if (staging_buffer == nullptr) {
-        ErrorScope error_scope(user_context, context.device);
-
-        // Create a staging buffer for transfers if we haven't already.
-        WGPUBufferDescriptor desc{};
-        desc.nextInChain = nullptr;
-        desc.label = nullptr;
-        desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
-        desc.size = kWebGpuStagingBufferSize;
-        desc.mappedAtCreation = false;
-
-        staging_buffer = wgpuDeviceCreateBuffer(context.device, &desc);
-
-        int error_code = error_scope.wait();
-        if (error_code != halide_error_code_success) {
-            staging_buffer = nullptr;
-            return error_code;
-        }
-    }
-
     buf->device = (uint64_t)device_handle;
     buf->device_interface = &webgpu_device_interface;
     buf->device_interface->impl->use_module();
@@ -482,8 +484,9 @@ WEAK int halide_webgpu_device_release(void *user_context) {
     WGPUInstance instance;
     WGPUAdapter adapter;
     WGPUDevice device;
+    WGPUBuffer staging_buffer;
     err = halide_webgpu_acquire_context(user_context,
-                                        &instance, &adapter, &device, false);
+                                        &instance, &adapter, &device, &staging_buffer, false);
     if (err != halide_error_code_success) {
         return err;
     }
@@ -492,13 +495,13 @@ WEAK int halide_webgpu_device_release(void *user_context) {
         shader_cache.delete_context(user_context, device,
                                     wgpuShaderModuleRelease);
 
-        if (staging_buffer) {
-            wgpuBufferRelease(staging_buffer);
-            staging_buffer = nullptr;
-        }
-
-        // Release the device/adapter/instance, if we created them.
+        // Release the device/adapter/instance/staging_buffer, if we created them.
         if (device == global_device) {
+            if (staging_buffer) {
+                wgpuBufferRelease(staging_buffer);
+                global_staging_buffer = nullptr;
+            }
+
             wgpuDeviceSetDeviceLostCallback(device, nullptr, nullptr);
             wgpuDeviceRelease(device);
             global_device = nullptr;
@@ -538,9 +541,9 @@ namespace {
 int do_copy_to_host(void *user_context, WgpuContext *context, uint8_t *dst,
                     WGPUBuffer src, int64_t src_offset, int64_t size) {
     // Copy chunks via the staging buffer.
-    for (int64_t offset = 0; offset < size;
-         offset += kWebGpuStagingBufferSize) {
-        int64_t num_bytes = kWebGpuStagingBufferSize;
+    int64_t staging_buffer_size = wgpuBufferGetSize(context->staging_buffer);
+    for (int64_t offset = 0; offset < size; offset += staging_buffer_size) {
+        int64_t num_bytes = staging_buffer_size;
         if (offset + num_bytes > size) {
             num_bytes = size - offset;
         }
@@ -549,7 +552,8 @@ int do_copy_to_host(void *user_context, WgpuContext *context, uint8_t *dst,
         WGPUCommandEncoder encoder =
             wgpuDeviceCreateCommandEncoder(context->device, nullptr);
         wgpuCommandEncoderCopyBufferToBuffer(encoder, src, src_offset + offset,
-                                             staging_buffer, 0, num_bytes);
+                                             context->staging_buffer,
+                                             0, num_bytes);
         WGPUCommandBuffer command_buffer =
             wgpuCommandEncoderFinish(encoder, nullptr);
         wgpuQueueSubmit(context->queue, 1, &command_buffer);
@@ -563,7 +567,7 @@ int do_copy_to_host(void *user_context, WgpuContext *context, uint8_t *dst,
         // Map the staging buffer for reading.
         __atomic_test_and_set(&result.map_complete, __ATOMIC_RELAXED);
         wgpuBufferMapAsync(
-            staging_buffer, WGPUMapMode_Read, 0, num_bytes,
+            context->staging_buffer, WGPUMapMode_Read, 0, num_bytes,
             [](WGPUBufferMapAsyncStatus status, void *userdata) {
                 BufferMapResult *result = (BufferMapResult *)userdata;
                 result->map_status = status;
@@ -581,10 +585,10 @@ int do_copy_to_host(void *user_context, WgpuContext *context, uint8_t *dst,
         }
 
         // Copy the data from the mapped staging buffer to the host allocation.
-        const void *src = wgpuBufferGetConstMappedRange(staging_buffer, 0,
-                                                        num_bytes);
+        const void *src = wgpuBufferGetConstMappedRange(context->staging_buffer,
+                                                        0, num_bytes);
         memcpy(dst + offset, src, num_bytes);
-        wgpuBufferUnmap(staging_buffer);
+        wgpuBufferUnmap(context->staging_buffer);
     }
 
     return halide_error_code_success;

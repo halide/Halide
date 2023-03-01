@@ -173,11 +173,12 @@ void emscripten_sleep(unsigned int ms);
 #endif
 }
 
-inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapter_out, WGPUDevice *device_out) {
+inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapter_out, WGPUDevice *device_out, WGPUBuffer *staging_buffer_out) {
     struct Results {
         WGPUInstance instance = nullptr;
         WGPUAdapter adapter = nullptr;
         WGPUDevice device = nullptr;
+        WGPUBuffer staging_buffer = nullptr;
         bool success = true;
     } results;
 
@@ -246,6 +247,20 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
                 abort();
             };
             wgpuDeviceSetDeviceLostCallback(device, device_lost_callback, userdata);
+
+            // Create a staging buffer for transfers.
+            constexpr int kStagingBufferSize = 4 * 1024 * 1024;
+            WGPUBufferDescriptor desc{};
+            desc.nextInChain = nullptr;
+            desc.label = nullptr;
+            desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
+            desc.size = kStagingBufferSize;
+            desc.mappedAtCreation = false;
+            results->staging_buffer = wgpuDeviceCreateBuffer(device, &desc);
+            if (results->staging_buffer == nullptr) {
+                results->success = false;
+                return;
+            }
         };
 
         wgpuAdapterRequestDevice(adapter, &desc, request_device_callback, userdata);
@@ -267,11 +282,13 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
     *instance_out = results.instance;
     *adapter_out = results.adapter;
     *device_out = results.device;
+    *staging_buffer_out = results.staging_buffer;
     return results.success;
 }
 
-inline void destroy_webgpu_context(WGPUInstance instance, WGPUAdapter adapter, WGPUDevice device) {
+inline void destroy_webgpu_context(WGPUInstance instance, WGPUAdapter adapter, WGPUDevice device, WGPUBuffer staging_buffer) {
     wgpuDeviceSetDeviceLostCallback(device, nullptr, nullptr);
+    wgpuBufferRelease(staging_buffer);
     wgpuDeviceRelease(device);
     wgpuAdapterRelease(adapter);
 
