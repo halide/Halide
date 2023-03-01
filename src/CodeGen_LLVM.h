@@ -14,7 +14,8 @@ class Function;
 class FunctionType;
 class IRBuilderDefaultInserter;
 class ConstantFolder;
-class IRBuilderBase;
+template<typename, typename>
+class IRBuilder;
 class LLVMContext;
 class Type;
 class StructType;
@@ -163,7 +164,7 @@ protected:
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
-    std::unique_ptr<llvm::IRBuilderBase> builder;
+    std::unique_ptr<llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>> builder;
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
     llvm::MDNode *default_fp_math_md;

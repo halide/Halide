@@ -47,7 +47,11 @@ void destroy<CallableContents>(const CallableContents *p) {
 }  // namespace Internal
 
 Callable::Callable()
-    : contents(new CallableContents) {
+    : contents(nullptr) {
+}
+
+bool Callable::defined() const {
+    return contents.defined();
 }
 
 Callable::Callable(const std::string &name,
@@ -136,6 +140,8 @@ Callable::FailureFn Callable::check_qcci(size_t argc, const QuickCallCheckInfo *
 }
 
 Callable::FailureFn Callable::check_fcci(size_t argc, const FullCallCheckInfo *actual_fcci) const {
+    user_assert(defined()) << "Cannot call() a default-constructed Callable.";
+
     // Lazily create full_call_check_info upon the first call to make_std_function().
     if (contents->full_call_check_info.empty()) {
         contents->full_call_check_info.reserve(contents->jit_cache.arguments.size());
@@ -197,6 +203,8 @@ Callable::FailureFn Callable::check_fcci(size_t argc, const FullCallCheckInfo *a
 }
 
 int Callable::call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_qcci) const {
+    user_assert(defined()) << "Cannot call() a default-constructed Callable.";
+
     // It's *essential* we call this for safety.
     const auto failure_fn = check_qcci(argc, actual_qcci);
     if (failure_fn) {
