@@ -483,13 +483,17 @@ _add_halide_aot_tests(metadata_tester
 
 # msan_aottest.cpp
 # msan_generator.cpp
-_add_halide_libraries(msan
-                      FEATURES msan
-                      # Broken for C++ backend (https://github.com/halide/Halide/issues/7273)
-                      OMIT_C_BACKEND)
-_add_halide_aot_tests(msan
-                      OMIT_C_BACKEND
-                      GROUPS multithreaded)
+if ("${Halide_TARGET}" MATCHES "webgpu")
+    message(WARNING "Test generator_aot_msan is not supported under WebGPU")
+else()
+    _add_halide_libraries(msan
+                          FEATURES msan
+                          # Broken for C++ backend (https://github.com/halide/Halide/issues/7273)
+                          OMIT_C_BACKEND)
+    _add_halide_aot_tests(msan
+                          OMIT_C_BACKEND
+                          GROUPS multithreaded)
+endif()
 
 # (Doesn't build/link properly on windows / under wasm)
 if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows" AND NOT ${_USING_WASM})
