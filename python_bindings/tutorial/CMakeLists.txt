@@ -1,3 +1,8 @@
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "webgpu")
+    message(WARNING "Python tutorials are not supported with WebGPU.")
+    return()
+endif ()
+
 set(tests
     lesson_01_basics.py
     lesson_02_input_image.py
