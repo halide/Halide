@@ -253,24 +253,6 @@ void request_device_callback(WGPURequestDeviceStatus status,
     device_was_lost = false;
     wgpuDeviceSetDeviceLostCallback(device, device_lost_callback, user_context);
     global_device = device;
-
-    // Create a staging buffer for transfers.
-    constexpr int kStagingBufferSize = 4 * 1024 * 1024;
-    WGPUBufferDescriptor desc{};
-    desc.nextInChain = nullptr;
-    desc.label = nullptr;
-    desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
-    desc.size = kStagingBufferSize;
-    desc.mappedAtCreation = false;
-
-    ErrorScope error_scope(user_context, global_device);
-    global_staging_buffer = wgpuDeviceCreateBuffer(device, &desc);
-
-    halide_error_code_t error_code = error_scope.wait();
-    if (error_code != halide_error_code_success) {
-        global_staging_buffer = nullptr;
-        init_error_code = error_code;
-    }
 }
 
 void request_adapter_callback(WGPURequestAdapterStatus status,
@@ -348,6 +330,28 @@ WEAK int create_webgpu_context(void *user_context) {
 #else
         usleep(1000);
 #endif
+    }
+
+    if (init_error_code != halide_error_code_success) {
+        return init_error_code;
+    }
+
+    // Create a staging buffer for transfers.
+    constexpr int kStagingBufferSize = 4 * 1024 * 1024;
+    WGPUBufferDescriptor desc{};
+    desc.nextInChain = nullptr;
+    desc.label = nullptr;
+    desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
+    desc.size = kStagingBufferSize;
+    desc.mappedAtCreation = false;
+
+    ErrorScope error_scope(user_context, global_device);
+    global_staging_buffer = wgpuDeviceCreateBuffer(global_device, &desc);
+
+    halide_error_code_t error_code = error_scope.wait();
+    if (error_code != halide_error_code_success) {
+        global_staging_buffer = nullptr;
+        init_error_code = error_code;
     }
 
     return init_error_code;
