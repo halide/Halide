@@ -5,6 +5,8 @@
 #include <cmath>
 #include <list>
 
+#if HANNK_PROFILER
+
 #define WEAK __attribute__((weak))
 
 // Weak symbol functions for Op profiling.
@@ -13,6 +15,8 @@ extern "C" WEAK void HannkOpInvokeStart() {
 
 extern "C" WEAK void HannkOpInvokeEnd(const char *name, const int node_idx) {
 }
+
+#endif
 
 namespace hannk {
 
@@ -93,9 +97,13 @@ bool OpGroup::prepare() {
 
 void OpGroup::execute() {
     for (int i = 0; i < op_count(); i++) {
+#if HANNK_PROFILER
         HannkOpInvokeStart();
+#endif
         op(i)->execute();
+#if HANNK_PROFILER
         HannkOpInvokeEnd(op(i)->name().c_str(), i);
+#endif
     }
 }
 
