@@ -51,7 +51,7 @@ class CountGPUBlocksThreads : public IRVisitor {
         nt += dt;
 
         // Update the maximum counter values seen.
-        Nblocks = std::max(nb, nblocks);
+        nblocks = std::max(nb, nblocks);
         nthreads = std::max(nt, nthreads);
         nlanes = std::max(nl, nlanes);
 
