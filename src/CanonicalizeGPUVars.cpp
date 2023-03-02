@@ -31,6 +31,10 @@ string get_block_name(int index) {
 class CountGPUBlocksThreads : public IRVisitor {
     using IRVisitor::visit;
 
+    // Counters that track the number of blocks, threads, and lanes loops that
+    // we're inside of, respectively. Lanes loops also count as threads loops.
+    int nb = 0, nt = 0, nl = 0;
+
     void visit(const For *op) override {
         // Figure out how much to increment each counter by based on the loop
         // type.
@@ -46,8 +50,8 @@ class CountGPUBlocksThreads : public IRVisitor {
         nl += dl;
         nt += dt;
 
-        // Update the high water mark.
-        nblocks = std::max(nb, nblocks);
+        // Update the maximum counter values seen.
+        Nblocks = std::max(nb, nblocks);
         nthreads = std::max(nt, nthreads);
         nlanes = std::max(nl, nlanes);
 
@@ -60,11 +64,11 @@ class CountGPUBlocksThreads : public IRVisitor {
         nt -= dt;
     }
 
-    int nb = 0, nt = 0, nl = 0;
-
 public:
+    // The maximum values hit by the counters above, which tells us the nesting
+    // depth of each type of loop within a Stmt.
     int nblocks = 0;
-    int nthreads = 0;  // Includes lanes loops
+    int nthreads = 0;
     int nlanes = 0;
 };
 
