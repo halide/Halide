@@ -86,7 +86,7 @@ halide_error_code_t report_error(void *user_context, Args &&...args) {
 }
 
 #define HALIDE_REPORT_ERROR(ID)                                                                             \
-    template<typename... Args> \
+    template<typename... Args>                                                                              \
     halide_error_code_t report_error_##ID(void *user_context, Args &&...args) {                             \
         return report_error_with_code(user_context, halide_error_code_##ID, static_cast<Args &&>(args)...); \
     }

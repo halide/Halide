@@ -85,7 +85,7 @@ int call_device_interface(const halide_device_interface_t *device_interface, Fn 
     return fn(static_cast<Args &&>(args)...);
 }
 
-halide_error_code_t debug_log_and_validate_buf(void *user_context,  const halide_buffer_t *buf_arg, const char *function = __builtin_FUNCTION()) {
+halide_error_code_t debug_log_and_validate_buf(void *user_context, const halide_buffer_t *buf_arg, const char *function = __builtin_FUNCTION()) {
     if (buf_arg == nullptr) {
         return report_error_buffer_is_null(user_context, function);
     }
