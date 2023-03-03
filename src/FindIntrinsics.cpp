@@ -897,6 +897,127 @@ protected:
         }
         return op;
     }
+
+    // Narrow and comparisons between ramps and broadcasts to produce masks that
+    // match the bit-width of the type being selected between or loaded or
+    // stored. We do this late in lowering in this pass instead of in the
+    // simplifier because it messes up the reasoning done by loop partitioning.
+    //
+    // For example if we're selecting between uint8s, and we have the condition:
+    // ramp(x, 1, 16) < broadcast(y)
+    // where x is an Int(32), we can rewrite this to:
+    // ramp(0, 1, 16) < broadcast(y - x)
+    // which can be safely narrowed to:
+    // cast<int8_t>(ramp(0, 1, 16)) < saturating_cast<int8_t>(broadcast(y - x))
+    Expr narrow_predicate(const Expr &p, Type t) {
+        if (t.bits() >= 32) {
+            return p;
+        }
+
+        int lanes = t.lanes();
+
+        if (const Or *op = p.as<Or>()) {
+            return narrow_predicate(op->a, t) || narrow_predicate(op->b, t);
+        } else if (const And *op = p.as<And>()) {
+            return narrow_predicate(op->a, t) && narrow_predicate(op->b, t);
+        } else if (const Not *op = p.as<Not>()) {
+            return !narrow_predicate(op->a, t);
+        }
+
+        const LT *lt = p.as<LT>();
+        const LE *le = p.as<LE>();
+        // Check it's a comparison
+        if (!(le || lt)) {
+            return p;
+        }
+        // Check it's an int32 comparison
+        if ((lt ? lt->a.type() : le->a.type()) != Int(32, lanes)) {
+            return p;
+        }
+
+        auto rewrite = IRMatcher::rewriter(p, Int(32, lanes));
+
+        // Construct predicates which state the ramp can't hit the extreme
+        // values of an int8 or an int16. This is an overconservative condition,
+        // but it's hard to imagine cases where a more precise condition would
+        // be necessary.
+        auto min_ramp_lane = min(c0, c0 * (lanes - 1));
+        auto max_ramp_lane = max(c0, c0 * (lanes - 1));
+        auto ramp_fits_in_i8 = min_ramp_lane > -128 && max_ramp_lane < 127;
+        auto ramp_fits_in_i16 = min_ramp_lane > -32768 && max_ramp_lane < 32767;
+
+        if ((t.bits() <= 8 &&
+             // Try to narrow to 8-bit comparisons
+             (rewrite(broadcast(x, lanes) < ramp(y, c0, lanes),
+                      broadcast(saturating_cast(Int(8), x - y), lanes) < cast(Int(8, lanes), ramp(0, c0, lanes)),
+                      ramp_fits_in_i8) ||
+
+              rewrite(ramp(y, c0, lanes) < broadcast(x, lanes),
+                      cast(Int(8, lanes), ramp(0, c0, lanes)) < broadcast(saturating_cast(Int(8), x - y), lanes),
+                      ramp_fits_in_i8) ||
+
+              rewrite(broadcast(x, lanes) <= ramp(y, c0, lanes),
+                      broadcast(saturating_cast(Int(8), x - y), lanes) <= cast(Int(8, lanes), ramp(0, c0, lanes)),
+                      ramp_fits_in_i8) ||
+
+              rewrite(ramp(y, c0, lanes) <= broadcast(x, lanes),
+                      cast(Int(8, lanes), ramp(0, c0, lanes)) <= broadcast(saturating_cast(Int(8), x - y), lanes),
+                      ramp_fits_in_i8))) ||
+
+            // Try to narrow to 16-bit comparisons
+            rewrite(broadcast(x, lanes) < ramp(y, c0, lanes),
+                    broadcast(saturating_cast(Int(16), x - y), lanes) < cast(Int(16, lanes), ramp(0, c0, lanes)),
+                    ramp_fits_in_i16) ||
+
+            rewrite(ramp(y, c0, lanes) < broadcast(x, lanes),
+                    cast(Int(16, lanes), ramp(0, c0, lanes)) < broadcast(saturating_cast(Int(16), x - y), lanes),
+                    ramp_fits_in_i16) ||
+
+            rewrite(broadcast(x, lanes) <= ramp(y, c0, lanes),
+                    broadcast(saturating_cast(Int(16), x - y), lanes) <= cast(Int(16, lanes), ramp(0, c0, lanes)),
+                    ramp_fits_in_i16) ||
+
+            rewrite(ramp(y, c0, lanes) <= broadcast(x, lanes),
+                    cast(Int(16, lanes), ramp(0, c0, lanes)) <= broadcast(saturating_cast(Int(16), x - y), lanes),
+                    ramp_fits_in_i16)) {
+            return rewrite.result;
+        } else {
+            return p;
+        }
+    }
+
+    Expr visit(const Select *op) override {
+        Expr condition = mutate(op->condition);
+        Expr true_value = mutate(op->true_value);
+        Expr false_value = mutate(op->false_value);
+        condition = narrow_predicate(condition, op->type);
+        return Select::make(condition, true_value, false_value);
+    }
+
+    Expr visit(const Load *op) override {
+        Expr predicate = mutate(op->predicate);
+        Expr index = mutate(op->index);
+        predicate = narrow_predicate(predicate, op->type);
+        if (predicate.same_as(op->predicate) && index.same_as(op->index)) {
+            return op;
+        } else {
+            return Load::make(op->type, op->name, std::move(index),
+                              op->image, op->param, std::move(predicate),
+                              op->alignment);
+        }
+    }
+
+    Stmt visit(const Store *op) override {
+        Expr predicate = mutate(op->predicate);
+        Expr value = mutate(op->value);
+        Expr index = mutate(op->index);
+        predicate = narrow_predicate(predicate, value.type());
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
+            return op;
+        } else {
+            return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment);
+        }
+    }
 };
 
 // Substitute in let values than have an output vector
