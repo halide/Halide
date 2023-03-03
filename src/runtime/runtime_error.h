@@ -67,14 +67,12 @@ halide_error_code_t report_error_with_code(void *user_context,
         StringStreamPrinter<> str(user_context);
         str << "HalideRuntimeError=" << (int)error << ": ";
         (str << ... << static_cast<Args &&>(args));
-        str.add_eol();
         halide_error(user_context, str.str());
     } else {
         // No extra args: really, 64 bytes should be enough here, but let's go 128
         // in case someone is sloppy when adding stuff
         StackStringStreamPrinter<128> str(user_context);
         str << "HalideRuntimeError=" << (int)error;
-        str.add_eol();
         halide_error(user_context, str.str());
     }
     return error;
