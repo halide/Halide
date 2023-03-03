@@ -232,7 +232,7 @@ WEAK int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
         return report_error_incompatible_device_interface(user_context, "halide_device_malloc doesn't support switching interfaces");
     }
 
-    if (auto result = call_device_interface(device_interface, device_interface->impl->device_free, user_context, buf); result != halide_error_code_success) {
+    if (auto result = call_device_interface(device_interface, device_interface->impl->device_malloc, user_context, buf); result != halide_error_code_success) {
         return result;
     }
     return halide_error_code_success;
