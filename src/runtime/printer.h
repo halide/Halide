@@ -131,6 +131,7 @@ public:
     void add_eol() {
         if (dst < end - 1 && *dst != '\n') {
             *dst++ = '\n';
+            *dst = 0;
         }
     }
 
