@@ -945,40 +945,42 @@ protected:
         auto max_ramp_lane = max(c0, c0 * (lanes - 1));
         auto ramp_fits_in_i8 = min_ramp_lane > -128 && max_ramp_lane < 127;
         auto ramp_fits_in_i16 = min_ramp_lane > -32768 && max_ramp_lane < 32767;
+        auto saturated_diff_i8 = saturating_cast(Int(8), saturating_sub(x, y));
+        auto saturated_diff_i16 = saturating_cast(Int(16), saturating_sub(x, y));
 
         if ((t.bits() <= 8 &&
              // Try to narrow to 8-bit comparisons
              (rewrite(broadcast(x, lanes) < ramp(y, c0, lanes),
-                      broadcast(saturating_cast(Int(8), x - y), lanes) < cast(Int(8, lanes), ramp(0, c0, lanes)),
+                      broadcast(saturated_diff_i8, lanes) < cast(Int(8, lanes), ramp(0, c0, lanes)),
                       ramp_fits_in_i8) ||
 
               rewrite(ramp(y, c0, lanes) < broadcast(x, lanes),
-                      cast(Int(8, lanes), ramp(0, c0, lanes)) < broadcast(saturating_cast(Int(8), x - y), lanes),
+                      cast(Int(8, lanes), ramp(0, c0, lanes)) < broadcast(saturated_diff_i8, lanes),
                       ramp_fits_in_i8) ||
 
               rewrite(broadcast(x, lanes) <= ramp(y, c0, lanes),
-                      broadcast(saturating_cast(Int(8), x - y), lanes) <= cast(Int(8, lanes), ramp(0, c0, lanes)),
+                      broadcast(saturated_diff_i8, lanes) <= cast(Int(8, lanes), ramp(0, c0, lanes)),
                       ramp_fits_in_i8) ||
 
               rewrite(ramp(y, c0, lanes) <= broadcast(x, lanes),
-                      cast(Int(8, lanes), ramp(0, c0, lanes)) <= broadcast(saturating_cast(Int(8), x - y), lanes),
+                      cast(Int(8, lanes), ramp(0, c0, lanes)) <= broadcast(saturated_diff_i8, lanes),
                       ramp_fits_in_i8))) ||
 
             // Try to narrow to 16-bit comparisons
             rewrite(broadcast(x, lanes) < ramp(y, c0, lanes),
-                    broadcast(saturating_cast(Int(16), x - y), lanes) < cast(Int(16, lanes), ramp(0, c0, lanes)),
+                    broadcast(saturated_diff_i16, lanes) < cast(Int(16, lanes), ramp(0, c0, lanes)),
                     ramp_fits_in_i16) ||
 
             rewrite(ramp(y, c0, lanes) < broadcast(x, lanes),
-                    cast(Int(16, lanes), ramp(0, c0, lanes)) < broadcast(saturating_cast(Int(16), x - y), lanes),
+                    cast(Int(16, lanes), ramp(0, c0, lanes)) < broadcast(saturated_diff_i16, lanes),
                     ramp_fits_in_i16) ||
 
             rewrite(broadcast(x, lanes) <= ramp(y, c0, lanes),
-                    broadcast(saturating_cast(Int(16), x - y), lanes) <= cast(Int(16, lanes), ramp(0, c0, lanes)),
+                    broadcast(saturated_diff_i16, lanes) <= cast(Int(16, lanes), ramp(0, c0, lanes)),
                     ramp_fits_in_i16) ||
 
             rewrite(ramp(y, c0, lanes) <= broadcast(x, lanes),
-                    cast(Int(16, lanes), ramp(0, c0, lanes)) <= broadcast(saturating_cast(Int(16), x - y), lanes),
+                    cast(Int(16, lanes), ramp(0, c0, lanes)) <= broadcast(saturated_diff_i16, lanes),
                     ramp_fits_in_i16)) {
             return rewrite.result;
         } else {
