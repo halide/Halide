@@ -37,6 +37,16 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    JITHandlers handlers;
+    handlers.custom_error = [](JITUserContext *user_context, const char *msg) {
+        if (!strcmp(msg, "HalideRuntimeError=-34: halide_buffer_copy_already_locked: copy_to_host but host is null")) {
+            return;
+        }
+        printf("Unexpected Error Seen: (%s)\n", msg);
+        abort();
+    };
+    Internal::JITSharedRuntime::set_default_handlers(handlers);
+
     printf("Test copy to device.\n");
     {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer(hexagon_rpc);

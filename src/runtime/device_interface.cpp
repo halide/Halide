@@ -501,7 +501,7 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
     const bool to_host_exists = dst->host != nullptr;
 
     if (to_host && !to_host_exists) {
-        return report_error_host_is_null(user_context);
+        return report_error_host_is_null(user_context, "halide_buffer_copy_already_locked: copy_to_host but host is null");
     }
 
     // If a device to device copy is requested, try to do it directly.
