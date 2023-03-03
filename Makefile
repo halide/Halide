@@ -1099,9 +1099,6 @@ $(BUILD_DIR)/initmod.%_ll.ll: $(SRC_DIR)/runtime/%.ll
 $(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll $(BUILD_DIR)/llvm_ok
 	$(LLVM_AS) $(BUILD_DIR)/initmod.$*.ll -o $(BUILD_DIR)/initmod.$*.bc
 
-$(BUILD_DIR)/initmod.%.s: $(BUILD_DIR)/initmod.%.bc $(BUILD_DIR)/llvm_ok
-	$(LLVM_BINDIR)/llc $(BUILD_DIR)/initmod.$*.bc -march=x86-64 -o $(BUILD_DIR)/initmod.$*.s
-
 $(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/binary2cpp $(BUILD_DIR)/initmod.%.bc
 	./$(BIN_DIR)/binary2cpp halide_internal_initmod_$* < $(BUILD_DIR)/initmod.$*.bc > $@
 
