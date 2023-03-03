@@ -1034,7 +1034,7 @@ extern int halide_msan_annotate_buffer_is_initialized(void *user_context, struct
 extern void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_context, void *buffer);
 
 /** The error codes that may be returned by a Halide pipeline. */
-enum halide_error_code_t {
+enum HALIDE_MUST_USE_RESULT halide_error_code_t {
     /** There was no error. This is the value returned by Halide on success. */
     halide_error_code_success = 0,
 

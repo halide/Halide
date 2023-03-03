@@ -127,6 +127,13 @@ public:
         }
     }
 
+    // If the string doesn't end in '\n', append one to it, if possible.
+    void add_eol() {
+        if (dst < end - 1 && *dst != '\n') {
+            *dst++ = '\n';
+        }
+    }
+
     // Clear it. Useful for reusing a stringstream.
     void clear() {
         dst = buf;
