@@ -1161,7 +1161,6 @@ private:
             {"halide_xtensa_sat_narrow_i8", i8_sat(wild_i16x)},
             {"halide_xtensa_sat_narrow_u8", u8_sat(wild_i16x)},
             {"halide_xtensa_sat_narrow_i16", i16_sat(wild_i32x)},
-            {"halide_xtensa_sat_narrow_u16", u16_sat(wild_u32x)},
 
             {"halide_xtensa_rounding_shift_right_i8", rounding_shift_right(wild_i8x, bc(wild_u8))},
             // {"halide_xtensa_rounding_shift_right_u8", rounding_shift_right(wild_u8x, bc(wild_u8))},
