@@ -938,9 +938,10 @@ protected:
         auto rewrite = IRMatcher::rewriter(p, Int(32, lanes));
 
         // Construct predicates which state the ramp can't hit the extreme
-        // values of an int8 or an int16. This is an overconservative condition,
-        // but it's hard to imagine cases where a more precise condition would
-        // be necessary.
+        // values of an int8 or an int16, so that the saturated broadcast has a
+        // value to take on that leaves it clear of the bounds of the ramp. This
+        // is an overconservative condition, but it's hard to imagine cases
+        // where a more precise condition would be necessary.
         auto min_ramp_lane = min(c0, c0 * (lanes - 1));
         auto max_ramp_lane = max(c0, c0 * (lanes - 1));
         auto ramp_fits_in_i8 = min_ramp_lane > -128 && max_ramp_lane < 127;
