@@ -29,49 +29,44 @@ string get_block_name(int index) {
 }
 
 class CountGPUBlocksThreads : public IRVisitor {
-    string prefix;  // Producer name + stage
-
     using IRVisitor::visit;
 
+    // Counters that track the number of blocks, threads, and lanes loops that
+    // we're inside of, respectively. Lanes loops also count as threads loops.
+    int nb = 0, nt = 0, nl = 0;
+
     void visit(const For *op) override {
-        if (starts_with(op->name, prefix)) {
-            if (op->for_type == ForType::GPUBlock) {
-                nblocks++;
-            } else if (op->for_type == ForType::GPUThread) {
-                nthreads++;
-            } else if (op->for_type == ForType::GPULane) {
-                nlanes++;
-            }
-        }
+        // Figure out how much to increment each counter by based on the loop
+        // type.
+        int db = op->for_type == ForType::GPUBlock;
+        int dl = op->for_type == ForType::GPULane;
+        int dt = op->for_type == ForType::GPUThread;
+
+        // The threads counter includes lanes loops
+        dt += dl;
+
+        // Increment counters
+        nb += db;
+        nl += dl;
+        nt += dt;
+
+        // Update the maximum counter values seen.
+        nblocks = std::max(nb, nblocks);
+        nthreads = std::max(nt, nthreads);
+        nlanes = std::max(nl, nlanes);
+
+        // Visit the body
         IRVisitor::visit(op);
-    }
 
-    void visit(const IfThenElse *op) override {
-        op->condition.accept(this);
-
-        int old_nblocks = nblocks;
-        int old_nthreads = nthreads;
-        int old_nlanes = nlanes;
-        op->then_case.accept(this);
-
-        if (op->else_case.defined()) {
-            int then_nblocks = nblocks;
-            int then_nthreads = nthreads;
-            int then_nlanes = nlanes;
-            nblocks = old_nblocks;
-            nthreads = old_nthreads;
-            nlanes = old_nlanes;
-            op->else_case.accept(this);
-            nblocks = std::max(then_nblocks, nblocks);
-            nthreads = std::max(then_nthreads, nthreads);
-            nlanes = std::max(then_nlanes, nlanes);
-        }
+        // Decrement counters
+        nb -= db;
+        nl -= dl;
+        nt -= dt;
     }
 
 public:
-    CountGPUBlocksThreads(const string &p)
-        : prefix(p) {
-    }
+    // The maximum values hit by the counters above, which tells us the nesting
+    // depth of each type of loop within a Stmt.
     int nblocks = 0;
     int nthreads = 0;
     int nlanes = 0;
@@ -81,19 +76,6 @@ class CanonicalizeGPUVars : public IRMutator {
     map<string, string> gpu_vars;
 
     using IRMutator::visit;
-
-    string gpu_name(vector<string> v, const string &new_var) {
-        v.push_back(new_var);
-
-        std::ostringstream stream;
-        for (size_t i = 0; i < v.size(); ++i) {
-            stream << v[i];
-            if (i != v.size() - 1) {
-                stream << ".";
-            }
-        }
-        return stream.str();
-    }
 
     string find_replacement(const string &suffix, const string &name) {
         vector<string> v = split_string(name, suffix);
@@ -127,10 +109,7 @@ class CanonicalizeGPUVars : public IRMutator {
             (op->for_type == ForType::GPUThread) ||
             (op->for_type == ForType::GPULane)) {
 
-            vector<string> v = split_string(op->name, ".");
-            internal_assert(v.size() > 2);
-
-            CountGPUBlocksThreads counter(v[0] + "." + v[1]);
+            CountGPUBlocksThreads counter;
             op->body.accept(&counter);
             internal_assert(counter.nblocks <= 4)
                 << op->name << " can only have maximum of 4 block dimensions\n";
@@ -138,14 +117,14 @@ class CanonicalizeGPUVars : public IRMutator {
                 << op->name << " can only have maximum of 4 thread dimensions\n";
 
             if (op->for_type == ForType::GPUBlock) {
-                name = gpu_name(v, get_block_name(counter.nblocks));
+                name += "." + get_block_name(counter.nblocks);
                 debug(5) << "Replacing " << op->name << " with GPU block name " << name << "\n";
             } else if (op->for_type == ForType::GPUThread) {
-                name = gpu_name(v, get_thread_name(counter.nlanes + counter.nthreads));
+                name += "." + get_thread_name(counter.nthreads);
                 debug(5) << "Replacing " << op->name << " with GPU thread name " << name << "\n";
             } else if (op->for_type == ForType::GPULane) {
                 user_assert(counter.nlanes == 0) << "Cannot nest multiple loops over gpu lanes: " << name << "\n";
-                name = gpu_name(v, get_thread_name(0));
+                name += "." + get_thread_name(0);
             }
 
             if (name != op->name) {
