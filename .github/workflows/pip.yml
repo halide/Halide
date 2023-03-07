@@ -5,10 +5,28 @@
 name: Build PyPI package
 
 on:
-  push:
-    branches: [ main ]
-  release:
-    types: [ created ]
+  # In the main working branch of Halide, this Action is configured to produce nightly
+  # builds (whether or not new commits have occurred.)
+  #
+  # TODO: Currently this uses the most-recentversion of LLVM that we have built
+  # in Halide/docker-images, which does not correspond to top-of-tree LLVM, which
+  # is what we really want for nightlies. We should consider whether there is a
+  # way to efficiently produce nightly LLVM builds to allow nightly Halide drops that
+  # reflect the right branch of LLVM.
+
+  # In Release branches, this file should be edited to make official releases. See:
+  # https://setuptools.pypa.io/en/latest/userguide/distribution.html#making-official-non-snapshot-releases
+  #
+  # TODO: edit this file so that the appropriate changes for a Release branch are obvious (but commented out).
+  #
+  # push:
+  #   branches: [ main ]
+  # release:
+  #  types: [ created ]
+
+  schedule:
+    # Run at 4:15AM UTC every day, which is 8:15PM PST
+    - cron:  '15 4 * * *'
 
 concurrency:
   group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
@@ -23,16 +41,15 @@ permissions:
 
 jobs:
   # When creating 'dev' (e.g. nightly) PyPI packages, we need to create a unique
-  # label for each upload. For simplicity, we choose the Unix time-since-epoch in
-  # UTC form (aka `date +%s`).
+  # eigh-character label for each upload, so we'll use yyyymmdd.
   pip-labels:
     name: Create Label for PyPI Packages
     runs-on: ubuntu-latest
     outputs:
-      halide_pypi_label: ${{ steps.make_label.outputs.unix_time_utc }}
+      halide_pypi_label: ${{ steps.make_label.outputs.yyyymmdd }}
     steps:
       - id: make_label
-        run: echo "unix_time_utc=$(date +%s)" >> "$GITHUB_OUTPUT"
+        run: echo "yyyymmdd=$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
 
   pip-linux:
     name: Package Halide Python bindings
