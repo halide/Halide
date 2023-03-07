@@ -377,7 +377,8 @@ public:
 
 CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
-      extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false), using_vector_typedefs(false) {
+      extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false),
+      using_vector_typedefs(false) {
 
     if (output_kind == CPlusPlusFunctionInfoHeader) {
         // If it's a header, emit an include guard.
@@ -506,6 +507,10 @@ CodeGen_C::~CodeGen_C() {
         }
         stream << "#endif\n";
     }
+}
+
+void CodeGen_C::add_platform_prologue() {
+    // nothing
 }
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
@@ -1884,6 +1889,8 @@ void CodeGen_C::emit_halide_free_helper(const std::string &alloc_name, const std
 }
 
 void CodeGen_C::compile(const Module &input) {
+    add_platform_prologue();
+
     TypeInfoGatherer type_info;
     for (const auto &f : input.functions()) {
         if (f.body.defined()) {
@@ -2472,6 +2479,10 @@ void CodeGen_C::visit(const FloatImm *op) {
     }
 }
 
+bool CodeGen_C::is_stack_private_to_thread() const {
+    return false;
+}
+
 void CodeGen_C::visit(const Call *op) {
 
     internal_assert(op->is_extern() || op->is_intrinsic())
@@ -2675,28 +2686,56 @@ void CodeGen_C::visit(const Call *op) {
             }
             indent--;
             string struct_name = unique_name('s');
-            stream << get_indent() << "} " << struct_name << " = {\n";
-            // List the values.
-            indent++;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                stream << get_indent() << values[i];
-                if (i < op->args.size() - 1) {
-                    stream << ",";
+            if (is_stack_private_to_thread()) {
+                // Can't allocate the closure information on the stack; use malloc instead.
+                stream << get_indent() << "} *" << struct_name << ";\n";
+                stream << get_indent() << struct_name
+                       << " = (decltype(" << struct_name << "))halide_malloc(_ucon, sizeof(*"
+                       << struct_name << "));\n";
+
+                create_assertion("(" + struct_name + ")", Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
+
+                // Assign the values.
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    stream << get_indent() << struct_name << "->f_" << i << " = " << values[i] << ";\n";
                 }
-                stream << "\n";
-            }
-            indent--;
-            stream << get_indent() << "};\n";
 
-            // Return a pointer to it of the appropriate type
+                // Insert destructor.
+                emit_halide_free_helper(struct_name, "halide_free");
 
-            // TODO: This is dubious type-punning. We really need to
-            // find a better way to do this. We dodge the problem for
-            // the specific case of buffer shapes in the case above.
-            if (op->type.handle_type) {
-                rhs << "(" << print_type(op->type) << ")";
+                // Return the pointer, casting to appropriate type if necessary.
+
+                // TODO: This is dubious type-punning. We really need to
+                // find a better way to do this. We dodge the problem for
+                // the specific case of buffer shapes in the case above.
+                if (op->type.handle_type) {
+                    rhs << "(" << print_type(op->type) << ")";
+                }
+                rhs << struct_name;
+            } else {
+                stream << get_indent() << "} " << struct_name << " = {\n";
+                // List the values.
+                indent++;
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    stream << get_indent() << values[i];
+                    if (i < op->args.size() - 1) {
+                        stream << ",";
+                    }
+                    stream << "\n";
+                }
+                indent--;
+                stream << get_indent() << "};\n";
+
+                // Return a pointer to it of the appropriate type
+
+                // TODO: This is dubious type-punning. We really need to
+                // find a better way to do this. We dodge the problem for
+                // the specific case of buffer shapes in the case above.
+                if (op->type.handle_type) {
+                    rhs << "(" << print_type(op->type) << ")";
+                }
+                rhs << "(&" << struct_name << ")";
             }
-            rhs << "(&" << struct_name << ")";
         }
     } else if (op->is_intrinsic(Call::load_typed_struct_member)) {
         // Given a void * instance of a typed struct, an in-scope prototype
