@@ -5,23 +5,38 @@
 name: Build PyPI package
 
 on:
-  push:
-    branches: [ main ]
-  release:
-    types: [ created ]
+  workflow_run:
+    workflows: [Create PyPI Label]
+    types: [completed]
 
 concurrency:
   group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: true
 
 env:
-  LLVM_VER: 15.0.1
+  LLVM_VER: 15.0.7
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
   packages: read  #  to fetch packages (docker)
 
 jobs:
+  get-pypi-label:
+    runs-on: ubuntu-latest
+    permissions:
+      # required when deleting artifact
+      actions: write
+    steps:
+      - id: HalidePyPILabel
+        name: Download Label for PyPI
+        uses: redhat-plumbers-in-action/download-artifact@1
+        with:
+          name: halide_pypi_label
+
+      - name: Log Label
+        run: |
+          echo "Using label: ${{ steps.HalidePyPILabel.outputs.halide_pypi_label }}"
+
   pip-linux:
     name: Package Halide Python bindings
 
@@ -52,6 +67,7 @@ jobs:
         env:
           CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
           CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux*"
+          CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ steps.HalidePyPILabel.outputs.halide_pypi_label }}"
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           # CIBW_MANYLINUX_I686_IMAGE: ghcr.io/halide/manylinux2014_i686-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
@@ -175,6 +191,7 @@ jobs:
           CMAKE_PREFIX_PATH: ${{ github.workspace }}/local-halide
           CIBW_BUILD: "cp38-${{ matrix.pytag }} cp39-${{ matrix.pytag }} cp310-${{ matrix.pytag }}"
           CIBW_ARCHS_MACOS: "universal2"
+          CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ steps.HalidePyPILabel.outputs.halide_pypi_label }}"
 
       - uses: actions/upload-artifact@v3
         with:
@@ -186,7 +203,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3.1.0
-      - run: pipx run build --sdist
+      - run: pipx run build --sdist -C--global-option=egg_info -C--global-option=-b.dev${{ steps.HalidePyPILabel.outputs.halide_pypi_label }}
       - uses: actions/upload-artifact@v3
         with:
           name: wheels

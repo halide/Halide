@@ -1,0 +1,27 @@
+# When creating 'dev' (e.g. nightly) PyPI packages, we need to create a unique
+# label for each upload. For simplicity, we choose the Unix time-since-epoch in
+# UTC form (aka `date +%s`); however, since we have multiple jobs that want to
+# use the same label, we split this into two GitHub Actions: this one (which
+# chooses and uploads the label), and pip.yml (which uses the label).
+name: Create PyPI Label
+
+on:
+  push:
+    branches: [ main ]
+  release:
+    types: [ created ]
+
+jobs:
+  create-pypi-label:
+    name: Create label for PyPI packages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create label for nightly PyPI packages
+        run: |
+          mkdir -p ./halide_uploads
+          echo $(date +%s) > ./halide_uploads/halide_pypi_label
+      - uses: actions/upload-artifact@v3
+        with:
+          name: halide_pypi_label
+          path: halide_uploads/halide_pypi_label
