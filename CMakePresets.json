@@ -36,13 +36,13 @@
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
     },
     {
-      "name": "vs2019",
+      "name": "vs2022",
       "hidden": true,
       "inherits": [
         "vcpkg",
         "windows-only"
       ],
-      "generator": "Visual Studio 16 2019",
+      "generator": "Visual Studio 17 2022",
       "toolset": "host=x64"
     },
     {
@@ -84,7 +84,7 @@
     {
       "name": "win32",
       "inherits": [
-        "vs2019",
+        "vs2022",
         "base"
       ],
       "displayName": "Win32 (Visual Studio)",
@@ -94,7 +94,7 @@
     {
       "name": "win64",
       "inherits": [
-        "vs2019",
+        "vs2022",
         "base"
       ],
       "displayName": "Win64 (Visual Studio)",
@@ -121,7 +121,7 @@
       "name": "package-windows",
       "inherits": [
         "package",
-        "vs2019"
+        "vs2022"
       ],
       "displayName": "Package ZIP for Windows",
       "description": "Build for packaging Windows shared libraries.",

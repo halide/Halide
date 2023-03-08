@@ -16,7 +16,7 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    set(WABT_VER 1.0.30)
+    set(WABT_VER 1.0.32)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
@@ -106,6 +106,7 @@ function(add_wasm_executable TARGET)
         -s ASSERTIONS=1
         -s ALLOW_MEMORY_GROWTH=1
         -s ENVIRONMENT=node
+        -s STACK_SIZE=98304
     )
 
     set(SRCS)

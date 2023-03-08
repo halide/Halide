@@ -244,6 +244,9 @@ public:
     bool host_dirty() const {
         return buffer_.host_dirty();
     }
+    int device_sync(void *ctx = nullptr) {
+        return buffer_.device_sync(ctx);
+    }
 
     void resize_dynamic(const Box &new_shape);
 
