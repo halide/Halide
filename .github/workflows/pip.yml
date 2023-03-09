@@ -46,7 +46,7 @@ jobs:
         arch: [ x86_64, aarch64 ]
 
     steps:
-      - uses: actions/checkout@v3.1.0
+      - uses: actions/checkout@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2.1.0
@@ -99,7 +99,7 @@ jobs:
             arch: x86_64;arm64
 
     steps:
-      - uses: actions/checkout@v3.1.0
+      - uses: actions/checkout@v3
 
       - name: Cache LLVM build folder
         id: cache-llvm
@@ -111,7 +111,7 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@latest
 
-      - uses: actions/checkout@v3.1.0
+      - uses: actions/checkout@v3
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         with:
           path: llvm-src
@@ -202,7 +202,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: pip-labels
     steps:
-      - uses: actions/checkout@v3.1.0
+      - uses: actions/checkout@v3
       - run: pipx run build --sdist -C--global-option=egg_info -C--global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }}
       - uses: actions/upload-artifact@v3
         with:
