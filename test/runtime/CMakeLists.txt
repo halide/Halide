@@ -19,15 +19,16 @@ function(_set_target_options NAME)
 endfunction()
 
 function(halide_define_runtime_internal_test NAME)
-    add_executable(runtime_internal_${NAME} ${NAME}.cpp)
+    add_executable(runtime_internal_${NAME} ${NAME}.cpp $<TARGET_OBJECTS:runtime_internal_common>)
     _set_target_options(runtime_internal_${NAME})
-    target_link_libraries(runtime_internal_${NAME} PRIVATE Halide::Test Halide::Runtime runtime_internal_common)
+    target_link_libraries(runtime_internal_${NAME} PRIVATE Halide::Test)
     add_halide_test(runtime_internal_${NAME} GROUPS runtime_internal)
 endfunction()
 
 # NOTE: These tests directly include runtime_internal.h which isn't compatible with MSVC
 if(NOT MSVC)
-    add_library(runtime_internal_common STATIC
+    # Weak linkages are easier to get right with OBJECT libraries
+    add_library(runtime_internal_common OBJECT
                 common.cpp
                 "${Halide_SOURCE_DIR}/src/runtime/msan_stubs.cpp"
                 "${Halide_SOURCE_DIR}/src/runtime/to_string.cpp")

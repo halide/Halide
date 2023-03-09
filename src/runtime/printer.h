@@ -205,11 +205,11 @@ public:
 // does nothing and should compile to a no-op.
 class SinkPrinter {
 public:
-    explicit SinkPrinter(void *user_context) {
+    ALWAYS_INLINE explicit SinkPrinter(void *user_context) {
     }
 };
 template<typename T>
-SinkPrinter operator<<(const SinkPrinter &s, T) {
+ALWAYS_INLINE SinkPrinter operator<<(const SinkPrinter &s, T) {
     return s;
 }
 
