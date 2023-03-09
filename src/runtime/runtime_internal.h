@@ -60,17 +60,20 @@ typedef ptrdiff_t ssize_t;
 // --------------
 
 #ifdef BITS_64
-#define INT64_C(c) c##L
-#define UINT64_C(c) c##UL
 typedef uint64_t uintptr_t;
 typedef int64_t intptr_t;
 #endif
 
 #ifdef BITS_32
-#define INT64_C(c) c##LL
-#define UINT64_C(c) c##ULL
 typedef uint32_t uintptr_t;
 typedef int32_t intptr_t;
+#endif
+
+#if !defined(BITS_32) && !defined(BITS_64)
+typedef __UINTPTR_TYPE__ uintptr_t;
+typedef __INTPTR_TYPE__ intptr_t;
+static_assert(sizeof(uintptr_t) == sizeof(void *));
+static_assert(sizeof(intptr_t) == sizeof(void *));
 #endif
 
 #define STDOUT_FILENO 1

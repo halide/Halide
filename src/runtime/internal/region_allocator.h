@@ -1,8 +1,10 @@
 #ifndef HALIDE_RUNTIME_REGION_ALLOCATOR_H
 #define HALIDE_RUNTIME_REGION_ALLOCATOR_H
 
+#include "HalideRuntime.h"
 #include "memory_arena.h"
 #include "memory_resources.h"
+#include "printer.h"
 
 namespace Halide {
 namespace Runtime {
@@ -95,7 +97,7 @@ private:
 };
 
 RegionAllocator *RegionAllocator::create(void *user_context, BlockResource *block_resource, const MemoryAllocators &allocators) {
-    halide_abort_if_false(user_context, allocators.system.allocate != nullptr);
+    halide_debug_assert(user_context, allocators.system.allocate != nullptr);
     RegionAllocator *result = reinterpret_cast<RegionAllocator *>(
         allocators.system.allocate(user_context, sizeof(RegionAllocator)));
 
@@ -109,10 +111,10 @@ RegionAllocator *RegionAllocator::create(void *user_context, BlockResource *bloc
 }
 
 void RegionAllocator::destroy(void *user_context, RegionAllocator *instance) {
-    halide_abort_if_false(user_context, instance != nullptr);
+    halide_debug_assert(user_context, instance != nullptr);
     const MemoryAllocators &allocators = instance->allocators;
     instance->destroy(user_context);
-    halide_abort_if_false(user_context, allocators.system.deallocate != nullptr);
+    halide_debug_assert(user_context, allocators.system.deallocate != nullptr);
     allocators.system.deallocate(user_context, instance);
 }
 
@@ -120,7 +122,7 @@ void RegionAllocator::initialize(void *user_context, BlockResource *mb, const Me
     block = mb;
     allocators = ma;
     arena = MemoryArena::create(user_context, {sizeof(BlockRegion), MemoryArena::default_capacity, 0}, allocators.system);
-    halide_abort_if_false(user_context, arena != nullptr);
+    halide_debug_assert(user_context, arena != nullptr);
     block->allocator = this;
     block->regions = create_block_region(
         user_context,
@@ -130,7 +132,7 @@ void RegionAllocator::initialize(void *user_context, BlockResource *mb, const Me
 }
 
 MemoryRegion *RegionAllocator::reserve(void *user_context, const MemoryRequest &request) {
-    halide_abort_if_false(user_context, request.size > 0);
+    halide_debug_assert(user_context, request.size > 0);
     size_t remaining = block->memory.size - block->reserved;
     if (remaining < request.size) {
 #ifdef DEBUG_RUNTIME
@@ -164,8 +166,8 @@ MemoryRegion *RegionAllocator::reserve(void *user_context, const MemoryRequest &
 
 void RegionAllocator::reclaim(void *user_context, MemoryRegion *memory_region) {
     BlockRegion *block_region = reinterpret_cast<BlockRegion *>(memory_region);
-    halide_abort_if_false(user_context, block_region != nullptr);
-    halide_abort_if_false(user_context, block_region->block_ptr == block);
+    halide_debug_assert(user_context, block_region != nullptr);
+    halide_debug_assert(user_context, block_region->block_ptr == block);
     free_block_region(user_context, block_region);
     if (can_coalesce(block_region)) {
         block_region = coalesce_block_regions(user_context, block_region);
@@ -174,8 +176,8 @@ void RegionAllocator::reclaim(void *user_context, MemoryRegion *memory_region) {
 
 RegionAllocator *RegionAllocator::find_allocator(void *user_context, MemoryRegion *memory_region) {
     BlockRegion *block_region = reinterpret_cast<BlockRegion *>(memory_region);
-    halide_abort_if_false(user_context, block_region != nullptr);
-    halide_abort_if_false(user_context, block_region->block_ptr != nullptr);
+    halide_debug_assert(user_context, block_region != nullptr);
+    halide_debug_assert(user_context, block_region->block_ptr != nullptr);
     return block_region->block_ptr->allocator;
 }
 
@@ -287,7 +289,7 @@ BlockRegion *RegionAllocator::split_block_region(void *user_context, BlockRegion
                                                     block_region->memory.properties,
                                                     empty_offset, empty_size,
                                                     block_region->memory.dedicated);
-    halide_abort_if_false(user_context, empty_region != nullptr);
+    halide_debug_assert(user_context, empty_region != nullptr);
 
     empty_region->next_ptr = next_region;
     if (next_region) {
@@ -356,8 +358,8 @@ void RegionAllocator::alloc_block_region(void *user_context, BlockRegion *block_
 #ifdef DEBUG_RUNTIME
     debug(user_context) << "RegionAllocator: Allocating region (size=" << (int32_t)(block_region->memory.size) << ", offset=" << (int32_t)block_region->memory.offset << ")!\n";
 #endif
-    halide_abort_if_false(user_context, allocators.region.allocate != nullptr);
-    halide_abort_if_false(user_context, block_region->status == AllocationStatus::Available);
+    halide_debug_assert(user_context, allocators.region.allocate != nullptr);
+    halide_debug_assert(user_context, block_region->status == AllocationStatus::Available);
     MemoryRegion *memory_region = &(block_region->memory);
     allocators.region.allocate(user_context, memory_region);
     block_region->status = block_region->memory.dedicated ? AllocationStatus::Dedicated : AllocationStatus::InUse;
@@ -373,7 +375,7 @@ void RegionAllocator::free_block_region(void *user_context, BlockRegion *block_r
     if ((block_region->status == AllocationStatus::InUse) ||
         (block_region->status == AllocationStatus::Dedicated)) {
         debug(user_context) << "RegionAllocator: Deallocating region (size=" << (int32_t)(block_region->memory.size) << ", offset=" << (int32_t)block_region->memory.offset << ")!\n";
-        halide_abort_if_false(user_context, allocators.region.deallocate != nullptr);
+        halide_debug_assert(user_context, allocators.region.deallocate != nullptr);
         MemoryRegion *memory_region = &(block_region->memory);
         allocators.region.deallocate(user_context, memory_region);
         block->reserved -= block_region->memory.size;

@@ -1,4 +1,7 @@
+#include "HalideRuntime.h"
+
 #include "common.h"
+#include "printer.h"
 
 #include "internal/linked_list.h"
 
@@ -23,80 +26,80 @@ int main(int argc, char **argv) {
     // test class interface
     {
         LinkedList list(user_context, sizeof(int), 64, test_allocator);
-        halide_abort_if_false(user_context, list.size() == 0);
+        HALIDE_CHECK(user_context, list.size() == 0);
 
         const int i0 = 12;
         list.append(user_context, &i0);  // contents: 12
-        halide_abort_if_false(user_context, list.size() == 1);
-        halide_abort_if_false(user_context, (list.front() != nullptr));
-        halide_abort_if_false(user_context, (list.back() != nullptr));
-        halide_abort_if_false(user_context, read_as<int>(list.front()) == i0);
-        halide_abort_if_false(user_context, read_as<int>(list.back()) == i0);
+        HALIDE_CHECK(user_context, list.size() == 1);
+        HALIDE_CHECK(user_context, (list.front() != nullptr));
+        HALIDE_CHECK(user_context, (list.back() != nullptr));
+        HALIDE_CHECK(user_context, read_as<int>(list.front()) == i0);
+        HALIDE_CHECK(user_context, read_as<int>(list.back()) == i0);
 
         const int i1 = 34;
         list.append(user_context, &i1);  // contents: 12, 34
-        halide_abort_if_false(user_context, list.size() == 2);
-        halide_abort_if_false(user_context, read_as<int>(list.back()) == i1);
+        HALIDE_CHECK(user_context, list.size() == 2);
+        HALIDE_CHECK(user_context, read_as<int>(list.back()) == i1);
 
         const int i2 = 56;
         list.insert_before(user_context, list.back(), &i2);  // contents: 12, 56, 34
-        halide_abort_if_false(user_context, list.size() == 3);
-        halide_abort_if_false(user_context, read_as<int>(list.back()) == i1);
+        HALIDE_CHECK(user_context, list.size() == 3);
+        HALIDE_CHECK(user_context, read_as<int>(list.back()) == i1);
 
         const int i3 = 78;
         list.prepend(user_context, &i3);  // contents: 78, 12, 56, 34
-        halide_abort_if_false(user_context, list.size() == 4);
-        halide_abort_if_false(user_context, read_as<int>(list.front()) == i3);
-        halide_abort_if_false(user_context, read_as<int>(list.back()) == i1);
+        HALIDE_CHECK(user_context, list.size() == 4);
+        HALIDE_CHECK(user_context, read_as<int>(list.front()) == i3);
+        HALIDE_CHECK(user_context, read_as<int>(list.back()) == i1);
 
         list.pop_front(user_context);  // contents: 12, 56, 34
-        halide_abort_if_false(user_context, list.size() == 3);
-        halide_abort_if_false(user_context, read_as<int>(list.front()) == i0);
-        halide_abort_if_false(user_context, read_as<int>(list.back()) == i1);
+        HALIDE_CHECK(user_context, list.size() == 3);
+        HALIDE_CHECK(user_context, read_as<int>(list.front()) == i0);
+        HALIDE_CHECK(user_context, read_as<int>(list.back()) == i1);
 
         list.pop_back(user_context);  // contents: 12, 56
-        halide_abort_if_false(user_context, list.size() == 2);
-        halide_abort_if_false(user_context, read_as<int>(list.front()) == i0);
-        halide_abort_if_false(user_context, read_as<int>(list.back()) == i2);
+        HALIDE_CHECK(user_context, list.size() == 2);
+        HALIDE_CHECK(user_context, read_as<int>(list.front()) == i0);
+        HALIDE_CHECK(user_context, read_as<int>(list.back()) == i2);
 
         list.clear(user_context);
-        halide_abort_if_false(user_context, list.size() == 0);
+        HALIDE_CHECK(user_context, list.size() == 0);
 
         size_t count = 4 * 1024;
         for (size_t n = 0; n < count; ++n) {
             list.append(user_context, &n);
         }
-        halide_abort_if_false(user_context, list.size() == count);
+        HALIDE_CHECK(user_context, list.size() == count);
 
         list.destroy(user_context);
-        halide_abort_if_false(user_context, allocated_system_memory == 0);
+        HALIDE_CHECK(user_context, get_allocated_system_memory() == 0);
     }
 
     // test struct storage
     {
         LinkedList list(user_context, sizeof(TestStruct), 32, test_allocator);
-        halide_abort_if_false(user_context, list.size() == 0);
+        HALIDE_CHECK(user_context, list.size() == 0);
 
         TestStruct s1 = {8, 16, 32.0f};
         list.append(user_context, &s1);
-        halide_abort_if_false(user_context, list.size() == 1);
+        HALIDE_CHECK(user_context, list.size() == 1);
 
         const TestStruct e1 = read_as<TestStruct>(list.front());
-        halide_abort_if_false(user_context, e1.i8 == s1.i8);
-        halide_abort_if_false(user_context, e1.ui16 == s1.ui16);
-        halide_abort_if_false(user_context, e1.f32 == s1.f32);
+        HALIDE_CHECK(user_context, e1.i8 == s1.i8);
+        HALIDE_CHECK(user_context, e1.ui16 == s1.ui16);
+        HALIDE_CHECK(user_context, e1.f32 == s1.f32);
 
         TestStruct s2 = {1, 2, 3.0f};
         list.prepend(user_context, &s2);
-        halide_abort_if_false(user_context, list.size() == 2);
+        HALIDE_CHECK(user_context, list.size() == 2);
 
         TestStruct e2 = read_as<TestStruct>(list.front());
-        halide_abort_if_false(user_context, e2.i8 == s2.i8);
-        halide_abort_if_false(user_context, e2.ui16 == s2.ui16);
-        halide_abort_if_false(user_context, e2.f32 == s2.f32);
+        HALIDE_CHECK(user_context, e2.i8 == s2.i8);
+        HALIDE_CHECK(user_context, e2.ui16 == s2.ui16);
+        HALIDE_CHECK(user_context, e2.f32 == s2.f32);
 
         list.destroy(user_context);
-        halide_abort_if_false(user_context, allocated_system_memory == 0);
+        HALIDE_CHECK(user_context, get_allocated_system_memory() == 0);
     }
 
     print(user_context) << "Success!\n";
