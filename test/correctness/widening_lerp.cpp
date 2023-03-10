@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
                     printf("Difference of lerp + cast and lerp alone is %f,"
                            " which exceeds threshold for seed %d\n",
                            err, fuzz_seed);
-                    return -1;
+                    return 1;
                 }
             }
         }

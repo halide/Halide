@@ -17,12 +17,12 @@ int check_nans(const Buffer<float> &im) {
             if ((x - y) < 0) {
                 if (im(x, y) != 0.0f) {
                     printf("undetected Nan for sqrt(%d - %d)\n", x, y);
-                    return -1;
+                    return 1;
                 }
             } else {
                 if (im(x, y) != 1.0f) {
                     printf("unexpected Nan for sqrt(%d - %d)\n", x, y);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -37,12 +37,12 @@ int check_infs(const Buffer<float> &im) {
             if (std::isinf(e)) {
                 if (im(x, y) != 1.0f) {
                     printf("undetected Inf for (%d-%d)/(%d-%d) -> %f\n", x, w / 2, y, h / 2, e);
-                    return -1;
+                    return 1;
                 }
             } else {
                 if (im(x, y) != 0.0f) {
                     printf("unexpected Inf for (%d-%d)/(%d-%d) -> %f\n", x, w / 2, y, h / 2, e);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -57,12 +57,12 @@ int check_finites(const Buffer<float> &im) {
             if (std::isfinite(e)) {
                 if (im(x, y) != 1.0f) {
                     printf("undetected finite for (%d-%d)/(%d-%d) -> %f\n", x, w / 2, y, h / 2, e);
-                    return -1;
+                    return 1;
                 }
             } else {
                 if (im(x, y) != 0.0f) {
                     printf("unexpected finite for (%d-%d)/(%d-%d) -> %f\n", x, w / 2, y, h / 2, e);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
 
         Buffer<float> im = f.realize({w, h});
         if (check_nans(im) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
         in.set(non_halide_produced);
         Buffer<float> im = f.realize({w, h});
         if (check_nans(im) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
 
         Buffer<float> im = f.realize({w, h});
         if (check_infs(im) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -145,7 +145,7 @@ int main(int argc, char **argv) {
         in.set(non_halide_produced);
         Buffer<float> im = f.realize({w, h});
         if (check_infs(im) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
 
         Buffer<float> im = f.realize({w, h});
         if (check_finites(im) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -184,7 +184,7 @@ int main(int argc, char **argv) {
         in.set(non_halide_produced);
         Buffer<float> im = f.realize({w, h});
         if (check_finites(im) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -202,7 +202,7 @@ int main(int argc, char **argv) {
 
             Buffer<float> im = f.realize({w, h});
             if (check_nans(im) != 0) {
-                return -1;
+                return 1;
             }
         }
 
@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
             in.set(non_halide_produced);
             Buffer<float> im = f.realize({w, h});
             if (check_nans(im) != 0) {
-                return -1;
+                return 1;
             }
         }
 
@@ -243,7 +243,7 @@ int main(int argc, char **argv) {
 
             Buffer<float> im = f.realize({w, h});
             if (check_infs(im) != 0) {
-                return -1;
+                return 1;
             }
         }
 
@@ -267,7 +267,7 @@ int main(int argc, char **argv) {
             in.set(non_halide_produced);
             Buffer<float> im = f.realize({w, h});
             if (check_infs(im) != 0) {
-                return -1;
+                return 1;
             }
         }
 
@@ -284,7 +284,7 @@ int main(int argc, char **argv) {
 
             Buffer<float> im = f.realize({w, h});
             if (check_finites(im) != 0) {
-                return -1;
+                return 1;
             }
         }
 
@@ -308,7 +308,7 @@ int main(int argc, char **argv) {
             in.set(non_halide_produced);
             Buffer<float> im = f.realize({w, h});
             if (check_finites(im) != 0) {
-                return -1;
+                return 1;
             }
         }
     }

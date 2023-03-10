@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
             std::cout << "result(" << i
                       << ") = " << result(i)
                       << " instead of " << correct << "\n";
-            return -1;
+            return 1;
         }
     }
 

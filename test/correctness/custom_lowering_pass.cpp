@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
     if (multiply_count != size * 2) {
         printf("The multiplies weren't all counted. Got %d instead of %d\n",
                multiply_count, size);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
         printf("[SKIP] No GPU target enabled.\n");
         // This test is currently expected to error out. This is for the Makefile's benefit.
         printf("Error: pretending that there was an error\n");
-        return -1;
+        return 1;
     }
 
     Func f;
@@ -29,13 +29,13 @@ int main(int argc, char **argv) {
 
     // Delete this code once this test works.
     printf("Error: I should not have successfully compiled.\n");
-    return -1;
+    return 1;
 
     for (int i = 0; i < result.width(); i++) {
         if (i != result(i)) {
             printf("result(%d) = %d instead of %d\n",
                    i, result(i), i);
-            return -1;
+            return 1;
         }
     }
 

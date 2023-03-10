@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < 256; i++) {
             if (result(i) != i) {
                 std::cout << "Error! " << result(i) << " != " << i << "\n";
-                return -1;
+                return 1;
             }
         }
     }

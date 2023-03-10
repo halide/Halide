@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
         float correct = i * 2 * 3 * 2;
         if (result(i) != correct) {
             printf("result(%d) = %f instead of %f\n", i, result(i), correct);
-            return -1;
+            return 1;
         }
     }
 

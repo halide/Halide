@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
 
         if (!errored) {
             printf("There was supposed to be an error\n");
-            return -1;
+            return 1;
         }
     }
 

@@ -34,7 +34,7 @@ int multi_thread_type_test(MemoryType memory_type) {
                 if (out(x, y, z) != correct) {
                     printf("out(%d, %d, %d) = %d instead of %d\n",
                            x, y, z, out(x, y, z), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -77,7 +77,7 @@ int pyramid_test(MemoryType memory_type) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -126,7 +126,7 @@ int inverted_pyramid_test(MemoryType memory_type) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -157,7 +157,7 @@ int dynamic_shared_test(MemoryType memory_type) {
         if (out(x) != correct) {
             printf("out(%d) = %d instead of %d\n",
                    x, out(x), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -175,17 +175,17 @@ int main(int argc, char **argv) {
     for (auto memory_type : {MemoryType::GPUShared, MemoryType::Heap}) {
         printf("Running multi thread type test\n");
         if (multi_thread_type_test(memory_type) != 0) {
-            return -1;
+            return 1;
         }
 
         printf("Running pyramid test\n");
         if (pyramid_test(memory_type) != 0) {
-            return -1;
+            return 1;
         }
 
         printf("Running inverted pyramid test\n");
         if (inverted_pyramid_test(memory_type) != 0) {
-            return -1;
+            return 1;
         }
 
         printf("Running dynamic shared test\n");
@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
             printf("Skipping test because GL doesn't support dynamic sizes for shared memory\n");
         } else {
             if (dynamic_shared_test(memory_type) != 0) {
-                return -1;
+                return 1;
             }
         }
     }

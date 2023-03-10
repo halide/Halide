@@ -28,13 +28,13 @@ int main(int argc, char **argv) {
 
         if (call_counter != 10) {
             printf("Wrong number of calls to f: %d\n", call_counter);
-            return -1;
+            return 1;
         }
 
         for (int i = 0; i < im.width(); i++) {
             if (im(i) != i) {
                 printf("im(%d) = %d instead of %d\n", i, im(i), i);
-                return -1;
+                return 1;
             }
         }
         call_counter = 0;
@@ -57,13 +57,13 @@ int main(int argc, char **argv) {
 
         if (call_counter != 10) {
             printf("Wrong number of calls to f: %d\n", call_counter);
-            return -1;
+            return 1;
         }
 
         for (int i = 0; i < im.width(); i++) {
             if (im(i) != i) {
                 printf("im(%d) = %d instead of %d\n", i, im(i), i);
-                return -1;
+                return 1;
             }
         }
         call_counter = 0;
@@ -86,13 +86,13 @@ int main(int argc, char **argv) {
 
         if (call_counter != 10) {
             printf("Wrong number of calls to f: %d\n", call_counter);
-            return -1;
+            return 1;
         }
 
         for (int i = 0; i < im.width(); i++) {
             if (im(i) != i) {
                 printf("im(%d) = %d instead of %d\n", i, im(i), i);
-                return -1;
+                return 1;
             }
         }
         call_counter = 0;
@@ -117,14 +117,14 @@ int main(int argc, char **argv) {
 
         if (call_counter != 10) {
             printf("Wrong number of calls to f: %d\n", call_counter);
-            return -1;
+            return 1;
         }
 
         for (int i = 0; i < im.width(); i++) {
             int correct = (i / 2) + ((i % 2 == 0) ? 0 : 5);
             if (im(i) != correct) {
                 printf("im(%d) = %d instead of %d\n", i, im(i), correct);
-                return -1;
+                return 1;
             }
         }
         call_counter = 0;
@@ -147,14 +147,14 @@ int main(int argc, char **argv) {
 
         if (call_counter != 20) {
             printf("Wrong number of calls to f: %d\n", call_counter);
-            return -1;
+            return 1;
         }
 
         for (int i = 0; i < im.width(); i++) {
             int correct = i;
             if (im(i) != correct) {
                 printf("im(%d) = %d instead of %d\n", i, im(i), correct);
-                return -1;
+                return 1;
             }
         }
         call_counter = 0;
@@ -179,13 +179,13 @@ int main(int argc, char **argv) {
 
         if (call_counter != 10) {
             printf("Wrong number of calls to f: %d\n", call_counter);
-            return -1;
+            return 1;
         }
 
         for (int i = 0; i < im.width(); i++) {
             if (im(i) != i) {
                 printf("im(%d) = %d instead of %d\n", i, im(i), i);
-                return -1;
+                return 1;
             }
         }
         call_counter = 0;

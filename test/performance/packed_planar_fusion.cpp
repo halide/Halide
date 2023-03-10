@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
                t_planar_packed,
                t_packed_planar);
 
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         if (out(i) != correct) {
             printf("out(%d) = %d instead of %d\n",
                    i, out(i), correct);
-            return -1;
+            return 1;
         }
     }
 

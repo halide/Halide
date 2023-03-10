@@ -64,7 +64,7 @@ int find_pi() {
         fabs(secant_result - correct) > tolerance) {
         printf("Incorrect results: %10.20f %10.20f %10.20f\n",
                newton_result, secant_result, correct);
-        return -1;
+        return 1;
     }
     return 0;
 }

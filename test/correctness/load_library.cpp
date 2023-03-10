@@ -89,5 +89,5 @@ int main(int argc, char **argv) {
     Buffer<int32_t> out = f.realize({64, 64}, target);
 
     fprintf(stderr, "Should not get here.\n");
-    return -1;
+    return 1;
 }

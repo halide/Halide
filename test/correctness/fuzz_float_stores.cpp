@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
             // the sort of thing FuzzFloatStores is trying to discourage.
             if (im_ref(i) != im_fuzzed(i)) {
                 printf("Expected exact floating point equality between %10.10g and %10.10g\n", im_ref(i), im_fuzzed(i));
-                return -1;
+                return 1;
             }
         }
     }
@@ -49,12 +49,12 @@ int main(int argc, char **argv) {
 
         if (differences == 0) {
             printf("fuzzing float stores should have done something\n");
-            return -1;
+            return 1;
         }
 
         if (differences == size) {
             printf("fuzzing float stores should not have changed every store\n");
-            return -1;
+            return 1;
         }
     }
 

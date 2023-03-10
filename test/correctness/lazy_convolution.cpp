@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     // places, it should be smaller; roughly 100*100*20*20*0.5.
     if (call_count > 2100000) {
         printf("Expected call_count ~= 2000000. Instead it's %d\n", call_count);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

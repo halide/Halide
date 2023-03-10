@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
         if (tracker.validate_gpu_object_lifetime(true /* allow_globals */,
                                                  true /* allow_none */,
                                                  1 /* max_globals */)) {
-            return -1;
+            return 1;
         }
     }
 

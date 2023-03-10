@@ -358,7 +358,7 @@ int main(int argc, char **argv) {
     bool success = test.test_all();
 
     if (!success) {
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");
