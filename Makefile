@@ -459,7 +459,6 @@ SOURCE_FILES = \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   FindIntrinsics.cpp \
-  FindStmtCost.cpp \
   FlattenNestedRamps.cpp \
   Float16.cpp \
   Func.cpp \
@@ -467,8 +466,6 @@ SOURCE_FILES = \
   FuseGPUThreadLoops.cpp \
   FuzzFloatStores.cpp \
   Generator.cpp \
-  GetAssemblyInfoViz.cpp \
-  GetStmtHierarchy.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
@@ -486,7 +483,6 @@ SOURCE_FILES = \
   IROperator.cpp \
   IRPrinter.cpp \
   IRVisitor.cpp \
-  IRVisualization.cpp \
   JITModule.cpp \
   Lambda.cpp \
   Lerp.cpp \
@@ -645,7 +641,6 @@ HEADER_FILES = \
   FastIntegerDivide.h \
   FindCalls.h \
   FindIntrinsics.h \
-  FindStmtCost.h \
   FlattenNestedRamps.h \
   Float16.h \
   Func.h \
@@ -654,8 +649,6 @@ HEADER_FILES = \
   FuseGPUThreadLoops.h \
   FuzzFloatStores.h \
   Generator.h \
-  GetAssemblyInfoViz.h \
-  GetStmtHierarchy.h \
   HexagonOffload.h \
   HexagonOptimize.h \
   ImageParam.h \
@@ -674,7 +667,6 @@ HEADER_FILES = \
   IROperator.h \
   IRPrinter.h \
   IRVisitor.h \
-  IRVisualization.h \
   WasmExecutor.h \
   JITModule.h \
   Lambda.h \
