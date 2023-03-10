@@ -25,10 +25,480 @@ using std::ostringstream;
 using std::string;
 
 // Classes define within this file
+class CostModel;
 class AssemblyInfo;
 template<typename T> class HTMLCodePrinter;
 class HTMLVisualizationPrinter;
 class IRVisualizer;
+
+/********************** IRCostModel **********************/
+// A basic cost model for Halide IR. Estimates computation
+// cost through simple op-counting and data-movement cost 
+// by counting the number of bits being moved.
+class IRCostModel : public IRVisitor {
+public:
+    IRCostModel()
+        : _max_compute_cost(-1), _max_data_cost(-1), _max_compute_cost_inclusive(-1), 
+        _max_data_cost_inclusive(-1)
+    {
+    }
+
+    // Pre-compute all costs to avoid repeated work
+    void comput_all_costs(const Module &m) {
+        // Compute all node costs
+        for (const auto &fn : m.functions()) {
+            fn.body.accept(this);
+        }
+
+        // Compute the max cost for each category
+        _max_compute_cost = -1;
+        for (auto const &[node, cost] : _compute_cost) {
+            _max_compute_cost = std::max(cost, _max_compute_cost);
+        }
+
+        _max_data_cost = -1;
+        for (auto const &[node, cost] : _data_cost) {
+            _max_data_cost = std::max(cost, _max_data_cost);
+        }
+
+        _max_compute_cost_inclusive = -1;
+        for (auto const &[node, cost] : _compute_cost_inclusive) {
+            _max_compute_cost_inclusive = std::max(cost, _max_compute_cost_inclusive);
+        }
+
+        _max_data_cost_inclusive = -1;
+        for (auto const &[node, cost] : _data_cost_inclusive) {
+            _max_data_cost_inclusive = std::max(cost, _max_data_cost_inclusive);
+        }
+    }
+
+    // Returns the compute cost of a node (estimated using simple op-counting)
+    int get_compute_cost(const IRNode *node, bool _include_subtree_cost) {
+        internal_assert(node != nullptr) << "IRCostModel::get_compute_cost(): node is nullptr\n";
+
+        int cost = -1;
+        if (_compute_cost.count(node)) {
+            cost = _include_subtree_cost ? _compute_cost_inclusive[node] : _compute_cost[node];
+        }
+        else 
+            internal_assert(false) << "IRCostModel::get_compute_cost(): cost lookup failed\n";
+
+        internal_assert(cost >= 0) << "Cost must not be negative.\n";
+        return cost;
+    }
+
+    // Returns the data movement cost of a node (the number of bits moved in load/store/shuffle ops)
+    int get_datamovement_cost(const IRNode *node, bool _include_subtree_cost) {
+        internal_assert(node != nullptr) << "IRCostModel::get_datamovement_cost(): node is nullptr\n";
+
+        int cost = -1;
+        if (_compute_cost.count(node)) {
+            cost = _include_subtree_cost ? _data_cost_inclusive[node] : _data_cost[node];
+        } else
+            internal_assert(false) << "IRCostModel::get_datamovement_cost(): cost lookup failed\n";
+
+        internal_assert(cost >= 0) << "Cost cost must not be negative.\n";
+        return cost;
+    }
+    
+    // Returns the max compute cost of any node in the program
+    int get_max_compute_cost(bool _include_subtree_cost) {
+        return _include_subtree_cost ? _max_compute_cost_inclusive : _max_compute_cost;
+    }
+
+    // Returns the max data movement cost of any node in the program
+    int get_max_datamovement_cost(bool _include_subtree_cost) {
+        return _include_subtree_cost ? _max_data_cost_inclusive : _max_data_cost;
+    }
+    
+
+private:
+    // Cost database. We track two costs:
+    //  - The line cost of a node is the sum of the node cost
+    //    plus the cost of any children that are printed on
+    //    a single line (since we display cost by each line in
+    //    the program)
+    //  - The inclusive cost is the cost of the entire sub-tree.
+    //    We display this cost when the user collapses a program
+    //    block in the IR.
+    std::unordered_map<const IRNode *, int> _compute_cost;
+    std::unordered_map<const IRNode *, int> _data_cost;
+
+    std::unordered_map<const IRNode *, int> _compute_cost_inclusive;
+    std::unordered_map<const IRNode *, int> _data_cost_inclusive;
+
+    // We also track the max costs to determine the cost color
+    // intensity for a given line of code
+    int _max_compute_cost;
+    int _max_data_cost;
+
+    int _max_compute_cost_inclusive;
+    int _max_data_cost_inclusive;
+
+    /* Utility functions to store node costs in the cost database */
+    void set_compute_costs(const IRNode *node, int node_cost, std::vector<const IRNode *> child_nodes) {
+        set_compute_costs(node, node_cost, child_nodes, child_nodes);
+    }
+
+    void set_compute_costs(const IRNode *node, int node_cost, std::vector<const IRNode *> child_nodes, std::vector<const IRNode *> inline_child_nodes) {
+        int subtree_cost = 0;
+        for (const IRNode *child_node : child_nodes) {
+            // Certain child nodes can be null. Ex: else-case
+            // in an if statement
+            if (child_node)
+                subtree_cost += get_compute_cost(child_node, true);
+        }
+
+        int line_cost = node_cost;
+        for (const IRNode *child_node : inline_child_nodes) {
+            if (child_node)
+                line_cost += get_compute_cost(child_node, true);
+        }
+        
+        _compute_cost[node] = line_cost;
+        _compute_cost_inclusive[node] = node_cost + subtree_cost;
+    }
+
+    void set_data_costs(const IRNode *node, int node_cost, std::vector<const IRNode *> child_nodes) {
+        set_data_costs(node, node_cost, child_nodes, child_nodes);
+    }
+
+    void set_data_costs(const IRNode *node, int node_cost, std::vector<const IRNode *> child_nodes, std::vector<const IRNode *> inline_child_nodes) {
+        int subtree_cost = 0;
+        for (const IRNode *child_node : child_nodes) {
+            // Certain child nodes can be null. Ex: else-case
+            // in an if statement
+            if (child_node)
+                subtree_cost += get_datamovement_cost(child_node, true);
+        }
+        
+        int line_cost = node_cost;
+        for (const IRNode *child_node : inline_child_nodes) {
+            if (child_node)
+                line_cost += get_datamovement_cost(child_node, true);
+        }
+        
+        _data_cost[node] = line_cost;
+        _data_cost_inclusive[node] = node_cost + subtree_cost;
+    }
+
+private:
+    using IRVisitor::visit;
+
+    void visit(const IntImm *op) override { 
+        set_compute_costs(op, 0, {});
+        set_data_costs(op, 0, {});
+    }
+
+    void visit(const UIntImm *op) override {
+        set_compute_costs(op, 0, {});
+        set_data_costs(op, 0, {});
+    }
+
+    void visit(const FloatImm *op) override {
+        set_compute_costs(op, 0, {});
+        set_data_costs(op, 0, {});
+    }
+
+    void visit(const StringImm *op) override {
+        set_compute_costs(op, 0, {});
+        set_data_costs(op, 0, {});
+    }
+
+    void visit(const Variable *op) override {
+        set_compute_costs(op, 0, {});
+        set_data_costs(op, 0, {});
+    }
+
+    void visit(const Cast *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->value.get()});
+        set_data_costs(op, 0, {op->value.get()});
+    }
+
+    void visit(const Reinterpret *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->value.get()});
+        set_data_costs(op, 0, {op->value.get()});
+    }
+
+    void visit(const Add *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const Sub *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const Mul *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const Div *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const Mod *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const Min *op) override {
+        IRVisitor::visit(op);
+        // This cost model treats min as a single op
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const Max *op) override {
+        IRVisitor::visit(op);
+        // This cost model treats max as a single op
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const EQ *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const NE *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const LT *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const LE *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const GT *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const GE *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const And *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const Or *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get(), op->b.get()});
+        set_data_costs(op, 0, {op->a.get(), op->b.get()});
+    }
+
+    void visit(const Not *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->a.get()});
+        set_data_costs(op, 0, {op->a.get()}); 
+    }
+
+    void visit(const Select *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, op->type.lanes(), {op->condition.get(), op->true_value.get(), op->false_value.get()});
+        set_data_costs(op, 0, {op->condition.get(), op->true_value.get(), op->false_value.get()}); 
+    }
+
+    void visit(const Load *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->predicate.get(), op->index.get()});
+        set_data_costs(op, op->type.bits() * op->type.lanes(), {op->predicate.get(), op->index.get()}); 
+    }
+
+    void visit(const Ramp *op) override {
+        // The cost of a Ramp is higher when the stride is not 1,
+        // but currently the cost model does not consider such cases
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->base.get(), op->stride.get()});
+        set_data_costs(op, 0, {op->base.get(), op->stride.get()}); 
+    }
+
+    void visit(const Broadcast *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 1, {op->value.get()});
+        set_data_costs(op, 0, {op->value.get()});
+    }
+
+    void visit(const Call *op) override {
+        IRVisitor::visit(op);
+        std::vector<const IRNode *> args;
+        for (auto arg : op->args)
+            args.push_back(arg.get());
+        set_compute_costs(op, 1, args);
+        set_data_costs(op, 0, args);
+    }
+
+    void visit(const Let *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->value.get(), op->body.get()});
+        set_data_costs(op, 0, {op->value.get(), op->body.get()});
+    }
+
+    void visit(const Shuffle *op) override {
+        IRVisitor::visit(op);
+        std::vector<const IRNode *> args;
+        for (auto arg : op->vectors)
+            args.push_back(arg.get());
+        set_compute_costs(op, 0, args);
+        set_data_costs(op, op->type.bits() * op->type.lanes(), args);
+    }
+
+    void visit(const VectorReduce *op) override {
+        IRVisitor::visit(op);
+        const int factor = op->value.type().lanes() / op->type.lanes();
+        const int op_count = op->type.lanes() * (factor - 1);
+        set_compute_costs(op, op_count, {op->value.get()});
+        set_data_costs(op, 0, {op->value.get()});
+    }
+
+    void visit(const LetStmt *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->value.get(), op->body.get()}, {op->value.get()});
+        set_data_costs(op, 0, {op->value.get(), op->body.get()}, {op->value.get()});
+    }
+
+    void visit(const AssertStmt *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 1, {op->condition.get()});
+        set_data_costs(op, 0, {op->condition.get()});
+    }
+    
+    void visit(const ProducerConsumer *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->body.get()}, {});
+        set_data_costs(op, 0, {op->body.get()}, {});
+    }
+
+    void visit(const For *op) override {
+        // The cost of a loop-node essentially depends on its iteration
+        // count. The cost model currently ignores such costs.
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->min.get(), op->extent.get(), op->body.get()}, {op->min.get(), op->extent.get()});
+        set_data_costs(op, 0, {op->min.get(), op->extent.get(), op->body.get()}, {op->min.get(), op->extent.get()});
+    }
+
+    void visit(const Acquire *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 1, {op->semaphore.get(), op->count.get(), op->body.get()}, {op->semaphore.get(), op->count.get()});
+        set_data_costs(op, 0, {op->semaphore.get(), op->count.get(), op->body.get()}, {op->semaphore.get(), op->count.get()});
+    }
+
+    void visit(const Store *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->predicate.get(), op->value.get(), op->index.get()});
+        set_data_costs(op, op->value.type().bits() * op->value.type().lanes(), {op->predicate.get(), op->value.get(), op->index.get()});
+    }
+
+    void visit(const Provide *op) override {
+        IRVisitor::visit(op);
+        std::vector<const IRNode *> args;
+        for (auto arg : op->values)
+            args.push_back(arg.get());
+        for (auto arg : op->args)
+            args.push_back(arg.get());
+        args.push_back(op->predicate.get());
+        set_compute_costs(op, 0, args, {});
+        set_data_costs(op, 0, args, {});
+    }
+
+    void visit(const Allocate *op) override {
+        // We do not model allocation/de-allocation costs
+        IRVisitor::visit(op);
+        std::vector<const IRNode *> args_inline;
+        for (auto arg : op->extents)
+            args_inline.push_back(arg.get());  
+        args_inline.push_back(op->new_expr.get());
+        std::vector<const IRNode *> args = args_inline;
+        args.push_back(op->body.get());
+        set_compute_costs(op, 0, args, args_inline);
+        set_data_costs(op, 0, args, args_inline);
+    }
+
+    void visit(const Free *op) override {
+        // We do not model allocation/de-allocation costs
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {});
+        set_data_costs(op, 0, {});
+    }
+
+    void visit(const Realize *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->condition.get(), op->body.get()}, {op->condition.get()});
+        set_data_costs(op, 0, {op->condition.get(), op->body.get()}, {op->condition.get()});
+    }
+
+    void visit(const Prefetch *op) override {
+        IRVisitor::visit(op);
+        std::vector<const IRNode *> args_inline;
+        for (auto arg : op->bounds)
+            args_inline.push_back(arg.min.get());
+        args_inline.push_back(op->condition.get());
+        std::vector<const IRNode *> args = args_inline;
+        args.push_back(op->body.get());
+        set_compute_costs(op, 0, args);
+        int elem_size = 0;
+        for (auto etype : op->types)
+            elem_size += etype.bits() * etype.lanes();
+        set_data_costs(op, elem_size, args, args_inline);
+    }
+
+    void visit(const Block *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->first.get(), op->rest.get()}, {});
+        set_data_costs(op, 0, {op->first.get(), op->rest.get()}, {});
+    }
+
+    void visit(const Fork *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->first.get(), op->rest.get()}, {});
+        set_data_costs(op, 0, {op->first.get(), op->rest.get()}, {});
+    }
+
+    void visit(const IfThenElse *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 1, {op->condition.get(), op->then_case.get()}, {op->condition.get()});
+        set_data_costs(op, 0, {op->condition.get(), op->then_case.get()}, {op->condition.get()});
+    }
+
+    void visit(const Evaluate *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->value.get()});
+        set_data_costs(op, 0, {op->value.get()});
+    }
+
+    void visit(const Atomic *op) override {
+        IRVisitor::visit(op);
+        set_compute_costs(op, 0, {op->body.get()}, {});
+        set_data_costs(op, 0, {op->body.get()}, {});
+    }  
+};
 
 /******************* GetAssemblyInfo *******************/
 // Used to map some Halide IR nodes to line-numbers in the
@@ -134,12 +604,15 @@ private:
 /******************* HTMLCodePrinter Class *******************/
 // Prints IR code in HTML. Very similar to generating a stmt
 // file, except that the generated html is more interactive.
-
 template<typename T>
 class HTMLCodePrinter : public IRVisitor {
 public:
     HTMLCodePrinter(T &os)
         : stream(os), _id(0), context_stack(1, 0) {
+    }
+
+    void init_cost_info(IRCostModel cost_model) {
+        _cost_model = cost_model;
     }
 
     void print(const Module &m) {
@@ -214,6 +687,9 @@ private:
      * These variables are used to track the context within generated HTML */
     std::vector<int> context_stack;
     std::vector<string> context_stack_tags;
+
+    // Holds cost information for visualized program
+    IRCostModel _cost_model;
 
     /* Private print functions to handle various IR types */
     void print(const Buffer<> &buf) {
@@ -710,6 +1186,62 @@ private:
         }
     }
 
+    // Prints compute and data cost buttons/indicators
+    void print_cost_buttons(const IRNode *op) {
+        print_cost_buttons(op, (uint64_t)op);
+    }
+
+    void print_cost_buttons(const IRNode *op, int id) {
+        print_opening_tag("div", "node-cost");
+        print_compute_cost(op, id);
+        print_datamovement_cost(op, id);
+        print_closing_tag("div");
+    }
+
+    // Prints the button/indicator for the compute cost of a line in the program
+    void print_compute_cost(const IRNode *op, uint64_t id) {
+        int max_line_cost = _cost_model.get_max_compute_cost(false);
+        int line_cost = _cost_model.get_compute_cost(op, false);
+        int block_cost = _cost_model.get_compute_cost(op, true);
+        string _id = "cc-" + std::to_string(id);
+        print_cost_btn(line_cost, block_cost, max_line_cost, _id, "Op Count: ");
+    }
+
+    // Prints the button/indicator for the data movement cost of a line in the program
+    void print_datamovement_cost(const IRNode *op, uint64_t id) {
+        int max_line_cost = _cost_model.get_max_datamovement_cost(false);
+        int line_cost = _cost_model.get_datamovement_cost(op, false);
+        int block_cost = _cost_model.get_datamovement_cost(op, true);
+        string _id = "dc-" + std::to_string(id);
+        print_cost_btn(line_cost, block_cost, max_line_cost, _id, "Bits Moved: ");
+    }
+
+    // Prints a cost button/indicator
+     void print_cost_btn(int line_cost, int block_cost, int max_line_cost, string id, string prefix) {
+        const int num_cost_buckets = 20;
+
+        int line_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
+        int block_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
+
+        int line_costc = line_cost / line_cost_bin_size;
+        int block_costc = block_cost / block_cost_bin_size;
+
+        if (line_costc >= num_cost_buckets)
+            line_costc = num_cost_buckets - 1;
+        if (block_costc >= num_cost_buckets)
+            block_costc = num_cost_buckets - 1;
+
+        stream << "<div id='" << id << "' class='cost-btn CostColor" << line_costc << "'"
+               << "   aria-describedby='tooltip-" << id << "'"
+               << "   line-cost='" << line_cost << "' block-cost='" << block_cost << "'"
+               << "   line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>"
+               << "</div>";
+
+        stream << "<span id='tooltip-" << id << "' class='tooltip cond-tooltop' role='tooltip-" << id << "'>"
+               << prefix << line_cost
+               << "</span>";
+    }
+
     /* Misc utility methods */
     int gen_unique_id() {
         return _id++;
@@ -894,13 +1426,16 @@ private:
     void visit(const LetStmt *op) override {
         scope.push(op->name, gen_unique_id());
         print_opening_tag("div", "LetStmt");
+        print_cost_buttons(op);
         print_opening_tag("p", "WrapLine");
+        print_opening_tag("span", "cost-highlight", "cost-bg-" + std::to_string((uint64_t)op));
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "let ");
         print_variable(op->name);
         print_html_element("span", "Operator Assign", " = ");
         print_closing_tag("span");
         print(op->value);
+        print_closing_tag("span");
         print_closing_tag("p");        
         print(op->body); 
         print_closing_tag("div");
@@ -909,6 +1444,7 @@ private:
 
     void visit(const AssertStmt *op) override {
         print_opening_tag("div", "AssertStmt WrapLine");
+        print_cost_buttons(op);
         print_function_call("assert", {op->condition, op->message});
         print_closing_tag("div");
     }
@@ -922,6 +1458,9 @@ private:
 
         // Start a dive to hold code for this Producer/Consumer
         print_opening_tag("div", op->is_producer ? "Produce" : "Consumer");
+
+        // Print cost buttons
+        print_cost_buttons(op, id);
 
         // Generate the show hide icon/text buttons
         print_toggle_anchor_opening_tag(id);
@@ -972,6 +1511,9 @@ private:
         
         // Start a dive to hold code for this allocate
         print_opening_tag("div", "For");
+
+        // Print cost buttons
+        print_cost_buttons(op, id);
 
         // Generate the show hide icon/text buttons
         print_toggle_anchor_opening_tag(id);
@@ -1071,6 +1613,9 @@ private:
         // Start a dive to hold code for this acquire
         print_opening_tag("div", "Store WrapLine");
 
+        // Print cost buttons
+        print_cost_buttons(op);
+
         // Print store target
         print_opening_tag("span", "matched");
         print_opening_tag("span", "nav-anchor", "store-" + std::to_string((uint64_t)op));
@@ -1119,6 +1664,9 @@ private:
 
         // Start a dive to hold code for this allocate
         print_opening_tag("div", "Allocate");
+
+        // Print cost buttons
+        print_cost_buttons(op);
 
         //  Print allocation name, type and extents
         print_opening_tag("span", "matched");
@@ -1181,6 +1729,7 @@ private:
     
     void visit(const Free *op) override {
         print_opening_tag("div", "Free WrapLine");
+        print_cost_buttons(op);
         print_html_element("span", "keyword", "free ");
         print_variable(op->name);
         print_closing_tag("div");
@@ -1304,6 +1853,9 @@ private:
         // Start a dive to hold code for this conditional
         print_opening_tag("div", "IfThenElse");
 
+        // Print cost buttons
+        print_cost_buttons(op, id);
+
         // Generate the show hide icon/text buttons
         print_toggle_anchor_opening_tag(id);
 
@@ -1354,6 +1906,9 @@ private:
                 // Generate a new id for the `else-if` case
                 id = gen_unique_id();
 
+                // Print cost buttons
+                print_cost_buttons(op, id);
+
                 // Generate the show hide icon/text buttons
                 print_toggle_anchor_opening_tag(id);
 
@@ -1379,6 +1934,9 @@ private:
             // Otherwise, print it and we are done!
             else {
                 int else_id = gen_unique_id();
+
+                // Print cost buttons
+                print_cost_buttons(op, else_id);
 
                 // Generate the show hide icon/text buttons
                 print_toggle_anchor_opening_tag(else_id);
@@ -1420,6 +1978,8 @@ private:
 
     void visit(const Evaluate *op) override {
         print_opening_tag("div", "Block");
+        // Print cost buttons
+        print_cost_buttons(op);
         print(op->value);
         print_closing_tag("div");
     }
@@ -1459,6 +2019,9 @@ private:
 
     void visit(const Prefetch *op) override {
         print_opening_tag("div", "Prefetch");
+
+        // Print cost buttons
+        print_cost_buttons(op);
 
         // Print prefetch
         print_html_element("span", "matched keyword", "prefetch ");
@@ -2079,6 +2642,11 @@ public:
         // between Halide IR and assembly -- unclear how reliable this is.
         _asm_info.generate(_asm.str(), m);
 
+        // Run the cost model over this module to pre-compute all 
+        // node costs
+        _cost_model.comput_all_costs(m);
+        html_code_printer.init_cost_info(_cost_model);
+
         // Generate html page
         stream << "<html>\n";
         generate_head(m);
@@ -2092,6 +2660,9 @@ private:
 
     // Handle to assembly file stream
     std::ifstream assembly;
+
+    // Holds cost information for visualized program
+    IRCostModel _cost_model;
 
     // Used to generate unique popup ids
     int _popup_id;
