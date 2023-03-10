@@ -375,10 +375,12 @@ WEAK int halide_shutdown_trace() {
         if (halide_trace_buffer) {
             free(halide_trace_buffer);
         }
-        return ret;
-    } else {
-        return 0;
+        if (ret != 0) {
+            return halide_error_code_trace_failed;
+        }
+        // else fall thru
     }
+    return halide_error_code_success;
 }
 
 namespace {

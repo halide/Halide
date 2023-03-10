@@ -1,8 +1,10 @@
 #ifndef HALIDE_RUNTIME_DEVICE_INTERFACE_H
 #define HALIDE_RUNTIME_DEVICE_INTERFACE_H
 
+#include "HalideRuntime.h"
+
 #ifndef WEAK
-#include "runtime_internal.h"
+#error "This should be impossible"
 #endif
 
 extern "C" {

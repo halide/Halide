@@ -1,3 +1,7 @@
+#ifndef HALIDE_RUNTIME_GPU_CONTEXT_COMMON_H_
+#define HALIDE_RUNTIME_GPU_CONTEXT_COMMON_H_
+
+#include "HalideRuntime.h"
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
@@ -211,8 +215,7 @@ public:
             return false;
         }
         result = compiled_module;
-
-        return true;
+        return halide_error_code_success;
     }
 
     void release_hold(void *user_context, ContextT context, void *state_ptr) {
@@ -228,3 +231,5 @@ public:
 
 }  // namespace Internal
 }  // namespace Halide
+
+#endif  // HALIDE_RUNTIME_GPU_CONTEXT_COMMON_H_

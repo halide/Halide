@@ -61,7 +61,7 @@ typedef struct {
 
 int halide_hexagon_free_l2_pool(void *user_context) {
     halide_print(user_context, "halide_hexagon_free_l2_pool mock implementation \n");
-    return 0;
+    return halide_error_code_success;
 }
 
 static int nDmaPixelSize(int pix_fmt) {
