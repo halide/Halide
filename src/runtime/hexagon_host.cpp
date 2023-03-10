@@ -152,28 +152,44 @@ WEAK int init_hexagon_runtime(void *user_context) {
 
     // Get the symbols we need from the library.
     auto result = get_required_symbol(user_context, host_lib, "halide_hexagon_remote_load_library", remote_load_library);
-    if (result) return result;
+    if (result) {
+        return result;
+    }
 
     result = get_required_symbol(user_context, host_lib, "halide_hexagon_remote_get_symbol_v4", remote_get_symbol);
-    if (result) return result;
+    if (result) {
+        return result;
+    }
 
     result = get_required_symbol(user_context, host_lib, "halide_hexagon_remote_run", remote_run);
-    if (result) return result;
+    if (result) {
+        return result;
+    }
 
     result = get_required_symbol(user_context, host_lib, "halide_hexagon_remote_release_library", remote_release_library);
-    if (result) return result;
+    if (result) {
+        return result;
+    }
 
     result = get_required_symbol(user_context, host_lib, "halide_hexagon_host_malloc_init", host_malloc_init);
-    if (result) return result;
+    if (result) {
+        return result;
+    }
 
     result = get_required_symbol(user_context, host_lib, "halide_hexagon_host_malloc_deinit", host_malloc_deinit);
-    if (result) return result;
+    if (result) {
+        return result;
+    }
 
     result = get_required_symbol(user_context, host_lib, "halide_hexagon_host_malloc", host_malloc);
-    if (result) return result;
+    if (result) {
+        return result;
+    }
 
     result = get_required_symbol(user_context, host_lib, "halide_hexagon_host_free", host_free);
-    if (result) return result;
+    if (result) {
+        return result;
+    }
 
     // These symbols are optional.
     get_optional_symbol(user_context, host_lib, "halide_hexagon_remote_poll_log", remote_poll_log);

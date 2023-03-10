@@ -263,7 +263,6 @@ namespace OpenCL {
 // Helper object to acquire and release the OpenCL context.
 class ClContext {
     void *const user_context;
-    int status_;  // must always be a valid halide_error_code_t value
 
 public:
     cl_context context;
@@ -903,7 +902,9 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t *buf) {
     cl_mem dev_ptr = clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, nullptr, &err);
     if (err != CL_SUCCESS || dev_ptr == nullptr) {
         free(dev_handle);
-        if (err == CL_SUCCESS) err = CL_OUT_OF_RESOURCES;
+        if (err == CL_SUCCESS) {
+            err = CL_OUT_OF_RESOURCES;
+        }
         return error_opencl(user_context, err, "CL: clCreateBuffer failed: ");
     }
     debug(user_context) << (void *)dev_ptr << " device_handle: " << dev_handle << "\n";
@@ -1669,7 +1670,9 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
     cl_mem dev_ptr = clCreateImage(ctx.context, CL_MEM_READ_WRITE, &format, &desc, nullptr, &cl_err);
     if (cl_err != CL_SUCCESS || dev_ptr == nullptr) {
         free(dev_handle);
-        if (cl_err == CL_SUCCESS) cl_err = CL_OUT_OF_RESOURCES;
+        if (cl_err == CL_SUCCESS) {
+            cl_err = CL_OUT_OF_RESOURCES;
+        }
         return error_opencl(user_context, cl_err, "clCreateImage failed");
     } else {
         debug(user_context) << (void *)dev_ptr << " device_handle: " << dev_handle << "\n";
