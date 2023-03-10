@@ -27,7 +27,7 @@ public:
 
     void error(const char *msg) override {
         fprintf(stderr, "Error: %s\n", msg);
-        exit(-1);
+        exit(1);
     }
 };
 
@@ -43,7 +43,7 @@ int run_test() {
         float16_t correct = Halide::float16_t(-0.5f) + Halide::float16_t(i) / Halide::float16_t(128.0f);
         if (in1(i) != correct) {
             fprintf(stderr, "in1(%d) = %f instead of %f\n", i, float(in2(i)), float(correct));
-            exit(-1);
+            exit(1);
         }
     });
 
@@ -51,7 +51,7 @@ int run_test() {
         bfloat16_t correct = Halide::bfloat16_t(-0.5f) + Halide::bfloat16_t(i) / Halide::bfloat16_t(128.0f);
         if (in2(i) != correct) {
             fprintf(stderr, "in2(%d) = %f instead of %f\n", i, float(in2(i)), float(correct));
-            exit(-1);
+            exit(1);
         }
     });
 

@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
             if (out(x) != correct) {
                 printf("out(%d) = %d instead of %d\n",
                        x, out(x), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
             if (out(x) != correct) {
                 printf("out(%d) = %d instead of %d\n",
                        x, out(x), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -160,7 +160,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -214,7 +214,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -243,7 +243,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -267,7 +267,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -298,7 +298,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -321,7 +321,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -346,7 +346,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -369,7 +369,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -409,7 +409,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }
@@ -435,7 +435,7 @@ int main(int argc, char **argv) {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         });
     }

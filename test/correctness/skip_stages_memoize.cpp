@@ -13,7 +13,7 @@ int single_toggle_trace(JITUserContext *user_context, const halide_trace_event_t
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
             printf("set_toggle1 is false; %s's producer should never have had been executed.\n",
                    buffer_name.c_str());
-            exit(-1);
+            exit(1);
         }
     }
     return 0;
@@ -25,14 +25,14 @@ int double_toggle_trace(JITUserContext *user_context, const halide_trace_event_t
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
             printf("set_toggle1 is false; %s's producer should never have had been executed.\n",
                    buffer_name.c_str());
-            exit(-1);
+            exit(1);
         }
     } else if (!set_toggle2) {
         std::string buffer_name = "f2_" + std::to_string(buffer_index);
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
             printf("set_toggle2 is false; %s's producer should never have had been executed.\n",
                    buffer_name.c_str());
-            exit(-1);
+            exit(1);
         }
     }
     return 0;

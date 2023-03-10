@@ -28,7 +28,7 @@ double test(Func f, bool test_correctness = true) {
                 if (output(x, y) != correct) {
                     printf("output(%d, %d) = %d instead of %d\n",
                            x, y, output(x, y), correct);
-                    exit(-1);
+                    exit(1);
                 }
             }
         }

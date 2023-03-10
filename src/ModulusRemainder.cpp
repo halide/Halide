@@ -337,7 +337,7 @@ void check(const Expr &e, int64_t m, int64_t r) {
         std::cerr << "Computed modulus, remainder = "
                   << result.modulus << ", "
                   << result.remainder << "\n";
-        exit(-1);
+        exit(1);
     }
 }
 }  // namespace

@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
             for (int i = 0; i < out.width(); i++) {
                 if (out(i) == 0) {
                     std::cerr << "Mismatch between: " << a << " and " << b << " when x == " << i << "\n";
-                    exit(-1);
+                    exit(1);
                 }
             }
         };

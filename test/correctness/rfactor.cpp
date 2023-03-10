@@ -832,7 +832,7 @@ int allocation_bound_test_trace(JITUserContext *user_context, const halide_trace
             printf("Bounds on realization of f were supposed to be [0, 2]\n"
                    "Instead they are: [%d, %d]\n",
                    e->coordinates[0], e->coordinates[1]);
-            exit(-1);
+            exit(1);
         }
     }
     return 0;

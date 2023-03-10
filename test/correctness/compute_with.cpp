@@ -71,7 +71,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
         if (iter != stores.end()) {
             const Bound &b = iter->second;
             if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "store", fname)) {
-                exit(-1);
+                exit(1);
             }
         }
         stores_total++;
@@ -81,7 +81,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
         if (iter != loads.end()) {
             const Bound &b = iter->second;
             if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "load", fname)) {
-                exit(-1);
+                exit(1);
             }
         }
         loads_total++;
@@ -2096,7 +2096,7 @@ int rvar_bounds_test() {
         Stmt visit(const Allocate *op) override {
             if ((op->name == "input_c") && (op->constant_allocation_size() != 64)) {
                 printf("Expected allocation size for input_c is 64, but is %d instead\n", op->constant_allocation_size());
-                exit(-1);
+                exit(1);
             }
             return IRMutator::visit(op);
         }

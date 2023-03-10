@@ -57,12 +57,12 @@ public:
         if (expected_store_count != c.store_count) {
             printf("There were %d predicated stores; expect %d predicated stores\n",
                    c.store_count, expected_store_count);
-            exit(-1);
+            exit(1);
         }
         if (expected_load_count != c.load_count) {
             printf("There were %d predicated loads; expect %d predicated loads\n",
                    c.load_count, expected_load_count);
-            exit(-1);
+            exit(1);
         }
         return s;
     }

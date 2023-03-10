@@ -40,7 +40,7 @@ void check_interleave_count(Func f, int correct) {
     if (c < correct) {
         printf("Func %s should have interleaved >= %d times but interleaved %d times instead.\n",
                f.name().c_str(), correct, c);
-        exit(-1);
+        exit(1);
     }
 }
 

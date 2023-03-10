@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     result = user_context(context_pointer, input, output);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);
-        exit(-1);
+        exit(1);
     }
     assert(called_malloc && called_free);
     assert(called_trace && !called_error);
@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
     result = user_context_argv(args);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);
-        exit(-1);
+        exit(1);
     }
     assert(called_malloc && called_free);
     assert(called_trace && !called_error);
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     result = user_context(context_pointer, input, big_output);
     if (result == 0) {
         fprintf(stderr, "Expected this to fail, but got %d\n", result);
-        exit(-1);
+        exit(1);
     }
     assert(called_error);
 
