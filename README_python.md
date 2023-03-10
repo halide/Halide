@@ -193,7 +193,8 @@ f.vectorize(x, 8).parallel(y)
 buf = f.realize([edge, edge, 3])
 
 # Do something with the image. We'll just save it to a PNG.
-hl.imageio.imwrite("/tmp/example.png", buf)
+from halide import imageio
+imageio.imwrite("/tmp/example.png", buf)
 ```
 
 It's worth noting in the example above that the Halide `Buffer` object supports
