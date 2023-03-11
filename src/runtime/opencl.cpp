@@ -263,6 +263,7 @@ namespace OpenCL {
 // Helper object to acquire and release the OpenCL context.
 class ClContext {
     void *const user_context;
+    int status_;  // must always be a valid halide_error_code_t value
 
 public:
     cl_context context;
