@@ -588,7 +588,12 @@ void CodeGen_X86::visit(const Call *op) {
             codegen(saturating_sub(op->args[0], op->args[1]) | saturating_sub(op->args[1], op->args[0]));
             return;
         } else if (op->args[0].type().is_int()) {
-            codegen(Max::make(op->args[0], op->args[1]) - Min::make(op->args[0], op->args[1]));
+            // In the signed case, we take the min/max, cast them to unsigned,
+            // and subtract. The cast to unsigned may wrap, but if it does, so
+            // will the subtract.
+            codegen(
+                cast(op->type, Max::make(op->args[0], op->args[1])) -
+                cast(op->type, Min::make(op->args[0], op->args[1])));
             return;
         }
     }
