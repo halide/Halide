@@ -776,7 +776,6 @@ WEAK int halide_metal_run(void *user_context,
 #ifdef DEBUG_RUNTIME
     int64_t max_total_threads_per_threadgroup = get_max_total_threads_per_threadgroup(pipeline_state);
     if (max_total_threads_per_threadgroup < threadsX * threadsY * threadsZ) {
-        stringstream msg(user_context);
         end_encoding(encoder);
         release_ns_object(pipeline_state);
         error(user_context) << "Metal: threadsX(" << threadsX << ") * threadsY("

@@ -215,7 +215,7 @@ public:
             return false;
         }
         result = compiled_module;
-        return halide_error_code_success;
+        return true;
     }
 
     void release_hold(void *user_context, ContextT context, void *state_ptr) {
