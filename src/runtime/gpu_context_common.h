@@ -215,6 +215,7 @@ public:
             return false;
         }
         result = compiled_module;
+
         return true;
     }
 
