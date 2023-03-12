@@ -88,14 +88,43 @@
         var buttonShow = document.getElementById(id + '-show');
         var buttonHide = document.getElementById(id + '-hide');
         var body = document.getElementById(id);
+        var re = /(?:\-([^-]+))?$/;
+        var ccost_btn = document.getElementById("vcc-" + re.exec(id)[1]);
+        var dcost_btn = document.getElementById("vdc-" + re.exec(id)[1]);
+        var ccost_tt = document.getElementById("tooltip-vcc-" + re.exec(id)[1]);
+        var dcost_tt = document.getElementById("tooltip-vdc-" + re.exec(id)[1]);
         if (body.classList.contains("collapsed-viz")) {
             body.classList.remove("collapsed-viz");
             buttonShow.style.display = 'none';
             buttonHide.style.display = 'block';
+            if (ccost_btn && dcost_tt) {
+                // Update cost indicators
+                ccost_color = ccost_btn.getAttribute('line-cost-color');
+                dcost_color = dcost_btn.getAttribute('line-cost-color');
+                ccost_btn.className = ccost_btn.className.replace(/CostColor\d+/, 'CostColor' + ccost_color);
+                dcost_btn.className = dcost_btn.className.replace(/CostColor\d+/, 'CostColor' + dcost_color);
+                // Update cost tooltips
+                ccost = ccost_btn.getAttribute('line-cost');
+                dcost = dcost_btn.getAttribute('line-cost');
+                ccost_tt.innerText = 'Op Count: ' + ccost;
+                dcost_tt.innerText = 'Bits Moved: ' + dcost;
+            }
         } else {
             body.classList.add("collapsed-viz");
             buttonShow.style.display = 'block';
             buttonHide.style.display = 'none';
+            if (ccost_btn && dcost_tt) {
+                // Update cost indicators
+                collapsed_ccost_color = ccost_btn.getAttribute('block-cost-color');
+                collapsed_dcost_color = dcost_btn.getAttribute('block-cost-color');
+                ccost_btn.className = ccost_btn.className.replace(/CostColor\d+/, 'CostColor' + collapsed_ccost_color);
+                dcost_btn.className = dcost_btn.className.replace(/CostColor\d+/, 'CostColor' + collapsed_dcost_color);
+                // Update cost tooltips
+                collapsed_ccost = ccost_btn.getAttribute('block-cost');
+                collapsed_dcost = dcost_btn.getAttribute('block-cost');
+                ccost_tt.innerText = 'Op Count: ' + collapsed_ccost;
+                dcost_tt.innerText = 'Bits Moved: ' + collapsed_dcost;
+            }
         }
     };
 
@@ -336,6 +365,8 @@
     init_tooltips($('button[id^="cond-"]'), "span#cond-tooltip-");
     init_tooltips($('div[id^="cc-"]'), "span#tooltip-cc-");
     init_tooltips($('div[id^="dc-"]'), "span#tooltip-dc-");
+    init_tooltips($('div[id^="vcc-"]'), "span#tooltip-vcc-");
+    init_tooltips($('div[id^="vdc-"]'), "span#tooltip-vdc-");
     
     function depth(elem) {
         if ($(elem).is("div#ir-visualization-tab"))

@@ -2108,6 +2108,10 @@ public:
         : stream(os), printer(ss), _id(0) {
     }
 
+    void init_cost_info(IRCostModel cost_model) {
+        _cost_model = cost_model;
+    }
+
     void print(const Module &m, AssemblyInfo asm_info) {
         _assembly_info = asm_info;
         for (const auto &fn : m.functions()) {
@@ -2128,6 +2132,9 @@ private:
 
     // Assembly line number info
     AssemblyInfo _assembly_info;
+
+    // Holds cost information for visualized program
+    IRCostModel _cost_model;
 
     // Generate unique ids
     int _id;
@@ -2235,22 +2242,76 @@ private:
         print_closing_tag("div");
     }
 
+    // Prints the cost indicator buttons within div.box-header
+    void print_cost_buttons(int id, const IRNode *op) {
+        print_opening_tag("div", "viz-cost-btns");
+        
+        // Print compute cost indicator
+        int max_line_ccost = _cost_model.get_max_compute_cost(false);
+        int line_ccost = _cost_model.get_compute_cost(op, false);
+        int block_ccost = _cost_model.get_compute_cost(op, true);
+        print_cost_button(line_ccost, block_ccost, max_line_ccost, "vcc-" + std::to_string(id), "Op Count: ");
+
+        // Print data movement cost indicator
+        int max_line_dcost = _cost_model.get_max_datamovement_cost(false);
+        int line_dcost = _cost_model.get_datamovement_cost(op, false);
+        int block_dcost = _cost_model.get_datamovement_cost(op, true);
+        // Special handling for Store nodes; since unlike the code view
+        // the viz view prints stores and loads seperately, therefore using 
+        // inclusive cost is confusing.
+        if (op->node_type == IRNodeType::Store) {
+            const Store *st = static_cast<const Store *>(op);
+            line_dcost = st->value.type().bits() * st->value.type().lanes();
+            block_dcost = line_dcost;
+        }
+        print_cost_button(line_dcost, block_dcost, max_line_dcost, "vdc-" + std::to_string(id), "Bits Moved: ");
+        
+        print_closing_tag("div");
+    }
+
+    void print_cost_button(int line_cost, int block_cost, int max_line_cost, string id, string prefix) {
+        const int num_cost_buckets = 20;
+
+        int line_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
+        int block_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
+
+        int line_costc = line_cost / line_cost_bin_size;
+        int block_costc = block_cost / block_cost_bin_size;
+
+        if (line_costc >= num_cost_buckets)
+            line_costc = num_cost_buckets - 1;
+        if (block_costc >= num_cost_buckets)
+            block_costc = num_cost_buckets - 1;
+
+        stream << "<div id='" << id << "' class='cost-btn CostColor" << line_costc << "'"
+               << "   aria-describedby='tooltip-" << id << "'"
+               << "   line-cost='" << line_cost << "' block-cost='" << block_cost << "'"
+               << "   line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>"
+               << "</div>";
+
+        stream << "<span id='tooltip-" << id << "' class='tooltip cond-tooltop' role='tooltip-" << id << "'>"
+               << prefix << line_cost
+               << "</span>";
+    }
+
     // Prints the box .box-header within div.box
-    void print_box_header(int id, string anchor, string code_anchor, string title) {
+    void print_box_header(int id, const IRNode* op, string anchor, string code_anchor, string title) {
         print_opening_tag("div", "box-header");
         print_collapse_expand_btn(id);
         print_code_button(code_anchor);
         print_box_title(title, anchor);
+        print_cost_buttons(id, op);
         print_closing_tag("div");
     }
 
     // Prints the box .box-header within div.box, contains the asm info button
-    void print_box_header_asm(int id, string anchor, string code_anchor, string asm_anchor, string title) {
+    void print_box_header_asm(int id, const IRNode *op, string anchor, string code_anchor, string asm_anchor, string title) {
         print_opening_tag("div", "box-header");
         print_collapse_expand_btn(id);
         print_code_button(code_anchor);
         print_asm_button(asm_anchor);
         print_box_title(title, anchor);
+        print_cost_buttons(id, op);
         print_closing_tag("div");
     }
 
@@ -2320,7 +2381,7 @@ private:
 
         // Create viz content
         string aid = std::to_string((uint64_t)&node);
-        print_box_header(id, "cond-viz-" + aid, "cond-" + aid, get_as_str(cond, prefix));
+        print_box_header(id, node.get(), "cond-viz-" + aid, "cond-" + aid, get_as_str(cond, prefix));
         
         // Print contents of node
         print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
@@ -2349,7 +2410,7 @@ private:
 
         // Print box header
         string aid = std::to_string((uint64_t)op);
-        print_box_header(id, "allocate-viz-" + aid, "allocate-" + aid, "Allocate: " + op->name);
+        print_box_header(id, op, "allocate-viz-" + aid, "allocate-" + aid, "Allocate: " + op->name);
 
         // Start a box to hold viz
         print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
@@ -2393,9 +2454,9 @@ private:
         string aid = std::to_string((uint64_t)op);
         int asm_lno = _assembly_info.get_asm_lno((uint64_t)op);
         if (asm_lno == -1)
-            print_box_header(id, "loop-viz-" + aid, "loop-" + aid, "For: " + get_as_var(op->name));
+            print_box_header(id, op, "loop-viz-" + aid, "loop-" + aid, "For: " + get_as_var(op->name));
         else
-            print_box_header_asm(id, "loop-viz-" + aid, "loop-" + aid, std::to_string(asm_lno), "For: " + get_as_var(op->name));
+            print_box_header_asm(id, op, "loop-viz-" + aid, "loop-" + aid, std::to_string(asm_lno), "For: " + get_as_var(op->name));
 
         // Start a box to hold viz
         print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
@@ -2476,9 +2537,9 @@ private:
         string prefix = op->is_producer ? "Produce: " : "Consume: ";
         int asm_lno = _assembly_info.get_asm_lno((uint64_t)op);
         if (asm_lno == -1)
-            print_box_header(id, "prodcons-viz-" + aid, "prodcons-" + aid, prefix + get_as_var(op->name));
+            print_box_header(id, op, "prodcons-viz-" + aid, "prodcons-" + aid, prefix + get_as_var(op->name));
         else
-            print_box_header_asm(id, "prodcons-viz-" + aid, "prodcons-" + aid, std::to_string(asm_lno), prefix + get_as_var(op->name));
+            print_box_header_asm(id, op, "prodcons-viz-" + aid, "prodcons-" + aid, std::to_string(asm_lno), prefix + get_as_var(op->name));
 
         // Print the body
         print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
@@ -2502,7 +2563,7 @@ private:
 
         // Print box header
         string aid = std::to_string((uint64_t)op);
-        print_box_header(id, "store-viz-" + aid, "store-" + aid, "Store: " + get_as_var(op->name));
+        print_box_header(id, op, "store-viz-" + aid, "store-" + aid, "Store: " + get_as_var(op->name));
 
         // Start a box to hold viz
         print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
@@ -2550,7 +2611,7 @@ private:
 
         // Print box header
         string aid = std::to_string((uint64_t)op);
-        print_box_header(id, "load-viz-" + aid, "load-" + aid, "Load: " + get_as_var(op->name));
+        print_box_header(id, op, "load-viz-" + aid, "load-" + aid, "Load: " + get_as_var(op->name));
 
         // Start a box to hold viz
         print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
@@ -2646,6 +2707,7 @@ public:
         // node costs
         _cost_model.comput_all_costs(m);
         html_code_printer.init_cost_info(_cost_model);
+        html_viz_printer.init_cost_info(_cost_model);
 
         // Generate html page
         stream << "<html>\n";
