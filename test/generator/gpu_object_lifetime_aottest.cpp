@@ -213,7 +213,8 @@ int main(int argc, char **argv) {
 
     int ret = tracker.validate_gpu_object_lifetime(false /* allow_globals */, true /* allow_none */, 2 /* max_globals */);
     if (ret != 0) {
-        return ret;
+        fprintf(stderr, "validate_gpu_object_lifetime() failed\n");
+        return 1;
     }
 
     printf("Success!\n");
