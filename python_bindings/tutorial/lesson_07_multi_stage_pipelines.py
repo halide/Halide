@@ -1,15 +1,24 @@
 #!/usr/bin/python3
-
+#
 # Halide tutorial lesson 7
-
+#
 # This lesson demonstrates how express multi-stage pipelines.
-
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_07_multi_stage_pipelines
-# in a shell with the current directory at python_bindings/
+#
+# With Halide for Python installed, run
+#
+#    python3 path/to/lesson_07_multi_stage_pipelines.py
+#
+# in a shell.
+#
+# - To install Halide for Python from PyPI:
+#   - python3 -m pip install halide
+#
+# - To install Halide for Python from source:
+#   - Build and install Halide locally using CMake (see README_cmake.md)
+#   - export HALIDE_INSTALL=path/to/halide/install
+#   - export PYTHONPATH=$HALIDE_INSTALL/lib/python3/site-packages
 
 import halide as hl
-
 import halide.imageio
 import numpy as np
 import os.path
@@ -19,7 +28,7 @@ def main():
     # First we'll declare some Vars to use below.
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "images/rgb.png")
 
     # Now we'll express a multi-stage pipeline that blurs an image
     # first horizontally, and then vertically.
@@ -34,13 +43,15 @@ def main():
 
         # Blur it horizontally:
         blur_x = hl.Func("blur_x")
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 *
-                           input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (
+            input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]
+        ) / 4
 
         # Blur it vertically:
         blur_y = hl.Func("blur_y")
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 *
-                           blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (
+            blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]
+        ) / 4
 
         # Convert back to 8-bit.
         output = hl.Func("output")
@@ -54,9 +65,9 @@ def main():
         # feed-forward graphs of Funcs.
 
         # Now let's realize it...
-
-        # result = output.realize([input.width(), input.height(), 3])
-
+        #
+        #   result = output.realize([input.width(), input.height(), 3])
+        #
         # Except that the line above is not going to work. Uncomment
         # it to see what happens.
 
@@ -70,7 +81,7 @@ def main():
         # this code, determines that the input will be read out of
         # bounds, and refuses to continue. No actual bounds checks
         # occur in the inner loop that would be slow.
-        #
+
         # So what do we do? There are a few options. If we realize
         # over a domain shifted inwards by one pixel, we won't be
         # asking the Halide routine to read out of bounds. We saw how
@@ -82,9 +93,7 @@ def main():
         # Save the result. It should look like a slightly blurry
         # parrot, and it should be two pixels narrower and two pixels
         # shorter than the input image.
-
-        # python3-imageio versions <2.5 expect a numpy array
-        halide.imageio.imwrite("blurry_parrot_1.png", np.asanyarray(result))
+        halide.imageio.imwrite("blurry_parrot_1.png", result)
         print("Created blurry_parrot_1.png")
 
         # This is usually the fastest way to deal with boundaries:
@@ -117,7 +126,7 @@ def main():
         # using a helper function from the BoundaryConditions
         # namespace like so:
         #
-        # clamped = hl.BoundaryConditions.repeat_edge(input)
+        #   clamped = hl.BoundaryConditions.repeat_edge(input)
         #
         # These are important to use for other boundary conditions,
         # because they are expressed in the way that Halide can best
@@ -134,13 +143,15 @@ def main():
 
         # Blur it horizontally:
         blur_x = hl.Func("blur_x")
-        blur_x[x, y, c] = (input_16[x - 1, y, c] + 2 *
-                           input_16[x, y, c] + input_16[x + 1, y, c]) / 4
+        blur_x[x, y, c] = (
+            input_16[x - 1, y, c] + 2 * input_16[x, y, c] + input_16[x + 1, y, c]
+        ) / 4
 
         # Blur it vertically:
         blur_y = hl.Func("blur_y")
-        blur_y[x, y, c] = (blur_x[x, y - 1, c] + 2 *
-                           blur_x[x, y, c] + blur_x[x, y + 1, c]) / 4
+        blur_y[x, y, c] = (
+            blur_x[x, y - 1, c] + 2 * blur_x[x, y, c] + blur_x[x, y + 1, c]
+        ) / 4
 
         # Convert back to 8-bit.
         output = hl.Func("output")
@@ -153,9 +164,7 @@ def main():
         # Save the result. It should look like a slightly blurry
         # parrot, but this time it will be the same size as the
         # input.
-
-        # python3-imageio versions <2.5 expect a numpy array
-        halide.imageio.imwrite("blurry_parrot_2.png", np.asanyarray(result))
+        halide.imageio.imwrite("blurry_parrot_2.png", result)
         print("Created blurry_parrot_2.png")
 
     print("Success!")

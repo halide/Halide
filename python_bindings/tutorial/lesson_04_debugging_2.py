@@ -1,12 +1,22 @@
 #!/usr/bin/python3
-
+#
 # Halide tutorial lesson 4
-
+#
 # This lesson demonstrates how to follow what Halide is doing at runtime.
-
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_04_debugging_2
-# in a shell with the current directory at python_bindings/
+#
+# With Halide for Python installed, run
+#
+#    python3 path/to/lesson_04_debugging_2.py
+#
+# in a shell.
+#
+# - To install Halide for Python from PyPI:
+#   - python3 -m pip install halide
+#
+# - To install Halide for Python from source:
+#   - Build and install Halide locally using CMake (see README_cmake.md)
+#   - export HALIDE_INSTALL=path/to/halide/install
+#   - export PYTHONPATH=$HALIDE_INSTALL/lib/python3/site-packages
 
 import halide as hl
 
@@ -45,12 +55,12 @@ def main():
     # that describes the algorithm.
 
     # Now we tell Halide to use a parallel for loop over the y
-    # coordinate. On linux we run this using a thread pool and a task
-    # queue. On os x we call into grand central dispatch, which does
+    # coordinate. On Linux we run this using a thread pool and a task
+    # queue. On OSX we call into Grand Central Dispatch, which does
     # the same thing for us.
     parallel_gradient.parallel(y)
 
-    # This time the printfs should come out of order, because each
+    # This time the prints should come out of order, because each
     # scanline is potentially being processed in a different
     # thread. The number of threads should adapt to your system, but
     # on linux you can control it manually using the environment

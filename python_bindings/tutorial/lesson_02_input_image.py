@@ -1,10 +1,22 @@
+#!/usr/bin/python3
+#
 # Halide tutorial lesson 2.
-
+#
 # This lesson demonstrates how to pass in input images.
-
-# This lesson can be built by invoking the command:
-#    make test_tutorial_lesson_02_input_image
-# in a shell with the current directory at python_bindings/
+#
+# With Halide for Python installed, run
+#
+#    python3 path/to/lesson_02_input_image.py
+#
+# in a shell.
+#
+# - To install Halide for Python from PyPI:
+#   - python3 -m pip install halide
+#
+# - To install Halide for Python from source:
+#   - Build and install Halide locally using CMake (see README_cmake.md)
+#   - export HALIDE_INSTALL=path/to/halide/install
+#   - export PYTHONPATH=$HALIDE_INSTALL/lib/python3/site-packages
 
 import halide as hl
 import numpy as np
@@ -18,7 +30,7 @@ def main():
     # brightens an image.
 
     # First we'll load the input image we wish to brighten.
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "images/rgb.png")
 
     # We create a hl.Buffer object to wrap the numpy array
     input = hl.Buffer(halide.imageio.imread(image_path))
@@ -44,9 +56,7 @@ def main():
     # Cast it to a floating point value.
     value = hl.cast(hl.Float(32), value)
 
-    # Multiply it by 1.5 to brighten it. Halide represents real
-    # numbers as floats, not doubles, so we stick an 'f' on the end
-    # of our constant.
+    # Multiply it by 1.5 to brighten it.
     value = value * 1.5
 
     # Clamp it to be less than 255, so we don't get overflow when we
@@ -61,8 +71,7 @@ def main():
 
     # The equivalent one-liner to all of the above is:
     #
-    # brighter(x, y, c) = hl.cast<uint8_t>(hl.min(input(x, y, c) * 1.5f, 255))
-    # brighter[x, y, c] = hl.cast(hl.UInt(8), hl.min(input[x, y, c] * 1.5, 255))
+    #   brighter[x, y, c] = hl.cast(hl.UInt(8), hl.min(input[x, y, c] * 1.5, 255))
     #
     # In the shorter version:
     # - I skipped the hl.cast to float, because multiplying by 1.5f does
@@ -86,8 +95,7 @@ def main():
     assert output_image.type() == hl.UInt(8)
 
     # Save the output for inspection. It should look like a bright parrot.
-    # python3-imageio versions <2.5 expect a numpy array
-    halide.imageio.imwrite("brighter.png", np.asanyarray(output_image))
+    halide.imageio.imwrite("brighter.png", output_image)
     print("Created brighter.png result file.")
 
     print("Success!")

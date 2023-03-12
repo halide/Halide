@@ -106,6 +106,7 @@ stdout.txt
 # Tutorial images that were copied to the install tree
 **/tutorial/images/
 !tutorial/images/
+!python_bindings/tutorial/images/
 
 ################################################################################
 ## Common build artifacts
