@@ -179,6 +179,7 @@ void define_enums(py::module &m) {
         .value("ProfileByTimer", Target::Feature::ProfileByTimer)
         .value("SPIRV", Target::Feature::SPIRV)
         .value("Semihosting", Target::Feature::Semihosting)
+        .value("NoAlignedAlloc", Target::Feature::NoAlignedAlloc)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

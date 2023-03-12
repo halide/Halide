@@ -157,6 +157,7 @@ struct Target {
         ProfileByTimer = halide_target_feature_profile_by_timer,
         SPIRV = halide_target_feature_spirv,
         Semihosting = halide_target_feature_semihosting,
+        NoAlignedAlloc = halide_target_feature_no_aligned_alloc,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
