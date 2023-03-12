@@ -589,7 +589,7 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
 
 WEAK void halide_cuda_finalize_kernels(void *user_context, void *state_ptr) {
     Context ctx(user_context);
-    if (ctx.error()) {
+    if (ctx.error() == halide_error_code_success) {
         compilation_cache.release_hold(user_context, ctx.context, state_ptr);
     }
 }
