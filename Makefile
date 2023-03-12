@@ -1334,8 +1334,26 @@ $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHAR
 
 # Runtime tests that test internals
 RUNTIME_TESTS_CXXFLAGS = -fno-rtti -fno-exceptions -fno-threadsafe-statics -Wno-builtin-declaration-mismatch -DCOMPILING_HALIDE_RUNTIME -DCOMPILING_HALIDE_RUNTIME_TESTS
-$(BIN_DIR)/runtime_%: $(ROOT_DIR)/test/runtime/%.cpp $(ROOT_DIR)/test/runtime/common.h
-	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) $< $(COMMON_LD_FLAGS) -o $@
+
+$(BIN_DIR)/runtime_internal_common.o: $(ROOT_DIR)/test/runtime/common.cpp $(ROOT_DIR)/test/runtime/common.h
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
+
+$(BIN_DIR)/runtime_internal_msan_stubs.o: $(ROOT_DIR)/src/runtime/msan_stubs.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
+
+$(BIN_DIR)/runtime_internal_to_string.o: $(ROOT_DIR)/src/runtime/to_string.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
+
+$(BIN_DIR)/runtime_common:
+	@mkdir -p $(@D)
+	touch $@
+
+$(BIN_DIR)/runtime_%: $(ROOT_DIR)/test/runtime/%.cpp $(BIN_DIR)/runtime_internal_common.o $(BIN_DIR)/runtime_internal_msan_stubs.o $(BIN_DIR)/runtime_internal_to_string.o
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) $^ $(COMMON_LD_FLAGS) -o $@
 
 # Auto schedule tests that link against libHalide
 $(BIN_DIR)/mullapudi2016_%: $(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
@@ -1956,6 +1974,9 @@ warning_%: $(BIN_DIR)/warning_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "^Warning"
 	@-echo
+
+runtime_common:
+	# nothing
 
 runtime_%: $(BIN_DIR)/runtime_%
 	@-mkdir -p $(TMP_DIR)
