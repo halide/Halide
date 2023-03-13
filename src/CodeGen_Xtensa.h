@@ -12,10 +12,7 @@ namespace Internal {
 
 class CodeGen_Xtensa : public CodeGen_C {
 public:
-    CodeGen_Xtensa(std::ostream &s, Target t, OutputKind kind = CImplementation)
-        : CodeGen_C(s, t, kind) {
-        stack_is_core_private = true;
-    }
+    using CodeGen_C::CodeGen_C;
 
 protected:
     Stmt preprocess_function_body(const Stmt &stmt) override;
@@ -55,6 +52,8 @@ protected:
     void visit(const IntImm *op) override;
     void visit(const Let *op) override;
     void visit(const LetStmt *op) override;
+
+    bool is_stack_private_to_thread() const override;
 
     int current_loop_level = 0;
     std::vector<std::string> global_static_allocations;

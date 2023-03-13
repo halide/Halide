@@ -3800,6 +3800,10 @@ void CodeGen_Xtensa::visit(const Store *op) {
     cache.clear();
 }
 
+bool CodeGen_Xtensa::is_stack_private_to_thread() const {
+    return true;
+}
+
 void CodeGen_Xtensa::visit(const Call *op) {
     ostringstream rhs;
 
