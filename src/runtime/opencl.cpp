@@ -345,7 +345,7 @@ WEAK int validate_device_pointer(void *user_context, halide_buffer_t *buf, size_
     size_t real_size;
     cl_int err = clGetMemObjectInfo(dev_ptr, CL_MEM_SIZE, sizeof(size_t), &real_size, nullptr);
     if (err != CL_SUCCESS) {
-        return error_opencl(user_context, err, "CL: Bad device pointer ", (void *)dev_ptr);
+        return error_opencl(user_context, err, "Bad device pointer ", (void *)dev_ptr);
     }
 
     debug(user_context) << "CL: validate " << (void *)dev_ptr << " offset: " << offset
@@ -381,7 +381,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
     err = clGetPlatformIDs(max_platforms, platforms, &platform_count);
     if (err != CL_SUCCESS) {
-        return error_opencl(user_context, err, "CL: clGetPlatformIDs failed");
+        return error_opencl(user_context, err, "clGetPlatformIDs failed");
     }
 
     cl_platform_id platform = nullptr;
@@ -408,7 +408,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         platform = platforms[0];
     }
     if (platform == nullptr) {
-        return error_opencl(user_context, CL_INVALID_PLATFORM, "CL: Failed to find platform");
+        return error_opencl(user_context, CL_INVALID_PLATFORM, "Failed to find platform");
     }
 
 #ifdef DEBUG_RUNTIME
@@ -454,7 +454,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     cl_uint deviceCount = 0;
     err = clGetDeviceIDs(platform, device_type, maxDevices, devices, &deviceCount);
     if (err != CL_SUCCESS) {
-        return error_opencl(user_context, err, "CL: clGetDeviceIDs failed");
+        return error_opencl(user_context, err, "clGetDeviceIDs failed");
     }
 
     // If the user indicated a specific device index to use, use
@@ -485,7 +485,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     }
 
     if (device < 0 || device >= (int)deviceCount) {
-        return error_opencl(user_context, CL_DEVICE_NOT_FOUND, "CL: Failed to get device");
+        return error_opencl(user_context, CL_DEVICE_NOT_FOUND, "Failed to get device");
     }
 
     cl_device_id dev = devices[device];
@@ -530,7 +530,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     for (int i = 0; infos[i].dst; i++) {
         err = clGetDeviceInfo(dev, infos[i].param, infos[i].sz, infos[i].dst, nullptr);
         if (err != CL_SUCCESS) {
-            return error_opencl(user_context, err, "CL: clGetDeviceInfo failed");
+            return error_opencl(user_context, err, "clGetDeviceInfo failed");
         }
     }
 
@@ -555,14 +555,14 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     debug(user_context) << "    clCreateContext -> ";
     *ctx = clCreateContext(properties, 1, &dev, nullptr, nullptr, &err);
     if (err != CL_SUCCESS) {
-        return error_opencl(user_context, err, "CL: clCreateContext failed");
+        return error_opencl(user_context, err, "clCreateContext failed");
     }
     debug(user_context) << *ctx << "\n";
 
     debug(user_context) << "    clCreateCommandQueue ";
     *q = clCreateCommandQueue(*ctx, dev, 0, &err);
     if (err != CL_SUCCESS) {
-        return error_opencl(user_context, err, "CL: clCreateCommandQueue failed");
+        return error_opencl(user_context, err, "clCreateCommandQueue failed");
     }
     debug(user_context) << *q << "\n";
 
@@ -736,13 +736,13 @@ WEAK int halide_opencl_compute_capability(void *user_context, int *major, int *m
         cl_device_id devices[1];
         err = clGetContextInfo(ctx.context, CL_CONTEXT_DEVICES, sizeof(devices), devices, nullptr);
         if (err != CL_SUCCESS) {
-            return error_opencl(user_context, err, "CL: clGetContextInfo failed");
+            return error_opencl(user_context, err, "clGetContextInfo failed");
         }
 
         char device_version[256] = "";
         err = clGetDeviceInfo(devices[0], CL_DEVICE_VERSION, sizeof(device_version), device_version, nullptr);
         if (err != CL_SUCCESS) {
-            return error_opencl(user_context, err, "CL: clGetDeviceInfo failed");
+            return error_opencl(user_context, err, "clGetDeviceInfo failed");
         }
 
         // This should always be of the format "OpenCL X.Y" per the spec
@@ -813,7 +813,7 @@ WEAK int halide_opencl_device_sync(void *user_context, halide_buffer_t *) {
 
     cl_int err = clFinish(ctx.cmd_queue);
     if (err != CL_SUCCESS) {
-        return error_opencl(user_context, err, "CL: clFinish failed");
+        return error_opencl(user_context, err, "clFinish failed");
     }
 
 #ifdef DEBUG_RUNTIME
@@ -841,7 +841,7 @@ WEAK int halide_opencl_device_release(void *user_context) {
     if (ctx) {
         err = clFinish(q);
         if (err != CL_SUCCESS) {
-            return error_opencl(user_context, err, "CL: clFinish failed");
+            return error_opencl(user_context, err, "clFinish failed");
         }
 
         compilation_cache.delete_context(user_context, ctx, clReleaseProgram);
@@ -851,14 +851,14 @@ WEAK int halide_opencl_device_release(void *user_context) {
             debug(user_context) << "    clReleaseCommandQueue " << command_queue << "\n";
             err = clReleaseCommandQueue(command_queue);
             if (err != CL_SUCCESS) {
-                return error_opencl(user_context, err, "CL: clReleaseCommandQueue failed");
+                return error_opencl(user_context, err, "clReleaseCommandQueue failed");
             }
             command_queue = nullptr;
 
             debug(user_context) << "    clReleaseContext " << context << "\n";
             err = clReleaseContext(context);
             if (err != CL_SUCCESS) {
-                return error_opencl(user_context, err, "CL: clReleaseContext failed");
+                return error_opencl(user_context, err, "clReleaseContext failed");
             }
             context = nullptr;
         }
@@ -906,7 +906,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t *buf) {
         if (err == CL_SUCCESS) {
             err = CL_OUT_OF_RESOURCES;
         }
-        return error_opencl(user_context, err, "CL: clCreateBuffer failed: ");
+        return error_opencl(user_context, err, "clCreateBuffer failed: ");
     }
     debug(user_context) << (void *)dev_ptr << " device_handle: " << dev_handle << "\n";
 
@@ -969,7 +969,7 @@ WEAK int opencl_do_multidimensional_copy(void *user_context, ClContext &ctx,
         }
 
         if (err) {
-            return error_opencl(user_context, err, "CL: buffer copy failed");
+            return error_opencl(user_context, err, "buffer copy failed");
         }
     } else {
         ssize_t src_off = 0, dst_off = 0;
@@ -1048,7 +1048,7 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
         // to the buffer while the above writes are still running.
         int err = clFinish(ctx.cmd_queue);
         if (err != CL_SUCCESS) {
-            return error_opencl(user_context, err, "CL: clFinish failed");
+            return error_opencl(user_context, err, "clFinish failed");
         }
 
 #ifdef DEBUG_RUNTIME
@@ -1104,7 +1104,7 @@ WEAK int halide_opencl_run(void *user_context,
     debug(user_context) << "    clCreateKernel " << entry_name << " -> ";
     cl_kernel f = clCreateKernel(program, entry_name, &err);
     if (err != CL_SUCCESS) {
-        return error_opencl(user_context, err, "CL: clCreateKernel ", entry_name, " failed");
+        return error_opencl(user_context, err, "clCreateKernel ", entry_name, " failed");
     }
 
 #ifdef DEBUG_RUNTIME
@@ -1172,7 +1172,7 @@ WEAK int halide_opencl_run(void *user_context,
                 clReleaseMemObject(sub_buffers[sub_buf_index]);
             }
             free(sub_buffers);
-            return error_opencl(user_context, err, "CL: clSetKernelArg failed");
+            return error_opencl(user_context, err, "clSetKernelArg failed");
         }
         i++;
     }
@@ -1182,7 +1182,7 @@ WEAK int halide_opencl_run(void *user_context,
         << "    clSetKernelArg " << i << " " << shared_mem_bytes << " [nullptr]\n";
     err = clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, nullptr);
     if (err != CL_SUCCESS) {
-        return error_opencl(user_context, err, "CL: clSetKernelArg failed");
+        return error_opencl(user_context, err, "clSetKernelArg failed");
     }
 
     // Launch kernel
@@ -1205,7 +1205,7 @@ WEAK int halide_opencl_run(void *user_context,
     free(sub_buffers);
 
     if (err != CL_SUCCESS) {
-        return error_opencl(user_context, err, "CL: clEnqueueNDRangeKernel failed");
+        return error_opencl(user_context, err, "clEnqueueNDRangeKernel failed");
     }
 
     debug(user_context) << "    Releasing kernel " << (void *)f << "\n";
@@ -1215,7 +1215,7 @@ WEAK int halide_opencl_run(void *user_context,
 #ifdef DEBUG_RUNTIME
     err = clFinish(ctx.cmd_queue);
     if (err != CL_SUCCESS) {
-        return error_opencl(user_context, err, "CL: clFinish failed");
+        return error_opencl(user_context, err, "clFinish failed");
     }
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
@@ -1363,7 +1363,7 @@ WEAK int halide_opencl_device_release_crop(void *user_context,
     cl_int err = clReleaseMemObject((cl_mem)dev_ptr);
     free((device_handle *)buf->device);
     if (err != CL_SUCCESS) {
-        return error_opencl(user_context, err, "CL: clReleaseMemObject failed");
+        return error_opencl(user_context, err, "clReleaseMemObject failed");
     }
 
 #ifdef DEBUG_RUNTIME
@@ -1808,7 +1808,7 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
         }
 
         if (err != CL_SUCCESS) {
-            return error_opencl(user_context, err, "CL: buffer transfer failed");
+            return error_opencl(user_context, err, "buffer transfer failed");
         }
 
         // The reads/writes above are all non-blocking, so empty the command
