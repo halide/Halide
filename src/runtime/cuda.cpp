@@ -1438,7 +1438,7 @@ WEAK const char *get_cuda_error_name(CUresult err) {
     case CUDA_ERROR_UNKNOWN:
         return "CUDA_ERROR_UNKNOWN";
     default:
-        return "CUDA:<Unknown error>";
+        return "<Unknown error>";
     }
 }
 
