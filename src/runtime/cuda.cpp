@@ -1229,7 +1229,7 @@ WEAK int halide_cuda_device_and_host_free(void *user_context, struct halide_buff
 WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr) {
     halide_abort_if_false(user_context, buf->device == 0);
     if (buf->device != 0) {
-        error(user_context) << "halide_cuda_wrap_device_ptr: device is nonzero";
+        error(user_context) << "halide_cuda_wrap_device_ptr: device field is already non-zero";
         return halide_error_code_generic_error;
     }
     buf->device = device_ptr;
@@ -1438,8 +1438,6 @@ WEAK const char *get_cuda_error_name(CUresult err) {
     case CUDA_ERROR_UNKNOWN:
         return "CUDA_ERROR_UNKNOWN";
     default:
-        // This is unfortunate as usually get_cuda_error is called in the middle of
-        // an error print, but dropping the number on the floor is worse.
         return "CUDA:<Unknown error>";
     }
 }
