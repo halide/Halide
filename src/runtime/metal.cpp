@@ -1095,7 +1095,7 @@ WEAK int halide_metal_device_release_crop(void *user_context,
 
 WEAK int halide_metal_wrap_buffer(void *user_context, struct halide_buffer_t *buf, uint64_t buffer) {
     if (buf->device != 0) {
-        error(user_context) << "halide_metal_wrap_buffer: device is nonzero.";
+        error(user_context) << "halide_metal_wrap_buffer: device field is already non-zero.";
         return halide_error_code_generic_error;
     }
     device_handle *handle = (device_handle *)malloc(sizeof(device_handle));

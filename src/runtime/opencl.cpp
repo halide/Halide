@@ -1234,7 +1234,7 @@ WEAK int halide_opencl_device_and_host_free(void *user_context, struct halide_bu
 WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t mem) {
     halide_abort_if_false(user_context, buf->device == 0);
     if (buf->device != 0) {
-        error(user_context) << "halide_opencl_wrap_cl_mem: device is nonzero.";
+        error(user_context) << "halide_opencl_wrap_cl_mem: device field is already non-zero.";
         return halide_error_code_generic_error;
     }
     device_handle *dev_handle = (device_handle *)malloc(sizeof(device_handle));
@@ -1844,7 +1844,7 @@ WEAK int halide_opencl_image_device_and_host_free(void *user_context, struct hal
 WEAK int halide_opencl_image_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t mem) {
     halide_abort_if_false(user_context, buf->device == 0);
     if (buf->device != 0) {
-        error(user_context) << "halide_opencl_image_wrap_cl_mem: device is nonzero.";
+        error(user_context) << "halide_opencl_image_wrap_cl_mem: device field is already non-zero.";
         return halide_error_code_generic_error;
     }
     device_handle *dev_handle = (device_handle *)malloc(sizeof(device_handle));
