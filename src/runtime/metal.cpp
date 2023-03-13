@@ -390,7 +390,7 @@ namespace Metal {
 class MetalContextHolder {
     objc_id pool;
     void *const user_context;
-    int status_;  // must always be a valid halide_error_code_t value
+    int status;  // must always be a valid halide_error_code_t value
 
 public:
     mtl_device *device;
@@ -398,7 +398,7 @@ public:
 
     ALWAYS_INLINE MetalContextHolder(void *user_context, bool create)
         : pool(create_autorelease_pool()), user_context(user_context) {
-        status_ = halide_metal_acquire_context(user_context, &device, &queue, create);
+        status = halide_metal_acquire_context(user_context, &device, &queue, create);
     }
     ALWAYS_INLINE ~MetalContextHolder() {
         (void)halide_metal_release_context(user_context);  // ignore errors
@@ -406,7 +406,7 @@ public:
     }
 
     ALWAYS_INLINE int error() const {
-        return status_;
+        return status;
     }
 };
 

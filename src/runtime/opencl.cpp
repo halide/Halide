@@ -263,21 +263,21 @@ namespace OpenCL {
 // Helper object to acquire and release the OpenCL context.
 class ClContext {
     void *const user_context;
-    int status_;  // must always be a valid halide_error_code_t value
+    int status;  // must always be a valid halide_error_code_t value
 
 public:
     cl_context context;
     cl_command_queue cmd_queue;
 
-    // Constructor sets 'status_' if any occurs.
+    // Constructor sets 'status' if any occurs.
     ALWAYS_INLINE ClContext(void *user_context)
         : user_context(user_context),
-          status_(halide_error_code_success),
+          status(halide_error_code_success),
           context(nullptr),
           cmd_queue(nullptr) {
         if (clCreateContext == nullptr) {
-            status_ = load_libopencl(user_context);
-            if (status_) {
+            status = load_libopencl(user_context);
+            if (status) {
                 return;
             }
         }
@@ -285,15 +285,15 @@ public:
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif
-        status_ = halide_acquire_cl_context(user_context, &context, &cmd_queue);
-        if (status_) {
+        status = halide_acquire_cl_context(user_context, &context, &cmd_queue);
+        if (status) {
             return;
         }
 
         // don't abort: that would prevent host_supports_device_api() from being able work properly.
         if (!context || !cmd_queue) {
             ::Halide::Runtime::Internal::error(user_context) << "OpenCL: null context or cmd_queue";
-            status_ = halide_error_code_generic_error;
+            status = halide_error_code_generic_error;
         }
     }
 
@@ -302,7 +302,7 @@ public:
     }
 
     ALWAYS_INLINE int error() const {
-        return status_;
+        return status;
     }
 
     ClContext(const ClContext &) = delete;

@@ -2127,7 +2127,7 @@ static void wait_until_idle() {
 
 class D3D12ContextHolder {
     void *const user_context;
-    int status_;  // must always be a valid halide_error_code_t value
+    int status;  // must always be a valid halide_error_code_t value
 
 public:
     d3d12_device *device;
@@ -2135,13 +2135,13 @@ public:
 
     ALWAYS_INLINE D3D12ContextHolder(void *user_context, bool create)
         : user_context(user_context) {
-        status_ = halide_d3d12compute_acquire_context(user_context, &device, &queue, create);
+        status = halide_d3d12compute_acquire_context(user_context, &device, &queue, create);
     }
     ALWAYS_INLINE ~D3D12ContextHolder() {
         (void)halide_d3d12compute_release_context(user_context);  // ignore error
     }
     ALWAYS_INLINE int error() const {
-        return status_;
+        return status;
     }
 };
 

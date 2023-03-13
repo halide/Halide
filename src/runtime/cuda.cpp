@@ -265,40 +265,40 @@ namespace Cuda {
 // Helper object to acquire and release the cuda context.
 class Context {
     void *const user_context;
-    int status_;  // must always be a valid halide_error_code_t value
+    int status;  // must always be a valid halide_error_code_t value
 
 public:
     CUcontext context;
 
-    // Constructor sets 'status_' if any error occurs.
+    // Constructor sets 'status' if any error occurs.
     ALWAYS_INLINE Context(void *user_context)
         : user_context(user_context),
-          status_(halide_error_code_success),
+          status(halide_error_code_success),
           context(nullptr) {
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif
-        status_ = halide_cuda_acquire_context(user_context, &context);
-        if (status_) {
+        status = halide_cuda_acquire_context(user_context, &context);
+        if (status) {
             return;
         }
 
         // The default acquire_context loads libcuda as a
         // side-effect. However, if acquire_context has been
         // overridden, we may still need to load libcuda
-        status_ = ensure_libcuda_init(user_context);
-        if (status_) {
+        status = ensure_libcuda_init(user_context);
+        if (status) {
             return;
         }
 
         halide_abort_if_false(user_context, context != nullptr);
         halide_abort_if_false(user_context, cuInit != nullptr);
 
-        status_ = error_cuda(user_context, cuCtxPushCurrent(context));
+        status = error_cuda(user_context, cuCtxPushCurrent(context));
     }
 
     ALWAYS_INLINE ~Context() {
-        if (status_ == halide_error_code_success) {
+        if (status == halide_error_code_success) {
             CUcontext old;
             cuCtxPopCurrent(&old);
         }
@@ -307,7 +307,7 @@ public:
     }
 
     ALWAYS_INLINE int error() const {
-        return status_;
+        return status;
     }
 
     Context(const Context &) = delete;
