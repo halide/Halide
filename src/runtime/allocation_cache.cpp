@@ -20,7 +20,6 @@ extern "C" {
 WEAK void halide_reuse_device_allocations(void *user_context, bool flag) {
     halide_reuse_device_allocations_flag = flag;
 
-    int err = 0;
     if (!flag) {
         ScopedMutexLock lock(&allocation_pools_lock);
         for (halide_device_allocation_pool *p = device_allocation_pools; p != nullptr; p = p->next) {
