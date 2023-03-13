@@ -136,7 +136,7 @@ public:
         if (queue) {
             wgpuQueueRelease(queue);
         }
-        (void) halide_webgpu_release_context(user_context);  // ignore errors
+        (void)halide_webgpu_release_context(user_context);  // ignore errors
     }
 };
 
