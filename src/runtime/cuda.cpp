@@ -103,7 +103,7 @@ WEAK int ensure_libcuda_init(void *user_context) {
 
 extern WEAK halide_device_interface_t cuda_device_interface;
 
-WEAK const char *get_error_name(CUresult error);
+WEAK const char *get_cuda_error_name(CUresult error);
 WEAK int create_cuda_context(void *user_context, CUcontext *ctx);
 
 template<typename... Args>
@@ -111,7 +111,7 @@ int error_cuda(void *user_context, CUresult cuda_error, const Args &...args) {
     if (cuda_error == CUDA_SUCCESS) {
         return halide_error_code_success;
     }
-    error(user_context).append("Cuda error: ", get_error_name(cuda_error), args...);
+    error(user_context).append(get_cuda_error_name(cuda_error), args...);
     return halide_error_code_gpu_device_error;
 }
 
@@ -544,7 +544,7 @@ WEAK CUmodule compile_kernel(void *user_context, const char *ptx_src, int size) 
 
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuModuleLoadData failed: "
-                            << get_error_name(err);
+                            << get_cuda_error_name(err);
         return nullptr;
     } else {
         debug(user_context) << (void *)(loaded_module) << "\n";
@@ -1324,7 +1324,7 @@ namespace Runtime {
 namespace Internal {
 namespace Cuda {
 
-WEAK const char *get_error_name(CUresult err) {
+WEAK const char *get_cuda_error_name(CUresult err) {
     switch (err) {
     case CUDA_SUCCESS:
         return "CUDA_SUCCESS";
@@ -1440,7 +1440,7 @@ WEAK const char *get_error_name(CUresult err) {
     default:
         // This is unfortunate as usually get_cuda_error is called in the middle of
         // an error print, but dropping the number on the floor is worse.
-        return "<Unknown error>";
+        return "CUDA:<Unknown error>";
     }
 }
 
