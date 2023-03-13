@@ -482,7 +482,8 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
 
     if (dst_device_interface && !dst->device) {
         debug(user_context) << "halide_buffer_copy_already_locked: calling halide_device_malloc.\n";
-        if (auto result = halide_device_malloc(user_context, dst, dst_device_interface); result != halide_error_code_success) {
+        if (auto result = halide_device_malloc(user_context, dst, dst_device_interface);
+            result != halide_error_code_success) {
             return result;
         }
     }

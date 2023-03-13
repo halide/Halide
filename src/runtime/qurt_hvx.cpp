@@ -74,17 +74,20 @@ WEAK_INLINE int _halide_hexagon_do_par_for(void *user_context, halide_task_t f,
                                            int min, int size, uint8_t *closure,
                                            int use_hvx) {
     if (use_hvx) {
-        if (auto result = halide_qurt_hvx_unlock(user_context); result != halide_error_code_success) {
+        if (auto result = halide_qurt_hvx_unlock(user_context);
+            result != halide_error_code_success) {
             return result;
         }
     }
 
-    if (auto result = halide_do_par_for(user_context, f, min, size, closure); result != halide_error_code_success) {
+    if (auto result = halide_do_par_for(user_context, f, min, size, closure);
+        result != halide_error_code_success) {
         return result;
     }
 
     if (use_hvx) {
-        if (auto result = halide_qurt_hvx_lock(user_context); result != halide_error_code_success) {
+        if (auto result = halide_qurt_hvx_lock(user_context);
+            result != halide_error_code_success) {
             return result;
         }
     }

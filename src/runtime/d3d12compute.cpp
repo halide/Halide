@@ -3272,7 +3272,8 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                     c.dst = reinterpret_cast<uint64_t>(dst->host) + 0;
                     copy_memory(c, user_context);
                     // 2. sync 'dst->host' buffer with 'dst->device' buffer:
-                    if (auto err = halide_d3d12compute_copy_to_device(user_context, dst); err != halide_error_code_success) {
+                    if (auto err = halide_d3d12compute_copy_to_device(user_context, dst);
+                        err != halide_error_code_success) {
                         return err;
                     }
                 } else {
@@ -3310,7 +3311,8 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
                 halide_abort_if_false(user_context, (src->device == c.src));
                 if (src->host != nullptr) {
                     // 1. sync 'src->device' buffer with 'src->host' buffer:
-                    if (auto err = halide_d3d12compute_copy_to_host(user_context, src); err != halide_error_code_success) {
+                    if (auto err = halide_d3d12compute_copy_to_host(user_context, src);
+                        err != halide_error_code_success) {
                         return err;
                     }
                     // 2. copy 'src->host' buffer to 'dst->host' buffer:
@@ -3359,7 +3361,8 @@ WEAK int d3d12compute_device_crop_from_offset(void *user_context,
     ID3D12Resource *pResource = old_handle->resource;
     uint64_t opaqued = reinterpret_cast<uint64_t>(pResource);
 
-    if (auto err = halide_d3d12compute_wrap_buffer(user_context, dst, opaqued); err != halide_error_code_success) {
+    if (auto err = halide_d3d12compute_wrap_buffer(user_context, dst, opaqued);
+        err != halide_error_code_success) {
         TRACEFATAL("halide_d3d12compute_device_crop: failed when wrapping buffer.");
         return err;
     }

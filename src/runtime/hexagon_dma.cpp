@@ -349,7 +349,8 @@ int halide_hexagon_dma_wrapper(void *user_context, struct halide_buffer_t *src,
     }
 
     desc_pool_put(user_context, desc_addr);
-    if (auto result = halide_hexagon_free_to_dma_pool(user_context, dma_engine, dev->dma_engine); result != halide_error_code_success) {
+    if (auto result = halide_hexagon_free_to_dma_pool(user_context, dma_engine, dev->dma_engine);
+        result != halide_error_code_success) {
         debug(user_context) << "halide_hexagon_free_from_dma_pool error:" << result << "\n";
         return result;
     }
@@ -379,7 +380,8 @@ WEAK int halide_hexagon_dma_device_malloc(void *user_context, halide_buffer_t *b
         return halide_error_code_out_of_memory;
     }
 
-    if (auto result = halide_hexagon_dma_device_wrap_native(user_context, buf, reinterpret_cast<uint64_t>(mem)); result != halide_error_code_success) {
+    if (auto result = halide_hexagon_dma_device_wrap_native(user_context, buf, reinterpret_cast<uint64_t>(mem));
+        result != halide_error_code_success) {
         halide_free(user_context, mem);
         return halide_error_code_device_malloc_failed;
     }
@@ -431,7 +433,8 @@ WEAK int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engi
     desc_pool_free(user_context);
 
     // Free DMA Resources
-    if (auto result = halide_hexagon_free_dma_resource(user_context, dma_engine); result != halide_error_code_success) {
+    if (auto result = halide_hexagon_free_dma_resource(user_context, dma_engine);
+        result != halide_error_code_success) {
         debug(user_context) << "Hexagon: Free DMA/Cache Pool failed.\n";
         return result;
     }
@@ -500,7 +503,8 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
         // If the source is not hexagon_dma or host memory, ask the source
         // device interface to copy to dst host memory first.
         debug(user_context) << "Hexagon: src->device_interface != &hexagon_dma_device_interface\n";
-        if (auto result = src->device_interface->impl->buffer_copy(user_context, src, nullptr, dst); result != halide_error_code_success) {
+        if (auto result = src->device_interface->impl->buffer_copy(user_context, src, nullptr, dst);
+            result != halide_error_code_success) {
             return result;
         }
         // Now just copy from src to host

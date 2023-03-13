@@ -142,7 +142,8 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
         return halide_error_code_bad_dimensions;
     }
 
-    if (auto result = halide_copy_to_host(user_context, buf); result != halide_error_code_success) {
+    if (auto result = halide_copy_to_host(user_context, buf);
+        result != halide_error_code_success) {
         return result;
     }
 

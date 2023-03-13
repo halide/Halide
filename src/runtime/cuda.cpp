@@ -173,7 +173,8 @@ WEAK int halide_default_cuda_acquire_context(void *user_context, CUcontext *ctx,
             ScopedMutexLock spinlock(&context_lock);
             local_val = context;
             if (local_val == nullptr) {
-                if (auto result = create_cuda_context(user_context, &local_val); result != halide_error_code_success) {
+                if (auto result = create_cuda_context(user_context, &local_val);
+                    result != halide_error_code_success) {
                     return result;
                 }
             }
@@ -1184,7 +1185,8 @@ WEAK int halide_cuda_run(void *user_context,
     // We use whether this routine was defined in the cuda driver library
     // as a test for streams support in the cuda implementation.
     if (cuStreamSynchronize != nullptr) {
-        if (auto result = halide_cuda_get_stream(user_context, ctx.context, &stream); result != halide_error_code_success) {
+        if (auto result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+            result != halide_error_code_success) {
             error(user_context) << "CUDA: In halide_cuda_run, halide_cuda_get_stream returned " << result << "\n";
             free(dev_handles);
             free(translated_args);
@@ -1234,7 +1236,8 @@ WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_t 
     buf->device_interface = &cuda_device_interface;
     buf->device_interface->impl->use_module();
 #ifdef DEBUG_RUNTIME
-    if (auto result = validate_device_pointer(user_context, buf); result != halide_error_code_success) {
+    if (auto result = validate_device_pointer(user_context, buf);
+        result != halide_error_code_success) {
         buf->device_interface->impl->release_module();
         buf->device = 0;
         buf->device_interface = nullptr;

@@ -143,7 +143,8 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
         hexagon_dma_pool = nullptr;
 
         // Free cache pool
-        if (auto err = halide_hexagon_free_l2_pool(user_context); err != halide_error_code_success) {
+        if (auto err = halide_hexagon_free_l2_pool(user_context);
+            err != halide_error_code_success) {
             error(user_context) << "Hexagon: Failure to free Cache Pool\n";
             nRet = err;
         }
