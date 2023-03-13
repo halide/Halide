@@ -3,10 +3,6 @@
 
 #include "HalideRuntime.h"
 
-#ifndef WEAK
-#error "This should be impossible"
-#endif
-
 extern "C" {
 
 struct halide_device_interface_impl_t {
