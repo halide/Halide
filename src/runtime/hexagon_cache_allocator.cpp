@@ -139,7 +139,7 @@ inline halide_error_code_t hexagon_cache_pool_free(void *user_context) {
         if (temp->l2memory != nullptr) {
             err = HAP_cache_unlock(temp->l2memory);
             if (err != QURT_EOK) {
-                error(user_context) << "Hexagon: Hexagon: HAP_cache_unlock failed on pool free";
+                error(user_context) << "Hexagon: HAP_cache_unlock failed on pool free";
                 return halide_error_code_generic_error;
             }
         }
