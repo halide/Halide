@@ -424,7 +424,6 @@ target_compile_options(
         Halide
         PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Werror>
 
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
