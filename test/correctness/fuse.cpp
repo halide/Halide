@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
 
         Expr visit(const Internal::Mod *op) override {
             std::cerr << "Found mod: " << Expr(op) << "\n";
-            exit(-1);
+            exit(1);
             return op;
         }
     };

@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 
     result = autograd(a, b, c, lut, lut_indices, out, out_lut);
     if (result != 0) {
-        exit(-1);
+        exit(1);
     }
     out.for_each_element([&](int x) {
         float expected = f(a(x), b(x), c(x));
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
                            grad_loss_output_lut_wrt_lut,
                            grad_loss_output_lut_wrt_lut_indices);
     if (result != 0) {
-        exit(-1);
+        exit(1);
     }
 
     // Although the values are float, all should be exact results,

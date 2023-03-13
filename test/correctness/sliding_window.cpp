@@ -12,7 +12,7 @@ HalideExtern_2(int, call_counter, int, int);
 
 extern "C" void *my_malloc(JITUserContext *, size_t x) {
     printf("Malloc wasn't supposed to be called!\n");
-    exit(-1);
+    exit(1);
 }
 
 int main(int argc, char **argv) {

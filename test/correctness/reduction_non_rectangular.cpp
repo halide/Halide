@@ -25,7 +25,7 @@ int intermediate_bound_depend_on_output_trace(JITUserContext *user_context, cons
                 printf("Bounds on store of g were supposed to be x < y and x=[0, 99] and y=[0, 99]\n"
                        "Instead they are: %d %d\n",
                        e->coordinates[0], e->coordinates[1]);
-                exit(-1);
+                exit(1);
             }
             niters++;
         }
@@ -47,7 +47,7 @@ int func_call_bound_trace(JITUserContext *user_context, const halide_trace_event
                 printf("Bounds on store of g were supposed to be x=[10, 109]\n"
                        "Instead it is: %d\n",
                        e->coordinates[0]);
-                exit(-1);
+                exit(1);
             }
             niters++;
         }
@@ -70,7 +70,7 @@ int box_bound_trace(JITUserContext *user_context, const halide_trace_event_t *e)
                 printf("Bounds on store of g were supposed to be x < y and x=[0, 99] and y=[0, 99]\n"
                        "Instead they are: %d %d\n",
                        e->coordinates[0], e->coordinates[1]);
-                exit(-1);
+                exit(1);
             }
             niters++;
         }

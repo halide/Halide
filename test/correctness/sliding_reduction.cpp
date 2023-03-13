@@ -18,7 +18,7 @@ void check(Buffer<int> im) {
             if (im(x, y) != correct) {
                 printf("Value at %d %d was %d instead of %d\n",
                        x, y, im(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         }
     }

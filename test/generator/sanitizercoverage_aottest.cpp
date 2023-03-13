@@ -84,7 +84,7 @@ void verify_out(const Buffer<int8_t, 3> &image) {
         int actual = image(x, y, c);
         if (actual != expected) {
             fprintf(stderr, "Failure @ %d %d %d: expected %d, got %d\n", x, y, c, expected, actual);
-            exit(-1);
+            exit(1);
         }
     });
 }
@@ -106,7 +106,7 @@ int main() {
     fprintf(stderr, "Performing the transformation.\n");
     if (sanitizercoverage_wrapper(out) != 0) {
         fprintf(stderr, "Failure!\n");
-        exit(-1);
+        exit(1);
     }
     fprintf(stderr, "Verifying the transformation.\n");
     verify_out(out);

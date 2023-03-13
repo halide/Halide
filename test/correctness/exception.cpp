@@ -6,14 +6,14 @@ using namespace Halide;
 void check_pure(Func f) {
     if (f.has_update_definition()) {
         std::cout << "f's reduction definition was supposed to fail!\n";
-        exit(-1);
+        exit(1);
     }
 }
 
 void check_error(bool error) {
     if (!error) {
         std::cout << "There was supposed to be an error!\n";
-        exit(-1);
+        exit(1);
     }
 }
 

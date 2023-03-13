@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
                            extra_buffer_output, extra_func_output);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);
-        exit(-1);
+        exit(1);
     }
 
     output.for_each_element([&](int x, int y, int c) {

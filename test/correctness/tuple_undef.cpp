@@ -35,7 +35,7 @@ public:
 
         if (c.count != correct) {
             printf("There were %d stores. There were supposed to be %d\n", c.count, correct);
-            exit(-1);
+            exit(1);
         }
 
         return s;

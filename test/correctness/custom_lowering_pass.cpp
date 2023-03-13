@@ -16,7 +16,7 @@ class CheckForFloatDivision : public IRMutator {
     Expr visit(const Div *op) override {
         if (op->type.is_float() && is_const(op->b)) {
             std::cerr << "Found floating-point division by constant: " << Expr(op) << "\n";
-            exit(-1);
+            exit(1);
         }
         return op;
     }

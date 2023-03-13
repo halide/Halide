@@ -39,12 +39,12 @@ halide_buffer_t make_buffer(int w, int h) {
     // memalign() isn't present on OSX, but posix_memalign is
     int result = posix_memalign((void **)&mem, 128, w * h * sizeof(T));
     if (result != 0 || mem == NULL) {
-        exit(-1);
+        exit(1);
     }
 #else
     mem = (T *)memalign(128, w * h * sizeof(T));
     if (mem == NULL) {
-        exit(-1);
+        exit(1);
     }
 #endif
 

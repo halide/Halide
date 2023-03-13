@@ -4,11 +4,11 @@
 
 #define EXPECT_EQ(a, b) \
     if ((a) != (b)) {   \
-        exit(-1);       \
+        exit(1);       \
     }
 #define EXPECT_NEAR(a, b, c)         \
     if (std::abs((a) - (b)) > (c)) { \
-        exit(-1);                    \
+        exit(1);                    \
     }
 
 static void test_abs() {

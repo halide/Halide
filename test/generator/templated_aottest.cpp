@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         if (val != input_val + 2) {
             printf("Output value was %f instead of %f\n",
                    val, input_val + 2);
-            exit(-1);
+            exit(1);
         }
     };
 
