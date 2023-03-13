@@ -386,7 +386,8 @@ int main(int argc, char **argv) {
     int vector_width_max = 32;
     if (target.has_feature(Target::Metal) ||
         target.has_feature(Target::OpenGLCompute) ||
-        target.has_feature(Target::D3D12Compute)) {
+        target.has_feature(Target::D3D12Compute) ||
+        target.has_feature(Target::WebGPU)) {
         // https://github.com/halide/Halide/issues/2148
         vector_width_max = 4;
     }

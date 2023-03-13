@@ -181,6 +181,8 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
         std::string storage_name = unique_name('_');
         if (vector_declaration_style == VectorDeclarationStyle::OpenCLSyntax) {
             rhs << "(" << print_type(op->type) << ")(";
+        } else if (vector_declaration_style == VectorDeclarationStyle::WGSLSyntax) {
+            rhs << print_type(op->type) << "(";
         } else {
             rhs << "{";
         }
@@ -191,6 +193,8 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
             }
         }
         if (vector_declaration_style == VectorDeclarationStyle::OpenCLSyntax) {
+            rhs << ")";
+        } else if (vector_declaration_style == VectorDeclarationStyle::WGSLSyntax) {
             rhs << ")";
         } else {
             rhs << "}";

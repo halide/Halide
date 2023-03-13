@@ -22,7 +22,7 @@ class GpuObjectLifetimeTracker {
         }
     };
 
-    std::array<ObjectType, 11> object_types = {{
+    std::array<ObjectType, 14> object_types = {{
         {"Caching compiled kernel:", "Releasing cached compilation:"},
 
         // OpenCL objects
@@ -44,6 +44,11 @@ class GpuObjectLifetimeTracker {
         // Hexagon objects
         {"halide_remote_load_library", "halide_remote_release_library"},
         {"ion_alloc", "ion_free"},
+
+        // WebGPU objects
+        {"wgpuCreateInstance", "wgpuInstanceRelease", true},
+        {"wgpuDeviceCreateBuffer", "wgpuBufferRelease"},
+        {"wgpuDeviceCreateComputePipeline", "wgpuComputePipelineRelease"},
     }};
 
 public:

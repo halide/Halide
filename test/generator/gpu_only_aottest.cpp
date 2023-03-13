@@ -9,6 +9,8 @@
 #include "HalideRuntimeCuda.h"
 #elif defined(TEST_METAL)
 #include "HalideRuntimeMetal.h"
+#elif defined(TEST_WEBGPU)
+#include "HalideRuntimeWebGPU.h"
 #endif
 
 #include "gpu_only.h"
@@ -26,6 +28,12 @@ using namespace Halide::Runtime;
 #error "TEST_CUDA defined but HALIDE_RUNTIME_CUDA not defined"
 #endif
 
+#elif defined(TEST_WEBGPU)
+
+#if !defined(HALIDE_RUNTIME_WEBGPU)
+#error "TEST_WEBGPU defined but HALIDE_RUNTIME_WEBGPU not defined"
+#endif
+
 #else
 
 #if defined(HALIDE_RUNTIME_OPENCL)
@@ -34,11 +42,14 @@ using namespace Halide::Runtime;
 #if defined(HALIDE_RUNTIME_CUDA)
 #error "TEST_CUDA not defined but HALIDE_RUNTIME_CUDA defined"
 #endif
+#if defined(HALIDE_RUNTIME_WEBGPU)
+#error "TEST_WEBGPU not defined but HALIDE_RUNTIME_WEBGPU defined"
+#endif
 
 #endif
 
 int main(int argc, char **argv) {
-#if defined(TEST_OPENCL) || defined(TEST_CUDA) || defined(TEST_METAL)
+#if defined(TEST_OPENCL) || defined(TEST_CUDA) || defined(TEST_METAL) || defined(TEST_WEBGPU)
     const int W = 32, H = 32;
     Buffer<int, 2> input(W, H);
     for (int y = 0; y < input.height(); y++) {
@@ -55,6 +66,8 @@ int main(int argc, char **argv) {
     interface = halide_cuda_device_interface();
 #elif defined(TEST_METAL)
     interface = halide_metal_device_interface();
+#elif defined(TEST_WEBGPU)
+    interface = halide_webgpu_device_interface();
 #endif
 
     Buffer<int, 2> output(W, H);

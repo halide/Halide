@@ -124,6 +124,7 @@ WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGLCOMPUTE ?= not-empty
 WITH_D3D12 ?= not-empty
+WITH_WEBGPU ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
@@ -160,6 +161,8 @@ OPENGLCOMPUTE_CXX_FLAGS=$(if $(WITH_OPENGLCOMPUTE), -DWITH_OPENGLCOMPUTE, )
 
 D3D12_CXX_FLAGS=$(if $(WITH_D3D12), -DWITH_D3D12, )
 D3D12_LLVM_CONFIG_LIB=$(if $(WITH_D3D12), , )
+
+WEBGPU_CXX_FLAGS=$(if $(WITH_WEBGPU), -DWITH_WEBGPU, )
 
 AARCH64_CXX_FLAGS=$(if $(WITH_AARCH64), -DWITH_AARCH64, )
 AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
@@ -206,6 +209,7 @@ CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
 CXX_FLAGS += $(OPENGLCOMPUTE_CXX_FLAGS)
 CXX_FLAGS += $(D3D12_CXX_FLAGS)
+CXX_FLAGS += $(WEBGPU_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
@@ -436,6 +440,7 @@ SOURCE_FILES = \
   CodeGen_PyTorch.cpp \
   CodeGen_RISCV.cpp \
   CodeGen_WebAssembly.cpp \
+  CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
   CompilerLogger.cpp \
   CPlusPlusMangle.cpp \
@@ -613,6 +618,7 @@ HEADER_FILES = \
   CodeGen_PTX_Dev.h \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
+  CodeGen_WebGPU_Dev.h \
   CompilerLogger.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
@@ -824,6 +830,7 @@ RUNTIME_CPP_COMPONENTS = \
   trace_helper \
   tracing \
   wasm_cpu_features \
+  webgpu \
   windows_clock \
   windows_cuda \
   windows_d3d12compute_arm \
@@ -864,6 +871,7 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
+                            $(INCLUDE_DIR)/HalideRuntimeWebGPU.h \
                             $(INCLUDE_DIR)/HalideBuffer.h \
                             $(INCLUDE_DIR)/HalidePyTorchHelpers.h \
                             $(INCLUDE_DIR)/HalidePyTorchCudaHelpers.h

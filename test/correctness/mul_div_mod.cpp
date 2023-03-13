@@ -550,7 +550,8 @@ int main(int argc, char **argv) {
     // Test multiplication and division
     std::vector<int> vector_widths = {1};
     if (target.has_feature(Target::Metal) ||
-        target.has_feature(Target::D3D12Compute)) {
+        target.has_feature(Target::D3D12Compute) ||
+        target.has_feature(Target::WebGPU)) {
         for (int i = 2; i <= 4; i *= 2) {
             vector_widths.push_back(i);
         }
