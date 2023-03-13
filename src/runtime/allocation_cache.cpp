@@ -17,20 +17,16 @@ WEAK halide_device_allocation_pool *device_allocation_pools = nullptr;
 
 extern "C" {
 
-WEAK int halide_reuse_device_allocations(void *user_context, bool flag) {
+WEAK void halide_reuse_device_allocations(void *user_context, bool flag) {
     halide_reuse_device_allocations_flag = flag;
 
     int err = 0;
     if (!flag) {
         ScopedMutexLock lock(&allocation_pools_lock);
         for (halide_device_allocation_pool *p = device_allocation_pools; p != nullptr; p = p->next) {
-            int ret = p->release_unused(user_context);
-            if (ret) {
-                err = ret;
-            }
+            p->release_unused(user_context);
         }
     }
-    return err;
 }
 
 /** Determines whether on device_free the memory is returned

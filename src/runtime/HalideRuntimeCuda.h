@@ -63,7 +63,7 @@ extern uintptr_t halide_cuda_get_device_ptr(void *user_context, struct halide_bu
 
 /** Release any currently-unused device allocations back to the cuda
  * driver. See halide_reuse_device_allocations. */
-extern int halide_cuda_release_unused_device_allocations(void *user_context);
+extern void halide_cuda_release_unused_device_allocations(void *user_context);
 
 // These typedefs treat both a CUcontext and a CUstream as a void *,
 // to avoid dependencies on cuda headers.
