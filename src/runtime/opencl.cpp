@@ -1512,7 +1512,7 @@ WEAK const char *get_opencl_error_name(cl_int err) {
     case CL_INVALID_DEVICE_PARTITION_COUNT:
         return "CL_INVALID_DEVICE_PARTITION_COUNT";
     default:
-        return "OpenCL:<Unknown error>";
+        return "<Unknown error>";
     }
 }
 
