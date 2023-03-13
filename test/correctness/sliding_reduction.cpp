@@ -18,7 +18,7 @@ void check(Buffer<int> im) {
             if (im(x, y) != correct) {
                 printf("Value at %d %d was %d instead of %d\n",
                        x, y, im(x, y), correct);
-                exit(-1);
+                exit(1);
             }
         }
     }
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
         int correct = 24;
         if (counter != correct) {
             printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
         int correct = 60;
         if (counter != correct) {
             printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
         int correct = 48;
         if (counter != correct) {
             printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
-            return -1;
+            return 1;
         }
     }
 

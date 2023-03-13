@@ -378,7 +378,7 @@ public:
 CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
       extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false),
-      using_vector_typedefs(false), stack_is_core_private(false) {
+      using_vector_typedefs(false) {
 
     if (output_kind == CPlusPlusFunctionInfoHeader) {
         // If it's a header, emit an include guard.
@@ -510,6 +510,7 @@ CodeGen_C::~CodeGen_C() {
 }
 
 void CodeGen_C::add_platform_prologue() {
+    // nothing
 }
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
@@ -2478,6 +2479,10 @@ void CodeGen_C::visit(const FloatImm *op) {
     }
 }
 
+bool CodeGen_C::is_stack_private_to_thread() const {
+    return false;
+}
+
 void CodeGen_C::visit(const Call *op) {
 
     internal_assert(op->is_extern() || op->is_intrinsic())
@@ -2681,7 +2686,8 @@ void CodeGen_C::visit(const Call *op) {
             }
             indent--;
             string struct_name = unique_name('s');
-            if (stack_is_core_private) {
+            if (is_stack_private_to_thread()) {
+                // Can't allocate the closure information on the stack; use malloc instead.
                 stream << get_indent() << "} *" << struct_name << ";\n";
                 stream << get_indent() << struct_name
                        << " = (decltype(" << struct_name << "))halide_malloc(_ucon, sizeof(*"

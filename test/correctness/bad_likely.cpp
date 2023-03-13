@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
         int correct = (x < 10 || x > 20) ? 1 : 2;
         if (im(x) != correct) {
             printf("im(%d) = %d instead of %d\n", x, im(x), correct);
-            return -1;
+            return 1;
         }
     }
 

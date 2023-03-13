@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
             if (out3(x, y) != out1(x, y)) {
                 printf("wrapper(%d, %d) = %d instead of %d\n",
                        x, y, out3(x, y), out1(x, y));
-                return -1;
+                return 1;
             }
         }
     }
@@ -167,7 +167,7 @@ int main(int argc, char **argv) {
             if (out3(x, y) != out2(x, y)) {
                 printf("wrapper(%d, %d) = %d instead of %d\n",
                        x, y, out3(x, y), out2(x, y));
-                return -1;
+                return 1;
             }
         }
     }

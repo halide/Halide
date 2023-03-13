@@ -1,6 +1,8 @@
 #ifndef HALIDE_RUNTIME_MEMORY_RESOURCES_H
 #define HALIDE_RUNTIME_MEMORY_RESOURCES_H
 
+#include "HalideRuntime.h"
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {

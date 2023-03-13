@@ -34,13 +34,13 @@ int main(int argc, char **argv) {
         int correct = i < 100 ? i + 1 : i + 2;
         if (buf(i) != correct) {
             printf("buf(%d) = %d instead of %d\n", i, buf(i), correct);
-            return -1;
+            return 1;
         }
     }
 
     if (count[0] != 100 || count[1] != 100) {
         printf("Incorrect counts: %d %d\n", count[0], count[1]);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

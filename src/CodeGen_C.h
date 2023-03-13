@@ -285,12 +285,12 @@ protected:
     /** true if add_vector_typedefs() has been called. */
     bool using_vector_typedefs;
 
-    /** Some architectures have private memory for the call stack. This
-     *  means a threads cannot use hand pointers to stack memory to
-     *  another thread. This flag forces heap allocation of things that
-     *  might be shared, such as closures and any buffer that may be
-     *  used in a parallel context. */
-    bool stack_is_core_private;
+    /** Some architectures have private memory for the call stack; this
+     * means a thread cannot hand pointers to stack memory to another
+     * thread. Returning true here flag forces heap allocation of
+     * things that might be shared, such as closures and any buffer
+     * that may be used in a parallel context. */
+    virtual bool is_stack_private_to_thread() const;
 
     void emit_argv_wrapper(const std::string &function_name,
                            const std::vector<LoweredArgument> &args);

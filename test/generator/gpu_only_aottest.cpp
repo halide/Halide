@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
         for (int x = 0; x < W; x++) {
             if (input(x, y) * 2 != output(x, y)) {
                 printf("Error at %d, %d: %d != %d\n", x, y, input(x, y), output(x, y));
-                return -1;
+                return 1;
             }
         }
     }

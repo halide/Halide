@@ -43,12 +43,12 @@ int main() {
             if (result1(x, y) != c1) {
                 printf("result1(%d, %d) = %d instead of %d\n",
                        x, y, result1(x, y), c1);
-                return -1;
+                return 1;
             }
             if (result2(x, y) != c2) {
                 printf("result2(%d, %d) = %d instead of %d\n",
                        x, y, result2(x, y), c2);
-                return -1;
+                return 1;
             }
         }
     }

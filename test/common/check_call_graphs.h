@@ -59,12 +59,12 @@ inline int check_call_graphs(Halide::Pipeline p, CallGraphs &expected) {
 
     if (result.size() != expected.size()) {
         printf("Expect %d callers instead of %d\n", (int)expected.size(), (int)result.size());
-        return -1;
+        return 1;
     }
     for (auto &iter : expected) {
         if (result.count(iter.first) == 0) {
             printf("Expect %s to be in the call graphs\n", iter.first.c_str());
-            return -1;
+            return 1;
         }
         std::vector<std::string> &expected_callees = iter.second;
         std::vector<std::string> &result_callees = result[iter.first];
@@ -84,7 +84,7 @@ inline int check_call_graphs(Halide::Pipeline p, CallGraphs &expected) {
 
             printf("Expect callees of %s to be (%s); got (%s) instead\n",
                    iter.first.c_str(), expected_str.c_str(), result_str.c_str());
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -98,7 +98,7 @@ inline int check_image2(const Halide::Buffer<T> &im, const F &func) {
             if (im(x, y) != correct) {
                 std::cout << "im(" << x << ", " << y << ") = " << im(x, y)
                           << " instead of " << correct << "\n";
-                return -1;
+                return 1;
             }
         }
     }
@@ -114,7 +114,7 @@ inline int check_image3(const Halide::Buffer<T> &im, const F &func) {
                 if (im(x, y, z) != correct) {
                     std::cout << "im(" << x << ", " << y << ", " << z << ") = "
                               << im(x, y, z) << " instead of " << correct << "\n";
-                    return -1;
+                    return 1;
                 }
             }
         }

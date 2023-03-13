@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
     if (err > 0.0001f) {
         printf("Failed\n");
-        return -1;
+        return 1;
     }
 
     // Undef on one side of a select doesn't destroy the entire
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
         }
         if (fabs(data(x) - correct) > 0.001) {
             printf("data(%d) = %f instead of %f\n", x, data(x), correct);
-            return -1;
+            return 1;
         }
     }
 

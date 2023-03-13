@@ -17,7 +17,7 @@ protected:
             if (op->name == "f") {
                 if (producer != "g") {
                     printf("Produce \"f\" should be inside of produce \"g\"\n");
-                    exit(-1);
+                    exit(1);
                 }
             }
             std::string old_producer = producer;
@@ -28,7 +28,7 @@ protected:
             if (op->name == "f") {
                 if (producer != "g") {
                     printf("Consume \"f\" should be inside of produce \"g\"\n");
-                    exit(-1);
+                    exit(1);
                 }
             }
             std::string old_consumer = consumer;

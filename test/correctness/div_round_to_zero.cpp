@@ -33,7 +33,7 @@ void test() {
                 int r = result(n + 128, d + 128);
                 if (r != correct) {
                     printf("result(%d, %d) = %d instead of %d\n", n, d, r, correct);
-                    exit(-1);
+                    exit(1);
                 }
             }
         }
@@ -56,7 +56,7 @@ void test() {
                 int r = result_fast(n + 128, d - 1);
                 if (r != correct) {
                     printf("result_fast(%d, %d) = %d instead of %d\n", n, d, r, correct);
-                    exit(-1);
+                    exit(1);
                 }
             }
         }
@@ -83,7 +83,7 @@ void test() {
                 int r = result_const(n + 128);
                 if (r != correct) {
                     printf("result_const(%d, %d) = %d instead of %d\n", n, d, r, correct);
-                    exit(-1);
+                    exit(1);
                 }
             }
         }

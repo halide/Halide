@@ -33,14 +33,14 @@ int main(int argc, char **argv) {
                    x,
                    (long long unsigned)out1(x),
                    (long long unsigned)correct);
-            return -1;
+            return 1;
         }
         if (out2(x) != correct) {
             printf("out2(%d) = %llu instead of %llu\n",
                    x,
                    (long long unsigned)out2(x),
                    (long long unsigned)correct);
-            return -1;
+            return 1;
         }
     }
 
