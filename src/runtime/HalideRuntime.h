@@ -1117,7 +1117,9 @@ enum halide_error_code_t {
      * violates a Halide invariant. */
     halide_error_code_no_device_interface = -19,
 
-    /* unused = -20, */
+    /** This part of the Halide runtime is unimplemented on this platform. */
+    halide_error_code_unimplemented = -20,
+
     /* unused = -21, */
 
     /** There is a bug in the Halide compiler. */
