@@ -2,6 +2,8 @@
 
 #include <limits>
 
+namespace {
+
 using namespace Halide;
 
 bool check_infinity_case(bool use_first, float16_t value, const char *value_name,
@@ -15,7 +17,22 @@ bool check_infinity_case(bool use_first, float16_t value, const char *value_name
     return true;
 }
 
-int main(int argc, char **argv) {
+class MyCustomErrorReporter : public CompileTimeErrorReporter {
+public:
+    MyCustomErrorReporter() = default;
+
+    void warning(const char *msg) override {
+        // Just ignore them, they are probably warnings about emulated float16, which we don't care about here
+    }
+
+    void error(const char *msg) override {
+        fprintf(stderr, "Error: %s\n", msg);
+        exit(1);
+    }
+};
+
+template<typename FP16>
+int run_test() {
     Var x;
 
     Buffer<float16_t> in1 = lambda(x, cast<float16_t>(-0.5f) + cast<float16_t>(x) / (128)).realize({128});
@@ -25,16 +42,16 @@ int main(int argc, char **argv) {
     in1.for_each_element([&](int i) {
         float16_t correct = Halide::float16_t(-0.5f) + Halide::float16_t(i) / Halide::float16_t(128.0f);
         if (in1(i) != correct) {
-            printf("in1(%d) = %f instead of %f\n", i, float(in2(i)), float(correct));
-            abort();
+            fprintf(stderr, "in1(%d) = %f instead of %f\n", i, float(in2(i)), float(correct));
+            exit(1);
         }
     });
 
     in2.for_each_element([&](int i) {
         bfloat16_t correct = Halide::bfloat16_t(-0.5f) + Halide::bfloat16_t(i) / Halide::bfloat16_t(128.0f);
         if (in2(i) != correct) {
-            printf("in2(%d) = %f instead of %f\n", i, float(in2(i)), float(correct));
-            abort();
+            fprintf(stderr, "in2(%d) = %f instead of %f\n", i, float(in2(i)), float(correct));
+            exit(1);
         }
     });
 
@@ -57,8 +74,8 @@ int main(int argc, char **argv) {
 
     double d = evaluate<double>(g());
     if (d != 0) {
-        printf("Should be zero: %f\n", d);
-        return -1;
+        fprintf(stderr, "Should be zero: %f\n", d);
+        return 1;
     }
 
     // Check scalar parameters
@@ -69,7 +86,7 @@ int main(int argc, char **argv) {
         b.set(bfloat16_t(2.75f));
         float result = evaluate<float>(cast<float>(a) + cast<float>(b));
         if (result != 4.25f) {
-            printf("Incorrect result: %f != 4.25f\n", result);
+            fprintf(stderr, "Incorrect result: %f != 4.25f\n", result);
             return 1;
         }
     }
@@ -82,7 +99,7 @@ int main(int argc, char **argv) {
         c.set(float16_t(0));
         float16_t result = evaluate<float16_t>(lerp(a, b, c));
         if (float(result) != 24.062500f) {
-            printf("Incorrect result: %f != 24.0625f\n", (float)result);
+            fprintf(stderr, "Incorrect result: %f != 24.0625f\n", (float)result);
             return 1;
         }
     }
@@ -94,7 +111,7 @@ int main(int argc, char **argv) {
         c.set(bfloat16_t(0));
         bfloat16_t result = evaluate<bfloat16_t>(lerp(a, b, c));
         if (float(result) != 24.5f) {
-            printf("Incorrect result: %f != 24.5f\n", (float)result);
+            fprintf(stderr, "Incorrect result: %f != 24.5f\n", (float)result);
             return 1;
         }
     }
@@ -108,15 +125,15 @@ int main(int argc, char **argv) {
             bfloat16_t ab = bfloat16_t(((float)a + (float)b) / 2);
 
             if (a > ab || ab > b) {
-                printf("Misordered: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
+                fprintf(stderr, "Misordered: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
             }
 
             bool ok = (((a.to_bits() & 1) && (ab == b)) ||
                        ((b.to_bits() & 1) && (ab == a)));
 
             if (!ok) {
-                printf("Incorrect rounding: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
-                return -1;
+                fprintf(stderr, "Incorrect rounding: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
+                return 1;
             }
         }
     }
@@ -130,15 +147,15 @@ int main(int argc, char **argv) {
             float16_t ab = float16_t(((float)a + (float)b) / 2);
 
             if (a > ab || ab > b) {
-                printf("Misordered: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
+                fprintf(stderr, "Misordered: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
             }
 
             bool ok = (((a.to_bits() & 1) && (ab == b)) ||
                        ((b.to_bits() & 1) && (ab == a)));
 
             if (!ok) {
-                printf("Incorrect rounding: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
-                return -1;
+                fprintf(stderr, "Incorrect rounding: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
+                return 1;
             }
         }
     }
@@ -174,9 +191,9 @@ int main(int argc, char **argv) {
                 float f32 = Buffer<float>(r[j])(i);
                 float f16 = float(Buffer<float16_t>(r[j + 4])(i));
                 if (f32 != f16) {
-                    printf("%s outputs do not match: %f %f\n",
-                           names[j], f32, f16);
-                    return -1;
+                    fprintf(stderr, "%s outputs do not match: %f %f\n",
+                            names[j], f32, f16);
+                    return 1;
                 }
             }
         }
@@ -206,9 +223,9 @@ int main(int argc, char **argv) {
             for (int x = 0; x < 8; x++) {
                 float16_t correct = float16_t((x * y) / 2.0f);
                 if (buf(x, y).to_bits() != correct.to_bits()) {
-                    printf("buf(%d, %d) = 0x%x instead of 0x%x\n",
-                           x, y, buf(x, y).to_bits(), correct.to_bits());
-                    return -1;
+                    fprintf(stderr, "buf(%d, %d) = 0x%x instead of 0x%x\n",
+                            x, y, buf(x, y).to_bits(), correct.to_bits());
+                    return 1;
                 }
             }
         }
@@ -221,8 +238,8 @@ int main(int argc, char **argv) {
         out() = constant;
         Buffer<float16_t> buf = out.realize();
         if (buf(0) != constant) {
-            printf("buf(0) = %f instead of %f\n", float(buf(0)), float(constant));
-            return -1;
+            fprintf(stderr, "buf(0) = %f instead of %f\n", float(buf(0)), float(constant));
+            return 1;
         }
     }
 
@@ -256,7 +273,7 @@ int main(int argc, char **argv) {
                                      "float16_t maximum value plus", test_case.first,
                                      float16_t::make_infinity(), max_pos_val,
                                      "positive infinity", "maximum positive value")) {
-                return -1;
+                return 1;
             }
 
             float16_t min_minus_increment(min_neg_val - increment);
@@ -264,7 +281,7 @@ int main(int argc, char **argv) {
                                      "float16_t minimum value minus", test_case.first,
                                      float16_t::make_negative_infinity(), min_neg_val,
                                      "negative infinity", "maximum negative value")) {
-                return -1;
+                return 1;
             }
 
             Param<float16_t> a("a"), b("b");
@@ -275,7 +292,7 @@ int main(int argc, char **argv) {
                                      "Halide float16_t maximum value plus", test_case.first,
                                      float16_t::make_infinity(), max_pos_val,
                                      "positive infinity", "maximum positive value")) {
-                return -1;
+                return 1;
             }
 
             a.set(min_neg_val);
@@ -284,49 +301,77 @@ int main(int argc, char **argv) {
                                      "Halide float16_t minimum value minus", test_case.first,
                                      float16_t::make_negative_infinity(), min_neg_val,
                                      "negative infinity", "maximum negative value")) {
-                return -1;
+                return 1;
             }
 
             float pos_inf = std::numeric_limits<float>::infinity();
             float16_t fp16_pos_inf(pos_inf);
             if (fp16_pos_inf != float16_t::make_infinity()) {
-                printf("Conversion of 32-bit positive infinity to 16-bit float is %x, not positive infinity.\n", fp16_pos_inf.to_bits());
-                return -1;
+                fprintf(stderr, "Conversion of 32-bit positive infinity to 16-bit float is %x, not positive infinity.\n", fp16_pos_inf.to_bits());
+                return 1;
             }
 
             float neg_inf = -std::numeric_limits<float>::infinity();
             float16_t fp16_neg_inf(neg_inf);
             if (fp16_neg_inf != float16_t::make_negative_infinity()) {
-                printf("Conversion of 32-bit negative infinity to 16-bit float is %x, not negative infinity.\n", fp16_neg_inf.to_bits());
-                return -1;
+                fprintf(stderr, "Conversion of 32-bit negative infinity to 16-bit float is %x, not negative infinity.\n", fp16_neg_inf.to_bits());
+                return 1;
             }
 
             Param<float> f_in("f_in");
             f_in.set(pos_inf);
             c = evaluate<float16_t>(cast(Float(16), f_in));
             if (c != float16_t::make_infinity()) {
-                printf("Halide conversion of 32-bit positive infinity to 16-bit float is %x, not positive infinity.\n", c.to_bits());
-                return -1;
+                fprintf(stderr, "Halide conversion of 32-bit positive infinity to 16-bit float is %x, not positive infinity.\n", c.to_bits());
+                return 1;
             }
 
             f_in.set(neg_inf);
             c = evaluate<float16_t>(cast(Float(16), f_in));
             if (c != float16_t::make_negative_infinity()) {
-                printf("Halide conversion of 32-bit negative infinity to 16-bit float is %x, not negative infinity.\n", c.to_bits());
-                return -1;
+                fprintf(stderr, "Halide conversion of 32-bit negative infinity to 16-bit float is %x, not negative infinity.\n", c.to_bits());
+                return 1;
             }
         }
     }
 
+    return 0;
+}
+
+}  // namespace
+
+int main(int argc, char **argv) {
+    MyCustomErrorReporter reporter;
+    set_custom_compile_time_error_reporter(&reporter);
+
+    printf("Testing float16_t...\n");
+    if (run_test<float16_t>() != 0) {
+        fprintf(stderr, "float16_t test failed!\n");
+        return 1;
+    }
+
+    printf("Testing _Float16...\n");
 #ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
+    if (run_test<_Float16>() != 0) {
+        fprintf(stderr, "_Float16 test failed!\n");
+        return 1;
+    }
+
+#ifdef __clang__
     {
         float16_t f(1.0f16);
         _Float16 f2 = (_Float16)f;
         if (f2 != 1.0f16) {
-            printf("Roundtrip of 16-bit float via _Float16 failed.\n");
-            return -1;
+            fprintf(stderr, "Roundtrip of 16-bit float via _Float16 failed.\n");
+            return 1;
         }
     }
+#else
+    printf("Only clang supports _Float16 constant literal 'f16' suffix, skipping roundtrip test\n");
+#endif
+
+#else
+    printf("[Compiler does not support _Float16, skipping]\n");
 #endif
 
     printf("Success!\n");

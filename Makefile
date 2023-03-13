@@ -67,7 +67,8 @@ LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir | sed -e 's/\\/\//g' -e 's/\([a-zA
 LLVM_SYSTEM_LIBS=$(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g' | sed 's/-llibxml2.tbd/-lxml2/')
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
-LLVM_CXX_FLAGS = -std=c++17  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/;s/c++14/c++17/g'))
+# Note, removing -D_GLIBCXX_ASSERTIONS is a workaround for https://reviews.llvm.org/D142279
+LLVM_CXX_FLAGS = -std=c++17  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/ -D_GLIBCXX_ASSERTIONS / /g' -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/;s/c++14/c++17/g'))
 OPTIMIZE ?= -O3
 OPTIMIZE_FOR_BUILD_TIME ?= -O0
 
@@ -123,6 +124,7 @@ WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGLCOMPUTE ?= not-empty
 WITH_D3D12 ?= not-empty
+WITH_WEBGPU ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
@@ -159,6 +161,8 @@ OPENGLCOMPUTE_CXX_FLAGS=$(if $(WITH_OPENGLCOMPUTE), -DWITH_OPENGLCOMPUTE, )
 
 D3D12_CXX_FLAGS=$(if $(WITH_D3D12), -DWITH_D3D12, )
 D3D12_LLVM_CONFIG_LIB=$(if $(WITH_D3D12), , )
+
+WEBGPU_CXX_FLAGS=$(if $(WITH_WEBGPU), -DWITH_WEBGPU, )
 
 AARCH64_CXX_FLAGS=$(if $(WITH_AARCH64), -DWITH_AARCH64, )
 AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
@@ -205,6 +209,7 @@ CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
 CXX_FLAGS += $(OPENGLCOMPUTE_CXX_FLAGS)
 CXX_FLAGS += $(D3D12_CXX_FLAGS)
+CXX_FLAGS += $(WEBGPU_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
@@ -435,6 +440,7 @@ SOURCE_FILES = \
   CodeGen_PyTorch.cpp \
   CodeGen_RISCV.cpp \
   CodeGen_WebAssembly.cpp \
+  CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
   CompilerLogger.cpp \
   CPlusPlusMangle.cpp \
@@ -613,6 +619,7 @@ HEADER_FILES = \
   CodeGen_PTX_Dev.h \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
+  CodeGen_WebGPU_Dev.h \
   CompilerLogger.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
@@ -825,6 +832,7 @@ RUNTIME_CPP_COMPONENTS = \
   trace_helper \
   tracing \
   wasm_cpu_features \
+  webgpu \
   windows_clock \
   windows_cuda \
   windows_d3d12compute_arm \
@@ -865,6 +873,7 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
+                            $(INCLUDE_DIR)/HalideRuntimeWebGPU.h \
                             $(INCLUDE_DIR)/HalideBuffer.h \
                             $(INCLUDE_DIR)/HalidePyTorchHelpers.h \
                             $(INCLUDE_DIR)/HalidePyTorchCudaHelpers.h
@@ -1331,12 +1340,30 @@ $(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(BIN_DIR)/libHalide.$(SHARED_E
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 # Runtime tests that test internals
 RUNTIME_TESTS_CXXFLAGS = -fno-rtti -fno-exceptions -fno-threadsafe-statics -Wno-builtin-declaration-mismatch -DCOMPILING_HALIDE_RUNTIME -DCOMPILING_HALIDE_RUNTIME_TESTS
-$(BIN_DIR)/runtime_%: $(ROOT_DIR)/test/runtime/%.cpp $(ROOT_DIR)/test/runtime/common.h
-	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) $< $(COMMON_LD_FLAGS) -o $@
+
+$(BIN_DIR)/runtime_internal_common.o: $(ROOT_DIR)/test/runtime/common.cpp $(ROOT_DIR)/test/runtime/common.h
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
+
+$(BIN_DIR)/runtime_internal_msan_stubs.o: $(ROOT_DIR)/src/runtime/msan_stubs.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
+
+$(BIN_DIR)/runtime_internal_to_string.o: $(ROOT_DIR)/src/runtime/to_string.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
+
+$(BIN_DIR)/runtime_common:
+	@mkdir -p $(@D)
+	touch $@
+
+$(BIN_DIR)/runtime_%: $(ROOT_DIR)/test/runtime/%.cpp $(BIN_DIR)/runtime_internal_common.o $(BIN_DIR)/runtime_internal_msan_stubs.o $(BIN_DIR)/runtime_internal_to_string.o
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) $^ $(COMMON_LD_FLAGS) -o $@
 
 # Auto schedule tests that link against libHalide
 $(BIN_DIR)/mullapudi2016_%: $(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
@@ -1957,6 +1984,9 @@ warning_%: $(BIN_DIR)/warning_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "^Warning"
 	@-echo
+
+runtime_common:
+	# nothing
 
 runtime_%: $(BIN_DIR)/runtime_%
 	@-mkdir -p $(TMP_DIR)

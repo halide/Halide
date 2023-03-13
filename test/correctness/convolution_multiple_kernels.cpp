@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
 
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }

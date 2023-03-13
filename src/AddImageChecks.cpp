@@ -106,11 +106,21 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        touches_buffer |= (buffers.count(op->name) > 0);
+        touches_buffer |=
+            (buffers.count(op->name) > 0) ||
+            (buffers.count(op->name + "." + std::to_string(op->value_index)));
+        // Output Tuple params are in the buffers map under their qualified
+        // tuple name, not the Func name.
         return IRMutator::visit(op);
     }
     Stmt visit(const Provide *op) override {
-        touches_buffer |= (buffers.find(op->name) != buffers.end());
+        if (op->values.size() == 1) {
+            touches_buffer |= (buffers.find(op->name) != buffers.end());
+        } else {
+            // It's a Tuple. Just check if the first Tuple component corresponds
+            // to an output buffer. If it does, they all do.
+            touches_buffer |= (buffers.find(op->name + ".0") != buffers.end());
+        }
         return IRMutator::visit(op);
     }
     Expr visit(const Variable *op) override {

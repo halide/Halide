@@ -17,7 +17,7 @@ extern "C" HALIDE_EXPORT_SYMBOL int check_struct(struct_t *s) {
         s->c != 1234 ||
         strcmp(s->d, "Test global string\n")) {
         printf("Unexpected struct values: %f %d %d %s\n", s->a, s->b, s->c, s->d);
-        exit(-1);
+        exit(1);
     }
     return 0;
 }

@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
                 const int actual = im(x, y, z);
                 if (actual != expected) {
                     fprintf(stderr, "im(%d, %d, %d) = %d, expected %d\n", x, y, z, actual, expected);
-                    return -1;
+                    return 1;
                 }
             }
         }

@@ -144,7 +144,6 @@ void define_enums(py::module &m) {
         .value("HVX_v62", Target::Feature::HVX_v62)
         .value("HVX_v65", Target::Feature::HVX_v65)
         .value("HVX_v66", Target::Feature::HVX_v66)
-        .value("HVX_shared_object", Target::Feature::HVX_shared_object)
         .value("FuzzFloatStores", Target::Feature::FuzzFloatStores)
         .value("SoftFloatABI", Target::Feature::SoftFloatABI)
         .value("MSAN", Target::Feature::MSAN)
@@ -179,6 +178,7 @@ void define_enums(py::module &m) {
         .value("SanitizerCoverage", Target::Feature::SanitizerCoverage)
         .value("ProfileByTimer", Target::Feature::ProfileByTimer)
         .value("SPIRV", Target::Feature::SPIRV)
+        .value("Semihosting", Target::Feature::Semihosting)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

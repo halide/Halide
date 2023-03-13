@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     g.realize({3, 100}, t);
     if (errored) {
         printf("There was not supposed to be an error\n");
-        return -1;
+        return 1;
     }
 
     // Should trap
@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
 
     if (!errored) {
         printf("There was supposed to be an error\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

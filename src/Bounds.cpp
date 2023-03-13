@@ -612,6 +612,8 @@ private:
             }
         } else if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(a.min / b.min);
         } else if (can_prove(b.min == b.max)) {
             Expr e1 = a.has_lower_bound() ? a.min / b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max / b.max : a.max;
@@ -747,6 +749,8 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(Interval::make_min(a.min, b.min));
         } else {
             interval = Interval(Interval::make_min(a.min, b.min),
                                 Interval::make_min(a.max, b.max));
@@ -763,6 +767,8 @@ private:
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
+        } else if (a.is_single_point() && b.is_single_point()) {
+            interval = Interval::single_point(Interval::make_max(a.min, b.min));
         } else {
             interval = Interval(Interval::make_max(a.min, b.min),
                                 Interval::make_max(a.max, b.max));
@@ -1723,7 +1729,7 @@ Region region_union(const Region &a, const Region &b) {
         Expr max_b = b[i].min + b[i].extent;
         Expr max_plus_one = Max::make(max_a, max_b);
         Expr extent = max_plus_one - min;
-        result.push_back(Range(simplify(min), simplify(extent)));
+        result.emplace_back(simplify(min), simplify(extent));
     }
     return result;
 }
@@ -3705,6 +3711,28 @@ void bounds_test() {
         Expr e4 = Let::make("t42", u16(x) >> u16(1), e3);
 
         check_constant_bound(e4, u16(0), u16(65535));
+    }
+
+    // Test case from https://github.com/halide/Halide/pull/7377
+    {
+        Var x;
+        Expr e = Load::make(Int(32), "buf", max(x, -x), Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+        e = Let::make(x.name(), 37, e);
+        Scope<Interval> scope;
+        scope.push("y", {0, 100});
+        Interval in = bounds_of_expr_in_scope(e, scope);
+        internal_assert(in.is_single_point());
+    }
+
+    // Test case from https://github.com/halide/Halide/pull/7379
+    {
+        Var x;
+        Expr e = Load::make(Int(32), "buf", -x / x, Buffer<>{}, Parameter{}, const_true(), ModulusRemainder{});
+        e = Let::make(x.name(), 37, e);
+        Scope<Interval> scope;
+        scope.push("y", {0, 100});
+        Interval in = bounds_of_expr_in_scope(e, scope);
+        internal_assert(in.is_single_point());
     }
 
     std::cout << "Bounds test passed" << std::endl;

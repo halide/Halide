@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
         int ret = variable_num_threads(out);
         if (ret) {
             printf("Non zero exit code: %d\n", ret);
-            return -1;
+            return 1;
         }
     }
 

@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
     // Check the right number of calls to powf occurred
     if (call_count != tile_size * tile_size) {
         printf("call_count = %d instead of %d\n", call_count, tile_size * tile_size);
-        return -1;
+        return 1;
     }
 
     // Check the output is correct
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
             if (fabs(correct - result(x, y)) > 0.001f) {
                 printf("result(%d, %d) = %f instead of %f\n",
                        x, y, result(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }

@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
                " Expected: %d\n"
                " Actual: %d\n",
                expected, num_stores);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

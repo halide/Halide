@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     // First, test that the host features are usable. If not, something is wrong.
     if (!halide_can_use_target_features(host_features.kWordCount, host_features.bits)) {
         printf("Failure!\n");
-        return -1;
+        return 1;
     }
 
     // Now start subtracting features; we should still be usable.
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
             printf("host_features are: %x %x\n", (unsigned)host_features.bits[word], (unsigned)(host_features.bits[word] >> 32));
             if (!halide_can_use_target_features(host_features.kWordCount, host_features.bits)) {
                 printf("Failure!\n");
-                return -1;
+                return 1;
             }
         }
     }

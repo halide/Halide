@@ -45,6 +45,15 @@ int main(int argc, char **argv) {
     const Target t = get_jit_target_from_environment();
 
     {
+        // Check that we can default-construct a Callable.
+        Callable c;
+        assert(!c.defined());
+
+        // This will assert-fail.
+        // c(0,1,2);
+    }
+
+    {
         Param<int32_t> p_int(42);
         Param<float> p_float(1.0f);
         ImageParam p_img(UInt(8), 2);
@@ -165,14 +174,14 @@ int main(int argc, char **argv) {
                        x,
                        (long long unsigned)out1(x),
                        (long long unsigned)correct);
-                exit(-1);
+                exit(1);
             }
             if (out2(x) != correct) {
                 printf("out2(%d) = %llu instead of %llu\n",
                        x,
                        (long long unsigned)out2(x),
                        (long long unsigned)correct);
-                exit(-1);
+                exit(1);
             }
         }
     }
@@ -209,14 +218,14 @@ int main(int argc, char **argv) {
                 float delta = imf(i, j) - correct;
                 if (delta < -0.001 || delta > 0.001) {
                     printf("imf[%d, %d] = %f instead of %f\n", i, j, imf(i, j), correct);
-                    exit(-1);
+                    exit(1);
                 }
             }
         }
 
         if (call_counter != 32 * 32) {
             printf("In pipeline_set_jit_externs_func, my_func was called %d times instead of %d\n", call_counter, 32 * 32);
-            exit(-1);
+            exit(1);
         }
     }
 

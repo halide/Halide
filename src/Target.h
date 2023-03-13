@@ -122,7 +122,6 @@ struct Target {
         HVX_v62 = halide_target_feature_hvx_v62,
         HVX_v65 = halide_target_feature_hvx_v65,
         HVX_v66 = halide_target_feature_hvx_v66,
-        HVX_shared_object = halide_target_feature_hvx_use_shared_object,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
         MSAN = halide_target_feature_msan,
@@ -147,6 +146,7 @@ struct Target {
         WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
         WasmThreads = halide_target_feature_wasm_threads,
         WasmBulkMemory = halide_target_feature_wasm_bulk_memory,
+        WebGPU = halide_target_feature_webgpu,
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
         ARMDotProd = halide_target_feature_arm_dot_prod,
@@ -157,6 +157,7 @@ struct Target {
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
         SPIRV = halide_target_feature_spirv,
+        Semihosting = halide_target_feature_semihosting,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

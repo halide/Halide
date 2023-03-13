@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     int correct = 131;
     if (result != correct) {
         printf("Bad GCD: %d != %d\n", result, correct);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

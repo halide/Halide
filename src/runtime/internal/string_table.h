@@ -1,6 +1,7 @@
 #ifndef HALIDE_RUNTIME_STRING_TABLE_H
 #define HALIDE_RUNTIME_STRING_TABLE_H
 
+#include "HalideRuntime.h"
 #include "block_storage.h"
 #include "pointer_table.h"
 #include "string_storage.h"

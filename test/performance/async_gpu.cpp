@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
 
     if (times[1] > 1.2 * times[0]) {
         printf("Using async should have been faster\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

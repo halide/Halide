@@ -506,7 +506,7 @@ int main(int argc, char **argv) {
         // Generate a random expr...
         Expr test = random_expr(expr_type, depth);
         if (!test_expression_bounds(test, trials, samples)) {
-            return -1;
+            return 1;
         }
     }
 

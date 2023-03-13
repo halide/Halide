@@ -81,7 +81,7 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
                    const_uint(value, &u) &&
                    op->type.bits() >= value.type().bits()) {
             // uint -> int with less than or equal to the number of bits
-            if (op->type.can_represent(u)) {
+            if (op->type.can_represent(u) || op->type.bits() < 32) {
                 // Recursively call mutate just to set the bounds
                 return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), bounds);
             } else {

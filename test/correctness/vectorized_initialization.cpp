@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     if (result(0) != 0 || result(1) != 2 || result(2) != 5 || result(3) != 9) {
         printf("Resulting sequence was: %d %d %d %d instead of 0 2 5 9\n",
                result(0), result(1), result(2), result(3));
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

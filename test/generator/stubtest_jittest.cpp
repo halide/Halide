@@ -28,7 +28,7 @@ void verify(const Buffer<InputType, Dims> &input, float float_arg, int int_arg, 
     if (input.width() != output.width() ||
         input.height() != output.height()) {
         fprintf(stderr, "size mismatch: %dx%d vs %dx%d\n", input.width(), input.height(), output.width(), output.height());
-        exit(-1);
+        exit(1);
     }
     int channels = std::max(1, std::min(input.channels(), output.channels()));
     for (int x = 0; x < output.width(); x++) {
@@ -38,7 +38,7 @@ void verify(const Buffer<InputType, Dims> &input, float float_arg, int int_arg, 
                 const OutputType actual = output(x, y, c);
                 if (expected != actual) {
                     fprintf(stderr, "img[%d, %d, %d] = %f, expected %f (input = %f)\n", x, y, c, (double)actual, (double)expected, (double)input(x, y, c));
-                    exit(-1);
+                    exit(1);
                 }
             }
         }

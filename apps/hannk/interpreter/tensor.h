@@ -231,6 +231,23 @@ public:
     void allocate_from_heap();
     void allocate_from_arena_pointer(void *host);
 
+    // HalideBuffer methods for GPU interactions.
+    void set_host_dirty(bool dirty = true) {
+        buffer_.set_host_dirty(dirty);
+    }
+    void copy_to_host() {
+        buffer_.copy_to_host();
+    }
+    bool device_dirty() const {
+        return buffer_.device_dirty();
+    }
+    bool host_dirty() const {
+        return buffer_.host_dirty();
+    }
+    int device_sync(void *ctx = nullptr) {
+        return buffer_.device_sync(ctx);
+    }
+
     void resize_dynamic(const Box &new_shape);
 
     AliasType alias_type() const {

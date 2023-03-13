@@ -61,8 +61,6 @@ public:
     /** Create an instance of CodeGen_LLVM suitable for the target. */
     static std::unique_ptr<CodeGen_LLVM> new_for_target(const Target &target, llvm::LLVMContext &context);
 
-    ~CodeGen_LLVM() override;
-
     /** Takes a halide Module and compiles it to an llvm Module. */
     virtual std::unique_ptr<llvm::Module> compile(const Module &module);
 
@@ -166,7 +164,7 @@ protected:
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
-    llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder;
+    std::unique_ptr<llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>> builder;
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
     llvm::MDNode *default_fp_math_md;
@@ -635,6 +633,12 @@ protected:
      * control over whether or not we should slice the load into native
      * vectors. Used by CodeGen_ARM to help with vld2/3/4 emission. */
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
+
+    /** Warning messages which we want to avoid displaying number of times */
+    enum class WarningKind {
+        EmulatedFloat16,
+    };
+    std::map<WarningKind, std::string> onetime_warnings;
 
 private:
     // used for mapping IR nodes to llvm markers in StmtToViz.cpp

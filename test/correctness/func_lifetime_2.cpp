@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
 
             Buffer<int> imf = f.realize({32, 32}, target);
             if (!validate(imf, 1)) {
-                return -1;
+                return 1;
             }
         }
 
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> img1 = g.realize({32, 32}, target);
         if (!validate(img1, 2)) {
-            return -1;
+            return 1;
         }
     }
 
@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
 
     Buffer<int> img2 = g.realize({32, 32}, target);
     if (!validate(img2, 2.0f)) {
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

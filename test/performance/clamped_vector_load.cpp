@@ -28,7 +28,7 @@ double test(Func f, bool test_correctness = true) {
                 if (output(x, y) != correct) {
                     printf("output(%d, %d) = %d instead of %d\n",
                            x, y, output(x, y), correct);
-                    exit(-1);
+                    exit(1);
                 }
             }
         }
@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
                "Scalarize the load: %f\n"
                "Pad the input: %f\n",
                t_ref, t_clamped, t_scalar, t_pad);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

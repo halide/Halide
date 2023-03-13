@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
 
         if (halide_cuda_get_symbol == nullptr) {
             printf("Failed to extract halide_cuda_get_symbol from Halide cuda runtime\n");
-            return -1;
+            return 1;
         }
 
         // Go get the CUDA API functions we actually intend to use.
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
             cuMemAlloc == nullptr ||
             cuMemFree == nullptr) {
             printf("Failed to find cuda API\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -107,19 +107,19 @@ int main(int argc, char **argv) {
     int err = cuCtxCreate(&state.cuda_context, 0, 0);
     if (state.cuda_context == nullptr) {
         printf("Failed to initialize context: %d\n", err);
-        return -1;
+        return 1;
     }
 
     err = cuCtxSetCurrent(state.cuda_context);
     if (err) {
         printf("Failed to set context: %d\n", err);
-        return -1;
+        return 1;
     }
 
     err = cuStreamCreate(&state.cuda_stream, 1 /* non-blocking */);
     if (state.cuda_stream == nullptr) {
         printf("Failed to initialize stream: %d\n", err);
-        return -1;
+        return 1;
     }
 
     // Allocate some GPU memory on this context
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
 
     if (ptr == nullptr) {
         printf("cuMemAlloc failed: %d\n", err);
-        return -1;
+        return 1;
     }
 
     // Wrap a Halide buffer around it, with some host memory too.
@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
                 float correct = 2.0f;
                 if (out(x, y) != 2.0f) {
                     printf("out(%d, %d) = %f instead of %f\n", x, y, out(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -176,7 +176,7 @@ int main(int argc, char **argv) {
         state.acquires.load() < height) {
         printf("Context acquires: %d releases: %d\n", state.acquires.load(), state.releases.load());
         printf("Expected these to match and be at least %d (the number of parallel tasks)\n", height);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

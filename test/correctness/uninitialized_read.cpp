@@ -8,7 +8,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     if (e->event == 2) {  // begin realization
         if (e->coordinates[1] != 4) {
             printf("Realization of f was supposed to be 4-wide\n");
-            exit(-1);
+            exit(1);
         }
     }
     return 0;

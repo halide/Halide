@@ -144,6 +144,7 @@ DECLARE_CPP_INITMOD(timer_profiler)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
+DECLARE_CPP_INITMOD(webgpu)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
@@ -912,6 +913,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.arch == Target::Hexagon) {
                     modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
                     modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
+                } else if (t.arch == Target::ARM && t.has_feature(Target::Semihosting)) {
+                    add_allocator();
+                    modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::Fuchsia) {
@@ -1179,6 +1186,15 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_windows_d3d12compute_arm(c, bits_64, debug));
             } else {
                 user_error << "Direct3D 12 can only be used on ARM or X86 architectures.\n";
+            }
+        }
+        if (t.has_feature(Target::WebGPU)) {
+            if (t.os == Target::Windows) {
+                // TOOD: Test on Windows and enable this.
+                // See https://github.com/halide/Halide/issues/7249
+                user_error << "WebGPU runtime not yet supported on Windows.\n";
+            } else {
+                modules.push_back(get_initmod_webgpu(c, bits_64, debug));
             }
         }
         if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {

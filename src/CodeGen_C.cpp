@@ -33,6 +33,7 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Compute_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeWebGPU_h[];
 
 namespace {
 
@@ -228,20 +229,17 @@ const B &return_second(const A &a, const B &b) {
 }
 
 namespace {
+template<void(*FreeFn)(void *, void *)>
 class HalideFreeHelper {
-    typedef void (*FreeFunction)(void *user_context, void *p);
-    void * user_context;
-    void *p;
-    FreeFunction free_function;
+    void * const user_context;
+    void * ptr;
 public:
-    HalideFreeHelper(void *user_context, void *p, FreeFunction free_function)
-        : user_context(user_context), p(p), free_function(free_function) {}
+    HalideFreeHelper(void *user_context, void *ptr) : user_context(user_context), ptr(ptr) {}
     ~HalideFreeHelper() { free(); }
     void free() {
-        if (p) {
-            // TODO: do all free_functions guarantee to ignore a nullptr?
-            free_function(user_context, p);
-            p = nullptr;
+        if (ptr) {
+            FreeFn(user_context, ptr);
+            ptr = nullptr;
         }
     }
 };
@@ -380,7 +378,8 @@ public:
 
 CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
-      extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false), using_vector_typedefs(false) {
+      extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false),
+      using_vector_typedefs(false) {
 
     if (output_kind == CPlusPlusFunctionInfoHeader) {
         // If it's a header, emit an include guard.
@@ -506,9 +505,16 @@ CodeGen_C::~CodeGen_C() {
             if (target.has_feature(Target::D3D12Compute)) {
                 stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << "\n";
             }
+            if (target.has_feature(Target::WebGPU)) {
+                stream << halide_internal_runtime_header_HalideRuntimeWebGPU_h << "\n";
+            }
         }
         stream << "#endif\n";
     }
+}
+
+void CodeGen_C::add_platform_prologue() {
+    // nothing
 }
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
@@ -1384,7 +1390,19 @@ string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     } else {
         oss << "reinterpret<" << print_type(type) << ">";
     }
-    oss << "(" << print_expr(e) << ")";
+    // If we are generating a typed nullptr, just emit that as a literal, with no intermediate,
+    // to avoid ugly code like
+    //
+    //      uint64_t _32 = (uint64_t)(0ull);
+    //      auto *_33 = (void *)(_32);
+    //
+    // and instead just do
+    //      auto *_33 = (void *)(nullptr);
+    if (type.is_handle() && is_const_zero(e)) {
+        oss << "(nullptr)";
+    } else {
+        oss << "(" << print_expr(e) << ")";
+    }
     return oss.str();
 }
 
@@ -1869,7 +1887,14 @@ void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
     stream << "}\n";
 }
 
+void CodeGen_C::emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function) {
+    stream << get_indent() << "HalideFreeHelper<" << free_function << "> "
+           << alloc_name << "_free(_ucon, " << alloc_name << ");\n";
+}
+
 void CodeGen_C::compile(const Module &input) {
+    add_platform_prologue();
+
     TypeInfoGatherer type_info;
     for (const auto &f : input.functions()) {
         if (f.body.defined()) {
@@ -1926,6 +1951,10 @@ void CodeGen_C::compile(const Module &input) {
     for (const auto &f : input.functions()) {
         compile(f, metadata_name_map);
     }
+}
+
+Stmt CodeGen_C::preprocess_function_body(const Stmt &stmt) {
+    return stmt;
 }
 
 void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_name_map) {
@@ -2014,7 +2043,8 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
                 stream << get_indent() << "halide_maybe_unused(_ucon);\n";
 
                 // Emit the body
-                print(f.body);
+                Stmt body_to_print = preprocess_function_body(f.body);
+                print(body_to_print);
 
                 // Return success.
                 stream << get_indent() << "return 0;\n";
@@ -2201,6 +2231,10 @@ string CodeGen_C::print_expr(const Expr &e) {
 
 string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
     string value = print_expr(e);
+    if (e.type() == t) {
+        // This is uncommon but does happen occasionally
+        return value;
+    }
     string type = print_type(t);
     if (t.is_vector() &&
         t.lanes() == e.type().lanes() &&
@@ -2405,12 +2439,16 @@ void CodeGen_C::visit(const IntImm *op) {
 }
 
 void CodeGen_C::visit(const UIntImm *op) {
-    static const char *const suffixes[3] = {
-        "ull",  // PlainC
-        "ul",   // OpenCL
-        "",     // HLSL
-    };
-    print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
+    if (op->type == UInt(1)) {
+        id = op->value ? "true" : "false";
+    } else {
+        static const char *const suffixes[3] = {
+            "ull",  // PlainC
+            "ul",   // OpenCL
+            "",     // HLSL
+        };
+        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
+    }
 }
 
 void CodeGen_C::visit(const StringImm *op) {
@@ -2419,24 +2457,10 @@ void CodeGen_C::visit(const StringImm *op) {
     id = oss.str();
 }
 
-// NaN is the only float/double for which this is true... and
-// surprisingly, there doesn't seem to be a portable isnan function
-// (dsharlet).
-template<typename T>
-static bool isnan(T x) {
-    return x != x;
-}
-
-template<typename T>
-static bool isinf(T x) {
-    return std::numeric_limits<T>::has_infinity && (x == std::numeric_limits<T>::infinity() ||
-                                                    x == -std::numeric_limits<T>::infinity());
-}
-
 void CodeGen_C::visit(const FloatImm *op) {
-    if (isnan(op->value)) {
+    if (std::isnan(op->value)) {
         id = "nan_f32()";
-    } else if (isinf(op->value)) {
+    } else if (std::isinf(op->value)) {
         if (op->value > 0) {
             id = "inf_f32()";
         } else {
@@ -2457,6 +2481,10 @@ void CodeGen_C::visit(const FloatImm *op) {
         oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
         print_assignment(op->type, oss.str());
     }
+}
+
+bool CodeGen_C::is_stack_private_to_thread() const {
+    return false;
 }
 
 void CodeGen_C::visit(const Call *op) {
@@ -2597,7 +2625,7 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->type == type_of<struct halide_semaphore_t *>() &&
                    sz && *sz == 16) {
             stream << get_indent();
-            string semaphore_name = unique_name("sema");
+            string semaphore_name = unique_name('m');
             stream << "halide_semaphore_t " << semaphore_name << ";\n";
             rhs << "&" << semaphore_name;
         } else {
@@ -2612,7 +2640,7 @@ void CodeGen_C::visit(const Call *op) {
         if (op->args.empty()) {
             internal_assert(op->type.handle_type);
             // Add explicit cast so that different structs can't cache to the same value
-            rhs << "(" << print_type(op->type) << ")(NULL)";
+            rhs << "(" << print_type(op->type) << ")(nullptr)";
         } else if (op->type == type_of<halide_dimension_t *>()) {
             // Emit a shape
 
@@ -2662,28 +2690,56 @@ void CodeGen_C::visit(const Call *op) {
             }
             indent--;
             string struct_name = unique_name('s');
-            stream << get_indent() << "} " << struct_name << " = {\n";
-            // List the values.
-            indent++;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                stream << get_indent() << values[i];
-                if (i < op->args.size() - 1) {
-                    stream << ",";
+            if (is_stack_private_to_thread()) {
+                // Can't allocate the closure information on the stack; use malloc instead.
+                stream << get_indent() << "} *" << struct_name << ";\n";
+                stream << get_indent() << struct_name
+                       << " = (decltype(" << struct_name << "))halide_malloc(_ucon, sizeof(*"
+                       << struct_name << "));\n";
+
+                create_assertion("(" + struct_name + ")", Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
+
+                // Assign the values.
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    stream << get_indent() << struct_name << "->f_" << i << " = " << values[i] << ";\n";
                 }
-                stream << "\n";
-            }
-            indent--;
-            stream << get_indent() << "};\n";
 
-            // Return a pointer to it of the appropriate type
+                // Insert destructor.
+                emit_halide_free_helper(struct_name, "halide_free");
 
-            // TODO: This is dubious type-punning. We really need to
-            // find a better way to do this. We dodge the problem for
-            // the specific case of buffer shapes in the case above.
-            if (op->type.handle_type) {
-                rhs << "(" << print_type(op->type) << ")";
+                // Return the pointer, casting to appropriate type if necessary.
+
+                // TODO: This is dubious type-punning. We really need to
+                // find a better way to do this. We dodge the problem for
+                // the specific case of buffer shapes in the case above.
+                if (op->type.handle_type) {
+                    rhs << "(" << print_type(op->type) << ")";
+                }
+                rhs << struct_name;
+            } else {
+                stream << get_indent() << "} " << struct_name << " = {\n";
+                // List the values.
+                indent++;
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    stream << get_indent() << values[i];
+                    if (i < op->args.size() - 1) {
+                        stream << ",";
+                    }
+                    stream << "\n";
+                }
+                indent--;
+                stream << get_indent() << "};\n";
+
+                // Return a pointer to it of the appropriate type
+
+                // TODO: This is dubious type-punning. We really need to
+                // find a better way to do this. We dodge the problem for
+                // the specific case of buffer shapes in the case above.
+                if (op->type.handle_type) {
+                    rhs << "(" << print_type(op->type) << ")";
+                }
+                rhs << "(&" << struct_name << ")";
             }
-            rhs << "(&" << struct_name << ")";
         }
     } else if (op->is_intrinsic(Call::load_typed_struct_member)) {
         // Given a void * instance of a typed struct, an in-scope prototype
@@ -2748,20 +2804,10 @@ void CodeGen_C::visit(const Call *op) {
         rhs << buf_name;
     } else if (op->is_intrinsic(Call::register_destructor)) {
         internal_assert(op->args.size() == 2);
-        const StringImm *fn = op->args[0].as<StringImm>();
-        internal_assert(fn);
+        const StringImm *free_fn = op->args[0].as<StringImm>();
+        internal_assert(free_fn);
         string arg = print_expr(op->args[1]);
-
-        stream << get_indent();
-        // Make a struct on the stack that calls the given function as a destructor
-        string struct_name = unique_name('s');
-        string instance_name = unique_name('d');
-        stream << "struct " << struct_name << " { "
-               << "void * const ucon; "
-               << "void * const arg; "
-               << "" << struct_name << "(void *ucon, void *a) : ucon(ucon), arg(a) {} "
-               << "~" << struct_name << "() { " << fn->value + "(ucon, arg); } "
-               << "} " << instance_name << "(_ucon, " << arg << ");\n";
+        emit_halide_free_helper(arg, free_fn->value);
         rhs << "(void *)nullptr";
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
@@ -3339,10 +3385,8 @@ void CodeGen_C::visit(const Allocate *op) {
         }
         create_assertion("(" + check.str() + ")", Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
-        stream << get_indent();
         string free_function = op->free_function.empty() ? "halide_free" : op->free_function;
-        stream << "HalideFreeHelper " << op_name << "_free(_ucon, "
-               << op_name << ", " << free_function << ");\n";
+        emit_halide_free_helper(op_name, free_function);
     }
 
     op->body.accept(this);
@@ -3524,7 +3568,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
    int32_t _4 = halide_error_out_of_memory(_ucon);
    return _4;
   }
-  HalideFreeHelper _tmp_heap_free(_ucon, _tmp_heap, halide_free);
+  HalideFreeHelper<halide_free> _tmp_heap_free(_ucon, _tmp_heap);
   {
    int32_t _tmp_stack[127];
    int32_t _5 = _beta + 1;

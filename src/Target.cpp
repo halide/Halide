@@ -302,7 +302,6 @@ bool is_using_hexagon(const Target &t) {
             t.has_feature(Target::HVX_v65) ||
             t.has_feature(Target::HVX_v66) ||
             t.has_feature(Target::HexagonDma) ||
-            t.has_feature(Target::HVX_shared_object) ||
             t.arch == Target::Hexagon);
 }
 
@@ -484,7 +483,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"hvx_v62", Target::HVX_v62},
     {"hvx_v65", Target::HVX_v65},
     {"hvx_v66", Target::HVX_v66},
-    {"hvx_shared_object", Target::HVX_shared_object},
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
@@ -510,6 +508,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"wasm_sat_float_to_int", Target::WasmSatFloatToInt},
     {"wasm_threads", Target::WasmThreads},
     {"wasm_bulk_memory", Target::WasmBulkMemory},
+    {"webgpu", Target::WebGPU},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
@@ -520,6 +519,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
     {"spirv", Target::SPIRV},
+    {"semihosting", Target::Semihosting},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -860,6 +860,9 @@ bool Target::supported() const {
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
 #endif
+#if !defined(WITH_WEBGPU)
+    bad |= has_feature(Target::WebGPU);
+#endif
     return !bad;
 }
 
@@ -924,7 +927,8 @@ bool Target::has_gpu_feature() const {
             has_feature(OpenCL) ||
             has_feature(Metal) ||
             has_feature(D3D12Compute) ||
-            has_feature(OpenGLCompute));
+            has_feature(OpenGLCompute) ||
+            has_feature(WebGPU));
 }
 
 int Target::get_cuda_capability_lower_bound() const {
@@ -967,11 +971,13 @@ bool Target::supports_type(const Type &t) const {
             return !has_feature(Metal) &&
                    !has_feature(OpenGLCompute) &&
                    !has_feature(D3D12Compute) &&
+                   !has_feature(WebGPU) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
             return (!has_feature(Metal) &&
                     !has_feature(OpenGLCompute) &&
-                    !has_feature(D3D12Compute));
+                    !has_feature(D3D12Compute) &&
+                    !has_feature(WebGPU));
         }
     }
     return true;
@@ -1001,6 +1007,8 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
         // types are not supported.
         return t.bits() < 64;
     } else if (device == DeviceAPI::OpenGLCompute) {
+        return t.bits() < 64;
+    } else if (device == DeviceAPI::WebGPU) {
         return t.bits() < 64;
     }
 
@@ -1046,6 +1054,9 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     }
+    if (has_feature(Target::WebGPU)) {
+        return DeviceAPI::WebGPU;
+    }
     return DeviceAPI::None;
 }
 
@@ -1063,6 +1074,8 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::HVX;
     case DeviceAPI::D3D12Compute:
         return Target::D3D12Compute;
+    case DeviceAPI::WebGPU:
+        return Target::WebGPU;
     default:
         return Target::FeatureEnd;
     }
@@ -1145,7 +1158,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
     // clang-format off
-    const std::array<Feature, 18> union_features = {{
+    const std::array<Feature, 19> union_features = {{
         // These are true union features.
         CUDA,
         D3D12Compute,
@@ -1153,6 +1166,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         NoNEON,
         OpenCL,
         OpenGLCompute,
+        WebGPU,
 
         // These features are actually intersection-y, but because targets only record the _highest_,
         // we have to put their union in the result and then take a lower bound.
@@ -1196,7 +1210,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         Debug,
         HexagonDma,
         HVX,
-        HVX_shared_object,
         MSAN,
         SoftFloatABI,
         TSAN,
@@ -1230,7 +1243,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, HVX_shared_object, SanitizerCoverage\n"
+        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, SanitizerCoverage\n"
                            << "  this:  " << *this << "\n"
                            << "  other: " << other << "\n";
         return false;

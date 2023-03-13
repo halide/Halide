@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
     sink.realize();
 
     if (!check_result())
-        return -1;
+        return 1;
 
     // Test ImageParam ExternFuncArgument via passed in image.
     Buffer<int32_t> buf = source.realize({10});
@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
     sink2.realize();
 
     if (!check_result())
-        return -1;
+        return 1;
 
     printf("Success!\n");
     return 0;

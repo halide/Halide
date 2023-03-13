@@ -57,12 +57,12 @@ int main(int argc, char **argv) {
                 if (out1(x, y) != correct) {
                     printf("out1(%d, %d) = %d instead of %d\n",
                            x, y, out1(x, y), correct);
-                    return -1;
+                    return 1;
                 }
                 if (out2(x, y) != correct) {
                     printf("out2(%d, %d) = %d instead of %d\n",
                            x, y, out2(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
                 if (out(x, y) != correct) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, out(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
