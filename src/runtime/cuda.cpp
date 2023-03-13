@@ -111,7 +111,7 @@ int error_cuda(void *user_context, CUresult cuda_error, const Args &...args) {
     if (cuda_error == CUDA_SUCCESS) {
         return halide_error_code_success;
     }
-    error(user_context).append("CUDA error: ", get_cuda_error_name(cuda_error), args...);
+    error(user_context).append("CUDA error: ", get_cuda_error_name(cuda_error), " ", args...);
     return halide_error_code_gpu_device_error;
 }
 

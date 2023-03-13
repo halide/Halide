@@ -108,7 +108,7 @@ halide_error_code_t error_opencl(void *user_context, cl_int cl_error, const Args
     if (cl_error == CL_SUCCESS) {
         return halide_error_code_success;
     }
-    error(user_context).append(get_opencl_error_name(cl_error), args...);
+    error(user_context).append("OpenCL error: ", get_opencl_error_name(cl_error), " ", args...);
     return halide_error_code_gpu_device_error;
 }
 
