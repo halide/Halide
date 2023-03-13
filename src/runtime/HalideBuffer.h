@@ -6,6 +6,8 @@
 #ifndef HALIDE_RUNTIME_BUFFER_H
 #define HALIDE_RUNTIME_BUFFER_H
 
+#ifndef COMPILING_HALIDE_RUNTIME
+
 #include <algorithm>
 #include <atomic>
 #include <cassert>
@@ -2559,5 +2561,7 @@ public:
 }  // namespace Halide
 
 #undef HALIDE_ALLOCA
+
+#endif  // #ifndef COMPILING_HALIDE_RUNTIME
 
 #endif  // HALIDE_RUNTIME_IMAGE_H
