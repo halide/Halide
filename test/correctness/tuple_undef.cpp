@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
                 if (a(x, y) != correct_a || b(x, y) != correct_b) {
                     printf("result(%d, %d) = (%d, %d) instead of (%d, %d)\n",
                            x, y, a(x, y), b(x, y), correct_a, correct_b);
-                    return -1;
+                    return 1;
                 }
             }
         }

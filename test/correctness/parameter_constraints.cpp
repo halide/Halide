@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
         f.realize({100, 100});
         if (error_occurred) {
             printf("Error incorrectly raised\n");
-            return -1;
+            return 1;
         }
 
         p.set(0);
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
         f.realize({100, 100});
         if (!error_occurred) {
             printf("Error should have been raised\n");
-            return -1;
+            return 1;
         }
     }
     // Use ctor arguments
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
         f.realize({100, 100});
         if (error_occurred) {
             printf("Error incorrectly raised\n");
-            return -1;
+            return 1;
         }
 
         p.set(0);
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         f.realize({100, 100});
         if (!error_occurred) {
             printf("Error should have been raised\n");
-            return -1;
+            return 1;
         }
     }
 

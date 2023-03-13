@@ -93,7 +93,7 @@ extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
 
     if (in->type != out->type) {
         fprintf(stderr, "type mismatch\n");
-        return -1;
+        return halide_error_code_generic_error;
     }
     if (skip_extern_copy) {
         // Fill it with zero to mimic msan "poison".
@@ -102,7 +102,7 @@ extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
         MsanBuffer(*out).copy_from(MsanBuffer(*in));
     }
     out->set_host_dirty();
-    return 0;
+    return halide_error_code_success;
 }
 
 extern "C" void halide_error(void *user_context, const char *msg) {

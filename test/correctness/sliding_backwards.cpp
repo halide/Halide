@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
 
     if (call_counter != 11) {
         printf("g was called %d times instead of %d\n", call_counter, 11);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

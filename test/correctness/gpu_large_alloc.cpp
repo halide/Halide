@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
             const int expected = std::min(std::max(m, 20), 100);
             if (img(i, j) != expected) {
                 printf("img[%d, %d] = %d\n", i, j, img(i, j));
-                return -1;
+                return 1;
             }
         }
     }

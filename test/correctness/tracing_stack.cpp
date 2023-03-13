@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
     h.realize({100, 100});
 
     printf("The code should not have reached this print statement.\n");
-    return -1;
+    return 1;
 }
 
 #else

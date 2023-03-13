@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
             int correct = (input(x) + 1) * 2 + 3;
             if (output1(x) != correct) {
                 printf("output1(%d) = %d instead of %d\n", x, output1(x), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
             int correct = (input(x) + 1) * 2;
             if (output2(x) != correct) {
                 printf("output2(%d) = %d instead of %d\n", x, output2(x), correct);
-                return -1;
+                return 1;
             }
         }
     }

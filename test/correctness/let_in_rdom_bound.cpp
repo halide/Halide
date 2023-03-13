@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 10; i++) {
         if (buf(i) != correct) {
             printf("buf(%d) = %d instead of %d\n", i, buf(i), correct);
-            return -1;
+            return 1;
         }
     }
 

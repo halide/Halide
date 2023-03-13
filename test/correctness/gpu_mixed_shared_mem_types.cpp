@@ -10,7 +10,7 @@ int check_result(Buffer<T> output, int n_types, int offset) {
         if (output(x) != correct) {
             printf("output(%d) = %d instead of %d\n",
                    (unsigned int)x, (unsigned int)output(x), (unsigned int)correct);
-            return -1;
+            return 1;
         }
     }
     return 0;

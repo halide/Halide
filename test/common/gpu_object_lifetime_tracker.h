@@ -67,12 +67,12 @@ public:
                 !(allow_globals && o.is_global)) {
                 printf("Error! %d objects created by %s still live\n",
                        o.live_count, o.created);
-                return -1;
+                return 1;
             }
             if (o.is_global && o.total_created > max_globals) {
                 printf("Error! %d global objects created by %s, max is %d\n",
                        o.total_created, o.created, max_globals);
-                return -1;
+                return 1;
             }
 
             total += o.total_created;
@@ -80,7 +80,7 @@ public:
         if (!allow_none && total == 0) {
             printf("Error! No objects created. Ensure gpu_debug is set, ");
             printf("and record_gpu_debug is called from halide_print.\n");
-            return -1;
+            return 1;
         }
         return 0;
     }

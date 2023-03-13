@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 
     if (err != 0) {
         printf("Multi-way select didn't equal equivalent reduction!\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

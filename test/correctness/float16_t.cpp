@@ -75,7 +75,7 @@ int run_test() {
     double d = evaluate<double>(g());
     if (d != 0) {
         fprintf(stderr, "Should be zero: %f\n", d);
-        return -1;
+        return 1;
     }
 
     // Check scalar parameters
@@ -87,7 +87,7 @@ int run_test() {
         float result = evaluate<float>(cast<float>(a) + cast<float>(b));
         if (result != 4.25f) {
             fprintf(stderr, "Incorrect result: %f != 4.25f\n", result);
-            return -1;
+            return 1;
         }
     }
 
@@ -100,7 +100,7 @@ int run_test() {
         float16_t result = evaluate<float16_t>(lerp(a, b, c));
         if (float(result) != 24.062500f) {
             fprintf(stderr, "Incorrect result: %f != 24.0625f\n", (float)result);
-            return -1;
+            return 1;
         }
     }
 
@@ -112,7 +112,7 @@ int run_test() {
         bfloat16_t result = evaluate<bfloat16_t>(lerp(a, b, c));
         if (float(result) != 24.5f) {
             fprintf(stderr, "Incorrect result: %f != 24.5f\n", (float)result);
-            return -1;
+            return 1;
         }
     }
 
@@ -133,7 +133,7 @@ int run_test() {
 
             if (!ok) {
                 fprintf(stderr, "Incorrect rounding: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
-                return -1;
+                return 1;
             }
         }
     }
@@ -155,7 +155,7 @@ int run_test() {
 
             if (!ok) {
                 fprintf(stderr, "Incorrect rounding: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
-                return -1;
+                return 1;
             }
         }
     }
@@ -193,7 +193,7 @@ int run_test() {
                 if (f32 != f16) {
                     fprintf(stderr, "%s outputs do not match: %f %f\n",
                             names[j], f32, f16);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -225,7 +225,7 @@ int run_test() {
                 if (buf(x, y).to_bits() != correct.to_bits()) {
                     fprintf(stderr, "buf(%d, %d) = 0x%x instead of 0x%x\n",
                             x, y, buf(x, y).to_bits(), correct.to_bits());
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -239,7 +239,7 @@ int run_test() {
         Buffer<float16_t> buf = out.realize();
         if (buf(0) != constant) {
             fprintf(stderr, "buf(0) = %f instead of %f\n", float(buf(0)), float(constant));
-            return -1;
+            return 1;
         }
     }
 
@@ -273,7 +273,7 @@ int run_test() {
                                      "float16_t maximum value plus", test_case.first,
                                      float16_t::make_infinity(), max_pos_val,
                                      "positive infinity", "maximum positive value")) {
-                return -1;
+                return 1;
             }
 
             float16_t min_minus_increment(min_neg_val - increment);
@@ -281,7 +281,7 @@ int run_test() {
                                      "float16_t minimum value minus", test_case.first,
                                      float16_t::make_negative_infinity(), min_neg_val,
                                      "negative infinity", "maximum negative value")) {
-                return -1;
+                return 1;
             }
 
             Param<float16_t> a("a"), b("b");
@@ -292,7 +292,7 @@ int run_test() {
                                      "Halide float16_t maximum value plus", test_case.first,
                                      float16_t::make_infinity(), max_pos_val,
                                      "positive infinity", "maximum positive value")) {
-                return -1;
+                return 1;
             }
 
             a.set(min_neg_val);
@@ -301,21 +301,21 @@ int run_test() {
                                      "Halide float16_t minimum value minus", test_case.first,
                                      float16_t::make_negative_infinity(), min_neg_val,
                                      "negative infinity", "maximum negative value")) {
-                return -1;
+                return 1;
             }
 
             float pos_inf = std::numeric_limits<float>::infinity();
             float16_t fp16_pos_inf(pos_inf);
             if (fp16_pos_inf != float16_t::make_infinity()) {
                 fprintf(stderr, "Conversion of 32-bit positive infinity to 16-bit float is %x, not positive infinity.\n", fp16_pos_inf.to_bits());
-                return -1;
+                return 1;
             }
 
             float neg_inf = -std::numeric_limits<float>::infinity();
             float16_t fp16_neg_inf(neg_inf);
             if (fp16_neg_inf != float16_t::make_negative_infinity()) {
                 fprintf(stderr, "Conversion of 32-bit negative infinity to 16-bit float is %x, not negative infinity.\n", fp16_neg_inf.to_bits());
-                return -1;
+                return 1;
             }
 
             Param<float> f_in("f_in");
@@ -323,14 +323,14 @@ int run_test() {
             c = evaluate<float16_t>(cast(Float(16), f_in));
             if (c != float16_t::make_infinity()) {
                 fprintf(stderr, "Halide conversion of 32-bit positive infinity to 16-bit float is %x, not positive infinity.\n", c.to_bits());
-                return -1;
+                return 1;
             }
 
             f_in.set(neg_inf);
             c = evaluate<float16_t>(cast(Float(16), f_in));
             if (c != float16_t::make_negative_infinity()) {
                 fprintf(stderr, "Halide conversion of 32-bit negative infinity to 16-bit float is %x, not negative infinity.\n", c.to_bits());
-                return -1;
+                return 1;
             }
         }
     }
@@ -347,14 +347,14 @@ int main(int argc, char **argv) {
     printf("Testing float16_t...\n");
     if (run_test<float16_t>() != 0) {
         fprintf(stderr, "float16_t test failed!\n");
-        return -1;
+        return 1;
     }
 
     printf("Testing _Float16...\n");
 #ifdef HALIDE_CPP_COMPILER_HAS_FLOAT16
     if (run_test<_Float16>() != 0) {
         fprintf(stderr, "_Float16 test failed!\n");
-        return -1;
+        return 1;
     }
 
 #ifdef __clang__
@@ -363,7 +363,7 @@ int main(int argc, char **argv) {
         _Float16 f2 = (_Float16)f;
         if (f2 != 1.0f16) {
             fprintf(stderr, "Roundtrip of 16-bit float via _Float16 failed.\n");
-            return -1;
+            return 1;
         }
     }
 #else

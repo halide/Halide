@@ -121,7 +121,7 @@ int test() {
     int cnt = count_host_alignment_asserts(f, m);
     if (cnt != 3) {
         printf("Error: expected 3 host alignment assertions in code, but got %d\n", cnt);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

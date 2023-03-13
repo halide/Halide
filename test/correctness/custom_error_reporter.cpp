@@ -68,5 +68,5 @@ int main(int argc, char **argv) {
     _halide_user_assert(argc == 0) << should_be_evaluated();
 
     printf("CompileTimeErrorReporter::error() must not return.\n");
-    return -1;
+    return 1;
 }
