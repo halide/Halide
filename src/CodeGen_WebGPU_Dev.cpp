@@ -77,6 +77,7 @@ protected:
 
         void visit(const Allocate *op) override;
         void visit(const And *op) override;
+        void visit(const AssertStmt *op) override;
         void visit(const Broadcast *op) override;
         void visit(const Call *op) override;
         void visit(const Cast *) override;
@@ -288,7 +289,7 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_reinterpret(Type type,
 }
 
 string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_extern_call(const Call *op) {
-    internal_assert(!function_takes_user_context(op->name));
+    internal_assert(!function_takes_user_context(op->name)) << op->name;
 
     vector<string> args(op->args.size());
     for (size_t i = 0; i < op->args.size(); i++) {
@@ -481,6 +482,10 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const And *op) {
         rhs += ")";
         print_assignment(t, rhs);
     }
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const AssertStmt *op) {
+    user_warning << "Ignoring assertion inside WebGPU kernel: " << op->condition << "\n";
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Broadcast *op) {

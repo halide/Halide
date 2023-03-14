@@ -464,7 +464,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_extern_call(const Call *op) {
-    internal_assert(!function_takes_user_context(op->name));
+    internal_assert(!function_takes_user_context(op->name)) << op->name;
     vector<string> args(op->args.size());
     for (size_t i = 0; i < op->args.size(); i++) {
         args[i] = print_expr(op->args[i]);
