@@ -128,7 +128,9 @@ function(_add_one_aot_test TARGET)
     if ("${Halide_TARGET}" MATCHES "webgpu")
         target_compile_definitions("${TARGET}" PRIVATE TEST_WEBGPU)
         target_include_directories("${TARGET}" PRIVATE ${args_INCLUDES} "${Halide_SOURCE_DIR}/src/runtime")
-        if (WEBGPU_NATIVE_LIB)
+        if ("${Halide_TARGET}" MATCHES "wasmrt")
+            # nothing
+        else ()
             # TODO: Remove this once Emscripten and Dawn agree with each other.
             target_compile_definitions("${TARGET}" PRIVATE WITH_DAWN_NATIVE)
         endif ()
