@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
             float delta = ref_energy(x, y) - im_energy(x, y);
             if (fabs(delta) > 1e-5) {
                 printf("energy(%d,%d) was %f instead of %f\n", x, y, im_energy(x, y), ref_energy(x, y));
-                return -1;
+                return 1;
             }
         }
     }

@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
         int correct = (256 * 255) / 2;
         if (im(0) != correct) {
             printf("im(0) = %d instead of %d\n", im(0), correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 256; i++) {
             if (result(i) != correct(i)) {
                 printf("result(%d) = %d instead of %d\n", i, result(i), correct(i));
-                return -1;
+                return 1;
             }
         }
     }

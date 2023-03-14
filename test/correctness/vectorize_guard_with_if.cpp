@@ -37,20 +37,20 @@ int main(int argc, char **argv) {
         if (num_vector_stores != expected_vector_stores) {
             printf("There were %d vector stores instead of %d\n",
                    num_vector_stores, expected_vector_stores);
-            return -1;
+            return 1;
         }
 
         if (num_scalar_stores != expected_scalar_stores) {
             printf("There were %d scalar stores instead of %d\n",
                    num_vector_stores, w % 8);
-            return -1;
+            return 1;
         }
 
         for (int i = 0; i < w; i++) {
             if (result(i) != i) {
                 printf("result(%d) == %d instead of %d\n",
                        i, result(i), i);
-                return -1;
+                return 1;
             }
         }
     }
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
             if (result(i) != i / 2 + i / 2) {
                 printf("result(%d) == %d instead of %d\n",
                        i, result(i), i);
-                return -1;
+                return 1;
             }
         }
     }
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
             if (result(i) != correct) {
                 printf("result(%d) == %d instead of %d\n",
                        i, result(i), correct);
-                return -1;
+                return 1;
             }
         }
     }

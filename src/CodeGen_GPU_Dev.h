@@ -87,11 +87,12 @@ struct CodeGen_GPU_Dev {
  * GPU backends derive from and specialize this class. */
 class CodeGen_GPU_C : public CodeGen_C {
 public:
-    /** OpenCL uses a different syntax than C for immediate vectors.  This
+    /** OpenCL and WGSL use different syntax than C for immediate vectors. This
     enum defines which style should be used by the backend. */
     enum class VectorDeclarationStyle {
         CLikeSyntax = 0,
-        OpenCLSyntax = 1
+        OpenCLSyntax = 1,
+        WGSLSyntax = 2,
     };
 
     CodeGen_GPU_C(std::ostream &s, Target t)

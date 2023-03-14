@@ -1,8 +1,10 @@
 #ifndef HALIDE_RUNTIME_BLOCK_ALLOCATOR_H
 #define HALIDE_RUNTIME_BLOCK_ALLOCATOR_H
 
+#include "HalideRuntime.h"
 #include "linked_list.h"
 #include "memory_resources.h"
+#include "printer.h"
 #include "region_allocator.h"
 
 namespace Halide {
@@ -111,7 +113,7 @@ private:
 };
 
 BlockAllocator *BlockAllocator::create(void *user_context, const Config &cfg, const MemoryAllocators &allocators) {
-    halide_abort_if_false(user_context, allocators.system.allocate != nullptr);
+    halide_debug_assert(user_context, allocators.system.allocate != nullptr);
     BlockAllocator *result = reinterpret_cast<BlockAllocator *>(
         allocators.system.allocate(user_context, sizeof(BlockAllocator)));
 
@@ -125,10 +127,10 @@ BlockAllocator *BlockAllocator::create(void *user_context, const Config &cfg, co
 }
 
 void BlockAllocator::destroy(void *user_context, BlockAllocator *instance) {
-    halide_abort_if_false(user_context, instance != nullptr);
+    halide_debug_assert(user_context, instance != nullptr);
     const MemoryAllocators &allocators = instance->allocators;
     instance->destroy(user_context);
-    halide_abort_if_false(user_context, allocators.system.deallocate != nullptr);
+    halide_debug_assert(user_context, allocators.system.deallocate != nullptr);
     allocators.system.deallocate(user_context, instance);
 }
 
@@ -160,8 +162,8 @@ MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &r
     }
 
     BlockResource *block = static_cast<BlockResource *>(block_entry->value);
-    halide_abort_if_false(user_context, block != nullptr);
-    halide_abort_if_false(user_context, block->allocator != nullptr);
+    halide_debug_assert(user_context, block != nullptr);
+    halide_debug_assert(user_context, block->allocator != nullptr);
 
     MemoryRegion *result = reserve_memory_region(user_context, block->allocator, request);
     if (result == nullptr) {
@@ -186,7 +188,7 @@ MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &r
 }
 
 void BlockAllocator::reclaim(void *user_context, MemoryRegion *memory_region) {
-    halide_abort_if_false(user_context, memory_region != nullptr);
+    halide_debug_assert(user_context, memory_region != nullptr);
     RegionAllocator *allocator = RegionAllocator::find_allocator(user_context, memory_region);
     if (allocator == nullptr) {
         return;
@@ -315,7 +317,7 @@ BlockAllocator::create_region_allocator(void *user_context, BlockResource *block
                         << "user_context=" << (void *)(user_context) << " "
                         << "block_resource=" << (void *)(block) << ")...\n";
 #endif
-    halide_abort_if_false(user_context, block != nullptr);
+    halide_debug_assert(user_context, block != nullptr);
     RegionAllocator *region_allocator = RegionAllocator::create(
         user_context, block, {allocators.system, allocators.region});
 
@@ -402,7 +404,7 @@ void BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block
 #ifdef DEBUG_RUNTIME
     debug(user_context) << "BlockAllocator: Allocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.allocate << ")...\n";
 #endif
-    halide_abort_if_false(user_context, allocators.block.allocate != nullptr);
+    halide_debug_assert(user_context, allocators.block.allocate != nullptr);
     MemoryBlock *memory_block = &(block->memory);
     allocators.block.allocate(user_context, memory_block);
     block->reserved = 0;
@@ -412,7 +414,7 @@ void BlockAllocator::free_memory_block(void *user_context, BlockResource *block)
 #ifdef DEBUG_RUNTIME
     debug(user_context) << "BlockAllocator: Deallocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.deallocate << ")...\n";
 #endif
-    halide_abort_if_false(user_context, allocators.block.deallocate != nullptr);
+    halide_debug_assert(user_context, allocators.block.deallocate != nullptr);
     MemoryBlock *memory_block = &(block->memory);
     allocators.block.deallocate(user_context, memory_block);
     block->reserved = 0;

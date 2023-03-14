@@ -29,7 +29,7 @@ void run_benchmark(const std::string &filename, const InterpreterOptions &option
     if (!interpreter.prepare()) {
         std::cerr << "hannk::Interpreter::prepare() failed\n";
         // TODO: probably better form to return an error here, but for now, this is fine.
-        exit(-1);
+        exit(1);
     }
 
     if (!options.trace) {
@@ -63,13 +63,13 @@ __attribute__((visibility("default"))) int main(int argc, char **argv) {
         }
         if (argv[i][0] == '-') {
             HLOG(ERROR) << "Unknown flag: " << argv[i] << ".\n";
-            exit(-1);
+            exit(1);
         }
     }
 
     if (options.verbosity > 0 && options.trace) {
         HLOG(ERROR) << "You cannot specify --trace and --verbose at the same time.\n";
-        exit(-1);
+        exit(1);
     }
 
     for (int i = 1; i < argc; i++) {

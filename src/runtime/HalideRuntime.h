@@ -1117,7 +1117,9 @@ enum halide_error_code_t {
      * violates a Halide invariant. */
     halide_error_code_no_device_interface = -19,
 
-    /* unused = -20, */
+    /** This part of the Halide runtime is unimplemented on this platform. */
+    halide_error_code_unimplemented = -20,
+
     /* unused = -21, */
 
     /** There is a bug in the Halide compiler. */
@@ -1376,6 +1378,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_wasm_sat_float_to_int,  ///< Enable saturating (nontrapping) float-to-int instructions for WebAssembly codegen.
     halide_target_feature_wasm_threads,           ///< Enable use of threads in WebAssembly codegen. Requires the use of a wasm runtime that provides pthread-compatible wrappers (typically, Emscripten with the -pthreads flag). Unsupported under WASI.
     halide_target_feature_wasm_bulk_memory,       ///< Enable +bulk-memory instructions for WebAssembly codegen.
+    halide_target_feature_webgpu,                 ///< Enable the WebGPU runtime.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
     halide_target_feature_egl,                    ///< Force use of EGL support.

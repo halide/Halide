@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
 #define EXPECT(expect, actual)                                                                                     \
     if (expect != actual) {                                                                                        \
         std::cout << "Failure, expected " << #expect << " for " << #actual << ", got " << actual << " instead.\n"; \
-        return -1;                                                                                                 \
+        return 1;                                                                                                  \
     }
 
     {

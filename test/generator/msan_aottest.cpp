@@ -93,7 +93,7 @@ extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
 
     if (in->type != out->type) {
         fprintf(stderr, "type mismatch\n");
-        return -1;
+        return halide_error_code_generic_error;
     }
     if (skip_extern_copy) {
         // Fill it with zero to mimic msan "poison".
@@ -102,7 +102,7 @@ extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
         MsanBuffer(*out).copy_from(MsanBuffer(*in));
     }
     out->set_host_dirty();
-    return 0;
+    return halide_error_code_success;
 }
 
 extern "C" void halide_error(void *user_context, const char *msg) {
@@ -117,17 +117,17 @@ extern "C" void halide_error(void *user_context, const char *msg) {
 // enabled, and the default implementation of our msan-specific runtime needs them.
 extern "C" void __msan_check_mem_is_initialized(const void *mem, size_t size) {
     fprintf(stderr, "Impossible\n");
-    exit(-1);
+    exit(1);
 }
 
 extern "C" void __msan_unpoison(const void *mem, size_t size) {
     fprintf(stderr, "Impossible\n");
-    exit(-1);
+    exit(1);
 }
 
 extern "C" long __msan_test_shadow(const void *mem, size_t size) {
     fprintf(stderr, "Impossible\n");
-    exit(-1);
+    exit(1);
 }
 
 extern "C" int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len, const char *name) {
@@ -135,13 +135,13 @@ extern "C" int halide_msan_check_memory_is_initialized(void *user_context, const
     if (check_stage == CheckInputBuffer) {
         if (len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
-            exit(-1);
+            exit(1);
         }
         check_stage = CheckInputShape;
     } else if (check_stage == CheckInputShape) {
         if (len != sizeof(halide_dimension_t) * 3) {
             fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int)len);
-            exit(-1);
+            exit(1);
         }
         check_stage = CheckInputContents;
     } else if (check_stage == CheckInputContents) {
@@ -153,13 +153,13 @@ extern "C" int halide_msan_check_memory_is_initialized(void *user_context, const
     } else if (check_stage == CheckExternResultBuffer) {
         if (len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
-            exit(-1);
+            exit(1);
         }
         check_stage = CheckExternResultShape;
     } else if (check_stage == CheckExternResultShape) {
         if (len != sizeof(halide_dimension_t) * 3) {
             fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int)len);
-            exit(-1);
+            exit(1);
         }
         check_stage = CheckExternResultContents;
     } else if (check_stage == CheckExternResultContents) {
@@ -169,7 +169,7 @@ extern "C" int halide_msan_check_memory_is_initialized(void *user_context, const
         externresult_contents_checked += len;
     } else {
         fprintf(stderr, "Failure: bad enum\n");
-        exit(-1);
+        exit(1);
     }
     return 0;
 }
@@ -179,13 +179,13 @@ extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, co
     if (annotate_stage == AnnotateBoundsInferenceBuffer) {
         if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
-            exit(-1);
+            exit(1);
         }
         annotate_stage = AnnotateBoundsInferenceShape;
     } else if (annotate_stage == AnnotateBoundsInferenceShape) {
         if (output_previous != nullptr || len != sizeof(halide_dimension_t) * 3) {
             fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int)len);
-            exit(-1);
+            exit(1);
         }
         bounds_inference_count += 1;
         if (bounds_inference_count == 4) {
@@ -197,55 +197,55 @@ extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, co
         if (expect_intermediate_buffer_error) {
             if (len != 80) {
                 fprintf(stderr, "Failure: Expected error message of len=80, saw %d bytes\n", (unsigned int)len);
-                exit(-1);
+                exit(1);
             }
             return 0;  // stay in this state
         }
         if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
-            exit(-1);
+            exit(1);
         }
         annotate_stage = AnnotateIntermediateShape;
     } else if (annotate_stage == AnnotateIntermediateShape) {
         if (output_previous != nullptr || len != sizeof(halide_dimension_t) * 3) {
             fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int)len);
-            exit(-1);
+            exit(1);
         }
         annotate_stage = AnnotateOutputBuffer;
     } else if (annotate_stage == AnnotateOutputBuffer) {
         if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
-            exit(-1);
+            exit(1);
         }
         annotate_stage = AnnotateOutputShape;
     } else if (annotate_stage == AnnotateOutputShape) {
         if (output_previous != nullptr || len != sizeof(halide_dimension_t) * 3) {
             fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int)len);
-            exit(-1);
+            exit(1);
         }
         annotate_stage = AnnotateIntermediateContents;
     } else if (annotate_stage == AnnotateIntermediateContents) {
         if (output_previous != nullptr || len != 4 * 4 * 3) {
             fprintf(stderr, "Failure: Expected %d, saw %d\n", 4 * 4 * 3, (unsigned int)len);
-            exit(-1);
+            exit(1);
         }
         annotate_stage = AnnotateOutputContents;
     } else if (annotate_stage == AnnotateOutputContents) {
         if (output_previous == nullptr) {
             if (ptr != output_base) {
                 fprintf(stderr, "Failure: Expected base p %p but saw %p\n", output_base, ptr);
-                exit(-1);
+                exit(1);
             }
             if (ptr <= output_previous) {
                 fprintf(stderr, "Failure: Expected monotonic increase but saw %p -> %p\n", output_previous, ptr);
-                exit(-1);
+                exit(1);
             }
             output_previous = ptr;
         }
         output_contents_annotated += len;
     } else {
         fprintf(stderr, "Failure: bad enum\n");
-        exit(-1);
+        exit(1);
     }
     return 0;
 }
@@ -260,7 +260,7 @@ void verify(const T &image) {
         int actual = image(x, y, c);
         if (actual != expected) {
             fprintf(stderr, "Failure @ %d %d %d: expected %d, got %d\n", x, y, c, expected, actual);
-            exit(-1);
+            exit(1);
         }
     });
 }
@@ -282,24 +282,24 @@ int main() {
         reset_state(in, out);
         if (msan(in, out) != 0) {
             fprintf(stderr, "Failure!\n");
-            exit(-1);
+            exit(1);
         }
         verify(out);
         if (input_contents_uninitialized != 0) {
             fprintf(stderr, "Failure: input_contents_uninitialized is wrong (%d).\n", (int)input_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (input_contents_checked != 4 * 4 * 3) {
             fprintf(stderr, "Failure: input_contents_checked is wrong (%d).\n", (int)input_contents_checked);
-            exit(-1);
+            exit(1);
         }
         if (output_contents_annotated != 4 * 4 * 3) {
             fprintf(stderr, "Failure: output_contents_annotated is wrong (%d).\n", (int)output_contents_annotated);
-            exit(-1);
+            exit(1);
         }
         if (output_previous == nullptr) {
             fprintf(stderr, "Failure: Expected to see annotations.\n");
-            exit(-1);
+            exit(1);
         }
     }
 
@@ -317,31 +317,31 @@ int main() {
         reset_state(in, out);
         if (msan(in, out) != 0) {
             fprintf(stderr, "Failure!\n");
-            exit(-1);
+            exit(1);
         }
         if (input_contents_uninitialized != 0) {
             fprintf(stderr, "Failure: input_contents_uninitialized is wrong (%d).\n", (int)input_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (input_contents_checked != 4 * 4 * 3) {
             fprintf(stderr, "Failure: input_contents_checked is wrong (%d).\n", (int)input_contents_checked);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_uninitialized != 0) {
             fprintf(stderr, "Failure: externresult_contents_uninitialized is wrong (%d).\n", (int)externresult_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_checked != 4 * 4 * 3) {
             fprintf(stderr, "Failure: externresult_contents_checked is wrong (%d).\n", (int)externresult_contents_checked);
-            exit(-1);
+            exit(1);
         }
         if (output_contents_annotated != 4 * 4 * 3) {
             fprintf(stderr, "Failure: output_contents_annotated is wrong (%d).\n", (int)output_contents_annotated);
-            exit(-1);
+            exit(1);
         }
         if (output_previous == nullptr) {
             fprintf(stderr, "Failure: Expected to see annotations.\n");
-            exit(-1);
+            exit(1);
         }
     }
 
@@ -352,31 +352,31 @@ int main() {
         reset_state(in, out);
         if (msan(in, out) != 0) {
             fprintf(stderr, "Failure!\n");
-            exit(-1);
+            exit(1);
         }
         if (input_contents_uninitialized != 0) {
             fprintf(stderr, "Failure: input_contents_uninitialized is wrong (%d).\n", (int)input_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (input_contents_checked != 4 * 4 * 3) {
             fprintf(stderr, "Failure: input_contents_checked is wrong (%d).\n", (int)input_contents_checked);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_uninitialized != 0) {
             fprintf(stderr, "Failure: externresult_contents_uninitialized is wrong (%d).\n", (int)externresult_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_checked != 4 * 4 * 3) {
             fprintf(stderr, "Failure: externresult_contents_checked is wrong (%d).\n", (int)externresult_contents_checked);
-            exit(-1);
+            exit(1);
         }
         if (output_contents_annotated != 4 * 4 * 3) {
             fprintf(stderr, "Failure: output_contents_annotated is wrong (%d).\n", (int)output_contents_annotated);
-            exit(-1);
+            exit(1);
         }
         if (output_previous == nullptr) {
             fprintf(stderr, "Failure: Expected to see annotations.\n");
-            exit(-1);
+            exit(1);
         }
     }
 
@@ -394,31 +394,31 @@ int main() {
         reset_state(in, out);
         if (msan(in, out) != 0) {
             fprintf(stderr, "Failure!\n");
-            exit(-1);
+            exit(1);
         }
         if (input_contents_uninitialized != 0) {
             fprintf(stderr, "Failure: input_contents_uninitialized is wrong (%d).\n", (int)input_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (input_contents_checked != 4 * 4 * 3) {
             fprintf(stderr, "Failure: input_contents_checked is wrong (%d).\n", (int)input_contents_checked);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_uninitialized != 0) {
             fprintf(stderr, "Failure: externresult_contents_uninitialized is wrong (%d).\n", (int)externresult_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_checked != 4 * 4 * 3) {
             fprintf(stderr, "Failure: externresult_contents_checked is wrong (%d).\n", (int)externresult_contents_checked);
-            exit(-1);
+            exit(1);
         }
         if (output_contents_annotated != 4 * 4 * 3) {
             fprintf(stderr, "Failure: output_contents_annotated is wrong (%d).\n", (int)output_contents_annotated);
-            exit(-1);
+            exit(1);
         }
         if (output_previous == nullptr) {
             fprintf(stderr, "Failure: Expected to see annotations.\n");
-            exit(-1);
+            exit(1);
         }
     }
 
@@ -431,31 +431,31 @@ int main() {
         expect_intermediate_buffer_error = true;
         if (msan(in, out) == 0) {
             fprintf(stderr, "Failure (expected failure but did not)!\n");
-            exit(-1);
+            exit(1);
         }
         if (input_contents_uninitialized != 0) {
             fprintf(stderr, "Failure: input_contents_uninitialized is wrong (%d).\n", (int)input_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (input_contents_checked != 1) {
             fprintf(stderr, "Failure: input_contents_checked is wrong (%d).\n", (int)input_contents_checked);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_uninitialized != 0) {
             fprintf(stderr, "Failure: externresult_contents_uninitialized is wrong (%d).\n", (int)externresult_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_checked != 0) {
             fprintf(stderr, "Failure: externresult_contents_checked is wrong (%d).\n", (int)externresult_contents_checked);
-            exit(-1);
+            exit(1);
         }
         if (output_contents_annotated != 0) {
             fprintf(stderr, "Failure: expected no output contents to be annotated.\n");
-            exit(-1);
+            exit(1);
         }
         if (output_previous != nullptr) {
             fprintf(stderr, "Failure: Expected NOT to see annotations.\n");
-            exit(-1);
+            exit(1);
         }
     }
 
@@ -475,23 +475,23 @@ int main() {
         // we'll actually let it "complete" successfully and check the uninitialized state at the end.
         if (msan(in, out) != 0) {
             fprintf(stderr, "Failure!\n");
-            exit(-1);
+            exit(1);
         }
         if (input_contents_uninitialized != sizeof(uint8_t)) {
             fprintf(stderr, "Failure: input_contents_uninitialized is wrong (%d).\n", (int)input_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (input_contents_checked != 4 * 4 * 3) {
             fprintf(stderr, "Failure: input_contents_checked is wrong (%d).\n", (int)input_contents_checked);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_uninitialized != 0) {
             fprintf(stderr, "Failure: externresult_contents_uninitialized is wrong (%d).\n", (int)externresult_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_checked != 4 * 4 * 3) {
             fprintf(stderr, "Failure: externresult_contents_checked is wrong (%d).\n", (int)externresult_contents_checked);
-            exit(-1);
+            exit(1);
         }
         // Don't bother checking outputs here.
     }
@@ -510,23 +510,23 @@ int main() {
         // we'll actually let it "complete" successfully and check the uninitialized state at the end.
         if (msan(in, out) != 0) {
             fprintf(stderr, "Failure!\n");
-            exit(-1);
+            exit(1);
         }
         if (input_contents_uninitialized != sizeof(uint8_t)) {
             fprintf(stderr, "Failure: input_contents_uninitialized is wrong (%d).\n", (int)input_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (input_contents_checked != 4 * 4 * 3) {
             fprintf(stderr, "Failure: input_contents_checked is wrong (%d).\n", (int)input_contents_checked);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_uninitialized != 4 * 4 * 3) {
             fprintf(stderr, "Failure: externresult_contents_uninitialized is wrong (%d).\n", (int)externresult_contents_uninitialized);
-            exit(-1);
+            exit(1);
         }
         if (externresult_contents_checked != 4 * 4 * 3) {
             fprintf(stderr, "Failure: externresult_contents_checked is wrong (%d).\n", (int)externresult_contents_checked);
-            exit(-1);
+            exit(1);
         }
         // Don't bother checking outputs here.
     }

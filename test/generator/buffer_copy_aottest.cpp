@@ -24,14 +24,14 @@ int main(int argc, char **argv) {
         int result = halide_buffer_copy(nullptr, input, nullptr, out);
         if (result != 0) {
             printf("halide_buffer_copy() failed\n");
-            exit(-1);
+            exit(1);
         }
 
         Buffer<int, 2> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
         out.for_each_value([&](int a, int b) {
             if (a != b) {
                 printf("Copying a crop failed\n");
-                exit(-1);
+                exit(1);
             }
         },
                            in_crop);
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         int result = halide_buffer_copy(nullptr, in_crop, dev, out);
         if (result != 0) {
             printf("halide_buffer_copy() failed\n");
-            exit(-1);
+            exit(1);
         }
 
         out.copy_to_host();
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
         out.for_each_value([&](int a, int b) {
             if (a != b) {
                 printf("Copying a crop failed\n");
-                exit(-1);
+                exit(1);
             }
         },
                            in_crop);
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         int result = halide_buffer_copy(nullptr, in_crop, nullptr, out);
         if (result != 0) {
             printf("halide_buffer_copy() failed\n");
-            exit(-1);
+            exit(1);
         }
 
         in_crop.copy_to_host();
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
         out.for_each_value([&](int a, int b) {
             if (a != b) {
                 printf("Copying a crop failed\n");
-                exit(-1);
+                exit(1);
             }
         },
                            in_crop);
@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
             if (output(x, y) != input(x, y) + 4) {
                 printf("output(%d, %d) = %f intead of %f\n",
                        x, y, output(x, y), input(x, y) + 4);
-                exit(-1);
+                exit(1);
             }
         });
     }

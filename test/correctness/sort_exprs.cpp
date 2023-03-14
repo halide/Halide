@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < N - 1; i++) {
         if (result(i) >= result(i + 1)) {
             printf("Results were not in order\n");
-            return -1;
+            return 1;
         }
     }
 

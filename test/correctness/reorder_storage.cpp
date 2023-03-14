@@ -10,7 +10,7 @@ int expected_allocation = 0;
 void *my_malloc(JITUserContext *user_context, size_t x) {
     if (std::abs((int)x - expected_allocation) > tolerance) {
         printf("Error! Expected allocation of %d bytes, got %zu bytes (tolerance %d)\n", expected_allocation, x, tolerance);
-        exit(-1);
+        exit(1);
     }
     return malloc(x);
 }

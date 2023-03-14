@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
             int factor = *iter;
             if (i % factor) {
                 printf("Error: %d is not a factor of %d\n", factor, i);
-                return -1;
+                return 1;
             }
             // printf("%d ", factor);
         }

@@ -6,13 +6,13 @@ using namespace Halide;
 extern "C" {
 void *my_malloc(JITUserContext *ctx, size_t sz) {
     printf("There weren't supposed to be heap allocations!\n");
-    exit(-1);
+    exit(1);
     return nullptr;
 }
 
 void my_free(JITUserContext *ctx, void *ptr) {
     printf("There weren't supposed to be heap allocations!\n");
-    exit(-1);
+    exit(1);
 }
 }
 

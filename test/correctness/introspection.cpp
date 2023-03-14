@@ -29,13 +29,13 @@ void check(const void *var, const std::string &type,
     if (!paths_equal(correct_name, name)) {
         printf("Mispredicted name: %s vs %s\n",
                name.c_str(), correct_name.c_str());
-        exit(-1);
+        exit(1);
     }
 
     if (!paths_equal(loc, correct_loc)) {
         printf("Mispredicted source location: %s vs %s\n",
                loc.c_str(), correct_loc.c_str());
-        exit(-1);
+        exit(1);
     }
 }
 }  // namespace Halide

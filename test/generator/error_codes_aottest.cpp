@@ -13,7 +13,7 @@ void my_halide_error(void *user_context, const char *msg) {
 void check(int result, int correct) {
     if (result != correct) {
         printf("The exit status was %d instead of %d\n", result, correct);
-        exit(-1);
+        exit(1);
     }
 }
 

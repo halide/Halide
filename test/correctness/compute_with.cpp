@@ -71,7 +71,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
         if (iter != stores.end()) {
             const Bound &b = iter->second;
             if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "store", fname)) {
-                exit(-1);
+                exit(1);
             }
         }
         stores_total++;
@@ -81,7 +81,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
         if (iter != loads.end()) {
             const Bound &b = iter->second;
             if (!check_coordinates(b, e->coordinates, e->dimensions, e->type.lanes, "load", fname)) {
-                exit(-1);
+                exit(1);
             }
         }
         loads_total++;
@@ -139,7 +139,7 @@ int split_test() {
         return im_ref(x, y);
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -194,7 +194,7 @@ int fuse_test() {
         return im_ref(x, y, z);
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -278,7 +278,7 @@ int multiple_fuse_group_test() {
         return im_ref(x, y);
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -334,14 +334,14 @@ int multiple_outputs_test() {
         return f_im_ref(x, y);
     };
     if (check_image(f_im, f_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -416,7 +416,7 @@ int fuse_compute_at_test() {
         return im_ref(x, y);
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -473,7 +473,7 @@ int double_split_fuse_test() {
         return im_ref(x, y);
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -614,7 +614,7 @@ int rgb_yuv420_test() {
             too_many_memops = true;
         }
         if (too_many_memops) {
-            return -1;
+            return 1;
         }
     }
 
@@ -622,21 +622,21 @@ int rgb_yuv420_test() {
         return y_im_ref(x, y);
     };
     if (check_image(y_im, y_func)) {
-        return -1;
+        return 1;
     }
 
     auto u_func = [u_im_ref](int x, int y) {
         return u_im_ref(x, y);
     };
     if (check_image(u_im, u_func)) {
-        return -1;
+        return 1;
     }
 
     auto v_func = [v_im_ref](int x, int y) {
         return v_im_ref(x, y);
     };
     if (check_image(v_im, v_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -696,7 +696,7 @@ int vectorize_test() {
         return im_ref(x, y);
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -758,7 +758,7 @@ int some_are_skipped_test() {
         return im_ref(x, y);
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -812,14 +812,14 @@ int multiple_outputs_on_gpu_test() {
         return f_im_ref(x, y);
     };
     if (check_image(f_im, f_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -898,21 +898,21 @@ int mixed_tile_factor_test() {
         return f_im_ref(x, y);
     };
     if (check_image(f_im, f_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     auto h_func = [h_im_ref](int x, int y) {
         return h_im_ref(x, y);
     };
     if (check_image(h_im, h_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -996,21 +996,21 @@ int multi_tile_mixed_tile_factor_test() {
         return f_im_ref(x, y);
     };
     if (check_image(f_im, f_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     auto h_func = [h_im_ref](int x, int y) {
         return h_im_ref(x, y);
     };
     if (check_image(h_im, h_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -1087,21 +1087,21 @@ int only_some_are_tiled_test() {
         return f_im_ref(x, y);
     };
     if (check_image(f_im, f_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     auto h_func = [h_im_ref](int x, int y) {
         return h_im_ref(x, y);
     };
     if (check_image(h_im, h_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -1159,7 +1159,7 @@ int with_specialization_test() {
         return im_ref(x, y);
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -1224,14 +1224,14 @@ int nested_compute_with_test() {
         return g1_im_ref(x, y);
     };
     if (check_image(g1_im, g1_func)) {
-        return -1;
+        return 1;
     }
 
     auto g2_func = [g2_im_ref](int x, int y) {
         return g2_im_ref(x, y);
     };
     if (check_image(g2_im, g2_func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -1295,14 +1295,14 @@ int update_stage_test() {
         return f_im_ref(x, y);
     };
     if (check_image(f_im, f_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -1368,14 +1368,14 @@ int update_stage2_test() {
         return f_im_ref(x, y);
     };
     if (check_image(f_im, f_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -1441,14 +1441,14 @@ int update_stage3_test() {
         return f_im_ref(x, y);
     };
     if (check_image(f_im, f_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -1514,14 +1514,14 @@ int update_stage_pairwise_test() {
         return f_im_ref(x, y);
     };
     if (check_image(f_im, f_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -1592,14 +1592,14 @@ int update_stage_pairwise_zigzag_test() {
         return f_im_ref(x, y);
     };
     if (check_image(f_im, f_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -1679,21 +1679,21 @@ int update_stage_diagonal_test() {
         return f_im_ref(x, y);
     };
     if (check_image(f_im, f_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     auto h_func = [h_im_ref](int x, int y) {
         return h_im_ref(x, y);
     };
     if (check_image(h_im, h_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -1728,7 +1728,7 @@ int update_stage_rfactor_test() {
     const int reference = 9900;
     if (result(0) != reference) {
         printf("Wrong result: expected %d, got %d\n", reference, result(0));
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -1820,7 +1820,7 @@ int vectorize_inlined_test() {
         }
 
         if (too_many_memops) {
-            return -1;
+            return 1;
         }
     }
 
@@ -1828,14 +1828,14 @@ int vectorize_inlined_test() {
         return h_im_ref(x, y, c);
     };
     if (check_image(h_im, h_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -1897,14 +1897,14 @@ int mismatching_splits_test() {
         return h_im_ref(x, y, z);
     };
     if (check_image(h_im, h_func)) {
-        return -1;
+        return 1;
     }
 
     auto g_func = [g_im_ref](int x, int y) {
         return g_im_ref(x, y);
     };
     if (check_image(g_im, g_func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -1981,7 +1981,7 @@ int different_arg_num_compute_at_test() {
             too_many_memops = true;
         }
         if (too_many_memops) {
-            return -1;
+            return 1;
         }
     }
 
@@ -1989,13 +1989,13 @@ int different_arg_num_compute_at_test() {
         return buffer_a_ref(x, y, c);
     };
     if (check_image(buffer_a, buffer_a_func)) {
-        return -1;
+        return 1;
     }
 
     for (int i = 0; i < buffer_b.width(); i++) {
         if (buffer_b(i) != buffer_b_ref(i)) {
             printf("Mismatch %d %d %d\n", i, buffer_b(i), buffer_b_ref(i));
-            return -1;
+            return 1;
         }
     }
 
@@ -2024,7 +2024,7 @@ int store_at_different_levels_test() {
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -2096,7 +2096,7 @@ int rvar_bounds_test() {
         Stmt visit(const Allocate *op) override {
             if ((op->name == "input_c") && (op->constant_allocation_size() != 64)) {
                 printf("Expected allocation size for input_c is 64, but is %d instead\n", op->constant_allocation_size());
-                exit(-1);
+                exit(1);
             }
             return IRMutator::visit(op);
         }
@@ -2111,7 +2111,7 @@ int rvar_bounds_test() {
     Buffer<int16_t> result = total_sum.realize();
 
     if (result() != 8192) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -2188,17 +2188,17 @@ int two_compute_at_test() {
         if (o1(x) != val) {
             printf("o1(%d) = %d instead of %d\n",
                    x, o1(x), val);
-            return -1;
+            return 1;
         }
         if (o2(x) != 2 * val) {
             printf("o2(%d) = %d instead of %d\n",
                    x, o2(x), 2 * val);
-            return -1;
+            return 1;
         }
         if (o3(x) != x + 2) {
             printf("o2(%d) = %d instead of %d\n",
                    x, o3(x), x + 2);
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -2257,7 +2257,7 @@ int main(int argc, char **argv) {
         const auto &task = tasks.at(t);
         std::cout << task.desc << "\n";
         if (task.fn() != 0) {
-            return -1;
+            return 1;
         }
     }
 

@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
                     if (result1(x, i, j, k) != correct) {
                         printf("result1(%d, %d, %d, %d) = %d instead of %d\n",
                                x, i, j, k, result1(x, i, j, k), correct);
-                        return -1;
+                        return 1;
                     }
                 }
             }
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
             if (result2(i, j) != correct) {
                 printf("result2(%d, %d) = %d instead of %d\n",
                        i, j, result2(i, j), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
                     if (transposed(i, j, k, l) != correct) {
                         printf("transposed(%d, %d, %d, %d) = %d instead of %d\n",
                                i, j, k, l, transposed(i, j, k, l), correct);
-                        return -1;
+                        return 1;
                     }
                 }
             }
@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
                     if (hairy_transposed(i, j, k, l) != correct) {
                         printf("hairy_transposed(%d, %d, %d, %d) = %d instead of %d\n",
                                i, j, k, l, hairy_transposed(i, j, k, l), correct);
-                        return -1;
+                        return 1;
                     }
                 }
             }
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
                     if (hairy_transposed2(i, j, k, l) != correct) {
                         printf("hairy_transposed2(%d, %d, %d, %d) = %d instead of %d\n",
                                i, j, k, l, hairy_transposed2(i, j, k, l), correct);
-                        return -1;
+                        return 1;
                     }
                 }
             }
