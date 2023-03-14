@@ -98,7 +98,7 @@ WEAK int halide_webgpu_acquire_context(void *user_context,
 
 WEAK int halide_webgpu_release_context(void *user_context) {
     __atomic_clear(&context_lock, __ATOMIC_RELEASE);
-    return 0;
+    return halide_error_code_success;
 }
 
 }  // extern "C" linkage
@@ -136,7 +136,7 @@ public:
         if (queue) {
             wgpuQueueRelease(queue);
         }
-        halide_webgpu_release_context(user_context);
+        (void)halide_webgpu_release_context(user_context);  // ignore errors
     }
 };
 
@@ -412,7 +412,7 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
 
 WEAK int halide_webgpu_device_free(void *user_context, halide_buffer_t *buf) {
     if (buf->device == 0) {
-        return 0;
+        return halide_error_code_success;
     }
 
     WgpuBufferHandle *handle = (WgpuBufferHandle *)buf->device;
@@ -521,9 +521,7 @@ WEAK int halide_webgpu_device_release(void *user_context) {
         }
     }
 
-    halide_webgpu_release_context(user_context);
-
-    return 1;
+    return halide_webgpu_release_context(user_context);
 }
 
 WEAK int halide_webgpu_device_and_host_malloc(void *user_context,
@@ -752,7 +750,7 @@ WEAK int webgpu_device_crop_from_offset(void *user_context,
     dst_handle->offset = src_handle->offset + offset;
     dst->device = (uint64_t)dst_handle;
 
-    return 0;
+    return halide_error_code_success;
 }
 
 }  // namespace
@@ -799,14 +797,14 @@ WEAK int halide_webgpu_wrap_native(void *user_context, struct halide_buffer_t *b
     // TODO: Implement this.
     // See https://github.com/halide/Halide/issues/7250
     halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+    return halide_error_code_unimplemented;
 }
 
 WEAK int halide_webgpu_detach_native(void *user_context, halide_buffer_t *buf) {
     // TODO: Implement this.
     // See https://github.com/halide/Halide/issues/7250
     halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+    return halide_error_code_unimplemented;
 }
 
 WEAK int halide_webgpu_initialize_kernels(void *user_context, void **state_ptr, const char *src, int size) {
@@ -840,7 +838,7 @@ WEAK int halide_webgpu_initialize_kernels(void *user_context, void **state_ptr, 
 
                 int error_code = error_scope.wait();
                 if (error_code != halide_error_code_success) {
-                    return nullptr;
+                    return nullptr;  // from the lambda
                 }
 
                 return shader_module;
