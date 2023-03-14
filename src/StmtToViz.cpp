@@ -52,23 +52,23 @@ public:
 
         // Compute the max cost for each category
         _max_compute_cost = -1;
-        for (auto const &[node, cost] : _compute_cost) {
-            _max_compute_cost = std::max(cost, _max_compute_cost);
+        for (auto const &entry : _compute_cost) {
+            _max_compute_cost = std::max(entry.second, _max_compute_cost);
         }
 
         _max_data_cost = -1;
-        for (auto const &[node, cost] : _data_cost) {
-            _max_data_cost = std::max(cost, _max_data_cost);
+        for (auto const &entry : _data_cost) {
+            _max_data_cost = std::max(entry.second, _max_data_cost);
         }
 
         _max_compute_cost_inclusive = -1;
-        for (auto const &[node, cost] : _compute_cost_inclusive) {
-            _max_compute_cost_inclusive = std::max(cost, _max_compute_cost_inclusive);
+        for (auto const &entry : _compute_cost_inclusive) {
+            _max_compute_cost_inclusive = std::max(entry.second, _max_compute_cost_inclusive);
         }
 
         _max_data_cost_inclusive = -1;
-        for (auto const &[node, cost] : _data_cost_inclusive) {
-            _max_data_cost_inclusive = std::max(cost, _max_data_cost_inclusive);
+        for (auto const &entry : _data_cost_inclusive) {
+            _max_data_cost_inclusive = std::max(entry.second, _max_data_cost_inclusive);
         }
     }
 
