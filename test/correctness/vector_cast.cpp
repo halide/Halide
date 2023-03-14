@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
         if (!sharder.should_run(t)) continue;
         const auto &task = tasks.at(t);
         if (!task.fn()) {
-            exit(-1);
+            exit(1);
         }
     }
 

@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
 
             if (out(x, y) != correct) {
                 std::cout << "out(" << x << ", " << y << ") = " << out(x, y) << " instead of " << correct << "\n";
-                return -1;
+                return 1;
             }
         }
     }

@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
 
     if (call_count != 2) {
         printf("Should have called the custom autoscheduler twice. Instead called it %d times\n", call_count);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
             uint8_t correct = 0;
             if (result(x, y) != 0) {
                 printf("result(%d, %d) = %d instead of %d\n", x, y, result(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }

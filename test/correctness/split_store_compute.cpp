@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (!success) return -1;
+    if (!success) return 1;
 
     printf("Success!\n");
     return 0;

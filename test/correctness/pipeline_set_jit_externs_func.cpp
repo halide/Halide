@@ -39,14 +39,14 @@ int main(int argc, char **argv) {
             float delta = imf(i, j) - correct;
             if (delta < -0.001 || delta > 0.001) {
                 printf("imf[%d, %d] = %f instead of %f\n", i, j, imf(i, j), correct);
-                return -1;
+                return 1;
             }
         }
     }
 
     if (call_counter != 32 * 32) {
         printf("In pipeline_set_jit_externs_func, my_func was called %d times instead of %d\n", call_counter, 32 * 32);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
             int expected_value = (5 * y + x);
             if (output(x, y) != expected_value) {
                 printf("Unexpected output value : %d at output(%d, %d)\n", output(x, y), x, y);
-                return -1;
+                return 1;
             }
         }
     }

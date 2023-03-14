@@ -1,6 +1,7 @@
 #ifndef HALIDE_RUNTIME_MEMORY_ARENA_H
 #define HALIDE_RUNTIME_MEMORY_ARENA_H
 
+#include "HalideRuntime.h"
 #include "block_storage.h"
 
 namespace Halide {
@@ -98,7 +99,7 @@ MemoryArena::~MemoryArena() {
 }
 
 MemoryArena *MemoryArena::create(void *user_context, const Config &cfg, const SystemMemoryAllocatorFns &system_allocator) {
-    halide_abort_if_false(user_context, system_allocator.allocate != nullptr);
+    halide_debug_assert(user_context, system_allocator.allocate != nullptr);
     MemoryArena *result = reinterpret_cast<MemoryArena *>(
         system_allocator.allocate(user_context, sizeof(MemoryArena)));
 
@@ -112,10 +113,10 @@ MemoryArena *MemoryArena::create(void *user_context, const Config &cfg, const Sy
 }
 
 void MemoryArena::destroy(void *user_context, MemoryArena *instance) {
-    halide_abort_if_false(user_context, instance != nullptr);
+    halide_debug_assert(user_context, instance != nullptr);
     const SystemMemoryAllocatorFns &system_allocator = instance->blocks.current_allocator();
     instance->destroy(user_context);
-    halide_abort_if_false(user_context, system_allocator.deallocate != nullptr);
+    halide_debug_assert(user_context, system_allocator.deallocate != nullptr);
     system_allocator.deallocate(user_context, instance);
 }
 
@@ -131,7 +132,7 @@ void MemoryArena::destroy(void *user_context) {
     if (!blocks.empty()) {
         for (size_t i = blocks.size(); i--;) {
             Block *block = lookup_block(user_context, i);
-            halide_abort_if_false(user_context, block != nullptr);
+            halide_debug_assert(user_context, block != nullptr);
             destroy_block(user_context, block);
         }
     }
@@ -142,7 +143,7 @@ bool MemoryArena::collect(void *user_context) {
     bool result = false;
     for (size_t i = blocks.size(); i--;) {
         Block *block = lookup_block(user_context, i);
-        halide_abort_if_false(user_context, block != nullptr);
+        halide_debug_assert(user_context, block != nullptr);
         if (collect_block(user_context, block)) {
             blocks.remove(user_context, i);
             result = true;
@@ -155,7 +156,7 @@ void *MemoryArena::reserve(void *user_context, bool initialize) {
     // Scan blocks for a free entry
     for (size_t i = blocks.size(); i--;) {
         Block *block = lookup_block(user_context, i);
-        halide_abort_if_false(user_context, block != nullptr);
+        halide_debug_assert(user_context, block != nullptr);
         if (block->free_index != invalid_entry) {
             return create_entry(user_context, block, block->free_index);
         }
@@ -181,7 +182,7 @@ void *MemoryArena::reserve(void *user_context, bool initialize) {
 void MemoryArena::reclaim(void *user_context, void *entry_ptr) {
     for (size_t i = blocks.size(); i--;) {
         Block *block = lookup_block(user_context, i);
-        halide_abort_if_false(user_context, block != nullptr);
+        halide_debug_assert(user_context, block != nullptr);
 
         // is entry_ptr in the address range of this block.
         uint8_t *offset_ptr = static_cast<uint8_t *>(entry_ptr);
@@ -205,7 +206,7 @@ typename MemoryArena::Block *MemoryArena::create_block(void *user_context) {
         new_capacity = (last_block->capacity * 3 / 2);
     }
 
-    halide_abort_if_false(user_context, current_allocator().allocate != nullptr);
+    halide_debug_assert(user_context, current_allocator().allocate != nullptr);
     void *new_entries = current_allocator().allocate(user_context, config.entry_size * new_capacity);
     memset(new_entries, 0, config.entry_size * new_capacity);
 
@@ -226,9 +227,9 @@ typename MemoryArena::Block *MemoryArena::create_block(void *user_context) {
 }
 
 void MemoryArena::destroy_block(void *user_context, Block *block) {
-    halide_abort_if_false(user_context, block != nullptr);
+    halide_debug_assert(user_context, block != nullptr);
     if (block->entries != nullptr) {
-        halide_abort_if_false(user_context, current_allocator().deallocate != nullptr);
+        halide_debug_assert(user_context, current_allocator().deallocate != nullptr);
         current_allocator().deallocate(user_context, block->entries);
         current_allocator().deallocate(user_context, block->indices);
         current_allocator().deallocate(user_context, block->status);
@@ -239,7 +240,7 @@ void MemoryArena::destroy_block(void *user_context, Block *block) {
 }
 
 bool MemoryArena::collect_block(void *user_context, Block *block) {
-    halide_abort_if_false(user_context, block != nullptr);
+    halide_debug_assert(user_context, block != nullptr);
     if (block->entries != nullptr) {
         bool can_collect = true;
         for (size_t i = block->capacity; i--;) {
@@ -261,8 +262,8 @@ MemoryArena::Block *MemoryArena::lookup_block(void *user_context, uint32_t index
 }
 
 void *MemoryArena::lookup_entry(void *user_context, Block *block, uint32_t index) {
-    halide_abort_if_false(user_context, block != nullptr);
-    halide_abort_if_false(user_context, block->entries != nullptr);
+    halide_debug_assert(user_context, block != nullptr);
+    halide_debug_assert(user_context, block->entries != nullptr);
     return offset_address(block->entries, index * config.entry_size);
 }
 

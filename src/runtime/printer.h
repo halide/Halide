@@ -1,6 +1,8 @@
 #ifndef HALIDE_RUNTIME_PRINTER_H
 #define HALIDE_RUNTIME_PRINTER_H
 
+#include "HalideRuntime.h"
+
 // This is useful for debugging threading issues in the Halide runtime:
 // prefix all `debug()` statements with the thread id that did the logging.
 // Left here (but disabled) for future reference.
@@ -205,11 +207,11 @@ public:
 // does nothing and should compile to a no-op.
 class SinkPrinter {
 public:
-    explicit SinkPrinter(void *user_context) {
+    ALWAYS_INLINE explicit SinkPrinter(void *user_context) {
     }
 };
 template<typename T>
-SinkPrinter operator<<(const SinkPrinter &s, T) {
+ALWAYS_INLINE SinkPrinter operator<<(const SinkPrinter &s, T) {
     return s;
 }
 

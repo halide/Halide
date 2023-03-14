@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
             uint16_t correct = x % 2 == 0 ? 3 : 7;
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }

@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 
     if (std::abs((double)sum - correct_sum) / correct_sum > 1e-4) {
         printf("Suspiciously large relative difference between the sum of the dithered values and the full-precision sum: %d vs %d\n", sum, correct_sum);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

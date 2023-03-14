@@ -54,5 +54,5 @@ int main(int argc, char **argv) {
     }
 
     printf("Failure!\n");
-    return -1;
+    return 1;
 }

@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
             int32_t correct = i * i * i * 2;
             if (result(i) != correct) {
                 printf("result(%d) = %d instead of %d\n", i, result(i), correct);
-                return -1;
+                return 1;
             }
         }
     }

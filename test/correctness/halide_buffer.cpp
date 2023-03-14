@@ -237,7 +237,7 @@ int main(int argc, char **argv) {
 
         if (counter != W * H * C) {
             printf("for_each_value didn't hit every element\n");
-            return -1;
+            return 1;
         }
 
         a.for_each_element([&](int x, int y, int c) {

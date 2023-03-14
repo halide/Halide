@@ -42,7 +42,7 @@ struct typed_scalar {
     bool operator==(const typed_scalar &that) const {
         if (this->type != that.type) {
             std::cerr << "Mismatched types\n";
-            exit(-1);
+            exit(1);
         }
         switch (type.element_of().as_u32()) {
         case halide_type_t(halide_type_float, 32).as_u32():
@@ -71,7 +71,7 @@ struct typed_scalar {
             return value.u.handle == that.value.u.handle;
         default:
             std::cerr << "Unsupported type\n";
-            exit(-1);
+            exit(1);
             break;
         }
     }
@@ -120,7 +120,7 @@ struct typed_scalar {
             break;
         default:
             std::cerr << "Unsupported type\n";
-            exit(-1);
+            exit(1);
             break;
         }
         return o;
@@ -131,7 +131,7 @@ struct typed_scalar {
     do {                                                                                               \
         if ((exp) != (act)) {                                                                          \
             std::cerr << #exp << " == " << #act << ": Expected " << exp << ", Actual " << act << "\n"; \
-            exit(-1);                                                                                  \
+            exit(1);                                                                                   \
         }                                                                                              \
     } while (0);
 
@@ -149,7 +149,7 @@ struct typed_scalar {
             EXPECT_EQ(etype, atype);                                             \
         } else {                                                                 \
             std::cerr << "One null, one non-null\n";                             \
-            exit(-1);                                                            \
+            exit(1);                                                             \
         }                                                                        \
     } while (0);
 
@@ -217,11 +217,11 @@ void verify(const Buffer<uint8_t, 3> &input,
             const Buffer<int32_t, 3> &tupled_output_buffer1) {
     if (output_scalar.dimensions() != 0) {
         std::cerr << "output_scalar should be zero-dimensional\n";
-        exit(-1);
+        exit(1);
     }
     if (output_scalar() != 1234.25f) {
         std::cerr << "output_scalar value is wrong (" << output_scalar() << "\n";
-        exit(-1);
+        exit(1);
     }
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
@@ -232,27 +232,27 @@ void verify(const Buffer<uint8_t, 3> &input,
                 const float actual1 = output1(x, y, c);
                 if (expected0 != actual0) {
                     std::cerr << "img0[" << x << "," << y << "," << c << "] = " << actual0 << ", expected " << expected0 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (expected1 != actual1) {
                     std::cerr << "img1[" << x << "," << y << "," << c << "] = " << actual1 << ", expected " << expected1 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (output_array0(x, y, c) != 1.5f) {
                     std::cerr << "output_array0[" << x << "," << y << "," << c << "] = " << output_array0(x, y, c) << ", expected " << 1.5f << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (output_array1(x, y, c) != 3.0f) {
                     std::cerr << "output_array1[" << x << "," << y << "," << c << "] = " << output_array1(x, y, c) << ", expected " << 2.0f << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (untyped_output_buffer(x, y, c) != expected1) {
                     std::cerr << "untyped_output_buffer[" << x << "," << y << "," << c << "] = " << untyped_output_buffer(x, y, c) << ", expected " << expected1 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (tupled_output_buffer0(x, y, c) != expected1) {
                     std::cerr << "tupled_output_buffer0[" << x << "," << y << "," << c << "] = " << tupled_output_buffer0(x, y, c) << ", expected " << expected1 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
             }
         }
@@ -367,7 +367,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
         !strstr(md.target, "wasm") &&
         !strstr(md.target, "arm")) {
         std::cerr << "Expected x86 or arm, Actual " << md.target << "\n";
-        exit(-1);
+        exit(1);
     }
 
     // Not static, since we free make_scalar() results each time
@@ -1572,27 +1572,27 @@ int main(int argc, char **argv) {
     check_metadata(*metadata_tester_metadata(), false);
     if (strcmp(metadata_tester_metadata()->name, "metadata_tester")) {
         std::cerr << "Expected name metadata_tester, got " << metadata_tester_metadata()->name << "\n";
-        exit(-1);
+        exit(1);
     }
 
     check_metadata(*metadata_tester_ucon_metadata(), true);
     if (strcmp(metadata_tester_ucon_metadata()->name, "metadata_tester_ucon")) {
         std::cerr << "Expected name metadata_tester_ucon, got " << metadata_tester_ucon_metadata()->name << "\n";
-        exit(-1);
+        exit(1);
     }
 
     constexpr auto sig = compute_signature(metadata_tester_argument_info());
     if (strcmp(&sig[0], "@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
         // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
         std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &sig[0] << "\n";
-        exit(-1);
+        exit(1);
     }
 
     constexpr auto usig = compute_signature(metadata_tester_ucon_argument_info());
     if (strcmp(&usig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
         // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
         std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &usig[0] << "\n";
-        exit(-1);
+        exit(1);
     }
 
     constexpr size_t count = count_buffers(metadata_tester_argument_info());

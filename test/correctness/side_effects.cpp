@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
     // Check draw_pixel was called the right number of times.
     if (call_count != 71 * 21) {
         printf("Something went wrong\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

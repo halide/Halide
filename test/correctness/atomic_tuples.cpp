@@ -48,14 +48,14 @@ int main(int argc, char **argv) {
                 if (out(x, y) != correct) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, out(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
 
         if (checker.count_atomics != 2 || checker.count_atomics_with_mutexes != 0) {
             printf("Expected two atomic nodes, neither of them with mutexes\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -83,14 +83,14 @@ int main(int argc, char **argv) {
                 if (out(x, y) != correct) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, out(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
 
         if (checker.count_atomics != 1 || checker.count_atomics_with_mutexes != 1) {
             printf("Expected one atomic node, with mutex\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -121,14 +121,14 @@ int main(int argc, char **argv) {
                 if (out(x, y) != correct) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, out(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
 
         if (checker.count_atomics != 1 || checker.count_atomics_with_mutexes != 1) {
             printf("Expected one atomic nodes, with mutex\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -161,14 +161,14 @@ int main(int argc, char **argv) {
                 if (out(x, y) != correct) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, out(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
 
         if (checker.count_atomics != 1 || checker.count_atomics_with_mutexes != 1) {
             printf("Expected one atomic node, with mutex\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -213,14 +213,14 @@ int main(int argc, char **argv) {
                 if (out(x, y) != correct) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, out(x, y), correct);
-                    // return -1;
+                    // return 1;
                 }
             }
         }
 
         if (checker.count_atomics != 4 || checker.count_atomics_with_mutexes != 0) {
             printf("Expected four atomic nodes, with no mutexes\n");
-            return -1;
+            return 1;
         }
     }
 
