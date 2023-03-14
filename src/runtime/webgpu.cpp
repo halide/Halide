@@ -331,6 +331,9 @@ WEAK int create_webgpu_context(void *user_context) {
         usleep(1000);
 #endif
     }
+    if (init_error_code != halide_error_code_success) {
+        return init_error_code;
+    }
 
     // Create a staging buffer for transfers.
     constexpr int kStagingBufferSize = 4 * 1024 * 1024;
