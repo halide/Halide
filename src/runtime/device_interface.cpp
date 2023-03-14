@@ -250,7 +250,6 @@ WEAK int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
     if (auto result = call_device_interface(device_interface, device_interface->impl->device_malloc, user_context, buf); result != halide_error_code_success) {
         return halide_error_code_device_malloc_failed;
     }
-    halide_debug_assert(user_context, buf->device == 0);
     return halide_error_code_success;
 }
 
@@ -266,6 +265,7 @@ WEAK int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
         if (auto result = call_device_interface(device_interface, device_interface->impl->device_free, user_context, buf); result != halide_error_code_success) {
             return halide_error_code_device_free_failed;
         }
+        halide_debug_assert(user_context, buf->device == 0);
     }
     buf->set_device_dirty(false);
     return halide_error_code_success;
