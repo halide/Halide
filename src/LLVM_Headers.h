@@ -89,7 +89,9 @@
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/AlwaysInliner.h>
 #include <llvm/Transforms/IPO/Inliner.h>
+#if LLVM_VERSION < 170
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#endif
 #include <llvm/Transforms/Instrumentation.h>
 #include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
 #include <llvm/Transforms/Instrumentation/SanitizerCoverage.h>
