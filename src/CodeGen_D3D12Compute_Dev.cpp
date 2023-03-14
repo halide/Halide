@@ -251,7 +251,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op)
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_extern_call(const Call *op) {
-    internal_assert(!function_takes_user_context(op->name));
+    internal_assert(!function_takes_user_context(op->name)) << op->name;
 
     vector<string> args(op->args.size());
     for (size_t i = 0; i < op->args.size(); i++) {

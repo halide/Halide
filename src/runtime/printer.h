@@ -1,6 +1,8 @@
 #ifndef HALIDE_RUNTIME_PRINTER_H
 #define HALIDE_RUNTIME_PRINTER_H
 
+#include "HalideRuntime.h"
+
 // This is useful for debugging threading issues in the Halide runtime:
 // prefix all `debug()` statements with the thread id that did the logging.
 // Left here (but disabled) for future reference.

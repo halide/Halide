@@ -46,7 +46,7 @@ JIT compilation is not supported when using WebGPU with WASM.
 
 ## Running natively: `HL_TARGET=host-webgpu`
 
-> _Tested with top-of-tree Dawn as of 2023-02-28._
+> _Tested with top-of-tree Dawn as of 2023-03-14._
 
 For testing purposes, Halide can also target native WebGPU libraries, such as
 [Dawn](dawn.googlesource.com/dawn/) or [wgpu](github.com/gfx-rs/wgpu).
