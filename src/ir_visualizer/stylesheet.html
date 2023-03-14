@@ -438,7 +438,15 @@
     div.StoreBox > div.box-header {
         background-color: #bcedd6;
     }
-    
+
+    .if-root-node {
+        width: 200px !important;
+        border: 1px dashed gray !important;
+        text-align: center;
+        padding: 3px !important;
+        background: #c0d4ff;
+    }
+
     .allocate-table {
         background-color: rgba(197, 195, 195, 0.2);
         min-width: -webkit-fill-available;
@@ -499,7 +507,7 @@
     }
 
     .tf-tree.tf-gap-sm li > .tf-nc:after, .tf-tree.tf-gap-sm li > .tf-node-content:after {
-        height: 1em;
+        /*height: 1em;*/
     }
 
     .tf-custom-ir-viz {
@@ -520,6 +528,10 @@
     .tf-custom-ir-viz .tf-nc:before,
     .tf-custom-ir-viz .tf-nc:after {
         border-left-width: 1px;
+    }
+
+    .tf-custom-ir-viz li:not(:first-child) > .if-node {
+        padding-left: 8px !important;
     }
 
     .tf-custom-ir-viz li li:before {

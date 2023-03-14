@@ -352,6 +352,8 @@ private:
         for (auto arg : op->args)
             args.push_back(arg.get());
         set_compute_costs(op, 1, args);
+        // Currently there is no special handling
+        // for intrinsics such as `prefetch`
         set_data_costs(op, 0, args);
     }
 
@@ -831,7 +833,8 @@ private:
 
     // Prints the closing tag for the specified html element.
     void print_closing_tag(const string &tag) {
-        internal_assert(!context_stack.empty() && tag == context_stack_tags.back());
+        internal_assert(!context_stack.empty() && tag == context_stack_tags.back())
+            << tag << " " << context_stack.empty() << " " << context_stack_tags.back();
         context_stack.pop_back();
         context_stack_tags.pop_back();
         stream << "</" + tag + ">";
@@ -1070,7 +1073,7 @@ private:
             }
             stream << line << "\n";
         }
-        stream << "</code>";
+        print_closing_tag("code");
     }
 
     // Prints the args in a function declaration
@@ -1947,6 +1950,7 @@ private:
                 // -- print text
                 print_opening_tag("span", "matched");
                 print_html_element("span", "keyword nav-anchor IfSpan", "else", "cond-" + std::to_string((uint64_t)&op->else_case));
+                print_closing_tag("span");
                 
                 print_toggle_anchor_closing_tag();
 
@@ -2096,6 +2100,7 @@ private:
     }
 };
 
+#undef print_closing_tag
 /************** HTMLVisualizationPrinter Class ***************/
 // Visualizes the IR in HTML. The visualization is essentially
 // an abstracted version of the code, highlighting the higher
@@ -2492,7 +2497,7 @@ private:
         if (op->else_case.defined()) {
             print_opening_tag("ul", "");
             print_opening_tag("li", "");
-            print_html_element("span", "tf-nc if-node", "Control Flow Branching");
+            print_html_element("span", "tf-nc if-node if-root-node", "Control Flow Branching");
         }
 
         // Create children nodes ('then', 'else if' and 'else' cases)
@@ -2511,7 +2516,7 @@ private:
 
         // `else` case
         if (else_case.defined()) {
-            print_if_tree_node(else_case, UIntImm::make(UInt(1), 1), "Else: ");
+            print_if_tree_node(else_case, UIntImm::make(UInt(1), 1), "Else");
         }
 
         print_closing_tag("ul");
