@@ -641,10 +641,6 @@ protected:
     std::map<WarningKind, std::string> onetime_warnings;
 
 private:
-    // used for mapping IR nodes to llvm markers in StmtToViz.cpp
-    int producer_consumer_count = 0;
-    int for_loop_count = 0;
-
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;
@@ -668,6 +664,13 @@ private:
      * as this is used on every Halide to LLVM type conversion.
      */
     int effective_vscale;
+
+    /** Assign a unique ID to each producer-consumer and for-loop node. The IDs
+     * are printed as comments in assembly and used to link visualizations with
+     * the generated assembly code within `StmtToViz`
+     */ 
+    int producer_consumer_id = 0;
+    int for_loop_id = 0;
 
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
