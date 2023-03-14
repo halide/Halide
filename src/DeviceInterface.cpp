@@ -102,6 +102,8 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         name = "hexagon_dma";
     } else if (d == DeviceAPI::D3D12Compute) {
         name = "d3d12compute";
+    } else if (d == DeviceAPI::WebGPU) {
+        name = "webgpu";
     } else {
         if (error_site) {
             user_error
@@ -158,6 +160,8 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::HexagonDma;
     } else if (target.has_feature(Target::D3D12Compute)) {
         return DeviceAPI::D3D12Compute;
+    } else if (target.has_feature(Target::WebGPU)) {
+        return DeviceAPI::WebGPU;
     } else {
         return DeviceAPI::Host;
     }
@@ -195,6 +199,9 @@ Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type) {
         break;
     case DeviceAPI::D3D12Compute:
         interface_name = "halide_d3d12compute_device_interface";
+        break;
+    case DeviceAPI::WebGPU:
+        interface_name = "halide_webgpu_device_interface";
         break;
     case DeviceAPI::Default_GPU:
         // Will be resolved later

@@ -355,7 +355,7 @@ int main(int argc, char **argv) {
         // Generate a random expr...
         Expr test = random_expr(VT, depth);
         if (!test_expression(test, samples)) {
-            return -1;
+            return 1;
         }
     }
 

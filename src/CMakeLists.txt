@@ -39,6 +39,7 @@ set(HEADER_FILES
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
+    CodeGen_WebGPU_Dev.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -206,6 +207,7 @@ set(SOURCE_FILES
     CodeGen_PyTorch.cpp
     CodeGen_RISCV.cpp
     CodeGen_WebAssembly.cpp
+    CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
@@ -526,6 +528,18 @@ option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
+
+option(TARGET_WEBGPU "Include WebGPU target" ON)
+if (TARGET_WEBGPU)
+    target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
+    set(WEBGPU_NATIVE_LIB "" CACHE STRING
+        "WebGPU native library to link against")
+    if (WEBGPU_NATIVE_LIB)
+        set_property(SOURCE JITModule.cpp PROPERTY COMPILE_DEFINITIONS
+                     WEBGPU_NATIVE_LIB=\"${WEBGPU_NATIVE_LIB}\"
+                     APPEND_STRING)
+    endif ()
+endif()
 
 if (TARGET_SPIRV)
     # Our vendored SPIRV headers are only used internally; users do not need

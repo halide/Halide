@@ -21,7 +21,7 @@ void check_counts(int a = 0, int b = 0, int c = 0, int d = 0) {
     for (int i = 0; i < 4; i++) {
         if (correct[i] != call_count[i]) {
             printf("call_count[%d] was supposed to be %d but instead is %d\n", i, correct[i], call_count[i]);
-            exit(-1);
+            exit(1);
         }
     }
 }

@@ -3,7 +3,7 @@ using namespace Halide;
 
 void *my_malloc(JITUserContext *user_context, size_t x) {
     printf("There was not supposed to be a heap allocation\n");
-    exit(-1);
+    exit(1);
     return nullptr;
 }
 
@@ -16,7 +16,7 @@ void my_error(JITUserContext *user_context, const char *msg) {
     char expected[] = "Bounds given for f in x (from 0 to 7) do not cover required region (from 0 to 9)";
     if (strncmp(expected, msg, sizeof(expected) - 1)) {
         printf("Unexpected error: '%s'\n", msg);
-        exit(-1);
+        exit(1);
     }
 }
 
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
 
         if (!errored) {
             printf("There was supposed to be an error\n");
-            return -1;
+            return 1;
         }
     }
 

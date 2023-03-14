@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
         if (actual != correct) {
             printf("result(%d, %d, %d) = %f instead of %f\n",
                    x, y, c, actual, correct);
-            exit(-1);
+            exit(1);
         }
     });
 

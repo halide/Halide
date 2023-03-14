@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
             for (int x = 0; x < output.width(); x++) {
                 if (output(x) != x) {
                     printf("Error! (explicit copy back %d): %d != %d\n", wrap_memory, output(x), x);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
             for (int x = 0; x < output.width(); x++) {
                 if (output(x) != x) {
                     printf("Error! (explicit copy back, no device free %d): %d != %d\n", wrap_memory, output(x), x);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
                 for (int x = 0; x < output.width(); x++) {
                     if (output(x) != wrap_test(x)) {
                         printf("Error! (wrap native test %d): %d != %d\n", i, output(x), wrap_test(x));
-                        return -1;
+                        return 1;
                     }
                 }
                 if (i == 1) {
@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
             int result = halide_device_free(nullptr, &raw_buf);
             if (result != 0) {
                 printf("Error! halide_device_free() returned: %d\n", result);
-                return -1;
+                return 1;
             }
         }
 
@@ -196,7 +196,7 @@ int main(int argc, char **argv) {
                 for (int x = 0; x < output.width(); x++) {
                     if (output(x) != output2(x)) {
                         printf("Error! (device and host allocation test): %d != %d\n", output(x), output2(x));
-                        return -1;
+                        return 1;
                     }
                 }
             }
@@ -213,7 +213,8 @@ int main(int argc, char **argv) {
 
     int ret = tracker.validate_gpu_object_lifetime(false /* allow_globals */, true /* allow_none */, 2 /* max_globals */);
     if (ret != 0) {
-        return ret;
+        fprintf(stderr, "validate_gpu_object_lifetime() failed\n");
+        return 1;
     }
 
     printf("Success!\n");

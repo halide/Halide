@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
         int actual = output(x, y);
         if (expected != actual) {
             fprintf(stderr, "at %d %d, expected %d, actual %d\n", x, y, expected, actual);
-            exit(-1);
+            exit(1);
         }
     });
 

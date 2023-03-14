@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
 
     if (error) {
         printf("There was a difference between using named updates and not.\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

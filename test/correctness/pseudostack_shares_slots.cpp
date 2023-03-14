@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
                 std::abs(mallocs[1] - sz2) > tolerance) {
                 printf("Incorrect allocations: %d %d %d\n", (int)mallocs.size(), (int)mallocs[0], (int)mallocs[1]);
                 printf("Expected: 2 %d %d\n", (int)sz1, (int)sz2);
-                return -1;
+                return 1;
             }
         }
     }
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
                 printf("Incorrect allocations: %d %d %d %d %d\n", (int)mallocs.size(),
                        mallocs[0], mallocs[1], mallocs[2], mallocs[3]);
                 printf("Expected: 4 %d %d %d %d\n", sz1, sz2, sz3, sz4);
-                return -1;
+                return 1;
             }
         }
     }

@@ -16,7 +16,7 @@ class CheckForFloatDivision : public IRMutator {
     Expr visit(const Div *op) override {
         if (op->type.is_float() && is_const(op->b)) {
             std::cerr << "Found floating-point division by constant: " << Expr(op) << "\n";
-            exit(-1);
+            exit(1);
         }
         return op;
     }
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
     if (multiply_count != size * 2) {
         printf("The multiplies weren't all counted. Got %d instead of %d\n",
                multiply_count, size);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

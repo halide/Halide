@@ -46,7 +46,7 @@ public:
         s.accept(&c);
         if (c.sin_count != correct) {
             printf("There were %d sin calls instead of %d\n", c.sin_count, correct);
-            exit(-1);
+            exit(1);
         }
         return s;
     }
@@ -69,7 +69,7 @@ public:
         s.accept(&c);
         if (c.store_count != correct) {
             printf("There were %d stores to %s instead of %d\n", c.store_count, func.c_str(), correct);
-            exit(-1);
+            exit(1);
         }
         return s;
     }

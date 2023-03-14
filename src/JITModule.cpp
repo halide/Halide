@@ -115,6 +115,39 @@ void load_metal() {
 #endif
 }
 
+void load_webgpu() {
+    debug(1) << "Looking for a native WebGPU implementation...\n";
+    const char *libnames[] = {
+#ifdef WEBGPU_NATIVE_LIB
+        // Specified via CMake.
+        WEBGPU_NATIVE_LIB,
+#endif
+        // Dawn (Chromium).
+        "libwebgpu_dawn.so",
+        "libwebgpu_dawn.dylib",
+        "webgpu_dawn.dll",
+
+        // wgpu (Firefox).
+        "libwgpu.so",
+        "libwgpu.dylib",
+        "wgpu.dll",
+    };
+    string error;
+    for (const char *libname : libnames) {
+        debug(1) << "Trying " << libname << "... ";
+        error.clear();
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently(libname, &error);
+        if (error.empty()) {
+            debug(1) << "found!\n";
+            break;
+        } else {
+            debug(1) << "not found.\n";
+        }
+    }
+    user_assert(error.empty()) << "Could not find a native WebGPU library: "
+                               << error << "\n";
+}
+
 }  // namespace
 
 using namespace llvm;
@@ -693,12 +726,14 @@ enum RuntimeKind {
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
+    WebGPU,
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
     OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,
+    WebGPUDebug,
     MaxRuntimeKind
 };
 
@@ -734,6 +769,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::HVX, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
+        one_gpu.set_feature(Target::WebGPU, false);
         string module_name;
         switch (runtime_kind) {
         case OpenCLDebug:
@@ -796,6 +832,17 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 #if !defined(_WIN32)
             internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
 #endif
+            break;
+        case WebGPUDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::WebGPU);
+            module_name = "debug_webgpu";
+            load_webgpu();
+            break;
+        case WebGPU:
+            one_gpu.set_feature(Target::WebGPU);
+            module_name += "webgpu";
+            load_webgpu();
             break;
         default:
             module_name = "shared runtime";
@@ -985,6 +1032,13 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     }
     if (target.has_feature(Target::D3D12Compute)) {
         auto kind = target.has_feature(Target::Debug) ? D3D12ComputeDebug : D3D12Compute;
+        JITModule m = make_module(for_module, target, kind, result, create);
+        if (m.compiled()) {
+            result.push_back(m);
+        }
+    }
+    if (target.has_feature(Target::WebGPU)) {
+        auto kind = target.has_feature(Target::Debug) ? WebGPUDebug : WebGPU;
         JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);

@@ -27,7 +27,7 @@ int calling_clone_no_op_test() {
             Func temp = f.clone_in(g);
             if (clone.name() != temp.name()) {
                 std::cerr << "Expect " << clone.name() << "; got " << temp.name() << " instead\n";
-                return -1;
+                return 1;
             }
         }
     }
@@ -44,7 +44,7 @@ int calling_clone_no_op_test() {
         Func clone2 = d.clone_in({g, f, e});
         if (clone1.name() != clone2.name()) {
             std::cerr << "Expect " << clone1.name() << "; got " << clone2.name() << " instead\n";
-            return -1;
+            return 1;
         }
     }
 
@@ -69,13 +69,13 @@ int func_clone_test() {
         {clone.name(), {}},
     };
     if (check_call_graphs(g, expected) != 0) {
-        return -1;
+        return 1;
     }
 
     Buffer<int> im = g.realize({200, 200});
     auto func = [](int x, int y) { return x; };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -104,7 +104,7 @@ int multiple_funcs_sharing_clone_test() {
         {f.name(), {}},
     };
     if (check_call_graphs(p, expected) != 0) {
-        return -1;
+        return 1;
     }
 
     Realization r = p.realize({200, 200});
@@ -113,13 +113,13 @@ int multiple_funcs_sharing_clone_test() {
     Buffer<int> img3 = r[2];
     auto func = [](int x, int y) { return x; };
     if (check_image(img1, func)) {
-        return -1;
+        return 1;
     }
     if (check_image(img2, func)) {
-        return -1;
+        return 1;
     }
     if (check_image(img3, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -156,7 +156,7 @@ int update_defined_after_clone_test() {
         {clone.name(), {}},
     };
     if (check_call_graphs(g, expected) != 0) {
-        return -1;
+        return 1;
     }
 
     Buffer<int> im = g.realize({200, 200});
@@ -164,7 +164,7 @@ int update_defined_after_clone_test() {
         return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
 
     for (bool param_value : {false, true}) {
@@ -175,7 +175,7 @@ int update_defined_after_clone_test() {
             return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
-            return -1;
+            return 1;
         }
     }
 
@@ -216,7 +216,7 @@ int clone_depend_on_mutated_func_test() {
         {a_clone_in_b.name(), {}},
     };
     if (check_call_graphs(p, expected) != 0) {
-        return -1;
+        return 1;
     }
 
     Realization r = p.realize({25, 25});
@@ -226,15 +226,15 @@ int clone_depend_on_mutated_func_test() {
 
     auto func_d = [](int x, int y) { return x + y + 6; };
     if (check_image(img_d, func_d)) {
-        return -1;
+        return 1;
     }
     auto func_e = [](int x, int y) { return x + y + 2; };
     if (check_image(img_e, func_e)) {
-        return -1;
+        return 1;
     }
     auto func_f = [](int x, int y) { return x + y + 7; };
     if (check_image(img_f, func_f)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -275,7 +275,7 @@ int clone_on_clone_test() {
         {a.name(), {}},
     };
     if (check_call_graphs(p, expected) != 0) {
-        return -1;
+        return 1;
     }
 
     Realization r = p.realize({25, 25});
@@ -286,19 +286,19 @@ int clone_on_clone_test() {
 
     auto func_c = [](int x, int y) { return x + y + 3; };
     if (check_image(img_c, func_c)) {
-        return -1;
+        return 1;
     }
     auto func_d = [](int x, int y) { return x + y + 4; };
     if (check_image(img_d, func_d)) {
-        return -1;
+        return 1;
     }
     auto func_e = [](int x, int y) { return 2 * x + 2 * y + 1; };
     if (check_image(img_e, func_e)) {
-        return -1;
+        return 1;
     }
     auto func_f = [](int x, int y) { return 2 * x + 2 * y + 2; };
     if (check_image(img_f, func_f)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -332,37 +332,37 @@ int clone_reduction_test() {
 int main(int argc, char **argv) {
     printf("Running calling clone no op test\n");
     if (calling_clone_no_op_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running func clone test\n");
     if (func_clone_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running multiple funcs sharing clone test\n");
     if (multiple_funcs_sharing_clone_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running update is defined after clone test\n");
     if (update_defined_after_clone_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running clone depend on mutated func test\n");
     if (clone_depend_on_mutated_func_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running clone on clone test\n");
     if (clone_on_clone_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running clone reduction test\n");
     if (clone_reduction_test() != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

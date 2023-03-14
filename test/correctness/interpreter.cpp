@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = (uint8_t)(((int)in_buf(x + 1, y) - in_buf(x - 1, y)) >> 1);
                 if (out_buf(x, y) != correct) {
                     printf("out_buf(%d, %d) = %d instead of %d\n", x, y, out_buf(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = (uint8_t)((int)std::floor(std::sqrt(a * a + b * b)));
                 if (out_buf(x, y) != correct) {
                     printf("out_buf(%d, %d) = %d instead of %d\n", x, y, out_buf(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

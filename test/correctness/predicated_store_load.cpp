@@ -57,12 +57,12 @@ public:
         if (expected_store_count != c.store_count) {
             printf("There were %d predicated stores; expect %d predicated stores\n",
                    c.store_count, expected_store_count);
-            exit(-1);
+            exit(1);
         }
         if (expected_load_count != c.load_count) {
             printf("There were %d predicated loads; expect %d predicated loads\n",
                    c.load_count, expected_load_count);
-            exit(-1);
+            exit(1);
         }
         return s;
     }
@@ -105,7 +105,7 @@ int predicated_tail_test(const Target &t) {
             return x;
         };
         if (check_image(im, func)) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -131,7 +131,7 @@ int predicated_tail_with_scalar_test(const Target &t) {
         return x + 10;
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -163,7 +163,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t)
     Buffer<int> im = f.realize({170, 170});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -193,7 +193,7 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
         return (x < 23) ? im_ref(x, y, z) : im(x, y, z);
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -226,7 +226,7 @@ int multiple_vectorized_predicate_test(const Target &t) {
     Buffer<int> im = f.realize({size, size});
     auto func = [&im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -258,7 +258,7 @@ int scalar_load_test(const Target &t) {
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -292,7 +292,7 @@ int scalar_store_test(const Target &t) {
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -325,7 +325,7 @@ int not_dependent_on_vectorized_var_test(const Target &t) {
     Buffer<int> im = f.realize({160, 160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -356,7 +356,7 @@ int no_op_store_test(const Target &t) {
     Buffer<int> im = f.realize({240, 240});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -387,7 +387,7 @@ int vectorized_predicated_predicate_with_pure_call_test(const Target &t) {
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -424,7 +424,7 @@ int vectorized_predicated_load_const_index_test(const Target &t) {
     Buffer<int> im = f.realize({100, 100});
     auto func = [im_ref](int x, int y) { return im_ref(x, y); };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -471,62 +471,62 @@ int main(int argc, char **argv) {
 
     printf("Running vectorized dense load test\n");
     if (predicated_tail_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running vectorized dense load with scalar test\n");
     if (predicated_tail_with_scalar_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running vectorized dense load with stride minus one test\n");
     if (vectorized_dense_load_with_stride_minus_one_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running multiple vectorized predicate test\n");
     if (multiple_vectorized_predicate_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running vectorized predicated store scalarized predicated load test\n");
     if (vectorized_predicated_store_scalarized_predicated_load_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running scalar load test\n");
     if (scalar_load_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running scalar store test\n");
     if (scalar_store_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running not dependent on vectorized var test\n");
     if (not_dependent_on_vectorized_var_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running no-op store test\n");
     if (no_op_store_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running vectorized predicated with pure call test\n");
     if (vectorized_predicated_predicate_with_pure_call_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running vectorized predicated load with constant index test\n");
     if (vectorized_predicated_load_const_index_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running vectorized predicated load lut test\n");
     if (vectorized_predicated_load_lut_test(t) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");
