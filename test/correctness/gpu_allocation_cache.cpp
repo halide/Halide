@@ -24,6 +24,10 @@ int main(int argc, char **argv) {
         printf("[SKIP] Allocation cache not yet implemented for D3D12Compute.\n");
         return 0;
     }
+    if (target.has_feature(Target::WebGPU)) {
+        printf("[SKIP] Allocation cache not yet implemented for WebGPU.\n");
+        return 0;
+    }
 
     const int N = 30;
     Var x, y, xi, yi;

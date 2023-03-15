@@ -33,6 +33,7 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Compute_h[];
+extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeWebGPU_h[];
 
 namespace {
 
@@ -503,6 +504,9 @@ CodeGen_C::~CodeGen_C() {
             }
             if (target.has_feature(Target::D3D12Compute)) {
                 stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << "\n";
+            }
+            if (target.has_feature(Target::WebGPU)) {
+                stream << halide_internal_runtime_header_HalideRuntimeWebGPU_h << "\n";
             }
         }
         stream << "#endif\n";

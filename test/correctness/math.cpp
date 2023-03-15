@@ -50,7 +50,8 @@ bool relatively_equal(value_t a, value_t b, Target target) {
         // For HLSL, try again with a lower error threshold, as it might be using
         // fast but approximated trigonometric functions:
         if (target.supports_device_api(DeviceAPI::D3D12Compute) ||
-            target.supports_device_api(DeviceAPI::OpenGLCompute)) {
+            target.supports_device_api(DeviceAPI::OpenGLCompute) ||
+            target.supports_device_api(DeviceAPI::WebGPU)) {
             // this threshold value has been empirically determined since there
             // is no clear documentation on the precision of these algorithms
             const double threshold = .001023;

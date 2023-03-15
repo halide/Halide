@@ -71,6 +71,11 @@ int check_finites(const Buffer<float> &im) {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().has_feature(Target::WebGPU)) {
+        printf("[SKIP] WebGPU does not reliably support isnan, isinf, or isfinite.\n");
+        return 0;
+    }
+
     // ---- is_nan()
     {
         Func f;
