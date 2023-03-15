@@ -9,6 +9,7 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_PyTorch.h"
+#include "CodeGen_Xtensa.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
 #include "HexagonOffload.h"
@@ -631,10 +632,17 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     if (contains(output_files, OutputFileType::c_source)) {
         debug(1) << "Module.compile(): c_source " << output_files.at(OutputFileType::c_source) << "\n";
         std::ofstream file(output_files.at(OutputFileType::c_source));
-        Internal::CodeGen_C cg(file,
-                               target(),
-                               target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
-        cg.compile(*this);
+        if (target().has_feature(Target::Xtensa)) {
+            Internal::CodeGen_Xtensa cg(file,
+                                        target(),
+                                        target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
+            cg.compile(*this);
+        } else {
+            Internal::CodeGen_C cg(file,
+                                   target(),
+                                   target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
+            cg.compile(*this);
+        }
     }
     if (contains(output_files, OutputFileType::python_extension)) {
         debug(1) << "Module.compile(): python_extension " << output_files.at(OutputFileType::python_extension) << "\n";

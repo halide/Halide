@@ -442,6 +442,7 @@ SOURCE_FILES = \
   CodeGen_WebAssembly.cpp \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
+  CodeGen_Xtensa.cpp \
   CompilerLogger.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
@@ -476,6 +477,7 @@ SOURCE_FILES = \
   HexagonOptimize.cpp \
   ImageParam.cpp \
   InferArguments.cpp \
+  InjectDmaTransfer.cpp \
   InjectHostDevBufferCopies.cpp \
   Inline.cpp \
   InlineReductions.cpp \
@@ -578,7 +580,8 @@ SOURCE_FILES = \
   Var.cpp \
   VectorizeLoops.cpp \
   WasmExecutor.cpp \
-  WrapCalls.cpp
+  WrapCalls.cpp \
+  XtensaOptimize.cpp
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
@@ -619,6 +622,7 @@ HEADER_FILES = \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
   CodeGen_WebGPU_Dev.h \
+  CodeGen_Xtensa.h \
   CompilerLogger.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
@@ -659,6 +663,7 @@ HEADER_FILES = \
   HexagonOptimize.h \
   ImageParam.h \
   InferArguments.h \
+  InjectDmaTransfer.h \
   InjectHostDevBufferCopies.h \
   Inline.h \
   InlineReductions.h \
@@ -745,7 +750,8 @@ HEADER_FILES = \
   Util.h \
   Var.h \
   VectorizeLoops.h \
-  WrapCalls.h
+  WrapCalls.h \
+  XtensaOptimize.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
@@ -1153,6 +1159,10 @@ clean:
 	rm -rf $(SHARE_DIR)
 	rm -rf $(DISTRIB_DIR)
 	rm -rf $(ROOT_DIR)/apps/*/bin
+
+.PHONY: clean_xtensa
+clean_xtensa:
+	rm -rf $(XTENSA_RUNTIME_OBJS) $(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a
 
 CORRECTNESS_TESTS = $(shell ls $(ROOT_DIR)/test/correctness/*.cpp) $(shell ls $(ROOT_DIR)/test/correctness/*.c)
 PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)
@@ -2410,6 +2420,25 @@ $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT)
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT) autoschedulers
+
+XTENSA_RUNTIME_SRC=$(ROOT_DIR)/src/runtime/alignment_128.cpp \
+                   $(ROOT_DIR)/src/runtime/errors.cpp \
+                   $(ROOT_DIR)/src/runtime/posix_error_handler.cpp \
+                   $(ROOT_DIR)/src/runtime/msan_stubs.cpp \
+                   $(ROOT_DIR)/src/runtime/to_string.cpp \
+                   $(ROOT_DIR)/src/runtime/posix_print.cpp \
+                   $(ROOT_DIR)/src/runtime/posix_io.cpp \
+                   $(ROOT_DIR)/src/runtime/xtensa_dma.cpp \
+
+XTENSA_RUNTIME_OBJS=$(patsubst $(ROOT_DIR)/src/runtime/%,$(BIN_DIR)/%,$(patsubst %.cpp,%.o,$(XTENSA_RUNTIME_SRC)))
+
+$(XTENSA_RUNTIME_OBJS): $(BIN_DIR)/%.o: $(ROOT_DIR)/src/runtime/%.cpp
+	xt-clang++ -O2 -mlongcalls -c -std=c++17 -stdlib=libc++ -D COMPILING_HALIDE_RUNTIME -DBITS_32 -ffreestanding $< -o $@
+
+$(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a: $(XTENSA_RUNTIME_OBJS)
+	xt-ar rcs $@ $^
+
+xtensa-runtime: distrib $(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a
 
 $(DISTRIB_DIR)/halide.tgz: distrib
 	ln -sf $(DISTRIB_DIR) halide
