@@ -793,7 +793,7 @@ gengen
             // if emit_flags contains "stmt_viz" but not "assembly", throw an error
             bool has_stmt_viz = std::find(emit_flags.begin(), emit_flags.end(), "stmt_viz") != emit_flags.end();
             bool has_assembly = std::find(emit_flags.begin(), emit_flags.end(), "assembly") != emit_flags.end();
-            
+
             user_assert(!has_stmt_viz || has_assembly)
                 << "Output flag `stmt_viz` requires the `assembly` flag to also be set.";
 

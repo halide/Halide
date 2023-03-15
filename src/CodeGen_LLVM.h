@@ -668,7 +668,7 @@ private:
     /** Assign a unique ID to each producer-consumer and for-loop node. The IDs
      * are printed as comments in assembly and used to link visualizations with
      * the generated assembly code within `StmtToViz`
-     */ 
+     */
     int producer_consumer_id = 0;
     int for_loop_id = 0;
 

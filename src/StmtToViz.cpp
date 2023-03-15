@@ -2,8 +2,8 @@
 #include "Debug.h"
 #include "Error.h"
 #include "IROperator.h"
-#include "IRVisitor.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
 #include "Module.h"
 #include "Scope.h"
 #include "Substitute.h"
@@ -13,9 +13,9 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <regex>
 #include <sstream>
 #include <utility>
-#include <regex>
 
 namespace Halide {
 namespace Internal {
@@ -27,20 +27,20 @@ using std::string;
 // Classes define within this file
 class CostModel;
 class AssemblyInfo;
-template<typename T> class HTMLCodePrinter;
+template<typename T>
+class HTMLCodePrinter;
 class HTMLVisualizationPrinter;
 class IRVisualizer;
 
 /********************** IRCostModel **********************/
 // A basic cost model for Halide IR. Estimates computation
-// cost through simple op-counting and data-movement cost 
+// cost through simple op-counting and data-movement cost
 // by counting the number of bits being moved.
 class IRCostModel : public IRVisitor {
 public:
     IRCostModel()
-        : _max_compute_cost(-1), _max_data_cost(-1), _max_compute_cost_inclusive(-1), 
-        _max_data_cost_inclusive(-1)
-    {
+        : _max_compute_cost(-1), _max_data_cost(-1), _max_compute_cost_inclusive(-1),
+          _max_data_cost_inclusive(-1) {
     }
 
     // Pre-compute all costs to avoid repeated work
@@ -79,8 +79,7 @@ public:
         int cost = -1;
         if (_compute_cost.count(node)) {
             cost = _include_subtree_cost ? _compute_cost_inclusive[node] : _compute_cost[node];
-        }
-        else 
+        } else
             internal_assert(false) << "IRCostModel::get_compute_cost(): cost lookup failed\n";
 
         internal_assert(cost >= 0) << "Cost must not be negative.\n";
@@ -100,7 +99,7 @@ public:
         internal_assert(cost >= 0) << "Cost cost must not be negative.\n";
         return cost;
     }
-    
+
     // Returns the max compute cost of any node in the program
     int get_max_compute_cost(bool _include_subtree_cost) {
         return _include_subtree_cost ? _max_compute_cost_inclusive : _max_compute_cost;
@@ -110,7 +109,6 @@ public:
     int get_max_datamovement_cost(bool _include_subtree_cost) {
         return _include_subtree_cost ? _max_data_cost_inclusive : _max_data_cost;
     }
-    
 
 private:
     // Cost database. We track two costs:
@@ -154,7 +152,7 @@ private:
             if (child_node)
                 line_cost += get_compute_cost(child_node, true);
         }
-        
+
         _compute_cost[node] = line_cost;
         _compute_cost_inclusive[node] = node_cost + subtree_cost;
     }
@@ -171,13 +169,13 @@ private:
             if (child_node)
                 subtree_cost += get_datamovement_cost(child_node, true);
         }
-        
+
         int line_cost = node_cost;
         for (const IRNode *child_node : inline_child_nodes) {
             if (child_node)
                 line_cost += get_datamovement_cost(child_node, true);
         }
-        
+
         _data_cost[node] = line_cost;
         _data_cost_inclusive[node] = node_cost + subtree_cost;
     }
@@ -185,7 +183,7 @@ private:
 private:
     using IRVisitor::visit;
 
-    void visit(const IntImm *op) override { 
+    void visit(const IntImm *op) override {
         set_compute_costs(op, 0, {});
         set_data_costs(op, 0, {});
     }
@@ -317,19 +315,19 @@ private:
     void visit(const Not *op) override {
         IRVisitor::visit(op);
         set_compute_costs(op, op->type.lanes(), {op->a.get()});
-        set_data_costs(op, 0, {op->a.get()}); 
+        set_data_costs(op, 0, {op->a.get()});
     }
 
     void visit(const Select *op) override {
         IRVisitor::visit(op);
         set_compute_costs(op, op->type.lanes(), {op->condition.get(), op->true_value.get(), op->false_value.get()});
-        set_data_costs(op, 0, {op->condition.get(), op->true_value.get(), op->false_value.get()}); 
+        set_data_costs(op, 0, {op->condition.get(), op->true_value.get(), op->false_value.get()});
     }
 
     void visit(const Load *op) override {
         IRVisitor::visit(op);
         set_compute_costs(op, 0, {op->predicate.get(), op->index.get()});
-        set_data_costs(op, op->type.bits() * op->type.lanes(), {op->predicate.get(), op->index.get()}); 
+        set_data_costs(op, op->type.bits() * op->type.lanes(), {op->predicate.get(), op->index.get()});
     }
 
     void visit(const Ramp *op) override {
@@ -337,7 +335,7 @@ private:
         // but currently the cost model does not consider such cases
         IRVisitor::visit(op);
         set_compute_costs(op, 0, {op->base.get(), op->stride.get()});
-        set_data_costs(op, 0, {op->base.get(), op->stride.get()}); 
+        set_data_costs(op, 0, {op->base.get(), op->stride.get()});
     }
 
     void visit(const Broadcast *op) override {
@@ -391,7 +389,7 @@ private:
         set_compute_costs(op, 1, {op->condition.get()});
         set_data_costs(op, 0, {op->condition.get()});
     }
-    
+
     void visit(const ProducerConsumer *op) override {
         IRVisitor::visit(op);
         set_compute_costs(op, 0, {op->body.get()}, {});
@@ -435,7 +433,7 @@ private:
         IRVisitor::visit(op);
         std::vector<const IRNode *> args_inline;
         for (auto arg : op->extents)
-            args_inline.push_back(arg.get());  
+            args_inline.push_back(arg.get());
         args_inline.push_back(op->new_expr.get());
         std::vector<const IRNode *> args = args_inline;
         args.push_back(op->body.get());
@@ -499,7 +497,7 @@ private:
         IRVisitor::visit(op);
         set_compute_costs(op, 0, {op->body.get()}, {});
         set_data_costs(op, 0, {op->body.get()}, {});
-    }  
+    }
 };
 
 /******************* GetAssemblyInfo *******************/
@@ -519,7 +517,7 @@ public:
         for (const auto &fn : m.functions()) {
             fn.body.accept(this);
         }
-        
+
         // Find markers in asm code
         istringstream _asm(code);
         string line;
@@ -542,7 +540,6 @@ public:
 
             lno++;
         }
-        
     }
 
     int get_asm_lno(uint64_t node_id) {
@@ -594,7 +591,6 @@ private:
         IRVisitor::visit(op);
     }
 
-    
     void visit(const For *op) override {
         // Generate asm marker
         _markers[(uint64_t)op] = gen_loop_asm_marker(gen_loop_id(), op->name);
@@ -627,7 +623,7 @@ public:
         // The implementation currently does not support submodules.
         // TODO: test it out on a benchmark with submodules
         internal_assert(m.submodules().empty()) << "StmtToViz does not yet support submodules.";
-        
+
         // Open div to hold this module
         print_opening_tag("div", "Module");
 
@@ -644,7 +640,7 @@ public:
         print_closing_tag("span");
 
         print_toggle_anchor_closing_tag();
-        
+
         // Open code block to hold module body
         print_html_element("span", "matched", " {");
 
@@ -669,7 +665,7 @@ public:
 
         // Close div holding this module
         print_closing_tag("div");
-        
+
         // Pop out to outer scope
         scope.pop(m.name());
     }
@@ -767,7 +763,7 @@ private:
         //    Note: We wrap the show/hide buttons in a navigation anchor
         //    that lets us sync text and visualization tabs.
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword nav-anchor", "func ", "lowered-func-" + std::to_string((uint64_t) &fn));
+        print_html_element("span", "keyword nav-anchor", "func ", "lowered-func-" + std::to_string((uint64_t)&fn));
         print_text(fn.name + "(");
         print_closing_tag("span");
         print_fndecl_args(fn.args);
@@ -809,8 +805,8 @@ private:
     }
 
     /* Methods used to emit common HTML patterns */
-    
-    // Prints the opening tag for the specified html element. A unique ID is 
+
+    // Prints the opening tag for the specified html element. A unique ID is
     // auto-generated unless provided.
     void print_opening_tag(const string &tag, const string &cls, int id = -1) {
         stream << "<" << tag << " class='" << cls << "' id='";
@@ -914,7 +910,7 @@ private:
         int current_id = -1;
         bool in_braces = false;
         bool in_func_signature = false;
-        
+
         string current_kernel;
         std::istringstream ss(str);
 
@@ -1220,7 +1216,7 @@ private:
     }
 
     // Prints a cost button/indicator
-     void print_cost_btn(int line_cost, int block_cost, int max_line_cost, string id, string prefix) {
+    void print_cost_btn(int line_cost, int block_cost, int max_line_cost, string id, string prefix) {
         const int num_cost_buckets = 20;
 
         int line_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
@@ -1306,7 +1302,7 @@ private:
     void visit(const Mul *op) override {
         print_binary_op(op->a, op->b, "*");
     }
-    
+
     void visit(const Div *op) override {
         print_binary_op(op->a, op->b, "/");
     }
@@ -1326,11 +1322,11 @@ private:
         print_function_call("max", {op->a, op->b});
         print_closing_tag("span");
     }
-    
+
     void visit(const EQ *op) override {
         print_binary_op(op->a, op->b, "==");
     }
-    
+
     void visit(const NE *op) override {
         print_binary_op(op->a, op->b, "!=");
     }
@@ -1350,7 +1346,7 @@ private:
     void visit(const GE *op) override {
         print_binary_op(op->a, op->b, "&gt;=");
     }
-    
+
     void visit(const And *op) override {
         print_binary_op(op->a, op->b, "&amp;&amp;");
     }
@@ -1439,8 +1435,8 @@ private:
         print_closing_tag("span");
         print(op->value);
         print_closing_tag("span");
-        print_closing_tag("p");        
-        print(op->body); 
+        print_closing_tag("p");
+        print(op->body);
         print_closing_tag("div");
         scope.pop(op->name);
     }
@@ -1473,8 +1469,8 @@ private:
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword nav-anchor", op->is_producer ? "produce " : "consume ", 
-            "prodcons-" + std::to_string((uint64_t)op));
+        print_html_element("span", "keyword nav-anchor", op->is_producer ? "produce " : "consume ",
+                           "prodcons-" + std::to_string((uint64_t)op));
         print_variable(op->name);
         print_closing_tag("span");
 
@@ -1511,7 +1507,7 @@ private:
 
         // Push scope
         scope.push(op->name, id);
-        
+
         // Start a dive to hold code for this allocate
         print_opening_tag("div", "For");
 
@@ -1683,7 +1679,7 @@ private:
             print(extent);
         }
         print_html_element("span", "matched", "]");
-        
+
         // Print memory type
         if (op->memory_type != MemoryType::Auto) {
             print_html_element("span", "keyword", " in ");
@@ -1729,7 +1725,7 @@ private:
         // Pop out of allocate scope
         scope.pop(op->name);
     }
-    
+
     void visit(const Free *op) override {
         print_opening_tag("div", "Free WrapLine");
         print_cost_buttons(op);
@@ -1826,7 +1822,7 @@ private:
 
         // -- print text
         print_html_element("span", "keyword matched", "fork");
-        
+
         print_toggle_anchor_closing_tag();
 
         // Open code block to hold fork body
@@ -1878,7 +1874,7 @@ private:
         // Add a button to jump to this conditional in the viz
         print_visualization_button("cond-viz-" + std::to_string((uint64_t)&op->then_case));
 
-        // Flatten nested if's in the else case as an 
+        // Flatten nested if's in the else case as an
         // `if-then-else_if-else` sequence
         while (true) {
             /* Handle the `then` case */
@@ -1951,7 +1947,7 @@ private:
                 print_opening_tag("span", "matched");
                 print_html_element("span", "keyword nav-anchor IfSpan", "else", "cond-" + std::to_string((uint64_t)&op->else_case));
                 print_closing_tag("span");
-                
+
                 print_toggle_anchor_closing_tag();
 
                 // Add a button to jump to this conditional branch in the viz
@@ -2042,7 +2038,7 @@ private:
             }
         }
         print_html_element("span", "matched", ")");
-        
+
         // Print condition
         if (!is_const_one(op->condition)) {
             print_html_element("span", "keyword", " if ");
@@ -2077,10 +2073,10 @@ private:
             print_html_element("span", "Symbol", op->mutex_name);
             print_html_element("span", "matched", ")");
         }
-        
+
         print_toggle_anchor_closing_tag();
 
-         // Open code block to hold atomic body
+        // Open code block to hold atomic body
         print_html_element("span", "matched", " {");
 
         // Open indented div to hold atomic code
@@ -2248,7 +2244,7 @@ private:
     // Prints the cost indicator buttons within div.box-header
     void print_cost_buttons(int id, const IRNode *op) {
         print_opening_tag("div", "viz-cost-btns");
-        
+
         // Print compute cost indicator
         int max_line_ccost = _cost_model.get_max_compute_cost(false);
         int line_ccost = _cost_model.get_compute_cost(op, false);
@@ -2260,7 +2256,7 @@ private:
         int line_dcost = _cost_model.get_datamovement_cost(op, false);
         int block_dcost = _cost_model.get_datamovement_cost(op, true);
         // Special handling for Store nodes; since unlike the code view
-        // the viz view prints stores and loads seperately, therefore using 
+        // the viz view prints stores and loads seperately, therefore using
         // inclusive cost is confusing.
         if (op->node_type == IRNodeType::Store) {
             const Store *st = static_cast<const Store *>(op);
@@ -2268,7 +2264,7 @@ private:
             block_dcost = line_dcost;
         }
         print_cost_button(line_dcost, block_dcost, max_line_dcost, "vdc-" + std::to_string(id), "Bits Moved: ");
-        
+
         print_closing_tag("div");
     }
 
@@ -2298,7 +2294,7 @@ private:
     }
 
     // Prints the box .box-header within div.box
-    void print_box_header(int id, const IRNode* op, string anchor, string code_anchor, string title) {
+    void print_box_header(int id, const IRNode *op, string anchor, string code_anchor, string title) {
         print_opening_tag("div", "box-header");
         print_collapse_expand_btn(id);
         print_code_button(code_anchor);
@@ -2340,7 +2336,7 @@ private:
     }
 
     // Return variable name wrapped with html that enables matching
-    string get_as_var(string name){
+    string get_as_var(string name) {
         return "<b class='variable matched'>" + name + "</b>";
     }
 
@@ -2385,7 +2381,7 @@ private:
         // Create viz content
         string aid = std::to_string((uint64_t)&node);
         print_box_header(id, node.get(), "cond-viz-" + aid, "cond-" + aid, get_as_str(cond, prefix));
-        
+
         // Print contents of node
         print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
         node.accept(this);
@@ -2554,7 +2550,7 @@ private:
     }
 
     void visit(const Store *op) override {
-        // Visit the value first. We want to show any loads 
+        // Visit the value first. We want to show any loads
         // that happen before the store operation
         op->value.accept(this);
 
@@ -2580,7 +2576,7 @@ private:
 
         // - Alignment
         const bool show_alignment = op->value.type().is_vector() && op->alignment.modulus > 1;
-        if (show_alignment) 
+        if (show_alignment)
             stream << "<tr><th scope='col'>Alignment</th><td>"
                    << "aligned(" << op->alignment.modulus << ", " << op->alignment.remainder << ")"
                    << "</td></tr>";
@@ -2597,14 +2593,14 @@ private:
             stream << "<tr><th scope='col'>Type</th><td>Scalar</td></tr>";
             stream << "<tr><th scope='col'>Output</th><td>" << op->value.type() << "</td></tr>";
         }
-        
+
         print_closing_tag("table");
 
         print_closing_tag("div");
 
         print_closing_tag("div");
     }
-    
+
     void visit(const Load *op) override {
         // Assign unique id to this node
         int id = gen_unique_id();
@@ -2657,20 +2653,16 @@ private:
         // Add viz support for key functions/intrinsics
         if (op->name == "halide_do_par_for") {
             print_fn_button(op->name, (uint64_t)op);
-        } 
-        else if (op->name == "halide_do_par_task") {
+        } else if (op->name == "halide_do_par_task") {
             print_fn_button(op->name, (uint64_t)op);
-        } 
-        else if (op->name == "_halide_buffer_init") {
+        } else if (op->name == "_halide_buffer_init") {
             print_fn_button(op->name, (uint64_t)op);
-        } 
-        else if (op->name.rfind("_halide", 0) != 0) {
+        } else if (op->name.rfind("_halide", 0) != 0) {
             // Assumption: We want to ignore intrinsics starting with _halide
             // but for everything else, generate a warning
             debug(2) << "Function call ignored by IRVisualizer: " << op->name << "\n";
         }
     }
-    
 };
 
 /************** IRVisualizer Class **************/
@@ -2696,11 +2688,11 @@ public:
         // Before we generate any html, we annotate IR nodes with
         // line numbers containing corresponding assembly code. This
         // code is based on darya-ver's original implementation. We
-        // use comments in the generated assembly to infer association 
+        // use comments in the generated assembly to infer association
         // between Halide IR and assembly -- unclear how reliable this is.
         _asm_info.generate(_asm.str(), m);
 
-        // Run the cost model over this module to pre-compute all 
+        // Run the cost model over this module to pre-compute all
         // node costs
         _cost_model.comput_all_costs(m);
         html_code_printer.init_cost_info(_cost_model);
@@ -2867,7 +2859,6 @@ private:
             _asm << line << "\n";
         }
     }
-    
 };
 
 /************** The external interface to this module **************/
