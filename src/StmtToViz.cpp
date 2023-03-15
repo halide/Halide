@@ -2872,15 +2872,7 @@ private:
 
 /************** The external interface to this module **************/
 
-void print_to_viz(const string &filename, const Stmt &s) {
-    internal_assert(false) << "\n\n"
-                           << "Exiting early: print_to_viz cannot be called from a Stmt node - it must be "
-                              "called from a Module node.\n"
-                           << "\n\n\n";
-}
-
 void print_to_viz(const string &filename, const Module &m) {
-
     IRVisualizer visualizer(filename);
     visualizer.generate_html(m);
     debug(1) << "Done generating HTML IR Visualization - printed to: " << filename << "\n";
