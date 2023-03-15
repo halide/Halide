@@ -553,6 +553,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::map<OutputFileType, std::string> output_files_copy = output_files;
         output_files_copy.erase(OutputFileType::stmt);
         output_files_copy.erase(OutputFileType::stmt_html);
+        output_files_copy.erase(OutputFileType::stmt_viz);
         resolve_submodules().compile(output_files_copy);
         return;
     }
