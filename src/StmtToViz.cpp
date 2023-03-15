@@ -79,8 +79,9 @@ public:
         int cost = -1;
         if (_compute_cost.count(node)) {
             cost = _include_subtree_cost ? _compute_cost_inclusive[node] : _compute_cost[node];
-        } else
+        } else {
             internal_assert(false) << "IRCostModel::get_compute_cost(): cost lookup failed\n";
+        }
 
         internal_assert(cost >= 0) << "Cost must not be negative.\n";
         return cost;
@@ -93,8 +94,9 @@ public:
         int cost = -1;
         if (_compute_cost.count(node)) {
             cost = _include_subtree_cost ? _data_cost_inclusive[node] : _data_cost[node];
-        } else
+        } else {
             internal_assert(false) << "IRCostModel::get_datamovement_cost(): cost lookup failed\n";
+        }
 
         internal_assert(cost >= 0) << "Cost cost must not be negative.\n";
         return cost;
@@ -119,11 +121,11 @@ private:
     //  - The inclusive cost is the cost of the entire sub-tree.
     //    We display this cost when the user collapses a program
     //    block in the IR.
-    std::unordered_map<const IRNode *, int> _compute_cost;
-    std::unordered_map<const IRNode *, int> _data_cost;
+    std::map<const IRNode *, int> _compute_cost;
+    std::map<const IRNode *, int> _data_cost;
 
-    std::unordered_map<const IRNode *, int> _compute_cost_inclusive;
-    std::unordered_map<const IRNode *, int> _data_cost_inclusive;
+    std::map<const IRNode *, int> _compute_cost_inclusive;
+    std::map<const IRNode *, int> _data_cost_inclusive;
 
     // We also track the max costs to determine the cost color
     // intensity for a given line of code
@@ -134,53 +136,57 @@ private:
     int _max_data_cost_inclusive;
 
     /* Utility functions to store node costs in the cost database */
-    void set_compute_costs(const IRNode *node, int node_cost, std::vector<const IRNode *> child_nodes) {
+    void set_compute_costs(const IRNode *node, int node_cost, const std::vector<const IRNode *> &child_nodes) {
         set_compute_costs(node, node_cost, child_nodes, child_nodes);
     }
 
-    void set_compute_costs(const IRNode *node, int node_cost, std::vector<const IRNode *> child_nodes, std::vector<const IRNode *> inline_child_nodes) {
+    void set_compute_costs(const IRNode *node, int node_cost, const std::vector<const IRNode *> &child_nodes, const std::vector<const IRNode *> &inline_child_nodes) {
         int subtree_cost = 0;
         for (const IRNode *child_node : child_nodes) {
             // Certain child nodes can be null. Ex: else-case
             // in an if statement
-            if (child_node)
+            if (child_node) {
                 subtree_cost += get_compute_cost(child_node, true);
+            }
         }
 
         int line_cost = node_cost;
         for (const IRNode *child_node : inline_child_nodes) {
-            if (child_node)
+            if (child_node) {
                 line_cost += get_compute_cost(child_node, true);
+            }
         }
 
         _compute_cost[node] = line_cost;
         _compute_cost_inclusive[node] = node_cost + subtree_cost;
     }
 
-    void set_data_costs(const IRNode *node, int node_cost, std::vector<const IRNode *> child_nodes) {
+    void set_data_costs(const IRNode *node, int node_cost, const std::vector<const IRNode *> &child_nodes) {
         set_data_costs(node, node_cost, child_nodes, child_nodes);
     }
 
-    void set_data_costs(const IRNode *node, int node_cost, std::vector<const IRNode *> child_nodes, std::vector<const IRNode *> inline_child_nodes) {
+    void set_data_costs(const IRNode *node, int node_cost, const std::vector<const IRNode *> &child_nodes, const std::vector<const IRNode *> &inline_child_nodes) {
         int subtree_cost = 0;
         for (const IRNode *child_node : child_nodes) {
             // Certain child nodes can be null. Ex: else-case
             // in an if statement
-            if (child_node)
+            if (child_node) {
                 subtree_cost += get_datamovement_cost(child_node, true);
+            }
         }
 
         int line_cost = node_cost;
         for (const IRNode *child_node : inline_child_nodes) {
-            if (child_node)
+            if (child_node) {
                 line_cost += get_datamovement_cost(child_node, true);
+            }
         }
 
         _data_cost[node] = line_cost;
         _data_cost_inclusive[node] = node_cost + subtree_cost;
     }
 
-private:
+    /* Visitor functions for each IR node */
     using IRVisitor::visit;
 
     void visit(const IntImm *op) override {
@@ -347,8 +353,9 @@ private:
     void visit(const Call *op) override {
         IRVisitor::visit(op);
         std::vector<const IRNode *> args;
-        for (auto arg : op->args)
+        for (const auto &arg : op->args) {
             args.push_back(arg.get());
+        }
         set_compute_costs(op, 1, args);
         // Currently there is no special handling
         // for intrinsics such as `prefetch`
@@ -364,8 +371,9 @@ private:
     void visit(const Shuffle *op) override {
         IRVisitor::visit(op);
         std::vector<const IRNode *> args;
-        for (auto arg : op->vectors)
+        for (const auto &arg : op->vectors) {
             args.push_back(arg.get());
+        }
         set_compute_costs(op, 0, args);
         set_data_costs(op, op->type.bits() * op->type.lanes(), args);
     }
@@ -419,10 +427,12 @@ private:
     void visit(const Provide *op) override {
         IRVisitor::visit(op);
         std::vector<const IRNode *> args;
-        for (auto arg : op->values)
+        for (const auto &arg : op->values) {
             args.push_back(arg.get());
-        for (auto arg : op->args)
+        }
+        for (const auto &arg : op->args) {
             args.push_back(arg.get());
+        }
         args.push_back(op->predicate.get());
         set_compute_costs(op, 0, args, {});
         set_data_costs(op, 0, args, {});
@@ -432,8 +442,9 @@ private:
         // We do not model allocation/de-allocation costs
         IRVisitor::visit(op);
         std::vector<const IRNode *> args_inline;
-        for (auto arg : op->extents)
+        for (const auto &arg : op->extents) {
             args_inline.push_back(arg.get());
+        }
         args_inline.push_back(op->new_expr.get());
         std::vector<const IRNode *> args = args_inline;
         args.push_back(op->body.get());
@@ -457,15 +468,17 @@ private:
     void visit(const Prefetch *op) override {
         IRVisitor::visit(op);
         std::vector<const IRNode *> args_inline;
-        for (auto arg : op->bounds)
+        for (const auto &arg : op->bounds) {
             args_inline.push_back(arg.min.get());
+        }
         args_inline.push_back(op->condition.get());
         std::vector<const IRNode *> args = args_inline;
         args.push_back(op->body.get());
         set_compute_costs(op, 0, args);
         int elem_size = 0;
-        for (auto etype : op->types)
+        for (const auto &etype : op->types) {
             elem_size += etype.bits() * etype.lanes();
+        }
         set_data_costs(op, elem_size, args, args_inline);
     }
 
@@ -509,7 +522,7 @@ public:
         : _loop_id(0), _prodcons_id(0) {
     }
 
-    void generate(string code, const Module &m) {
+    void generate(const string &code, const Module &m) {
         // Traverse the module to populate the list of
         // nodes we need to map and generate their assembly
         // markers (comments that appear in the assembly code
@@ -535,16 +548,18 @@ public:
             }
             // We map to the first match, stop
             // checking matched nodes
-            for (auto const node : matched_nodes)
+            for (auto const &node : matched_nodes) {
                 _markers.erase(node);
+            }
 
             lno++;
         }
     }
 
     int get_asm_lno(uint64_t node_id) {
-        if (_lnos.count(node_id))
+        if (_lnos.count(node_id)) {
             return _lnos[node_id];
+        }
         return -1;
     }
 
@@ -555,7 +570,7 @@ private:
         return ++_loop_id;
     }
 
-    std::regex gen_loop_asm_marker(int id, string loop_var) {
+    std::regex gen_loop_asm_marker(int id, const string &loop_var) {
         std::regex dollar("\\$");
         string marker = "%\"" + std::to_string(id) + "_for " + loop_var;
         marker = std::regex_replace(marker, dollar, "\\$");
@@ -568,7 +583,7 @@ private:
         return ++_prodcons_id;
     }
 
-    std::regex gen_prodcons_asm_marker(int id, string var, bool is_producer) {
+    std::regex gen_prodcons_asm_marker(int id, const string &var, bool is_producer) {
         std::regex dollar("\\$");
         string marker = "%\"" + std::to_string(id) + (is_producer ? "_produce " : "_consume ") + var;
         marker = std::regex_replace(marker, dollar, "\\$");
@@ -581,7 +596,6 @@ private:
     // Mapping of IR nodes to their asm line numbers
     std::map<uint64_t, int> _lnos;
 
-private:
     using IRVisitor::visit;
 
     void visit(const ProducerConsumer *op) override {
@@ -610,7 +624,7 @@ public:
     }
 
     void init_cost_info(IRCostModel cost_model) {
-        _cost_model = cost_model;
+        _cost_model = std::move(cost_model);
     }
 
     void print(const Module &m) {
@@ -723,11 +737,12 @@ private:
             print_opening_tag("div", "indent BufferData", id);
 
             string str((const char *)buf.data(), buf.size_in_bytes());
-            if (starts_with(buf.name(), "cuda_"))
+            if (starts_with(buf.name(), "cuda_")) {
                 print_cuda_gpu_source_kernels(str);
-            else
+            } else {
                 stream << "<pre>\n"
                        << str << "</pre>\n";
+            }
 
             print_closing_tag("div");
 
@@ -1073,9 +1088,9 @@ private:
     }
 
     // Prints the args in a function declaration
-    void print_fndecl_args(std::vector<LoweredArgument> args) {
+    void print_fndecl_args(const std::vector<LoweredArgument> &args) {
         bool print_delim = false;
-        for (const auto arg : args) {
+        for (const auto &arg : args) {
             if (print_delim) {
                 print_html_element("span", "matched", ",");
                 print_text(" ");
@@ -1122,7 +1137,7 @@ private:
         print_text("(");
         print_closing_tag("span");
         bool print_delim = false;
-        for (auto arg : args) {
+        for (const auto &arg : args) {
             if (print_delim) {
                 print_html_element("span", "matched", ", ");
             }
@@ -1225,10 +1240,12 @@ private:
         int line_costc = line_cost / line_cost_bin_size;
         int block_costc = block_cost / block_cost_bin_size;
 
-        if (line_costc >= num_cost_buckets)
+        if (line_costc >= num_cost_buckets) {
             line_costc = num_cost_buckets - 1;
-        if (block_costc >= num_cost_buckets)
+        }
+        if (block_costc >= num_cost_buckets) {
             block_costc = num_cost_buckets - 1;
+        }
 
         stream << "<div id='" << id << "' class='cost-btn CostColor" << line_costc << "'"
                << "   aria-describedby='tooltip-" << id << "'"
@@ -1246,8 +1263,7 @@ private:
         return _id++;
     }
 
-private:
-    /* All visitor functions inherited from IRVisitor*/
+    /* All visitor functions inherited from IRVisitor */
 
     void visit(const IntImm *op) override {
         print_constant("IntImm Imm", Expr(op));
@@ -1895,8 +1911,9 @@ private:
             print_html_element("span", "matched ClosingBrace cb-" + std::to_string(id), "}");
 
             // If there is no `else` case, we are done!
-            if (!op->else_case.defined())
+            if (!op->else_case.defined()) {
                 break;
+            }
 
             /* Handle the `else` case */
 
@@ -2108,11 +2125,11 @@ public:
     }
 
     void init_cost_info(IRCostModel cost_model) {
-        _cost_model = cost_model;
+        _cost_model = std::move(cost_model);
     }
 
     void print(const Module &m, AssemblyInfo asm_info) {
-        _assembly_info = asm_info;
+        _assembly_info = std::move(asm_info);
         for (const auto &fn : m.functions()) {
             print(fn);
         }
@@ -2172,7 +2189,7 @@ private:
         context_stack_tags.push_back(tag);
     }
 
-    void print_opening_tag(const string &tag, const string &cls, string id) {
+    void print_opening_tag(const string &tag, const string &cls, const string &id) {
         stream << "<" << tag << " class='" << cls << "' id='" << id << "'>";
         context_stack_tags.push_back(tag);
     }
@@ -2191,7 +2208,7 @@ private:
         print_closing_tag(tag);
     }
 
-    void print_html_element(const string &tag, const string &cls, const string &body, string id) {
+    void print_html_element(const string &tag, const string &cls, const string &body, const string &id) {
         print_opening_tag(tag, cls, id);
         stream << body;
         print_closing_tag(tag);
@@ -2203,21 +2220,21 @@ private:
     }
 
     // Prints a button to sync visualization with code
-    void print_code_button(string id) {
+    void print_code_button(const string &id) {
         stream << "<button class='icon-btn sync-btn' onclick='scrollToCode(\"" << id << "\")'>"
                << "  <i class='bi bi-arrow-left-square' title='Jump to code'></i>"
                << "</button>";
     }
 
     // Prints a button to sync visualization with assembly
-    void print_asm_button(string id) {
+    void print_asm_button(const string &id) {
         stream << "<button class='icon-btn sync-btn' onclick='scrollToAsm(\"" << id << "\")'>"
                << "  <i class='bi bi-arrow-right-square' title='Jump to assembly'></i>"
                << "</button>";
     }
 
     // Prints a function-call box
-    void print_fn_button(string name, uint64_t id) {
+    void print_fn_button(const string &name, uint64_t id) {
         print_opening_tag("div", "fn-call");
         print_code_button("fn-call-" + std::to_string(id));
         print_text(get_as_var(name) + "(...)");
@@ -2235,7 +2252,7 @@ private:
     }
 
     // Prints the box title within the div.box-header
-    void print_box_title(string title, string anchor) {
+    void print_box_title(const string &title, const string &anchor) {
         print_opening_tag("div", "box-title");
         print_html_element("span", "", title, anchor);
         print_closing_tag("div");
@@ -2268,7 +2285,7 @@ private:
         print_closing_tag("div");
     }
 
-    void print_cost_button(int line_cost, int block_cost, int max_line_cost, string id, string prefix) {
+    void print_cost_button(int line_cost, int block_cost, int max_line_cost, const string &id, const string &prefix) {
         const int num_cost_buckets = 20;
 
         int line_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
@@ -2277,10 +2294,12 @@ private:
         int line_costc = line_cost / line_cost_bin_size;
         int block_costc = block_cost / block_cost_bin_size;
 
-        if (line_costc >= num_cost_buckets)
+        if (line_costc >= num_cost_buckets) {
             line_costc = num_cost_buckets - 1;
-        if (block_costc >= num_cost_buckets)
+        }
+        if (block_costc >= num_cost_buckets) {
             block_costc = num_cost_buckets - 1;
+        }
 
         stream << "<div id='" << id << "' class='cost-btn CostColor" << line_costc << "'"
                << "   aria-describedby='tooltip-" << id << "'"
@@ -2294,7 +2313,7 @@ private:
     }
 
     // Prints the box .box-header within div.box
-    void print_box_header(int id, const IRNode *op, string anchor, string code_anchor, string title) {
+    void print_box_header(int id, const IRNode *op, const string &anchor, const string &code_anchor, const string &title) {
         print_opening_tag("div", "box-header");
         print_collapse_expand_btn(id);
         print_code_button(code_anchor);
@@ -2304,7 +2323,7 @@ private:
     }
 
     // Prints the box .box-header within div.box, contains the asm info button
-    void print_box_header_asm(int id, const IRNode *op, string anchor, string code_anchor, string asm_anchor, string title) {
+    void print_box_header_asm(int id, const IRNode *op, const string &anchor, const string &code_anchor, const string &asm_anchor, const string &title) {
         print_opening_tag("div", "box-header");
         print_collapse_expand_btn(id);
         print_code_button(code_anchor);
@@ -2315,13 +2334,14 @@ private:
     }
 
     // Converts an expr to a string without printing to stream
-    string get_as_str(Expr e) {
+    string get_as_str(const Expr &e) {
         return get_as_str(e, "");
     }
 
-    string get_as_str(Expr e, string prefix) {
-        if (prefix == "Else")
+    string get_as_str(const Expr &e, const string &prefix) {
+        if (prefix == "Else") {
             return "Else";
+        }
 
         ss.str("");
         ss.clear();
@@ -2336,19 +2356,19 @@ private:
     }
 
     // Return variable name wrapped with html that enables matching
-    string get_as_var(string name) {
+    string get_as_var(const string &name) {
         return "<b class='variable matched'>" + name + "</b>";
     }
 
     // Sometimes the expressions are too large to show within the viz. In
     // such cases we use tooltips.
-    bool large_expr(Expr e) {
+    bool large_expr(const Expr &e) {
         ostringstream ss;
         ss << e;
         return ss.str().size() > 50;
     }
 
-    string truncate_html(string cond) {
+    string truncate_html(const string &cond) {
         int id = gen_unique_id();
 
         ostringstream ss;
@@ -2367,7 +2387,7 @@ private:
     }
 
     // Prints a single node in an `if-elseif-...-else` chain
-    void print_if_tree_node(const Stmt &node, Expr cond, string prefix) {
+    void print_if_tree_node(const Stmt &node, const Expr &cond, const string &prefix) {
         // Assign unique id to this node
         int id = gen_unique_id();
 
@@ -2395,7 +2415,7 @@ private:
         print_closing_tag("li");
     }
 
-private:
+    /* Visitor functions for each IR node */
     using IRVisitor::visit;
 
     /* Override key visit functions */
@@ -2452,10 +2472,11 @@ private:
         // Print box header
         string aid = std::to_string((uint64_t)op);
         int asm_lno = _assembly_info.get_asm_lno((uint64_t)op);
-        if (asm_lno == -1)
+        if (asm_lno == -1) {
             print_box_header(id, op, "loop-viz-" + aid, "loop-" + aid, "For: " + get_as_var(op->name));
-        else
+        } else {
             print_box_header_asm(id, op, "loop-viz-" + aid, "loop-" + aid, std::to_string(asm_lno), "For: " + get_as_var(op->name));
+        }
 
         // Start a box to hold viz
         print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
@@ -2464,11 +2485,13 @@ private:
         print_opening_tag("table", "allocate-table");
 
         // - Loop type
-        if (op->for_type != ForType::Serial)
+        if (op->for_type != ForType::Serial) {
             stream << "<tr><th scope='col'>Loop Type</th><td>" << op->for_type << "</td></tr>";
+        }
         // - Device API
-        if (op->device_api != DeviceAPI::None)
+        if (op->device_api != DeviceAPI::None) {
             stream << "<tr><th scope='col'>Device API</th><td>" << op->device_api << "</td></tr>";
+        }
         // - Min
         stream << "<tr><th scope='col'>Min</th><td>" << get_as_str(op->min) << "</td></tr>";
         // - Extent
@@ -2535,10 +2558,11 @@ private:
         string aid = std::to_string((uint64_t)op);
         string prefix = op->is_producer ? "Produce: " : "Consume: ";
         int asm_lno = _assembly_info.get_asm_lno((uint64_t)op);
-        if (asm_lno == -1)
+        if (asm_lno == -1) {
             print_box_header(id, op, "prodcons-viz-" + aid, "prodcons-" + aid, prefix + get_as_var(op->name));
-        else
+        } else {
             print_box_header_asm(id, op, "prodcons-viz-" + aid, "prodcons-" + aid, std::to_string(asm_lno), prefix + get_as_var(op->name));
+        }
 
         // Print the body
         print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
@@ -2571,23 +2595,26 @@ private:
         print_opening_tag("table", "allocate-table");
 
         // - Store predicate
-        if (!is_const_one(op->predicate))
+        if (!is_const_one(op->predicate)) {
             stream << "<tr><th scope='col'>Predicate</th><td>" << get_as_str(op->predicate) << "</td></tr>";
+        }
 
         // - Alignment
         const bool show_alignment = op->value.type().is_vector() && op->alignment.modulus > 1;
-        if (show_alignment)
+        if (show_alignment) {
             stream << "<tr><th scope='col'>Alignment</th><td>"
                    << "aligned(" << op->alignment.modulus << ", " << op->alignment.remainder << ")"
                    << "</td></tr>";
+        }
 
         // - Qualifiers
         if (op->value.type().is_vector()) {
             const Ramp *idx = op->index.as<Ramp>();
-            if (idx && is_const_one(idx->stride))
+            if (idx && is_const_one(idx->stride)) {
                 stream << "<tr><th scope='col'>Type</th><td>Dense Vector</td></tr>";
-            else
+            } else {
                 stream << "<tr><th scope='col'>Type</th><td>Strided Vector</td></tr>";
+            }
             stream << "<tr><th scope='col'>Output Tile</th><td>" << op->value.type() << "</td></tr>";
         } else {
             stream << "<tr><th scope='col'>Type</th><td>Scalar</td></tr>";
@@ -2619,23 +2646,26 @@ private:
         print_opening_tag("table", "allocate-table");
 
         // - Load predicate
-        if (!is_const_one(op->predicate))
+        if (!is_const_one(op->predicate)) {
             stream << "<tr><th scope='col'>Predicate</th><td>" << get_as_str(op->predicate) << "</td></tr>";
+        }
 
         // - Alignment
         const bool show_alignment = op->type.is_vector() && op->alignment.modulus > 1;
-        if (show_alignment)
+        if (show_alignment) {
             stream << "<tr><th scope='col'>Alignment</th><td>"
                    << "aligned(" << op->alignment.modulus << ", " << op->alignment.remainder << ")"
                    << "</td></tr>";
+        }
 
         // - Qualifiers
         if (op->type.is_vector()) {
             const Ramp *idx = op->index.as<Ramp>();
-            if (idx && is_const_one(idx->stride))
+            if (idx && is_const_one(idx->stride)) {
                 stream << "<tr><th scope='col'>Type</th><td>Dense Vector</td></tr>";
-            else
+            } else {
                 stream << "<tr><th scope='col'>Type</th><td>Strided Vector</td></tr>";
+            }
             stream << "<tr><th scope='col'>Output Tile</th><td>" << op->type << "</td></tr>";
         } else {
             stream << "<tr><th scope='col'>Type</th><td>Scalar</td></tr>";
@@ -2844,12 +2874,11 @@ private:
         return _popup_id++;
     }
 
-private:
+    // Load assembly code from file
     ostringstream _asm;
     AssemblyInfo _asm_info;
 
-    // Load assembly code from file
-    void load_asm_code(string asm_file) {
+    void load_asm_code(const string &asm_file) {
         // Open assembly file
         assembly.open(asm_file.c_str());
 
