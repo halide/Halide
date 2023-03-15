@@ -35,8 +35,9 @@ When invoking `emcc` to link Halide-generated objects, include these flags:
 
 Tests that use AOT compilation can be run using a native WebGPU implementation
 that has Node.js bindings, such as [Dawn](dawn.googlesource.com/dawn/).
-When configuring Halide, use `-DWEBGPU_NODE_BINDINGS=/path/to/dawn.node` to
-enable these tests.
+You must set an environment variable named `HL_WEBGPU_NODE_BINDINGS` that
+has an absolute path to the bindings to run these tests, e.g. `HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node`.
+
 See [below](#setting-up-dawn) for instructions on building the Dawn Node.js
 bindings.
 
@@ -51,12 +52,13 @@ For testing purposes, Halide can also target native WebGPU libraries, such as
 This is currently the only path that can run the JIT correctness tests.
 See [below](#setting-up-dawn) for instructions on building Dawn.
 
-Pass `-DWEBGPU_NATIVE_LIB=/path/to/native/library.{so,dylib.dll}` to CMake when
-configuring Halide to enable this path, which will automatically use this
-library for the AOT and JIT tests.
+When targeting WebGPU with a native target, Halide defaults to looking for a
+build of Dawn (with several common names and suffixes); you can override this
+by setting the `HL_WEBGPU_NATIVE_LIB` environment variable to the absolute path
+to the library you want.
 
-Note that it is explicitly legal to specify both WEBGPU_NATIVE_LIB and
-WEBGPU_NODE_BINDINGS for the same build; the correct executable environment
+Note that it is explicitly legal to define both `HL_WEBGPU_NATIVE_LIB` and
+`HL_WEBGPU_NODE_BINDINGS` at the same time; the correct executable environment
 will be selected based on the Halide target specified.
 
 ## Setting up Dawn
@@ -98,5 +100,5 @@ This will produce the following artifacts:
 - Node.js bindings: `<build_dir>/dawn.node`
 - Native library: `<build_dir>/src/dawn/native/libwebgpu_dawn.{so,dylib,dll}`
 
-These paths can then be used for the `-DWEBGPU_NODE_BINDINGS` and
-`-DWEBGPU_NATIVE_LIB` CMake options when configuring Halide.
+These paths can then be used for the `HL_WEBGPU_NODE_BINDINGS` and
+`HL_WEBGPU_NATIVE_LIB` environment variables when using Halide.
