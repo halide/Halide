@@ -1144,8 +1144,6 @@ $(BUILD_DIR)/initmod.%.o: $(BUILD_DIR)/initmod.%.cpp
 
 $(BUILD_DIR)/c_template.%.o: $(BUILD_DIR)/c_template.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
-# 	@mkdir -p $(@D)
-# 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(BUILD_DIR)/llvm_ok
 	@mkdir -p $(@D)
