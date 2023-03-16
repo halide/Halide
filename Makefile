@@ -834,7 +834,8 @@ RUNTIME_CPP_COMPONENTS = \
   trace_helper \
   tracing \
   wasm_cpu_features \
-  webgpu \
+  webgpu_dawn \
+  webgpu_emscripten \
   windows_clock \
   windows_cuda \
   windows_d3d12compute_arm \
