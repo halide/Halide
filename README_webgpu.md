@@ -29,8 +29,6 @@ device codegen may be required before it becomes profitable to use.
 
 Halide can generate WebGPU code that can be integrated with WASM code using
 Emscripten.
-Halide must currently be built *without* the `WEBGPU_NATIVE_LIB` flag when
-targeting Emscripten.
 
 When invoking `emcc` to link Halide-generated objects, include these flags:
 `-s USE_WEBGPU=1 -s ASYNCIFY`.
@@ -53,11 +51,13 @@ For testing purposes, Halide can also target native WebGPU libraries, such as
 This is currently the only path that can run the JIT correctness tests.
 See [below](#setting-up-dawn) for instructions on building Dawn.
 
-Due to differences between the APIs implemented by native WebGPU libraries and
-Emscripten, this currently requires a separate build of Halide.
 Pass `-DWEBGPU_NATIVE_LIB=/path/to/native/library.{so,dylib.dll}` to CMake when
 configuring Halide to enable this path, which will automatically use this
 library for the AOT and JIT tests.
+
+Note that it is explicitly legal to specify both WEBGPU_NATIVE_LIB and
+WEBGPU_NODE_BINDINGS for the same build; the correct executable environment
+will be selected based on the Halide target specified.
 
 ## Setting up Dawn
 
