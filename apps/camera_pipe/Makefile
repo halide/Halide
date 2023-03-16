@@ -18,13 +18,9 @@ $(BIN)/%/camera_pipe_auto_schedule.a: $(GENERATOR_BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
 	$^ -g camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f camera_pipe_auto_schedule target=$*-no_runtime autoscheduler=Mullapudi2016
 
-$(BIN)/%/camera_pipe_c.halide_generated.cpp: $(GENERATOR_BIN)/camera_pipe.generator
+$(BIN)/%/process: process.cpp $(BIN)/%/camera_pipe.a $(BIN)/%/camera_pipe_auto_schedule.a
 	@mkdir -p $(@D)
-	$^ -g camera_pipe -o $(@D) -f camera_pipe_c -e c_source,c_header target=$*-xtensa
-
-$(BIN)/%/process: process.cpp $(BIN)/%/camera_pipe.a $(BIN)/%/camera_pipe_auto_schedule.a $(BIN)/%/camera_pipe_c.halide_generated.cpp
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -Wall -O2 -I$(BIN)/$* -I${XTENSA_CSTUBS_ROOT}  $^ ${XTENSA_CSTUBS_ROOT}/libcstub.a -o $@  $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -Wall -I$(BIN)/$* $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 $(BIN)/%/process_viz: process.cpp $(BIN)/%-trace_all/camera_pipe.a
 	@mkdir -p $(@D)
@@ -54,5 +50,3 @@ $(BIN)/%/viz_auto.mp4: $(BIN)/%/process_viz ../support/viz_auto.sh ../../bin/Hal
 
 viz_auto: $(BIN)/$(HL_TARGET)/viz_auto.mp4
 	$(HL_VIDEOPLAYER) $^
-
-.SECONDARY: $(BIN)/host/camera_pipe_c.halide_generated.cpp

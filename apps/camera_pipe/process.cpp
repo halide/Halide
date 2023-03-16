@@ -1,7 +1,6 @@
 #include "halide_benchmark.h"
 
 #include "camera_pipe.h"
-#include "camera_pipe_c.h"
 #ifndef NO_AUTO_SCHEDULE
 #include "camera_pipe_auto_schedule.h"
 #endif
@@ -84,14 +83,9 @@ int main(int argc, char **argv) {
     });
     fprintf(stderr, "Halide (auto):\t%gus\n", best * 1e6);
 #endif
-    convert_and_save_image(output, argv[7]);
-
-    camera_pipe_c(input, matrix_3200, matrix_7000,
-                  color_temp, gamma, contrast, sharpen, blackLevel, whiteLevel,
-                  output);
 
     fprintf(stderr, "output: %s\n", argv[7]);
-    convert_and_save_image(output, "bin/host/out_c.png");
+    convert_and_save_image(output, argv[7]);
     fprintf(stderr, "        %d %d\n", output.width(), output.height());
 
     printf("Success!\n");

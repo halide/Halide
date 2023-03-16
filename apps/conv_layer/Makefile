@@ -8,10 +8,6 @@ $(GENERATOR_BIN)/conv_layer.generator: conv_layer_generator.cpp $(GENERATOR_DEPS
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-$(BIN)/%/conv_layer.halide_generated.cpp: $(GENERATOR_BIN)/conv_layer.generator
-	@mkdir -p $(@D)
-	$^ -g conv_layer -o $(@D) -f conv_layer -e c_source,c_header target=$*-xtensa
-
 $(BIN)/%/conv_layer.a: $(GENERATOR_BIN)/conv_layer.generator
 	@mkdir -p $(@D)
 	$^ -g conv_layer -e $(GENERATOR_OUTPUTS) -o $(@D) -f conv_layer target=$*
@@ -24,33 +20,11 @@ $(BIN)/%/process: process.cpp $(BIN)/%/conv_layer.a $(BIN)/%/conv_layer_auto_sch
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS)
 
-$(BIN)/%/runtime.a: $(GENERATOR_BIN)/conv_layer.generator
-	@mkdir -p $(@D)
-	@$< -r runtime -o $(@D) target=$*
-
-$(BIN)/%/process_xt_cstub: process.cpp $(BIN)/%/conv_layer.halide_generated.cpp $(BIN)/%/runtime.a
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -DSKIP_BENCHMARK -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) -I${XTENSA_CSTUBS_ROOT} ${XTENSA_CSTUBS_ROOT}/libcstub.a
-
-$(BIN)/%/process_xt: process.cpp $(BIN)/%/conv_layer.halide_generated.cpp
-	@mkdir -p $(@D)
-	XTENSA_CORE=Aurora_vp2 xt-clang++ -DSKIP_BENCHMARK $(CXXFLAGS) -I$(BIN)/$* -Wall $^ $(HALIDE_DISTRIB_PATH)/lib/libHalideRuntime-xtensa.a -o $@ 
-
 run: $(BIN)/$(HL_TARGET)/process
 	@mkdir -p $(@D)
 	$^
-
-run_xt_cstub: $(BIN)/$(HL_TARGET)/process_xt_cstub
-	@mkdir -p $(@D)
-	$^
-
-run_xt: $(BIN)/$(HL_TARGET)/process_xt
-	@mkdir -p $(@D)
-	XTENSA_CORE=Aurora_vp2 xt-run $^
 
 clean:
 	rm -rf $(BIN)
 
 test: run
-
-.SECONDARY: $(BIN)/host/conv_layer.halide_generated.cpp

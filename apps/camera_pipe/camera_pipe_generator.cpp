@@ -518,7 +518,6 @@ void CameraPipe::generate() {
         if (get_target().has_feature(Target::HVX)) {
             vec = 64;
         }
-
         processed
             .compute_root()
             .reorder(c, x, y)
@@ -537,18 +536,12 @@ void CameraPipe::generate() {
             .vectorize(xi)
             .unroll(yi);
 
-        if (!get_target().has_feature(Target::Xtensa)) {
-            denoised.prefetch(input, y, 2);
-        }
-
-        const int deinterleaved_vector_size = get_target().has_feature(Target::Xtensa) ? vec : vec * 2;
-
         deinterleaved
             .compute_at(processed, yi)
             .store_at(processed, yo)
             .fold_storage(y, 4)
             .reorder(c, x, y)
-            .vectorize(x, deinterleaved_vector_size, TailStrategy::RoundUp)
+            .vectorize(x, 2 * vec, TailStrategy::RoundUp)
             .unroll(c);
 
         curved

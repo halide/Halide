@@ -13,10 +13,6 @@ $(BIN)/%/halide_blur.a: $(GENERATOR_BIN)/halide_blur.generator
 	@mkdir -p $(@D)
 	$^ -g halide_blur -e $(GENERATOR_OUTPUTS) -o $(@D) target=$*
 
-$(BIN)/%/halide_blur_c.halide_generated.cpp: $(GENERATOR_BIN)/halide_blur.generator
-	@mkdir -p $(@D)
-	$^ -g halide_blur -o $(@D) -f halide_blur_c -e c_source,c_header target=$*-xtensa
-
 # g++ on OS X might actually be system clang without openmp
 CXX_VERSION=$(shell $(CXX) --version)
 ifeq (,$(findstring clang,$(CXX_VERSION)))
@@ -26,14 +22,12 @@ OPENMP_FLAGS=
 endif
 
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
-$(BIN)/%/test: $(BIN)/%/halide_blur.a $(BIN)/%/halide_blur_c.halide_generated.cpp test.cpp
+$(BIN)/%/test: $(BIN)/%/halide_blur.a test.cpp
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(OPENMP_FLAGS) -Wall -O2 -I$(BIN)/$* -I${XTENSA_CSTUBS_ROOT}  test.cpp $(BIN)/$*/halide_blur_c.halide_generated.cpp $(BIN)/$*/halide_blur.a ${XTENSA_CSTUBS_ROOT}/libcstub.a -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(OPENMP_FLAGS) -Wall -O2 -I$(BIN)/$* test.cpp $(BIN)/$*/halide_blur.a -o $@ $(LDFLAGS-$*)
 
 clean:
 	rm -rf $(BIN)
 
 test: $(BIN)/$(HL_TARGET)/test
 	$<
-
-.SECONDARY: $(BIN)/host/halide_blur_c.halide_generated.cpp
