@@ -3600,7 +3600,7 @@ void CodeGen_Xtensa::visit(const Load *op) {
             internal_assert(t.is_vector());
             // The number of elements is difference between upper bound and base of the ramp
             // plus one (because the predicate is <=).
-            Expr count = simplify(pred->args[1] - pred->args[0] + 1);
+            Expr count = simplify(max(pred->args[1] - pred->args[0] + 1, 0));
             string id_ramp_base = print_expr(dense_ramp_base);
             string id_count = print_expr(count);
             rhs << "load_variable"
@@ -3739,7 +3739,7 @@ void CodeGen_Xtensa::visit(const Store *op) {
         if (pred && (pred->name == "clamped_dense_ramp") && dense_ramp_base.defined()) {
             // The number of elements is difference between upper bound and base of the ramp
             // plus one (because the predicate is <=).
-            Expr count = simplify(pred->args[1] - pred->args[0] + 1);
+            Expr count = simplify(max(pred->args[1] - pred->args[0] + 1, 0));
             internal_assert(op->value.type().is_vector());
             string id_ramp_base = print_expr(dense_ramp_base);
             string id_count = print_expr(count);
