@@ -8,6 +8,10 @@
 
 #include "mini_webgpu.h"
 
+#ifndef HALIDE_RUNTIME_WEBGPU_NATIVE_API
+#error "HALIDE_RUNTIME_WEBGPU_NATIVE_API must be defined"
+#endif
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {
@@ -41,7 +45,7 @@ using namespace Halide::Runtime::Internal::WebGPU;
 extern "C" {
 // TODO: Remove all of this when wgpuInstanceProcessEvents() is supported.
 // See https://github.com/halide/Halide/issues/7248
-#ifdef WITH_DAWN_NATIVE
+#if HALIDE_RUNTIME_WEBGPU_NATIVE_API
 // Defined by Dawn, and used to yield execution to asynchronous commands.
 void wgpuDeviceTick(WGPUDevice);
 // From <unistd.h>, used to spin-lock while waiting for device initialization.
@@ -279,7 +283,7 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
 
     // TODO: Enable for Emscripten when wgpuAdapterGetLimits is supported.
     // See https://github.com/halide/Halide/issues/7248
-#ifdef WITH_DAWN_NATIVE
+#if HALIDE_RUNTIME_WEBGPU_NATIVE_API
     WGPUSupportedLimits supportedLimits{};
     supportedLimits.nextInChain = nullptr;
     if (!wgpuAdapterGetLimits(adapter, &supportedLimits)) {
@@ -315,7 +319,7 @@ size_t round_up_to_multiple_of_4(size_t x) {
 WEAK int create_webgpu_context(void *user_context) {
     // TODO: Unify this when Emscripten implements wgpuCreateInstance().
     // See https://github.com/halide/Halide/issues/7248
-#ifdef WITH_DAWN_NATIVE
+#if HALIDE_RUNTIME_WEBGPU_NATIVE_API
     WGPUInstanceDescriptor desc{};
     desc.nextInChain = nullptr;
     global_instance = wgpuCreateInstance(&desc);
@@ -330,10 +334,10 @@ WEAK int create_webgpu_context(void *user_context) {
     while (!global_device && init_error_code == halide_error_code_success) {
         // TODO: Use wgpuInstanceProcessEvents() when it is supported.
         // See https://github.com/halide/Halide/issues/7248
-#ifndef WITH_DAWN_NATIVE
-        emscripten_sleep(10);
-#else
+#if HALIDE_RUNTIME_WEBGPU_NATIVE_API
         usleep(1000);
+#else
+        emscripten_sleep(10);
 #endif
     }
     if (init_error_code != halide_error_code_success) {
@@ -519,7 +523,7 @@ WEAK int halide_webgpu_device_release(void *user_context) {
 
             // TODO: Unify this when Emscripten supports wgpuInstanceRelease().
             // See https://github.com/halide/Halide/issues/7248
-#ifdef WITH_DAWN_NATIVE
+#if HALIDE_RUNTIME_WEBGPU_NATIVE_API
             wgpuInstanceRelease(instance);
             global_instance = nullptr;
 #endif
