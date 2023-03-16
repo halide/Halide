@@ -357,6 +357,8 @@ set(SOURCE_FILES
 set(TEMPLATE_FILES
     CodeGen_C_prologue
     CodeGen_C_vectors
+    CodeGen_Xtensa_prologue
+    CodeGen_Xtensa_vectors
     )
 
 ##

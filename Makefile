@@ -585,7 +585,9 @@ SOURCE_FILES = \
 
  C_TEMPLATE_FILES = \
    CodeGen_C_prologue \
-   CodeGen_C_vectors
+   CodeGen_C_vectors \
+   CodeGen_Xtensa_prologue \
+   CodeGen_Xtensa_vectors
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
