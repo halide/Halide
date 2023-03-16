@@ -4176,8 +4176,7 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
             call.accept(this);
             return;
         }
-        if (op->is_slice() && (op->slice_begin() >= 0 && op->slice_begin() < 4) && (op->slice_stride() == 4) && ((int)op->indices.size() == op->vectors[0].type().lanes() / 4)) {
-            string type_suffix = suffix_for_type(op->type);
+        if (is_native_vector_type(op->type, target) && op->is_slice() && (op->slice_begin() >= 0 && op->slice_begin() < 4) && (op->slice_stride() == 4) && ((int)op->indices.size() == op->vectors[0].type().lanes() / 4)) {            string type_suffix = suffix_for_type(op->type);
             string function_name = std::string("halide_xtensa_extract_" + std::to_string(op->slice_begin()) + "_of_4");
             Expr call = Call::make(op->type, function_name + type_suffix,
                                    {op->vectors[0]}, Call::PureExtern);
