@@ -1724,6 +1724,38 @@ HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_extract_3_of_4_i16(const na
         ));
 }
 
+HALIDE_ALWAYS_INLINE native_vector_u16 halide_xtensa_extract_0_of_4_u16(const native_vector_u16_x4& a) {
+  return halide_xtensa_deinterleave_even_u16(
+          native_vector_u16_x2(native_vector_u16_x2::from_native_vector,
+          halide_xtensa_deinterleave_even_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_even_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_u16 halide_xtensa_extract_1_of_4_u16(const native_vector_u16_x4& a) {
+  return halide_xtensa_deinterleave_even_u16(
+          native_vector_u16_x2(native_vector_u16_x2::from_native_vector,
+          halide_xtensa_deinterleave_odd_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_odd_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_u16 halide_xtensa_extract_2_of_4_u16(const native_vector_u16_x4& a) {
+  return halide_xtensa_deinterleave_odd_u16(
+          native_vector_u16_x2(native_vector_u16_x2::from_native_vector,
+          halide_xtensa_deinterleave_even_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_even_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_u16 halide_xtensa_extract_3_of_4_u16(const native_vector_u16_x4& a) {
+  return halide_xtensa_deinterleave_odd_u16(
+          native_vector_u16_x2(native_vector_u16_x2::from_native_vector,
+          halide_xtensa_deinterleave_odd_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_odd_u16(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
+}
+
 HALIDE_ALWAYS_INLINE native_vector_i16 halide_xtensa_slice_i16(const native_vector_i16_x2& a, int start) {
   return IVP_SELNX16(a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + native_vector_i16(start));
 }
