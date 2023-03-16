@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "printer.h"
 
 extern "C" {
 
@@ -22,19 +23,19 @@ WEAK int halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
 WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
                                    int min, int size, uint8_t *closure) {
     for (int x = min; x < min + size; x++) {
-        int result = halide_do_task(user_context, f, x, closure);
+        auto result = halide_do_task(user_context, f, x, closure);
         if (result) {
             return result;
         }
     }
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
                                           struct halide_parallel_task_t *tasks,
                                           void *task_parent) {
-    halide_error(nullptr, "halide_default_do_parallel_tasks not implemented on this platform.");
-    return -1;
+    error(user_context) << "halide_default_do_parallel_tasks not implemented on this platform.";
+    return halide_error_code_unimplemented;
 }
 
 WEAK int halide_default_semaphore_init(halide_semaphore_t *s, int n) {
@@ -104,11 +105,11 @@ WEAK void halide_mutex_array_destroy(void *user_context, void *array) {
 }
 
 WEAK int halide_mutex_array_lock(halide_mutex_array *array, int entry) {
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_mutex_array_unlock(halide_mutex_array *array, int entry) {
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK void halide_shutdown_thread_pool() {

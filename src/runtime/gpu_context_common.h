@@ -1,3 +1,7 @@
+#ifndef HALIDE_RUNTIME_GPU_CONTEXT_COMMON_H_
+#define HALIDE_RUNTIME_GPU_CONTEXT_COMMON_H_
+
+#include "HalideRuntime.h"
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
@@ -228,3 +232,5 @@ public:
 
 }  // namespace Internal
 }  // namespace Halide
+
+#endif  // HALIDE_RUNTIME_GPU_CONTEXT_COMMON_H_
