@@ -54,18 +54,18 @@ WEAK int halide_opengl_create_context(void *user_context) {
     int attrib[] = {4 /* AGL_RGBA */, 0 /* Sentinel */};
     void *pf = aglChoosePixelFormat(nullptr, 0, attrib);
     if (!pf) {
-        halide_error(user_context, "Could not create pixel format\n");
-        return -1;
+        error(user_context) << "Could not create pixel format.";
+        return halide_error_code_generic_error;
     }
     ctx = aglCreateContext(pf, nullptr);
     if (!ctx || aglGetError()) {
-        halide_error(user_context, "Could not create context\n");
-        return -1;
+        error(user_context) << "Could not create context.";
+        return halide_error_code_generic_error;
     }
     aglDestroyPixelFormat(pf);
     if (!aglSetCurrentContext(ctx)) {
-        halide_error(user_context, "Could not activate OpenGL context\n");
-        return -1;
+        error(user_context) << "Could not activate OpenGL context.";
+        return halide_error_code_generic_error;
     }
 #else
     {  // locking scope
@@ -74,19 +74,19 @@ WEAK int halide_opengl_create_context(void *user_context) {
         if (!cgl_initialized) {
             if ((CGLChoosePixelFormat =
                      (int (*)(int *, void **, int *))halide_opengl_get_proc_address(user_context, "CGLChoosePixelFormat")) == nullptr) {
-                return -1;
+                return halide_error_code_generic_error;
             }
             if ((CGLCreateContext =
                      (int (*)(void *, void *, void **))halide_opengl_get_proc_address(user_context, "CGLCreateContext")) == nullptr) {
-                return -1;
+                return halide_error_code_generic_error;
             }
             if ((CGLDestroyPixelFormat =
                      (int (*)(void *))halide_opengl_get_proc_address(user_context, "CGLDestroyPixelFormat")) == nullptr) {
-                return -1;
+                return halide_error_code_generic_error;
             }
             if ((CGLSetCurrentContext =
                      (int (*)(void *))halide_opengl_get_proc_address(user_context, "CGLSetCurrentContext")) == nullptr) {
-                return -1;
+                return halide_error_code_generic_error;
             }
         }
         cgl_initialized = true;
@@ -105,14 +105,14 @@ WEAK int halide_opengl_create_context(void *user_context) {
     void *fmt;
     int numFormats = 0;
     if (CGLChoosePixelFormat(attribs, &fmt, &numFormats) != 0) {
-        return -1;
+        return halide_error_code_generic_error;
     }
     if (CGLCreateContext(fmt, nullptr, &ctx) != 0) {
         CGLDestroyPixelFormat(fmt);
-        return -1;
+        return halide_error_code_generic_error;
     }
     CGLSetCurrentContext(ctx);
 #endif
-    return 0;
+    return halide_error_code_success;
 }
 }
