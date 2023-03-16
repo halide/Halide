@@ -1,6 +1,13 @@
 #ifndef HALIDE_RUNTIME_RUNTIME_ATOMICS_H
 #define HALIDE_RUNTIME_RUNTIME_ATOMICS_H
 
+// This file provides an abstraction layer over the __sync/__atomic builtins
+// in Clang; for various reasons, we use __sync for 32-bit targets, and
+// __atomic for 64-bit. At some point it may be desirable/necessary to
+// migrate 32-bit to __atomic as well, at which time this file can
+// likely go away. See https://github.com/halide/Halide/issues/7431 for
+// a discussion of the history and issues as to why we work this way.
+
 #include "HalideRuntime.h"
 
 namespace Halide {
