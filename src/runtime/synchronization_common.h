@@ -88,80 +88,6 @@ ALWAYS_INLINE void if_tsan_post_signal(void *) {
 }
 #endif
 
-#ifdef BITS_32
-ALWAYS_INLINE uintptr_t atomic_and_fetch_release(uintptr_t *addr, uintptr_t val) {
-    return __sync_and_and_fetch(addr, val);
-}
-
-template<typename T>
-ALWAYS_INLINE T atomic_fetch_add_acquire_release(T *addr, T val) {
-    return __sync_fetch_and_add(addr, val);
-}
-
-template<typename T>
-ALWAYS_INLINE bool cas_strong_sequentially_consistent_helper(T *addr, T *expected, T *desired) {
-    T oldval = *expected;
-    T gotval = __sync_val_compare_and_swap(addr, oldval, *desired);
-    *expected = gotval;
-    return oldval == gotval;
-}
-
-ALWAYS_INLINE bool atomic_cas_strong_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return cas_strong_sequentially_consistent_helper(addr, expected, desired);
-}
-
-ALWAYS_INLINE bool atomic_cas_weak_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return cas_strong_sequentially_consistent_helper(addr, expected, desired);
-}
-
-template<typename T>
-ALWAYS_INLINE bool atomic_cas_weak_relacq_relaxed(T *addr, T *expected, T *desired) {
-    return cas_strong_sequentially_consistent_helper(addr, expected, desired);
-}
-
-ALWAYS_INLINE bool atomic_cas_weak_relaxed_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return cas_strong_sequentially_consistent_helper(addr, expected, desired);
-}
-
-ALWAYS_INLINE bool atomic_cas_weak_acquire_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return cas_strong_sequentially_consistent_helper(addr, expected, desired);
-}
-
-ALWAYS_INLINE uintptr_t atomic_fetch_and_release(uintptr_t *addr, uintptr_t val) {
-    return __sync_fetch_and_and(addr, val);
-}
-
-template<typename T>
-ALWAYS_INLINE void atomic_load_relaxed(T *addr, T *val) {
-    *val = *addr;
-}
-
-template<typename T>
-ALWAYS_INLINE void atomic_load_acquire(T *addr, T *val) {
-    __sync_synchronize();
-    *val = *addr;
-}
-
-ALWAYS_INLINE uintptr_t atomic_or_fetch_relaxed(uintptr_t *addr, uintptr_t val) {
-    return __sync_or_and_fetch(addr, val);
-}
-
-ALWAYS_INLINE void atomic_store_relaxed(uintptr_t *addr, uintptr_t *val) {
-    *addr = *val;
-}
-
-template<typename T>
-ALWAYS_INLINE void atomic_store_release(T *addr, T *val) {
-    *addr = *val;
-    __sync_synchronize();
-}
-
-ALWAYS_INLINE void atomic_thread_fence_acquire() {
-    __sync_synchronize();
-}
-
-#else
-
 ALWAYS_INLINE uintptr_t atomic_and_fetch_release(uintptr_t *addr, uintptr_t val) {
     return __atomic_and_fetch(addr, val, __ATOMIC_RELEASE);
 }
@@ -222,8 +148,6 @@ ALWAYS_INLINE void atomic_store_release(T *addr, T *val) {
 ALWAYS_INLINE void atomic_thread_fence_acquire() {
     __atomic_thread_fence(__ATOMIC_ACQUIRE);
 }
-
-#endif
 
 }  // namespace
 
