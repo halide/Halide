@@ -795,7 +795,7 @@ void CodeGen_Xtensa::visit(const Load *op) {
             internal_assert(t.is_vector());
             // The number of elements is difference between upper bound and base of the ramp
             // plus one (because the predicate is <=).
-            Expr count = simplify(pred->args[1] - pred->args[0] + 1);
+            Expr count = simplify(max(pred->args[1] - pred->args[0] + 1, 0));
             string id_ramp_base = print_expr(dense_ramp_base);
             string id_count = print_expr(count);
             rhs << "load_variable"
@@ -934,7 +934,7 @@ void CodeGen_Xtensa::visit(const Store *op) {
         if (pred && (pred->name == "clamped_dense_ramp") && dense_ramp_base.defined()) {
             // The number of elements is difference between upper bound and base of the ramp
             // plus one (because the predicate is <=).
-            Expr count = simplify(pred->args[1] - pred->args[0] + 1);
+            Expr count = simplify(max(pred->args[1] - pred->args[0] + 1, 0));
             internal_assert(op->value.type().is_vector());
             string id_ramp_base = print_expr(dense_ramp_base);
             string id_count = print_expr(count);
@@ -1371,7 +1371,7 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
             call.accept(this);
             return;
         }
-        if (op->is_slice() && (op->slice_begin() >= 0 && op->slice_begin() < 4) && (op->slice_stride() == 4) && ((int)op->indices.size() == op->vectors[0].type().lanes() / 4)) {
+        if (is_native_vector_type(op->type, target) && op->is_slice() && (op->slice_begin() >= 0 && op->slice_begin() < 4) && (op->slice_stride() == 4) && ((int)op->indices.size() == op->vectors[0].type().lanes() / 4)) {
             string type_suffix = suffix_for_type(op->type);
             string function_name = std::string("halide_xtensa_extract_" + std::to_string(op->slice_begin()) + "_of_4");
             Expr call = Call::make(op->type, function_name + type_suffix,
