@@ -135,6 +135,17 @@ public:
         return *this;
     }
 
+    template<typename T>
+    void append(const T &value) {
+        *this << value;
+    }
+
+    template<typename First, typename Second, typename... Rest>
+    void append(const First &first, const Second &second, const Rest &...rest) {
+        append<First>(first);
+        append<Second, Rest...>(second, rest...);
+    }
+
     // Use it like a stringstream.
     const char *str() {
         if (buf) {

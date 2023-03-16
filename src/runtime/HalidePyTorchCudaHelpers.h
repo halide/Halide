@@ -37,7 +37,7 @@ int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create 
     } else {
         *ctx = nullptr;
     }
-    return 0;
+    return halide_error_code_success;
 }
 
 int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) {
@@ -47,7 +47,7 @@ int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) 
     } else {
         *stream = 0;
     }
-    return 0;
+    return halide_error_code_success;
 }
 
 int halide_get_gpu_device(void *user_context) {
