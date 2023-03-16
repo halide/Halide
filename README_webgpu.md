@@ -61,6 +61,10 @@ Note that it is explicitly legal to define both `HL_WEBGPU_NATIVE_LIB` and
 `HL_WEBGPU_NODE_BINDINGS` at the same time; the correct executable environment
 will be selected based on the Halide target specified.
 
+Note that it is explicitly legal to specify both WEBGPU_NATIVE_LIB and
+WEBGPU_NODE_BINDINGS for the same build; the correct executable environment
+will be selected based on the Halide target specified.
+
 ## Setting up Dawn
 
 Building Dawn's Node.js bindings currently requires using CMake.

@@ -719,7 +719,7 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
 
     if ("${ARGN}" MATCHES "webgpu")
         if (DEFINED ENV{HL_WEBGPU_NATIVE_LIB})
-            target_link_libraries(${TARGET} PRIVATE $ENV{HL_WEBGPU_NATIVE_LIB})
+            target_link_libraries(${TARGET} INTERFACE $ENV{HL_WEBGPU_NATIVE_LIB})
         endif ()
     endif ()
 endfunction()
