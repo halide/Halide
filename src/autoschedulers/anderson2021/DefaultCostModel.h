@@ -39,7 +39,6 @@ public:
           stats{stats} {
         load_weights();
     }
-    ~DefaultCostModel() override = default;
 
     // Configure the cost model for the algorithm to be scheduled.
     void set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
