@@ -106,31 +106,31 @@ public:
     }
 
     void dump() const {
-        aslog(0) << "All stages:\n";
+        aslog(1) << "All stages:\n";
         for (const auto &s : all_stages) {
-            aslog(0) << s << "\n";
+            aslog(1) << s << "\n";
         }
 
-        aslog(0) << "\ncompute_root stages:\n";
+        aslog(1) << "\ncompute_root stages:\n";
         for (const auto &s : compute_root_stages) {
-            aslog(0) << s.first << " with vector_dim = " << s.second << "\n";
+            aslog(1) << s.first << " with vector_dim = " << s.second << "\n";
         }
 
-        aslog(0) << "\nPartially scheduled stages:\n";
+        aslog(1) << "\nPartially scheduled stages:\n";
         for (const auto &s : partially_scheduled) {
-            aslog(0) << s << " with vector_dim = " << compute_root_stages.at(s) << "\n";
+            aslog(1) << s << " with vector_dim = " << compute_root_stages.at(s) << "\n";
         }
 
-        aslog(0) << "\nInlined stages:\n";
+        aslog(1) << "\nInlined stages:\n";
         for (const auto &s : inlined) {
-            aslog(0) << s << "\n";
+            aslog(1) << s << "\n";
         }
 
-        aslog(0) << "\nFull loop nest:\n";
+        aslog(1) << "\nFull loop nest:\n";
         for (const auto &s : loop_nest) {
-            aslog(0) << s << "\n";
+            aslog(1) << s << "\n";
         }
-        aslog(0) << "\n";
+        aslog(1) << "\n";
     }
 
     bool is_in_partial_schedule(const FunctionDAG::Node *node) const {

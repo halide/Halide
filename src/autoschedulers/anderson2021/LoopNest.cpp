@@ -2270,7 +2270,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 aslog(2) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
                                 aslog(2) << "END MEM ACCESS shared_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
                                 if (!jac.first.all_coeffs_exist()) {
-                                    aslog(0) << " (not all coeffs exist)";
+                                    aslog(1) << " (not all coeffs exist)";
                                 }
                                 aslog(2) << "\n\n";
                             }
@@ -2777,7 +2777,7 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
 }
 
 void LoopNest::dump() const {
-    auto stream = aslog(0);
+    auto stream = aslog(1);
     dump(stream, "", nullptr);
 }
 

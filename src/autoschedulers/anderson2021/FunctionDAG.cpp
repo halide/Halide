@@ -310,38 +310,38 @@ public:
 
 void LoadJacobian::dump(const char *prefix) const {
     if (count() > 1) {
-        aslog(0) << prefix << count() << " x\n";
+        aslog(1) << prefix << count() << " x\n";
     }
     for (size_t i = 0; i < producer_storage_dims(); i++) {
-        aslog(0) << prefix << "  [";
+        aslog(1) << prefix << "  [";
 
         for (size_t j = 0; j < consumer_loop_dims(); j++) {
             const auto &c = (*this)(i, j);
             if (!c.exists()) {
-                aslog(0) << " _  ";
+                aslog(1) << " _  ";
             } else if (c.denominator == 1) {
-                aslog(0) << " " << c.numerator << "  ";
+                aslog(1) << " " << c.numerator << "  ";
             } else {
-                aslog(0) << c.numerator << "/" << c.denominator << " ";
+                aslog(1) << c.numerator << "/" << c.denominator << " ";
             }
         }
-        aslog(0) << "]\n";
+        aslog(1) << "]\n";
     }
-    aslog(0) << "\n";
+    aslog(1) << "\n";
 }
 
 void BoundContents::validate() const {
     for (int i = 0; i < layout->total_size; i++) {
         auto p = data()[i];
         if (p.max() < p.min()) {
-            aslog(0) << "Bad bounds object:\n";
+            aslog(1) << "Bad bounds object:\n";
             for (int j = 0; j < layout->total_size; j++) {
                 if (i == j) {
-                    aslog(0) << "=> ";
+                    aslog(1) << "=> ";
                 } else {
-                    aslog(0) << "   ";
+                    aslog(1) << "   ";
                 }
-                aslog(0) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
+                aslog(1) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
             }
             internal_error << "Aborting";
         }
@@ -1092,7 +1092,7 @@ void FunctionDAG::dump_internal(OS &os) const {
 }
 
 void FunctionDAG::dump() const {
-    auto os = aslog(0);
+    auto os = aslog(1);
     dump_internal(os);
 }
 

@@ -696,7 +696,7 @@ bool State::calculate_cost(const FunctionDAG &dag, const Anderson2021Params &par
             const auto &feat = it.value();
             std::string name = stage.node->func.name();
             sanitize_names(name);
-            aslog(0) << "Schedule features for " << name << "_s" << stage.index << "\n";
+            aslog(1) << "Schedule features for " << name << "_s" << stage.index << "\n";
             feat.dump();
         }
     }
@@ -751,26 +751,26 @@ IntrusivePtr<State> State::make_child() const {
 }
 
 void State::dump() const {
-    aslog(0) << "State with cost " << cost << ":\n";
+    aslog(1) << "State with cost " << cost << ":\n";
     root->dump();
-    aslog(0) << schedule_source;
+    aslog(1) << schedule_source;
 }
 
 void State::print_compute_locations() const {
     StageMap<StageMap<bool>> descendants;
     root->get_stages_computed_in_each_compute_root_loop(descendants);
 
-    aslog(0) << "BEGIN compute locations\n";
+    aslog(1) << "BEGIN compute locations\n";
     for (const auto &d : descendants) {
-        aslog(0) << d.first->sanitized_name << " -> ";
+        aslog(1) << d.first->sanitized_name << " -> ";
 
         for (const auto &descendant : d.second) {
-            aslog(0) << descendant.first->sanitized_name << " ";
+            aslog(1) << descendant.first->sanitized_name << " ";
         }
 
-        aslog(0) << "\n";
+        aslog(1) << "\n";
     }
-    aslog(0) << "END compute locations\n";
+    aslog(1) << "END compute locations\n";
 }
 
 void State::fuse_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, const vector<VarOrRVar> &parallel_vars, const vector<int64_t> &parallel_extents, const vector<int> &constant_extents) const {
@@ -906,7 +906,7 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState *state, Stage &stage, 
                         for (size_t i = 0; i < edge_chain.size() - 1; ++i) {
                             s = edge_chain.at(i)->producer->func.name() + ".clone_in(" + s + ")";
                         }
-                        aslog(0) << "Chain with length > 1: " << producer_node->func.name() << ".in(" << s << ")\n";
+                        aslog(1) << "Chain with length > 1: " << producer_node->func.name() << ".in(" << s << ")\n";
                         continue;
                     }
 

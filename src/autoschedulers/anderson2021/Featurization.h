@@ -158,7 +158,7 @@ struct PipelineFeatures {
         }
     }
     void dump() const {
-        auto os = aslog(0);
+        auto os = aslog(1);
         dump(os);
     }
 };
@@ -422,7 +422,7 @@ struct ScheduleFeatures {
     }
 
     void dump() const {
-        auto os = aslog(0);
+        auto os = aslog(1);
         dump(os);
     }
 

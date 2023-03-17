@@ -279,7 +279,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
 
     std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
         [&](IntrusivePtr<State> &&s) {
-            // aslog(0) << "\n** Generated child: ";
+            // aslog(1) << "\n** Generated child: ";
             // s->dump();
             // s->calculate_cost(dag, params, nullptr, true);
 
@@ -332,7 +332,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
         }
 
         if ((int)pending.size() > beam_size * 10000) {
-            aslog(0) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
+            aslog(1) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
         }
 
         expanded = 0;
@@ -450,14 +450,14 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
                 continue;
             }
 
-            aslog(0) << "Options:\n";
+            aslog(1) << "Options:\n";
             for (int i = (int)q.size() - 1; i >= 0; i--) {
                 auto state = q[i];
                 LoopNestParser option = LoopNestParser::from_string(state->root->to_string());
-                aslog(0) << "Option " << i << ":\n";
+                aslog(1) << "Option " << i << ":\n";
                 option.dump();
             }
-            aslog(0) << "\nTarget partial schedule:\n";
+            aslog(1) << "\nTarget partial schedule:\n";
             partial_schedule->dump();
             internal_assert(false) << "Partial schedule not found";
         }
@@ -482,7 +482,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
                     if (target_loop_nest->contains_sub_loop_nest(option)) {
                         found = true;
                         selection = choice_label;
-                        aslog(0) << "\nFound matching option\n";
+                        aslog(1) << "\nFound matching option\n";
                         break;
                     }
                 }
@@ -492,30 +492,30 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
                 // The user has set HL_CYOS, and wants to navigate the
                 // search space manually.  Discard everything in the queue
                 // except for the user-chosen option.
-                aslog(0) << "\n--------------------\n";
-                aslog(0) << "Select a schedule:\n";
+                aslog(1) << "\n--------------------\n";
+                aslog(1) << "Select a schedule:\n";
                 for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                     auto state = q[choice_label];
-                    aslog(0) << "\n[" << choice_label << "]:\n";
+                    aslog(1) << "\n[" << choice_label << "]:\n";
                     state->dump();
                 }
 
                 int next_node = q[0]->num_decisions_made / 2;
                 if (next_node < (int)dag.nodes.size()) {
                     const FunctionDAG::Node *node = &dag.nodes[next_node];
-                    aslog(0) << "\nNext node to be scheduled: " << node->func.name() << "\n";
+                    aslog(1) << "\nNext node to be scheduled: " << node->func.name() << "\n";
                 }
             }
             cost_model->evaluate_costs();
 
             if (cyos_from_file && !found) {
-                aslog(0) << "\nTarget loop nest was not found.\n";
+                aslog(1) << "\nTarget loop nest was not found.\n";
             }
 
             if (!cyos_from_file || !found) {
                 // Select next partial schedule to expand.
                 while (selection < 0 || selection >= (int)q.size()) {
-                    aslog(0) << "\nEnter selection: ";
+                    aslog(1) << "\nEnter selection: ";
                     std::cin >> selection;
                 }
             }
@@ -572,9 +572,9 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule(int beam_size) {
         tick.clear();
 
         if (aslog::aslog_level() == 0) {
-            aslog(0) << "Pass " << pass_idx + 1 << " of " << num_passes << ", cost: " << pass->cost << "\n";
+            aslog(1) << "Pass " << pass_idx + 1 << " of " << num_passes << ", cost: " << pass->cost << "\n";
         } else {
-            aslog(0) << "Pass " << pass_idx + 1 << " result: ";
+            aslog(1) << "Pass " << pass_idx + 1 << " result: ";
             pass->dump();
         }
 
@@ -589,7 +589,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule(int beam_size) {
         }
     }
 
-    aslog(0) << "Best cost: " << best->cost << "\n";
+    aslog(1) << "Best cost: " << best->cost << "\n";
 
     return best;
 }
@@ -647,11 +647,11 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     std::unique_ptr<LoopNestParser> partial_schedule;
     if (!params.partial_schedule_path.empty()) {
-        aslog(0) << "Loading partial schedule from " << params.partial_schedule_path << "\n";
+        aslog(1) << "Loading partial schedule from " << params.partial_schedule_path << "\n";
         partial_schedule = LoopNestParser::from_file(params.partial_schedule_path);
-        aslog(0) << "Partial schedule:\n";
+        aslog(1) << "Partial schedule:\n";
         partial_schedule->dump();
-        aslog(0) << "\n";
+        aslog(1) << "\n";
     }
 
     std::mt19937 rng{(uint32_t)params.random_dropout_seed};
@@ -675,9 +675,9 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // Print out the schedule
     if (aslog::aslog_level() > 0) {
-        aslog(0) << "BEGIN Final generated loop nest and schedule:\n";
+        aslog(1) << "BEGIN Final generated loop nest and schedule:\n";
         optimal->dump();
-        aslog(0) << "END Final generated loop nest and schedule\n";
+        aslog(1) << "END Final generated loop nest and schedule\n";
         optimal->print_compute_locations();
     }
 
@@ -796,11 +796,11 @@ void find_and_apply_schedule(FunctionDAG &dag,
 
     std::unique_ptr<LoopNestParser> partial_schedule;
     if (!params.partial_schedule_path.empty()) {
-        aslog(0) << "Loading partial schedule from " << params.partial_schedule_path << "\n";
+        aslog(1) << "Loading partial schedule from " << params.partial_schedule_path << "\n";
         partial_schedule = LoopNestParser::from_file(params.partial_schedule_path);
-        aslog(0) << "Partial schedule:\n";
+        aslog(1) << "Partial schedule:\n";
         partial_schedule->dump();
-        aslog(0) << "\n";
+        aslog(1) << "\n";
     }
 
     SearchSpace search_space{dag, params, target, rng, cost_model, stats, partial_schedule.get()};

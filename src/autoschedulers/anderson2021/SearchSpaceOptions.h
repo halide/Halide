@@ -19,12 +19,12 @@ struct SearchSpaceOptions {
 
     SearchSpaceOptions(const std::string &bit_str)
         : options{bit_str} {
-        aslog(0) << "Search space options:\n";
-        aslog(0) << "Input string: " << bit_str << "\n";
-        aslog(0) << "Compute root: " << compute_root() << "\n";
-        aslog(0) << "Compute inline: " << compute_inline() << "\n";
-        aslog(0) << "Compute at block: " << compute_at_block() << "\n";
-        aslog(0) << "Compute at thread: " << compute_at_thread() << "\n";
+        aslog(1) << "Search space options:\n";
+        aslog(1) << "Input string: " << bit_str << "\n";
+        aslog(1) << "Compute root: " << compute_root() << "\n";
+        aslog(1) << "Compute inline: " << compute_inline() << "\n";
+        aslog(1) << "Compute at block: " << compute_at_block() << "\n";
+        aslog(1) << "Compute at thread: " << compute_at_thread() << "\n";
     }
 
     bool compute_root() const {

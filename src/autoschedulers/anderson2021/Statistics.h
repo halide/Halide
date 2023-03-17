@@ -20,7 +20,7 @@ struct ScopedStatistic {
     }
 
     ~ScopedStatistic() {
-        aslog(0) << msg << " = " << value << "\n";
+        aslog(1) << msg << " = " << value << "\n";
     }
 };
 
@@ -30,13 +30,13 @@ struct ScopedTimer {
 
     ScopedTimer(const std::string &msg)
         : start{Clock::now()}, msg{msg} {
-        aslog(0) << "Start: " << msg << "\n";
+        aslog(1) << "Start: " << msg << "\n";
     }
 
     ~ScopedTimer() {
         auto duration = Clock::now() - start;
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-        aslog(0) << "Duration (ms): " << msg << " = " << ms << "\n";
+        aslog(1) << "Duration (ms): " << msg << " = " << ms << "\n";
     }
 };
 

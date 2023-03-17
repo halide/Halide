@@ -277,7 +277,7 @@ void SearchSpace::generate_children(const IntrusivePtr<State> &state,
         // We don't need to schedule nodes that represent inputs,
         // and there are no other decisions to be made about them
         // at this time.
-        // aslog(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
+        // aslog(1) << "Skipping over scheduling input node: " << node->func.name() << "\n";
         auto child = state->make_child();
         child->num_decisions_made++;
         accept_child(std::move(child));
@@ -285,14 +285,14 @@ void SearchSpace::generate_children(const IntrusivePtr<State> &state,
     }
 
     if (!node->outgoing_edges.empty() && !root->calls(node)) {
-        aslog(0) << "In state:\n";
+        aslog(1) << "In state:\n";
         state->dump();
-        aslog(0) << node->func.name() << " is consumed by:\n";
+        aslog(1) << node->func.name() << " is consumed by:\n";
         for (const auto *e : node->outgoing_edges) {
-            aslog(0) << e->consumer->name << "\n";
-            aslog(0) << "Which in turn consumes:\n";
+            aslog(1) << e->consumer->name << "\n";
+            aslog(1) << "Which in turn consumes:\n";
             for (const auto *e2 : e->consumer->incoming_edges) {
-                aslog(0) << "  " << e2->producer->func.name() << "\n";
+                aslog(1) << "  " << e2->producer->func.name() << "\n";
             }
         }
         internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << '\n';
@@ -563,7 +563,7 @@ void SearchSpace::generate_children(const IntrusivePtr<State> &state,
     }
 
     if (num_children == 0) {
-        aslog(0) << "Warning: Found no legal way to schedule "
+        aslog(1) << "Warning: Found no legal way to schedule "
                  << node->func.name() << " in the following State:\n";
         state->dump();
         // All our children died. Maybe other states have had
