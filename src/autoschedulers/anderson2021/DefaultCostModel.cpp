@@ -254,22 +254,20 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
             any_nans = true;
             aslog(1) << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
             aslog(1) << "Checking pipeline features for NaNs...\n";
-            pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+            pipeline_feat_queue.for_each_value([&](float f) { internal_assert(!std::isnan(f)); });
             aslog(1) << "None found\n";
             aslog(1) << "Checking schedule features for NaNs...\n";
-            schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+            schedule_feat_queue.for_each_value([&](float f) { internal_assert(!std::isnan(f)); });
             aslog(1) << "None found\n";
             aslog(1) << "Checking network weights for NaNs...\n";
             weights.for_each_buffer([&](const Runtime::Buffer<float> &buf) {
-                buf.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
+                buf.for_each_value([&](float f) { internal_assert(!std::isnan(f)); });
             });
             aslog(1) << "None found\n";
         }
         internal_assert(true_runtimes(i) > 0);
     }
-    if (any_nans) {
-        abort();
-    }
+    internal_assert(!any_nans);
 
     // Update weights locally
     auto update_weight = [](const Runtime::Buffer<float> &src, Runtime::Buffer<float> &dst) {
