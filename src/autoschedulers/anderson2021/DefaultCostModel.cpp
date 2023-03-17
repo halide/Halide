@@ -36,7 +36,9 @@ bool ends_with(const std::string &str, const std::string &suffix) {
     if (str.size() < suffix.size()) return false;
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off + i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) {
+            return false;
+        }
     }
     return true;
 }
@@ -54,12 +56,16 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
                   "Incorrect size for pipeline features");
     int num_stages = 0;
     for (const auto &n : dag.nodes) {
-        if (!n.is_input) num_stages += (int)n.stages.size();
+        if (!n.is_input) {
+            num_stages += (int)n.stages.size();
+        }
     }
     Runtime::Buffer<float> pipeline_features(head1_w, head1_h, num_stages);
     int stage = 0;
     for (const auto &n : dag.nodes) {
-        if (n.is_input) continue;
+        if (n.is_input) {
+            continue;
+        }
         for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
             const auto &s = *it;
             const int *pipeline_feats = (const int *)(&(s.features)) + 7;
@@ -108,7 +114,9 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
     for (const auto &n : dag.nodes) {
 
         // Inputs are computed outside of the pipeline and don't count.
-        if (n.is_input) continue;
+        if (n.is_input) {
+            continue;
+        }
 
         // The remaining stages are not yet
         // scheduled. Optimistically assume their internal costs
@@ -118,7 +126,9 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
         // cost for loading from these unscheduled stages is
         // already baked into the scheduled stages that consume
         // them.
-        if (stage >= num_stages) break;
+        if (stage >= num_stages) {
+            break;
+        }
 
         // Load up the schedule features for all stages of this Func.
         for (auto it = n.stages.rbegin(); it != n.stages.rend(); it++) {
@@ -257,7 +267,9 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
         }
         internal_assert(true_runtimes(i) > 0);
     }
-    if (any_nans) abort();
+    if (any_nans) {
+        abort();
+    }
 
     // Update weights locally
     auto update_weight = [](const Runtime::Buffer<float> &src, Runtime::Buffer<float> &dst) {
@@ -276,7 +288,9 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
 }
 
 void DefaultCostModel::evaluate_costs() {
-    if (cursor == 0 || !schedule_feat_queue.data()) return;
+    if (cursor == 0 || !schedule_feat_queue.data()) {
+        return;
+    }
 
     internal_assert(pipeline_feat_queue.data());
     internal_assert(schedule_feat_queue.data());
