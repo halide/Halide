@@ -122,7 +122,7 @@ WEAK KernelInfo *find_kernel_by_name(const char *kernel_name, const ModuleState 
 // All persistent state maintained by the runtime.
 struct GlobalState {
     void init();
-    bool CheckAndReportError(void *user_context, const char *location);
+    int CheckAndReportError(void *user_context, const char *location);
 
     bool initialized;
 
@@ -132,16 +132,15 @@ struct GlobalState {
 #undef GLFUNC
 };
 
-WEAK bool GlobalState::CheckAndReportError(void *user_context, const char *location) {
+WEAK int GlobalState::CheckAndReportError(void *user_context, const char *location) {
     GLenum err = GetError();
-    if (err != GL_NO_ERROR) {
-        error(user_context)
-            << "OpenGL error " << gl_error_name(err)
-            << "(" << (int)err << ")"
-            << " at " << location << ".\n";
-        return true;
+    if (err == GL_NO_ERROR) {
+        return halide_error_code_success;
     }
-    return false;
+
+    error(user_context) << "OpenGL error " << gl_error_name(err) << "(" << (int)err << ")"
+                        << " at " << location << ".";
+    return halide_error_code_generic_error;
 }
 
 WEAK GlobalState global_state;
@@ -178,30 +177,31 @@ WEAK int load_gl_func(void *user_context, const char *name, void **ptr, bool req
     void *p = halide_opengl_get_proc_address(user_context, name);
     if (!p && required) {
         error(user_context) << "Could not load function pointer for " << name;
-        return -1;
+        return halide_error_code_symbol_not_found;
     }
     *ptr = p;
-    return 0;
+    return halide_error_code_success;
 }
 
 // Initialize the OpenGL-specific parts of the runtime.
 WEAK int halide_openglcompute_init(void *user_context) {
     if (global_state.initialized) {
-        return 0;
+        return halide_error_code_success;
     }
 
     global_state.init();
 
     // Make a context if there isn't one
-    if (halide_opengl_create_context(user_context)) {
-        error(user_context) << "Failed to make OpenGL context";
-        return -1;
+    auto result = halide_opengl_create_context(user_context);
+    if (result) {
+        return result;
     }
 
     // Initialize pointers to OpenGL functions.
 #define GLFUNC(TYPE, VAR)                                                              \
     if (load_gl_func(user_context, "gl" #VAR, (void **)&global_state.VAR, true) < 0) { \
-        return -1;                                                                     \
+        error(user_context) << "Failed to load function: gl" #VAR;                     \
+        return halide_error_code_symbol_not_found;                                     \
     }
     USED_GL_FUNCTIONS;
 #undef GLFUNC
@@ -209,7 +209,7 @@ WEAK int halide_openglcompute_init(void *user_context) {
     debug(user_context) << "Halide running on " << global_state.GetString(GL_VERSION) << "\n";
 
     global_state.initialized = true;
-    return 0;
+    return halide_error_code_success;
 }
 
 // Release all data allocated by the runtime.
@@ -250,7 +250,7 @@ WEAK int halide_openglcompute_device_release(void *user_context) {
                         << " ms\n";
 #endif
 
-    return 0;
+    return halide_error_code_success;
 }
 
 // Allocate a new texture matching the dimension and color format of the
@@ -263,8 +263,9 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     debug(user_context) << "OpenGLCompute: halide_openglcompute_device_malloc (user_context: "
                         << user_context << ", buf: " << buf << ")\n";
 
-    if (int error = halide_openglcompute_init(user_context)) {
-        return error;
+    auto result = halide_openglcompute_init(user_context);
+    if (result) {
+        return result;
     }
 
     size_t size = buf->size_in_bytes();
@@ -274,7 +275,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
         // This buffer already has a device allocation
         debug(user_context) << "openglcompute_device_malloc: This buffer already has a "
                                "device allocation\n";
-        return 0;
+        return halide_error_code_success;
     }
 
     for (int i = 0; i < buf->dimensions; i++) {
@@ -290,24 +291,26 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
                         << buf->dim[3].stride << " "
                         << "(type: " << buf->type << ")\n";
 
-    if (int error = halide_openglcompute_init(user_context)) {
-        return error;
+    result = halide_openglcompute_init(user_context);
+    if (result) {
+        return result;
     }
     debug(user_context) << "openglcompute_device_malloc: initialization completed.\n";
 
     if (!buf) {
-        error(user_context) << "Invalid buffer";
-        return 1;
+        return halide_error_code_buffer_argument_is_null;
     }
 
     GLuint the_buffer;
     global_state.GenBuffers(1, &the_buffer);
-    if (global_state.CheckAndReportError(user_context, "oglc: GenBuffers")) {
-        return 1;
+    result = global_state.CheckAndReportError(user_context, "oglc: GenBuffers");
+    if (result) {
+        return result;
     }
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
-    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) {
-        return 1;
+    result = global_state.CheckAndReportError(user_context, "oglc: BindBuffer");
+    if (result) {
+        return result;
     }
 
     // OpenGLCompute only supports int32, uint32, and float data
@@ -316,8 +319,9 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     size *= (4 / buf->type.bytes());
     halide_abort_if_false(user_context, size != 0);
     global_state.BufferData(GL_ARRAY_BUFFER, size, nullptr, GL_DYNAMIC_COPY);
-    if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) {
-        return 1;
+    result = global_state.CheckAndReportError(user_context, "oglc: BufferData");
+    if (result) {
+        return result;
     }
 
     buf->device = the_buffer;
@@ -332,7 +336,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
                         << " ms for malloc\n";
 #endif
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_openglcompute_device_free(void *user_context, halide_buffer_t *buf) {
@@ -342,11 +346,11 @@ WEAK int halide_openglcompute_device_free(void *user_context, halide_buffer_t *b
 
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized in call to halide_openglcompute_device_free.";
-        return 1;
+        return halide_error_code_generic_error;
     }
 
     if (buf->device == 0) {
-        return 0;
+        return halide_error_code_success;
     }
     GLuint the_buffer = (GLuint)buf->device;
 
@@ -367,7 +371,7 @@ WEAK int halide_openglcompute_device_free(void *user_context, halide_buffer_t *b
                         << " ms for free\n";
 #endif
 
-    return 0;
+    return halide_error_code_success;
 }
 
 namespace {
@@ -403,7 +407,7 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
 
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_copy_to_device).";
-        return 1;
+        return halide_error_code_generic_error;
     }
 
     GLuint the_buffer = (GLuint)buf->device;
@@ -413,14 +417,16 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
                         << ", the_buffer:" << the_buffer << ")\n";
 
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
-    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) {
-        return 1;
+    auto result = global_state.CheckAndReportError(user_context, "oglc: BindBuffer");
+    if (result) {
+        return result;
     }
 
     size_t size = buf->number_of_elements() * 4;
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
-    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) {
-        return 1;
+    result = global_state.CheckAndReportError(user_context, "oglc: BindBuffer");
+    if (result) {
+        return result;
     }
 
     debug(user_context) << "Calling global_state.MapBufferRange(GL_ARRAY_BUFFER, 0, " << (uint64_t)size << ", GL_MAP_READ_BIT|GL_MAP_WRITE_BIT)\n";
@@ -428,8 +434,9 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
                                                     0,
                                                     size,
                                                     GL_MAP_READ_BIT | GL_MAP_WRITE_BIT);
-    if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) {
-        return 1;
+    result = global_state.CheckAndReportError(user_context, "oglc: MapBufferRange");
+    if (result) {
+        return result;
     }
     halide_buffer_t buf_copy = *buf;
     buf_copy.device = (uint64_t)device_data;
@@ -448,8 +455,8 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
         } else if (buf->type.bits == 32) {
             copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else {
-            error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
-            return -1;
+            error(user_context) << "OpenGLCompute does not support 64-bit integers.";
+            return halide_error_code_generic_error;
         }
     } else if (buf->type.code == halide_type_uint) {
         if (buf->type.bits == 8) {
@@ -464,14 +471,15 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
         } else if (buf->type.bits == 32) {
             copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else {
-            error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
-            return -1;
+            error(user_context) << "OpenGLCompute does not support 64-bit integers.";
+            return halide_error_code_generic_error;
         }
     } else if (buf->type.code == halide_type_float) {
         if (buf->type.bits == 32) {
             copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, dev_copy.src_begin, 0);
         } else {
-            error(user_context) << "OpenGLCompute does not support 64-bit floating-point.\n";
+            error(user_context) << "OpenGLCompute does not support 64-bit floating-point.";
+            return halide_error_code_generic_error;
         }
     }
     global_state.UnmapBuffer(GL_ARRAY_BUFFER);
@@ -483,7 +491,7 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
                         << " ms for copy to dev\n";
 #endif
-    return 0;
+    return halide_error_code_success;
 }
 
 // Copy image data from texture back to host memory.
@@ -494,7 +502,7 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
 
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_copy_to_host).";
-        return 1;
+        return halide_error_code_generic_error;
     }
 
     GLuint the_buffer = (GLuint)buf->device;
@@ -508,16 +516,18 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
                         << ", size=" << (unsigned)size << ")\n";
 
     global_state.BindBuffer(GL_ARRAY_BUFFER, the_buffer);
-    if (global_state.CheckAndReportError(user_context, "oglc: BindBuffer")) {
-        return 1;
+    auto result = global_state.CheckAndReportError(user_context, "oglc: BindBuffer");
+    if (result) {
+        return result;
     }
 
     void *device_data = global_state.MapBufferRange(GL_ARRAY_BUFFER,
                                                     0,
                                                     size,
                                                     GL_MAP_READ_BIT);
-    if (global_state.CheckAndReportError(user_context, "oglc: MapBufferRange")) {
-        return 1;
+    result = global_state.CheckAndReportError(user_context, "oglc: MapBufferRange");
+    if (result) {
+        return result;
     }
 
     halide_buffer_t buf_copy = *buf;
@@ -537,8 +547,8 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
         } else if (buf->type.bits == 32) {
             copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else {
-            error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
-            return -1;
+            error(user_context) << "OpenGLCompute does not support 64-bit integers.";
+            return halide_error_code_generic_error;
         }
     } else if (buf->type.code == halide_type_uint) {
         if (buf->type.bits == 8) {
@@ -553,14 +563,15 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
         } else if (buf->type.bits == 32) {
             copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else {
-            error(user_context) << "OpenGLCompute does not support 64-bit integers.\n";
-            return -1;
+            error(user_context) << "OpenGLCompute does not support 64-bit integers.";
+            return halide_error_code_generic_error;
         }
     } else if (buf->type.code == halide_type_float) {
         if (buf->type.bits == 32) {
             copy_memory_helper(dev_copy, MAX_COPY_DIMS - 1, 0, dev_copy.src_begin);
         } else {
-            error(user_context) << "OpenGLCompute does not support 64-bit floating-point.\n";
+            error(user_context) << "OpenGLCompute does not support 64-bit floating-point.";
+            return halide_error_code_generic_error;
         }
     }
 
@@ -574,7 +585,7 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
                         << " ms for copy to host\n";
 #endif
 
-    return 0;
+    return halide_error_code_success;
 }
 
 }  // namespace OpenGLCompute
@@ -606,24 +617,25 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
 
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_run).";
-        return -1;
+        return halide_error_code_generic_error;
     }
 
     ModuleState *mod = (ModuleState *)state_ptr;
     if (!mod) {
-        error(user_context) << "Internal error: module state is nullptr";
-        return -1;
+        error(user_context) << "Internal error: module state is nullptr.";
+        return halide_error_code_generic_error;
     }
 
     KernelInfo *kernel = find_kernel_by_name(entry_name, mod);
     if (!kernel) {
         error(user_context) << "Internal error: unknown kernel named '" << entry_name << "'";
-        return -1;
+        return halide_error_code_generic_error;
     }
 
     global_state.UseProgram(kernel->program_id);
-    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run UseProgram")) {
-        return -1;
+    auto result = global_state.CheckAndReportError(user_context, "halide_openglcompute_run UseProgram");
+    if (result) {
+        return result;
     }
 
     // Populate uniforms with values passed in arguments.
@@ -644,14 +656,13 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                 } else if (arg_types[i].bits == 32) {
                     value = *((int32_t *)args[i]);
                 } else {
-                    error(user_context) << "Cannot pass argument of type "
-                                        << arg_types[i]
-                                        << " to GL shader\n";
-                    return -1;
+                    error(user_context) << "Cannot pass argument of type " << arg_types[i] << " to GL shader";
+                    return halide_error_code_generic_error;
                 }
                 global_state.Uniform1i(i, value);
-                if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1i")) {
-                    return -1;
+                result = global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1i");
+                if (result) {
+                    return result;
                 }
             } else if (arg_types[i].code == halide_type_uint) {
                 unsigned value;
@@ -663,53 +674,53 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                 } else if (arg_types[i].bits == 32) {
                     value = *((uint32_t *)args[i]);
                 } else {
-                    error(user_context) << "Cannot pass argument of type "
-                                        << arg_types[i]
-                                        << " to GL shader\n";
-                    return -1;
+                    error(user_context) << "Cannot pass argument of type " << arg_types[i] << " to GL shader";
+                    return halide_error_code_generic_error;
                 }
                 global_state.Uniform1ui(i, value);
-                if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1ui")) {
-                    return -1;
+                result = global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1ui");
+                if (result) {
+                    return result;
                 }
             } else if (arg_types[i].code == halide_type_float) {
                 float value;
                 if (arg_types[i].bits == 32) {
                     value = *((float *)args[i]);
                 } else {
-                    error(user_context) << "Cannot pass argument of type "
-                                        << arg_types[i]
-                                        << " to GL shader\n";
-                    return -1;
+                    error(user_context) << "Cannot pass argument of type " << arg_types[i] << " to GL shader";
+                    return halide_error_code_generic_error;
                 }
                 global_state.Uniform1f(i, value);
-                if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1f")) {
-                    return -1;
+                result = global_state.CheckAndReportError(user_context, "halide_openglcompute_run Uniform1f");
+                if (result) {
+                    return result;
                 }
             } else {
-                error(user_context) << "Cannot pass argument of type "
-                                    << arg_types[i]
-                                    << " to GL shader\n";
-                return -1;
+                error(user_context) << "Cannot pass argument of type " << arg_types[i] << " to GL shader";
+                return halide_error_code_generic_error;
             }
         } else {
             uint64_t arg_value = ((halide_buffer_t *)args[i])->device;
 
             GLuint the_buffer = (GLuint)arg_value;
             global_state.BindBufferBase(GL_SHADER_STORAGE_BUFFER, i, the_buffer);
-            if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run BindBufferBase")) {
-                return -1;
+            result = global_state.CheckAndReportError(user_context, "halide_openglcompute_run BindBufferBase");
+            if (result) {
+                return result;
             }
         }
         i++;
     }
     global_state.DispatchCompute(blocksX, blocksY, blocksZ);
-    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run DispatchCompute")) {
-        return -1;
+    result = global_state.CheckAndReportError(user_context, "halide_openglcompute_run DispatchCompute");
+    if (result) {
+        return result;
     }
+
     global_state.MemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
-    if (global_state.CheckAndReportError(user_context, "halide_openglcompute_run MemoryBarrier")) {
-        return -1;
+    result = global_state.CheckAndReportError(user_context, "halide_openglcompute_run MemoryBarrier");
+    if (result) {
+        return result;
     }
 
 #ifdef DEBUG_RUNTIME
@@ -718,7 +729,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                         << " ms for run\n";
 #endif
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_openglcompute_device_sync(void *user_context, halide_buffer_t *) {
@@ -727,8 +738,8 @@ WEAK int halide_openglcompute_device_sync(void *user_context, halide_buffer_t *)
 #endif
 
     if (!global_state.initialized) {
-        error(user_context) << "OpenGL Compute runtime not initialized (halide_openglcompute_device_sync).";
-        return 1;
+        error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_device_sync).";
+        return halide_error_code_generic_error;
     }
     global_state.Finish();
 #ifdef DEBUG_RUNTIME
@@ -736,7 +747,7 @@ WEAK int halide_openglcompute_device_sync(void *user_context, halide_buffer_t *)
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6
                         << " ms for sync\n";
 #endif
-    return 0;
+    return halide_error_code_success;
 }
 
 namespace {
@@ -759,8 +770,9 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    if (int error = halide_openglcompute_init(user_context)) {
-        return error;
+    auto result = halide_openglcompute_init(user_context);
+    if (result) {
+        return result;
     }
 
     ModuleState **state = (ModuleState **)state_ptr;
@@ -774,7 +786,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
     }
 
     if (module->kernel) {
-        return 0;
+        return halide_error_code_success;
     }
 
     const char *END_OF_KERNEL_MARKER = "\n// end of kernel ";
@@ -789,7 +801,8 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         const char *just_before_kernel_name = end_of_kernel_marker + END_OF_KERNEL_MARKER_LENGTH;
         const char *just_beyond_kernel_name = strstr(just_before_kernel_name, "\n");
         if (!just_beyond_kernel_name) {
-            error(user_context) << "Failed to find kernel name.\n";
+            error(user_context) << "Failed to find kernel name.";
+            return halide_error_code_generic_error;
         }
 
         char *kernel_name = get_kernel_name(just_before_kernel_name, just_beyond_kernel_name);
@@ -802,8 +815,9 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         module->kernel = kernel;
 
         GLuint shader = global_state.CreateShader(GL_COMPUTE_SHADER);
-        if (global_state.CheckAndReportError(user_context, "create shader")) {
-            return -1;
+        result = global_state.CheckAndReportError(user_context, "create shader");
+        if (result) {
+            return result;
         }
         const GLchar *sources = {src};
         const GLint sources_lengths = {(GLint)src_len};
@@ -814,39 +828,44 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
 #endif
 
         global_state.ShaderSource(shader, 1, &sources, &sources_lengths);
-        if (global_state.CheckAndReportError(user_context, "shader source")) {
-            return -1;
+        result = global_state.CheckAndReportError(user_context, "shader source");
+        if (result) {
+            return result;
         }
         global_state.CompileShader(shader);
-        if (global_state.CheckAndReportError(user_context, "compile shader")) {
-            return -1;
+        result = global_state.CheckAndReportError(user_context, "compile shader");
+        if (result) {
+            return result;
         }
 
         GLint shader_ok = 0;
         global_state.GetShaderiv(shader, GL_COMPILE_STATUS, &shader_ok);
         if (shader_ok != GL_TRUE) {
-            print(user_context) << "Could not compile shader:\n";
+            debug(user_context) << "Could not compile shader:\n";
             GLint log_len;
             global_state.GetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_len);
             HalideMalloc log_tmp(user_context, log_len);
             if (log_tmp.ptr) {
                 char *log = (char *)log_tmp.ptr;
                 global_state.GetShaderInfoLog(shader, log_len, nullptr, log);
-                print(user_context) << log << "\n";
+                debug(user_context) << log << "\n";
             }
             global_state.DeleteShader(shader);
-            return -1;
+            error(user_context) << "Could not compile shader.";
+            return halide_error_code_generic_error;
         }
 
         // Link GLSL program
         GLuint program = global_state.CreateProgram();
         global_state.AttachShader(program, shader);
-        if (global_state.CheckAndReportError(user_context, "attach shader")) {
-            return -1;
+        result = global_state.CheckAndReportError(user_context, "attach shader");
+        if (result) {
+            return result;
         }
         global_state.LinkProgram(program);
-        if (global_state.CheckAndReportError(user_context, "link program")) {
-            return -1;
+        result = global_state.CheckAndReportError(user_context, "link program");
+        if (result) {
+            return result;
         }
 
         // Release the individual shaders
@@ -865,7 +884,8 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
                                     << log << "\n";
             }
             global_state.DeleteProgram(program);
-            return -1;
+            error(user_context) << "Could not link GLSL program.";
+            return halide_error_code_generic_error;
         }
         kernel->program_id = program;
 
@@ -897,7 +917,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
                         << " ms\n";
 #endif
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK void halide_openglcompute_finalize_kernels(void *user_context, void *state_ptr) {

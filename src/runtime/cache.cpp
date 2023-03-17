@@ -475,7 +475,7 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
                 for (int32_t i = 0; i < tuple_count; i++) {
                     get_pointer_to_header(tuple_buffers[i]->host)->entry = nullptr;
                 }
-                return 0;
+                return halide_error_code_success;
             }
         }
         entry = entry->next;
@@ -509,7 +509,7 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
         if (new_entry) {
             halide_free(user_context, new_entry);
         }
-        return 0;
+        return halide_error_code_success;
     }
 
     new_entry->next = cache_entries[index];
@@ -534,7 +534,7 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
 #endif
     debug(user_context) << "Exiting halide_memoization_cache_store\n";
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK void halide_memoization_cache_release(void *user_context, void *host) {
