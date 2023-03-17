@@ -193,8 +193,8 @@ f.vectorize(x, 8).parallel(y)
 buf = f.realize([edge, edge, 3])
 
 # Do something with the image. We'll just save it to a PNG.
-import imageio
-imageio.imsave("/tmp/example.png", buf)
+from halide import imageio
+imageio.imwrite("/tmp/example.png", buf)
 ```
 
 It's worth noting in the example above that the Halide `Buffer` object supports
@@ -396,7 +396,7 @@ You can use the `compile_to_callable()` method to JIT-compile a Generator into a
 
 ```
 import LogicalOpGenerator
-import imageio
+from halide import imageio
 import numpy as np
 
 # Instantiate a Generator -- we can only set the GeneratorParams
@@ -408,6 +408,7 @@ or_filter = or_op_generator.compile_to_callable()
 
 # Read in some file for input
 input_buf = imageio.imread("/path/to/some/file.png")
+assert input_buf.ndim == 2
 assert input_buf.dtype == np.uint8
 
 # create a Buffer-compatible object for the output; we'll use np.array
@@ -419,7 +420,7 @@ or_filter(input_buf, 0x7f, output_buf)
 # Note also that we can use named arguments for any/all, in the Python manner:
 or_filter(mask=0x7f, input=input_buf, output=output_buf)
 
-imageio.imsave("/tmp/or.png", output_buf)
+imageio.imwrite("/tmp/or.png", output_buf)
 ```
 
 By default, a Generator will produce code targeted at `Target("host")` (or the
@@ -530,11 +531,12 @@ directly. For the example above:
 
 ```
 from my_module import xor_filter
-import imageio
+from halide import imageio
 import numpy as np
 
 # Read in some file for input
 input_buf = imageio.imread("/path/to/some/file.png")
+assert input_buf.ndim == 2
 assert input_buf.dtype == np.uint8
 
 # create a Buffer-compatible object for the output; we'll use np.array
@@ -546,10 +548,10 @@ xor_filter(input_buf, 0xff, output_buf)
 # Note also that we can use named arguments for any/all, in the Python manner:
 # xor_filter(input=input_buf, mask=0xff, output=output_buf)
 
-imageio.imsave("/tmp/xored.png", output_buf)
+imageio.imwrite("/tmp/xored.png", output_buf)
 ```
 
-Above, we're using common Python utilities (`numpy`, `imageio`) to construct the
+Above, we're using common Python utilities (`numpy`) to construct the
 input/output buffers we want to pass to Halide.
 
 **Note**: Getting the memory order correct can be a little confusing for numpy.

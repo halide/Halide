@@ -40,7 +40,7 @@ int simple_rfactor_test() {
             {f.name(), {}},
         };
         if (check_call_graphs(g, expected) != 0) {
-            return -1;
+            return 1;
         }
     } else {
         Buffer<int> im = g.realize({80, 80});
@@ -48,7 +48,7 @@ int simple_rfactor_test() {
             return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::max(40 + x + y, 40) : 40;
         };
         if (check_image(im, func)) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -86,7 +86,7 @@ int reorder_split_rfactor_test() {
             {f.name(), {}},
         };
         if (check_call_graphs(g, expected) != 0) {
-            return -1;
+            return 1;
         }
     } else {
         Buffer<int> im = g.realize({80, 80});
@@ -94,7 +94,7 @@ int reorder_split_rfactor_test() {
             return ((10 <= x && x <= 29) && (20 <= y && y <= 49)) ? x - y + 1 : 1;
         };
         if (check_image(im, func)) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -135,7 +135,7 @@ int multi_split_rfactor_test() {
             {f.name(), {}},
         };
         if (check_call_graphs(g, expected) != 0) {
-            return -1;
+            return 1;
         }
     } else {
         Buffer<int> im = g.realize({80, 80});
@@ -143,7 +143,7 @@ int multi_split_rfactor_test() {
             return ((10 <= x && x <= 29) && (20 <= y && y <= 49)) ? x - y + 1 : 1;
         };
         if (check_image(im, func)) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -183,7 +183,7 @@ int reorder_fuse_wrapper_rfactor_test() {
             {f.name(), {}},
         };
         if (check_call_graphs(g, expected) != 0) {
-            return -1;
+            return 1;
         }
     } else {
         Buffer<int> im = g.realize({20, 20, 20});
@@ -194,7 +194,7 @@ int reorder_fuse_wrapper_rfactor_test() {
                        1;
         };
         if (check_image(im, func)) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -256,7 +256,7 @@ int non_trivial_lhs_rfactor_test() {
                 {c.name(), {}},
             };
             if (check_call_graphs(g, expected) != 0) {
-                return -1;
+                return 1;
             }
         } else {
             Buffer<int> im = g.realize({20, 20, 20});
@@ -264,7 +264,7 @@ int non_trivial_lhs_rfactor_test() {
                 return im_ref(x, y, z);
             };
             if (check_image(im, func)) {
-                return -1;
+                return 1;
             }
         }
     }
@@ -299,7 +299,7 @@ int simple_rfactor_with_specialize_test() {
             {f.name(), {}},
         };
         if (check_call_graphs(g, expected) != 0) {
-            return -1;
+            return 1;
         }
     } else {
         {
@@ -309,7 +309,7 @@ int simple_rfactor_with_specialize_test() {
                 return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::min(x + y + 2, 40) : 40;
             };
             if (check_image(im, func)) {
-                return -1;
+                return 1;
             }
         }
         {
@@ -319,7 +319,7 @@ int simple_rfactor_with_specialize_test() {
                 return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::min(x + y + 2, 40) : 40;
             };
             if (check_image(im, func)) {
-                return -1;
+                return 1;
             }
         }
     }
@@ -355,7 +355,7 @@ int rdom_with_predicate_rfactor_test() {
             {f.name(), {}},
         };
         if (check_call_graphs(g, expected) != 0) {
-            return -1;
+            return 1;
         }
     } else {
         Buffer<int> im = g.realize({20, 20, 20});
@@ -366,7 +366,7 @@ int rdom_with_predicate_rfactor_test() {
                        1;
         };
         if (check_image(im, func)) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -414,7 +414,7 @@ int histogram_rfactor_test() {
 
         };
         if (check_call_graphs(g, expected) != 0) {
-            return -1;
+            return 1;
         }
     } else {
         Buffer<int32_t> histogram = g.realize({10});  // buckets 10-20 only
@@ -422,7 +422,7 @@ int histogram_rfactor_test() {
             if (histogram(i - 10) != reference_hist[i]) {
                 printf("Error: bucket %d is %d instead of %d\n",
                        i, histogram(i), reference_hist[i]);
-                return -1;
+                return 1;
             }
         }
     }
@@ -480,13 +480,13 @@ int parallel_dot_product_rfactor_test() {
             {b.name(), {}},
         };
         if (check_call_graphs(dot, expected) != 0) {
-            return -1;
+            return 1;
         }
     } else {
         Buffer<int32_t> im = dot.realize();
         if (ref(0) != im(0)) {
             printf("result = %d instead of %d\n", im(0), ref(0));
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -536,7 +536,7 @@ int tuple_rfactor_test() {
             {f.name(), {}},
         };
         if (check_call_graphs(g, expected) != 0) {
-            return -1;
+            return 1;
         }
     } else {
         Realization rn = g.realize({80, 80});
@@ -550,14 +550,14 @@ int tuple_rfactor_test() {
             return ref_im1(x, y);
         };
         if (check_image(im1, func1)) {
-            return -1;
+            return 1;
         }
 
         auto func2 = [&ref_im2](int x, int y, int z) {
             return ref_im2(x, y);
         };
         if (check_image(im2, func2)) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -611,7 +611,7 @@ int tuple_specialize_rdom_predicate_rfactor_test() {
             {f.name(), {}},
         };
         if (check_call_graphs(g, expected) != 0) {
-            return -1;
+            return 1;
         }
     } else {
         {
@@ -628,13 +628,13 @@ int tuple_specialize_rdom_predicate_rfactor_test() {
                 return ref_im1(x, y, z);
             };
             if (check_image(im1, func1)) {
-                return -1;
+                return 1;
             }
             auto func2 = [&ref_im2](int x, int y, int z) {
                 return ref_im2(x, y, z);
             };
             if (check_image(im2, func2)) {
-                return -1;
+                return 1;
             }
         }
         {
@@ -651,13 +651,13 @@ int tuple_specialize_rdom_predicate_rfactor_test() {
                 return ref_im1(x, y, z);
             };
             if (check_image(im1, func1)) {
-                return -1;
+                return 1;
             }
             auto func2 = [&ref_im2](int x, int y, int z) {
                 return ref_im2(x, y, z);
             };
             if (check_image(im2, func2)) {
-                return -1;
+                return 1;
             }
         }
         {
@@ -674,13 +674,13 @@ int tuple_specialize_rdom_predicate_rfactor_test() {
                 return ref_im1(x, y, z);
             };
             if (check_image(im1, func1)) {
-                return -1;
+                return 1;
             }
             auto func2 = [&ref_im2](int x, int y, int z) {
                 return ref_im2(x, y, z);
             };
             if (check_image(im2, func2)) {
-                return -1;
+                return 1;
             }
         }
         {
@@ -697,13 +697,13 @@ int tuple_specialize_rdom_predicate_rfactor_test() {
                 return ref_im1(x, y, z);
             };
             if (check_image(im1, func1)) {
-                return -1;
+                return 1;
             }
             auto func2 = [&ref_im2](int x, int y, int z) {
                 return ref_im2(x, y, z);
             };
             if (check_image(im2, func2)) {
-                return -1;
+                return 1;
             }
         }
     }
@@ -749,14 +749,14 @@ int complex_multiply_rfactor_test() {
         return ref_im1(x, y);
     };
     if (check_image(im1, func1)) {
-        return -1;
+        return 1;
     }
 
     auto func2 = [&ref_im2](int x, int y, int z) {
         return ref_im2(x, y);
     };
     if (check_image(im2, func2)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -805,21 +805,21 @@ int argmin_rfactor_test() {
         return ref_im1(x, y);
     };
     if (check_image(im1, func1)) {
-        return -1;
+        return 1;
     }
 
     auto func2 = [&ref_im2](int x, int y, int z) {
         return ref_im2(x, y);
     };
     if (check_image(im2, func2)) {
-        return -1;
+        return 1;
     }
 
     auto func3 = [&ref_im3](int x, int y, int z) {
         return ref_im3(x, y);
     };
     if (check_image(im3, func3)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -832,7 +832,7 @@ int allocation_bound_test_trace(JITUserContext *user_context, const halide_trace
             printf("Bounds on realization of f were supposed to be [0, 2]\n"
                    "Instead they are: [%d, %d]\n",
                    e->coordinates[0], e->coordinates[1]);
-            exit(-1);
+            exit(1);
         }
     }
     return 0;
@@ -893,7 +893,7 @@ int rfactor_tile_reorder_test() {
         return im_ref(x, y);
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -943,7 +943,7 @@ int tuple_partial_reduction_rfactor_test() {
             {f.name(), {}},
         };
         if (check_call_graphs(g, expected) != 0) {
-            return -1;
+            return 1;
         }
     } else {
         Realization rn = g.realize({80, 80});
@@ -957,14 +957,14 @@ int tuple_partial_reduction_rfactor_test() {
             return ref_im1(x, y);
         };
         if (check_image(im1, func1)) {
-            return -1;
+            return 1;
         }
 
         auto func2 = [&ref_im2](int x, int y, int z) {
             return ref_im2(x, y);
         };
         if (check_image(im2, func2)) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -987,7 +987,7 @@ int self_assignment_rfactor_test() {
         return x + y;
     };
     if (check_image(im, func)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -1041,7 +1041,7 @@ int main(int argc, char **argv) {
         const auto &task = tasks.at(t);
         std::cout << task.desc << "\n";
         if (task.fn() != 0) {
-            return -1;
+            return 1;
         }
     }
 

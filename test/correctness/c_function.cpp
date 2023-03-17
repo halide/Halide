@@ -41,14 +41,14 @@ int main(int argc, char **argv) {
             float delta = imf(i, j) - correct;
             if (delta < -0.001 || delta > 0.001) {
                 printf("imf[%d, %d] = %f instead of %f\n", i, j, imf(i, j), correct);
-                return -1;
+                return 1;
             }
         }
     }
 
     if (call_counter != 32 * 32) {
         printf("C function my_func was called %d times instead of %d\n", call_counter, 32 * 32);
-        return -1;
+        return 1;
     }
 
     Func g;
@@ -65,14 +65,14 @@ int main(int argc, char **argv) {
             float delta = imf2(i, j) - correct;
             if (delta < -0.001 || delta > 0.001) {
                 printf("imf2[%d, %d] = %f instead of %f\n", i, j, imf2(i, j), correct);
-                return -1;
+                return 1;
             }
         }
     }
 
     if (call_counter2 != 32 * 32) {
         printf("C function my_func2 was called %d times instead of %d\n", call_counter2, 32 * 32);
-        return -1;
+        return 1;
     }
 
     // Switch from my_func2 to my_func and verify a recompile happens.
@@ -86,14 +86,14 @@ int main(int argc, char **argv) {
             float delta = imf3(i, j) - correct;
             if (delta < -0.001 || delta > 0.001) {
                 printf("imf3[%d, %d] = %f instead of %f\n", i, j, imf3(i, j), correct);
-                return -1;
+                return 1;
             }
         }
     }
 
     if (call_counter3 != 32 * 32) {
         printf("C function my_func3 was called %d times instead of %d\n", call_counter3, 32 * 32);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

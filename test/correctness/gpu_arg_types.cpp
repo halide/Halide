@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
         if (out(i) != out2(i)) {
             printf("Incorrect result at %d: %d != %d\n", i, out(i), out2(i));
             printf("Failed\n");
-            return -1;
+            return 1;
         }
     }
 

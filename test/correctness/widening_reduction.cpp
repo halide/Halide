@@ -62,7 +62,7 @@ int main(int arch, char **argv) {
                 correct = std::min(std::max(correct / 16, 0), 255);
                 if (correct != out(x, y)) {
                     std::cout << "out(" << x << ", " << y << ") = " << (int)out(x, y) << " instead of " << correct << "\n";
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -105,7 +105,7 @@ int main(int arch, char **argv) {
                 correct = std::min(std::max(correct / 16, 0), 255);
                 if (correct != out(x, y)) {
                     std::cout << "out(" << x << ", " << y << ") = " << (int)out(x, y) << " instead of " << correct << "\n";
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -143,7 +143,7 @@ int main(int arch, char **argv) {
                 uint8_t correct = (static_cast<int16_t>(in(x, y)) + in(x + 1, y)) / 2;
                 if (correct != out(x, y)) {
                     std::cout << "out(" << x << ", " << y << ") = " << (int)out(x, y) << " instead of " << (int)correct << "\n";
-                    return -1;
+                    return 1;
                 }
             }
         }

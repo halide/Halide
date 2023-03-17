@@ -1,3 +1,8 @@
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "webgpu")
+    message(WARNING "Python correctness tests are not supported with WebGPU.")
+    return()
+endif ()
+
 add_library(the_sort_function MODULE the_sort_function.c)
 target_link_libraries(the_sort_function PRIVATE Halide::Runtime)
 

@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
         float correct = sqrtf((float)i);
         if (fabs(im(i) - correct) > 0.001) {
             printf("im(%d) = %f instead of %f\n", i, im(i), correct);
-            return -1;
+            return 1;
         }
     }
 

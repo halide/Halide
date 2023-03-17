@@ -401,7 +401,7 @@ public:
             compile_standalone_runtime(test.output_directory + "simd_op_check_runtime.o", test.target);
 
             if (!success) {
-                return -1;
+                return 1;
             }
         }
 

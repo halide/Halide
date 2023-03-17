@@ -335,7 +335,7 @@ private:
                        "Call device_free explicitly if you want to drop dirty device-side data. "
                        "Call copy_to_host explicitly if you want the data copied to the host allocation "
                        "before the device allocation is freed.");
-                int result = 0;
+                int result = halide_error_code_success;
                 if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative) {
                     result = buf.device_interface->detach_native(nullptr, &buf);
                 } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost) {
@@ -346,7 +346,7 @@ private:
                     result = buf.device_interface->device_free(nullptr, &buf);
                 }
                 // No reasonable way to return the error, but we can at least assert-fail in debug builds.
-                assert((result == 0) && "device_interface call returned a nonzero result in Buffer::decref()");
+                assert((result == halide_error_code_success) && "device_interface call returned a nonzero result in Buffer::decref()");
                 (void)result;
             }
             if (dev_ref_count) {
@@ -507,7 +507,7 @@ private:
 
     void complete_device_crop(Buffer<T, Dims, InClassDimStorage> &result_host_cropped) const {
         assert(buf.device_interface != nullptr);
-        if (buf.device_interface->device_crop(nullptr, &this->buf, &result_host_cropped.buf) == 0) {
+        if (buf.device_interface->device_crop(nullptr, &this->buf, &result_host_cropped.buf) == halide_error_code_success) {
             const Buffer<T, Dims, InClassDimStorage> *cropped_from = this;
             // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
             // is it possible to get to this point without incref having run at least once since
@@ -539,7 +539,7 @@ private:
 
     void complete_device_slice(Buffer<T, AnyDims, InClassDimStorage> &result_host_sliced, int d, int pos) const {
         assert(buf.device_interface != nullptr);
-        if (buf.device_interface->device_slice(nullptr, &this->buf, d, pos, &result_host_sliced.buf) == 0) {
+        if (buf.device_interface->device_slice(nullptr, &this->buf, d, pos, &result_host_sliced.buf) == halide_error_code_success) {
             const Buffer<T, Dims, InClassDimStorage> *sliced_from = this;
             // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
             // is it possible to get to this point without incref having run at least once since
@@ -1757,14 +1757,14 @@ public:
         if (device_dirty()) {
             return buf.device_interface->copy_to_host(ctx, &buf);
         }
-        return 0;
+        return halide_error_code_success;
     }
 
     int copy_to_device(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
         if (host_dirty()) {
             return device_interface->copy_to_device(ctx, &buf, device_interface);
         }
-        return 0;
+        return halide_error_code_success;
     }
 
     int device_malloc(const struct halide_device_interface_t *device_interface, void *ctx = nullptr) {
@@ -1783,7 +1783,7 @@ public:
                    "Don't call device_free on Halide buffers that you have copied or "
                    "passed by value.");
         }
-        int ret = 0;
+        int ret = halide_error_code_success;
         if (buf.device_interface) {
             ret = buf.device_interface->device_free(ctx, &buf);
         }
@@ -1815,7 +1815,7 @@ public:
                "allocation. Freeing it could create dangling references. "
                "Don't call device_detach_native on Halide buffers that you "
                "have copied or passed by value.");
-        int ret = 0;
+        int ret = halide_error_code_success;
         if (buf.device_interface) {
             ret = buf.device_interface->detach_native(ctx, &buf);
         }
@@ -1840,7 +1840,7 @@ public:
                    "Don't call device_and_host_free on Halide buffers that you have copied or "
                    "passed by value.");
         }
-        int ret = 0;
+        int ret = halide_error_code_success;
         if (buf.device_interface) {
             ret = buf.device_interface->device_and_host_free(ctx, &buf);
         }

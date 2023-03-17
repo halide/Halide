@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %f instead of %f\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %f instead of %f\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -215,7 +215,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -245,7 +245,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -309,7 +309,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %f instead of %f\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -370,7 +370,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %f instead of %f\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -427,7 +427,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %f instead of %f\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -487,7 +487,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -534,7 +534,7 @@ int main(int argc, char **argv) {
             if (correct != actual) {
                 printf("out(%d) = %d instead of %d\n",
                        y, actual, correct);
-                return -1;
+                return 1;
             }
         }
     }

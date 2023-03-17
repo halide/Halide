@@ -1,6 +1,7 @@
 #ifndef HALIDE_RUNTIME_LINKED_LIST_H
 #define HALIDE_RUNTIME_LINKED_LIST_H
 
+#include "HalideRuntime.h"
 #include "memory_arena.h"
 
 namespace Halide {
@@ -176,7 +177,7 @@ LinkedList::append(void *user_context, const void *value) {
 }
 
 void LinkedList::pop_front(void *user_context) {
-    halide_abort_if_false(user_context, (entry_count > 0));
+    halide_debug_assert(user_context, (entry_count > 0));
     EntryType *remove_ptr = front_ptr;
     EntryType *next_ptr = remove_ptr->next_ptr;
     if (next_ptr != nullptr) {
@@ -188,7 +189,7 @@ void LinkedList::pop_front(void *user_context) {
 }
 
 void LinkedList::pop_back(void *user_context) {
-    halide_abort_if_false(user_context, (entry_count > 0));
+    halide_debug_assert(user_context, (entry_count > 0));
     EntryType *remove_ptr = back_ptr;
     EntryType *prev_ptr = remove_ptr->prev_ptr;
     if (prev_ptr != nullptr) {
@@ -214,20 +215,20 @@ void LinkedList::clear(void *user_context) {
 }
 
 void LinkedList::remove(void *user_context, EntryType *entry_ptr) {
-    halide_abort_if_false(user_context, (entry_ptr != nullptr));
-    halide_abort_if_false(user_context, (entry_count > 0));
+    halide_debug_assert(user_context, (entry_ptr != nullptr));
+    halide_debug_assert(user_context, (entry_count > 0));
 
     if (entry_ptr->prev_ptr != nullptr) {
         entry_ptr->prev_ptr->next_ptr = entry_ptr->next_ptr;
     } else {
-        halide_abort_if_false(user_context, (front_ptr == entry_ptr));
+        halide_debug_assert(user_context, (front_ptr == entry_ptr));
         front_ptr = entry_ptr->next_ptr;
     }
 
     if (entry_ptr->next_ptr != nullptr) {
         entry_ptr->next_ptr->prev_ptr = entry_ptr->prev_ptr;
     } else {
-        halide_abort_if_false(user_context, (back_ptr == entry_ptr));
+        halide_debug_assert(user_context, (back_ptr == entry_ptr));
         back_ptr = entry_ptr->prev_ptr;
     }
 
@@ -246,7 +247,7 @@ LinkedList::insert_before(void *user_context, EntryType *entry_ptr) {
         if (prev_ptr != nullptr) {
             prev_ptr->next_ptr = new_ptr;
         } else {
-            halide_abort_if_false(user_context, (front_ptr == entry_ptr));
+            halide_debug_assert(user_context, (front_ptr == entry_ptr));
             front_ptr = new_ptr;
         }
         ++entry_count;
@@ -267,7 +268,7 @@ LinkedList::insert_after(void *user_context, EntryType *entry_ptr) {
         if (next_ptr != nullptr) {
             next_ptr->prev_ptr = new_ptr;
         } else {
-            halide_abort_if_false(user_context, (back_ptr == entry_ptr));
+            halide_debug_assert(user_context, (back_ptr == entry_ptr));
             back_ptr = new_ptr;
         }
         ++entry_count;

@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
         if (tests[i].time > tests[0].time * 5) {
             printf("Error: %s is %f times slower than unbounded\n",
                    tests[i].name, tests[i].time / tests[0].time);
-            return -1;
+            return 1;
         }
     }
 
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
         if (tests[i].time > tests[0].time * 2) {
             printf("Error: %s is %f times slower than unbounded\n",
                    tests[i].name, tests[i].time / tests[0].time);
-            return -1;
+            return 1;
         }
     }
 

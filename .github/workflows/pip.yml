@@ -15,17 +15,30 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  LLVM_VER: 15.0.1
+  LLVM_VER: 15.0.7
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
   packages: read  #  to fetch packages (docker)
 
 jobs:
+  # When creating 'dev' (e.g. nightly) PyPI packages, we need to create a unique
+  # label for each upload. For simplicity, we choose the Unix time-since-epoch in
+  # UTC form (aka `date +%s`).
+  pip-labels:
+    name: Create Label for PyPI Packages
+    runs-on: ubuntu-latest
+    outputs:
+      halide_pypi_label: ${{ steps.make_label.outputs.unix_time_utc }}
+    steps:
+      - id: make_label
+        run: echo "unix_time_utc=$(date +%s)" >> "$GITHUB_OUTPUT"
+
   pip-linux:
     name: Package Halide Python bindings
 
     runs-on: ubuntu-latest
+    needs: pip-labels
 
     strategy:
       fail-fast: false
@@ -33,7 +46,7 @@ jobs:
         arch: [ x86_64, aarch64 ]
 
     steps:
-      - uses: actions/checkout@v3.1.0
+      - uses: actions/checkout@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2.1.0
@@ -52,6 +65,7 @@ jobs:
         env:
           CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
           CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux*"
+          CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }}"
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           # CIBW_MANYLINUX_I686_IMAGE: ghcr.io/halide/manylinux2014_i686-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
@@ -70,6 +84,7 @@ jobs:
     name: Package Halide Python bindings
 
     runs-on: ${{ matrix.runner }}
+    needs: pip-labels
 
     strategy:
       fail-fast: false
@@ -84,7 +99,7 @@ jobs:
             arch: x86_64;arm64
 
     steps:
-      - uses: actions/checkout@v3.1.0
+      - uses: actions/checkout@v3
 
       - name: Cache LLVM build folder
         id: cache-llvm
@@ -96,7 +111,7 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@latest
 
-      - uses: actions/checkout@v3.1.0
+      - uses: actions/checkout@v3
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         with:
           path: llvm-src
@@ -174,6 +189,7 @@ jobs:
         env:
           CMAKE_PREFIX_PATH: ${{ github.workspace }}/local-halide
           CIBW_BUILD: "cp38-${{ matrix.pytag }} cp39-${{ matrix.pytag }} cp310-${{ matrix.pytag }}"
+          CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }}"
           CIBW_ARCHS_MACOS: "universal2"
 
       - uses: actions/upload-artifact@v3
@@ -184,9 +200,10 @@ jobs:
   pip-sdist:
     name: Make SDist
     runs-on: ubuntu-latest
+    needs: pip-labels
     steps:
-      - uses: actions/checkout@v3.1.0
-      - run: pipx run build --sdist
+      - uses: actions/checkout@v3
+      - run: pipx run build --sdist -C--global-option=egg_info -C--global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }}
       - uses: actions/upload-artifact@v3
         with:
           name: wheels

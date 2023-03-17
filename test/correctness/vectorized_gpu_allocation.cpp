@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 12; ++i) {
         if (input_data[i] != output_data[i]) {
             printf("output(%d) = %f instead of %f\n", i, output_data[i], input_data[i]);
-            return -1;
+            return 1;
         }
     }
 

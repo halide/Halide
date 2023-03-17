@@ -1,6 +1,7 @@
 #ifndef HALIDE_RUNTIME_BLOCK_STORAGE_H
 #define HALIDE_RUNTIME_BLOCK_STORAGE_H
 
+#include "HalideRuntime.h"
 #include "memory_resources.h"
 
 namespace Halide {
@@ -89,9 +90,9 @@ private:
 
 BlockStorage::BlockStorage(void *user_context, const Config &cfg, const SystemMemoryAllocatorFns &sma)
     : config(cfg), allocator(sma) {
-    halide_abort_if_false(user_context, config.entry_size != 0);
-    halide_abort_if_false(user_context, allocator.allocate != nullptr);
-    halide_abort_if_false(user_context, allocator.deallocate != nullptr);
+    halide_debug_assert(user_context, config.entry_size != 0);
+    halide_debug_assert(user_context, allocator.allocate != nullptr);
+    halide_debug_assert(user_context, allocator.deallocate != nullptr);
     if (config.minimum_capacity) {
         reserve(user_context, config.minimum_capacity);
     }
@@ -110,7 +111,7 @@ BlockStorage::~BlockStorage() {
 }
 
 void BlockStorage::destroy(void *user_context) {
-    halide_abort_if_false(user_context, allocator.deallocate != nullptr);
+    halide_debug_assert(user_context, allocator.deallocate != nullptr);
     if (ptr != nullptr) {
         allocator.deallocate(user_context, ptr);
     }
@@ -371,7 +372,7 @@ const void *BlockStorage::back() const {
 
 void BlockStorage::allocate(void *user_context, size_t new_capacity) {
     if (new_capacity != capacity) {
-        halide_abort_if_false(user_context, allocator.allocate != nullptr);
+        halide_debug_assert(user_context, allocator.allocate != nullptr);
         size_t requested_bytes = new_capacity * config.entry_size;
         size_t block_size = max(config.block_size, config.entry_size);
         size_t block_count = (requested_bytes / block_size);
@@ -389,7 +390,7 @@ void BlockStorage::allocate(void *user_context, size_t new_capacity) {
             memcpy(new_ptr, ptr, count * config.entry_size);
         }
         if (ptr != nullptr) {
-            halide_abort_if_false(user_context, allocator.deallocate != nullptr);
+            halide_debug_assert(user_context, allocator.deallocate != nullptr);
             allocator.deallocate(user_context, ptr);
         }
         capacity = new_capacity;

@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
 
         size_t expected_size = 101 * 4 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
 
         size_t expected_size = 101 * 1002 * 3 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -175,7 +175,7 @@ int main(int argc, char **argv) {
 
         size_t expected_size = 101 * 3 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
     }
 
@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
 
         if (!custom_malloc_sizes.empty()) {
             printf("There should not have been a heap allocation\n");
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -203,7 +203,7 @@ int main(int argc, char **argv) {
                 int correct = (2 * x) * (2 * y) + (2 * x + 1) * (2 * y + 1);
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
 
         if (!custom_malloc_sizes.empty()) {
             printf("There should not have been a heap allocation\n");
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -234,7 +234,7 @@ int main(int argc, char **argv) {
                 int correct = x * (2 * y) + (x + 3) * (2 * y + 1);
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -258,7 +258,7 @@ int main(int argc, char **argv) {
 
         size_t expected_size = 2 * 1000 * 4 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -266,7 +266,7 @@ int main(int argc, char **argv) {
                 int correct = (2 * x) * y + (2 * x + 1) * (y + 3);
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -292,7 +292,7 @@ int main(int argc, char **argv) {
 
         size_t expected_size = 1000 * 8 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -300,7 +300,7 @@ int main(int argc, char **argv) {
                 int correct = x * y;
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -325,7 +325,7 @@ int main(int argc, char **argv) {
 
         size_t expected_size = 2 * 1000 * 3 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -333,7 +333,7 @@ int main(int argc, char **argv) {
                 int correct = (2 * x) * y + (2 * x + 1) * (y + 2);
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -353,7 +353,7 @@ int main(int argc, char **argv) {
 
         size_t expected_size = 1000 * 2 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -361,7 +361,7 @@ int main(int argc, char **argv) {
                 int correct = (x) * (y / 2) + (x) * (y / 2 + 1);
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -385,7 +385,7 @@ int main(int argc, char **argv) {
         size_t expected_size_g = 1000 * 4 * sizeof(int) + sizeof(int);
         size_t expected_size_h = 1000 * 2 * sizeof(int) + sizeof(int);
         if (!check_expected_mallocs({expected_size_g, expected_size_h})) {
-            return -1;
+            return 1;
         }
 
         for (int y = 0; y < im.height(); y++) {
@@ -395,7 +395,7 @@ int main(int argc, char **argv) {
                 auto correct_f = [=](int x, int y) { return correct_g(x, y / 2) + correct_g(x, y / 2 + 1); };
                 if (im(x, y) != correct_f(x, y)) {
                     printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct_f(x, y));
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -425,7 +425,7 @@ int main(int argc, char **argv) {
             expected_size = 101 * 3 * sizeof(int);
         }
         if (!check_expected_mallocs({expected_size})) {
-            return -1;
+            return 1;
         }
     }
 

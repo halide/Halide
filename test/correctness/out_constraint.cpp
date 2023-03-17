@@ -12,7 +12,7 @@ void check_int(const Expr &expr, int expected) {
     if (!is_const(expr, expected)) {
         std::cerr << "Found expression " << expr << "; "
                   << "expected constant int " << expected << "\n";
-        exit(-1);
+        exit(1);
     }
 }
 
@@ -43,7 +43,7 @@ class Validator : public IRMutator {
 
         if (c.count != 1) {
             std::cerr << "expected one loop, found " << c.count << "\n";
-            exit(-1);
+            exit(1);
         }
 
         return s;
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> out = f.realize({size});
         if (!out.all_equal(42)) {
             std::cerr << "wrong output\n";
-            exit(-1);
+            exit(1);
         }
     }
 
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> out = f.realize({size});
         if (!out.all_equal(42)) {
             std::cerr << "wrong output\n";
-            exit(-1);
+            exit(1);
         }
     }
 

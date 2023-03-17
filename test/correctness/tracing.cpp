@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
         {102, 1, 9, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
     };
     if (!check_trace_correct(correct_pipeline_trace, 2)) {
-        return -1;
+        return 1;
     }
 
     // Test a more interesting trace.
@@ -276,7 +276,7 @@ int main(int argc, char **argv) {
 
     int correct_trace_length = sizeof(correct_trace) / sizeof(correct_trace[0]);
     if (!check_trace_correct(correct_trace, correct_trace_length)) {
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

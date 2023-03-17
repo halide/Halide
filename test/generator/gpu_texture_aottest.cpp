@@ -46,11 +46,11 @@ int main(int argc, char **argv) {
 
     if (input.raw_buffer()->device_interface != halide_opencl_image_device_interface()) {
         printf("Expected input to be copied to texture storage");
-        return -1;
+        return 1;
     }
     if (output.raw_buffer()->device_interface != halide_opencl_image_device_interface()) {
         printf("Expected output to be copied to texture storage");
-        return -1;
+        return 1;
     }
 
     output.copy_to_host();
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
         for (int x = 0; x < W; x++) {
             if (input(x, y) * 2 != output(x, y)) {
                 printf("Error at %d, %d: %d != %d\n", x, y, input(x, y), output(x, y));
-                return -1;
+                return 1;
             }
         }
     }
