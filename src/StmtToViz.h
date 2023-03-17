@@ -15,11 +15,6 @@ namespace Internal {
 
 struct Stmt;
 
-/**
- * Dump an HTML-formatted visualization of a Stmt to filename.
- */
-void print_to_viz(const std::string &filename, const Stmt &s);
-
 /** Dump an HTML-formatted visualization of a Module to filename. */
 void print_to_viz(const std::string &filename, const Module &m);
 

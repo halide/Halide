@@ -519,7 +519,7 @@ private:
 
 /******************* GetAssemblyInfo *******************/
 // Used to map some Halide IR nodes to line-numbers in the
-// assembly file marking the corresponding generated code.
+// assembly file containing the corresponding generated code.
 class AssemblyInfo : public IRVisitor {
 public:
     AssemblyInfo()
