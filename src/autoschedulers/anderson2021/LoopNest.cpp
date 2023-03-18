@@ -2054,7 +2054,24 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     // Recurse inwards
     for (const auto &c : children) {
-        c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, stats, verbose);
+        c->compute_features(dag,
+                            params,
+                            target,
+                            sites,
+                            subinstances,
+                            subparallelism,
+                            this,
+                            parent,
+                            root,
+                            gpu_loop_info,
+                            use_memoized_features,
+                            total_shared_mem_alloc_sizes,
+                            &working_set_here,
+                            &working_set_here_local_constant,
+                            &working_set_here_local_dynamic,
+                            features,
+                            stats,
+                            verbose);
     }
     for (const auto *node : store_at) {
         auto &feat = features->get(&(node->stages[0]));
