@@ -8,6 +8,9 @@
 #include "Debug.h"
 #include "Error.h"
 #include "Introspection.h"
+
+#include "zlib.h"
+
 #include <atomic>
 #include <chrono>
 #include <fstream>
@@ -924,6 +927,44 @@ int ctz64(uint64_t x) {
     static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
     return __builtin_ctzll(x);
 #endif
+}
+
+std::ostream &inflate_zlib_to_stream(std::ostream &o, const uint8_t *data, size_t length) {
+    constexpr size_t kChunkSize = 16384;
+    size_t offset = 0;
+    size_t remaining = length;
+    int inflate_result = Z_OK;
+
+    z_stream z;
+    memset(&z, 0, sizeof(z));
+    internal_assert(inflateInit(&z) == Z_OK);
+
+    do {
+        z.avail_in = std::min(kChunkSize, remaining);
+        if (z.avail_in == 0) {
+            break;
+        }
+        z.next_in = const_cast<uint8_t *>(&data[offset]);
+        offset += z.avail_in;
+        remaining -= z.avail_in;
+
+        do {
+            uint8_t out_buf[kChunkSize + 1];
+            z.avail_out = kChunkSize;
+            z.next_out = out_buf;
+            inflate_result = inflate(&z, Z_NO_FLUSH);
+            internal_assert(inflate_result == Z_OK || inflate_result == Z_STREAM_END);
+
+            const size_t actual_out = kChunkSize - z.avail_out;
+            out_buf[actual_out] = 0;
+            o << out_buf;
+        } while (z.avail_out == 0);
+    } while (inflate_result != Z_STREAM_END);
+
+    internal_assert(offset == length) << "offset " << offset << " length " << length;
+    internal_assert(inflateEnd(&z) == Z_OK);
+
+    return o;
 }
 
 }  // namespace Internal

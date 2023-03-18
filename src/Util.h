@@ -17,6 +17,8 @@
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <ostream>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -448,6 +450,34 @@ std::string c_print_name(const std::string &name, bool prefix_underscore = true)
  * only for internal tests which need to verify behavior; please don't use this outside
  * of Halide tests. */
 int get_llvm_version();
+
+/** The data points to a zlib-compressed chunk of data. Inflate it and append all inflated
+ * data to the stream. Currently assumes that the inflated data is textual and will not contain
+ * any null bytes (this could easily be relaxed if we need to do non-textual data in the future) */
+std::ostream &inflate_zlib_to_stream(std::ostream &o, const uint8_t *data, size_t length);
+
+class ZLibArchive {
+    const uint8_t *const data;
+    const size_t length;
+
+public:
+    explicit ZLibArchive(const uint8_t *data, size_t length)
+        : data(data), length(length) {
+    }
+    explicit ZLibArchive(const uint8_t *data, int length)
+        : data(data), length((size_t)length) {
+    }
+
+    friend std::ostream &operator<<(std::ostream &o, const ZLibArchive &self) {
+        return inflate_zlib_to_stream(o, self.data, self.length);
+    }
+
+    std::string str() const {
+        std::ostringstream o;
+        inflate_zlib_to_stream(o, data, length);
+        return o.str();
+    }
+};
 
 }  // namespace Internal
 

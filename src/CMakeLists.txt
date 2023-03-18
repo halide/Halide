@@ -2,6 +2,8 @@
 # Lists of source files. Keep ALL lists sorted in alphabetical order.
 ##
 
+find_package(ZLIB REQUIRED)
+
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
 # Also *don't* include anything that's only used internally (eg SpirvIR.h).
@@ -369,7 +371,7 @@ foreach (f IN LISTS TEMPLATE_FILES)
     set(DST "c_template.${f}.template.cpp")
 
     add_custom_command(OUTPUT "${DST}"
-                       COMMAND binary2cpp "halide_c_template_${f}" < "${SRC}" > "${DST}"
+                       COMMAND binary2cpp "halide_c_template_${f}" -zlib < "${SRC}" > "${DST}"
                        DEPENDS "${SRC}" binary2cpp
                        VERBATIM)
     target_sources(Halide_c_templates PRIVATE ${DST})
@@ -401,7 +403,7 @@ add_library(Halide
             $<TARGET_OBJECTS:Halide_c_templates>)
 add_library(Halide::Halide ALIAS Halide)
 
-target_link_libraries(Halide PRIVATE Halide::LLVM)
+target_link_libraries(Halide PRIVATE Halide::LLVM ZLIB::ZLIB)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
 target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
 target_compile_features(Halide PUBLIC cxx_std_17)
