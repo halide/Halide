@@ -1091,12 +1091,36 @@ void LoopNest::compute_mem_load_features(const LoadJacobian &jac, int producer_i
     mem_info.add(min_info);
 }
 
-template void LoopNest::compute_mem_load_features<GlobalMem>(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfoType<GlobalMem> &mem_info, double points_accessed_per_thread, bool verbose) const;
+template void LoopNest::compute_mem_load_features<GlobalMem>(const LoadJacobian &jac,
+                                                             int producer_innermost_dim,
+                                                             const FunctionDAG::Node *node,
+                                                             const Bound &producer_store_bounds,
+                                                             bool producer_has_been_scheduled,
+                                                             const ThreadInfo &thread_info,
+                                                             MemInfoType<GlobalMem> &mem_info,
+                                                             double points_accessed_per_thread,
+                                                             bool verbose) const;
 
-template void LoopNest::compute_mem_load_features<SharedMem>(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfoType<SharedMem> &mem_info, double points_accessed_per_thread, bool verbose) const;
+template void LoopNest::compute_mem_load_features<SharedMem>(const LoadJacobian &jac,
+                                                             int producer_innermost_dim,
+                                                             const FunctionDAG::Node *node,
+                                                             const Bound &producer_store_bounds,
+                                                             bool producer_has_been_scheduled,
+                                                             const ThreadInfo &thread_info,
+                                                             MemInfoType<SharedMem> &mem_info,
+                                                             double points_accessed_per_thread,
+                                                             bool verbose) const;
 
 template<>
-void LoopNest::compute_mem_load_features<LocalMem>(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfoType<LocalMem> &mem_info, double points_accessed_per_thread, bool verbose) const {
+void LoopNest::compute_mem_load_features<LocalMem>(const LoadJacobian &jac,
+                                                   int producer_innermost_dim,
+                                                   const FunctionDAG::Node *node,
+                                                   const Bound &producer_store_bounds,
+                                                   bool producer_has_been_scheduled,
+                                                   const ThreadInfo &thread_info,
+                                                   MemInfoType<LocalMem> &mem_info,
+                                                   double points_accessed_per_thread,
+                                                   bool verbose) const {
     compute_num_mem_accesses_per_block<LocalMem>(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, points_accessed_per_thread, mem_info, verbose);
 }
 
@@ -1263,7 +1287,20 @@ std::pair<const LoopNest *, const LoopNest *> LoopNest::find_innermost_and_paren
     return {child, parent};
 }
 
-int64_t LoopNest::points_accessed_per_thread(const Anderson2021Params &params, const Target &target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge *> &edge_chain, const LoadJacobian &jac, const LoopNest *parent, const LoopNest *grandparent, int64_t n, const ScheduleFeatures &feat, const LoadJacobian &serial_jac, bool producer_has_been_scheduled, int producer_innermost_dim, const GPUMemoryType &mem_type, bool verbose) const {
+int64_t LoopNest::points_accessed_per_thread(const Anderson2021Params &params,
+                                             const Target &target,
+                                             const GPULoopInfo &gpu_loop_info,
+                                             const std::vector<const FunctionDAG::Edge *> &edge_chain,
+                                             const LoadJacobian &jac,
+                                             const LoopNest *parent,
+                                             const LoopNest *grandparent,
+                                             int64_t n,
+                                             const ScheduleFeatures &feat,
+                                             const LoadJacobian &serial_jac,
+                                             bool producer_has_been_scheduled,
+                                             int producer_innermost_dim,
+                                             const GPUMemoryType &mem_type,
+                                             bool verbose) const {
 
     std::unique_ptr<LoopNest> innermost_parent_clone = std::make_unique<LoopNest>();
     innermost_parent_clone->copy_from(*parent);
