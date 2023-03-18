@@ -949,15 +949,15 @@ std::ostream &inflate_zlib_to_stream(std::ostream &o, const uint8_t *data, size_
         remaining -= z.avail_in;
 
         do {
-            uint8_t out_buf[kChunkSize + 1];
+            uint8_t out_buf[kChunkSize];
             z.avail_out = kChunkSize;
             z.next_out = out_buf;
             inflate_result = inflate(&z, Z_NO_FLUSH);
             internal_assert(inflate_result == Z_OK || inflate_result == Z_STREAM_END);
 
             const size_t actual_out = kChunkSize - z.avail_out;
-            out_buf[actual_out] = 0;
-            o << out_buf;
+            // Don't use <<, since the output might contain null bytes
+            o.write((const char *)out_buf, actual_out);
         } while (z.avail_out == 0);
     } while (inflate_result != Z_STREAM_END);
 

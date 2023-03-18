@@ -2,6 +2,7 @@
 #include "Error.h"
 #include "LLVM_Headers.h"
 #include "Target.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -11,7 +12,6 @@ using std::vector;
 namespace {
 
 std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
-
     llvm::MemoryBufferRef bitcode_buffer = llvm::MemoryBufferRef(buf, id);
 
     auto ret_val = llvm::expectedToErrorOr(
@@ -27,13 +27,24 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     return result;
 }
 
-#define DECLARE_INITMOD(mod)                                                              \
-    extern "C" unsigned char halide_internal_initmod_##mod[];                             \
-    extern "C" int halide_internal_initmod_##mod##_length;                                \
-    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context) {         \
-        llvm::StringRef sb = llvm::StringRef((const char *)halide_internal_initmod_##mod, \
-                                             halide_internal_initmod_##mod##_length);     \
-        return parse_bitcode_file(sb, context, #mod);                                     \
+std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::LLVMContext *context,
+                                                 const unsigned char *data,
+                                                 int length,
+                                                 const char *id) {
+    /* TODO: is there a way to stream data to LLVM instead of unpacking all at once? */
+    std::string str = Internal::ZLibArchive(data, length).str();
+    llvm::StringRef sb = llvm::StringRef(str.c_str(), str.size());
+    return parse_bitcode_file(sb, context, id);
+}
+
+#define DECLARE_INITMOD(mod)                                                      \
+    extern "C" unsigned char z_halide_internal_initmod_##mod[];                   \
+    extern "C" int z_halide_internal_initmod_##mod##_length;                      \
+    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context) { \
+        return parse_bitcode_file(context,                                        \
+                                  z_halide_internal_initmod_##mod,                \
+                                  z_halide_internal_initmod_##mod##_length,       \
+                                  #mod);                                          \
     }
 
 #define DECLARE_NO_INITMOD(mod)                                                                                         \

@@ -452,8 +452,7 @@ std::string c_print_name(const std::string &name, bool prefix_underscore = true)
 int get_llvm_version();
 
 /** The data points to a zlib-compressed chunk of data. Inflate it and append all inflated
- * data to the stream. Currently assumes that the inflated data is textual and will not contain
- * any null bytes (this could easily be relaxed if we need to do non-textual data in the future) */
+ * data to the stream. */
 std::ostream &inflate_zlib_to_stream(std::ostream &o, const uint8_t *data, size_t length);
 
 class ZLibArchive {

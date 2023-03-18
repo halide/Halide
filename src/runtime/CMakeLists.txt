@@ -262,7 +262,7 @@ foreach (i IN LISTS RUNTIME_CPP)
                                VERBATIM)
 
             add_custom_command(OUTPUT "${INITMOD}"
-                               COMMAND binary2cpp ${SYMBOL} < "${BC}" > "${INITMOD}"
+                               COMMAND binary2cpp ${SYMBOL} -zlib < "${BC}" > "${INITMOD}"
                                DEPENDS "${BC}" binary2cpp
                                VERBATIM)
 
@@ -288,7 +288,7 @@ foreach (i IN LISTS RUNTIME_LL)
                        DEPENDS "${LL_TRANSFORMED}"
                        VERBATIM)
     add_custom_command(OUTPUT "${INITMOD}"
-                       COMMAND binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
+                       COMMAND binary2cpp "halide_internal_initmod_${i}_ll" -zlib < "${BC}" > "${INITMOD}"
                        DEPENDS "${BC}" binary2cpp
                        VERBATIM)
     target_sources(Halide_initmod PRIVATE ${INITMOD})
@@ -299,7 +299,7 @@ foreach (i IN LISTS RUNTIME_BC)
     set(RT_BC "${CMAKE_CURRENT_SOURCE_DIR}/nvidia_libdevice_bitcode/libdevice.${i}.10.bc")
 
     add_custom_command(OUTPUT "${INITMOD}"
-                       COMMAND binary2cpp "halide_internal_initmod_ptx_${i}_ll" < "$<SHELL_PATH:${RT_BC}>" > "${INITMOD}"
+                       COMMAND binary2cpp "halide_internal_initmod_ptx_${i}_ll" -zlib < "$<SHELL_PATH:${RT_BC}>" > "${INITMOD}"
                        DEPENDS binary2cpp "${RT_BC}"
                        VERBATIM)
     target_sources(Halide_initmod PRIVATE ${INITMOD})

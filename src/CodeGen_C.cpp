@@ -24,9 +24,9 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
-#define ZLIB_ARCHIVE(EXTERN_NAME, INTERNAL_NAME)      \
-    extern "C" unsigned char z_##EXTERN_NAME[]; \
-    extern "C" int z_##EXTERN_NAME##_length;    \
+#define ZLIB_ARCHIVE(EXTERN_NAME, INTERNAL_NAME) \
+    extern "C" unsigned char z_##EXTERN_NAME[];  \
+    extern "C" int z_##EXTERN_NAME##_length;     \
     static const ZLibArchive INTERNAL_NAME(z_##EXTERN_NAME, z_##EXTERN_NAME##_length);
 
 ZLIB_ARCHIVE(halide_internal_initmod_inlined_c, z_inlined_c)
