@@ -1909,8 +1909,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     internal_assert(!stage->node->is_input);
     ScheduleFeatures &feat = features->get_or_create(stage);
 
-    if (innermost) {
-    } else {
+    if (!innermost) {
         // We want these features just outside the innermost loop,
         // so just set them at every level and let them get
         // progressively overwritten as we descend the loop nest
