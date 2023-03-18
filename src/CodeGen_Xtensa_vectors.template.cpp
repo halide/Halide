@@ -2060,6 +2060,12 @@ HALIDE_ALWAYS_INLINE native_vector_i8 convert<native_vector_i8, native_vector_i1
 }
 
 template<>
+HALIDE_ALWAYS_INLINE native_vector_i8 convert<native_vector_i8, native_vector_u16_x2>(const native_vector_u16_x2 &src) {
+    xb_vec2Nx24 wide = IVP_CVT24S2NX16(src.native_vector[1], src.native_vector[0]);
+    return IVP_PACKL2NX24(wide);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE native_vector_u8 convert<native_vector_u8, native_vector_i16_x2>(const native_vector_i16_x2 &src) {
     xb_vec2Nx24 wide = IVP_CVT24S2NX16(src.native_vector[1], src.native_vector[0]);
     return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));
@@ -2067,6 +2073,13 @@ HALIDE_ALWAYS_INLINE native_vector_u8 convert<native_vector_u8, native_vector_i1
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i8 convert<native_vector_i8, native_vector_i32_x4>(const native_vector_i32_x4 &src) {
+    xb_vec2Nx24 wide = IVP_CVT24UNX32L(src.native_vector[1], src.native_vector[0]);
+    IVP_CVT24UNX32H(wide, src.native_vector[3], src.native_vector[2]);
+    return IVP_PACKL2NX24(wide);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE native_vector_i8 convert<native_vector_i8, native_vector_u32_x4>(const native_vector_u32_x4 &src) {
     xb_vec2Nx24 wide = IVP_CVT24UNX32L(src.native_vector[1], src.native_vector[0]);
     IVP_CVT24UNX32H(wide, src.native_vector[3], src.native_vector[2]);
     return IVP_PACKL2NX24(wide);
@@ -2206,12 +2219,22 @@ HALIDE_ALWAYS_INLINE native_vector_i32_x4 convert<native_vector_i32_x4, native_v
 }
 
 template<>
+HALIDE_ALWAYS_INLINE native_vector_i32_x4 convert<native_vector_i32_x4, native_vector_i8>(const native_vector_i8 &src) {
+    xb_vec2Nx24 wide = src * native_vector_i8(1);
+    return native_vector_i32_x4(
+        native_vector_i32_x4::from_native_vector,
+        IVP_CVT32S2NX24LL(wide),
+        IVP_CVT32S2NX24LH(wide),
+        IVP_CVT32S2NX24HL(wide),
+        IVP_CVT32S2NX24HH(wide));
+}
+
+template<>
 HALIDE_ALWAYS_INLINE native_vector_i32_x2 convert<native_vector_i32_x2, native_vector_i16>(const native_vector_i16 &src) {
+    xb_vec2Nx24 wide = IVP_CVT24S2NX16(0, src);
     return native_vector_i32_x2(native_vector_i32_x2::from_native_vector,
-                                IVP_MOVN_2X32_FROMNX16(
-                                    IVP_SELNX16UI(native_vector_i16(0), src, IVP_SELI_16B_INTERLEAVE_1_LO)),
-                                IVP_MOVN_2X32_FROMNX16(
-                                    IVP_SELNX16UI(native_vector_i16(0), src, IVP_SELI_16B_INTERLEAVE_1_HI)));
+                                IVP_CVT32S2NX24LL(wide),
+                                IVP_CVT32S2NX24LH(wide));
 }
 
 template<>
@@ -2288,6 +2311,15 @@ HALIDE_ALWAYS_INLINE native_vector_f32_x2 convert<native_vector_f32_x2, native_v
 }
 
 template<>
+HALIDE_ALWAYS_INLINE native_vector_f32_x4 convert<native_vector_f32_x4, native_vector_i32_x4>(const native_vector_i32_x4 &src) {
+    return native_vector_f32_x4(native_vector_f32_x4::from_native_vector,
+                                convert<native_vector_f32, native_vector_i32>(src.native_vector[0]),
+                                convert<native_vector_f32, native_vector_i32>(src.native_vector[1]),
+                                convert<native_vector_f32, native_vector_i32>(src.native_vector[2]),
+                                convert<native_vector_f32, native_vector_i32>(src.native_vector[3]));
+}
+
+template<>
 HALIDE_ALWAYS_INLINE native_vector_f32_x2 convert<native_vector_f32_x2, native_vector_i16>(const native_vector_i16 &src) {
     native_vector_i32_x2 tmp = convert<native_vector_i32_x2, native_vector_i16>(src);
     return convert<native_vector_f32_x2, native_vector_i32_x2>(tmp);
@@ -2297,6 +2329,12 @@ template<>
 HALIDE_ALWAYS_INLINE native_vector_f32_x2 convert<native_vector_f32_x2, native_vector_u16>(const native_vector_u16 &src) {
     native_vector_i32_x2 tmp = convert<native_vector_i32_x2, native_vector_u16>(src);
     return convert<native_vector_f32_x2, native_vector_i32_x2>(tmp);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE native_vector_f32_x4 convert<native_vector_f32_x4, native_vector_i8>(const native_vector_i8 &src) {
+    native_vector_i32_x4 tmp = convert<native_vector_i32_x4, native_vector_i8>(src);
+    return convert<native_vector_f32_x4, native_vector_i32_x4>(tmp);
 }
 
 template<>

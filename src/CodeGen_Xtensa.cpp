@@ -222,6 +222,10 @@ void CodeGen_Xtensa::visit(const Mul *op) {
             string sa = print_expr(op->a);
             string sb = print_expr(op->b);
             print_assignment(op->type, "IVP_PACKLN_2X64W(IVP_MULN_2X32(" + sa + ", " + sb + "))");
+        } else if (is_native_xtensa_vector<uint32_t>(op->type, target)) {
+            string sa = print_expr(op->a);
+            string sb = print_expr(op->b);
+            print_assignment(op->type, "IVP_PACKLN_2X64W(IVP_MULN_2X32(" + sa + ", " + sb + "))");
         } else {
             visit_binop(op->type, op->a, op->b, "*");
         }
