@@ -2687,7 +2687,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     if (innermost && !is_scalar()) {
         compute_warp_features(feat, gpu_loop_info);
-
         compute_warp_and_block_occupancy(params, feat, gpu_loop_info);
     }
 }
