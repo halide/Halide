@@ -193,7 +193,6 @@ make_featurization() {
 
     GPU=$((RANDOM % NUM_GPUS))
     CMD="HL_DEBUG_AUTOSCHEDULE=1 \
-        HL_DEBUG_CODEGEN=1 \
         /bin/time -f 'Compile time (s): %e' ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \

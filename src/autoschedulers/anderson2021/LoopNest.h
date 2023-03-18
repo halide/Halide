@@ -357,13 +357,13 @@ struct LoopNest {
                           const LoopNest *parent,
                           const LoopNest *grandparent,
                           const LoopNest &root,
+                          GPULoopInfo gpu_loop_info,
+                          bool use_memoized_features,
+                          const StageMap<int64_t> &total_shared_mem_alloc_sizes,
                           int64_t *working_set,
                           int64_t *working_set_local_constant,
                           int64_t *working_set_local_dynamic,
                           StageMap<ScheduleFeatures> *features,
-                          GPULoopInfo gpu_loop_info,
-                          bool use_memoized_features,
-                          const StageMap<int64_t> &total_shared_mem_alloc_sizes,
                           Statistics &stats,
                           bool verbose = false) const;
 

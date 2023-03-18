@@ -1662,13 +1662,13 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 const LoopNest *parent,
                                 const LoopNest *grandparent,
                                 const LoopNest &root,
+                                GPULoopInfo gpu_loop_info,
+                                bool use_memoized_features,
+                                const StageMap<int64_t> &total_shared_mem_alloc_sizes,
                                 int64_t *working_set,
                                 int64_t *working_set_local_constant,
                                 int64_t *working_set_local_dynamic,
                                 StageMap<ScheduleFeatures> *features,
-                                GPULoopInfo gpu_loop_info,
-                                bool use_memoized_features,
-                                const StageMap<int64_t> &total_shared_mem_alloc_sizes,
                                 Statistics &stats,
                                 bool verbose) const {
 
@@ -1802,7 +1802,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 ++stats.num_memoization_misses;
             }
 
-            c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, stats, verbose);
+            c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, stats, verbose);
 
             if (use_memoized_features) {
                 c->features[hash_of_producers].make_large(dag.nodes[0].stages[0].max_id);
@@ -2054,7 +2054,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     // Recurse inwards
     for (const auto &c : children) {
-        c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, stats, verbose);
+        c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, stats, verbose);
     }
     for (const auto *node : store_at) {
         auto &feat = features->get(&(node->stages[0]));
