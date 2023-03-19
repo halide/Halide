@@ -109,7 +109,7 @@ public:
         }
     }
 
-#if (LOG_EXPR_MUTATORIONS || LOG_STMT_MUTATIONS)
+#if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
     static int debug_indent;
 #endif
 

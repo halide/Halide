@@ -1243,17 +1243,62 @@ Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
 }
 
 Expr lower_saturating_add(const Expr &a, const Expr &b) {
-    internal_assert(a.type() == b.type());
     // Lower saturating add without using widening arithmetic, which may require
     // types that aren't supported.
-    return simplify(clamp(a, a.type().min() - min(b, 0), a.type().max() - max(b, 0))) + b;
+    internal_assert(a.type() == b.type());
+    if (a.type().is_float()) {
+        return a + b;
+    } else if (a.type().is_uint()) {
+        Expr sum = a + b;
+        return select(sum < a, a.type().max(), sum);
+    } else if (a.type().is_int()) {
+        Type u = a.type().with_code(halide_type_uint);
+        Expr ua = cast(u, a);
+        Expr ub = cast(u, b);
+        Expr upper = make_const(u, (uint64_t(1) << (a.type().bits() - 1)) - 1);
+        Expr lower = make_const(u, (uint64_t(1) << (a.type().bits() - 1)));
+        Expr sum = ua + ub;
+        // For a 32-bit input, 'sum' is the low 32 bits of the true 33-bit
+        // sum. So it's the true sum, possibly plus 2^32 in the case where the
+        // true sum is supposed to be negative. The true sum is positive when:
+        // a + b >= 0 === a >= -b === a >= ~b + 1 === a > ~b
+        Expr pos_result = min(sum, upper);
+        Expr neg_result = max(sum, lower);
+        return simplify(reinterpret(a.type(), select(~b < a, pos_result, neg_result)));
+    } else {
+        internal_error << "Bad type for saturating_add: " << a.type() << "\n";
+        return Expr();
+    }
 }
 
 Expr lower_saturating_sub(const Expr &a, const Expr &b) {
-    internal_assert(a.type() == b.type());
-    // Lower saturating add without using widening arithmetic, which may require
+    // Lower saturating sub without using widening arithmetic, which may require
     // types that aren't supported.
-    return simplify(clamp(a, a.type().min() + max(b, 0), a.type().max() + min(b, 0))) - b;
+    internal_assert(a.type() == b.type());
+    if (a.type().is_float()) {
+        return a - b;
+    } else if (a.type().is_int()) {
+        // Do the math in unsigned, to avoid overflow in the simplifier.
+        Type u = a.type().with_code(halide_type_uint);
+        Expr ua = cast(u, a);
+        Expr ub = cast(u, b);
+        Expr upper = make_const(u, (uint64_t(1) << (a.type().bits() - 1)) - 1);
+        Expr lower = make_const(u, (uint64_t(1) << (a.type().bits() - 1)));
+        Expr diff = ua - ub;
+        // If a >= b, then diff is the (positive) difference. If a < b then diff
+        // is the (negative) difference plus 2^32 due to wraparound.
+        // We saturate the positive difference to be at most 2^31 - 1
+        Expr pos_diff = min(upper, diff);
+        // and saturate the negative difference to be at least -2^31 + 2^32 = 2^31
+        Expr neg_diff = max(lower, diff);
+        // Then select between them, and cast back to the signed type.
+        return simplify(reinterpret(a.type(), select(b <= a, pos_diff, neg_diff)));
+    } else if (a.type().is_uint()) {
+        return simplify(select(b < a, a - b, make_zero(a.type())));
+    } else {
+        internal_error << "Bad type for saturating_sub: " << a.type() << "\n";
+        return Expr();
+    }
 }
 
 Expr lower_saturating_cast(const Type &t, const Expr &a) {
