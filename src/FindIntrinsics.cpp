@@ -727,6 +727,7 @@ protected:
         }
 
         const int bits = op->type.bits();
+        const int lanes = op->type.lanes();
         const auto is_x_same_int = op->type.is_int() && is_int(x, bits);
         const auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
         const auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
@@ -781,6 +782,13 @@ protected:
             rewrite(saturating_cast(op->type, rounding_shift_right(widening_mul(x, y), z)),
                     rounding_mul_shift_right(x, y, cast(unsigned_type, z)),
                     is_x_same_int_or_uint && x_y_same_sign && is_uint(z)) ||
+
+            // Rewrite combinations of deinterleaves into horizontal ops
+            rewrite(widening_add(slice(x, 0, 2, lanes), slice(x, 1, 2, lanes)),
+                    h_add(cast(op->type.with_lanes(lanes * 2), x), lanes)) ||
+            rewrite(widening_add(slice(x, 1, 2, lanes), slice(x, 0, 2, lanes)),
+                    h_add(cast(op->type.with_lanes(lanes * 2), x), lanes)) ||
+
             // We can remove unnecessary widening if we are then performing a saturating narrow.
             // This is similar to the logic inside `visit_min_or_max`.
             (((bits <= 32) &&
