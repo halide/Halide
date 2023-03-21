@@ -1271,6 +1271,15 @@ void CodeGen_Xtensa::visit(const Reinterpret *op) {
     CodeGen_C::visit(op);
 }
 
+// TODO(aelphy): xtensa compiler produces sub-optimal results with the default C
+// implementation
+void CodeGen_Xtensa::emit_halide_free_helper(
+    const std::string &alloc_name, const std::string &free_function) {
+    stream << get_indent() << "HalideXtensaFreeHelper "
+           << alloc_name << "_free(_ucon, " << alloc_name
+           << ", " << free_function << ");\n";
+}
+
 void CodeGen_Xtensa::visit(const For *op) {
     current_loop_level++;
     string id_min = print_expr(op->min);
