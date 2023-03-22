@@ -1,0 +1,103 @@
+namespace Halide.IR;
+
+// This corresponds to the version.
+file_identifier "HLD0";
+
+// File extension of any written files.
+file_extension "hir";
+
+// enum TypeCode: ubyte {
+//     Int,
+//     UInt,
+//     Float,
+//     Handle,
+//     BFloat,
+// }
+
+// struct RuntimeType {
+//    code: TypeCode;
+//    bits: uint8;
+//    lanes: uint16;
+// }
+
+// // TODO: Fill in. Tricky as will require reconnecting to
+// // type info at runtime, thus adding a reverse lookup.
+// table CPPHandleType {
+//     placeholder: string;
+// }
+
+// table IRType {
+//     runtime_type: RuntimeType;
+//     cpp_handle_type: CPPHandleType;
+// }
+
+// table Expr {
+//     type: IRType;
+//     node: ExprNode;
+// }
+
+// table Stmt {
+
+// }
+
+// table Buffer {
+
+// }
+
+// union LoweredArgumentKind { ScalarLoweredArgument, InputBufferArgument, OutputBufferArgument }
+
+// table ArgumentEstimates {
+//     scalar_def: Expr;
+//     scalar_min: Expr;
+//     scalar_max: Expr;
+//     scalar_estimate: Expr;
+//     buffer_estimates: Region;
+// }
+
+// table LoweredArgument {
+//     name: string;
+//     type: IRType;
+//     kind: LoweredArgumentKind;
+//     dimensions: uint8;
+//     argument_estimates: ArgumentEstimates;
+// }
+
+// enum LinkageType: ubyte {
+//     External,
+//     ExternalPlusMetadata,
+//     ExternalPlusArgv,
+//     Internal,
+// }
+
+// enum NameMangling: ubyte {
+//     Default,
+//     C,
+//     CPlusPlus,
+// }
+
+// table LoweredFunc {
+//     name: string;
+//     args: [LoweredArgument];
+//     body: [Stmt];
+//     linkage: LinkageType;
+//     name_mangling: NameMangling;
+// }
+
+// table MetadataNameMap {
+//     name: string;
+//     value: string;
+// }
+
+table Module {
+    name: string;
+    target: string;
+    // buffers: [Buffer];
+    // functions: [LoweredFunc];
+    // submodules: [Module];
+    // metadata_name_map: MetadataNameMap;
+    // any_strict_float: bool;
+    // TODO: std::unique_ptr<AutoSchedulerResults> auto_scheduler_results;
+}
+
+
+root_type Module;
