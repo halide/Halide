@@ -300,7 +300,6 @@ protected:
     void emit_constexpr_function_info(const std::string &function_name,
                                       const std::vector<LoweredArgument> &args,
                                       const MetadataNameMap &metadata_name_map);
-    /** Xtensa compiler produces sub-optimal results with this free_helper */
     virtual void emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function);
 };
 
