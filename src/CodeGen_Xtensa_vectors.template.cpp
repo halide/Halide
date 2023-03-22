@@ -1164,7 +1164,7 @@ template<>
 HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_i16, int8_t, VECTOR_WIDTH_I16>(const native_vector_i16 &a, void *base, int32_t offset) {
     valign align = IVP_ZALIGN();
     xb_vecNx8 *__restrict ptr = (xb_vecNx8 *)((int8_t *)base + offset);
-    IVP_SANX8S_IP(a, align, ptr);
+    IVP_SANX8S_IP((a << 8) >> 8, align, ptr);
     IVP_SAPOSNX8S_FP(align, ptr);
 }
 
@@ -1188,7 +1188,7 @@ template<>
 HALIDE_ALWAYS_INLINE void store_narrowing<native_vector_i32, int16_t, VECTOR_WIDTH_I32>(const native_vector_i32 &a, void *base, int32_t offset) {
     valign align = IVP_ZALIGN();
     xb_vecN_2x16 *__restrict ptr = (xb_vecN_2x16 *)((int16_t *)base + offset);
-    IVP_SAN_2X16S_IP(a, align, ptr);
+    IVP_SAN_2X16S_IP((a << 16) >> 16, align, ptr);
     IVP_SAPOSN_2X16S_FP(align, ptr);
 }
 
