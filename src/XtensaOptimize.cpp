@@ -918,9 +918,6 @@ private:
         // }
 
         static const std::vector<Pattern> casts = {
-            // Narrowing multiply with shift.
-            // {"halide_xtensa_sat_mul_with_shift_i32", i32(wild_i64x * wild_i64x / wild_i64), Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::ExactLog2Op2},
-
             // Casts from bool.
             {"halide_xtensa_convert_u1_to_i16", i16(i8(wild_u1x))},
 
@@ -947,9 +944,6 @@ private:
             {"halide_xtensa_narrow_with_rounding_shift_u8", u8(rounding_shift_right(wild_i16x, bc(wild_u16)))},
             {"halide_xtensa_narrow_with_rounding_shift_i16", i16(rounding_shift_right(wild_i32x, bc(wild_u32)))},
 
-            // Looks like there is no such instruction.
-            // {"halide_xtensa_sat_narrow_with_rounding_shift_u16", u16_sat(rounding_shift_right(wild_i32x, wild_u32))},
-
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x >> wild_i24)},
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x / wild_i24), Pattern::ExactLog2Op1},
 
@@ -975,10 +969,6 @@ private:
             {"halide_xtensa_convert_concat_i32_to_u16", u16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x))},
             {"halide_xtensa_convert_concat_u32_to_i16", i16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
             {"halide_xtensa_convert_concat_u32_to_u16", u16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
-
-            // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
-            // {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_u32x))},
-            // {"halide_xtensa_narrow_clz_i16", i16(count_leading_zeros(wild_i32x))},
         };
         if (op->type.is_vector()) {
             Expr cast = op;
@@ -1095,17 +1085,11 @@ private:
             {"halide_xtensa_avg_u16", halving_add(wild_u16x, wild_u16x)},
             {"halide_xtensa_avg_i16", halving_add(wild_i16x, wild_i16x)},
 
-            // {"halide_xtensa_avg_u32", halving_add(wild_u32x, wild_u32x)},
-            // {"halide_xtensa_avg_i32", halving_add(wild_i32x, wild_i32x)},
-
             {"halide_xtensa_avg_round_u8", rounding_halving_add(wild_u8x, wild_u8x)},
             {"halide_xtensa_avg_round_i8", rounding_halving_add(wild_i8x, wild_i8x)},
 
             {"halide_xtensa_avg_round_u16", rounding_halving_add(wild_u16x, wild_u16x)},
             {"halide_xtensa_avg_round_i16", rounding_halving_add(wild_i16x, wild_i16x)},
-
-            // {"halide_xtensa_avg_round_u32", rounding_halving_add(wild_u32x, wild_u32x)},
-            // {"halide_xtensa_avg_round_i32", rounding_halving_add(wild_i32x, wild_i32x)},
 
             {"halide_xtensa_sat_add_i16", saturating_add(wild_i16x, wild_i16x)},
             {"halide_xtensa_sat_add_i32", saturating_add(wild_i32x, wild_i32x)},
@@ -1129,10 +1113,6 @@ private:
             {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(wild_u8x256, wild_u8)},
             {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(concat({wild_u8x64, wild_u8x64, wild_u8x64, wild_u8x64}), repeat_each_element(wild_u8x4, 64))},
             {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(repeat_each_element(wild_u8x4, 64), wild_u8x256), Pattern::SwapOps01},
-
-            // {"halide_xtensa_rounding_mul_shift_right_i8", rounding_mul_shift_right(wild_i8x, wild_i8x, bc(wild_u8))},
-            // {"halide_xtensa_rounding_mul_shift_right_i16", rounding_mul_shift_right(wild_i16x, wild_i16x, bc(wild_u16))},
-            // {"halide_xtensa_rounding_mul_shift_right_i32", rounding_mul_shift_right(wild_i32x, wild_i32x, bc(wild_u32))},
 
             {"halide_xtensa_sat_narrow_with_rounding_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_u16))},
             {"halide_xtensa_sat_narrow_with_rounding_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_u16))},
@@ -1163,11 +1143,8 @@ private:
             {"halide_xtensa_sat_narrow_i16", i16_sat(wild_i32x)},
 
             {"halide_xtensa_rounding_shift_right_i8", rounding_shift_right(wild_i8x, bc(wild_u8))},
-            // {"halide_xtensa_rounding_shift_right_u8", rounding_shift_right(wild_u8x, bc(wild_u8))},
             {"halide_xtensa_rounding_shift_right_i16", rounding_shift_right(wild_i16x, bc(wild_u16))},
-            // {"halide_xtensa_rounding_shift_right_u16", rounding_shift_right(wild_u16x, bc(wild_u16))},
             {"halide_xtensa_rounding_shift_right_i32", rounding_shift_right(wild_i32x, bc(wild_u32))},
-            // {"halide_xtensa_rounding_shift_right_u32", rounding_shift_right(wild_u32x, bc(wild_u32))},
 
             {"halide_xtensa_narrow_i48_with_shift_i16", call("halide_xtensa_narrow_with_shift_i16", wild_i16x, {i32(wild_i48x), wild_i32})},
             {"halide_xtensa_narrow_i48_with_rounding_shift_i16", call("halide_xtensa_narrow_with_rounding_shift_i16", wild_i16x, {i32(wild_i48x), wild_u32})},
@@ -1200,9 +1177,7 @@ private:
                   {call("halide_xtensa_widen_mul_add_i48", wild_i48x, {wild_i48x, wild_i16x, wild_i16x}), wild_i16x, wild_i16x})},
 
             {"halide_xtensa_sat_narrow_i48_with_shift_i16", call("halide_xtensa_sat_narrow_with_rounding_shift_i16", wild_i16x, {i32(wild_i48x), wild_u32})},
-            // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
-            // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
-            // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
+
             // Slice and convert
             {"halide_xtensa_convert_u8_low_u16", halide_xtensa_slice_to_native_u16(u16(wild_u8x), 0, wild_i32, wild_i32)},
             {"halide_xtensa_convert_u8_high_u16", halide_xtensa_slice_to_native_u16(u16(wild_u8x), 1, wild_i32, wild_i32)},
@@ -1665,78 +1640,6 @@ private:
 
         return IRMutator::visit(op);
     }
-
-    // NOTE(vksnk): not very clear if it's a good idea to slice loads/stores.
-    // Expr visit(const Load* op) override {
-    //     debug(0) << "maybe slicing load" << op->index << "\n";
-    //     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
-    //     if (dense_ramp_base.defined()) {
-    //         const int64_t *const_base_ptr = as_const_int(dense_ramp_base);
-    //         if (const_base_ptr && is_const_one(op->predicate)) {
-    //             int native_lanes = get_native_vector_lanes_num(op->type);
-    //             int split_to = op->type.lanes() / native_lanes;
-    //             // Expr predicate = mutate(op->predicate);
-    //             // Expr ramp_base = mutate(op->index.as<Ramp>()->base);
-    //             // Expr index = Ramp::make(ramp_base, 1, op->index.type().lanes());
-    //             int64_t const_base = *const_base_ptr;
-    //             std::vector<Expr> concat_args;
-    //             for (int ix = 0; ix < split_to; ix++) {
-    //                 concat_args.push_back(
-    //                     Load::make(op->type.with_lanes(native_lanes),  op->name,
-    //                             Ramp::make(Expr((int32_t)const_base + ix * native_lanes), Expr(1), native_lanes),
-    //                             op->image, op->param, make_one(op->predicate.type().with_lanes(native_lanes)),
-    //                             op->alignment + native_lanes));
-    //             }
-
-    //             return Call::make(op->type,
-    //                         "halide_xtensa_concat_from_native",
-    //                         concat_args, Call::PureExtern);
-    //         }
-    //     }
-    //     return IRMutator::visit(op);
-    // }
-
-    //     Stmt visit(const Store* op) {
-    //         Expr dense_ramp_base = strided_ramp_base(op->index, 1);
-    //         if (dense_ramp_base.defined()) {
-    //             Expr predicate = mutate(op->predicate);
-    //             Expr value = mutate(op->value);
-    //             Expr ramp_base = mutate(op->index.as<Ramp>()->base);
-    //             Expr index = Ramp::make(ramp_base, 1, op->index.type().lanes());
-    //             return Store::make(op->name, std::move(value), std::move(index), op->param, std::move(predicate), op->alignment);
-    //         }
-    //         return IRMutator::visit(op);
-    //     }
-
-    // Expr visit(const Ramp *op) override {
-    //     int native_lanes = get_native_vector_lanes_num(op->type);
-    //     if (native_lanes > 0) {
-    //         int split_to = op->type.lanes() / native_lanes;
-    //         Expr base = mutate(op->base);
-    //         Expr stride = mutate(op->stride);
-
-    //         std::vector<Expr> concat_args;
-    //         for (int ix = 0; ix < split_to; ix++) {
-    //             Expr r = Ramp::make(base + stride * (native_lanes * ix), stride, native_lanes);
-    //             concat_args.push_back(std::move(r));
-    //         }
-    //         return Call::make(op->type,
-    //                             "halide_xtensa_concat_from_native",
-    //                             concat_args, Call::PureExtern);
-    //     }
-    //     int width_to_extend = get_width_to_extend(op->type);
-    //     if (width_to_extend > 0) {
-    //         Expr base = mutate(op->base);
-    //         Expr stride = mutate(op->stride);
-
-    //         const int lanes = op->type.lanes();
-    //         Expr r = Ramp::make(base, stride, width_to_extend);
-
-    //         return slice(r, op->type, lanes);
-    //     }
-
-    //     return IRMutator::visit(op);
-    // }
 
     Expr visit(const Cast *op) override {
         int to_native_lanes = get_native_vector_lanes_num(op->type);
@@ -2294,8 +2197,6 @@ Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     const int lut_size_in_bytes = 2 * target.natural_vector_size<uint8_t>();
     Stmt s = OptimizeShuffles(alignment, lut_size_in_bytes).mutate(stmt);
     s = align_loads(s, alignment, 1);
-    // NOTE(vksnk): CSE seemed to break loop carry
-    // s = common_subexpression_elimination(s);
 
     // Use at most 16 vector registers for carrying values.
     // NOTE(vksnk): loop_carry seems to be a little finicky right now
@@ -2318,8 +2219,7 @@ Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     for (int ix = 0; ix < 10; ix++) {
         s = MatchXtensaPatterns(target).mutate(s);
     }
-    // NOTE(vksnk): looks like we shouldn't do simplification in the end.
-    // s = simplify(common_subexpression_elimination(s));
+
     s = DualQuadMulMutator().mutate(s);
     s = common_subexpression_elimination(s);
 
