@@ -81,44 +81,9 @@ bool is_native_xtensa_vector<float>(const Type &t, const Target &target) {
     return t.is_float() && (t.bits() == 32) && (t.lanes() == vector_size);
 }
 
-bool is_native_vector_type(const Type &t, const Target &target) {
-    int native_lanes = target.natural_vector_size<uint8_t>();
-
-    if (t.is_int_or_uint() && (t.lanes() == native_lanes) && (t.bits() == 8)) {
-        return true;
-    }
-
-    if (t.is_int_or_uint() && (t.lanes() == native_lanes) && (t.bits() == 24)) {
-        return true;
-    }
-
-    if (t.is_int_or_uint() && (t.lanes() == native_lanes / 2) && (t.bits() == 16)) {
-        return true;
-    }
-
-    if (t.is_int_or_uint() && (t.lanes() == native_lanes / 2) && (t.bits() == 48)) {
-        return true;
-    }
-
-    if (t.is_int_or_uint() && (t.lanes() == native_lanes / 4) && (t.bits() == 32)) {
-        return true;
-    }
-
-    if (t.is_float() && (t.lanes() == native_lanes / 4) && (t.bits() == 32)) {
-        return true;
-    }
-
-    return false;
-}
-
-bool is_double_native_vector_type(const Type &t, const Target &target) {
-    int single_vector_bitwidth = 8 * target.natural_vector_size<uint8_t>();
-
-    int double_vector_bitwidth = single_vector_bitwidth * 2;
-    return (t.bits() % 8 == 0) && (double_vector_bitwidth % t.bits() == 0) && (double_vector_bitwidth / t.bits() == t.lanes());
-}
-
 Type get_native_xtensa_vector(const Type &t, const Target &target) {
+    // There two types of vectors, the wide vectors are essentially accumulators
+    // and can store 24-, 48- or 64-bit values.
     int vector_bitwidth = target.has_feature(Target::Feature::XtensaQ8) ? 1024 : 512;
     int wide_vector_bitwidth = target.has_feature(Target::Feature::XtensaQ8) ? 4096 : 1536;
 
@@ -130,6 +95,16 @@ Type get_native_xtensa_vector(const Type &t, const Target &target) {
         return t.with_lanes(wide_vector_bitwidth / t.bits());
     }
     return t.with_lanes(vector_bitwidth / t.bits());
+}
+
+bool is_native_vector_type(const Type &t, const Target &target) {
+    Type native_vector_type = get_native_xtensa_vector(t, target);
+    return t == native_vector_type;
+}
+
+bool is_double_native_vector_type(const Type &t, const Target &target) {
+    Type native_vector_type = get_native_xtensa_vector(t, target);
+    return t == native_vector_type.with_lanes(native_vector_type.lanes());    
 }
 
 std::string suffix_for_type(Type t) {
