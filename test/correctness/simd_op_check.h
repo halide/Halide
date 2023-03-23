@@ -373,7 +373,7 @@ public:
         std::cout << "simd_op_check test seed: " << seed << "\n";
 
         for (const auto &t : targets_to_test) {
-            if(!t.supported()) {
+            if (!t.supported()) {
                 std::cout << "[SKIP] Unsupported target: " << t << "\n";
                 return 0;
             }

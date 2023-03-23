@@ -419,9 +419,9 @@ BlockAllocator::reserve_block_entry(void *user_context, const MemoryProperties &
 RegionAllocator *
 BlockAllocator::create_region_allocator(void *user_context, BlockResource *block) {
 #ifdef DEBUG_RUNTIME
-     debug(user_context) << "BlockAllocator: Creating region allocator ("
-                         << "user_context=" << (void *)(user_context) << " "
-                         << "block_resource=" << (void *)(block) << ")...\n";
+    debug(user_context) << "BlockAllocator: Creating region allocator ("
+                        << "user_context=" << (void *)(user_context) << " "
+                        << "block_resource=" << (void *)(block) << ")...\n";
 #endif
     halide_abort_if_false(user_context, block != nullptr);
     RegionAllocator *region_allocator = RegionAllocator::create(
