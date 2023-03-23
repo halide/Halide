@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
             std::cerr << "Mismatch with seed " << fuzz_seed << "\n"
                       << "Original: " << orig << "\n"
                       << "CSE: " << csed << "\n";
-            return -1;
+            return 1;
         }
         fuzz_seed = rng();
     }

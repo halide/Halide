@@ -1,6 +1,8 @@
 #ifndef HALIDE_RUNTIME_BLOCK_STORAGE_H
 #define HALIDE_RUNTIME_BLOCK_STORAGE_H
 
+#include "../HalideRuntime.h"
+#include "../printer.h"
 #include "memory_resources.h"
 
 namespace Halide {
@@ -176,12 +178,12 @@ void BlockStorage::append(void *user_context, const void *entry_ptr) {
 }
 
 void BlockStorage::pop_front(void *user_context) {
-    halide_debug_assert(user_context, count > 0);
+    halide_abort_if_false(user_context, count > 0);
     remove(user_context, 0);
 }
 
 void BlockStorage::pop_back(void *user_context) {
-    halide_debug_assert(user_context, count > 0);
+    halide_abort_if_false(user_context, count > 0);
     resize(user_context, size() - 1);
 }
 
@@ -213,7 +215,7 @@ void BlockStorage::resize(void *user_context, size_t entry_count, bool realloc) 
         return;
     }
 
-#if DEBUG
+#ifdef DEBUG_RUNTIME
     debug(user_context) << "BlockStorage: Resize ("
                         << "requested_size=" << (int32_t)requested_size << " "
                         << "current_size=" << (int32_t)current_size << " "
@@ -249,14 +251,14 @@ void BlockStorage::remove(void *user_context, size_t index) {
 }
 
 void BlockStorage::remove(void *user_context, size_t index, size_t entry_count) {
-    halide_debug_assert(user_context, index < count);
+    halide_abort_if_false(user_context, index < count);
     const size_t last_index = size();
     if (index < (last_index - entry_count)) {
         size_t dst_offset = index * config.entry_size;
         size_t src_offset = (index + entry_count) * config.entry_size;
         size_t bytes = (last_index - index - entry_count) * config.entry_size;
 
-#if DEBUG
+#ifdef DEBUG_RUNTIME
         debug(0) << "BlockStorage: Remove ("
                  << "index=" << (int32_t)index << " "
                  << "entry_count=" << (int32_t)entry_count << " "
@@ -274,7 +276,7 @@ void BlockStorage::remove(void *user_context, size_t index, size_t entry_count) 
 }
 
 void BlockStorage::replace(void *user_context, size_t index, const void *array, size_t array_size) {
-    halide_debug_assert(user_context, index < count);
+    halide_abort_if_false(user_context, index < count);
     size_t offset = index * config.entry_size;
     size_t remaining = count - index;
 
@@ -288,7 +290,7 @@ void BlockStorage::replace(void *user_context, size_t index, const void *array, 
              << "capacity=" << (int32_t)capacity << ")...\n";
 #endif
 
-    halide_debug_assert(user_context, remaining > 0);
+    halide_abort_if_false(user_context, remaining > 0);
     size_t copy_count = min(remaining, array_size);
     void *dst_ptr = offset_address(ptr, offset);
     memcpy(dst_ptr, array, copy_count * config.entry_size);
@@ -296,7 +298,7 @@ void BlockStorage::replace(void *user_context, size_t index, const void *array, 
 }
 
 void BlockStorage::insert(void *user_context, size_t index, const void *array, size_t array_size) {
-    halide_debug_assert(user_context, index <= count);
+    halide_abort_if_false(user_context, index <= count);
     const size_t last_index = size();
     resize(user_context, last_index + array_size);
     if (index < last_index) {
@@ -340,12 +342,12 @@ size_t BlockStorage::stride() const {
 }
 
 void *BlockStorage::operator[](size_t index) {
-    halide_debug_assert(nullptr, index < capacity);
+    halide_abort_if_false(nullptr, index < capacity);
     return offset_address(ptr, index * config.entry_size);
 }
 
 const void *BlockStorage::operator[](size_t index) const {
-    halide_debug_assert(nullptr, index < capacity);
+    halide_abort_if_false(nullptr, index < capacity);
     return offset_address(ptr, index * config.entry_size);
 }
 
@@ -354,12 +356,12 @@ void *BlockStorage::data() {
 }
 
 void *BlockStorage::front() {
-    halide_debug_assert(nullptr, count > 0);
+    halide_abort_if_false(nullptr, count > 0);
     return ptr;
 }
 
 void *BlockStorage::back() {
-    halide_debug_assert(nullptr, count > 0);
+    halide_abort_if_false(nullptr, count > 0);
     size_t index = count - 1;
     return offset_address(ptr, index * config.entry_size);
 }
@@ -369,12 +371,12 @@ const void *BlockStorage::data() const {
 }
 
 const void *BlockStorage::front() const {
-    halide_debug_assert(nullptr, count > 0);
+    halide_abort_if_false(nullptr, count > 0);
     return ptr;
 }
 
 const void *BlockStorage::back() const {
-    halide_debug_assert(nullptr, count > 0);
+    halide_abort_if_false(nullptr, count > 0);
     size_t index = count - 1;
     return offset_address(ptr, index * config.entry_size);
 }
@@ -387,7 +389,7 @@ void BlockStorage::allocate(void *user_context, size_t new_capacity) {
         size_t block_count = (requested_bytes / block_size);
         block_count += (requested_bytes % block_size) ? 1 : 0;
         size_t alloc_size = block_count * block_size;
-#if DEBUG
+#ifdef DEBUG_RUNTIME
         debug(0) << "BlockStorage: Allocating ("
                  << "requested_bytes=" << (int32_t)requested_bytes << " "
                  << "block_size=" << (int32_t)block_size << " "

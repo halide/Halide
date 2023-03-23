@@ -61,46 +61,59 @@ extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *nam
 }
 
 template<typename T>
-ALWAYS_INLINE T get_cuda_symbol(void *user_context, const char *name, bool optional = false) {
-    T s = (T)halide_cuda_get_symbol(user_context, name);
-    if (!optional && !s) {
-        error(user_context) << "CUDA API not found: " << name << "\n";
+ALWAYS_INLINE halide_error_code_t get_cuda_symbol(void *user_context, const char *name, bool optional, T &fn) {
+    fn = (T)halide_cuda_get_symbol(user_context, name);
+    if (!optional && !fn) {
+        error(user_context) << "CUDA API not found: " << name;
+        return halide_error_code_symbol_not_found;
     }
-    return s;
+    return halide_error_code_success;
 }
 
 // Load a CUDA shared object/dll and get the CUDA API function pointers from it.
-WEAK void load_libcuda(void *user_context) {
+WEAK int load_libcuda(void *user_context) {
     debug(user_context) << "    load_libcuda (user_context: " << user_context << ")\n";
     halide_abort_if_false(user_context, cuInit == nullptr);
+    halide_error_code_t result;
 
 // clang-format off
-#define CUDA_FN(ret, fn, args)               fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn);        // NOLINT(bugprone-macro-parentheses)
-#define CUDA_FN_OPTIONAL(ret, fn, args)      fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, true);  // NOLINT(bugprone-macro-parentheses)
-#define CUDA_FN_3020(ret, fn, fn_3020, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_3020);   // NOLINT(bugprone-macro-parentheses)
-#define CUDA_FN_4000(ret, fn, fn_4000, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_4000);   // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN(ret, fn, args)               result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, false, fn); if (result) return result;        // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_OPTIONAL(ret, fn, args)      result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, true, fn); if (result) return result; // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_3020(ret, fn, fn_3020, args) result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_3020, false, fn); if (result) return result;  // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_4000(ret, fn, fn_4000, args) result = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_4000, false, fn); if (result) return result;  // NOLINT(bugprone-macro-parentheses)
 #include "cuda_functions.h"
 #undef CUDA_FN
 #undef CUDA_FN_OPTIONAL
 #undef CUDA_FN_3020
 #undef CUDA_FN_4000
     // clang-format on
+    return halide_error_code_success;
 }
 
 // Call load_libcuda() if CUDA library has not been loaded.
 // This function is thread safe.
 // Note that initialization might fail. The caller can detect such failure by checking whether cuInit is nullptr.
-WEAK void ensure_libcuda_init(void *user_context) {
+WEAK int ensure_libcuda_init(void *user_context) {
     ScopedSpinLock spinlock(&lib_cuda_lock);
     if (!cuInit) {
-        load_libcuda(user_context);
+        return load_libcuda(user_context);
     }
+    return halide_error_code_success;
 }
 
 extern WEAK halide_device_interface_t cuda_device_interface;
 
-WEAK const char *get_error_name(CUresult error);
-WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx);
+WEAK const char *get_cuda_error_name(CUresult error);
+WEAK int create_cuda_context(void *user_context, CUcontext *ctx);
+
+template<typename... Args>
+int error_cuda(void *user_context, CUresult cuda_error, const Args &...args) {
+    if (cuda_error == CUDA_SUCCESS) {
+        return halide_error_code_success;
+    }
+    error(user_context).append("CUDA error: ", get_cuda_error_name(cuda_error), " ", args...);
+    return halide_error_code_gpu_device_error;
+}
 
 // A cuda context defined in this module with weak linkage
 CUcontext WEAK context = nullptr;
@@ -153,16 +166,16 @@ WEAK int halide_default_cuda_acquire_context(void *user_context, CUcontext *ctx,
     if (local_val == nullptr) {
         if (!create) {
             *ctx = nullptr;
-            return 0;
+            return halide_error_code_success;
         }
 
         {
             ScopedMutexLock spinlock(&context_lock);
             local_val = context;
             if (local_val == nullptr) {
-                CUresult error = create_cuda_context(user_context, &local_val);
-                if (error != CUDA_SUCCESS) {
-                    return error;
+                if (auto result = create_cuda_context(user_context, &local_val);
+                    result != halide_error_code_success) {
+                    return result;
                 }
             }
             // Normally in double-checked locking you need a release
@@ -176,11 +189,11 @@ WEAK int halide_default_cuda_acquire_context(void *user_context, CUcontext *ctx,
     }
 
     *ctx = local_val;
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_default_cuda_release_context(void *user_context) {
-    return 0;
+    return halide_error_code_success;
 }
 
 // Return the stream to use for executing kernels and synchronization. Only called
@@ -193,7 +206,7 @@ WEAK int halide_default_cuda_get_stream(void *user_context, CUcontext ctx, CUstr
     // synchronous. stream 2 gives a separate non-blocking stream per
     // thread.
     *stream = nullptr;
-    return 0;
+    return halide_error_code_success;
 }
 
 }  // extern "C"
@@ -252,75 +265,84 @@ namespace Cuda {
 
 // Helper object to acquire and release the cuda context.
 class Context {
-    void *user_context;
+    void *const user_context;
+    int status;  // must always be a valid halide_error_code_t value
 
 public:
     CUcontext context;
-    int error;
 
-    // Constructor sets 'error' if any occurs.
+    // Constructor sets 'status' if any error occurs.
     ALWAYS_INLINE Context(void *user_context)
         : user_context(user_context),
-          context(nullptr),
-          error(CUDA_SUCCESS) {
+          status(halide_error_code_success),
+          context(nullptr) {
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif
-        error = halide_cuda_acquire_context(user_context, &context);
-        if (error != 0) {
+        status = halide_cuda_acquire_context(user_context, &context);
+        if (status) {
             return;
         }
 
         // The default acquire_context loads libcuda as a
         // side-effect. However, if acquire_context has been
         // overridden, we may still need to load libcuda
-        ensure_libcuda_init(user_context);
+        status = ensure_libcuda_init(user_context);
+        if (status) {
+            return;
+        }
 
         halide_abort_if_false(user_context, context != nullptr);
         halide_abort_if_false(user_context, cuInit != nullptr);
 
-        error = cuCtxPushCurrent(context);
+        status = error_cuda(user_context, cuCtxPushCurrent(context));
     }
 
     ALWAYS_INLINE ~Context() {
-        if (error == 0) {
+        if (status == halide_error_code_success) {
             CUcontext old;
             cuCtxPopCurrent(&old);
         }
 
-        halide_cuda_release_context(user_context);
+        (void)halide_cuda_release_context(user_context);  // ignore error
     }
+
+    ALWAYS_INLINE int error() const {
+        return status;
+    }
+
+    Context(const Context &) = delete;
+    Context &operator=(const Context &) = delete;
+    Context(Context &&) = delete;
+    Context &operator=(Context &&) = delete;
 };
 
 WEAK Halide::Internal::GPUCompilationCache<CUcontext, CUmodule> compilation_cache;
 
-WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
+WEAK int create_cuda_context(void *user_context, CUcontext *ctx) {
     // Initialize CUDA
-    ensure_libcuda_init(user_context);
+    auto result = ensure_libcuda_init(user_context);
+    if (result) {
+        return result;
+    }
     if (!cuInit) {
-        error(user_context) << "Could not find cuda system libraries";
-        return CUDA_ERROR_FILE_NOT_FOUND;
+        return error_cuda(user_context, CUDA_ERROR_FILE_NOT_FOUND, "Could not find cuda system libraries");
     }
 
     CUresult err = cuInit(0);
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuInit failed: "
-                            << get_error_name(err);
-        return err;
+        return error_cuda(user_context, err, "cuInit failed");
     }
 
     // Make sure we have a device
     int deviceCount = 0;
     err = cuDeviceGetCount(&deviceCount);
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuGetDeviceCount failed: "
-                            << get_error_name(err);
-        return err;
+        return error_cuda(user_context, err, "cuGetDeviceCount failed");
     }
 
     if (deviceCount <= 0) {
-        halide_error(user_context, "CUDA: No devices available");
-        return CUDA_ERROR_NO_DEVICE;
+        return error_cuda(user_context, CUDA_ERROR_NO_DEVICE, "No devices available");
     }
 
     int device = halide_get_gpu_device(user_context);
@@ -351,10 +373,9 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
 
     // Get device
     CUdevice dev;
-    CUresult status = cuDeviceGet(&dev, device);
-    if (status != CUDA_SUCCESS) {
-        halide_error(user_context, "CUDA: Failed to get device\n");
-        return status;
+    err = cuDeviceGet(&dev, device);
+    if (err != CUDA_SUCCESS) {
+        return error_cuda(user_context, err, "Failed to get device");
     }
 
     debug(user_context) << "    Got device " << dev << "\n";
@@ -368,9 +389,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         debug(user_context) << "      " << name << "\n";
 
         if (err != CUDA_SUCCESS) {
-            error(user_context) << "CUDA: cuDeviceGetName failed: "
-                                << get_error_name(err);
-            return err;
+            return error_cuda(user_context, err, "cuDeviceGetName failed");
         }
 
         size_t memory = 0;
@@ -378,9 +397,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         debug(user_context) << "      total memory: " << (int)(memory >> 20) << " MB\n";
 
         if (err != CUDA_SUCCESS) {
-            error(user_context) << "CUDA: cuDeviceTotalMem failed: "
-                                << get_error_name(err);
-            return err;
+            return error_cuda(user_context, err, "cuDeviceTotalMem failed");
         }
 
         // Declare variables for other state we want to query.
@@ -413,11 +430,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         for (int i = 0; attrs[i].dst; i++) {
             err = cuDeviceGetAttribute(attrs[i].dst, attrs[i].attr, dev);
             if (err != CUDA_SUCCESS) {
-                error(user_context)
-                    << "CUDA: cuDeviceGetAttribute failed ("
-                    << get_error_name(err)
-                    << ") for attribute " << (int)attrs[i].attr;
-                return err;
+                return error_cuda(user_context, err, "cuDeviceGetAttribute failed for attribute ", (int)attrs[i].attr);
             }
         }
 
@@ -469,26 +482,24 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     debug(user_context) << "    cuCtxCreate " << dev << " -> ";
     err = cuCtxCreate(ctx, 0, dev);
     if (err != CUDA_SUCCESS) {
-        debug(user_context) << get_error_name(err) << "\n";
-        error(user_context) << "CUDA: cuCtxCreate failed: "
-                            << get_error_name(err);
-        return err;
-    } else {
-        unsigned int version = 0;
-        cuCtxGetApiVersion(*ctx, &version);
-        debug(user_context) << *ctx << "(" << version << ")\n";
+        return error_cuda(user_context, err, "cuCtxCreate failed");
     }
+    unsigned int version = 0;
+    err = cuCtxGetApiVersion(*ctx, &version);
+    if (err != CUDA_SUCCESS) {
+        return error_cuda(user_context, err, "cuCtxGetApiVersion failed");
+    }
+    debug(user_context) << *ctx << "(" << version << ")\n";
+
     // Creation automatically pushes the context, but we'll pop to allow the caller
     // to decide when to push.
     CUcontext dummy;
     err = cuCtxPopCurrent(&dummy);
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuCtxPopCurrent failed: "
-                            << get_error_name(err);
-        return err;
+        return error_cuda(user_context, err, "cuCtxPopCurrent failed");
     }
 
-    return CUDA_SUCCESS;
+    return halide_error_code_success;
 }
 
 // This feature may be useful during CUDA backend or runtime
@@ -497,31 +508,20 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
 // it prevents using debug mode with cuda.
 #define ENABLE_POINTER_VALIDATION 0
 
-WEAK bool validate_device_pointer(void *user_context, halide_buffer_t *buf, size_t size = 0) {
-// The technique using cuPointerGetAttribute and CU_POINTER_ATTRIBUTE_CONTEXT
-// requires unified virtual addressing is enabled and that is not the case
-// for 32-bit processes on Mac OS X. So for now, as a total hack, just return true
-// in 32-bit. This could of course be wrong the other way for cards that only
-// support 32-bit addressing in 64-bit processes, but I expect those cards do not
-// support unified addressing at all.
-// TODO: figure out a way to validate pointers in all cases if strictly necessary.
-#if defined(BITS_32) || !ENABLE_POINTER_VALIDATION
-    return true;
+WEAK int validate_device_pointer(void *user_context, halide_buffer_t *buf, size_t size = 0) {
+#if !ENABLE_POINTER_VALIDATION
+    return halide_error_code_success;
 #else
-    if (buf->device == 0)
-        return true;
+    if (buf->device != 0) {
+        CUdeviceptr dev_ptr = (CUdeviceptr)buf->device;
 
-    CUdeviceptr dev_ptr = (CUdeviceptr)buf->device;
-
-    CUcontext ctx;
-    CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, dev_ptr);
-    if (result != CUDA_SUCCESS) {
-        error(user_context) << "Bad device pointer " << (void *)dev_ptr
-                            << ": cuPointerGetAttribute returned "
-                            << get_error_name(result);
-        return false;
+        CUcontext ctx;
+        CUresult err = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, dev_ptr);
+        if (err != CUDA_SUCCESS) {
+            return error_cuda(user_context, err, "Bad device pointer ", (void *)dev_ptr);
+        }
     }
-    return true;
+    return halide_error_code_success;
 #endif
 }
 
@@ -544,7 +544,7 @@ WEAK CUmodule compile_kernel(void *user_context, const char *ptx_src, int size) 
 
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuModuleLoadData failed: "
-                            << get_error_name(err);
+                            << get_cuda_error_name(err);
         return nullptr;
     } else {
         debug(user_context) << (void *)(loaded_module) << "\n";
@@ -565,8 +565,8 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
                         << ", size: " << size << "\n";
 
     Context ctx(user_context);
-    if (ctx.error != 0) {
-        return ctx.error;
+    if (ctx.error()) {
+        return ctx.error();
     }
 
 #ifdef DEBUG_RUNTIME
@@ -585,12 +585,12 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK void halide_cuda_finalize_kernels(void *user_context, void *state_ptr) {
     Context ctx(user_context);
-    if (ctx.error == 0) {
+    if (ctx.error() == halide_error_code_success) {
         compilation_cache.release_hold(user_context, ctx.context, state_ptr);
     }
 }
@@ -609,7 +609,7 @@ WEAK int halide_cuda_release_unused_device_allocations(void *user_context) {
         free(to_free);
         to_free = next;
     }
-    return 0;
+    return halide_error_code_success;
 }
 
 namespace Halide {
@@ -643,7 +643,7 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t *buf) {
     // should be allowed to call halide_device_free on any halide_buffer_t
     // including ones that have never been used with a GPU.
     if (buf->device == 0) {
-        return 0;
+        return halide_error_code_success;
     }
 
     CUdeviceptr dev_ptr = (CUdeviceptr)buf->device;
@@ -653,15 +653,18 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t *buf) {
         << ", buf: " << buf << ")\n";
 
     Context ctx(user_context);
-    if (ctx.error != CUDA_SUCCESS) {
-        return ctx.error;
+    if (ctx.error()) {
+        return ctx.error();
     }
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    halide_abort_if_false(user_context, validate_device_pointer(user_context, buf));
+    auto result = validate_device_pointer(user_context, buf);
+    if (result) {
+        return result;
+    }
 
     CUresult err = CUDA_SUCCESS;
     if (halide_can_reuse_device_allocations(user_context)) {
@@ -676,9 +679,9 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t *buf) {
             // We don't want to use a buffer freed one stream on
             // another, as there are no synchronization guarantees and
             // everything is async.
-            int result = halide_cuda_get_stream(user_context, ctx.context, &item->stream);
-            if (result != 0) {
-                error(user_context) << "CUDA: In halide_cuda_device_free, halide_cuda_get_stream returned " << result << "\n";
+            result = halide_cuda_get_stream(user_context, ctx.context, &item->stream);
+            if (result) {
+                return result;
             }
         } else {
             item->stream = nullptr;
@@ -700,7 +703,7 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t *buf) {
     buf->device = 0;
     if (err != CUDA_SUCCESS) {
         // We may be called as a destructor, so don't raise an error here.
-        return err;
+        return error_cuda(user_context, err);
     }
 
 #ifdef DEBUG_RUNTIME
@@ -708,7 +711,7 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t *buf) {
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_cuda_device_release(void *user_context) {
@@ -717,28 +720,29 @@ WEAK int halide_cuda_device_release(void *user_context) {
 
     // If we haven't even loaded libcuda, don't load it just to quit.
     if (!cuInit) {
-        return 0;
+        return halide_error_code_success;
     }
 
-    int err;
     CUcontext ctx;
-    err = halide_cuda_acquire_context(user_context, &ctx, false);
-    if (err != CUDA_SUCCESS) {
-        return err;
+    auto result = halide_cuda_acquire_context(user_context, &ctx, false);
+    if (result) {
+        return result;
     }
 
     if (ctx) {
         // It's possible that this is being called from the destructor of
         // a static variable, in which case the driver may already be
         // shutting down.
-        err = cuCtxPushCurrent(ctx);
+        CUresult err = cuCtxPushCurrent(ctx);
         if (err != CUDA_SUCCESS) {
             err = cuCtxSynchronize();
         }
-        halide_abort_if_false(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
+        if (err != CUDA_SUCCESS && err != CUDA_ERROR_DEINITIALIZED) {
+            return error_cuda(user_context, err);
+        }
 
         // Dump the contents of the free list, ignoring errors.
-        halide_cuda_release_unused_device_allocations(user_context);
+        (void)halide_cuda_release_unused_device_allocations(user_context);
 
         compilation_cache.delete_context(user_context, ctx, cuModuleUnload);
 
@@ -754,15 +758,15 @@ WEAK int halide_cuda_device_release(void *user_context) {
                 debug(user_context) << "    cuCtxDestroy " << context << "\n";
                 err = cuProfilerStop();
                 err = cuCtxDestroy(context);
-                halide_abort_if_false(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
+                if (err != CUDA_SUCCESS && err != CUDA_ERROR_DEINITIALIZED) {
+                    return error_cuda(user_context, err);
+                }
                 context = nullptr;
             }
         }  // spinlock
     }
 
-    halide_cuda_release_context(user_context);
-
-    return 0;
+    return halide_cuda_release_context(user_context);
 }
 
 WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
@@ -771,8 +775,8 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
         << ", buf: " << buf << ")\n";
 
     Context ctx(user_context);
-    if (ctx.error != CUDA_SUCCESS) {
-        return ctx.error;
+    if (ctx.error()) {
+        return ctx.error();
     }
 
     size_t size = buf->size_in_bytes();
@@ -782,8 +786,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
     halide_abort_if_false(user_context, size != 0);
     if (buf->device) {
         // This buffer already has a device allocation
-        halide_abort_if_false(user_context, validate_device_pointer(user_context, buf, size));
-        return 0;
+        return validate_device_pointer(user_context, buf, size);
     }
 
     // Check all strides positive.
@@ -802,9 +805,9 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
     if (halide_can_reuse_device_allocations(user_context)) {
         CUstream stream = nullptr;
         if (cuStreamSynchronize != nullptr) {
-            int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
-            if (result != 0) {
-                error(user_context) << "CUDA: In halide_cuda_device_malloc, halide_cuda_get_stream returned " << result << "\n";
+            auto result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+            if (result) {
+                return result;
             }
         }
 
@@ -865,17 +868,16 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 
         CUresult err = cuMemAlloc(&p, size);
         if (err == CUDA_ERROR_OUT_OF_MEMORY) {
-            halide_cuda_release_unused_device_allocations(user_context);
+            auto result = halide_cuda_release_unused_device_allocations(user_context);
+            if (result) {
+                return result;
+            }
             err = cuMemAlloc(&p, size);
         }
         if (err != CUDA_SUCCESS) {
-            debug(user_context) << get_error_name(err) << "\n";
-            error(user_context) << "CUDA: cuMemAlloc failed: "
-                                << get_error_name(err);
-            return err;
-        } else {
-            debug(user_context) << (void *)p << "\n";
+            return error_cuda(user_context, err, "cuMemAlloc failed");
         }
+        debug(user_context) << (void *)p << "\n";
     }
     halide_abort_if_false(user_context, p);
     buf->device = p;
@@ -887,7 +889,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
 
-    return 0;
+    return halide_error_code_success;
 }
 
 namespace {
@@ -896,7 +898,7 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
                                        CUstream stream) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
-        return -1;
+        return halide_error_code_bad_dimensions;
     } else if (d == 0) {
         CUresult err = CUDA_SUCCESS;
         const char *copy_name;
@@ -935,21 +937,20 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
             memcpy((void *)dst, (void *)src, c.chunk_size);
         }
         if (err != CUDA_SUCCESS) {
-            error(user_context) << "CUDA: " << copy_name << " failed: " << get_error_name(err);
-            return (int)err;
+            return error_cuda(user_context, err, copy_name, " failed");
         }
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d - 1]; i++) {
-            int err = cuda_do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host, stream);
+            auto result = cuda_do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host, stream);
             dst_off += c.dst_stride_bytes[d - 1];
             src_off += c.src_stride_bytes[d - 1];
-            if (err) {
-                return err;
+            if (result) {
+                return result;
             }
         }
     }
-    return 0;
+    return halide_error_code_success;
 }
 }  // namespace
 
@@ -977,11 +978,10 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
 
     device_copy c = make_buffer_copy(src, from_host, dst, to_host);
 
-    int err = 0;
     {
         Context ctx(user_context);
-        if (ctx.error != CUDA_SUCCESS) {
-            return ctx.error;
+        if (ctx.error()) {
+            return ctx.error();
         }
 
         debug(user_context)
@@ -991,22 +991,31 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
 #ifdef DEBUG_RUNTIME
         uint64_t t_before = halide_current_time_ns(user_context);
         if (!from_host) {
-            halide_abort_if_false(user_context, validate_device_pointer(user_context, src));
+            auto result = validate_device_pointer(user_context, src);
+            if (result) {
+                return result;
+            }
         }
         if (!to_host) {
-            halide_abort_if_false(user_context, validate_device_pointer(user_context, dst));
+            auto result = validate_device_pointer(user_context, dst);
+            if (result) {
+                return result;
+            }
         }
 #endif
 
         CUstream stream = nullptr;
         if (cuStreamSynchronize != nullptr) {
-            int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
-            if (result != 0) {
-                error(user_context) << "CUDA: In cuda_do_multidimensional_copy, halide_cuda_get_stream returned " << result << "\n";
+            auto result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+            if (result) {
+                return result;
             }
         }
 
-        err = cuda_do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host, stream);
+        auto result = cuda_do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host, stream);
+        if (result) {
+            return result;
+        }
 
 #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
@@ -1014,7 +1023,7 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
 #endif
     }
 
-    return err;
+    return halide_error_code_success;
 }
 
 namespace {
@@ -1025,7 +1034,7 @@ WEAK int cuda_device_crop_from_offset(const struct halide_buffer_t *src,
     dst->device = src->device + offset;
     dst->device_interface = src->device_interface;
     dst->set_device_dirty(src->device_dirty());
-    return 0;
+    return halide_error_code_success;
 }
 
 }  // namespace
@@ -1058,7 +1067,7 @@ WEAK int halide_cuda_device_release_crop(void *user_context, struct halide_buffe
     debug(user_context)
         << "CUDA: halide_cuda_release_crop (user_context: " << user_context
         << ", dst: " << dst << ")\n";
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_cuda_copy_to_device(void *user_context, halide_buffer_t *buf) {
@@ -1075,8 +1084,8 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
         << "CUDA: halide_cuda_device_sync (user_context: " << user_context << ")\n";
 
     Context ctx(user_context);
-    if (ctx.error != CUDA_SUCCESS) {
-        return ctx.error;
+    if (ctx.error()) {
+        return ctx.error();
     }
 
 #ifdef DEBUG_RUNTIME
@@ -1086,18 +1095,16 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
     CUresult err;
     if (cuStreamSynchronize != nullptr) {
         CUstream stream;
-        int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
-        if (result != 0) {
-            error(user_context) << "CUDA: In halide_cuda_device_sync, halide_cuda_get_stream returned " << result << "\n";
+        auto result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+        if (result) {
+            return result;
         }
         err = cuStreamSynchronize(stream);
     } else {
         err = cuCtxSynchronize();
     }
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuCtxSynchronize failed: "
-                            << get_error_name(err);
-        return err;
+        return error_cuda(user_context, err, "cuCtxSynchronize failed");
     }
 
 #ifdef DEBUG_RUNTIME
@@ -1105,7 +1112,7 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_cuda_run(void *user_context,
@@ -1127,8 +1134,8 @@ WEAK int halide_cuda_run(void *user_context,
 
     CUresult err;
     Context ctx(user_context);
-    if (ctx.error != CUDA_SUCCESS) {
-        return ctx.error;
+    if (ctx.error()) {
+        return ctx.error();
     }
 
     debug(user_context) << "Got context.\n";
@@ -1146,9 +1153,7 @@ WEAK int halide_cuda_run(void *user_context,
     err = cuModuleGetFunction(&f, mod, entry_name);
     debug(user_context) << "Got function " << f << "\n";
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuModuleGetFunction failed: "
-                            << get_error_name(err);
-        return err;
+        return error_cuda(user_context, err, "cuModuleGetFunction failed");
     }
 
     size_t num_args = 0;
@@ -1180,8 +1185,8 @@ WEAK int halide_cuda_run(void *user_context,
     // We use whether this routine was defined in the cuda driver library
     // as a test for streams support in the cuda implementation.
     if (cuStreamSynchronize != nullptr) {
-        int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
-        if (result != 0) {
+        if (auto result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+            result != halide_error_code_success) {
             error(user_context) << "CUDA: In halide_cuda_run, halide_cuda_get_stream returned " << result << "\n";
             free(dev_handles);
             free(translated_args);
@@ -1199,22 +1204,18 @@ WEAK int halide_cuda_run(void *user_context,
     free(dev_handles);
     free(translated_args);
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuLaunchKernel failed: "
-                            << get_error_name(err);
-        return err;
+        return error_cuda(user_context, err, "cuLaunchKernel failed");
     }
 
 #ifdef DEBUG_RUNTIME
     err = cuCtxSynchronize();
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuCtxSynchronize failed: "
-                            << get_error_name(err);
-        return err;
+        return error_cuda(user_context, err, "cuCtxSynchronize failed");
     }
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_cuda_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
@@ -1228,36 +1229,38 @@ WEAK int halide_cuda_device_and_host_free(void *user_context, struct halide_buff
 WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr) {
     halide_abort_if_false(user_context, buf->device == 0);
     if (buf->device != 0) {
-        return -2;
+        error(user_context) << "halide_cuda_wrap_device_ptr: device field is already non-zero";
+        return halide_error_code_generic_error;
     }
     buf->device = device_ptr;
     buf->device_interface = &cuda_device_interface;
     buf->device_interface->impl->use_module();
 #ifdef DEBUG_RUNTIME
-    if (!validate_device_pointer(user_context, buf)) {
+    if (auto result = validate_device_pointer(user_context, buf);
+        result != halide_error_code_success) {
         buf->device_interface->impl->release_module();
         buf->device = 0;
         buf->device_interface = nullptr;
-        return -3;
+        return result;
     }
 #endif
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_cuda_detach_device_ptr(void *user_context, struct halide_buffer_t *buf) {
     if (buf->device == 0) {
-        return 0;
+        return halide_error_code_success;
     }
     halide_abort_if_false(user_context, buf->device_interface == &cuda_device_interface);
     buf->device_interface->impl->release_module();
     buf->device = 0;
     buf->device_interface = nullptr;
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK uintptr_t halide_cuda_get_device_ptr(void *user_context, struct halide_buffer_t *buf) {
     if (buf->device == 0) {
-        return 0;
+        return halide_error_code_success;
     }
     halide_abort_if_false(user_context, buf->device_interface == &cuda_device_interface);
     return (uintptr_t)buf->device;
@@ -1276,14 +1279,14 @@ WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *min
         void *sym = halide_cuda_get_symbol(user_context, "cuInit");
         if (!sym) {
             *major = *minor = 0;
-            return 0;
+            return halide_error_code_success;
         }
     }
 
     {
         Context ctx(user_context);
-        if (ctx.error != 0) {
-            return ctx.error;
+        if (ctx.error()) {
+            return ctx.error();
         }
 
         CUresult err;
@@ -1291,11 +1294,7 @@ WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *min
         CUdevice dev;
         err = cuCtxGetDevice(&dev);
         if (err != CUDA_SUCCESS) {
-            error(user_context)
-                << "CUDA: cuCtxGetDevice failed ("
-                << Halide::Runtime::Internal::Cuda::get_error_name(err)
-                << ")";
-            return err;
+            return error_cuda(user_context, err, "cuCtxGetDevice failed");
         }
 
         err = cuDeviceGetAttribute(major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev);
@@ -1304,21 +1303,17 @@ WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *min
         }
 
         if (err != CUDA_SUCCESS) {
-            error(user_context)
-                << "CUDA: cuDeviceGetAttribute failed ("
-                << Halide::Runtime::Internal::Cuda::get_error_name(err)
-                << ")";
-            return err;
+            return error_cuda(user_context, err, "cuDeviceGetAttribute failed");
         }
     }
 
-    return 0;
+    return halide_error_code_success;
 }
 
 namespace {
 WEAK __attribute__((destructor)) void halide_cuda_cleanup() {
     compilation_cache.release_all(nullptr, cuModuleUnload);
-    halide_cuda_device_release(nullptr);
+    (void)halide_cuda_device_release(nullptr);  // ignore error
 }
 }  // namespace
 
@@ -1329,7 +1324,7 @@ namespace Runtime {
 namespace Internal {
 namespace Cuda {
 
-WEAK const char *get_error_name(CUresult err) {
+WEAK const char *get_cuda_error_name(CUresult err) {
     switch (err) {
     case CUDA_SUCCESS:
         return "CUDA_SUCCESS";
@@ -1443,9 +1438,6 @@ WEAK const char *get_error_name(CUresult err) {
     case CUDA_ERROR_UNKNOWN:
         return "CUDA_ERROR_UNKNOWN";
     default:
-        // This is unfortunate as usually get_cuda_error is called in the middle of
-        // an error print, but dropping the number on the floor is worse.
-        error(nullptr) << "Unknown cuda error " << err << "\n";
         return "<Unknown error>";
     }
 }

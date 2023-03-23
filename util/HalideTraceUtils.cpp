@@ -38,7 +38,7 @@ bool Packet::read(void *d, size_t size, FILE *fdesc) {
     if (s != size) {
         if (ferror(fdesc) || !feof(fdesc)) {
             perror("Failed during read");
-            exit(-1);
+            exit(1);
         }
         return false;  // EOF
     }
@@ -48,7 +48,7 @@ bool Packet::read(void *d, size_t size, FILE *fdesc) {
 
 void bad_type_error(halide_type_t type) {
     fprintf(stderr, "Can't convert packet with type: %d bits: %d\n", type.code, type.bits);
-    exit(-1);
+    exit(1);
 }
 
 }  // namespace Internal

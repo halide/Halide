@@ -132,7 +132,7 @@ int main(int argc, char **argv) {
             if (im2(x, y) != im1(x, y)) {
                 printf("wrapper(%d, %d) = %d instead of %d\n",
                        x, y, im2(x, y), im1(x, y));
-                return -1;
+                return 1;
             }
         }
     }

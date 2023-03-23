@@ -373,6 +373,10 @@ public:
         std::cout << "simd_op_check test seed: " << seed << "\n";
 
         for (const auto &t : targets_to_test) {
+            if(!t.supported()) {
+                std::cout << "[SKIP] Unsupported target: " << t << "\n";
+                return 0;
+            }
             SIMDOpCheckT test(t);
 
             if (argc > 1) {
@@ -401,7 +405,7 @@ public:
             compile_standalone_runtime(test.output_directory + "simd_op_check_runtime.o", test.target);
 
             if (!success) {
-                return -1;
+                return 1;
             }
         }
 

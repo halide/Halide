@@ -104,6 +104,8 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         name = "d3d12compute";
     } else if (d == DeviceAPI::Vulkan) {
         name = "vulkan";
+    } else if (d == DeviceAPI::WebGPU) {
+        name = "webgpu";
     } else {
         if (error_site) {
             user_error
@@ -162,6 +164,8 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::D3D12Compute;
     } else if (target.has_feature(Target::Vulkan)) {
         return DeviceAPI::Vulkan;
+    } else if (target.has_feature(Target::WebGPU)) {
+        return DeviceAPI::WebGPU;
     } else {
         return DeviceAPI::Host;
     }
@@ -202,6 +206,9 @@ Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type) {
         break;
     case DeviceAPI::Vulkan:
         interface_name = "halide_vulkan_device_interface";
+        break;
+    case DeviceAPI::WebGPU:
+        interface_name = "halide_webgpu_device_interface";
         break;
     case DeviceAPI::Default_GPU:
         // Will be resolved later

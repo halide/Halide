@@ -63,7 +63,7 @@ int run_test(bool use_timer_profiler) {
         printf("Percentage of runtime spent in f13: %d\n"
                "This is suspiciously low. It should be more like 66%%\n",
                percentage);
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -77,14 +77,14 @@ int main(int argc, char **argv) {
 
     printf("Testing thread based profiler.\n");
     int result = run_test(false);
-    if (result == -1) {
-        return -1;
+    if (result != 0) {
+        return 1;
     }
     if (get_jit_target_from_environment().os == Target::Linux) {
         printf("Testing timer based profiler.\n");
         result = run_test(true);
-        if (result == -1) {
-            return -1;
+        if (result != 0) {
+            return 1;
         }
     }
     printf("Success!\n");

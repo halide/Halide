@@ -1,4 +1,3 @@
-
 ##
 # Lists of source files. Keep ALL lists sorted in alphabetical order.
 ##
@@ -41,6 +40,7 @@ set(HEADER_FILES
     CodeGen_PyTorch.h
     CodeGen_Targets.h
     CodeGen_Vulkan_Dev.h
+    CodeGen_WebGPU_Dev.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -209,6 +209,7 @@ set(SOURCE_FILES
     CodeGen_RISCV.cpp
     CodeGen_Vulkan_Dev.cpp
     CodeGen_WebAssembly.cpp
+    CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
@@ -349,11 +350,32 @@ set(SOURCE_FILES
     WrapCalls.cpp
     )
 
+set(TEMPLATE_FILES
+    CodeGen_C_prologue
+    CodeGen_C_vectors
+    )
+
 ##
 # Build and import the runtime.
 ##
 
 add_subdirectory(runtime)
+
+##
+# Build the template files via binary2cpp.
+##
+
+add_library(Halide_c_templates OBJECT)
+foreach (f IN LISTS TEMPLATE_FILES)
+    set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${f}.template.cpp>")
+    set(DST "c_template.${f}.template.cpp")
+
+    add_custom_command(OUTPUT "${DST}"
+                       COMMAND binary2cpp "halide_c_template_${f}" < "${SRC}" > "${DST}"
+                       DEPENDS "${SRC}" binary2cpp
+                       VERBATIM)
+    target_sources(Halide_c_templates PRIVATE ${DST})
+endforeach ()
 
 ##
 # Build the Halide mono-header.
@@ -377,7 +399,8 @@ add_library(Halide
             ${SOURCE_FILES}
             ${HEADER_FILES}
             # Including these as sources works around the need to "install" Halide_initmod
-            $<TARGET_OBJECTS:Halide_initmod>)
+            $<TARGET_OBJECTS:Halide_initmod>
+            $<TARGET_OBJECTS:Halide_c_templates>)
 add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
@@ -548,6 +571,19 @@ if (TARGET_SPIRV)
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
     target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:Halide::SPIRV>")
 endif ()
+
+option(TARGET_WEBGPU "Include WebGPU target" ON)
+if (TARGET_WEBGPU)
+    target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
+    set(WEBGPU_NATIVE_LIB "" CACHE STRING
+        "WebGPU native library to link against")
+    if (WEBGPU_NATIVE_LIB)
+        set_property(SOURCE JITModule.cpp PROPERTY COMPILE_DEFINITIONS
+                     WEBGPU_NATIVE_LIB=\"${WEBGPU_NATIVE_LIB}\"
+                     APPEND_STRING)
+    endif ()
+endif()
+
 
 ##
 # Add autoschedulers to the build.

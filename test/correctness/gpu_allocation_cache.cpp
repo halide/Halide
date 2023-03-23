@@ -28,7 +28,10 @@ int main(int argc, char **argv) {
         printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK only allows 30 buffers to be allocated)!\n");
         return 0;
     }
-    const int N = 30;
+    if (target.has_feature(Target::WebGPU)) {
+        printf("[SKIP] Allocation cache not yet implemented for WebGPU.\n");
+        return 0;
+    }    const int N = 30;
     Var x, y, xi, yi;
 
     // Fixed size, overlapping lifetimes, looped 300 times. Should have 3 allocations live and OOM if there's a leak.

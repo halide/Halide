@@ -8,6 +8,7 @@
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_Vulkan_Dev.h"
+#include "CodeGen_WebGPU_Dev.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -271,6 +272,9 @@ public:
         }
         if (target.has_feature(Target::Vulkan)) {
             cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(target);
+        }
+        if (target.has_feature(Target::WebGPU)) {
+            cgdev[DeviceAPI::WebGPU] = new_CodeGen_WebGPU_Dev(target);
         }
 
         internal_assert(!cgdev.empty()) << "Requested unknown GPU target: " << target.to_string() << "\n";

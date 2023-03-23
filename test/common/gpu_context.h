@@ -10,7 +10,7 @@
 #endif
 
 // Create the global context. This is just a helper function not called by Halide.
-bool create_opencl_context(cl_context &cl_ctx, cl_command_queue &cl_q) {
+inline bool create_opencl_context(cl_context &cl_ctx, cl_command_queue &cl_q) {
     cl_int err = 0;
 
     const cl_uint maxPlatforms = 4;
@@ -68,7 +68,7 @@ bool create_opencl_context(cl_context &cl_ctx, cl_command_queue &cl_q) {
     return true;
 }
 
-void destroy_opencl_context(cl_context cl_ctx, cl_command_queue cl_q) {
+inline void destroy_opencl_context(cl_context cl_ctx, cl_command_queue cl_q) {
     clReleaseCommandQueue(cl_q);
     clReleaseContext(cl_ctx);
 }
@@ -77,7 +77,7 @@ void destroy_opencl_context(cl_context cl_ctx, cl_command_queue cl_q) {
 // Implement CUDA custom context.
 #include <cuda.h>
 
-bool create_cuda_context(CUcontext &cuda_ctx) {
+inline bool create_cuda_context(CUcontext &cuda_ctx) {
     // Initialize CUDA
     CUresult err = cuInit(0);
     if (err != CUDA_SUCCESS) {
@@ -123,7 +123,7 @@ bool create_cuda_context(CUcontext &cuda_ctx) {
     return true;
 }
 
-void destroy_cuda_context(CUcontext cuda_ctx) {
+inline void destroy_cuda_context(CUcontext cuda_ctx) {
     cuCtxDestroy(cuda_ctx);
 }
 
@@ -131,7 +131,7 @@ void destroy_cuda_context(CUcontext cuda_ctx) {
 #include <Metal/MTLCommandQueue.h>
 #include <Metal/MTLDevice.h>
 
-bool create_metal_context(id<MTLDevice> &device, id<MTLCommandQueue> &queue) {
+inline bool create_metal_context(id<MTLDevice> &device, id<MTLCommandQueue> &queue) {
     device = MTLCreateSystemDefaultDevice();
     if (device == nullptr) {
         NSArray<id<MTLDevice>> *devices = MTLCopyAllDevices();
@@ -151,9 +151,152 @@ bool create_metal_context(id<MTLDevice> &device, id<MTLCommandQueue> &queue) {
     return true;
 }
 
-void destroy_metal_context(id<MTLDevice> device, id<MTLCommandQueue> queue) {
+inline void destroy_metal_context(id<MTLDevice> device, id<MTLCommandQueue> queue) {
     [queue release];
     [device release];
+}
+
+#elif defined(TEST_WEBGPU)
+
+#include "mini_webgpu.h"
+
+extern "C" {
+// TODO: Remove all of this when wgpuInstanceProcessEvents() is supported.
+// See https://github.com/halide/Halide/issues/7248
+#ifdef WITH_DAWN_NATIVE
+// From <unistd.h>, used to spin-lock while waiting for device initialization.
+int usleep(uint32_t);
+#else
+// Defined by Emscripten, and used to yield execution to asynchronous Javascript
+// work in combination with Emscripten's "Asyncify" mechanism.
+void emscripten_sleep(unsigned int ms);
+#endif
+}
+
+inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapter_out, WGPUDevice *device_out, WGPUBuffer *staging_buffer_out) {
+    struct Results {
+        WGPUInstance instance = nullptr;
+        WGPUAdapter adapter = nullptr;
+        WGPUDevice device = nullptr;
+        WGPUBuffer staging_buffer = nullptr;
+        bool success = true;
+    } results;
+
+    // TODO: Unify this when Emscripten implements wgpuCreateInstance().
+    // See https://github.com/halide/Halide/issues/7248
+#ifdef WITH_DAWN_NATIVE
+    WGPUInstanceDescriptor desc{};
+    desc.nextInChain = nullptr;
+    results.instance = wgpuCreateInstance(&desc);
+#else
+    results.instance = nullptr;
+#endif
+
+    auto request_adapter_callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, char const *message, void *userdata) {
+        auto *results = (Results *)userdata;
+
+        if (status != WGPURequestAdapterStatus_Success) {
+            results->success = false;
+            return;
+        }
+        results->adapter = adapter;
+
+        // Use the defaults for most limits.
+        WGPURequiredLimits requestedLimits{};
+        requestedLimits.nextInChain = nullptr;
+        memset(&requestedLimits.limits, 0xFF, sizeof(WGPULimits));
+
+        // TODO: Enable for Emscripten when wgpuAdapterGetLimits is supported.
+        // See https://github.com/halide/Halide/issues/7248
+#ifdef WITH_DAWN_NATIVE
+        WGPUSupportedLimits supportedLimits{};
+        supportedLimits.nextInChain = nullptr;
+        if (!wgpuAdapterGetLimits(adapter, &supportedLimits)) {
+            results->success = false;
+            return;
+        } else {
+            // Raise the limits on buffer size and workgroup storage size.
+            requestedLimits.limits.maxBufferSize = supportedLimits.limits.maxBufferSize;
+            requestedLimits.limits.maxStorageBufferBindingSize = supportedLimits.limits.maxStorageBufferBindingSize;
+            requestedLimits.limits.maxComputeWorkgroupStorageSize = supportedLimits.limits.maxComputeWorkgroupStorageSize;
+        }
+#endif
+
+        WGPUDeviceDescriptor desc{};
+        desc.nextInChain = nullptr;
+        desc.label = nullptr;
+        desc.requiredFeaturesCount = 0;
+        desc.requiredFeatures = nullptr;
+        desc.requiredLimits = &requestedLimits;
+
+        auto request_device_callback = [](WGPURequestDeviceStatus status,
+                                          WGPUDevice device,
+                                          char const *message,
+                                          void *userdata) {
+            auto *results = (Results *)userdata;
+            if (status != WGPURequestDeviceStatus_Success) {
+                results->success = false;
+                return;
+            }
+            results->device = device;
+
+            auto device_lost_callback = [](WGPUDeviceLostReason reason,
+                                           char const *message,
+                                           void *userdata) {
+                fprintf(stderr, "WGPU Device Lost: %d %s", (int)reason, message);
+                abort();
+            };
+            wgpuDeviceSetDeviceLostCallback(device, device_lost_callback, userdata);
+
+            // Create a staging buffer for transfers.
+            constexpr int kStagingBufferSize = 4 * 1024 * 1024;
+            WGPUBufferDescriptor desc{};
+            desc.nextInChain = nullptr;
+            desc.label = nullptr;
+            desc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
+            desc.size = kStagingBufferSize;
+            desc.mappedAtCreation = false;
+            results->staging_buffer = wgpuDeviceCreateBuffer(device, &desc);
+            if (results->staging_buffer == nullptr) {
+                results->success = false;
+                return;
+            }
+        };
+
+        wgpuAdapterRequestDevice(adapter, &desc, request_device_callback, userdata);
+    };
+
+    wgpuInstanceRequestAdapter(results.instance, nullptr, request_adapter_callback, &results);
+
+    // Wait for device initialization to complete.
+    while (!results.device && results.success) {
+        // TODO: Use wgpuInstanceProcessEvents() when it is supported.
+        // See https://github.com/halide/Halide/issues/7248
+#ifndef WITH_DAWN_NATIVE
+        emscripten_sleep(10);
+#else
+        usleep(1000);
+#endif
+    }
+
+    *instance_out = results.instance;
+    *adapter_out = results.adapter;
+    *device_out = results.device;
+    *staging_buffer_out = results.staging_buffer;
+    return results.success;
+}
+
+inline void destroy_webgpu_context(WGPUInstance instance, WGPUAdapter adapter, WGPUDevice device, WGPUBuffer staging_buffer) {
+    wgpuDeviceSetDeviceLostCallback(device, nullptr, nullptr);
+    wgpuBufferRelease(staging_buffer);
+    wgpuDeviceRelease(device);
+    wgpuAdapterRelease(adapter);
+
+    // TODO: Unify this when Emscripten supports wgpuInstanceRelease().
+    // See https://github.com/halide/Halide/issues/7248
+#ifdef WITH_DAWN_NATIVE
+    wgpuInstanceRelease(instance);
+#endif
 }
 
 #endif

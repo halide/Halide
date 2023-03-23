@@ -387,7 +387,8 @@ int main(int argc, char **argv) {
     if (target.has_feature(Target::Metal) ||
         target.has_feature(Target::Vulkan) ||
         target.has_feature(Target::OpenGLCompute) ||
-        target.has_feature(Target::D3D12Compute)) {
+        target.has_feature(Target::D3D12Compute) ||
+        target.has_feature(Target::WebGPU)) {
         // https://github.com/halide/Halide/issues/2148
         vector_width_max = 4;
     }
@@ -407,7 +408,7 @@ int main(int argc, char **argv) {
         if (!sharder.should_run(t)) continue;
         const auto &task = tasks.at(t);
         if (!task.fn()) {
-            exit(-1);
+            exit(1);
         }
     }
 

@@ -90,11 +90,11 @@ int main(int argc, char **argv) {
         for (int j = 0; j < output1.dim(1).extent(); j++) {
             if (output1(i, j) != correct[j]) {
                 printf("output1(%d, %d) = %d instead of %d\n", i, j, output1(i, j), correct[j]);
-                return -1;
+                return 1;
             }
             if (output2(i, j) != correct[j]) {
                 printf("output2(%d, %d) = %d instead of %d\n", i, j, output2(i, j), correct[j]);
-                return -1;
+                return 1;
             }
         }
     }
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
                 if (output(x, y) != correct) {
                     printf("output(%d, %d) = %d instead of %d\n",
                            x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -203,7 +203,7 @@ int main(int argc, char **argv) {
                 printf("Sort result is not correctly ordered at elements %d, %d:\n"
                        "(%d, %d) vs (%d, %d)\n",
                        i, i + 1, out_0(i), out_1(i), out_0(i + 1), out_1(i + 1));
-                return -1;
+                return 1;
             }
         }
     }
@@ -220,7 +220,7 @@ int main(int argc, char **argv) {
             int correct = i < 4 ? 5 : 0;
             if (out(i) != correct) {
                 printf("out(%d) = %d instead of %d\n", i, out(i), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -240,7 +240,7 @@ int main(int argc, char **argv) {
             int correct = i == 3 ? 9 : 0;
             if (out(i) != correct) {
                 printf("out(%d) = %d instead of %d\n", i, out(i), correct);
-                return -1;
+                return 1;
             }
         }
     }

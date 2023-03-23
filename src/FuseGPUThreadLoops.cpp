@@ -1027,9 +1027,10 @@ public:
           device_api(d),
           thread_id_var_name(unique_name('t')),
           num_threads_var_name(unique_name('t')),
-          may_merge_allocs_of_different_type(device_api != DeviceAPI::Vulkan &&
-                                             device_api != DeviceAPI::OpenGLCompute &&
-                                             device_api != DeviceAPI::D3D12Compute) {
+          may_merge_allocs_of_different_type(device_api != DeviceAPI::OpenGLCompute &&
+                                             device_api != DeviceAPI::D3D12Compute &&
+						device_api != DeviceAPI::Vulkan &&                                   
+                                             device_api != DeviceAPI::WebGPU) {
     }
 };  // namespace Internal
 

@@ -16,7 +16,7 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    set(WABT_VER 1.0.30)
+    set(WABT_VER 1.0.32)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
@@ -70,7 +70,7 @@ endif()
 function(add_wasm_executable TARGET)
     set(options)
     set(oneValueArgs)
-    set(multiValueArgs SRCS DEPS INCLUDES ENABLE_IF)
+    set(multiValueArgs SRCS DEPS INCLUDES OPTIONS ENABLE_IF)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
@@ -106,7 +106,17 @@ function(add_wasm_executable TARGET)
         -s ASSERTIONS=1
         -s ALLOW_MEMORY_GROWTH=1
         -s ENVIRONMENT=node
+        -s STACK_SIZE=98304
+        ${args_OPTIONS}
     )
+
+    if ("${Halide_TARGET}" MATCHES "webgpu")
+        set(EMCC_FLAGS
+            ${EMCC_FLAGS}
+            -s USE_WEBGPU=1
+            -s ASYNCIFY
+        )
+    endif ()
 
     set(SRCS)
     foreach (S IN LISTS args_SRCS)
@@ -143,9 +153,18 @@ function(add_wasm_halide_test TARGET)
         return()
     endif ()
 
+    set(script "require('./${TARGET}.js')")
+    if (WEBGPU_NODE_BINDINGS)
+        set(script "\
+            const provider = require('${WEBGPU_NODE_BINDINGS}')\n\
+            const gpu = provider.create([])\n\
+            const navigator = { gpu: gpu }\n
+            ${script}")
+    endif ()
+
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
-                    COMMAND ${NODE_JS_EXECUTABLE} "${TARGET}.js")
+                    COMMAND ${NODE_JS_EXECUTABLE} "-e" "${script}")
 endfunction()
 
 function(find_node_js)

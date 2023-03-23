@@ -145,6 +145,9 @@ void check_casts() {
     check(cast(UInt(8), x + 1) - cast(UInt(8), x),
           cast(UInt(8), x + 1) - cast(UInt(8), x));
 
+    // Overflow is well-defined for ints < 32 bits
+    check(cast(Int(8), make_const(UInt(8), 128)), make_const(Int(8), -128));
+
     // Check that chains of widening casts don't lose the distinction
     // between zero-extending and sign-extending.
     check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),

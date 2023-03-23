@@ -1,3 +1,7 @@
+#ifndef HALIDE_RUNTIME_GPU_CONTEXT_COMMON_H_
+#define HALIDE_RUNTIME_GPU_CONTEXT_COMMON_H_
+
+#include "HalideRuntime.h"
 #include "printer.h"
 #include "scoped_mutex_lock.h"
 
@@ -9,14 +13,8 @@ class GPUCompilationCache {
     struct CachedCompilation {
         ContextT context{};
         ModuleStateT module_state{};
-        uint32_t kernel_id{};
-        uint32_t use_count{0};
-
-        CachedCompilation(ContextT context, ModuleStateT module_state,
-                          uint32_t kernel_id, uint32_t use_count)
-            : context(context), module_state(module_state),
-              kernel_id(kernel_id), use_count(use_count) {
-        }
+        uintptr_t kernel_id{0};
+        uintptr_t use_count{0};
     };
 
     halide_mutex mutex;
@@ -27,17 +25,16 @@ class GPUCompilationCache {
     CachedCompilation *compilations{nullptr};
     int count{0};
 
-    static constexpr uint32_t kInvalidId{0};
-    static constexpr uint32_t kDeletedId{1};
+    static constexpr uintptr_t kInvalidId{0};
+    static constexpr uintptr_t kDeletedId{1};
 
-    uint32_t unique_id{2};  // zero is an invalid id
+    uintptr_t unique_id{2};  // zero is an invalid id
 
-public:
-    static ALWAYS_INLINE uintptr_t kernel_hash(ContextT context, uint32_t id, uint32_t bits) {
+    static ALWAYS_INLINE uintptr_t kernel_hash(ContextT context, uintptr_t id, int bits) {
         uintptr_t addr = (uintptr_t)context + id;
         // Fibonacci hashing. The golden ratio is 1.9E3779B97F4A7C15F39...
         // in hexadecimal.
-        if (sizeof(uintptr_t) >= 8) {
+        if constexpr (sizeof(uintptr_t) >= 8) {
             return (addr * (uintptr_t)0x9E3779B97F4A7C15) >> (64 - bits);
         } else {
             return (addr * (uintptr_t)0x9E3779B9) >> (32 - bits);
@@ -70,7 +67,7 @@ public:
         return false;
     }
 
-    HALIDE_MUST_USE_RESULT bool find_internal(ContextT context, uint32_t id,
+    HALIDE_MUST_USE_RESULT bool find_internal(ContextT context, uintptr_t id,
                                               ModuleStateT *&module_state, int increment) {
         if (log2_compilations_size == 0) {
             return false;
@@ -90,17 +87,6 @@ public:
                 }
                 return true;
             }
-        }
-        return false;
-    }
-
-    HALIDE_MUST_USE_RESULT bool lookup(ContextT context, void *state_ptr, ModuleStateT &module_state) {
-        ScopedMutexLock lock_guard(&mutex);
-        uint32_t id = (uint32_t)(uintptr_t)state_ptr;
-        ModuleStateT *mod_ptr;
-        if (find_internal(context, id, mod_ptr, 0)) {
-            module_state = *mod_ptr;
-            return true;
         }
         return false;
     }
@@ -135,7 +121,7 @@ public:
     }
 
     template<typename FreeModuleT>
-    void release_context(void *user_context, bool all, ContextT context, FreeModuleT &f) {
+    void release_context_already_locked(void *user_context, bool all, ContextT context, FreeModuleT &f) {
         if (count == 0) {
             return;
         }
@@ -155,18 +141,38 @@ public:
         }
     }
 
+public:
+    HALIDE_MUST_USE_RESULT bool lookup(ContextT context, void *state_ptr, ModuleStateT &module_state) {
+        ScopedMutexLock lock_guard(&mutex);
+
+        uintptr_t id = (uintptr_t)state_ptr;
+        ModuleStateT *mod_ptr;
+        if (find_internal(context, id, mod_ptr, 0)) {
+            module_state = *mod_ptr;
+            return true;
+        }
+        return false;
+    }
+
+    template<typename FreeModuleT>
+    void release_context(void *user_context, bool all, ContextT context, FreeModuleT &f) {
+        ScopedMutexLock lock_guard(&mutex);
+
+        release_context_already_locked(user_context, all, context, f);
+    }
+
     template<typename FreeModuleT>
     void delete_context(void *user_context, ContextT context, FreeModuleT &f) {
         ScopedMutexLock lock_guard(&mutex);
 
-        release_context(user_context, false, context, f);
+        release_context_already_locked(user_context, false, context, f);
     }
 
     template<typename FreeModuleT>
     void release_all(void *user_context, FreeModuleT &f) {
         ScopedMutexLock lock_guard(&mutex);
 
-        release_context(user_context, true, nullptr, f);
+        release_context_already_locked(user_context, true, nullptr, f);
         // Some items may have been in use, so can't free.
         if (count == 0) {
             free(compilations);
@@ -176,15 +182,19 @@ public:
     }
 
     template<typename CompileModuleT, typename... Args>
-    HALIDE_MUST_USE_RESULT bool kernel_state_setup(void *user_context, void **state_ptr,
+    HALIDE_MUST_USE_RESULT bool kernel_state_setup(void *user_context, void **state_ptr_ptr,
                                                    ContextT context, ModuleStateT &result,
                                                    CompileModuleT f,
                                                    Args... args) {
         ScopedMutexLock lock_guard(&mutex);
 
-        uint32_t *id_ptr = (uint32_t *)state_ptr;
+        uintptr_t *id_ptr = (uintptr_t *)state_ptr_ptr;
         if (*id_ptr == 0) {
             *id_ptr = unique_id++;
+            if (unique_id == (uintptr_t)-1) {
+                // Sorry, out of ids
+                return false;
+            }
         }
 
         ModuleStateT *mod;
@@ -210,8 +220,10 @@ public:
     }
 
     void release_hold(void *user_context, ContextT context, void *state_ptr) {
+        ScopedMutexLock lock_guard(&mutex);
+
         ModuleStateT *mod;
-        uint32_t id = (uint32_t)(uintptr_t)state_ptr;
+        uintptr_t id = (uintptr_t)state_ptr;
         bool result = find_internal(context, id, mod, -1);
         halide_debug_assert(user_context, result);  // Value must be in cache to be released
         (void)result;
@@ -220,3 +232,5 @@ public:
 
 }  // namespace Internal
 }  // namespace Halide
+
+#endif  // HALIDE_RUNTIME_GPU_CONTEXT_COMMON_H_

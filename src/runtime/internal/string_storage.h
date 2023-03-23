@@ -1,6 +1,7 @@
 #ifndef HALIDE_RUNTIME_STRING_STORAGE_H
 #define HALIDE_RUNTIME_STRING_STORAGE_H
 
+#include "../HalideRuntime.h"
 #include "block_storage.h"
 
 namespace Halide {

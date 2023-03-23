@@ -1,6 +1,8 @@
 #ifndef HALIDE_RUNTIME_BLOCK_ALLOCATOR_H
 #define HALIDE_RUNTIME_BLOCK_ALLOCATOR_H
 
+#include "../HalideRuntime.h"
+#include "../printer.h"
 #include "linked_list.h"
 #include "memory_resources.h"
 #include "region_allocator.h"
@@ -149,15 +151,15 @@ void BlockAllocator::initialize(void *user_context, const Config &cfg, const Mem
 }
 
 MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &request) {
-#ifdef DEBUG_INTERNAL
-    StackBasicPrinter<256>(nullptr) << "BlockAllocator: Reserve ("
-                                    << "user_context=" << (void *)(user_context) << " "
-                                    << "offset=" << (uint32_t)request.offset << " "
-                                    << "size=" << (uint32_t)request.size << " "
-                                    << "dedicated=" << (request.dedicated ? "true" : "false") << " "
-                                    << "usage=" << halide_memory_usage_name(request.properties.usage) << " "
-                                    << "caching=" << halide_memory_caching_name(request.properties.caching) << " "
-                                    << "visibility=" << halide_memory_visibility_name(request.properties.visibility) << ") ...\n";
+#ifdef DEBUG_RUNTIME
+    debug(user_context) << "BlockAllocator: Reserve ("
+                        << "user_context=" << (void *)(user_context) << " "
+                        << "offset=" << (uint32_t)request.offset << " "
+                        << "size=" << (uint32_t)request.size << " "
+                        << "dedicated=" << (request.dedicated ? "true" : "false") << " "
+                        << "usage=" << halide_memory_usage_name(request.properties.usage) << " "
+                        << "caching=" << halide_memory_caching_name(request.properties.caching) << " "
+                        << "visibility=" << halide_memory_visibility_name(request.properties.visibility) << ") ...\n";
 #endif
     BlockEntry *block_entry = reserve_block_entry(user_context, request.properties, request.size, request.dedicated);
     if (block_entry == nullptr) {
@@ -172,6 +174,7 @@ MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &r
 
     MemoryRegion *result = reserve_memory_region(user_context, block->allocator, request);
     if (result == nullptr) {
+
         // Unable to reserve region in an existing block ... create a new block and try again.
         block_entry = create_block_entry(user_context, request.properties, request.size, request.dedicated);
         if (block_entry == nullptr) {
@@ -234,18 +237,18 @@ bool BlockAllocator::collect(void *user_context) {
             continue;
         }
 
-#ifdef DEBUG_INTERNAL
+#ifdef DEBUG_RUNTIME
         uint64_t reserved = block->reserved;
 #endif
 
         bool collected = block->allocator->collect(user_context);
         if (collected) {
-#ifdef DEBUG_INTERNAL
-            StackBasicPrinter<256>(nullptr) << "Collected block ("
-                                            << "block=" << (void *)block << " "
-                                            << "reserved=" << (uint32_t)block->reserved << " "
-                                            << "recovered=" << (uint32_t)(reserved - block->reserved) << " "
-                                            << ")\n";
+#ifdef DEBUG_RUNTIME
+            debug(user_context) << "Collected block ("
+                                << "block=" << (void *)block << " "
+                                << "reserved=" << (uint32_t)block->reserved << " "
+                                << "recovered=" << (uint32_t)(reserved - block->reserved) << " "
+                                << ")\n";
 #endif
         }
         if (block->reserved == 0) {
@@ -282,9 +285,9 @@ int BlockAllocator::destroy(void *user_context) {
 MemoryRegion *BlockAllocator::reserve_memory_region(void *user_context, RegionAllocator *allocator, const MemoryRequest &request) {
     MemoryRegion *result = allocator->reserve(user_context, request);
     if (result == nullptr) {
-#ifdef DEBUG_INTERNAL
-        StackBasicPrinter<256>(nullptr) << "BlockAllocator: Failed to allocate region of size ("
-                                        << (int32_t)(request.size) << " bytes)!\n";
+#ifdef DEBUG_RUNTIME
+        debug(user_context) << "BlockAllocator: Failed to allocate region of size ("
+                            << (int32_t)(request.size) << " bytes)!\n";
 #endif
         // allocator has enough free space, but not enough contiguous space
         // -- collect and try to reallocate
@@ -297,39 +300,39 @@ MemoryRegion *BlockAllocator::reserve_memory_region(void *user_context, RegionAl
 
 bool BlockAllocator::is_block_suitable_for_request(void *user_context, const BlockResource *block, const MemoryProperties &properties, size_t size, bool dedicated) const {
     if (!is_compatible_block(block, properties)) {
-#ifdef DEBUG_INTERNAL
-        StackBasicPrinter<256>(nullptr) << "BlockAllocator: skipping block ... incompatible properties!\n"
-                                        << " block_resource=" << (void *)block << "\n"
-                                        << " block_size=" << (uint32_t)block->memory.size << "\n"
-                                        << " block_reserved=" << (uint32_t)block->reserved << "\n"
-                                        << " block_usage=" << halide_memory_usage_name(block->memory.properties.usage) << "\n"
-                                        << " block_caching=" << halide_memory_caching_name(block->memory.properties.caching) << "\n"
-                                        << " block_visibility=" << halide_memory_visibility_name(block->memory.properties.visibility) << "\n";
-        StackBasicPrinter<256>(nullptr) << " request_size=" << (uint32_t)size << "\n"
-                                        << " request_usage=" << halide_memory_usage_name(properties.usage) << "\n"
-                                        << " request_caching=" << halide_memory_caching_name(properties.caching) << "\n"
-                                        << " request_visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+#ifdef DEBUG_RUNTIME
+        debug(user_context) << "BlockAllocator: skipping block ... incompatible properties!\n"
+                            << " block_resource=" << (void *)block << "\n"
+                            << " block_size=" << (uint32_t)block->memory.size << "\n"
+                            << " block_reserved=" << (uint32_t)block->reserved << "\n"
+                            << " block_usage=" << halide_memory_usage_name(block->memory.properties.usage) << "\n"
+                            << " block_caching=" << halide_memory_caching_name(block->memory.properties.caching) << "\n"
+                            << " block_visibility=" << halide_memory_visibility_name(block->memory.properties.visibility) << "\n";
+        debug(user_context) << " request_size=" << (uint32_t)size << "\n"
+                            << " request_usage=" << halide_memory_usage_name(properties.usage) << "\n"
+                            << " request_caching=" << halide_memory_caching_name(properties.caching) << "\n"
+                            << " request_visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
 #endif
         // skip blocks that are using incompatible memory
         return false;
     }
 
     if (dedicated && (block->reserved > 0)) {
-#ifdef DEBUG_INTERNAL
-        StackBasicPrinter<256>(nullptr) << "BlockAllocator: skipping block ... can be used for dedicated allocation!\n"
-                                        << " block_resource=" << (void *)block << "\n"
-                                        << " block_size=" << (uint32_t)block->memory.size << "\n"
-                                        << " block_reserved=" << (uint32_t)block->reserved << "\n";
+#ifdef DEBUG_RUNTIME
+        debug(user_context) << "BlockAllocator: skipping block ... can be used for dedicated allocation!\n"
+                            << " block_resource=" << (void *)block << "\n"
+                            << " block_size=" << (uint32_t)block->memory.size << "\n"
+                            << " block_reserved=" << (uint32_t)block->reserved << "\n";
 #endif
         // skip blocks that can't be dedicated to a single allocation
         return false;
 
     } else if (block->memory.dedicated && (block->reserved > 0)) {
-#ifdef DEBUG_INTERNAL
-        StackBasicPrinter<256>(nullptr) << "BlockAllocator: skipping block ... already dedicated to an allocation!\n"
-                                        << " block_resource=" << (void *)block << "\n"
-                                        << " block_size=" << (uint32_t)block->memory.size << "\n"
-                                        << " block_reserved=" << (uint32_t)block->reserved << "\n";
+#ifdef DEBUG_RUNTIME
+        debug(user_context) << "BlockAllocator: skipping block ... already dedicated to an allocation!\n"
+                            << " block_resource=" << (void *)block << "\n"
+                            << " block_size=" << (uint32_t)block->memory.size << "\n"
+                            << " block_reserved=" << (uint32_t)block->reserved << "\n";
 #endif
         // skip dedicated blocks that are already allocated
         return false;
@@ -350,17 +353,17 @@ BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &pro
         BlockEntry *prev_entry = block_entry->prev_ptr;
         const BlockResource *block = static_cast<BlockResource *>(block_entry->value);
         if (is_block_suitable_for_request(user_context, block, properties, size, dedicated)) {
-#ifdef DEBUG_INTERNAL
-            StackBasicPrinter<256>(nullptr) << "BlockAllocator: found suitable block ...\n"
-                                            << " user_context=" << (void *)(user_context) << "\n"
-                                            << " block_resource=" << (void *)block << "\n"
-                                            << " block_size=" << (uint32_t)block->memory.size << "\n"
-                                            << " block_reserved=" << (uint32_t)block->reserved << "\n";
-            StackBasicPrinter<256>(nullptr) << " request_size=" << (uint32_t)size << "\n"
-                                            << " dedicated=" << (dedicated ? "true" : "false") << "\n"
-                                            << " usage=" << halide_memory_usage_name(properties.usage) << "\n"
-                                            << " caching=" << halide_memory_caching_name(properties.caching) << "\n"
-                                            << " visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+#ifdef DEBUG_RUNTIME
+            debug(user_context) << "BlockAllocator: found suitable block ...\n"
+                                << " user_context=" << (void *)(user_context) << "\n"
+                                << " block_resource=" << (void *)block << "\n"
+                                << " block_size=" << (uint32_t)block->memory.size << "\n"
+                                << " block_reserved=" << (uint32_t)block->reserved << "\n"
+                                << " request_size=" << (uint32_t)size << "\n"
+                                << " dedicated=" << (dedicated ? "true" : "false") << "\n"
+                                << " usage=" << halide_memory_usage_name(properties.usage) << "\n"
+                                << " caching=" << halide_memory_caching_name(properties.caching) << "\n"
+                                << " visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
 #endif
             return block_entry;
         }
@@ -368,14 +371,14 @@ BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &pro
     }
 
     if (block_entry == nullptr) {
-#ifdef DEBUG_INTERNAL
-        StackBasicPrinter<256>(nullptr) << "BlockAllocator: couldn't find suitable block!\n"
-                                        << " user_context=" << (void *)(user_context) << "\n"
-                                        << " request_size=" << (uint32_t)size << "\n"
-                                        << " dedicated=" << (dedicated ? "true" : "false") << "\n"
-                                        << " usage=" << halide_memory_usage_name(properties.usage) << "\n"
-                                        << " caching=" << halide_memory_caching_name(properties.caching) << "\n"
-                                        << " visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+#ifdef DEBUG_RUNTIME
+        debug(user_context) << "BlockAllocator: couldn't find suitable block!\n"
+                            << " user_context=" << (void *)(user_context) << "\n"
+                            << " request_size=" << (uint32_t)size << "\n"
+                            << " dedicated=" << (dedicated ? "true" : "false") << "\n"
+                            << " usage=" << halide_memory_usage_name(properties.usage) << "\n"
+                            << " caching=" << halide_memory_caching_name(properties.caching) << "\n"
+                            << " visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
 #endif
     }
     return block_entry;
@@ -383,23 +386,23 @@ BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &pro
 
 BlockAllocator::BlockEntry *
 BlockAllocator::reserve_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated) {
-#ifdef DEBUG_INTERNAL
-    StackBasicPrinter<256>(nullptr) << "BlockAllocator: reserving block ... !\n"
-                                    << " requested_size=" << (uint32_t)size << "\n"
-                                    << " requested_is_dedicated=" << (dedicated ? "true" : "false") << "\n"
-                                    << " requested_usage=" << halide_memory_usage_name(properties.usage) << "\n"
-                                    << " requested_caching=" << halide_memory_caching_name(properties.caching) << "\n"
-                                    << " requested_visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+#ifdef DEBUG_RUNTIME
+    debug(user_context) << "BlockAllocator: reserving block ... !\n"
+                        << " requested_size=" << (uint32_t)size << "\n"
+                        << " requested_is_dedicated=" << (dedicated ? "true" : "false") << "\n"
+                        << " requested_usage=" << halide_memory_usage_name(properties.usage) << "\n"
+                        << " requested_caching=" << halide_memory_caching_name(properties.caching) << "\n"
+                        << " requested_visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
 #endif
     BlockEntry *block_entry = find_block_entry(user_context, properties, size, dedicated);
     if (block_entry == nullptr) {
-#ifdef DEBUG_INTERNAL
-        StackBasicPrinter<256>(nullptr) << "BlockAllocator: creating block ... !\n"
-                                        << " requested_size=" << (uint32_t)size << "\n"
-                                        << " requested_is_dedicated=" << (dedicated ? "true" : "false") << "\n"
-                                        << " requested_usage=" << halide_memory_usage_name(properties.usage) << "\n"
-                                        << " requested_caching=" << halide_memory_caching_name(properties.caching) << "\n"
-                                        << " requested_visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+#ifdef DEBUG_RUNTIME
+        debug(user_context) << "BlockAllocator: creating block ... !\n"
+                            << " requested_size=" << (uint32_t)size << "\n"
+                            << " requested_is_dedicated=" << (dedicated ? "true" : "false") << "\n"
+                            << " requested_usage=" << halide_memory_usage_name(properties.usage) << "\n"
+                            << " requested_caching=" << halide_memory_caching_name(properties.caching) << "\n"
+                            << " requested_visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
 #endif
         block_entry = create_block_entry(user_context, properties, size, dedicated);
     }
@@ -415,10 +418,10 @@ BlockAllocator::reserve_block_entry(void *user_context, const MemoryProperties &
 
 RegionAllocator *
 BlockAllocator::create_region_allocator(void *user_context, BlockResource *block) {
-#ifdef DEBUG_INTERNAL
-    StackBasicPrinter<256>(nullptr) << "BlockAllocator: Creating region allocator ("
-                                    << "user_context=" << (void *)(user_context) << " "
-                                    << "block_resource=" << (void *)(block) << ")...\n";
+#ifdef DEBUG_RUNTIME
+     debug(user_context) << "BlockAllocator: Creating region allocator ("
+                         << "user_context=" << (void *)(user_context) << " "
+                         << "block_resource=" << (void *)(block) << ")...\n";
 #endif
     halide_abort_if_false(user_context, block != nullptr);
     RegionAllocator *region_allocator = RegionAllocator::create(
@@ -433,10 +436,10 @@ BlockAllocator::create_region_allocator(void *user_context, BlockResource *block
 }
 
 int BlockAllocator::destroy_region_allocator(void *user_context, RegionAllocator *region_allocator) {
-#ifdef DEBUG_INTERNAL
-    StackBasicPrinter<256>(nullptr) << "BlockAllocator: Destroying region allocator ("
-                                    << "user_context=" << (void *)(user_context) << " "
-                                    << "region_allocator=" << (void *)(region_allocator) << ")...\n";
+#ifdef DEBUG_RUNTIME
+    debug(user_context) << "BlockAllocator: Destroying region allocator ("
+                        << "user_context=" << (void *)(user_context) << " "
+                        << "region_allocator=" << (void *)(region_allocator) << ")...\n";
 #endif
     if (region_allocator == nullptr) {
         return 0;
@@ -465,11 +468,11 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
         return nullptr;
     }
 
-#ifdef DEBUG_INTERNAL
-    StackBasicPrinter<256>(nullptr) << "BlockAllocator: Creating block entry ("
-                                    << "block_entry=" << (void *)(block_entry) << " "
-                                    << "block=" << (void *)(block_entry->value) << " "
-                                    << "allocator=" << (void *)(allocators.block.allocate) << ")...\n";
+#ifdef DEBUG_RUNTIME
+    debug(user_context) << "BlockAllocator: Creating block entry ("
+                        << "block_entry=" << (void *)(block_entry) << " "
+                        << "block=" << (void *)(block_entry->value) << " "
+                        << "allocator=" << (void *)(allocators.block.allocate) << ")...\n";
 #endif
 
     BlockResource *block = static_cast<BlockResource *>(block_entry->value);
@@ -484,10 +487,10 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
 }
 
 int BlockAllocator::release_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
-#ifdef DEBUG_INTERNAL
-    StackBasicPrinter<256>(nullptr) << "BlockAllocator: Releasing block entry ("
-                                    << "block_entry=" << (void *)(block_entry) << " "
-                                    << "block=" << (void *)(block_entry->value) << ")...\n";
+#ifdef DEBUG_RUNTIME
+    debug(user_context) << "BlockAllocator: Releasing block entry ("
+                        << "block_entry=" << (void *)(block_entry) << " "
+                        << "block=" << (void *)(block_entry->value) << ")...\n";
 #endif
     BlockResource *block = static_cast<BlockResource *>(block_entry->value);
     if (block->allocator) {
@@ -497,11 +500,11 @@ int BlockAllocator::release_block_entry(void *user_context, BlockAllocator::Bloc
 }
 
 int BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
-#ifdef DEBUG_INTERNAL
-    StackBasicPrinter<256>(nullptr) << "BlockAllocator: Destroying block entry ("
-                                    << "block_entry=" << (void *)(block_entry) << " "
-                                    << "block=" << (void *)(block_entry->value) << " "
-                                    << "deallocator=" << (void *)(allocators.block.deallocate) << ")...\n";
+#ifdef DEBUG_RUNTIME
+    debug(user_context) << "BlockAllocator: Destroying block entry ("
+                        << "block_entry=" << (void *)(block_entry) << " "
+                        << "block=" << (void *)(block_entry->value) << " "
+                        << "deallocator=" << (void *)(allocators.block.deallocate) << ")...\n";
 #endif
     BlockResource *block = static_cast<BlockResource *>(block_entry->value);
     if (block->allocator) {
@@ -514,8 +517,8 @@ int BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::Bloc
 }
 
 int BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block) {
-#ifdef DEBUG_INTERNAL
-    StackBasicPrinter<256>(nullptr) << "BlockAllocator: Allocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.allocate << ")...\n";
+#ifdef DEBUG_RUNTIME
+    debug(user_context) << "BlockAllocator: Allocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.allocate << ")...\n";
 #endif
     halide_abort_if_false(user_context, allocators.block.allocate != nullptr);
     MemoryBlock *memory_block = &(block->memory);
@@ -525,8 +528,8 @@ int BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block)
 }
 
 int BlockAllocator::free_memory_block(void *user_context, BlockResource *block) {
-#ifdef DEBUG_INTERNAL
-    StackBasicPrinter<256>(nullptr) << "BlockAllocator: Deallocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.deallocate << ")...\n";
+#ifdef DEBUG_RUNTIME
+    debug(user_context) << "BlockAllocator: Deallocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.deallocate << ")...\n";
 #endif
     halide_abort_if_false(user_context, allocators.block.deallocate != nullptr);
     MemoryBlock *memory_block = &(block->memory);

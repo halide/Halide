@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
         // Should have used vector stores
         if (!vector_store || scalar_store) {
             printf("This was supposed to use vector stores\n");
-            return -1;
+            return 1;
         }
 
         // Now try a smaller input
@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
         // Should have used scalar stores
         if (vector_store || !scalar_store) {
             printf("This was supposed to use scalar stores\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -201,7 +201,7 @@ int main(int argc, char **argv) {
             printf("There were supposed to be 1 empty alloc, 2 nonempty allocs, and 3 frees.\n"
                    "Instead we got %d empty allocs, %d nonempty allocs, and %d frees.\n",
                    empty_allocs, nonempty_allocs, frees);
-            return -1;
+            return 1;
         }
 
         reset_alloc_counts();
@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
             printf("There were supposed to be 2 empty allocs, 1 nonempty alloc, and 3 frees.\n"
                    "Instead we got %d empty allocs, %d nonempty allocs, and %d frees.\n",
                    empty_allocs, nonempty_allocs, frees);
-            return -1;
+            return 1;
         }
     }
 
@@ -237,7 +237,7 @@ int main(int argc, char **argv) {
         int m = im.get().min(0), e = im.get().extent(0);
         if (m != 0 || e != 5) {
             printf("min, extent = %d, %d instead of 0, 5\n", m, e);
-            return -1;
+            return 1;
         }
 
         // Check we don't crash with the small input, and that it uses scalar stores
@@ -245,7 +245,7 @@ int main(int argc, char **argv) {
         f.realize({5});
         if (!scalar_store || vector_store) {
             printf("These stores were supposed to be scalar.\n");
-            return -1;
+            return 1;
         }
 
         // Check we don't crash with a larger input, and that it uses vector stores
@@ -256,7 +256,7 @@ int main(int argc, char **argv) {
         f.realize({100});
         if (scalar_store || !vector_store) {
             printf("These stores were supposed to be vector.\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -284,7 +284,7 @@ int main(int argc, char **argv) {
         f.realize({100});
         if (!scalar_store || vector_store) {
             printf("These stores were supposed to be scalar.\n");
-            return -1;
+            return 1;
         }
 
         // Check that we used vector stores for a dense input.
@@ -295,7 +295,7 @@ int main(int argc, char **argv) {
         f.realize({100});
         if (scalar_store || !vector_store) {
             printf("These stores were supposed to be vector.\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -314,7 +314,7 @@ int main(int argc, char **argv) {
         int m = im.get().min(0);
         if (m != 10) {
             printf("min %d instead of 10\n", m);
-            return -1;
+            return 1;
         }
         param.set(false);
         im.reset();
@@ -322,7 +322,7 @@ int main(int argc, char **argv) {
         m = im.get().min(0);
         if (m != -10) {
             printf("min %d instead of -10\n", m);
-            return -1;
+            return 1;
         }
     }
 
@@ -391,14 +391,14 @@ int main(int argc, char **argv) {
 
         if (im.get().extent(0) != 3) {
             printf("extent(0) was supposed to be 3.\n");
-            return -1;
+            return 1;
         }
 
         if (im.get().extent(1) != 2) {
             // Height is 2, because the unrolling also happens in the
             // specialized case.
             printf("extent(1) was supposed to be 2.\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -451,7 +451,7 @@ int main(int argc, char **argv) {
 
         if (if_then_else_count != 1) {
             printf("Expected 1 IfThenElse stmts. Found %d.\n", if_then_else_count);
-            return -1;
+            return 1;
         }
     }
 
@@ -484,7 +484,7 @@ int main(int argc, char **argv) {
         // branch cannot be simplified.
         if (if_then_else_count != 2) {
             printf("Expected 2 IfThenElse stmts. Found %d.\n", if_then_else_count);
-            return -1;
+            return 1;
         }
     }
 
@@ -512,7 +512,7 @@ int main(int argc, char **argv) {
         int h = im.get().height();
         if (w != 10 || h != 1) {
             printf("Incorrect inferred size: %d %d\n", w, h);
-            return -1;
+            return 1;
         }
         im.reset();
 
@@ -522,7 +522,7 @@ int main(int argc, char **argv) {
         h = im.get().height();
         if (w != 1 || h != 10) {
             printf("Incorrect inferred size: %d %d\n", w, h);
-            return -1;
+            return 1;
         }
     }
 
@@ -546,7 +546,7 @@ int main(int argc, char **argv) {
         int h = im.get().height();
         if (w != 10 || h != 1) {
             printf("Incorrect inferred size: %d %d\n", w, h);
-            return -1;
+            return 1;
         }
         im.reset();
 
@@ -561,7 +561,7 @@ int main(int argc, char **argv) {
         h = im.get().height();
         if (w != 10 || h != 10) {
             printf("Incorrect inferred size: %d %d\n", w, h);
-            return -1;
+            return 1;
         }
     }
 
