@@ -153,6 +153,8 @@ std::string suffix_for_type(Type t) {
         return "_f16";
     }
 
+    internal_error << "No suffix available for this type.";
+
     return "";
 }
 
