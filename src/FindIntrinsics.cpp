@@ -1253,8 +1253,8 @@ Expr lower_saturating_add(const Expr &a, const Expr &b) {
         return select(sum < a, a.type().max(), sum);
     } else if (a.type().is_int()) {
         Type u = a.type().with_code(halide_type_uint);
-        Expr ua = cast(u, a);
-        Expr ub = cast(u, b);
+        Expr ua = reinterpret(u, a);
+        Expr ub = reinterpret(u, b);
         Expr upper = make_const(u, (uint64_t(1) << (a.type().bits() - 1)) - 1);
         Expr lower = make_const(u, (uint64_t(1) << (a.type().bits() - 1)));
         Expr sum = ua + ub;
@@ -1280,8 +1280,8 @@ Expr lower_saturating_sub(const Expr &a, const Expr &b) {
     } else if (a.type().is_int()) {
         // Do the math in unsigned, to avoid overflow in the simplifier.
         Type u = a.type().with_code(halide_type_uint);
-        Expr ua = cast(u, a);
-        Expr ub = cast(u, b);
+        Expr ua = reinterpret(u, a);
+        Expr ub = reinterpret(u, b);
         Expr upper = make_const(u, (uint64_t(1) << (a.type().bits() - 1)) - 1);
         Expr lower = make_const(u, (uint64_t(1) << (a.type().bits() - 1)));
         Expr diff = ua - ub;
