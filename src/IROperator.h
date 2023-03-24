@@ -1668,7 +1668,7 @@ namespace Internal {
 // lower-ranked in function resolution order.
 struct PseudoExpr {
     Expr e;
-    PseudoExpr(Expr e)  // Intentionally implicit
+    PseudoExpr(const Expr &e)  // Intentionally implicit
         : e(e) {
     }
     operator Expr() {
@@ -1677,31 +1677,31 @@ struct PseudoExpr {
 };
 
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr widen_right_add(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr widen_right_add(PseudoExpr a, const Expr &b) {
     return Halide::widen_right_add(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr widen_right_mul(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr widen_right_mul(PseudoExpr a, const Expr &b) {
     return Halide::widen_right_mul(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr widen_right_sub(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr widen_right_sub(PseudoExpr a, const Expr &b) {
     return Halide::widen_right_sub(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr widening_add(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr widening_add(PseudoExpr a, const Expr &b) {
     return Halide::widening_add(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr widening_mul(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr widening_mul(PseudoExpr a, const Expr &b) {
     return Halide::widening_mul(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr widening_sub(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr widening_sub(PseudoExpr a, const Expr &b) {
     return Halide::widening_sub(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr widening_shift_left(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr widening_shift_left(PseudoExpr a, const Expr &b) {
     return Halide::widening_shift_left(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
@@ -1709,7 +1709,7 @@ HALIDE_NO_USER_CODE_INLINE inline Expr widening_shift_left(PseudoExpr a, int b) 
     return Halide::widening_shift_left(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr widening_shift_right(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr widening_shift_right(PseudoExpr a, const Expr &b) {
     return Halide::widening_shift_right(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
@@ -1717,7 +1717,7 @@ HALIDE_NO_USER_CODE_INLINE inline Expr widening_shift_right(PseudoExpr a, int b)
     return Halide::widening_shift_right(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr rounding_shift_left(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr rounding_shift_left(PseudoExpr a, const Expr &b) {
     return Halide::widening_shift_left(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
@@ -1725,7 +1725,7 @@ HALIDE_NO_USER_CODE_INLINE inline Expr rounding_shift_left(PseudoExpr a, int b) 
     return Halide::widening_shift_left(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr rounding_shift_right(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr rounding_shift_right(PseudoExpr a, const Expr &b) {
     return Halide::rounding_shift_right(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
@@ -1733,39 +1733,39 @@ HALIDE_NO_USER_CODE_INLINE inline Expr rounding_shift_right(PseudoExpr a, int b)
     return Halide::rounding_shift_right(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr saturating_add(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr saturating_add(PseudoExpr a, const Expr &b) {
     return Halide::saturating_add(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr saturating_sub(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr saturating_sub(PseudoExpr a, const Expr &b) {
     return Halide::saturating_sub(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr halving_add(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr halving_add(PseudoExpr a, const Expr &b) {
     return Halide::halving_add(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr rounding_halving_add(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr rounding_halving_add(PseudoExpr a, const Expr &b) {
     return Halide::rounding_halving_add(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr halving_sub(PseudoExpr a, Expr b) {
+HALIDE_NO_USER_CODE_INLINE inline Expr halving_sub(PseudoExpr a, const Expr &b) {
     return Halide::halving_sub(a, b);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr mul_shift_right(PseudoExpr a, Expr b, Expr q) {
+HALIDE_NO_USER_CODE_INLINE inline Expr mul_shift_right(PseudoExpr a, const Expr &b, const Expr &q) {
     return Halide::mul_shift_right(a, b, q);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr mul_shift_right(PseudoExpr a, Expr b, int q) {
+HALIDE_NO_USER_CODE_INLINE inline Expr mul_shift_right(PseudoExpr a, const Expr &b, int q) {
     return Halide::mul_shift_right(a, b, q);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr rounding_mul_shift_right(PseudoExpr a, Expr b, Expr q) {
+HALIDE_NO_USER_CODE_INLINE inline Expr rounding_mul_shift_right(PseudoExpr a, const Expr &b, const Expr &q) {
     return Halide::rounding_mul_shift_right(a, b, q);
 }
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-HALIDE_NO_USER_CODE_INLINE inline Expr rounding_mul_shift_right(PseudoExpr a, Expr b, int q) {
+HALIDE_NO_USER_CODE_INLINE inline Expr rounding_mul_shift_right(PseudoExpr a, const Expr &b, int q) {
     return Halide::rounding_mul_shift_right(a, b, q);
 }
 }  // namespace Internal
