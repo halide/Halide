@@ -2,9 +2,8 @@
 #define OPTIMIZE_SHUFFLES_H
 
 /** \file
- * Defines a lowering pass that partitions loop bodies into three
- * to handle boundary conditions: A prologue, a simplified
- * steady-stage, and an epilogue.
+ * Defines a lowering pass that replace indirect
+ * loads with dynamic_shuffle intrinsics where possible.
  */
 
 #include "Expr.h"
