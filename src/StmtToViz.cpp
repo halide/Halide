@@ -536,10 +536,10 @@ public:
         }
 
         // Find markers in asm code
-        istringstream _asm(code);
+        istringstream _asm_stream(code);
         string line;
         int lno = 1;
-        while (getline(_asm, line)) {
+        while (getline(_asm_stream, line)) {
             // Try all markers
             std::vector<uint64_t> matched_nodes;
             for (auto const &[node, regex] : _markers) {
@@ -2724,7 +2724,7 @@ public:
         // code is based on darya-ver's original implementation. We
         // use comments in the generated assembly to infer association
         // between Halide IR and assembly -- unclear how reliable this is.
-        _asm_info.generate(_asm.str(), m);
+        _asm_info.generate(_asm_stream.str(), m);
 
         // Run the cost model over this module to pre-compute all
         // node costs
@@ -2818,7 +2818,7 @@ private:
         stream << "<div id='assembly-tab'>\n";
         stream << "<div id='assemblyContent' style='display: none;'>\n";
         stream << "<pre>\n";
-        stream << _asm.str();
+        stream << _asm_stream.str();
         stream << "</pre>\n";
         stream << "</div>\n";
         stream << "</div>\n";
@@ -2873,7 +2873,7 @@ private:
     }
 
     // Load assembly code from file
-    ostringstream _asm;
+    ostringstream _asm_stream;
     AssemblyInfo _asm_info;
 
     void load_asm_code(const string &asm_file) {
@@ -2883,7 +2883,7 @@ private:
         // Slurp the code into _asm
         string line;
         while (getline(assembly, line)) {
-            _asm << line << "\n";
+            _asm_stream << line << "\n";
         }
     }
 };
