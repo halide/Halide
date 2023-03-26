@@ -57,7 +57,7 @@ const LoopNest *State::deepest_valid_compute_location(const Anderson2021Params &
             continue;
         }
 
-        if ((*it)->gpu_label == block) {
+        if ((*it)->gpu_label == GPU_parallelism::Block) {
             new_shared_mem_alloc_size = node.bytes_per_point;
             for (int i = 0; i < node.dimensions; ++i) {
                 new_shared_mem_alloc_size *= (*it)->get_bounds(&node)->region_computed(i).extent();
@@ -69,7 +69,7 @@ const LoopNest *State::deepest_valid_compute_location(const Anderson2021Params &
             }
         }
 
-        if ((*it)->gpu_label == thread || (*it)->gpu_label == serial) {
+        if ((*it)->gpu_label == GPU_parallelism::Thread || (*it)->gpu_label == GPU_parallelism::Serial) {
             int64_t total = node.bytes_per_point;
             for (int i = 0; i < node.dimensions; ++i) {
                 total *= (*it)->get_bounds(&node)->region_computed(i).extent();
@@ -92,7 +92,7 @@ const LoopNest *State::deepest_valid_compute_location(const Anderson2021Params &
         candidate = *it;
     }
 
-    if (candidate->gpu_label == block) {
+    if (candidate->gpu_label == GPU_parallelism::Block) {
         total_shared_mem_alloc_sizes.get(candidate->stage) += new_shared_mem_alloc_size;
         internal_assert(total_shared_mem_alloc_sizes.get(candidate->stage) <= get_shared_memory_limit(params));
     }
@@ -167,7 +167,7 @@ const LoopNest *State::deepest_common_ancestor(const map<const LoopNest *, pair<
 
 bool State::has_loop_nest_without_thread_loops() const {
     for (const auto &c : root->children) {
-        if (c->gpu_label != block) {
+        if (c->gpu_label != GPU_parallelism::Block) {
             continue;
         }
 
@@ -183,7 +183,7 @@ bool State::has_loop_nest_without_thread_loops() const {
 
 bool State::has_compute_root_loops_without_blocks() const {
     for (const auto &c : root->children) {
-        if (c->gpu_label == none) {
+        if (c->gpu_label == GPU_parallelism::None) {
             return true;
         }
     }
@@ -207,7 +207,7 @@ void State::FeatureLoopNestMutator::split_compute_root_loops(LoopNest *loop_nest
 
     for (auto it = loop_nest->children.rbegin(); it != loop_nest->children.rend(); ++it) {
         auto &c = *it;
-        if (c->gpu_label != none) {
+        if (c->gpu_label != GPU_parallelism::None) {
             continue;
         }
 
@@ -274,7 +274,7 @@ void State::FeatureLoopNestMutator::add_outer_thread_loops(LoopNest *loop_nest) 
         return;
     }
 
-    if (loop_nest->gpu_label == block) {
+    if (loop_nest->gpu_label == GPU_parallelism::Block) {
         // Example:
         // block
         //  serial (a)
@@ -286,20 +286,20 @@ void State::FeatureLoopNestMutator::add_outer_thread_loops(LoopNest *loop_nest) 
                 continue;
             }
 
-            internal_assert(c->gpu_label == serial);
+            internal_assert(c->gpu_label == GPU_parallelism::Serial);
 
             // We want outer thread loops with extents 1
             vector<int64_t> tiling(c->node->dimensions, 1);
 
             // Mark as 'thread' so this loop is split into threads and
             // serial
-            c->gpu_label = thread;
+            c->gpu_label = GPU_parallelism::Thread;
             c = c->parallelize_in_tiles(tiling, loop_nest, params, target, false, true);
         }
         return;
     }
 
-    if (loop_nest->gpu_label == serial) {
+    if (loop_nest->gpu_label == GPU_parallelism::Serial) {
         bool has_child_with_thread_descendant = false;
 
         for (const auto &c : loop_nest->children) {
@@ -333,7 +333,7 @@ void State::FeatureLoopNestMutator::add_outer_thread_loops(LoopNest *loop_nest) 
 
             // Mark as 'thread' so this loop is split into threads and
             // serial
-            c->gpu_label = thread;
+            c->gpu_label = GPU_parallelism::Thread;
             c = c->parallelize_in_tiles(tiling, loop_nest, params, target, false, true);
         }
     }
@@ -364,21 +364,21 @@ void State::set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *
     bool type_has_been_set = false;
     const LoopNest *candidate_block = loop;
     while (candidate_block) {
-        if (candidate_block->gpu_label == thread) {
-            site.gpu_store_memory_type = GPUMemoryType::registers;
+        if (candidate_block->gpu_label == GPU_parallelism::Thread) {
+            site.gpu_store_memory_type = GPUMemoryType::Registers;
             type_has_been_set = true;
             break;
         }
 
         if (candidate_block->is_root()) {
-            site.gpu_store_memory_type = GPUMemoryType::global;
+            site.gpu_store_memory_type = GPUMemoryType::Global;
             type_has_been_set = true;
             break;
         }
 
-        if (candidate_block->gpu_label == block) {
+        if (candidate_block->gpu_label == GPU_parallelism::Block) {
             site.store = candidate_block;
-            site.gpu_store_memory_type = GPUMemoryType::shared;
+            site.gpu_store_memory_type = GPUMemoryType::Shared;
             type_has_been_set = true;
             break;
         }
@@ -413,7 +413,7 @@ bool State::compute_featurization(const FunctionDAG &dag, const Anderson2021Para
                 if (s.compute == nullptr) {
                     s.compute = feature_root.get();
                     s.store = feature_root.get();
-                    s.gpu_store_memory_type = GPUMemoryType::global;
+                    s.gpu_store_memory_type = GPUMemoryType::Global;
                 }
             }
         }
@@ -592,7 +592,7 @@ bool State::exceeds_serial_extents_limit(const Target &target) const {
 int64_t State::get_shared_mem_alloc_size(const LoopNest *block, const LoopNest *loop) const {
     int64_t result = 0;
 
-    if (loop->gpu_label == thread) {
+    if (loop->gpu_label == GPU_parallelism::Thread) {
         return result;
     }
 

@@ -29,19 +29,21 @@ using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
 template<typename T>
 using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 
-enum GPU_parallelism { block,
-                       thread,
-                       serial,
-                       simd,
-                       parallelized,
-                       none };
+enum class GPU_parallelism { Block,
+                             Thread,
+                             Serial,
+                             Simd,
+                             Parallelized,
+                             None };
+
+std::string stringify(GPU_parallelism label);
 
 // inlined => func is inlined so has no memory store location
-enum class GPUMemoryType { global,
-                           shared,
-                           local,
-                           registers,
-                           inlined };
+enum class GPUMemoryType { Global,
+                           Shared,
+                           Local,
+                           Registers,
+                           Inlined };
 
 bool may_subtile(const Anderson2021Params &params);
 
@@ -120,7 +122,7 @@ struct LoopNest {
     int vectorized_loop_index = -1;
 
     // Apply gpu threads to this loop nest
-    mutable GPU_parallelism gpu_label = none;
+    mutable GPU_parallelism gpu_label = GPU_parallelism::None;
 
     struct FeatureIntermediates {
         double inlined_calls;
@@ -138,15 +140,15 @@ struct LoopNest {
     mutable std::map<uint64_t, StageMap<ScheduleFeatures>> features;
 
     bool is_gpu_serial(const Target &target) const {
-        return target.has_gpu_feature() && gpu_label == serial;
+        return target.has_gpu_feature() && gpu_label == GPU_parallelism::Serial;
     }
 
     bool is_gpu_thread(const Target &target) const {
-        return target.has_gpu_feature() && gpu_label == thread;
+        return target.has_gpu_feature() && gpu_label == GPU_parallelism::Thread;
     }
 
     bool is_gpu_block(const Target &target) const {
-        return target.has_gpu_feature() && gpu_label == block;
+        return target.has_gpu_feature() && gpu_label == GPU_parallelism::Block;
     }
 
     bool is_scalar() const {
@@ -219,16 +221,16 @@ struct LoopNest {
         uint64_t hash_of_producers_stored_at_root;
 
         bool is_stored_in_global_mem() const {
-            return gpu_store_memory_type == GPUMemoryType::global;
+            return gpu_store_memory_type == GPUMemoryType::Global;
         }
         bool is_stored_in_shared_mem() const {
-            return gpu_store_memory_type == GPUMemoryType::shared;
+            return gpu_store_memory_type == GPUMemoryType::Shared;
         }
         bool is_stored_in_local_mem() const {
-            return gpu_store_memory_type == GPUMemoryType::local;
+            return gpu_store_memory_type == GPUMemoryType::Local;
         }
         bool is_stored_in_registers() const {
-            return gpu_store_memory_type == GPUMemoryType::registers;
+            return gpu_store_memory_type == GPUMemoryType::Registers;
         }
     };
 

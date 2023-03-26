@@ -11,6 +11,25 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+std::string stringify(GPU_parallelism label) {
+    if (label == GPU_parallelism::Block) {
+        return "block";
+    }
+    if (label == GPU_parallelism::Thread) {
+        return "thread";
+    }
+    if (label == GPU_parallelism::Serial) {
+        return "serial";
+    }
+    if (label == GPU_parallelism::Simd) {
+        return "simd";
+    }
+    if (label == GPU_parallelism::Parallelized) {
+        return "parallelized";
+    }
+    return "None";
+}
+
 // How small should an innermost loop cluster be before you just
 // entirely unroll the thing
 const int kUnrollLimitGPU = 16;
@@ -82,7 +101,7 @@ vector<int64_t> LoopNest::get_union_thread_counts(const FunctionDAG::Node *f) co
     // find the loop nests we just created and get max gpu_thread extents of other children
     for (const auto &c : children) {
         if (c->node != f) {
-            if (c->gpu_label == thread) {
+            if (c->gpu_label == GPU_parallelism::Thread) {
                 vector<int64_t> lowered_size;
                 lowered_dims(c->size, c->vectorized_loop_index, lowered_size);
                 for (int dim = 0; dim < (int)(lowered_size.size()); dim++) {
@@ -173,7 +192,7 @@ bool LoopNest::add_gpu_thread_tilings(const FunctionDAG::Node *f,
     if (!made_child) {  // if we can't tile into gpu threads the inserted node, make it serial
         for (auto &c : children) {
             if (c->node == f) {
-                c->gpu_label = serial;
+                c->gpu_label = GPU_parallelism::Serial;
             }
         }
     }
@@ -275,19 +294,19 @@ void LoopNest::structural_hash(uint64_t &h, int depth) const {
 
 GPUMemoryType LoopNest::get_gpu_memory_type(bool in_block, bool in_thread, bool is_inlined) const {
     if (is_inlined) {
-        return GPUMemoryType::inlined;
+        return GPUMemoryType::Inlined;
     }
 
     if (in_thread) {
         internal_assert(in_block);
-        return GPUMemoryType::local;
+        return GPUMemoryType::Local;
     }
 
     if (in_block) {
-        return GPUMemoryType::shared;
+        return GPUMemoryType::Shared;
     }
 
-    return GPUMemoryType::global;
+    return GPUMemoryType::Global;
 }
 
 std::vector<int> LoopNest::unrolled_loops(const Target &target, const LoopNest *parent, const LoopNest *grandparent) const {
@@ -342,7 +361,7 @@ void LoopNest::get_allocs_that_can_be_promoted_to_registers(const Target &target
 
     for (const auto *alloc_node : store_at) {
         const auto &store_site = sites.get(&alloc_node->stages[0]);
-        if (store_site.gpu_store_memory_type != GPUMemoryType::local) {
+        if (store_site.gpu_store_memory_type != GPUMemoryType::Local) {
             continue;
         }
 
@@ -357,7 +376,7 @@ void LoopNest::get_allocs_that_can_be_promoted_to_registers(const Target &target
         auto unrolled = unrolled_loops(target, parent, grandparent);
 
         for (const auto *e : stage->incoming_edges) {
-            if (sites.get(&e->producer->stages[0]).gpu_store_memory_type != GPUMemoryType::local) {
+            if (sites.get(&e->producer->stages[0]).gpu_store_memory_type != GPUMemoryType::Local) {
                 continue;
             }
 
@@ -405,7 +424,7 @@ void LoopNest::get_sites(const Target &target,
             sites.get_or_create(&s).is_constant_allocation = alloc.second;
 
             const LoopNest *store_site = sites.get_or_create(&s).store;
-            if (store_site->gpu_label == block && s.index == 0) {
+            if (store_site->gpu_label == GPU_parallelism::Block && s.index == 0) {
                 total_shared_mem_alloc_sizes.get_or_create(store_site->stage) += alloc.first;
             }
         }
@@ -420,7 +439,7 @@ void LoopNest::get_sites(const Target &target,
         // Accumulate all the innermost loop nests into which this func is
         // inlined
         s.inlined_innermosts.push_back(this);
-        s.gpu_store_memory_type = GPUMemoryType::inlined;
+        s.gpu_store_memory_type = GPUMemoryType::Inlined;
         s.task = task;
     }
     if (innermost) {
@@ -439,8 +458,8 @@ bool LoopNest::promote_allocs_to_registers(const Target &target, StageMap<Sites>
         }
 
         for (const auto &stage : node.first->stages) {
-            internal_assert(sites.get(&stage).gpu_store_memory_type == GPUMemoryType::local);
-            sites.get(&stage).gpu_store_memory_type = GPUMemoryType::registers;
+            internal_assert(sites.get(&stage).gpu_store_memory_type == GPUMemoryType::Local);
+            sites.get(&stage).gpu_store_memory_type = GPUMemoryType::Registers;
         }
     }
 
@@ -455,7 +474,7 @@ bool LoopNest::exceeds_serial_extents_limit(const Target &target, const LoopNest
         }
     }
 
-    if (gpu_label == serial && stage->index == 0) {
+    if (gpu_label == GPU_parallelism::Serial && stage->index == 0) {
         int64_t serial_loop_extents = 1;
         for (const auto &i : stage->loop) {
             if (!i.pure) {
@@ -475,7 +494,7 @@ bool LoopNest::exceeds_serial_extents_limit(const Target &target, const LoopNest
     }
 
     for (const auto &c : children) {
-        if (c->exceeds_serial_extents_limit(target, this, in_threads_loop || c->gpu_label == thread)) {
+        if (c->exceeds_serial_extents_limit(target, this, in_threads_loop || c->gpu_label == GPU_parallelism::Thread)) {
             return true;
         }
     }
@@ -496,7 +515,7 @@ bool LoopNest::node_has_dynamic_region_computed(const FunctionDAG::Node *f) cons
 }
 
 bool LoopNest::has_dynamic_allocation_inside_thread(bool in_thread_loop) const {
-    in_thread_loop = in_thread_loop || (gpu_label == thread);
+    in_thread_loop = in_thread_loop || (gpu_label == GPU_parallelism::Thread);
 
     if (in_thread_loop) {
         for (const auto &f : store_at) {
@@ -610,7 +629,7 @@ bool LoopNest::can_vectorize_access_for_innermost_dim(const LoadJacobian &jac, c
 }
 
 bool LoopNest::can_vectorize_store_access(const LoadJacobian &jac, const FunctionDAG::Node *accessed, bool accessed_has_been_scheduled, int innermost_dim, int loop_index, const GPUMemoryType &mem_type) const {
-    if (loop_index < 0 || mem_type != GPUMemoryType::shared) {
+    if (loop_index < 0 || mem_type != GPUMemoryType::Shared) {
         return false;
     }
 
@@ -620,7 +639,7 @@ bool LoopNest::can_vectorize_store_access(const LoadJacobian &jac, const Functio
 
 int LoopNest::vectorized_load_access_size(const LoadJacobian &jac, const FunctionDAG::Node *accessed, bool accessed_has_been_scheduled, int innermost_dim, const GPUMemoryType &mem_type, bool verbose) const {
     int vector_size = 1;
-    if (mem_type != GPUMemoryType::shared) {
+    if (mem_type != GPUMemoryType::Shared) {
         return vector_size;
     }
 
@@ -825,7 +844,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
     }
 
     const ThreadInfo &thread_info = *gpu_loop_info.thread_info;
-    bool is_shared_mem = consumer_site.gpu_store_memory_type == GPUMemoryType::shared;
+    bool is_shared_mem = consumer_site.gpu_store_memory_type == GPUMemoryType::Shared;
 
     size_t actual_vector_dim = get_actual_vector_dim(consumer_store_bounds);
 
@@ -856,9 +875,9 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
         std::string consumer_name = node->func.name();
         sanitize_names(consumer_name);
         std::string mem_type = "global";
-        if (consumer_site.gpu_store_memory_type == GPUMemoryType::shared) {
+        if (consumer_site.gpu_store_memory_type == GPUMemoryType::Shared) {
             mem_type = "shared";
-        } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::local) {
+        } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::Local) {
             mem_type = "local";
         }
         aslog(2) << "BEGIN MEM ACCESS " << mem_type << "_mem_" << type;
@@ -888,7 +907,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
 
         internal_assert(in_range_zero_one(feat.shared_mem_store_efficiency)) << "Invalid shared mem store efficiency: " << feat.shared_mem_store_efficiency << " for " << node->func.name();
 
-    } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::global) {
+    } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::Global) {
         if (verbose) {
             aslog(2) << "vector_size = " << vector_size << "\n";
         }
@@ -910,7 +929,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
 
         internal_assert(in_range_zero_one(feat.global_mem_store_efficiency)) << "Invalid global mem store efficiency: " << feat.global_mem_store_efficiency << " for " << node->func.name();
 
-    } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::local) {
+    } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::Local) {
         auto local_mem_info = compute_mem_store_info<LocalMem>(
             jac,
             consumer_innermost_dim,
@@ -934,9 +953,9 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
         std::string consumer_name = node->func.name();
         sanitize_names(consumer_name);
         std::string mem_type = "global";
-        if (consumer_site.gpu_store_memory_type == GPUMemoryType::shared) {
+        if (consumer_site.gpu_store_memory_type == GPUMemoryType::Shared) {
             mem_type = "shared";
-        } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::local) {
+        } else if (consumer_site.gpu_store_memory_type == GPUMemoryType::Local) {
             mem_type = "local";
         }
         aslog(2) << "END MEM ACCESS " << mem_type << "_mem_" << type << ". consumer: " << consumer_name << "_s" << stage->index << "; producer: " << consumer_name;
@@ -1126,17 +1145,17 @@ void LoopNest::compute_mem_load_features<LocalMem>(const LoadJacobian &jac,
 
 // Assumes block, serial, thread or block, thread nesting
 const LoopNest *LoopNest::get_enclosing_block(const LoopNest *parent, const LoopNest *grandparent) const {
-    internal_assert(gpu_label == thread);
+    internal_assert(gpu_label == GPU_parallelism::Thread);
 
-    if (parent->gpu_label == block && grandparent->is_root()) {
+    if (parent->gpu_label == GPU_parallelism::Block && grandparent->is_root()) {
         return parent;
     }
 
-    if (parent->gpu_label == serial && grandparent->gpu_label == block) {
+    if (parent->gpu_label == GPU_parallelism::Serial && grandparent->gpu_label == GPU_parallelism::Block) {
         return grandparent;
     }
 
-    internal_error << "Invalid nesting: " << parent->gpu_label << ", " << grandparent->gpu_label << "\n";
+    internal_error << "Invalid nesting: " << stringify(parent->gpu_label) << ", " << stringify(grandparent->gpu_label) << "\n";
     return nullptr;
 }
 
@@ -1171,7 +1190,7 @@ std::pair<int64_t, int64_t> LoopNest::get_block_and_serial_extents(const LoopNes
 }
 
 bool LoopNest::all_paths_to_leaves_have_thread_loop() const {
-    if (gpu_label == thread) {
+    if (gpu_label == GPU_parallelism::Thread) {
         return true;
     }
 
@@ -1189,7 +1208,7 @@ bool LoopNest::all_paths_to_leaves_have_thread_loop() const {
 }
 
 bool LoopNest::has_thread_loop_descendant() const {
-    if (gpu_label == thread) {
+    if (gpu_label == GPU_parallelism::Thread) {
         return true;
     }
 
@@ -1400,7 +1419,7 @@ int64_t LoopNest::points_accessed_per_thread(const Anderson2021Params &params,
     if (points_accessed_by_loop_extents <= points_accessed_by_region_required) {
         points_accessed = points_accessed_by_loop_extents;
 
-        if (mem_type == GPUMemoryType::shared) {
+        if (mem_type == GPUMemoryType::Shared) {
             int vector_size = parent->vectorized_load_access_size(
                 serial_jac,
                 producer,
@@ -2285,8 +2304,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                                             site.produce->vector_dim);
 
                     // Shared, global, or local memory?
-                    bool is_global_mem = site.gpu_store_memory_type == GPUMemoryType::global;
-                    bool is_shared_mem = site.gpu_store_memory_type == GPUMemoryType::shared;
+                    bool is_global_mem = site.gpu_store_memory_type == GPUMemoryType::Global;
+                    bool is_shared_mem = site.gpu_store_memory_type == GPUMemoryType::Shared;
 
                     // Grab the jacobians that describe the memory dependence
                     for (size_t i = 0; i < thread_jacobians.size(); ++i) {
@@ -2307,7 +2326,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 aslog(2) << "BEGIN MEM ACCESS shared_mem_load. consumer: " << consumer_name << "_s" << stage->index << "; producer: " << producer_name << "\n";
                             }
 
-                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::shared, verbose);
+                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::Shared, verbose);
 
                             compute_mem_load_features<SharedMem>(
                                 jac.first,
@@ -2338,7 +2357,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 aslog(2) << "BEGIN MEM ACCESS global_mem_load. consumer: " << consumer_name << "_s" << stage->index << "; producer: " << producer_name << "\n";
                             }
 
-                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::global, verbose);
+                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::Global, verbose);
 
                             compute_mem_load_features<GlobalMem>(
                                 jac.first,
@@ -2362,7 +2381,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                         }
                     }
 
-                    if (site.gpu_store_memory_type == GPUMemoryType::local) {
+                    if (site.gpu_store_memory_type == GPUMemoryType::Local) {
                         internal_assert(false) << "Loop nest contains local_mem_load";
                         for (const auto &jac : jacobians) {
                             if (jac.second != e->producer) {
@@ -2378,7 +2397,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 aslog(2) << "BEGIN MEM ACCESS local_mem_load. consumer: " << consumer_name << "_s" << stage->index << "; producer: " << producer_name << "\n";
                             }
 
-                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::local, verbose);
+                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::Local, verbose);
 
                             compute_mem_load_features<LocalMem>(
                                 jac.first,
@@ -2548,7 +2567,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                             register_bytes_loaded_per_thread += thread_footprint;
                             register_lines_loaded_per_thread += thread_line_footprint;
                         } else {
-                            internal_assert(producer_store_site->gpu_label == GPU_parallelism::serial);
+                            internal_assert(producer_store_site->gpu_label == GPU_parallelism::Serial);
                             register_bytes_loaded_per_thread += store_footprint;
                             register_lines_loaded_per_thread += store_line_footprint;
                         }
@@ -2880,17 +2899,17 @@ void LoopNest::dump(T &stream, string prefix, const LoopNest *parent) const {
     if (innermost) {
         stream << " *";
     }
-    if (gpu_label == block) {
+    if (gpu_label == GPU_parallelism::Block) {
         stream << " gpu_block\n";
-    } else if (gpu_label == serial) {
+    } else if (gpu_label == GPU_parallelism::Serial) {
         stream << " gpu_serial\n";
-    } else if (gpu_label == none) {
+    } else if (gpu_label == GPU_parallelism::None) {
         stream << " gpu_none\n";
-    } else if (gpu_label == simd) {
+    } else if (gpu_label == GPU_parallelism::Simd) {
         stream << " gpu_simd\n";
-    } else if (gpu_label == thread) {
+    } else if (gpu_label == GPU_parallelism::Thread) {
         stream << " gpu_thread\n";
-    } else if (gpu_label == parallelized) {
+    } else if (gpu_label == GPU_parallelism::Parallelized) {
         stream << " gpu_parallelized\n";
     } else if (parallel) {
         stream << " p\n";
@@ -3079,11 +3098,11 @@ bool LoopNest::compute_here(const FunctionDAG::Node *f,
         // if computing at serial loop set gpu_label to thread.
         if (target.has_gpu_feature()) {
             if (is_root()) {
-                node->gpu_label = none;
+                node->gpu_label = GPU_parallelism::None;
             } else if (!in_threads_loop) {
-                node->gpu_label = thread;
+                node->gpu_label = GPU_parallelism::Thread;
             } else {
-                node->gpu_label = serial;
+                node->gpu_label = GPU_parallelism::Serial;
             }
         }
         // Set up a bound for the inside of the
@@ -3148,7 +3167,7 @@ bool LoopNest::compute_here(const FunctionDAG::Node *f,
         one_vector->vector_dim = v;
         one_vector->size.resize(loop_dim, 1);
         one_vector->innermost = true;
-        one_vector->gpu_label = simd;
+        one_vector->gpu_label = GPU_parallelism::Simd;
         auto *b = node->get_bounds(f)->make_copy();
         // Set the region computed inside this node to be the first vector lane
         if (node->vectorized_loop_index >= 0) {
@@ -3191,24 +3210,24 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const vector<int64_t
     inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
 
     if (target.has_gpu_feature()) {
-        if (gpu_label == none) {
-            inner->gpu_label = serial;
-            outer->gpu_label = parallelized;
+        if (gpu_label == GPU_parallelism::None) {
+            inner->gpu_label = GPU_parallelism::Serial;
+            outer->gpu_label = GPU_parallelism::Parallelized;
             outer->parallel = true;
-        } else if (gpu_label == parallelized) {
-            inner->gpu_label = thread;  // compute root funcs always allowed to use GPU threads
-            outer->gpu_label = block;
+        } else if (gpu_label == GPU_parallelism::Parallelized) {
+            inner->gpu_label = GPU_parallelism::Thread;  // compute root funcs always allowed to use GPU threads
+            outer->gpu_label = GPU_parallelism::Block;
             outer->parallel = true;
-        } else if (gpu_label == thread) {
-            inner->gpu_label = serial;
-            outer->gpu_label = thread;
+        } else if (gpu_label == GPU_parallelism::Thread) {
+            inner->gpu_label = GPU_parallelism::Serial;
+            outer->gpu_label = GPU_parallelism::Thread;
             outer->parallel = false;
-        } else if (gpu_label == serial) {
-            inner->gpu_label = serial;
-            outer->gpu_label = serial;
+        } else if (gpu_label == GPU_parallelism::Serial) {
+            inner->gpu_label = GPU_parallelism::Serial;
+            outer->gpu_label = GPU_parallelism::Serial;
             outer->parallel = false;
         } else {
-            internal_error << "invalid gpu label " << gpu_label << " for parallelized loop\n";
+            internal_error << "invalid gpu label " << stringify(gpu_label) << " for parallelized loop\n";
         }
     }
 
@@ -3291,7 +3310,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const vector<int64_t
 int64_t LoopNest::get_total_local_mem_alloc_size(bool constant_allocs_only, bool in_threads_loop) const {
     int64_t result = 0;
 
-    in_threads_loop = in_threads_loop || gpu_label == thread;
+    in_threads_loop = in_threads_loop || gpu_label == GPU_parallelism::Thread;
 
     if (in_threads_loop) {
         for (const auto *store_node : store_at) {
@@ -3407,7 +3426,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         }
     }
 
-    if (gpu_label == block) {
+    if (gpu_label == GPU_parallelism::Block) {
         // once we enter a gpu block loop compute union thread counts to pass down
         union_counts = get_union_thread_counts(f);
     }
@@ -3467,7 +3486,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                 continue;
             }
 
-            in_threads_loop |= (children[child]->gpu_label == thread);
+            in_threads_loop |= (children[child]->gpu_label == GPU_parallelism::Thread);
             // we must pass down union thread count constraints computed at block level when computing further in
             auto opts = children[child]->compute_in_tiles(f, this, params, target, search_space_options, v, store_here, in_threads_loop, false, union_counts);
             for (IntrusivePtr<const LoopNest> &n : opts) {
@@ -3653,7 +3672,7 @@ void LoopNest::apply(LoopLevel here,
                 fv.extent = p.extent();
                 fv.constant_extent = p.constant_extent();
                 fv.outermost = true;
-                fv.parallel = l.pure && target.has_gpu_feature() ? gpu_label == block : parallel;
+                fv.parallel = l.pure && target.has_gpu_feature() ? gpu_label == GPU_parallelism::Block : parallel;
                 fv.exists = true;
                 fv.pure = l.pure;
                 fv.index = i;
@@ -3718,7 +3737,7 @@ void LoopNest::apply(LoopLevel here,
                 // In case the threads loop is innermost
                 for (size_t i = 0; i < symbolic_loop.size(); i++) {
                     StageScheduleState::FuncVar &v = state.vars[i];
-                    v.gpu_threads = gpu_label == thread && symbolic_loop[i].pure;
+                    v.gpu_threads = gpu_label == GPU_parallelism::Thread && symbolic_loop[i].pure;
                 }
 
                 if (vectorized_loop_index >= 0) {
@@ -3763,7 +3782,7 @@ void LoopNest::apply(LoopLevel here,
                     StageScheduleState::FuncVar v;
                     StageScheduleState::FuncVar &parent = state.vars[i];
 
-                    parent.gpu_threads = gpu_label == thread && symbolic_loop[i].pure;
+                    parent.gpu_threads = gpu_label == GPU_parallelism::Thread && symbolic_loop[i].pure;
 
                     int64_t factor = product_of_descendants(parent.index);
 
@@ -3906,7 +3925,7 @@ void LoopNest::apply(LoopLevel here,
             }
         }
 
-        if (gpu_label == thread && state.all_innermost_unrolled && num_serial_loops() <= 1) {
+        if (gpu_label == GPU_parallelism::Thread && state.all_innermost_unrolled && num_serial_loops() <= 1) {
             update_producers_to_be_staged(state, all_inlined);
         }
 

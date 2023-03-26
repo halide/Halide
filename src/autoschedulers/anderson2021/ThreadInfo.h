@@ -17,7 +17,7 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-#define MAX_THREADS_PER_BLOCK 1024
+static constexpr int MAX_THREADS_PER_BLOCK = 1024;
 
 struct LoopNest;
 

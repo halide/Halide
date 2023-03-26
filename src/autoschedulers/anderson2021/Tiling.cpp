@@ -24,17 +24,17 @@ bool equal_to_existing_size(const std::vector<int64_t> &s, const std::vector<int
     return true;
 }
 
-vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
-                                                int last_d,
-                                                int vectorized_index,
-                                                const vector<int> &vec_dim_serial_sizes,
-                                                bool filter_small_outer_extents,
-                                                bool allow_inner_ones) {
-    vector<vector<int64_t>> result;
+std::vector<std::vector<int64_t>> generate_serial_tilings(const std::vector<int64_t> &s, int d,
+                                                          int last_d,
+                                                          int vectorized_index,
+                                                          const std::vector<int> &vec_dim_serial_sizes,
+                                                          bool filter_small_outer_extents,
+                                                          bool allow_inner_ones) {
+    std::vector<std::vector<int64_t>> result;
     if (d == -1) {
         result.emplace_back();
     } else {
-        vector<vector<int64_t>> v;
+        std::vector<std::vector<int64_t>> v;
         v = generate_serial_tilings(s, d - 1, last_d, vectorized_index, vec_dim_serial_sizes, filter_small_outer_extents, allow_inner_ones);
         for (auto t : v) {
             t.push_back(0);
@@ -90,14 +90,14 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
 // producer-consumer fusion, or tiling for parallelism.
 // inner_sizes is optional vector of fixed sizes to choose from for inner loop.
 // used for GPU schedules when we split a 'none' loop into a parallel loop and a serial loop
-vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor,
-                                         bool allow_splits,
-                                         const vector<int> &inner_sizes) {
-    vector<vector<int64_t>> result;
+std::vector<std::vector<int64_t>> generate_tilings(const std::vector<int64_t> &s, int d, int factor,
+                                                   bool allow_splits,
+                                                   const std::vector<int> &inner_sizes) {
+    std::vector<std::vector<int64_t>> result;
     if (d == -1) {
         result.emplace_back();
     } else {
-        vector<vector<int64_t>> v;
+        std::vector<std::vector<int64_t>> v;
         v = generate_tilings(s, d - 1, factor, allow_splits);
         // If we're already generated too many tiling configurations
         // for the inner loops, search the outer loops with coarser
@@ -199,7 +199,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
 
 // Moves vectorized dimension first and also removes dimensions with size 1
 // to reflect actual thread dimensions when loop nests are lowered
-void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t> &lowered_size) {
+void lowered_dims(const std::vector<int64_t> &size, int vector_loop_i, std::vector<int64_t> &lowered_size) {
     if (vector_loop_i >= 0 && size[vector_loop_i] > 1) {
         lowered_size.push_back(size[vector_loop_i]);
     }
@@ -218,11 +218,14 @@ void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t
 // serial_inner = True when we're generating (thread, serial) tilings, False when generating (block,thread) tilings
 // max_s holds max gpu_thread counts across all sibling loop nests in each dimension. Used to
 // make sure union of thread counts is under 1024 threshold.
-vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stage_sizes,
-                                             const vector<vector<int>> &pure_dims,
-                                             const vector<int64_t> &max_s,
-                                             int d, const vector<int> &vectorized_indices, bool serial_inner, bool is_compute_root_stage) {
-    vector<vector<int64_t>> result;
+std::vector<std::vector<int64_t>> generate_gpu_tilings(const std::vector<std::vector<int64_t>> &stage_sizes,
+                                                       const std::vector<std::vector<int>> &pure_dims,
+                                                       const std::vector<int64_t> &max_s,
+                                                       int d,
+                                                       const std::vector<int> &vectorized_indices,
+                                                       bool serial_inner,
+                                                       bool is_compute_root_stage) {
+    std::vector<std::vector<int64_t>> result;
     if (d == -1) {
         result.emplace_back();
     } else {
@@ -234,7 +237,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
             innermost_warp_extent = 1;
         }
 
-        vector<vector<int64_t>> v;
+        std::vector<std::vector<int64_t>> v;
         v = generate_gpu_tilings(stage_sizes, pure_dims, max_s, d - 1, vectorized_indices, serial_inner, is_compute_root_stage);
 
         for (auto t : v) {
@@ -246,13 +249,13 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
             // have more than three dimensions with ext > 1, or result in large serial loops
             std::function<validity()> is_valid_tiling = [&]() {
                 if (d == ((int)(stage_sizes[0].size()) - 1)) {
-                    vector<int64_t> lowered_size, thread_t;
+                    std::vector<int64_t> lowered_size, thread_t;
                     thread_t = t;
                     lowered_dims(thread_t, vectorized_indices[0], lowered_size);
                     // see how tiling will be applied to other stages of this func and update max_s accordingly
-                    vector<int64_t> new_max_s = max_s;
+                    std::vector<int64_t> new_max_s = max_s;
                     for (size_t stage = 0; stage < pure_dims.size(); stage++) {
-                        vector<int64_t> stage_thread_t, stage_lowered_size;
+                        std::vector<int64_t> stage_thread_t, stage_lowered_size;
                         for (int i : pure_dims[stage]) {
                             if (i >= 0) {
                                 stage_thread_t.push_back(thread_t[i]);

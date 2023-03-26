@@ -7,7 +7,7 @@ using namespace Halide;
 using namespace Halide::Internal;
 using namespace Halide::Internal::Autoscheduler;
 
-using tilings_t = vector<vector<int64_t>>;
+using tilings_t = std::vector<std::vector<int64_t>>;
 
 std::string to_string(const tilings_t &tilings) {
     std::ostringstream s;
@@ -42,13 +42,13 @@ void Halide::Internal::Autoscheduler::expect_eq(int line, const tilings_t &expec
 void test_serial_tilings() {
     {
         // Don't split small, odd extents
-        vector<int64_t> s;
+        std::vector<int64_t> s;
         s.push_back(3);
 
-        vector<vector<int64_t>> expected;
+        std::vector<std::vector<int64_t>> expected;
         expected.push_back({3});
 
-        vector<vector<int64_t>> actual = generate_serial_tilings(s, 0, 0, 0, {}, false, true);
+        std::vector<std::vector<int64_t>> actual = generate_serial_tilings(s, 0, 0, 0, {}, false, true);
 
         EXPECT_EQ(expected, actual);
 
@@ -69,42 +69,42 @@ void test_serial_tilings() {
     }
 
     {
-        vector<int64_t> s;
+        std::vector<int64_t> s;
         s.push_back(8);
 
-        vector<vector<int64_t>> expected;
+        std::vector<std::vector<int64_t>> expected;
         expected.push_back({8});
         expected.push_back({4});
         expected.push_back({2});
 
-        vector<vector<int64_t>> actual = generate_serial_tilings(s, 0, 0, 0, {}, false, true);
+        std::vector<std::vector<int64_t>> actual = generate_serial_tilings(s, 0, 0, 0, {}, false, true);
 
         EXPECT_EQ(expected, actual);
     }
 
     {
-        vector<int64_t> s;
+        std::vector<int64_t> s;
         s.push_back(8);
 
-        vector<vector<int64_t>> expected;
+        std::vector<std::vector<int64_t>> expected;
         // If 'filter_small_outer_extents' is true, don't split small extents
-        vector<vector<int64_t>> actual = generate_serial_tilings(s, 0, 0, 0, {}, true, true);
+        std::vector<std::vector<int64_t>> actual = generate_serial_tilings(s, 0, 0, 0, {}, true, true);
 
         EXPECT_EQ(expected, actual);
     }
 
     {
-        vector<int64_t> s;
+        std::vector<int64_t> s;
         s.push_back(8);
 
-        vector<vector<int64_t>> expected;
+        std::vector<std::vector<int64_t>> expected;
         expected.push_back({8});
         expected.push_back({4});
         expected.push_back({2});
 
         // If 'filter_small_outer_extents' is true but we're not considering the
         // vectorized_loop_index, do split
-        vector<vector<int64_t>> actual = generate_serial_tilings(s, 0, 0, 1, {}, true, true);
+        std::vector<std::vector<int64_t>> actual = generate_serial_tilings(s, 0, 0, 1, {}, true, true);
 
         EXPECT_EQ(expected, actual);
     }
@@ -112,23 +112,23 @@ void test_serial_tilings() {
     // Test that generate_gpu_tilings does not exit when it encounters a tiling
     // option with too many threads
     {
-        vector<vector<int64_t>> stage_sizes;
+        std::vector<std::vector<int64_t>> stage_sizes;
         stage_sizes.push_back({16, 16, 32});
 
-        vector<vector<int>> pure_dims;
+        std::vector<std::vector<int>> pure_dims;
         pure_dims.push_back({0, 1, 2});
 
-        vector<int64_t> max_s;
+        std::vector<int64_t> max_s;
         max_s.push_back(16);
         max_s.push_back(16);
         max_s.push_back(2);
 
-        vector<int> vectorized_indices;
+        std::vector<int> vectorized_indices;
         vectorized_indices.push_back(0);
 
         bool serial_inner = true;
 
-        vector<vector<int64_t>> expected;
+        std::vector<std::vector<int64_t>> expected;
         expected.push_back({16, 1, 2});
         expected.push_back({16, 1, 4});
         expected.push_back({16, 1, 8});
@@ -148,21 +148,21 @@ void test_serial_tilings() {
     }
 
     {
-        vector<vector<int64_t>> stage_sizes;
+        std::vector<std::vector<int64_t>> stage_sizes;
         stage_sizes.push_back({128});
 
-        vector<vector<int>> pure_dims;
+        std::vector<std::vector<int>> pure_dims;
         pure_dims.push_back({0});
 
-        vector<int64_t> max_s;
+        std::vector<int64_t> max_s;
         max_s.push_back(1);
 
-        vector<int> vectorized_indices;
+        std::vector<int> vectorized_indices;
         vectorized_indices.push_back(0);
 
         bool serial_inner = false;
 
-        vector<vector<int64_t>> expected;
+        std::vector<std::vector<int64_t>> expected;
         expected.push_back({16});
         expected.push_back({32});
         expected.push_back({64});
