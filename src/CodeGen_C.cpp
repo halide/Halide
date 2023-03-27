@@ -24,18 +24,18 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
-extern "C" unsigned char halide_internal_initmod_inlined_c[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntime_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeCuda_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeHexagonHost_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeMetal_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Compute_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeWebGPU_h[];
-extern "C" unsigned char halide_c_template_CodeGen_C_prologue[];
-extern "C" unsigned char halide_c_template_CodeGen_C_vectors[];
+extern "C" const unsigned char *halide_internal_initmod_inlined_c();
+extern "C" const unsigned char *halide_internal_runtime_header_HalideRuntime_h();
+extern "C" const unsigned char *halide_internal_runtime_header_HalideRuntimeCuda_h();
+extern "C" const unsigned char *halide_internal_runtime_header_HalideRuntimeHexagonHost_h();
+extern "C" const unsigned char *halide_internal_runtime_header_HalideRuntimeMetal_h();
+extern "C" const unsigned char *halide_internal_runtime_header_HalideRuntimeOpenCL_h();
+extern "C" const unsigned char *halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h();
+extern "C" const unsigned char *halide_internal_runtime_header_HalideRuntimeQurt_h();
+extern "C" const unsigned char *halide_internal_runtime_header_HalideRuntimeD3D12Compute_h();
+extern "C" const unsigned char *halide_internal_runtime_header_HalideRuntimeWebGPU_h();
+extern "C" const unsigned char *halide_c_template_CodeGen_C_prologue();
+extern "C" const unsigned char *halide_c_template_CodeGen_C_vectors();
 
 namespace {
 
@@ -249,9 +249,9 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
     } else {
         // Include declarations of everything generated C source might want
         stream
-            << halide_c_template_CodeGen_C_prologue << "\n"
-            << halide_internal_runtime_header_HalideRuntime_h << "\n"
-            << halide_internal_initmod_inlined_c << "\n";
+            << halide_c_template_CodeGen_C_prologue() << "\n"
+            << halide_internal_runtime_header_HalideRuntime_h() << "\n"
+            << halide_internal_initmod_inlined_c() << "\n";
         stream << "\n";
     }
 
@@ -296,27 +296,27 @@ CodeGen_C::~CodeGen_C() {
                    << "// use the -r flag with any Halide generator binary, e.g.:\n"
                    << "// $ ./my_generator -r halide_runtime -o . target=host\n"
                    << "\n"
-                   << halide_internal_runtime_header_HalideRuntime_h << "\n";
+                   << halide_internal_runtime_header_HalideRuntime_h() << "\n";
             if (target.has_feature(Target::CUDA)) {
-                stream << halide_internal_runtime_header_HalideRuntimeCuda_h << "\n";
+                stream << halide_internal_runtime_header_HalideRuntimeCuda_h() << "\n";
             }
             if (target.has_feature(Target::HVX)) {
-                stream << halide_internal_runtime_header_HalideRuntimeHexagonHost_h << "\n";
+                stream << halide_internal_runtime_header_HalideRuntimeHexagonHost_h() << "\n";
             }
             if (target.has_feature(Target::Metal)) {
-                stream << halide_internal_runtime_header_HalideRuntimeMetal_h << "\n";
+                stream << halide_internal_runtime_header_HalideRuntimeMetal_h() << "\n";
             }
             if (target.has_feature(Target::OpenCL)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenCL_h << "\n";
+                stream << halide_internal_runtime_header_HalideRuntimeOpenCL_h() << "\n";
             }
             if (target.has_feature(Target::OpenGLCompute)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h << "\n";
+                stream << halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h() << "\n";
             }
             if (target.has_feature(Target::D3D12Compute)) {
-                stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << "\n";
+                stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h() << "\n";
             }
             if (target.has_feature(Target::WebGPU)) {
-                stream << halide_internal_runtime_header_HalideRuntimeWebGPU_h << "\n";
+                stream << halide_internal_runtime_header_HalideRuntimeWebGPU_h() << "\n";
             }
         }
         stream << "#endif\n";
@@ -334,7 +334,7 @@ void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
         // flushing the stream before or after heals it. Since C++ codegen is rarely
         // on a compilation critical path, we'll just band-aid it in this way.
         stream << std::flush;
-        stream << halide_c_template_CodeGen_C_vectors;
+        stream << halide_c_template_CodeGen_C_vectors();
         stream << std::flush;
 
         for (const auto &t : vector_types) {
@@ -504,9 +504,9 @@ class ExternCallPrototypes : public IRGraphVisitor {
 public:
     ExternCallPrototypes() {
         // Make sure we don't catch calls that are already in the global declarations
-        const char *strs[] = {(const char *)halide_c_template_CodeGen_C_prologue,
-                              (const char *)halide_internal_runtime_header_HalideRuntime_h,
-                              (const char *)halide_internal_initmod_inlined_c};
+        const char *strs[] = {(const char *)halide_c_template_CodeGen_C_prologue(),
+                              (const char *)halide_internal_runtime_header_HalideRuntime_h(),
+                              (const char *)halide_internal_initmod_inlined_c()};
         for (const char *str : strs) {
             size_t j = 0;
             for (size_t i = 0; str[i]; i++) {
@@ -2534,9 +2534,9 @@ void CodeGen_C::test() {
     }
 
     string correct_source =
-        string((const char *)halide_c_template_CodeGen_C_prologue) + '\n' +
-        string((const char *)halide_internal_runtime_header_HalideRuntime_h) + '\n' +
-        string((const char *)halide_internal_initmod_inlined_c) + '\n' +
+        string((const char *)halide_c_template_CodeGen_C_prologue()) + '\n' +
+        string((const char *)halide_internal_runtime_header_HalideRuntime_h()) + '\n' +
+        string((const char *)halide_internal_initmod_inlined_c()) + '\n' +
         '\n' + kDefineMustUseResult + R"GOLDEN_CODE(
 #ifndef HALIDE_FUNCTION_ATTRS
 #define HALIDE_FUNCTION_ATTRS
