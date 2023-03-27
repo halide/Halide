@@ -45,3 +45,31 @@ public:
         return dma_desc_ != nullptr;
     }
 };
+
+// TODO(aelphy): xtensa compiler produces sub-optimal results with the default C
+// implementation
+namespace {
+class HalideXtensaFreeHelper {
+    typedef void (*FreeFunction)(void *user_context, void *p);
+    void *user_context;
+    void *p;
+    FreeFunction free_function;
+
+public:
+    HalideXtensaFreeHelper(
+        void *user_context, void *p, FreeFunction free_function)
+        : user_context(user_context), p(p), free_function(free_function) {
+    }
+    ~HalideXtensaFreeHelper() {
+        free();
+    }
+    void free() {
+        if (p) {
+            // TODO: do all free_functions guarantee to ignore a nullptr?
+            free_function(user_context, p);
+            p = nullptr;
+        }
+    }
+};
+
+}  // namespace

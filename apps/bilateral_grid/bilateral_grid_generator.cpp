@@ -121,16 +121,13 @@ public:
         } else {
             // CPU schedule.
 
-            // 3.98ms on an Intel i9-9960X using 32 threads at 3.7 GHz
-            // using target x86-64-avx2. This is a little less
-            // SIMD-friendly than some of the other apps, so we
-            // benefit from hyperthreading, and don't benefit from
-            // AVX-512, which on my machine reduces the clock to 3.0
-            // GHz.
+            // 2.04ms on an Intel i9-9960X using 32 threads at 3.5 GHz using
+            // target "host". This is a little less SIMD-friendly than some of the
+            // other apps, so we benefit from hyperthreading, and don't benefit
+            // from 512-bit vectors.
 
-            blurz.compute_root()
+            blurz.compute_at(blurx, y)
                 .reorder(c, z, x, y)
-                .parallel(y)
                 .vectorize(x, 8)
                 .unroll(c);
             histogram.compute_at(blurz, y);
@@ -138,17 +135,18 @@ public:
                 .reorder(c, r.x, r.y, x, y)
                 .unroll(c);
             blurx.compute_root()
-                .reorder(c, x, y, z)
-                .parallel(z)
+                .reorder(c, x, z, y)
+                .parallel(y)
                 .vectorize(x, 8)
                 .unroll(c);
-            blury.compute_root()
+            blury.compute_at(bilateral_grid, y)
+                .store_in(MemoryType::Stack)
                 .reorder(c, x, y, z)
-                .parallel(z)
+                .reorder_storage(c, z, x, y)
                 .vectorize(x, 8)
                 .unroll(c);
             bilateral_grid.compute_root()
-                .parallel(y)
+                .parallel(y, 8)
                 .vectorize(x, 8);
         }
 

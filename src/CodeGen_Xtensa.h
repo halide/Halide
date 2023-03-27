@@ -55,6 +55,10 @@ protected:
 
     bool is_stack_private_to_thread() const override;
 
+    void emit_halide_free_helper(
+        const std::string &alloc_name,
+        const std::string &free_function) override;
+
     int current_loop_level = 0;
     std::vector<std::string> global_static_allocations;
 

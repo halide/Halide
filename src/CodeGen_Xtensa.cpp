@@ -218,7 +218,8 @@ void CodeGen_Xtensa::visit(const Mul *op) {
             string sa = print_expr(op->a);
             string sb = print_expr(op->b);
             print_assignment(op->type, "IVP_MULNX16UPACKL(" + sa + ", " + sb + ")");
-        } else if (is_native_xtensa_vector<int32_t>(op->type, target)) {
+        } else if (is_native_xtensa_vector<int32_t>(op->type, target) ||
+                   is_native_xtensa_vector<uint32_t>(op->type, target)) {
             string sa = print_expr(op->a);
             string sb = print_expr(op->b);
             print_assignment(op->type, "IVP_PACKLN_2X64W(IVP_MULN_2X32(" + sa + ", " + sb + "))");
@@ -1273,6 +1274,15 @@ void CodeGen_Xtensa::visit(const Reinterpret *op) {
         }
     }
     CodeGen_C::visit(op);
+}
+
+// TODO(aelphy): xtensa compiler produces sub-optimal results with the default C
+// implementation
+void CodeGen_Xtensa::emit_halide_free_helper(
+    const std::string &alloc_name, const std::string &free_function) {
+    stream << get_indent() << "HalideXtensaFreeHelper "
+           << alloc_name << "_free(_ucon, " << alloc_name
+           << ", " << free_function << ");\n";
 }
 
 void CodeGen_Xtensa::visit(const For *op) {
