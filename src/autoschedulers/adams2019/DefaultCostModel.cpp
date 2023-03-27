@@ -20,8 +20,8 @@
 // This is an embedded version of `baseline.weights`.
 // The embedding is done using binary2cpp.
 
-extern "C" unsigned char baseline_weights[];
-extern "C" int baseline_weights_length;
+extern "C" const unsigned char *baseline_weights();
+extern "C" int baseline_weights_length();
 
 namespace Halide {
 namespace {
@@ -308,7 +308,7 @@ void DefaultCostModel::load_weights() {
         // This copy shouldn't be necessary, but std::istream in C++ doesn't seem
         // to have a convenient wrap-around-constant-data variant... and since
         // this isn't much data, just copy it.
-        const std::string baseline_weights_data((const char *)&baseline_weights[0], baseline_weights_length);
+        const std::string baseline_weights_data((const char *)baseline_weights(), baseline_weights_length());
         std::istringstream i(baseline_weights_data);
         if (!weights.load(i)) {
             std::cerr << "The built-in baseline weights should never fail to load\n";
