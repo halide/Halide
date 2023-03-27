@@ -104,7 +104,7 @@ bool is_native_vector_type(const Type &t, const Target &target) {
 
 bool is_double_native_vector_type(const Type &t, const Target &target) {
     Type native_vector_type = get_native_xtensa_vector(t, target);
-    return t == native_vector_type.with_lanes(native_vector_type.lanes());    
+    return t == native_vector_type.with_lanes(native_vector_type.lanes());
 }
 
 std::string suffix_for_type(Type t) {

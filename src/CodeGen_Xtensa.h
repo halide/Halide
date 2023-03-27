@@ -53,6 +53,9 @@ protected:
     void visit(const Let *op) override;
     void visit(const LetStmt *op) override;
 
+    template<typename ComparisonOp>
+    void visit_comparison_op(const ComparisonOp *op, const std::string &op_name);
+
     bool is_stack_private_to_thread() const override;
 
     void emit_halide_free_helper(
