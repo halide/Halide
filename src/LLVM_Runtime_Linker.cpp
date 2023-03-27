@@ -29,7 +29,7 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 
 #define DECLARE_INITMOD(mod)                                                              \
     extern "C" const unsigned char *halide_internal_initmod_##mod();                       \
-    extern "C" const int halide_internal_initmod_##mod##_length();                          \
+    extern "C" int halide_internal_initmod_##mod##_length();                          \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context) {         \
         llvm::StringRef sb = llvm::StringRef((const char *)halide_internal_initmod_##mod(), \
                                              halide_internal_initmod_##mod##_length());     \

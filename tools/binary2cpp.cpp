@@ -25,7 +25,7 @@ int main(int argc, const char **argv) {
             printf("#define _H_%s_binary2cpp\n", target);
             printf("extern \"C\" {\n");
             printf("extern const unsigned char *%s();\n", target);
-            printf("extern const int %s_length();\n", target);
+            printf("extern int %s_length();\n", target);
             printf("}  // extern \"C\"\n");
             printf("#endif  // _H_%s_binary2cpp\n", target);
             return 0;
@@ -58,7 +58,7 @@ int main(int argc, const char **argv) {
     }
     printf("0};\n");
     printf("const unsigned char *%s() { return %s_; }\n", target, target);
-    printf("const int %s_length() { return %d; }\n", target, count);
+    printf("int %s_length() { return %d; }\n", target, count);
     printf("}  // extern \"C\"\n");
     return 0;
 }
