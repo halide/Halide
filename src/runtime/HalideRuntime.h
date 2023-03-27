@@ -1969,7 +1969,12 @@ extern double halide_float16_bits_to_double(uint16_t);
  *
  * If set to false, releases all unused device allocations back to the
  * underlying device APIs. For finer-grained control, see specific
- * methods in each device api runtime. */
+ * methods in each device api runtime.
+ *
+ * Note that if the flag is set to true, this call *must* succeed and return
+ * a value of halide_error_code_success (i.e., zero); if you replace
+ * the implementation of this call in the runtime, you must honor this contract.
+ * */
 extern int halide_reuse_device_allocations(void *user_context, bool);
 
 /** Determines whether on device_free the memory is returned
