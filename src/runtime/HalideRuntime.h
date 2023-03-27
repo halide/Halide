@@ -1767,7 +1767,7 @@ void halide_register_argv_and_metadata(
  * alongside the pipeline. */
 
 /** Per-Func state tracked by the sampling profiler. */
-struct halide_profiler_func_stats {
+struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
 
@@ -1795,7 +1795,7 @@ struct halide_profiler_func_stats {
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
  * in a linked list. */
-struct halide_profiler_pipeline_stats {
+struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
     /** Total time spent inside this pipeline (in nanoseconds) */
     uint64_t time;
 
