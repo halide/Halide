@@ -152,8 +152,8 @@ void load_webgpu() {
             }
         }
     }
-    user_assert(error.empty()) << "Could not find a native WebGPU library: "
-                               << error << "\n";
+    user_assert(error.empty()) << "Could not find a native WebGPU library: " << error << "\n"
+                               << "(Try setting the env var HL_WEBGPU_NATIVE_LIB to an explicit path to fix this.)\n";
 }
 
 }  // namespace
