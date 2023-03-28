@@ -171,6 +171,9 @@ Box box_touched(Stmt s, const std::string &fn,
 FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &order,
                                               const std::map<std::string, Function> &env);
 
+/* Find an upper bound of bounds.max - bounds.min. */
+Expr span_of_bounds(const Interval &bounds);
+
 void bounds_test();
 
 }  // namespace Internal

@@ -11,6 +11,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Lerp.h"
+#include "OptimizeShuffles.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
@@ -1928,155 +1929,6 @@ class FuseInterleaves : public IRMutator {
     using IRMutator::visit;
 };
 
-// Find an upper bound of bounds.max - bounds.min.
-Expr span_of_bounds(const Interval &bounds) {
-    internal_assert(bounds.is_bounded());
-
-    const Min *min_min = bounds.min.as<Min>();
-    const Max *min_max = bounds.min.as<Max>();
-    const Min *max_min = bounds.max.as<Min>();
-    const Max *max_max = bounds.max.as<Max>();
-    const Add *min_add = bounds.min.as<Add>();
-    const Add *max_add = bounds.max.as<Add>();
-    const Sub *min_sub = bounds.min.as<Sub>();
-    const Sub *max_sub = bounds.max.as<Sub>();
-
-    if (min_min && max_min && equal(min_min->b, max_min->b)) {
-        return span_of_bounds({min_min->a, max_min->a});
-    } else if (min_max && max_max && equal(min_max->b, max_max->b)) {
-        return span_of_bounds({min_max->a, max_max->a});
-    } else if (min_add && max_add && equal(min_add->b, max_add->b)) {
-        return span_of_bounds({min_add->a, max_add->a});
-    } else if (min_sub && max_sub && equal(min_sub->b, max_sub->b)) {
-        return span_of_bounds({min_sub->a, max_sub->a});
-    } else {
-        return bounds.max - bounds.min;
-    }
-}
-
-// Replace indirect loads with dynamic_shuffle intrinsics where
-// possible.
-class OptimizeShuffles : public IRMutator {
-    int lut_alignment;
-    Scope<Interval> bounds;
-    std::vector<std::pair<string, Expr>> lets;
-
-    using IRMutator::visit;
-
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
-            const Broadcast *b = op->args[0].as<Broadcast>();
-            if (!b || b->value.type().is_vector()) {
-                return op;
-            }
-        }
-        return IRMutator::visit(op);
-    }
-
-    template<typename NodeType, typename T>
-    NodeType visit_let(const T *op) {
-        // We only care about vector lets.
-        if (op->value.type().is_vector()) {
-            bounds.push(op->name, bounds_of_expr_in_scope(op->value, bounds));
-        }
-        NodeType node = IRMutator::visit(op);
-        if (op->value.type().is_vector()) {
-            bounds.pop(op->name);
-        }
-        return node;
-    }
-
-    Expr visit(const Let *op) override {
-        lets.emplace_back(op->name, op->value);
-        Expr expr = visit_let<Expr>(op);
-        lets.pop_back();
-        return expr;
-    }
-    Stmt visit(const LetStmt *op) override {
-        return visit_let<Stmt>(op);
-    }
-
-    set<string> allocations_to_pad;
-    Stmt visit(const Allocate *op) override {
-        Stmt s = IRMutator::visit(op);
-        if (allocations_to_pad.count(op->name)) {
-            op = s.as<Allocate>();
-            internal_assert(op);
-            int padding = 128 / op->type.bytes();  // One native vector
-            return Allocate::make(op->name, op->type, op->memory_type,
-                                  op->extents, op->condition,
-                                  op->body, op->new_expr, op->free_function,
-                                  std::max(op->padding, padding));
-        } else {
-            return s;
-        }
-    }
-
-    Expr visit(const Load *op) override {
-        if (!is_const_one(op->predicate)) {
-            // TODO(psuriana): We shouldn't mess with predicated load for now.
-            return IRMutator::visit(op);
-        }
-        if (!op->type.is_vector() || op->index.as<Ramp>()) {
-            // Don't handle scalar or simple vector loads.
-            return IRMutator::visit(op);
-        }
-
-        Expr index = mutate(op->index);
-        Interval unaligned_index_bounds = bounds_of_expr_in_scope(index, bounds);
-        if (unaligned_index_bounds.is_bounded()) {
-            // We want to try both the unaligned and aligned
-            // bounds. The unaligned bounds might fit in 256 elements,
-            // while the aligned bounds do not.
-            int align = lut_alignment / op->type.bytes();
-            Interval aligned_index_bounds = {
-                (unaligned_index_bounds.min / align) * align,
-                ((unaligned_index_bounds.max + align) / align) * align - 1};
-            ModulusRemainder alignment(align, 0);
-
-            for (const Interval &index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
-                Expr index_span = span_of_bounds(index_bounds);
-                index_span = common_subexpression_elimination(index_span);
-                index_span = simplify(index_span);
-
-                if (can_prove(index_span < 256)) {
-                    // This is a lookup within an up to 256 element array. We
-                    // can use dynamic_shuffle for this.
-                    int const_extent = as_const_int(index_span) ? *as_const_int(index_span) + 1 : 256;
-                    Expr base = simplify(index_bounds.min);
-
-                    // Load all of the possible indices loaded from the
-                    // LUT. Note that for clamped ramps, this loads up to 1
-                    // vector past the max, so we will add padding to the
-                    // allocation accordingly (if we're the one that made it).
-                    allocations_to_pad.insert(op->name);
-                    Expr lut = Load::make(op->type.with_lanes(const_extent), op->name,
-                                          Ramp::make(base, 1, const_extent),
-                                          op->image, op->param, const_true(const_extent), alignment);
-
-                    // We know the size of the LUT is not more than 256, so we
-                    // can safely cast the index to 8 bit, which
-                    // dynamic_shuffle requires.
-                    index = simplify(cast(UInt(8).with_lanes(op->type.lanes()), index - base));
-                    return Call::make(op->type, "dynamic_shuffle", {lut, index, 0, const_extent - 1}, Call::PureIntrinsic);
-                }
-                // Only the first iteration of this loop is aligned.
-                alignment = ModulusRemainder();
-            }
-        }
-        if (!index.same_as(op->index)) {
-            return Load::make(op->type, op->name, index, op->image, op->param, op->predicate, op->alignment);
-        } else {
-            return op;
-        }
-    }
-
-public:
-    OptimizeShuffles(int lut_alignment)
-        : lut_alignment(lut_alignment) {
-    }
-};
-
 // Distribute constant RHS widening shift lefts as multiplies.
 // TODO: This is an extremely unfortunate mess. I think the better
 // solution is for the simplifier to distribute constant multiplications
@@ -2462,7 +2314,7 @@ public:
 Stmt optimize_hexagon_shuffles(const Stmt &s, int lut_alignment) {
     // Replace indirect and other complicated loads with
     // dynamic_shuffle (vlut) calls.
-    return OptimizeShuffles(lut_alignment).mutate(s);
+    return optimize_shuffles(s, lut_alignment);
 }
 
 Stmt scatter_gather_generator(Stmt s) {

@@ -507,6 +507,7 @@ SOURCE_FILES = \
   Monotonic.cpp \
   ObjectInstanceRegistry.cpp \
   OffloadGPULoops.cpp \
+  OptimizeShuffles.cpp \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
   Parameter.cpp \
@@ -702,6 +703,7 @@ HEADER_FILES = \
   Monotonic.h \
   ObjectInstanceRegistry.h \
   OffloadGPULoops.h \
+  OptimizeShuffles.h \
   OutputImageParam.h \
   ParallelRVar.h \
   Param.h \
