@@ -374,6 +374,15 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         for (auto const &iter : module.exports()) {
             orc::SymbolStringPtr name = symbolStringPool->intern(iter.first);
             orc::SymbolStringPtr _name = symbolStringPool->intern("_" + iter.first);
+#if LLVM_VERSION >= 170
+            auto symbol = llvm::orc::ExecutorAddr::fromPtr(iter.second.address);
+            if (!newSymbols.count(name)) {
+                newSymbols.insert({name, {symbol, JITSymbolFlags::Exported}});
+            }
+            if (!newSymbols.count(_name)) {
+                newSymbols.insert({_name, {symbol, JITSymbolFlags::Exported}});
+            }
+#else
             auto symbol = llvm::JITEvaluatedSymbol::fromPointer(iter.second.address);
             if (!newSymbols.count(name)) {
                 newSymbols.insert({name, symbol});
@@ -381,6 +390,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
             if (!newSymbols.count(_name)) {
                 newSymbols.insert({_name, symbol});
             }
+#endif
         }
     }
     err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(newSymbols)));
