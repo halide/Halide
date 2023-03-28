@@ -59,3 +59,20 @@ define weak_odr <16 x i16> @hadd_pmadd_i8_avx2(<32 x i8> %a) nounwind alwaysinli
   ret <16 x i16> %1
 }
 declare <16 x i16> @llvm.x86.avx2.pmadd.ub.sw(<32 x i8>, <32 x i8>) nounwind readnone
+
+define weak_odr <8 x i32> @wmul_pmaddwd_avx2(<8 x i16> %a, <8 x i16> %b) nounwind alwaysinline {
+  %1 = zext <8 x i16> %a to <8 x i32>
+  %2 = zext <8 x i16> %b to <8 x i32>
+  %3 = bitcast <8 x i32> %1 to <16 x i16>
+  %4 = bitcast <8 x i32> %2 to <16 x i16>
+  %res = call <8 x i32> @llvm.x86.avx2.pmadd.wd(<16 x i16> %3, <16 x i16> %4)
+  ret <8 x i32> %res
+}
+
+define weak_odr <8 x i32> @hadd_pmadd_i16_avx2(<16 x i16> %a) nounwind alwaysinline {
+  %res = call <8 x i32> @llvm.x86.avx2.pmadd.wd(<16 x i16> %a, <16 x i16> <i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1>)
+  ret <8 x i32> %res
+}
+
+declare <8 x i32> @llvm.x86.avx2.pmadd.wd(<16 x i16>, <16 x i16>) nounwind readnone
+
