@@ -18,6 +18,8 @@ The following is a non-comprehensive list of known limitations:
     * 64-bit integers and floats will likely remain unsupported until WGSL gains
       extensions to support them.
 -   Wrapping native device buffer handles is not yet implemented.
+-   You must use CMake/CTest to build/test Halide for WebGPU; using the Makefile
+    is not supported for WebGPU testing (and probably never will be).
 
 In addition to these functional limitations, the performance of the WebGPU
 backend has not yet been evaluated, and so optimizations in the runtime or
