@@ -829,7 +829,9 @@ template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_png(ImageType &im, const std::string &filename) {
     static_assert(!ImageType::has_static_halide_type, "");
 
-    im.copy_to_host();
+    if (!check(im.copy_to_host() == halide_error_code_success, "copy_to_host() failed.")) {
+        return false;
+    }
 
     const int width = im.width();
     const int height = im.height();
@@ -977,7 +979,9 @@ bool save_pnm(ImageType &im, const int channels, const std::string &filename) {
         return false;
     }
 
-    im.copy_to_host();
+    if (!check(im.copy_to_host() == halide_error_code_success, "copy_to_host() failed.")) {
+        return false;
+    }
 
     const halide_type_t im_type = im.type();
     const int width = im.width();
@@ -1103,7 +1107,9 @@ template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_jpg(ImageType &im, const std::string &filename) {
     static_assert(!ImageType::has_static_halide_type, "");
 
-    im.copy_to_host();
+    if (!check(im.copy_to_host() == halide_error_code_success, "copy_to_host() failed.")) {
+        return false;
+    }
 
     const int width = im.width();
     const int height = im.height();
@@ -1272,7 +1278,9 @@ template<typename ImageType, CheckFunc check = CheckReturn>
 bool save_tmp(ImageType &im, const std::string &filename) {
     static_assert(!ImageType::has_static_halide_type, "");
 
-    im.copy_to_host();
+    if (!check(im.copy_to_host() == halide_error_code_success, "copy_to_host() failed.")) {
+        return false;
+    }
 
     int32_t header[5] = {1, 1, 1, 1, -1};
     for (int i = 0; i < im.dimensions(); ++i) {
@@ -1490,7 +1498,9 @@ template<typename ImageType, CheckFunc check = CheckReturn>
 bool save_mat(ImageType &im, const std::string &filename) {
     static_assert(!ImageType::has_static_halide_type, "");
 
-    im.copy_to_host();
+    if (!check(im.copy_to_host() == halide_error_code_success, "copy_to_host() failed.")) {
+        return false;
+    }
 
     uint32_t class_code = 0, type_code = 0;
     switch (im.raw_buffer()->type.code) {
@@ -1799,7 +1809,9 @@ template<typename ImageType, Internal::CheckFunc check = Internal::CheckReturn>
 bool save_tiff(ImageType &im, const std::string &filename) {
     static_assert(!ImageType::has_static_halide_type, "");
 
-    im.copy_to_host();
+    if (!check(im.copy_to_host() == halide_error_code_success, "copy_to_host() failed.")) {
+        return false;
+    }
 
     if (!check(im.dimensions() <= 4, "Can only save TIFF files with <= 4 dimensions")) {
         return false;
@@ -2357,7 +2369,9 @@ void save_image(ImageType &im, const std::string &filename) {
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckFail>
 void convert_and_save_image(ImageType &im, const std::string &filename) {
     // We'll be doing any conversion on the CPU
-    im.copy_to_host();
+    if (!check(im.copy_to_host() == halide_error_code_success, "copy_to_host() failed.")) {
+        return;
+    }
 
     std::set<FormatInfo> info;
     (void)save_query<typename Internal::ImageTypeWithDynamicDims<ImageType>::type, check>(filename, &info);

@@ -533,9 +533,8 @@ int main(int argc, char **argv) {
 
     // This is a single-purpose binary to benchmark this filter, so we
     // shouldn't be eagerly returning device memory.
-    int result = halide_reuse_device_allocations(nullptr, true);
-    if (result != 0) {
-        std::cerr << "halide_reuse_device_allocations() returned an error: " << result << "\n";
+    if (auto result = halide_reuse_device_allocations(nullptr, true); result != halide_error_code_success) {
+        std::cerr << "halide_reuse_device_allocations() returned an error: " << (int)result << "\n";
     }
 
     if (benchmark) {
@@ -553,7 +552,9 @@ int main(int argc, char **argv) {
     if (track_memory) {
         // Ensure that we copy any GPU-output buffers back to host before
         // we report on memory usage.
-        r.copy_outputs_to_host();
+        if (auto result = r.copy_outputs_to_host(); result != halide_error_code_success) {
+            std::cerr << "Warning: copy_outputs_to_host() returned error " << (int)result << "\n";
+        }
         std::cout << "Maximum Halide memory: " << tracker.highwater()
                   << " bytes for output of " << r.megapixels_out() << " mpix.\n";
     }

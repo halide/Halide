@@ -3232,6 +3232,32 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
     return fb;
 }
 
+// Find an upper bound of bounds.max - bounds.min.
+Expr span_of_bounds(const Interval &bounds) {
+    internal_assert(bounds.is_bounded());
+
+    const Min *min_min = bounds.min.as<Min>();
+    const Max *min_max = bounds.min.as<Max>();
+    const Min *max_min = bounds.max.as<Min>();
+    const Max *max_max = bounds.max.as<Max>();
+    const Add *min_add = bounds.min.as<Add>();
+    const Add *max_add = bounds.max.as<Add>();
+    const Sub *min_sub = bounds.min.as<Sub>();
+    const Sub *max_sub = bounds.max.as<Sub>();
+
+    if (min_min && max_min && equal(min_min->b, max_min->b)) {
+        return span_of_bounds({min_min->a, max_min->a});
+    } else if (min_max && max_max && equal(min_max->b, max_max->b)) {
+        return span_of_bounds({min_max->a, max_max->a});
+    } else if (min_add && max_add && equal(min_add->b, max_add->b)) {
+        return span_of_bounds({min_add->a, max_add->a});
+    } else if (min_sub && max_sub && equal(min_sub->b, max_sub->b)) {
+        return span_of_bounds({min_sub->a, max_sub->a});
+    } else {
+        return bounds.max - bounds.min;
+    }
+}
+
 namespace {
 
 void check(const Scope<Interval> &scope, const Expr &e, const Expr &correct_min, const Expr &correct_max) {

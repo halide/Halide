@@ -1152,14 +1152,17 @@ public:
         }
     }
 
-    void copy_outputs_to_host() {
+    int copy_outputs_to_host() {
         for (auto &arg_pair : args) {
             auto &arg = arg_pair.second;
             if (arg.metadata->kind == halide_argument_kind_output_buffer) {
                 Buffer<> &b = arg.buffer_value;
-                b.copy_to_host();
+                if (auto err = b.copy_to_host(); err != halide_error_code_success) {
+                    return err;
+                }
             }
         }
+        return halide_error_code_success;
     }
 
     uint64_t pixels_out() const {

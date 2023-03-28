@@ -169,6 +169,7 @@ inline int test1_th_(float _alpha, int32_t _beta, at::Tensor &_buf) {
 
         std::string expected =
             R"GOLDEN_CODE(#include "ATen/cuda/CUDAContext.h"
+#include "HalidePyTorchCudaHelpers.h"
 #include "HalideBuffer.h"
 #include "HalidePyTorchHelpers.h"
 

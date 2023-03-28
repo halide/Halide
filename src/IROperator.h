@@ -351,54 +351,6 @@ Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
-/** Compute a + widen(b). */
-Expr widen_right_add(Expr a, Expr b);
-/** Compute a * widen(b). */
-Expr widen_right_mul(Expr a, Expr b);
-/** Compute a - widen(b). */
-Expr widen_right_sub(Expr a, Expr b);
-
-/** Compute widen(a) + widen(b). */
-Expr widening_add(Expr a, Expr b);
-/** Compute widen(a) * widen(b). a and b may have different signedness. */
-Expr widening_mul(Expr a, Expr b);
-/** Compute widen(a) - widen(b). The result is always signed. */
-Expr widening_sub(Expr a, Expr b);
-/** Compute widen(a) << b. */
-Expr widening_shift_left(Expr a, Expr b);
-Expr widening_shift_left(Expr a, int b);
-/** Compute widen(a) >> b. */
-Expr widening_shift_right(Expr a, Expr b);
-Expr widening_shift_right(Expr a, int b);
-
-/** Compute saturating_narrow(widening_add(a, (1 >> min(b, 0)) / 2) << b).
- * When b is positive indicating a left shift, the rounding term is zero. */
-Expr rounding_shift_left(Expr a, Expr b);
-Expr rounding_shift_left(Expr a, int b);
-/** Compute saturating_narrow(widening_add(a, (1 << max(b, 0)) / 2) >> b).
- * When b is negative indicating a left shift, the rounding term is zero. */
-Expr rounding_shift_right(Expr a, Expr b);
-Expr rounding_shift_right(Expr a, int b);
-
-/** Compute saturating_narrow(widen(a) + widen(b)) */
-Expr saturating_add(Expr a, Expr b);
-/** Compute saturating_narrow(widen(a) - widen(b)) */
-Expr saturating_sub(Expr a, Expr b);
-
-/** Compute narrow((widen(a) + widen(b)) / 2) */
-Expr halving_add(Expr a, Expr b);
-/** Compute narrow((widen(a) + widen(b) + 1) / 2) */
-Expr rounding_halving_add(Expr a, Expr b);
-/** Compute narrow((widen(a) - widen(b)) / 2) */
-Expr halving_sub(Expr a, Expr b);
-
-/** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
-Expr mul_shift_right(Expr a, Expr b, Expr q);
-Expr mul_shift_right(Expr a, Expr b, int q);
-/** Compute saturating_narrow(rounding_shift_right(widening_mul(a, b), q)) */
-Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
-Expr rounding_mul_shift_right(Expr a, Expr b, int q);
-
 }  // namespace Internal
 
 /** Cast an expression to the halide type corresponding to the C++ type T. */
@@ -1626,6 +1578,197 @@ f32.vectorize(x, 8);
  * See test/correctness/extract_concat_bits.cpp for a complete example.
  */
 Expr concat_bits(const std::vector<Expr> &e);
+
+/** Below is a collection of intrinsics for fixed-point programming. Most of
+ * them can be expressed via other means, but this is more natural for some, as
+ * it avoids ghost widened intermediates that don't (or shouldn't) actually show
+ * up in codegen, and doesn't rely on pattern-matching inside the compiler to
+ * succeed to get good instruction selection.
+ *
+ * The semantics of each call are defined in terms of a non-existent 'widen' and
+ * 'narrow' operators, which stand in for casts that double or halve the
+ * bit-width of a type respectively.
+ */
+
+/** Compute a + widen(b). */
+Expr widen_right_add(Expr a, Expr b);
+
+/** Compute a * widen(b). */
+Expr widen_right_mul(Expr a, Expr b);
+
+/** Compute a - widen(b). */
+Expr widen_right_sub(Expr a, Expr b);
+
+/** Compute widen(a) + widen(b). */
+Expr widening_add(Expr a, Expr b);
+
+/** Compute widen(a) * widen(b). a and b may have different signedness, in which
+ * case the result is signed. */
+Expr widening_mul(Expr a, Expr b);
+
+/** Compute widen(a) - widen(b). The result is always signed. */
+Expr widening_sub(Expr a, Expr b);
+
+/** Compute widen(a) << b. */
+//@{
+Expr widening_shift_left(Expr a, Expr b);
+Expr widening_shift_left(Expr a, int b);
+//@}
+
+/** Compute widen(a) >> b. */
+//@{
+Expr widening_shift_right(Expr a, Expr b);
+Expr widening_shift_right(Expr a, int b);
+//@}
+
+/** Compute saturating_narrow(widening_add(a, (1 >> min(b, 0)) / 2) << b).
+ * When b is positive indicating a left shift, the rounding term is zero. */
+//@{
+Expr rounding_shift_left(Expr a, Expr b);
+Expr rounding_shift_left(Expr a, int b);
+//@}
+
+/** Compute saturating_narrow(widening_add(a, (1 << max(b, 0)) / 2) >> b).
+ * When b is negative indicating a left shift, the rounding term is zero. */
+//@{
+Expr rounding_shift_right(Expr a, Expr b);
+Expr rounding_shift_right(Expr a, int b);
+//@}
+
+/** Compute saturating_narrow(widen(a) + widen(b)) */
+Expr saturating_add(Expr a, Expr b);
+
+/** Compute saturating_narrow(widen(a) - widen(b)) */
+Expr saturating_sub(Expr a, Expr b);
+
+/** Compute narrow((widen(a) + widen(b)) / 2) */
+Expr halving_add(Expr a, Expr b);
+
+/** Compute narrow((widen(a) + widen(b) + 1) / 2) */
+Expr rounding_halving_add(Expr a, Expr b);
+
+/** Compute narrow((widen(a) - widen(b)) / 2) */
+Expr halving_sub(Expr a, Expr b);
+
+/** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
+//@{
+Expr mul_shift_right(Expr a, Expr b, Expr q);
+Expr mul_shift_right(Expr a, Expr b, int q);
+//@}
+
+/** Compute saturating_narrow(rounding_shift_right(widening_mul(a, b), q)) */
+//@{
+Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
+Expr rounding_mul_shift_right(Expr a, Expr b, int q);
+//@}
+
+namespace Internal {
+// These deprecated versions of the functions take a type that can convert to
+// and from Expr instead of taking Exprs directly so that they'll be
+// lower-ranked in function resolution order.
+struct PseudoExpr {
+    Expr e;
+    PseudoExpr(const Expr &e)  // Intentionally implicit
+        : e(e) {
+    }
+    operator Expr() {
+        return e;
+    }
+};
+
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr widen_right_add(PseudoExpr a, const Expr &b) {
+    return Halide::widen_right_add(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr widen_right_mul(PseudoExpr a, const Expr &b) {
+    return Halide::widen_right_mul(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr widen_right_sub(PseudoExpr a, const Expr &b) {
+    return Halide::widen_right_sub(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr widening_add(PseudoExpr a, const Expr &b) {
+    return Halide::widening_add(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr widening_mul(PseudoExpr a, const Expr &b) {
+    return Halide::widening_mul(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr widening_sub(PseudoExpr a, const Expr &b) {
+    return Halide::widening_sub(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr widening_shift_left(PseudoExpr a, const Expr &b) {
+    return Halide::widening_shift_left(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr widening_shift_left(PseudoExpr a, int b) {
+    return Halide::widening_shift_left(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr widening_shift_right(PseudoExpr a, const Expr &b) {
+    return Halide::widening_shift_right(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr widening_shift_right(PseudoExpr a, int b) {
+    return Halide::widening_shift_right(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr rounding_shift_left(PseudoExpr a, const Expr &b) {
+    return Halide::widening_shift_left(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr rounding_shift_left(PseudoExpr a, int b) {
+    return Halide::widening_shift_left(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr rounding_shift_right(PseudoExpr a, const Expr &b) {
+    return Halide::rounding_shift_right(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr rounding_shift_right(PseudoExpr a, int b) {
+    return Halide::rounding_shift_right(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr saturating_add(PseudoExpr a, const Expr &b) {
+    return Halide::saturating_add(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr saturating_sub(PseudoExpr a, const Expr &b) {
+    return Halide::saturating_sub(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr halving_add(PseudoExpr a, const Expr &b) {
+    return Halide::halving_add(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr rounding_halving_add(PseudoExpr a, const Expr &b) {
+    return Halide::rounding_halving_add(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr halving_sub(PseudoExpr a, const Expr &b) {
+    return Halide::halving_sub(a, b);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr mul_shift_right(PseudoExpr a, const Expr &b, const Expr &q) {
+    return Halide::mul_shift_right(a, b, q);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr mul_shift_right(PseudoExpr a, const Expr &b, int q) {
+    return Halide::mul_shift_right(a, b, q);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr rounding_mul_shift_right(PseudoExpr a, const Expr &b, const Expr &q) {
+    return Halide::rounding_mul_shift_right(a, b, q);
+}
+HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
+inline Expr rounding_mul_shift_right(PseudoExpr a, const Expr &b, int q) {
+    return Halide::rounding_mul_shift_right(a, b, q);
+}
+}  // namespace Internal
 
 }  // namespace Halide
 
