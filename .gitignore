@@ -82,9 +82,6 @@ _initmod*.cpp
 # Tests
 **/python_bindings/correctness/generators/*.h
 **/test/generator/*.h
-**/test/generator/external_code_extern_bitcode_32.cpp
-**/test/generator/external_code_extern_bitcode_64.cpp
-**/test/generator/external_code_extern_cpp_source.cpp
 compile_log.txt
 stderr.txt
 stdout.txt
