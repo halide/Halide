@@ -1951,7 +1951,7 @@ private:
             binop = Or::make;
             break;
         case VectorReduce::SaturatingAdd:
-            binop = [](Expr a, Expr b) { return saturating_add(a, b); };
+            binop = ::Halide::saturating_add;
             break;
         }
 
