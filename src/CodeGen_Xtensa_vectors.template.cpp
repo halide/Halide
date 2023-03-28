@@ -704,6 +704,82 @@ HALIDE_ALWAYS_INLINE void store_predicated<native_vector_u8_x4, native_vector_i3
 }
 
 template<>
+HALIDE_ALWAYS_INLINE void store_predicated<native_vector_i16, native_vector_i32_x2, native_mask_i16, int16_t, VECTOR_WIDTH_I16>(const native_vector_i16 &a, void *base, const native_vector_i32_x2 &offset, const native_mask_i16 &predicate) {
+    int16_t __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[VECTOR_WIDTH_I16];
+    aligned_store<native_vector_i16, int16_t, VECTOR_WIDTH_I16>(a, &tmp[0], 0);
+
+    int __attribute__((aligned(XCHAL_VISION_SIMD8))) offsets[2 * VECTOR_WIDTH_I32];
+    aligned_store<native_vector_i32_x2, int32_t, 2 * VECTOR_WIDTH_I32>(offset, &offsets[0], 0);
+
+    native_vector_i16 vmask = IVP_MOVNX16T(native_vector_i16(1), native_vector_i16(0), predicate);
+    int16_t __attribute__((aligned(XCHAL_VISION_SIMD8))) mask[2 * VECTOR_WIDTH_I32];
+    aligned_store<native_vector_i16, int16_t, 2 * VECTOR_WIDTH_I32>(vmask, &mask[0], 0);
+
+    for (int i = 0; i < VECTOR_WIDTH_I16; i++) {
+        if (mask[i]) {
+            ((int16_t *)base)[offsets[i]] = tmp[i];
+        }
+    }
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void store_predicated<native_vector_i16_x2, native_vector_i32_x4, native_mask_i8, int16_t, 2 * VECTOR_WIDTH_I16>(const native_vector_i16_x2 &a, void *base, const native_vector_i32_x4 &offset, const native_mask_i8 &predicate) {
+    int16_t __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[2 * VECTOR_WIDTH_I16];
+    aligned_store<native_vector_i16_x2, int16_t, 2 * VECTOR_WIDTH_I16>(a, &tmp[0], 0);
+
+    int __attribute__((aligned(XCHAL_VISION_SIMD8))) offsets[4 * VECTOR_WIDTH_I32];
+    aligned_store<native_vector_i32_x4, int32_t, 4 * VECTOR_WIDTH_I32>(offset, &offsets[0], 0);
+
+    native_vector_i8 vmask = IVP_MOV2NX8T(native_vector_i8(1), native_vector_i8(0), predicate);
+    int8_t __attribute__((aligned(XCHAL_VISION_SIMD8))) mask[4 * VECTOR_WIDTH_I32];
+    aligned_store<native_vector_i8, int8_t, 4 * VECTOR_WIDTH_I32>(vmask, &mask[0], 0);
+
+    for (int i = 0; i < 2 * VECTOR_WIDTH_I16; i++) {
+        if (mask[i]) {
+            ((int16_t *)base)[offsets[i]] = tmp[i];
+        }
+    }
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void store_predicated<native_vector_u16, native_vector_i32_x2, native_mask_i16, uint16_t, VECTOR_WIDTH_U16>(const native_vector_u16 &a, void *base, const native_vector_i32_x2 &offset, const native_mask_i16 &predicate) {
+    uint16_t __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[VECTOR_WIDTH_U16];
+    aligned_store<native_vector_u16, uint16_t, VECTOR_WIDTH_U16>(a, &tmp[0], 0);
+
+    int __attribute__((aligned(XCHAL_VISION_SIMD8))) offsets[2 * VECTOR_WIDTH_I32];
+    aligned_store<native_vector_i32_x2, int32_t, 2 * VECTOR_WIDTH_I32>(offset, &offsets[0], 0);
+
+    native_vector_i16 vmask = IVP_MOVNX16T(native_vector_i16(1), native_vector_i16(0), predicate);
+    int16_t __attribute__((aligned(XCHAL_VISION_SIMD8))) mask[2 * VECTOR_WIDTH_I32];
+    aligned_store<native_vector_i16, int16_t, 2 * VECTOR_WIDTH_I32>(vmask, &mask[0], 0);
+
+    for (int i = 0; i < VECTOR_WIDTH_I16; i++) {
+        if (mask[i]) {
+            ((uint16_t *)base)[offsets[i]] = tmp[i];
+        }
+    }
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void store_predicated<native_vector_u16_x2, native_vector_i32_x4, native_mask_i8, uint16_t, 2 * VECTOR_WIDTH_U16>(const native_vector_u16_x2 &a, void *base, const native_vector_i32_x4 &offset, const native_mask_i8 &predicate) {
+    uint16_t __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[2 * VECTOR_WIDTH_U16];
+    aligned_store<native_vector_u16_x2, uint16_t, 2 * VECTOR_WIDTH_I16>(a, &tmp[0], 0);
+
+    int __attribute__((aligned(XCHAL_VISION_SIMD8))) offsets[4 * VECTOR_WIDTH_I32];
+    aligned_store<native_vector_i32_x4, int32_t, 4 * VECTOR_WIDTH_I32>(offset, &offsets[0], 0);
+
+    native_vector_i8 vmask = IVP_MOV2NX8T(native_vector_i8(1), native_vector_i8(0), predicate);
+    int8_t __attribute__((aligned(XCHAL_VISION_SIMD8))) mask[4 * VECTOR_WIDTH_I32];
+    aligned_store<native_vector_i8, int8_t, 4 * VECTOR_WIDTH_I32>(vmask, &mask[0], 0);
+
+    for (int i = 0; i < 2 * VECTOR_WIDTH_I16; i++) {
+        if (mask[i]) {
+            ((int16_t *)base)[offsets[i]] = tmp[i];
+        }
+    }
+}
+
+template<>
 HALIDE_ALWAYS_INLINE void store_predicated<native_vector_u16_x3, native_vector_i32_x6, native_mask_i16_x3, uint16_t, 3 * VECTOR_WIDTH_U16>(const native_vector_u16_x3 &a, void *base, const native_vector_i32_x6 &offset, const native_mask_i16_x3 &predicate) {
     uint16_t __attribute__((aligned(XCHAL_VISION_SIMD8))) tmp[3 * VECTOR_WIDTH_U16];
     aligned_store<native_vector_u16_x3, uint16_t, 3 * VECTOR_WIDTH_U16>(a, &tmp[0], 0);
