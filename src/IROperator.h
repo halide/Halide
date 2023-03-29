@@ -1669,7 +1669,7 @@ namespace Internal {
 struct PseudoExpr {
     Expr e;
 
-    template <typename T>
+    template<typename T>
     PseudoExpr(const T &t)  // Intentionally implicit
         : e((Expr)t) {
     }
