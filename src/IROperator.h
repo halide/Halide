@@ -1668,10 +1668,8 @@ namespace Internal {
 // lower-ranked in function resolution order.
 struct PseudoExpr {
     Expr e;
-
-    template<typename T>
-    PseudoExpr(const T &t)  // Intentionally implicit
-        : e((Expr)t) {
+    PseudoExpr(const Expr &e)  // Intentionally implicit
+        : e(e) {
     }
     operator Expr() {
         return e;
