@@ -1663,111 +1663,120 @@ Expr rounding_mul_shift_right(Expr a, Expr b, int q);
 //@}
 
 namespace Internal {
-// These deprecated versions of the functions take a type that can convert to
-// and from Expr instead of taking Exprs directly so that they'll be
-// lower-ranked in function resolution order.
-struct PseudoExpr {
-    Expr e;
 
-    template<typename T>
-    PseudoExpr(const T &t)  // Intentionally implicit
-        : e((Expr)t) {
-    }
-    operator Expr() {
-        return e;
-    }
-};
-
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr widen_right_add(PseudoExpr a, const Expr &b) {
+Expr widen_right_add(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::widen_right_add(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr widen_right_mul(PseudoExpr a, const Expr &b) {
+Expr widen_right_mul(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::widen_right_mul(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr widen_right_sub(PseudoExpr a, const Expr &b) {
+Expr widen_right_sub(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::widen_right_sub(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr widening_add(PseudoExpr a, const Expr &b) {
+Expr widening_add(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::widening_add(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr widening_mul(PseudoExpr a, const Expr &b) {
+Expr widening_mul(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::widening_mul(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr widening_sub(PseudoExpr a, const Expr &b) {
+Expr widening_sub(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::widening_sub(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr widening_shift_left(PseudoExpr a, const Expr &b) {
+Expr widening_shift_left(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::widening_shift_left(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr widening_shift_left(PseudoExpr a, int b) {
+Expr widening_shift_left(const Expr &a, int b, T * = nullptr) {
     return Halide::widening_shift_left(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr widening_shift_right(PseudoExpr a, const Expr &b) {
+Expr widening_shift_right(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::widening_shift_right(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr widening_shift_right(PseudoExpr a, int b) {
+Expr widening_shift_right(const Expr &a, int b, T * = nullptr) {
     return Halide::widening_shift_right(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr rounding_shift_left(PseudoExpr a, const Expr &b) {
+Expr rounding_shift_left(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::widening_shift_left(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr rounding_shift_left(PseudoExpr a, int b) {
+Expr rounding_shift_left(const Expr &a, int b, T * = nullptr) {
     return Halide::widening_shift_left(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr rounding_shift_right(PseudoExpr a, const Expr &b) {
+Expr rounding_shift_right(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::rounding_shift_right(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr rounding_shift_right(PseudoExpr a, int b) {
+Expr rounding_shift_right(const Expr &a, int b, T * = nullptr) {
     return Halide::rounding_shift_right(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr saturating_add(PseudoExpr a, const Expr &b) {
+Expr saturating_add(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::saturating_add(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr saturating_sub(PseudoExpr a, const Expr &b) {
+Expr saturating_sub(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::saturating_sub(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr halving_add(PseudoExpr a, const Expr &b) {
+Expr halving_add(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::halving_add(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr rounding_halving_add(PseudoExpr a, const Expr &b) {
+Expr rounding_halving_add(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::rounding_halving_add(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr halving_sub(PseudoExpr a, const Expr &b) {
+Expr halving_sub(const Expr &a, const Expr &b, T * = nullptr) {
     return Halide::halving_sub(a, b);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr mul_shift_right(PseudoExpr a, const Expr &b, const Expr &q) {
+Expr mul_shift_right(const Expr &a, const Expr &b, const Expr &q, T * = nullptr) {
     return Halide::mul_shift_right(a, b, q);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr mul_shift_right(PseudoExpr a, const Expr &b, int q) {
+Expr mul_shift_right(const Expr &a, const Expr &b, int q, T * = nullptr) {
     return Halide::mul_shift_right(a, b, q);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr rounding_mul_shift_right(PseudoExpr a, const Expr &b, const Expr &q) {
+Expr rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q, T * = nullptr) {
     return Halide::rounding_mul_shift_right(a, b, q);
 }
+template<typename T = void>
 HALIDE_ATTRIBUTE_DEPRECATED("This function has been moved out of the Halide::Internal:: namespace into Halide::")
-inline Expr rounding_mul_shift_right(PseudoExpr a, const Expr &b, int q) {
+Expr rounding_mul_shift_right(const Expr &a, const Expr &b, int q, T * = nullptr) {
     return Halide::rounding_mul_shift_right(a, b, q);
 }
 }  // namespace Internal
