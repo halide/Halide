@@ -84,7 +84,7 @@ public:
         if (compute_cost.count(node)) {
             cost = include_subtree_cost ? compute_cost_inclusive[node] : compute_cost[node];
         } else {
-            internal_assert(false) << "IRCostModel::get_compute_cost(): cost lookup failed\n";
+            internal_error << "IRCostModel::get_compute_cost(): cost lookup failed\n";
         }
 
         internal_assert(cost >= 0) << "Cost must not be negative.\n";
@@ -99,7 +99,7 @@ public:
         if (compute_cost.count(node)) {
             cost = include_subtree_cost ? data_cost_inclusive[node] : data_cost[node];
         } else {
-            internal_assert(false) << "IRCostModel::get_datamovement_cost(): cost lookup failed\n";
+            internal_error << "IRCostModel::get_datamovement_cost(): cost lookup failed\n";
         }
 
         internal_assert(cost >= 0) << "Cost cost must not be negative.\n";
