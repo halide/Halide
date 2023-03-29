@@ -68,7 +68,7 @@ public:
         Expr inv_filter_count =
             u16_sat(((2 << log2_numerator) + filter_count) / (2 * filter_count));
         Expr average =
-            ::Halide::rounding_mul_shift_right(sum(c, x, y, b), inv_filter_count, log2_numerator);
+            rounding_mul_shift_right(sum(c, x, y, b), inv_filter_count, log2_numerator);
 
         output_(c, x, y, b) = clamp(u8_sat(average), output_min_, output_max_);
 
