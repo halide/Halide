@@ -2075,7 +2075,7 @@ Expr CodeGen_C::scalarize_vector_reduce(const VectorReduce *op) {
         binop = Or::make;
         break;
     case VectorReduce::SaturatingAdd:
-        binop = Halide::saturating_add;
+        binop = saturating_add;
         break;
     }
 

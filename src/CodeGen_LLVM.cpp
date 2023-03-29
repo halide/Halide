@@ -4188,7 +4188,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         binop = Or::make;
         break;
     case VectorReduce::SaturatingAdd:
-        binop = Halide::saturating_add;
+        binop = saturating_add;
         break;
     }
 
