@@ -619,9 +619,13 @@ private:
 template<typename T>
 class HTMLCodePrinter : public IRVisitor {
 public:
-    HTMLCodePrinter(T &os)
+    explicit HTMLCodePrinter(T &os)
         : stream(os), id(0), context_stack(1, 0) {
     }
+
+    // Make class non-copyable and non-moveable
+    HTMLCodePrinter(const HTMLCodePrinter &) = delete;
+    HTMLCodePrinter &operator=(const HTMLCodePrinter &) = delete;
 
     void init_cost_info(IRCostModel cost_model) {
         cost_model = std::move(cost_model);
@@ -2120,9 +2124,13 @@ private:
 // computation performed at each stage.
 class HTMLVisualizationPrinter : public IRVisitor {
 public:
-    HTMLVisualizationPrinter(std::ofstream &os)
+    explicit HTMLVisualizationPrinter(std::ofstream &os)
         : stream(os), id(0) {
     }
+
+    // Make class non-copyable and non-moveable
+    HTMLVisualizationPrinter(const HTMLVisualizationPrinter &) = delete;
+    HTMLVisualizationPrinter &operator=(const HTMLVisualizationPrinter &) = delete;
 
     void init_cost_info(IRCostModel cost_model) {
         cost_model = std::move(cost_model);
@@ -2698,7 +2706,7 @@ private:
 class IRVisualizer {
 public:
     // Construct the visualizer and point it to the output file
-    IRVisualizer(const std::string &filename)
+    explicit IRVisualizer(const std::string &filename)
         : html_code_printer(stream), html_viz_printer(stream) {
         // Open output file
         stream.open(filename.c_str());
