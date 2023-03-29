@@ -1946,9 +1946,9 @@ private:
 
                 // Update op to the nested if for next loop iteration
                 op = nested_if;
-            }
-            // Otherwise, print it and we are done!
-            else {
+
+            } else { // Otherwise, print it and we are done!
+
                 int else_id = gen_unique_id();
 
                 // Print cost buttons
@@ -2121,7 +2121,7 @@ private:
 class HTMLVisualizationPrinter : public IRVisitor {
 public:
     HTMLVisualizationPrinter(std::ofstream &os)
-        : stream(os), printer(ss), id(0) {
+        : stream(os), id(0) {
     }
 
     void init_cost_info(IRCostModel cost_model) {
@@ -2141,10 +2141,6 @@ private:
 
     // Used to track the context within generated HTML
     std::vector<std::string> context_stack_tags;
-
-    // Used to translate IR to code in HTML
-    std::ostringstream ss;
-    HTMLCodePrinter<std::ostringstream> printer;
 
     // Assembly line number info
     AssemblyInfo assembly_info;
@@ -2343,8 +2339,8 @@ private:
             return "Else";
         }
 
-        ss.str("");
-        ss.clear();
+        std::ostringstream ss;
+        HTMLCodePrinter<std::ostringstream> printer(ss);
         e.accept(&printer);
         std::string html_e = ss.str();
 
