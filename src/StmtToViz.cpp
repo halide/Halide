@@ -88,14 +88,14 @@ public:
     }
 
     // Returns the data movement cost of a node (the number of bits moved in load/store/shuffle ops)
-    int get_datamovement_cost(const IRNode *node, bool include_subtree_cost) {
-        internal_assert(node != nullptr) << "IRCostModel::get_datamovement_cost(): node is nullptr\n";
+    int get_data_movement_cost(const IRNode *node, bool include_subtree_cost) {
+        internal_assert(node != nullptr) << "IRCostModel::get_data_movement_cost(): node is nullptr\n";
 
         int cost = -1;
         if (compute_cost.count(node)) {
             cost = include_subtree_cost ? data_cost_inclusive[node] : data_cost[node];
         } else {
-            internal_error << "IRCostModel::get_datamovement_cost(): cost lookup failed\n";
+            internal_error << "IRCostModel::get_data_movement_cost(): cost lookup failed\n";
         }
 
         internal_assert(cost >= 0) << "Cost cost must not be negative.\n";
@@ -108,7 +108,7 @@ public:
     }
 
     // Returns the max data movement cost of any node in the program
-    int get_max_datamovement_cost(bool include_subtree_cost) {
+    int get_max_data_movement_cost(bool include_subtree_cost) {
         return include_subtree_cost ? max_data_cost_inclusive : max_data_cost;
     }
 
@@ -171,14 +171,14 @@ private:
             // Certain child nodes can be null. Ex: else-case
             // in an if statement
             if (child_node) {
-                subtree_cost += get_datamovement_cost(child_node, true);
+                subtree_cost += get_data_movement_cost(child_node, true);
             }
         }
 
         int line_cost = node_cost;
         for (const IRNode *child_node : inline_child_nodes) {
             if (child_node) {
-                line_cost += get_datamovement_cost(child_node, true);
+                line_cost += get_data_movement_cost(child_node, true);
             }
         }
 
@@ -1208,7 +1208,7 @@ private:
     void print_cost_buttons(const IRNode *op, int id) {
         print_opening_tag("div", "node-cost");
         print_compute_cost(op, id);
-        print_datamovement_cost(op, id);
+        print_data_movement_cost(op, id);
         print_closing_tag("div");
     }
 
@@ -1222,10 +1222,10 @@ private:
     }
 
     // Prints the button/indicator for the data movement cost of a line in the program
-    void print_datamovement_cost(const IRNode *op, uint64_t id) {
-        int max_line_cost = cost_model.get_max_datamovement_cost(false);
-        int line_cost = cost_model.get_datamovement_cost(op, false);
-        int block_cost = cost_model.get_datamovement_cost(op, true);
+    void print_data_movement_cost(const IRNode *op, uint64_t id) {
+        int max_line_cost = cost_model.get_max_data_movement_cost(false);
+        int line_cost = cost_model.get_data_movement_cost(op, false);
+        int block_cost = cost_model.get_data_movement_cost(op, true);
         std::string _id = "dc-" + std::to_string(id);
         print_cost_btn(line_cost, block_cost, max_line_cost, _id, "Bits Moved: ");
     }
@@ -2265,9 +2265,9 @@ private:
         print_cost_button(line_ccost, block_ccost, max_line_ccost, "vcc-" + std::to_string(id), "Op Count: ");
 
         // Print data movement cost indicator
-        int max_line_dcost = cost_model.get_max_datamovement_cost(false);
-        int line_dcost = cost_model.get_datamovement_cost(op, false);
-        int block_dcost = cost_model.get_datamovement_cost(op, true);
+        int max_line_dcost = cost_model.get_max_data_movement_cost(false);
+        int line_dcost = cost_model.get_data_movement_cost(op, false);
+        int block_dcost = cost_model.get_data_movement_cost(op, true);
         // Special handling for Store nodes; since unlike the code view
         // the viz view prints stores and loads seperately, therefore using
         // inclusive cost is confusing.
