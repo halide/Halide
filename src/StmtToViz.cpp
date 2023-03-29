@@ -28,7 +28,7 @@ extern "C" unsigned char halide_html_template_StmtToViz_dependencies[];
 extern "C" unsigned char halide_html_template_StmtToViz_stylesheet[];
 extern "C" unsigned char halide_html_template_StmtToViz_javascript[];
 
-// Classes define within this file
+// Classes defined within this file
 class CostModel;
 class AssemblyInfo;
 template<typename T>
@@ -43,8 +43,8 @@ class IRVisualizer;
 class IRCostModel : public IRVisitor {
 public:
     IRCostModel()
-        : _max_compute_cost(-1), _max_data_cost(-1), _max_compute_cost_inclusive(-1),
-          _max_data_cost_inclusive(-1) {
+        : max_compute_cost(-1), max_data_cost(-1), max_compute_cost_inclusive(-1),
+          max_data_cost_inclusive(-1) {
     }
 
     // Pre-compute all costs to avoid repeated work
@@ -55,34 +55,34 @@ public:
         }
 
         // Compute the max cost for each category
-        _max_compute_cost = -1;
-        for (auto const &entry : _compute_cost) {
-            _max_compute_cost = std::max(entry.second, _max_compute_cost);
+        max_compute_cost = -1;
+        for (auto const &entry : compute_cost) {
+            max_compute_cost = std::max(entry.second, max_compute_cost);
         }
 
-        _max_data_cost = -1;
-        for (auto const &entry : _data_cost) {
-            _max_data_cost = std::max(entry.second, _max_data_cost);
+        max_data_cost = -1;
+        for (auto const &entry : data_cost) {
+            max_data_cost = std::max(entry.second, max_data_cost);
         }
 
-        _max_compute_cost_inclusive = -1;
-        for (auto const &entry : _compute_cost_inclusive) {
-            _max_compute_cost_inclusive = std::max(entry.second, _max_compute_cost_inclusive);
+        max_compute_cost_inclusive = -1;
+        for (auto const &entry : compute_cost_inclusive) {
+            max_compute_cost_inclusive = std::max(entry.second, max_compute_cost_inclusive);
         }
 
-        _max_data_cost_inclusive = -1;
-        for (auto const &entry : _data_cost_inclusive) {
-            _max_data_cost_inclusive = std::max(entry.second, _max_data_cost_inclusive);
+        max_data_cost_inclusive = -1;
+        for (auto const &entry : data_cost_inclusive) {
+            max_data_cost_inclusive = std::max(entry.second, max_data_cost_inclusive);
         }
     }
 
     // Returns the compute cost of a node (estimated using simple op-counting)
-    int get_compute_cost(const IRNode *node, bool _include_subtree_cost) {
+    int get_compute_cost(const IRNode *node, bool include_subtree_cost) {
         internal_assert(node != nullptr) << "IRCostModel::get_compute_cost(): node is nullptr\n";
 
         int cost = -1;
-        if (_compute_cost.count(node)) {
-            cost = _include_subtree_cost ? _compute_cost_inclusive[node] : _compute_cost[node];
+        if (compute_cost.count(node)) {
+            cost = include_subtree_cost ? compute_cost_inclusive[node] : compute_cost[node];
         } else {
             internal_assert(false) << "IRCostModel::get_compute_cost(): cost lookup failed\n";
         }
@@ -92,12 +92,12 @@ public:
     }
 
     // Returns the data movement cost of a node (the number of bits moved in load/store/shuffle ops)
-    int get_datamovement_cost(const IRNode *node, bool _include_subtree_cost) {
+    int get_datamovement_cost(const IRNode *node, bool include_subtree_cost) {
         internal_assert(node != nullptr) << "IRCostModel::get_datamovement_cost(): node is nullptr\n";
 
         int cost = -1;
-        if (_compute_cost.count(node)) {
-            cost = _include_subtree_cost ? _data_cost_inclusive[node] : _data_cost[node];
+        if (compute_cost.count(node)) {
+            cost = include_subtree_cost ? data_cost_inclusive[node] : data_cost[node];
         } else {
             internal_assert(false) << "IRCostModel::get_datamovement_cost(): cost lookup failed\n";
         }
@@ -107,13 +107,13 @@ public:
     }
 
     // Returns the max compute cost of any node in the program
-    int get_max_compute_cost(bool _include_subtree_cost) {
-        return _include_subtree_cost ? _max_compute_cost_inclusive : _max_compute_cost;
+    int get_max_compute_cost(bool include_subtree_cost) {
+        return include_subtree_cost ? max_compute_cost_inclusive : max_compute_cost;
     }
 
     // Returns the max data movement cost of any node in the program
-    int get_max_datamovement_cost(bool _include_subtree_cost) {
-        return _include_subtree_cost ? _max_data_cost_inclusive : _max_data_cost;
+    int get_max_datamovement_cost(bool include_subtree_cost) {
+        return include_subtree_cost ? max_data_cost_inclusive : max_data_cost;
     }
 
 private:
@@ -125,19 +125,19 @@ private:
     //  - The inclusive cost is the cost of the entire sub-tree.
     //    We display this cost when the user collapses a program
     //    block in the IR.
-    std::map<const IRNode *, int> _compute_cost;
-    std::map<const IRNode *, int> _data_cost;
+    std::map<const IRNode *, int> compute_cost;
+    std::map<const IRNode *, int> data_cost;
 
-    std::map<const IRNode *, int> _compute_cost_inclusive;
-    std::map<const IRNode *, int> _data_cost_inclusive;
+    std::map<const IRNode *, int> compute_cost_inclusive;
+    std::map<const IRNode *, int> data_cost_inclusive;
 
     // We also track the max costs to determine the cost color
     // intensity for a given line of code
-    int _max_compute_cost;
-    int _max_data_cost;
+    int max_compute_cost;
+    int max_data_cost;
 
-    int _max_compute_cost_inclusive;
-    int _max_data_cost_inclusive;
+    int max_compute_cost_inclusive;
+    int max_data_cost_inclusive;
 
     /* Utility functions to store node costs in the cost database */
     void set_compute_costs(const IRNode *node, int node_cost, const std::vector<const IRNode *> &child_nodes) {
@@ -161,8 +161,8 @@ private:
             }
         }
 
-        _compute_cost[node] = line_cost;
-        _compute_cost_inclusive[node] = node_cost + subtree_cost;
+        compute_cost[node] = line_cost;
+        compute_cost_inclusive[node] = node_cost + subtree_cost;
     }
 
     void set_data_costs(const IRNode *node, int node_cost, const std::vector<const IRNode *> &child_nodes) {
@@ -186,8 +186,8 @@ private:
             }
         }
 
-        _data_cost[node] = line_cost;
-        _data_cost_inclusive[node] = node_cost + subtree_cost;
+        data_cost[node] = line_cost;
+        data_cost_inclusive[node] = node_cost + subtree_cost;
     }
 
     /* Visitor functions for each IR node */
@@ -523,7 +523,7 @@ private:
 class AssemblyInfo : public IRVisitor {
 public:
     AssemblyInfo()
-        : _loop_id(0), _prodcons_id(0) {
+        : loop_id(0), prodcons_id(0) {
     }
 
     void generate(const string &code, const Module &m) {
@@ -536,16 +536,16 @@ public:
         }
 
         // Find markers in asm code
-        istringstream _asm_stream(code);
+        istringstream asm_stream(code);
         string line;
         int lno = 1;
-        while (getline(_asm_stream, line)) {
+        while (getline(asm_stream, line)) {
             // Try all markers
             std::vector<uint64_t> matched_nodes;
-            for (auto const &[node, regex] : _markers) {
+            for (auto const &[node, regex] : markers) {
                 if (std::regex_search(line, regex)) {
                     // Save line number
-                    _lnos[node] = lno;
+                    lnos[node] = lno;
                     // Save this node's id
                     matched_nodes.push_back(node);
                 }
@@ -553,7 +553,7 @@ public:
             // We map to the first match, stop
             // checking matched nodes
             for (auto const &node : matched_nodes) {
-                _markers.erase(node);
+                markers.erase(node);
             }
 
             lno++;
@@ -561,17 +561,17 @@ public:
     }
 
     int get_asm_lno(uint64_t node_id) {
-        if (_lnos.count(node_id)) {
-            return _lnos[node_id];
+        if (lnos.count(node_id)) {
+            return lnos[node_id];
         }
         return -1;
     }
 
 private:
     // Generate asm markers for Halide loops
-    int _loop_id;
+    int loop_id;
     int gen_loop_id() {
-        return ++_loop_id;
+        return ++loop_id;
     }
 
     std::regex gen_loop_asm_marker(int id, const string &loop_var) {
@@ -582,9 +582,9 @@ private:
     }
 
     // Generate asm markers for Halide producer/consumer ndoes
-    int _prodcons_id;
+    int prodcons_id;
     int gen_prodcons_id() {
-        return ++_prodcons_id;
+        return prodcons_id;
     }
 
     std::regex gen_prodcons_asm_marker(int id, const string &var, bool is_producer) {
@@ -595,23 +595,23 @@ private:
     }
 
     // Mapping of IR nodes to their asm markers
-    std::map<uint64_t, std::regex> _markers;
+    std::map<uint64_t, std::regex> markers;
 
     // Mapping of IR nodes to their asm line numbers
-    std::map<uint64_t, int> _lnos;
+    std::map<uint64_t, int> lnos;
 
     using IRVisitor::visit;
 
     void visit(const ProducerConsumer *op) override {
         // Generate asm marker
-        _markers[(uint64_t)op] = gen_prodcons_asm_marker(gen_prodcons_id(), op->name, op->is_producer);
+        markers[(uint64_t)op] = gen_prodcons_asm_marker(gen_prodcons_id(), op->name, op->is_producer);
         // Continue traversal
         IRVisitor::visit(op);
     }
 
     void visit(const For *op) override {
         // Generate asm marker
-        _markers[(uint64_t)op] = gen_loop_asm_marker(gen_loop_id(), op->name);
+        markers[(uint64_t)op] = gen_loop_asm_marker(gen_loop_id(), op->name);
         // Continue traversal
         IRVisitor::visit(op);
     }
@@ -624,11 +624,11 @@ template<typename T>
 class HTMLCodePrinter : public IRVisitor {
 public:
     HTMLCodePrinter(T &os)
-        : stream(os), _id(0), context_stack(1, 0) {
+        : stream(os), id(0), context_stack(1, 0) {
     }
 
     void init_cost_info(IRCostModel cost_model) {
-        _cost_model = std::move(cost_model);
+        cost_model = std::move(cost_model);
     }
 
     void print(const Module &m) {
@@ -693,7 +693,7 @@ private:
     T &stream;
 
     // Used to generate unique ids
-    int _id;
+    int id;
 
     // Used to track scope during IR traversal
     Scope<int> scope;
@@ -705,7 +705,7 @@ private:
     std::vector<string> context_stack_tags;
 
     // Holds cost information for visualized program
-    IRCostModel _cost_model;
+    IRCostModel cost_model;
 
     /* Private print functions to handle various IR types */
     void print(const Buffer<> &buf) {
@@ -1218,18 +1218,18 @@ private:
 
     // Prints the button/indicator for the compute cost of a line in the program
     void print_compute_cost(const IRNode *op, uint64_t id) {
-        int max_line_cost = _cost_model.get_max_compute_cost(false);
-        int line_cost = _cost_model.get_compute_cost(op, false);
-        int block_cost = _cost_model.get_compute_cost(op, true);
+        int max_line_cost = cost_model.get_max_compute_cost(false);
+        int line_cost = cost_model.get_compute_cost(op, false);
+        int block_cost = cost_model.get_compute_cost(op, true);
         string _id = "cc-" + std::to_string(id);
         print_cost_btn(line_cost, block_cost, max_line_cost, _id, "Op Count: ");
     }
 
     // Prints the button/indicator for the data movement cost of a line in the program
     void print_datamovement_cost(const IRNode *op, uint64_t id) {
-        int max_line_cost = _cost_model.get_max_datamovement_cost(false);
-        int line_cost = _cost_model.get_datamovement_cost(op, false);
-        int block_cost = _cost_model.get_datamovement_cost(op, true);
+        int max_line_cost = cost_model.get_max_datamovement_cost(false);
+        int line_cost = cost_model.get_datamovement_cost(op, false);
+        int block_cost = cost_model.get_datamovement_cost(op, true);
         string _id = "dc-" + std::to_string(id);
         print_cost_btn(line_cost, block_cost, max_line_cost, _id, "Bits Moved: ");
     }
@@ -1264,7 +1264,7 @@ private:
 
     /* Misc utility methods */
     int gen_unique_id() {
-        return _id++;
+        return id++;
     }
 
     /* All visitor functions inherited from IRVisitor */
@@ -2121,19 +2121,19 @@ private:
 // Visualizes the IR in HTML. The visualization is essentially
 // an abstracted version of the code, highlighting the higher
 // level execution pipeline along with key properties of the
-// execution performed at each stage.
+// computation performed at each stage.
 class HTMLVisualizationPrinter : public IRVisitor {
 public:
     HTMLVisualizationPrinter(std::ofstream &os)
-        : stream(os), printer(ss), _id(0) {
+        : stream(os), printer(ss), id(0) {
     }
 
     void init_cost_info(IRCostModel cost_model) {
-        _cost_model = std::move(cost_model);
+        cost_model = std::move(cost_model);
     }
 
     void print(const Module &m, AssemblyInfo asm_info) {
-        _assembly_info = std::move(asm_info);
+        assembly_info = std::move(asm_info);
         for (const auto &fn : m.functions()) {
             print(fn);
         }
@@ -2151,15 +2151,15 @@ private:
     HTMLCodePrinter<ostringstream> printer;
 
     // Assembly line number info
-    AssemblyInfo _assembly_info;
+    AssemblyInfo assembly_info;
 
     // Holds cost information for visualized program
-    IRCostModel _cost_model;
+    IRCostModel cost_model;
 
     // Generate unique ids
-    int _id;
+    int id;
     int gen_unique_id() {
-        return _id++;
+        return id++;
     }
 
     /* Private print functions to handle various IR types */
@@ -2267,15 +2267,15 @@ private:
         print_opening_tag("div", "viz-cost-btns");
 
         // Print compute cost indicator
-        int max_line_ccost = _cost_model.get_max_compute_cost(false);
-        int line_ccost = _cost_model.get_compute_cost(op, false);
-        int block_ccost = _cost_model.get_compute_cost(op, true);
+        int max_line_ccost = cost_model.get_max_compute_cost(false);
+        int line_ccost = cost_model.get_compute_cost(op, false);
+        int block_ccost = cost_model.get_compute_cost(op, true);
         print_cost_button(line_ccost, block_ccost, max_line_ccost, "vcc-" + std::to_string(id), "Op Count: ");
 
         // Print data movement cost indicator
-        int max_line_dcost = _cost_model.get_max_datamovement_cost(false);
-        int line_dcost = _cost_model.get_datamovement_cost(op, false);
-        int block_dcost = _cost_model.get_datamovement_cost(op, true);
+        int max_line_dcost = cost_model.get_max_datamovement_cost(false);
+        int line_dcost = cost_model.get_datamovement_cost(op, false);
+        int block_dcost = cost_model.get_datamovement_cost(op, true);
         // Special handling for Store nodes; since unlike the code view
         // the viz view prints stores and loads seperately, therefore using
         // inclusive cost is confusing.
@@ -2475,7 +2475,7 @@ private:
 
         // Print box header
         string aid = std::to_string((uint64_t)op);
-        int asm_lno = _assembly_info.get_asm_lno((uint64_t)op);
+        int asm_lno = assembly_info.get_asm_lno((uint64_t)op);
         if (asm_lno == -1) {
             print_box_header(id, op, "loop-viz-" + aid, "loop-" + aid, "For: " + get_as_var(op->name));
         } else {
@@ -2561,7 +2561,7 @@ private:
         // Print box header
         string aid = std::to_string((uint64_t)op);
         string prefix = op->is_producer ? "Produce: " : "Consume: ";
-        int asm_lno = _assembly_info.get_asm_lno((uint64_t)op);
+        int asm_lno = assembly_info.get_asm_lno((uint64_t)op);
         if (asm_lno == -1) {
             print_box_header(id, op, "prodcons-viz-" + aid, "prodcons-" + aid, prefix + get_as_var(op->name));
         } else {
@@ -2707,7 +2707,7 @@ class IRVisualizer {
 public:
     // Construct the visualizer and point it to the output file
     IRVisualizer(const string &filename)
-        : _popup_id(0), html_code_printer(stream), html_viz_printer(stream) {
+        : html_code_printer(stream), html_viz_printer(stream) {
         // Open output file
         stream.open(filename.c_str());
 
@@ -2724,13 +2724,13 @@ public:
         // code is based on darya-ver's original implementation. We
         // use comments in the generated assembly to infer association
         // between Halide IR and assembly -- unclear how reliable this is.
-        _asm_info.generate(_asm_stream.str(), m);
+        asm_info.generate(asm_stream.str(), m);
 
         // Run the cost model over this module to pre-compute all
         // node costs
-        _cost_model.comput_all_costs(m);
-        html_code_printer.init_cost_info(_cost_model);
-        html_viz_printer.init_cost_info(_cost_model);
+        cost_model.comput_all_costs(m);
+        html_code_printer.init_cost_info(cost_model);
+        html_viz_printer.init_cost_info(cost_model);
 
         // Generate html page
         stream << "<html>\n";
@@ -2747,10 +2747,7 @@ private:
     std::ifstream assembly;
 
     // Holds cost information for visualized program
-    IRCostModel _cost_model;
-
-    // Used to generate unique popup ids
-    int _popup_id;
+    IRCostModel cost_model;
 
     // Used to translate IR to code in HTML
     HTMLCodePrinter<std::ofstream> html_code_printer;
@@ -2809,7 +2806,7 @@ private:
     // Generate tab 2/3: Lowered IR code with syntax highlighting in HTML
     void generate_visualization_tab(const Module &m) {
         stream << "<div id='ir-visualization-tab'>\n";
-        html_viz_printer.print(m, _asm_info);
+        html_viz_printer.print(m, asm_info);
         stream << "</div>\n";
     }
 
@@ -2818,7 +2815,7 @@ private:
         stream << "<div id='assembly-tab'>\n";
         stream << "<div id='assemblyContent' style='display: none;'>\n";
         stream << "<pre>\n";
-        stream << _asm_stream.str();
+        stream << asm_stream.str();
         stream << "</pre>\n";
         stream << "</div>\n";
         stream << "</div>\n";
@@ -2867,23 +2864,18 @@ private:
 
     /* Misc helper methods */
 
-    // Returns a new unique popup id
-    int gen_popup_id() {
-        return _popup_id++;
-    }
-
     // Load assembly code from file
-    ostringstream _asm_stream;
-    AssemblyInfo _asm_info;
+    ostringstream asm_stream;
+    AssemblyInfo asm_info;
 
     void load_asm_code(const string &asm_file) {
         // Open assembly file
         assembly.open(asm_file.c_str());
 
-        // Slurp the code into _asm
+        // Slurp the code into asm_stream
         string line;
         while (getline(assembly, line)) {
-            _asm_stream << line << "\n";
+            asm_stream << line << "\n";
         }
     }
 };

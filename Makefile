@@ -55,7 +55,7 @@ endif
 SHELL = bash
 CXX ?= g++
 PREFIX ?= /usr/local
-LLVM_CONFIG ?= llvm-config
+LLVM_CONFIG ?= llvm-config-15
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1.\2/')
 
@@ -894,7 +894,7 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) \
                   $(RUNTIME_EXPORTED_INCLUDES:$(INCLUDE_DIR)/%.h=$(BUILD_DIR)/initmod.%_h.o) \
                   $(C_TEMPLATE_FILES:%=$(BUILD_DIR)/c_template.%.o) \
-				  $(HTML_TEMPLATE_FILES:%=$(BUILD_DIR)/html_template.%.o) \
+                  $(HTML_TEMPLATE_FILES:%=$(BUILD_DIR)/html_template.%.o) \
                   $(BUILD_DIR)/initmod.inlined_c.o \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
