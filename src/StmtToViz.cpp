@@ -627,8 +627,8 @@ public:
     HTMLCodePrinter(const HTMLCodePrinter &) = delete;
     HTMLCodePrinter &operator=(const HTMLCodePrinter &) = delete;
 
-    void init_cost_info(IRCostModel cost_model) {
-        cost_model = std::move(cost_model);
+    void init_cost_info(IRCostModel cm) {
+        cost_model = std::move(cm);
     }
 
     void print(const Module &m) {
@@ -2132,8 +2132,8 @@ public:
     HTMLVisualizationPrinter(const HTMLVisualizationPrinter &) = delete;
     HTMLVisualizationPrinter &operator=(const HTMLVisualizationPrinter &) = delete;
 
-    void init_cost_info(IRCostModel cost_model) {
-        cost_model = std::move(cost_model);
+    void init_cost_info(IRCostModel cm) {
+        cost_model = std::move(cm);
     }
 
     void print(const Module &m, AssemblyInfo asm_info) {
