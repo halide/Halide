@@ -156,3 +156,29 @@ define weak_odr <16 x i32> @abs_i32x16(<16 x i32> %arg) {
  ret <16 x i32> %1
 }
 declare <16 x i32> @llvm.abs.v16i32(<16 x i32>, i1) nounwind readnone
+
+define weak_odr <32 x i16> @hadd_pmadd_u8_avx512(<64 x i8> %a) nounwind alwaysinline {
+  %1 = tail call <32 x i16> @llvm.x86.avx512.pmaddubs.w.512(<64 x i8> %a, <64 x i8> <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>)
+  ret <32 x i16> %1
+}
+
+define weak_odr <32 x i16> @hadd_pmadd_i8_avx512(<64 x i8> %a) nounwind alwaysinline {
+  %1 = tail call <32 x i16> @llvm.x86.avx512.pmaddubs.w.512(<64 x i8> <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>, <64 x i8> %a)
+  ret <32 x i16> %1
+}
+declare <32 x i16> @llvm.x86.avx512.pmaddubs.w.512(<64 x i8>, <64 x i8>) nounwind readnone
+
+define weak_odr <16 x i32> @wmul_pmaddwd_avx512(<16 x i16> %a, <16 x i16> %b) nounwind alwaysinline {
+  %1 = zext <16 x i16> %a to <16 x i32>
+  %2 = zext <16 x i16> %b to <16 x i32>
+  %3 = bitcast <16 x i32> %1 to <32 x i16>
+  %4 = bitcast <16 x i32> %2 to <32 x i16>
+  %res = call <16 x i32> @llvm.x86.avx512.pmaddw.d.512(<32 x i16> %3, <32 x i16> %4)
+  ret <16 x i32> %res
+}
+
+define weak_odr <16 x i32> @hadd_pmadd_i16_avx512(<32 x i16> %a) nounwind alwaysinline {
+  %res = call <16 x i32> @llvm.x86.avx512.pmaddw.d.512(<32 x i16> %a, <32 x i16> <i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1, i16 1>)
+  ret <16 x i32> %res
+}
+declare <16 x i32> @llvm.x86.avx512.pmaddw.d.512(<32 x i16>, <32 x i16>) nounwind readnone

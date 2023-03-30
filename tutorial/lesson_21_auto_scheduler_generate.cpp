@@ -64,8 +64,8 @@ public:
         det(x, y) = Sxx(x, y) * Syy(x, y) - Sxy(x, y) * Sxy(x, y);
         trace(x, y) = Sxx(x, y) + Syy(x, y);
         harris(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
-        output1(x, y) = harris(x + 2, y + 2);
-        output2(x, y) = factor * harris(x + 2, y + 2);
+        output1(x, y) = harris(x, y);
+        output2(x, y) = factor * harris(x, y);
     }
 
     void schedule() {

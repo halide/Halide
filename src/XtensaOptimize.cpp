@@ -104,7 +104,7 @@ bool is_native_vector_type(const Type &t, const Target &target) {
 
 bool is_double_native_vector_type(const Type &t, const Target &target) {
     Type native_vector_type = get_native_xtensa_vector(t, target);
-    return t == native_vector_type.with_lanes(native_vector_type.lanes());
+    return t == native_vector_type.with_lanes(2 * native_vector_type.lanes());
 }
 
 std::string suffix_for_type(Type t) {
@@ -1370,32 +1370,6 @@ public:
     }
 };
 
-// Find an upper bound of bounds.max - bounds.min.
-Expr span_of_bounds(const Interval &bounds) {
-    internal_assert(bounds.is_bounded());
-
-    const Min *min_min = bounds.min.as<Min>();
-    const Max *min_max = bounds.min.as<Max>();
-    const Min *max_min = bounds.max.as<Min>();
-    const Max *max_max = bounds.max.as<Max>();
-    const Add *min_add = bounds.min.as<Add>();
-    const Add *max_add = bounds.max.as<Add>();
-    const Sub *min_sub = bounds.min.as<Sub>();
-    const Sub *max_sub = bounds.max.as<Sub>();
-
-    if (min_min && max_min && equal(min_min->b, max_min->b)) {
-        return span_of_bounds({min_min->a, max_min->a});
-    } else if (min_max && max_max && equal(min_max->b, max_max->b)) {
-        return span_of_bounds({min_max->a, max_max->a});
-    } else if (min_add && max_add && equal(min_add->b, max_add->b)) {
-        return span_of_bounds({min_add->a, max_add->a});
-    } else if (min_sub && max_sub && equal(min_sub->b, max_sub->b)) {
-        return span_of_bounds({min_sub->a, max_sub->a});
-    } else {
-        return bounds.max - bounds.min;
-    }
-}
-
 // NOTE(vksnk): this is borrowed from HexagonOptimize.cpp, so
 // eventually need to generalize and share across two places.
 // Replace indirect loads with dynamic_shuffle intrinsics where
@@ -1951,7 +1925,7 @@ private:
             binop = Or::make;
             break;
         case VectorReduce::SaturatingAdd:
-            binop = saturating_add;
+            binop = ::Halide::saturating_add;
             break;
         }
 

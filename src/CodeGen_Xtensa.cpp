@@ -639,104 +639,50 @@ void CodeGen_Xtensa::visit(const Broadcast *op) {
     print_assignment(vector_type, rhs);
 }
 
-void CodeGen_Xtensa::visit(const LE *op) {
+template<typename ComparisonOp>
+void CodeGen_Xtensa::visit_comparison_op(const ComparisonOp *op, const string &op_name) {
     string sa = print_expr(op->a);
     string sb = print_expr(op->b);
 
     if (is_native_xtensa_vector<int8_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LE2NX8(" + sa + ", " + sb + ")");
+        print_assignment(op->type, "IVP_" + op_name + "2NX8(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<uint8_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LEU2NX8U(" + sa + ", " + sb + ")");
+        print_assignment(op->type, "IVP_" + op_name + "U2NX8U(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<int16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LENX16(" + sa + ", " + sb + ")");
+        print_assignment(op->type, "IVP_" + op_name + "NX16(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<uint16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LEUNX16U(" + sa + ", " + sb + ")");
+        print_assignment(op->type, "IVP_" + op_name + "UNX16U(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<int32_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LEN_2X32(" + sa + ", " + sb + ")");
+        print_assignment(op->type, "IVP_" + op_name + "N_2X32(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LEUN_2X32U(" + sa + ", " + sb + ")");
+        print_assignment(op->type, "IVP_" + op_name + "UN_2X32U(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_OLENXF16(" + sa + ", " + sb + ")");
+        print_assignment(op->type, "IVP_O" + op_name + "NXF16(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_OLEN_2XF32(" + sa + ", " + sb + ")");
+        print_assignment(op->type, "IVP_O" + op_name + "N_2XF32(" + sa + ", " + sb + ")");
     } else {
         CodeGen_C::visit(op);
     }
+}
+
+void CodeGen_Xtensa::visit(const LE *op) {
+    visit_comparison_op(op, "LE");
 }
 
 void CodeGen_Xtensa::visit(const LT *op) {
-    string sa = print_expr(op->a);
-    string sb = print_expr(op->b);
-
-    if (is_native_xtensa_vector<int8_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LT2NX8(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint8_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LTU2NX8U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<int16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LTNX16(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LTUNX16U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<int32_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LTN_2X32(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_LTUN_2X32U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_OLTNXF16(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_OLTN_2XF32(" + sa + ", " + sb + ")");
-    } else {
-        CodeGen_C::visit(op);
-    }
+    visit_comparison_op(op, "LT");
 }
 
 void CodeGen_Xtensa::visit(const GE *op) {
-    string sa = print_expr(op->a);
-    string sb = print_expr(op->b);
-
-    if (is_native_xtensa_vector<int8_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GE2NX8(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint8_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GEU2NX8U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<int16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GENX16(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GEUNX16U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<int32_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GEN_2X32(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GEUN_2X32U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_OGENXF16(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_OGEN_2XF32(" + sa + ", " + sb + ")");
-    } else {
-        CodeGen_C::visit(op);
-    }
+    visit_comparison_op(op, "GE");
 }
 
 void CodeGen_Xtensa::visit(const GT *op) {
-    string sa = print_expr(op->a);
-    string sb = print_expr(op->b);
+    visit_comparison_op(op, "GT");
+}
 
-    if (is_native_xtensa_vector<int8_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GT2NX8(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint8_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GTU2NX8U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<int16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GTNX16(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GTUNX16U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<int32_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GTN_2X32(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_GTUN_2X32U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_OGTNXF16(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_OGTN_2XF32(" + sa + ", " + sb + ")");
-    } else {
-        CodeGen_C::visit(op);
-    }
+void CodeGen_Xtensa::visit(const EQ *op) {
+    visit_comparison_op(op, "EQ");
 }
 
 void CodeGen_Xtensa::visit(const Or *op) {
@@ -753,31 +699,6 @@ void CodeGen_Xtensa::visit(const Or *op) {
         } else {
             internal_assert(false) << "Unhandled boolean type in the || op\n";
         }
-    } else {
-        CodeGen_C::visit(op);
-    }
-}
-
-void CodeGen_Xtensa::visit(const EQ *op) {
-    string sa = print_expr(op->a);
-    string sb = print_expr(op->b);
-
-    if (is_native_xtensa_vector<int8_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_EQ2NX8(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint8_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_EQ2NX8U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<int16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_EQNX16(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_EQNX16U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<int32_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_EQN_2X32(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint32_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_EQN_2X32U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<float16_t>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_OEQNXF16(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<float>(op->a.type(), target)) {
-        print_assignment(op->type, "IVP_OEQN_2XF32(" + sa + ", " + sb + ")");
     } else {
         CodeGen_C::visit(op);
     }
