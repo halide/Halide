@@ -345,7 +345,6 @@ inline bool try_parse_metadata_buffer_estimates(const halide_filter_argument_t *
         const int64_t *extent = md->buffer_estimates[i * 2 + 1];
         if (!min || !extent) {
             return false;
-            fail() << "Argument " << md->name << " was specified as 'estimate', but no estimate was provided for dimension " << i << " of " << md->dimensions;
         }
         result[i] = halide_dimension_t{(int32_t)*min, (int32_t)*extent, stride};
         stride *= result[i].extent;
