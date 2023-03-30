@@ -94,25 +94,28 @@ public:
         check("IVP_MULN_2X32", vector_width / 2, i32_1 * i32_2);
 
         // Shifts.
-        check("IVP_SRLNX16", vector_width / 2, u16_1 >> u16_2);
+        check("IVP_SRLNX16", vector_width / 2, u16_1 >> min(max(i16_2, -16), 16));
         check("IVP_SRLINX16U", vector_width / 2, u16_1 / 4);
-        check("IVP_SRLN_2X32", vector_width / 4, u32_1 >> u32_2);
+        check("IVP_SRLN_2X32", vector_width / 4, u32_1 >> min(max(i32_2, -31), 31));
         check("IVP_SRLIN_2X32", vector_width / 4, u32_1 / 4);
-        check("IVP_SLLNX16U", vector_width / 2, u16_1 << u16_2);
+        check("IVP_SLLNX16U", vector_width / 2, u16_1 << min(max(i16_2, -16), 16));
+        check("IVP_SLANX16", vector_width / 2, i16_1 << min(max(i16_2, -16), 16));
         check("IVP_SLLINX16U", vector_width / 2, u16_1 * 4);
-        check("IVP_SLLN_2X32", vector_width / 4, u32_1 << u32_2);
-        check("IVP_SLLIN_2X32", vector_width / 4, u32_1 * 4);
+        check("IVP_SLLN_2X32U", vector_width / 4, u32_1 << min(max(i32_2, -31), 31));
+        check("IVP_SLLIN_2X32U", vector_width / 4, u32_1 * 4);
 
         // Casts.
-        check("convert<int32x32_t,int16x32_t>", vector_width / 2, i32(i16_1));
         check("convert<float16x32_t,float32x32_t>", vector_width / 2, f16(f32_1));
         check("convert<float32x32_t, float16x32_t>", vector_width / 2, f32(f16_1));
         check("convert<float32x32_t, int16x32_t>", vector_width / 2, f32(i16_1));
         check("convert<float32x32_t, uint16x32_t>", vector_width / 2, f32(u16_1));
         check("convert<uint32x32_t, uint16x32_t>", vector_width / 2, u32(u16_1));
+        check("convert<int32x32_t, uint16x32_t>", vector_width / 2, i32(u16_1));
+        check("convert<int32x32_t, int16x32_t>", vector_width / 2, i32(i16_1));
         check("store_narrowing<int32x16_t, int16_t, 16>", vector_width / 4, i16(i32_1));
         check("store_narrowing<uint32x16_t, uint16_t, 16>", vector_width / 4, u16(u32_1));
         check("store_narrowing<int16x32_t, int8_t, 32>", vector_width / 2, i8(i16_1));
+        check("store_narrowing<int16x32_t, uint8_t, 32>", vector_width / 2, u8(i16_1));
         check("store_narrowing<uint16x32_t, uint8_t, 32>", vector_width / 2, u8(u16_1));
 
         // Averaging instructions.
@@ -125,8 +128,10 @@ public:
         check("IVP_ADDSNX16", vector_width / 2, i16_sat(i32(i16_1) + i32(i16_2)));
         check("halide_xtensa_sat_add_i32", vector_width / 4, i32_sat(i64(i32_1) + i64(i32_2)));
         check("IVP_SUBSNX16", vector_width / 2, i16_sat(i32(i16_1) - i32(i16_2)));
-        check("IVP_ABSSUBNX16", vector_width / 2, absd(u16_1, u16_2));
+        check("IVP_ABSSUBUNX16U", vector_width / 2, absd(u16_1, u16_2));
         check("IVP_ABSSUBNX16", vector_width / 2, absd(i16_1, i16_2));
+        check("IVP_ABSSUBNX16", vector_width / 2, absd(u16_1, i16_2));
+        check("IVP_ABSSUBNX16", vector_width / 2, absd(i16_1, u16_2));
 
         // Min/max
         check("IVP_MAXUNX16", vector_width / 2, max(u16_1, u16_2));

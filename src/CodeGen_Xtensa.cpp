@@ -325,7 +325,11 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     }
     // absd needs extra cast to uint*
     if (op->name == "halide_xtensa_absd_i16") {
-        rhs << "xb_vecNx16_rtor_xb_vecNx16U(IVP_ABSSUBNX16(" << args[0] + ", " + args[1] + "))";
+        if (op->args[0].type().is_int()) {
+            rhs << "xb_vecNx16_rtor_xb_vecNx16U(IVP_ABSSUBNX16(" << args[0] + ", " + args[1] + "))";
+        } else {
+            rhs << "IVP_ABSSUBUNX16U(" << args[0] + ", " + args[1] + ")";
+        }
         return rhs.str();
     } else if (op->name == "halide_xtensa_narrow_i48_with_shift_u16") {
         rhs << "xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKVRNRNX48(" << args[0] + ", " + args[1] + "))";
@@ -976,11 +980,11 @@ void CodeGen_Xtensa::visit(const Call *op) {
         } else {
             string a1 = print_expr(op->args[1]);
             if (is_native_xtensa_vector<uint16_t>(op->type, target)) {
-                rhs << "IVP_SLLNX16U(" << a0 << ", xb_vecNx16U_rtor_xb_vecNx16(" << a1 << "))";
+                rhs << "IVP_SLLNX16U(" << a0 << ", " << a1 << ")";
             } else if (is_native_xtensa_vector<int16_t>(op->type, target)) {
                 rhs << "IVP_SLANX16(" << a0 << ", " << a1 << ")";
             } else if (is_native_xtensa_vector<uint32_t>(op->type, target)) {
-                rhs << "IVP_SLLN_2X32U(" << a0 << ", xb_vecN_2x32Uv_rtor_xb_vecN_2x32v( " << a1 << "))";
+                rhs << "IVP_SLLN_2X32U(" << a0 << ", " << a1 << ")";
             } else if (is_native_xtensa_vector<int32_t>(op->type, target)) {
                 rhs << "IVP_SLAN_2X32(" << a0 << ", " << a1 << ")";
             } else {
