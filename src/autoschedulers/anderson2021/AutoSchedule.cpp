@@ -27,48 +27,6 @@
   HL_PERMIT_FAILED_UNROLL
   Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-
-  Most of the settings in this Autoscheduler are controlled by the values specified via
-  an `autoscheduler.fieldname` GeneratorParam, as listed in the Anderson2021Params struct;
-  this is the preferred way to set these.
-
-  For now, however, you can (instead) control these settings via env vars;
-  doing so requires that you compile all of Halide with HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-  defined. (Note that this ability is deprecated, and likely to be removed in Halide 16.)
-
-  That said, here are the (legacy) env vars you can still use when HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-  is defined:
-
-  HL_BEAM_SIZE
-  Beam size to use in the beam search. Defaults to 32. Use 1 to get a greedy search instead.
-
-  HL_RANDOM_DROPOUT
-  percent chance of accepting each state in the beam. Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
-
-  HL_SEED
-  Random seed used by the random dropout.
-
-  HL_WEIGHTS_DIR
-  When training or schedule, read weights from this directory or file
-  (if path ends in `.weights` it is written as a single file, otherwise a directory of files)
-
-  HL_NO_SUBTILING
-  If set to 1, limits the search space to that of Mullapudi et al.
-
-  HL_SEARCH_SPACE_OPTIONS
-  Allow/disallow search space options to be considered by the autoscheduler.
-  Expects a string of four 0/1 values that allow/disallow the following options: compute root, inline, compute at the block level, compute at the thread level e.g. 1000 would allow compute root only
-
-  HL_RANDOMIZE_TILINGS
-  If set, only a random subset of the generated tilings for each stage will be accepted into the beam
-
-  HL_FREEZE_INLINE_COMPUTE_ROOT
-  If set, run a pre-pass where only compute_root and inline scheduling options are considered.
-  The cheapest stages (according to the cost model) have these decisions 'frozen' for the remaining autoscheduling passes.
-
-#endif
-
 #ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
 
   HL_CYOS
@@ -203,21 +161,6 @@ struct AutoSchedule {
     // Performance coarse-to-fine beam search and return the best state found.
     IntrusivePtr<State> optimal_schedule(int beam_size);
 };
-
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-template<typename T>
-T get_scalar_env_var(const char *nm, T def = T()) {
-    auto str = get_env_variable(nm);
-    if (str.empty()) {
-        return def;
-    }
-    std::istringstream iss(str);
-    T t;
-    iss >> t;
-    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << str;
-    return t;
-}
-#endif
 
 // Decide whether or not to drop a beam search state. Used for
 // randomly exploring the search tree for autotuning and to generate
@@ -682,9 +625,6 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 
     if (auto_scheduler_results) {
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        auto_scheduler_results->scheduler_name = "Anderson2021";
-#endif
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;
@@ -720,32 +660,6 @@ void generate_schedule(const std::vector<Function> &outputs,
 }
 
 struct Anderson2021 {
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    void operator()(const Pipeline &p, const Target &target, const MachineParams &params_in, AutoSchedulerResults *results) {
-        std::vector<Function> outputs;
-        for (const Func &f : p.outputs()) {
-            outputs.push_back(f.function());
-        }
-        Anderson2021Params params;
-        params.parallelism = params_in.parallelism;
-        params.beam_size = get_scalar_env_var<int>("HL_BEAM_SIZE", 32);
-        params.random_dropout = get_scalar_env_var<int>("HL_RANDOM_DROPOUT", 100);
-        params.random_dropout_seed = get_scalar_env_var<int64_t>("HL_SEED", (int)time(nullptr));
-        params.weights_path = get_scalar_env_var<std::string>("HL_WEIGHTS_DIR");
-        params.disable_subtiling = get_scalar_env_var<int>("HL_NO_SUBTILING", 0);
-        params.randomize_tilings = get_scalar_env_var<int>("HL_RANDOMIZE_TILINGS", 0);
-        params.search_space_options = get_scalar_env_var<std::string>("HL_SEARCH_SPACE_OPTIONS", "1111");
-        params.freeze_inline_compute_root = get_scalar_env_var<int>("HL_FREEZE_INLINE_COMPUTE_ROOT", 0);
-        params.partial_schedule_path = get_scalar_env_var<std::string>("PARTIAL_SCHEDULE", "");
-        params.num_passes = get_scalar_env_var<int>("HL_NUM_PASSES", 0);
-        params.stack_factor = get_scalar_env_var<double>("HL_STACK_FACTOR", 0.95f);
-        params.shared_memory_limit_kb = get_scalar_env_var<int>("HL_SHARED_MEMORY_LIMIT", 48);
-        params.shared_memory_sm_limit_kb = get_scalar_env_var<int>("HL_SHARED_MEMORY_SM_LIMIT", 96);
-        params.active_block_limit = get_scalar_env_var<int>("HL_ACTIVE_BLOCK_LIMIT", 32);
-        params.active_warp_limit = get_scalar_env_var<int>("HL_ACTIVE_WARP_LIMIT", 64);
-        Autoscheduler::generate_schedule(outputs, target, params, results);
-    }
-#else
     void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
         internal_assert(params_in.name == "Anderson2021");
 
@@ -777,7 +691,6 @@ struct Anderson2021 {
         Autoscheduler::generate_schedule(outputs, target, params, results);
         results->autoscheduler_params = params_in;
     }
-#endif
 };
 
 REGISTER_AUTOSCHEDULER(Anderson2021)
