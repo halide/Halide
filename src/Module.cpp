@@ -632,7 +632,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     if (contains(output_files, OutputFileType::c_source)) {
         debug(1) << "Module.compile(): c_source " << output_files.at(OutputFileType::c_source) << "\n";
         std::ofstream file(output_files.at(OutputFileType::c_source));
-        if (target().has_feature(Target::Xtensa)) {
+        if (target().arch == Target::Xtensa) {
             Internal::CodeGen_Xtensa cg(file,
                                         target(),
                                         target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
