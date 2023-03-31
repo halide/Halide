@@ -8,11 +8,7 @@ int main(int argc, char **argv) {
     load_plugin("autoschedule_anderson2021");
 
     constexpr int hardware_parallelism = 80;
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    MachineParams params(hardware_parallelism, 1, 1);
-#else
     AutoschedulerParams params = {"Anderson2021", {{"parallelism", std::to_string(hardware_parallelism)}}};
-#endif
 
     // Use a fixed target for the analysis to get consistent results from this test.
     Target target("x86-64-linux-sse41-avx-avx2-cuda");
@@ -28,11 +24,7 @@ int main(int argc, char **argv) {
 
         h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(h).auto_schedule(target, params);
-#else
         Pipeline(h).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -52,11 +44,7 @@ int main(int argc, char **argv) {
 
         h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(h).auto_schedule(target, params);
-#else
         Pipeline(h).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -69,11 +57,7 @@ int main(int argc, char **argv) {
 
         h.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(h).auto_schedule(target, params);
-#else
         Pipeline(h).apply_autoscheduler(target, params);
-#endif
     }
 
     // Smaller footprint stencil -> smaller tiles
@@ -86,11 +70,7 @@ int main(int argc, char **argv) {
 
         h.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(h).auto_schedule(target, params);
-#else
         Pipeline(h).apply_autoscheduler(target, params);
-#endif
     }
 
     // A stencil chain
@@ -109,11 +89,7 @@ int main(int argc, char **argv) {
         }
         f[N - 1].set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(f[N - 1]).auto_schedule(target, params);
-#else
         Pipeline(f[N - 1]).apply_autoscheduler(target, params);
-#endif
     }
 
     // An outer product
@@ -124,11 +100,7 @@ int main(int argc, char **argv) {
 
         f.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(f).auto_schedule(target, params);
-#else
         Pipeline(f).apply_autoscheduler(target, params);
-#endif
     }
 
     // A separable downsample that models the start of local_laplacian
@@ -147,11 +119,7 @@ int main(int argc, char **argv) {
         downx(x, y, k) = downy(2 * x - 1, y, k) + downy(2 * x, y, k) + downy(2 * x + 1, y, k) + downy(2 * x + 2, y, k);
         downx.set_estimate(x, 1, 1022).set_estimate(y, 1, 1022).set_estimate(k, 0, 256);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(downx).auto_schedule(target, params);
-#else
         Pipeline(downx).apply_autoscheduler(target, params);
-#endif
     }
 
     // A Func with multiple stages, some of which include additional loops
@@ -170,11 +138,7 @@ int main(int argc, char **argv) {
 
         g.set_estimate(x, 1, 1022).set_estimate(y, 1, 1022);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(g).auto_schedule(target, params);
-#else
         Pipeline(g).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -198,11 +162,7 @@ int main(int argc, char **argv) {
 
         after[4].set_estimate(x, 0, 1024).set_estimate(y, 0, 1024);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(after[4]).auto_schedule(target, params);
-#else
         Pipeline(after[4]).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -221,11 +181,7 @@ int main(int argc, char **argv) {
 
         out.set_estimate(j, 0, 1024).set_estimate(i, 0, 1024);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(out).auto_schedule(target, params);
-#else
         Pipeline(out).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -255,11 +211,7 @@ int main(int argc, char **argv) {
 
         p3[N - 1].set_estimate(x, 0, 1024).set_estimate(y, 0, 1024);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(p3[N - 1]).auto_schedule(target, params);
-#else
         Pipeline(p3[N - 1]).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -279,11 +231,7 @@ int main(int argc, char **argv) {
 
         out.set_estimate(x, 0, 10);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(out).auto_schedule(target, params);
-#else
         Pipeline(out).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -298,11 +246,7 @@ int main(int argc, char **argv) {
 
         h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(h).auto_schedule(target, params);
-#else
         Pipeline(h).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -320,11 +264,7 @@ int main(int argc, char **argv) {
         a.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
         b.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline({a, b}).auto_schedule(target, params);
-#else
         Pipeline({a, b}).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -335,11 +275,7 @@ int main(int argc, char **argv) {
         g(x, y) = f(x, y);
 
         g.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(g).auto_schedule(target, params);
-#else
         Pipeline(g).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -349,11 +285,7 @@ int main(int argc, char **argv) {
         f(x, y) = im(x, y) * 7;
 
         f.set_estimate(x, 0, 3).set_estimate(y, 0, 5);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(f).auto_schedule(target, params);
-#else
         Pipeline(f).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -370,11 +302,7 @@ int main(int argc, char **argv) {
             .set_estimate(t, 0, 3)
             .set_estimate(u, 0, 2)
             .set_estimate(v, 0, 6);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(f).auto_schedule(target, params);
-#else
         Pipeline(f).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -393,11 +321,7 @@ int main(int argc, char **argv) {
 
         out1.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
         out2.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline({out1, out2}).auto_schedule(target, params);
-#else
         Pipeline({out1, out2}).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -422,11 +346,7 @@ int main(int argc, char **argv) {
         g(x, y) = f[N - 1](x, y) + f[0](clamp(cast<int>(sin(x) * 10000), 0, 100000), clamp(cast<int>(sin(x * y) * 10000), 0, 100000));
         g.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(g).auto_schedule(target, params);
-#else
         Pipeline(g).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -441,11 +361,7 @@ int main(int argc, char **argv) {
         g(x, y) = f(x, y);
 
         g.set_estimate(x, 0, 10).set_estimate(y, 0, 2048);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(g).auto_schedule(target, params);
-#else
         Pipeline(g).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -477,11 +393,7 @@ int main(int argc, char **argv) {
         out(x, y) = up[0](x, y);
 
         out.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(out).auto_schedule(target, params);
-#else
         Pipeline(out).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -499,11 +411,7 @@ int main(int argc, char **argv) {
         casted(x, y) = scan(x, y);
 
         casted.set_estimate(x, 0, 2000).set_estimate(y, 0, 2000);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(casted).auto_schedule(target, params);
-#else
         Pipeline(casted).apply_autoscheduler(target, params);
-#endif
     }
 
     if (true) {
@@ -519,11 +427,7 @@ int main(int argc, char **argv) {
 
         f.set_estimate(x, 0, 2000).set_estimate(y, 0, 2000);
         output.set_estimate(i, 0, 256);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        Pipeline(output).auto_schedule(target, params);
-#else
         Pipeline(output).apply_autoscheduler(target, params);
-#endif
     }
 
     return 0;
