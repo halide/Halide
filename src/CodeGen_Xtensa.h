@@ -5,6 +5,11 @@
  * Defines the code-generator for producing Xtensa code
  */
 
+#include <set>
+#include <string>
+#include <unordered_set>
+#include <vector>
+
 #include "CodeGen_C.h"
 
 namespace Halide {
@@ -58,14 +63,38 @@ protected:
 
     bool is_stack_private_to_thread() const override;
 
-    void emit_halide_free_helper(
-        const std::string &alloc_name,
-        const std::string &free_function) override;
+    void emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function) override;
 
     int current_loop_level = 0;
     std::vector<std::string> global_static_allocations;
 
+    // TODO: this appears to be unused; we read from it but never write to it?
     std::set<std::string> external_buffers;
+
+    template<typename T>
+    bool is_native_xtensa_vector(halide_type_t op_type) const {
+        constexpr halide_type_t cpp_type = halide_type_of<T>();
+        return op_type == cpp_type.with_lanes(target.natural_vector_size<T>());
+    }
+
+    template<>
+    bool is_native_xtensa_vector<int64_t>(halide_type_t op_type) const {
+        constexpr halide_type_t cpp_type = halide_type_of<int64_t>();
+        // On Xtensa int64 vectors are *wide* vectors, so the number of lanes match
+        // the number of lanes for 32-bit vectors.
+        return op_type == cpp_type.with_lanes(target.natural_vector_size<int32_t>());
+    }
+
+    halide_type_t get_native_xtensa_vector(const halide_type_t &t) const;
+
+    bool is_native_vector_type(const halide_type_t &t) const {
+        return t == get_native_xtensa_vector(t);
+    }
+
+    bool is_double_native_vector_type(const halide_type_t &t) const {
+        const halide_type_t native_vector_type = get_native_xtensa_vector(t);
+        return t == native_vector_type.with_lanes(2 * native_vector_type.lanes);
+    }
 };
 
 }  // namespace Internal
