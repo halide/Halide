@@ -786,9 +786,6 @@ void CodeGen_Xtensa::visit(const Load *op) {
             native_lanes = bytes_in_vector / 2;
         }
         bool is_aligned_load = (op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0);
-        if (external_buffers.count(op->name) > 0) {
-            is_aligned_load = is_aligned_load && (op->param.host_alignment() % bytes_in_vector == 0);
-        }
         if (is_aligned_load) {
             op_name = "aligned_load";
         } else {
@@ -811,7 +808,7 @@ void CodeGen_Xtensa::visit(const Load *op) {
         // } else {
         string id_index = print_expr(op->index);
         // Is not allocated on the heap and is not a buffer
-        bool is_tcm = !(heap_allocations.contains(name) || external_buffers.count(op->name) > 0);
+        bool is_tcm = !heap_allocations.contains(name);
 
         rhs << "gather_load<" << print_type(t) << ", "
             << print_type(Int(32, t.lanes())) << ", "
@@ -938,10 +935,6 @@ void CodeGen_Xtensa::visit(const Store *op) {
         }
 
         bool is_aligned_store = (op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0);
-        if (external_buffers.count(op->name) > 0) {
-            is_aligned_store = is_aligned_store && (op->param.host_alignment() % bytes_in_vector == 0);
-        }
-
         if (is_aligned_store) {
             op_name = "aligned_store";
         } else {

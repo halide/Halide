@@ -68,9 +68,6 @@ protected:
     int current_loop_level = 0;
     std::vector<std::string> global_static_allocations;
 
-    // TODO: this appears to be unused; we read from it but never write to it?
-    std::set<std::string> external_buffers;
-
     template<typename T>
     bool is_native_xtensa_vector(halide_type_t op_type) const {
         constexpr halide_type_t cpp_type = halide_type_of<T>();
