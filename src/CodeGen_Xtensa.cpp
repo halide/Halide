@@ -34,8 +34,15 @@ namespace {
 class HalideTypeSetHashFunction {
 public:
     size_t operator()(const halide_type_t &t) const {
-        // TODO: is this good enough?
-        return (size_t)t.as_u32();
+        // classic djb2 hash
+        const uint32_t u = t.as_u32();
+        size_t h = 5381;
+        // Assume that compiler may decide to replace h*33 with (h<<5)+h if it so chooses
+        h = h * 33 + ((u)&0xff);
+        h = h * 33 + ((u) >> 8 & 0xff);
+        h = h * 33 + ((u) >> 16 & 0xff);
+        h = h * 33 + ((u) >> 24 & 0xff);
+        return h;
     }
 };
 
