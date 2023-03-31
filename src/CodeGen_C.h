@@ -86,7 +86,7 @@ protected:
     std::string id;
 
     /** The target being generated for. */
-    Target target;
+    const Target target;
 
     /** Controls whether this instance is generating declarations or
      * definitions and whether the interface us extern "C" or C++. */
