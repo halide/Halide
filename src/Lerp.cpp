@@ -143,11 +143,24 @@ Expr lower_lerp(Type final_type, Expr zero_val, Expr one_val, const Expr &weight
                 // ((x + 128) / 256 + x + 128) / 256. Note that
                 // overflow is impossible here because the most our
                 // prod_sum can be is 255^2.
-                if (target.arch == Target::X86) {
-                    // On x86 we have no rounding shifts but we do
-                    // have a multiply-keep-high-half. So it's
-                    // actually one instruction cheaper to do the
-                    // division directly.
+                //
+                // On x86 we have no rounding shifts but we do
+                // have a multiply-keep-high-half. So it's
+                // actually one instruction cheaper to do the
+                // division directly.
+                //
+                // Note, however, that it isn't enough to just check for
+                // target.arch == Target::X86, since we could be compiling
+                // for a GPU, DSP, or other similar thing... hence the
+                // somewhat arbitrary trick above. (Note that HVX isn't
+                // possible to run on a real x86, but the feature can
+                // be set for running on a simulator, so the check is
+                // appropriate.)
+                //
+                // TODO(srj): also add Xtensa to list of things above
+                if (target.arch == Target::X86 &&
+                    !target.has_gpu_feature() &&
+                    !target.has_feature(Target::HVX)) {
                     Expr divisor = cast(UInt(bits), -1);
                     result = (prod_sum + divisor / 2) / divisor;
                 } else {
