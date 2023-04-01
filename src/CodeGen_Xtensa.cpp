@@ -1,6 +1,7 @@
 #include "CodeGen_Xtensa.h"
 
 #include <string>
+#include <string_view>
 
 #include "CodeGen_Internal.h"
 #include "IROperator.h"
@@ -29,38 +30,27 @@ extern "C" unsigned char halide_c_template_CodeGen_Xtensa_vectors[];
 
 namespace {
 
-// For most of our purposes, a halide_type_t is just as good as a Halide::Type,
-// but notably smaller and more efficient (since it fits into a u32 and hashes well).
-class HalideTypeSetHashFunction {
-public:
-    size_t operator()(const halide_type_t &t) const {
-        // TODO: is this good enough?
-        return (size_t)t.as_u32();
-    }
-};
-
-using HalideTypeSet = std::unordered_set<halide_type_t, HalideTypeSetHashFunction>;
-
-std::string intrinsic_suffix_for_type(Type t) {
-    if (t.is_int() && (t.bits() == 8)) {
-        return "2NX8";
-    } else if (t.is_uint() && (t.bits() == 8)) {
-        return "2NX8U";
-    } else if (t.is_int() && (t.bits() == 16)) {
-        return "NX16";
-    } else if (t.is_uint() && (t.bits() == 16)) {
-        return "NX16U";
-    } else if (t.is_int() && (t.bits() == 32)) {
-        return "N_2X32";
-    } else if (t.is_uint() && (t.bits() == 32)) {
-        return "N_2X32U";
-    } else if (t.is_float() && (t.bits() == 32)) {
+std::string_view intrinsic_suffix_for_type(const halide_type_t &t) {
+    switch (t.as_u32()) {
+    case halide_type_t(halide_type_float, 16).as_u32():
         return "N_2XF32";
-    } else if (t.is_float() && (t.bits() == 16)) {
+    case halide_type_t(halide_type_float, 32).as_u32():
         return "NXF16";
+    case halide_type_t(halide_type_int, 16).as_u32():
+        return "NX16";
+    case halide_type_t(halide_type_int, 32).as_u32():
+        return "N_2X32";
+    case halide_type_t(halide_type_int, 8).as_u32():
+        return "2NX8";
+    case halide_type_t(halide_type_uint, 16).as_u32():
+        return "NX16U";
+    case halide_type_t(halide_type_uint, 32).as_u32():
+        return "N_2X32U";
+    case halide_type_t(halide_type_uint, 8).as_u32():
+        return "2NX8U";
+    default:
+        return "";
     }
-
-    return "";
 }
 
 class UsesDmaCopy : public IRGraphVisitor {
@@ -83,6 +73,105 @@ public:
 };
 
 }  // namespace
+
+size_t CodeGen_Xtensa::HalideTypeHasher::operator()(const halide_type_t &t) const {
+    // classic djb2 hash
+    const uint32_t u = t.as_u32();
+    size_t h = 5381;
+    // Assume that compiler may decide to replace h*33 with (h<<5)+h if it so chooses
+    h = h * 33 + ((u)&0xff);
+    h = h * 33 + (((u) >> 8) & 0xff);
+    h = h * 33 + (((u) >> 16) & 0xff);
+    h = h * 33 + (((u) >> 24) & 0xff);
+    return h;
+}
+
+CodeGen_Xtensa::CodeGen_Xtensa(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
+    : CodeGen_C(s, t, output_kind, guard),
+      halide_type_to_xnv_type_map{
+          {halide_type_t(halide_type_float, 16, t.natural_vector_size<float16_t>()), XNVType::float16},
+          {halide_type_t(halide_type_float, 32, t.natural_vector_size<float>()), XNVType::float32},
+          {halide_type_t(halide_type_int, 8, t.natural_vector_size<int16_t>()), XNVType::int8},
+          {halide_type_t(halide_type_int, 16, t.natural_vector_size<int16_t>()), XNVType::int16},
+          {halide_type_t(halide_type_int, 24, t.natural_vector_size<int8_t>()), XNVType::int24},
+          {halide_type_t(halide_type_int, 32, t.natural_vector_size<int32_t>()), XNVType::int32},
+          {halide_type_t(halide_type_int, 48, t.natural_vector_size<int16_t>()), XNVType::int48},
+          {halide_type_t(halide_type_int, 64, t.natural_vector_size<int32_t>()), XNVType::int64},  // natural_vector_size<int32_t> is intentional!
+          {halide_type_t(halide_type_uint, 8, t.natural_vector_size<uint8_t>()), XNVType::uint8},
+          {halide_type_t(halide_type_uint, 16, t.natural_vector_size<uint16_t>()), XNVType::uint16},
+          {halide_type_t(halide_type_uint, 24, t.natural_vector_size<uint8_t>()), XNVType::uint24},
+          {halide_type_t(halide_type_uint, 32, t.natural_vector_size<uint32_t>()), XNVType::uint32},
+          {halide_type_t(halide_type_uint, 48, t.natural_vector_size<uint16_t>()), XNVType::uint48},
+      },
+      op_name_to_intrinsic{
+          {"halide_xtensa_abs_i8", "IVP_ABS2NX8"},
+          {"halide_xtensa_abs_i16", "IVP_ABSNX16"},
+          {"halide_xtensa_abs_i32", "IVP_ABSN_2X32"},
+          {"halide_xtensa_abs_f32", "IVP_ABSN_2XF32"},
+          {"halide_xtensa_sat_add_i16", "IVP_ADDSNX16"},
+          {"halide_xtensa_sat_sub_i16", "IVP_SUBSNX16"},
+          {"halide_xtensa_avg_i8", "IVP_AVG2NX8"},
+          {"halide_xtensa_avg_u8", "IVP_AVGU2NX8"},
+          {"halide_xtensa_avg_i16", "IVP_AVGNX16"},
+          {"halide_xtensa_avg_u16", "IVP_AVGUNX16"},
+          {"halide_xtensa_avg_round_i8", "IVP_AVGR2NX8"},
+          {"halide_xtensa_avg_round_u8", "IVP_AVGRU2NX8U"},
+          {"halide_xtensa_avg_round_i16", "IVP_AVGRNX16"},
+          {"halide_xtensa_avg_round_u16", "IVP_AVGRUNX16U"},
+          {"halide_xtensa_widen_mul_i24", "IVP_MUL2NX8"},
+          {"halide_xtensa_widen_mul_u24", "IVP_MULUU2NX8"},
+          {"halide_xtensa_widen_mul_i48", "IVP_MULNX16"},
+          {"halide_xtensa_widen_mul_u48", "IVP_MULUUNX16U"},
+          {"halide_xtensa_mul_i32", "IVP_MULN_2X32"},
+          {"halide_xtensa_widen_mul_ui48", "IVP_MULUSNX16"},
+          {"halide_xtensa_widen_pair_mul_u48", "IVP_MULUUPNX16"},
+          {"halide_xtensa_convert_i48_low_i32", "IVP_CVT32SNX48L"},
+          {"halide_xtensa_convert_i48_high_i32", "IVP_CVT32SNX48H"},
+          {"halide_xtensa_convert_i48_low_u32", "IVP_CVT32UNX48L"},
+          {"halide_xtensa_convert_i48_high_u32", "IVP_CVT32UNX48H"},
+          {"halide_xtensa_narrow_i48_with_shift_i16", "IVP_PACKVRNRNX48"},
+          {"halide_xtensa_narrow_i48_with_rounding_shift_i16", "IVP_PACKVRNX48"},
+          {"halide_xtensa_sat_narrow_i48_with_shift_i16", "IVP_PACKVRNX48"},
+          {"halide_xtensa_sat_narrow_with_rounding_shift_i32", "IVP_PACKVRN_2X64W"},
+          {"halide_xtensa_full_reduce_add_i8", "IVP_RADD2NX8"},
+          {"halide_xtensa_full_reduce_add_i16", "IVP_RADDNX16"},
+          {"halide_xtensa_full_reduce_add_i32", "IVP_RADDN_2X32"},
+
+          {"halide_xtensa_full_reduce_min_u8", "IVP_RMINU2NX8U"},
+          {"halide_xtensa_full_reduce_min_u16", "IVP_RMINUNX16U"},
+          {"halide_xtensa_full_reduce_min_u32", "IVP_RMINUN_2X32U"},
+          {"halide_xtensa_full_reduce_min_i8", "IVP_RMIN2NX8"},
+          {"halide_xtensa_full_reduce_min_i16", "IVP_RMINNX16"},
+          {"halide_xtensa_full_reduce_min_i32", "IVP_RMINN_2X32"},
+
+          {"halide_xtensa_full_reduce_max_u8", "IVP_RMAXU2NX8U"},
+          {"halide_xtensa_full_reduce_max_u16", "IVP_RMAXUNX16U"},
+          {"halide_xtensa_full_reduce_max_u32", "IVP_RMAXUN_2X32U"},
+          {"halide_xtensa_full_reduce_max_i8", "IVP_RMAX2NX8"},
+          {"halide_xtensa_full_reduce_max_i16", "IVP_RMAXNX16"},
+          {"halide_xtensa_full_reduce_max_i32", "IVP_RMAXN_2X32"},
+
+          {"halide_xtensa_sat_left_shift_i16", "IVP_SLSNX16"},
+          {"halide_xtensa_sat_left_shift_i32", "IVP_SLSN_2X32"},
+      } {
+}
+
+CodeGen_Xtensa::XNVType CodeGen_Xtensa::xnv_type(const halide_type_t &op_type) const {
+    const auto it = halide_type_to_xnv_type_map.find(op_type);
+    return (it != halide_type_to_xnv_type_map.end()) ? it->second : XNVType::none;
+}
+
+void CodeGen_Xtensa::print_custom_binop(std::string_view name, const Type &t, const Expr &a, const Expr &b) {
+    ostringstream rhs;
+    rhs << name << "(" << print_expr(a) << ", " << print_expr(b) << ")";
+    // Add another right-paren for every left-paren that is in 'name'
+    for (char c : name) {
+        if (c == '(') {
+            rhs << ")";
+        }
+    }
+    print_assignment(t, rhs.str());
+};
 
 void CodeGen_Xtensa::add_platform_prologue() {
     stream << halide_c_template_CodeGen_Xtensa_prologue;
@@ -147,22 +236,6 @@ inline int GetCycleCount() {
         stream << halide_c_template_CodeGen_Xtensa_vectors;
         stream << std::flush;
 
-        const HalideTypeSet native_vector_types = {
-            halide_type_t(halide_type_int, 8, target.natural_vector_size<int8_t>()),
-            halide_type_t(halide_type_uint, 8, target.natural_vector_size<uint8_t>()),
-            halide_type_t(halide_type_int, 16, target.natural_vector_size<int16_t>()),
-            halide_type_t(halide_type_uint, 16, target.natural_vector_size<uint16_t>()),
-            halide_type_t(halide_type_int, 32, target.natural_vector_size<int32_t>()),
-            halide_type_t(halide_type_uint, 32, target.natural_vector_size<uint32_t>()),
-            halide_type_t(halide_type_int, 24, target.natural_vector_size<int8_t>()),
-            halide_type_t(halide_type_uint, 24, target.natural_vector_size<uint8_t>()),
-            halide_type_t(halide_type_int, 48, target.natural_vector_size<int16_t>()),
-            halide_type_t(halide_type_uint, 48, target.natural_vector_size<uint16_t>()),
-            halide_type_t(halide_type_int, 64, target.natural_vector_size<int32_t>()),  // Yes, int32, not int64
-            halide_type_t(halide_type_float, 16, target.natural_vector_size<float16_t>()),
-            halide_type_t(halide_type_float, 32, target.natural_vector_size<float>()),
-        };
-
         const HalideTypeSet predefined_vectors = {
             halide_type_t(halide_type_int, 8, 4),
             halide_type_t(halide_type_uint, 8, 4),
@@ -175,11 +248,10 @@ inline int GetCycleCount() {
             if (predefined_vectors.count(type) > 0) {
                 continue;
             }
-            for (const auto &native_vector : native_vector_types) {
-                if (native_vector.code == type.code() &&
-                    native_vector.bits == type.bits() &&
-                    type.lanes() > native_vector.lanes &&
-                    (type.lanes() % native_vector.lanes) == 0) {
+            for (const auto &it : halide_type_to_xnv_type_map) {
+                const halide_type_t &native_vector = it.first;
+                if (native_vector.code == type.code() && native_vector.bits == type.bits() &&
+                    type.lanes() > native_vector.lanes && (type.lanes() % native_vector.lanes) == 0) {
                     stream << "using " << print_type(type) << " = MultipleOfNativeVector<" << print_type(native_vector) << ", " << type.lanes() / native_vector.lanes << ">;\n";
                     multiple_of_native_types.insert(type);
                     break;
@@ -187,17 +259,17 @@ inline int GetCycleCount() {
             }
         }
 
-        std::set<Type> filtered_vector_types;
-        for (const auto &t : vector_types) {
-            if (native_vector_types.count(t) > 0 ||
-                predefined_vectors.count(t) > 0 ||
-                multiple_of_native_types.count(t) > 0) {
+        std::set<Type> vector_types_to_add;
+        for (const auto &type : vector_types) {
+            if (halide_type_to_xnv_type_map.count(type) > 0 ||
+                predefined_vectors.count(type) > 0 ||
+                multiple_of_native_types.count(type) > 0) {
                 continue;
             }
-            filtered_vector_types.insert(t);
+            vector_types_to_add.insert(type);
         }
 
-        CodeGen_C::add_vector_typedefs(filtered_vector_types);
+        CodeGen_C::add_vector_typedefs(vector_types_to_add);
     }
 }
 
@@ -241,25 +313,28 @@ void CodeGen_Xtensa::visit(const IntImm *op) {
         print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
     }
 }
+
 void CodeGen_Xtensa::visit(const Mul *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         print_expr(Call::make(op->type, Call::shift_left, {op->a, Expr(bits)}, Call::PureIntrinsic));
     } else {
-        if (is_native_xtensa_vector<int16_t>(op->type)) {
-            string sa = print_expr(op->a);
-            string sb = print_expr(op->b);
-            print_assignment(op->type, "IVP_MULNX16PACKL(" + sa + ", " + sb + ")");
-        } else if (is_native_xtensa_vector<uint16_t>(op->type)) {
-            string sa = print_expr(op->a);
-            string sb = print_expr(op->b);
-            print_assignment(op->type, "IVP_MULNX16UPACKL(" + sa + ", " + sb + ")");
-        } else if (is_native_xtensa_vector<int32_t>(op->type) ||
-                   is_native_xtensa_vector<uint32_t>(op->type)) {
-            string sa = print_expr(op->a);
-            string sb = print_expr(op->b);
-            print_assignment(op->type, "IVP_PACKLN_2X64W(IVP_MULN_2X32(" + sa + ", " + sb + "))");
-        } else {
+        const auto print_mul = [this, op](const char *name) {
+            this->print_custom_binop(name, op->type, op->a, op->b);
+        };
+
+        switch (xnv_type(op->type)) {
+        case XNVType::int16:
+            print_mul("IVP_MULNX16PACKL");
+            break;
+        case XNVType::uint16:
+            print_mul("IVP_MULNX16UPACKL");
+            break;
+        case XNVType::int32:
+        case XNVType::uint32:
+            print_mul("IVP_PACKLN_2X64W(IVP_MULN_2X32");
+            break;
+        default:
             visit_binop(op->type, op->a, op->b, "*");
         }
     }
@@ -324,40 +399,38 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     }
 
     if ((op->name.find("halide_xtensa_slice_right") == 0) || (op->name.find("halide_xtensa_slice_left") == 0)) {
-        string intrinsic_name;
-        string shift_define;
-        string direction = (op->name.find("halide_xtensa_slice_right") == 0) ? "RIGHT_" : "LEFT_";
-        if (is_native_xtensa_vector<int8_t>(op->type)) {
-            intrinsic_name = "IVP_SEL2NX8I";
-            shift_define = "IVP_SELI_8B_ROTATE_";
-        } else if (is_native_xtensa_vector<uint8_t>(op->type)) {
-            intrinsic_name = "IVP_SEL2NX8UI";
-            shift_define = "IVP_SELI_8B_ROTATE_";
-        } else if (is_native_xtensa_vector<int16_t>(op->type)) {
-            intrinsic_name = "IVP_SELNX16I";
-            shift_define = "IVP_SELI_16B_ROTATE_";
-        } else if (is_native_xtensa_vector<uint16_t>(op->type)) {
-            intrinsic_name = "IVP_SELNX16UI";
-            shift_define = "IVP_SELI_16B_ROTATE_";
-        } else if (is_native_xtensa_vector<int32_t>(op->type)) {
-            intrinsic_name = "IVP_SELN_2X32I";
-            shift_define = "IVP_SELI_32B_ROTATE_";
-        } else if (is_native_xtensa_vector<uint32_t>(op->type)) {
-            intrinsic_name = "IVP_SELN_2X32UI";
-            shift_define = "IVP_SELI_32B_ROTATE_";
-        } else if (is_native_xtensa_vector<float16_t>(op->type)) {
-            intrinsic_name = "IVP_SELNXF16I";
-            shift_define = "IVP_SELI_16B_ROTATE_";
-        } else if (is_native_xtensa_vector<float>(op->type)) {
-            intrinsic_name = "IVP_SELN_2XF32I";
-            shift_define = "IVP_SELI_32B_ROTATE_";
-        } else {
-            internal_assert(false) << "Unsupported type for slicing";
+        std::string_view const direction = (op->name.find("halide_xtensa_slice_right") == 0) ? "RIGHT_" : "LEFT_";
+
+        const auto print_slice_call = [args, direction](std::string_view intrinsic_name, std::string_view shift_define) -> std::string {
+            ostringstream rhs;
+            rhs << intrinsic_name << "("
+                << args[0] << ".native_vector[1], "
+                << args[0] << ".native_vector[0], "
+                << shift_define << direction << args[1]
+                << ")";
+            return rhs.str();
+        };
+
+        switch (xnv_type(op->type)) {
+        case XNVType::int8:
+            return print_slice_call("IVP_SEL2NX8I", "IVP_SELI_8B_ROTATE_");
+        case XNVType::uint8:
+            return print_slice_call("IVP_SEL2NX8UI", "IVP_SELI_8B_ROTATE_");
+        case XNVType::int16:
+            return print_slice_call("IVP_SELNX16I", "IVP_SELI_16B_ROTATE_");
+        case XNVType::uint16:
+            return print_slice_call("IVP_SELNX16UI", "IVP_SELI_16B_ROTATE_");
+        case XNVType::int32:
+            return print_slice_call("IVP_SELN_2X32I", "IVP_SELI_32B_ROTATE_");
+        case XNVType::uint32:
+            return print_slice_call("IVP_SELN_2X32UI", "IVP_SELI_32B_ROTATE_");
+        case XNVType::float16:
+            return print_slice_call("IVP_SELNXF16I", "IVP_SELI_16B_ROTATE_");
+        case XNVType::float32:
+            return print_slice_call("IVP_SELN_2XF32I", "IVP_SELI_32B_ROTATE_");
+        default:
+            internal_error << "Unsupported type for " << op->name;
         }
-
-        rhs << intrinsic_name << "(" << args[0] << ".native_vector[1], " << args[0] << ".native_vector[0], " << shift_define << direction << args[1] << ")";
-
-        return rhs.str();
     }
     // absd needs extra cast to uint*
     if (op->name == "halide_xtensa_absd_i16") {
@@ -401,60 +474,9 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     }
 
     string op_name = op->name;
-    std::map<string, string> op_name_to_intrinsic = {
-        {"halide_xtensa_abs_i8", "IVP_ABS2NX8"},
-        {"halide_xtensa_abs_i16", "IVP_ABSNX16"},
-        {"halide_xtensa_abs_i32", "IVP_ABSN_2X32"},
-        {"halide_xtensa_abs_f32", "IVP_ABSN_2XF32"},
-        {"halide_xtensa_sat_add_i16", "IVP_ADDSNX16"},
-        {"halide_xtensa_sat_sub_i16", "IVP_SUBSNX16"},
-        {"halide_xtensa_avg_i8", "IVP_AVG2NX8"},
-        {"halide_xtensa_avg_u8", "IVP_AVGU2NX8"},
-        {"halide_xtensa_avg_i16", "IVP_AVGNX16"},
-        {"halide_xtensa_avg_u16", "IVP_AVGUNX16"},
-        {"halide_xtensa_avg_round_i8", "IVP_AVGR2NX8"},
-        {"halide_xtensa_avg_round_u8", "IVP_AVGRU2NX8U"},
-        {"halide_xtensa_avg_round_i16", "IVP_AVGRNX16"},
-        {"halide_xtensa_avg_round_u16", "IVP_AVGRUNX16U"},
-        {"halide_xtensa_widen_mul_i24", "IVP_MUL2NX8"},
-        {"halide_xtensa_widen_mul_u24", "IVP_MULUU2NX8"},
-        {"halide_xtensa_widen_mul_i48", "IVP_MULNX16"},
-        {"halide_xtensa_widen_mul_u48", "IVP_MULUUNX16U"},
-        {"halide_xtensa_mul_i32", "IVP_MULN_2X32"},
-        {"halide_xtensa_widen_mul_ui48", "IVP_MULUSNX16"},
-        {"halide_xtensa_widen_pair_mul_u48", "IVP_MULUUPNX16"},
-        {"halide_xtensa_convert_i48_low_i32", "IVP_CVT32SNX48L"},
-        {"halide_xtensa_convert_i48_high_i32", "IVP_CVT32SNX48H"},
-        {"halide_xtensa_convert_i48_low_u32", "IVP_CVT32UNX48L"},
-        {"halide_xtensa_convert_i48_high_u32", "IVP_CVT32UNX48H"},
-        {"halide_xtensa_narrow_i48_with_shift_i16", "IVP_PACKVRNRNX48"},
-        {"halide_xtensa_narrow_i48_with_rounding_shift_i16", "IVP_PACKVRNX48"},
-        {"halide_xtensa_sat_narrow_i48_with_shift_i16", "IVP_PACKVRNX48"},
-        {"halide_xtensa_sat_narrow_with_rounding_shift_i32", "IVP_PACKVRN_2X64W"},
-        {"halide_xtensa_full_reduce_add_i8", "IVP_RADD2NX8"},
-        {"halide_xtensa_full_reduce_add_i16", "IVP_RADDNX16"},
-        {"halide_xtensa_full_reduce_add_i32", "IVP_RADDN_2X32"},
-
-        {"halide_xtensa_full_reduce_min_u8", "IVP_RMINU2NX8U"},
-        {"halide_xtensa_full_reduce_min_u16", "IVP_RMINUNX16U"},
-        {"halide_xtensa_full_reduce_min_u32", "IVP_RMINUN_2X32U"},
-        {"halide_xtensa_full_reduce_min_i8", "IVP_RMIN2NX8"},
-        {"halide_xtensa_full_reduce_min_i16", "IVP_RMINNX16"},
-        {"halide_xtensa_full_reduce_min_i32", "IVP_RMINN_2X32"},
-
-        {"halide_xtensa_full_reduce_max_u8", "IVP_RMAXU2NX8U"},
-        {"halide_xtensa_full_reduce_max_u16", "IVP_RMAXUNX16U"},
-        {"halide_xtensa_full_reduce_max_u32", "IVP_RMAXUN_2X32U"},
-        {"halide_xtensa_full_reduce_max_i8", "IVP_RMAX2NX8"},
-        {"halide_xtensa_full_reduce_max_i16", "IVP_RMAXNX16"},
-        {"halide_xtensa_full_reduce_max_i32", "IVP_RMAXN_2X32"},
-
-        {"halide_xtensa_sat_left_shift_i16", "IVP_SLSNX16"},
-        {"halide_xtensa_sat_left_shift_i32", "IVP_SLSN_2X32"},
-    };
-
-    if (op_name_to_intrinsic.count(op_name) > 0) {
-        op_name = op_name_to_intrinsic[op_name];
+    const auto it = op_name_to_intrinsic.find(op_name);
+    if (it != op_name_to_intrinsic.end()) {
+        op_name = it->second;
     }
 
     rhs << op_name << "(" << with_commas(args) << ")";
@@ -465,28 +487,31 @@ void CodeGen_Xtensa::visit(const Div *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         print_expr(Call::make(op->type, Call::shift_right, {op->a, Expr(bits)}, Call::PureIntrinsic));
-    } else if (is_native_xtensa_vector<float16_t>(op->type)) {
-        ostringstream rhs;
-        rhs << "IVP_DIVNXF16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        print_assignment(op->type, rhs.str());
-    } else if (is_native_xtensa_vector<float>(op->type)) {
-        ostringstream rhs;
-        rhs << "IVP_DIVN_2XF32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        print_assignment(op->type, rhs.str());
     } else {
         string sa = print_expr(op->a);
         string sb = print_expr(op->b);
-        // Just cast to clang vector types and use division defined on them.
-        if (is_native_xtensa_vector<uint8_t>(op->type) ||
-            is_native_xtensa_vector<int8_t>(op->type) ||
-            is_native_xtensa_vector<int32_t>(op->type) ||
-            is_native_xtensa_vector<uint32_t>(op->type)) {
-            print_assignment(
-                op->type,
-                "(common_" + print_type(op->type) + ")" + sa + " / (common_" + print_type(op->type) + ")" + sb);
-        } else {
-            print_assignment(op->type, sa + " / " + sb);
+
+        ostringstream rhs;
+
+        switch (xnv_type(op->type)) {
+        case XNVType::int8:
+        case XNVType::uint8:
+        case XNVType::int32:
+        case XNVType::uint32:
+            // Just cast to clang vector types and use division defined on them.
+            rhs << "(common_" << print_type(op->type) << ")" << sa << " / (common_" << print_type(op->type) << ")" << sb;
+            break;
+        case XNVType::float16:
+            rhs << "IVP_DIVNXF16(" << sa << ", " << sb << ")";
+            break;
+        case XNVType::float32:
+            rhs << "IVP_DIVN_2XF32(" << sa << ", " << sb << ")";
+            break;
+        default:
+            rhs << sa << " / " << sb;
+            break;
         }
+        print_assignment(op->type, rhs.str());
     }
 }
 
@@ -506,26 +531,40 @@ void CodeGen_Xtensa::visit(const Max *op) {
         print_expr(Call::make(op->type, "::halide_cpp_max<" + print_type(op->type) + ">", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
-        if (is_native_xtensa_vector<int8_t>(op->type)) {
-            rhs << "IVP_MAX2NX8(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<uint8_t>(op->type)) {
-            rhs << "IVP_MAXU2NX8(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<int16_t>(op->type)) {
-            rhs << "IVP_MAXNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<uint16_t>(op->type)) {
-            rhs << "IVP_MAXUNX16U(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<int32_t>(op->type)) {
-            rhs << "IVP_MAXN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<uint32_t>(op->type)) {
-            rhs << "IVP_MAXUN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<float16_t>(op->type)) {
-            rhs << "IVP_MAXNXF16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<float>(op->type)) {
-            rhs << "IVP_MAXN_2XF32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else {
-            rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+
+        const auto print_xtensa_max = [&](std::string_view name) {
+            this->print_custom_binop(name, op->type, op->a, op->b);
+        };
+
+        switch (xnv_type(op->type)) {
+        case XNVType::int8:
+            print_xtensa_max("IVP_MAX2NX8");
+            break;
+        case XNVType::uint8:
+            print_xtensa_max("IVP_MAXU2NX8");
+            break;
+        case XNVType::int16:
+            print_xtensa_max("IVP_MAXNX16");
+            break;
+        case XNVType::uint16:
+            print_xtensa_max("IVP_MAXUNX16U");
+            break;
+        case XNVType::int32:
+            print_xtensa_max("IVP_MAXN_2X32");
+            break;
+        case XNVType::uint32:
+            print_xtensa_max("IVP_MAXUN_2X32");
+            break;
+        case XNVType::float16:
+            print_xtensa_max("IVP_MAXNXF16");
+            break;
+        case XNVType::float32:
+            print_xtensa_max("IVP_MAXN_2XF32");
+            break;
+        default:
+            print_xtensa_max(print_type(op->type) + "::max");
+            break;
         }
-        print_assignment(op->type, rhs.str());
     }
 }
 
@@ -534,26 +573,40 @@ void CodeGen_Xtensa::visit(const Min *op) {
         print_expr(Call::make(op->type, "::halide_cpp_min<" + print_type(op->type) + ">", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
-        if (is_native_xtensa_vector<int8_t>(op->type)) {
-            rhs << "IVP_MIN2NX8(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<uint8_t>(op->type)) {
-            rhs << "IVP_MINU2NX8(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<int16_t>(op->type)) {
-            rhs << "IVP_MINNX16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<uint16_t>(op->type)) {
-            rhs << "IVP_MINUNX16U(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<int32_t>(op->type)) {
-            rhs << "IVP_MINN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<uint32_t>(op->type)) {
-            rhs << "IVP_MINUN_2X32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<float16_t>(op->type)) {
-            rhs << "IVP_MINNXF16(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else if (is_native_xtensa_vector<float>(op->type)) {
-            rhs << "IVP_MINN_2XF32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
-        } else {
-            rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+
+        const auto print_xtensa_min = [&](std::string_view name) {
+            this->print_custom_binop(name, op->type, op->a, op->b);
+        };
+
+        switch (xnv_type(op->type)) {
+        case XNVType::int8:
+            print_xtensa_min("IVP_MIN2NX8");
+            break;
+        case XNVType::uint8:
+            print_xtensa_min("IVP_MINU2NX8");
+            break;
+        case XNVType::int16:
+            print_xtensa_min("IVP_MINNX16");
+            break;
+        case XNVType::uint16:
+            print_xtensa_min("IVP_MINUNX16U");
+            break;
+        case XNVType::int32:
+            print_xtensa_min("IVP_MINN_2X32");
+            break;
+        case XNVType::uint32:
+            print_xtensa_min("IVP_MINUN_2X32");
+            break;
+        case XNVType::float16:
+            print_xtensa_min("IVP_MINNXF16");
+            break;
+        case XNVType::float32:
+            print_xtensa_min("IVP_MINN_2XF32");
+            break;
+        default:
+            print_xtensa_min(print_type(op->type) + "::min");
+            break;
         }
-        print_assignment(op->type, rhs.str());
     }
 }
 
@@ -571,24 +624,40 @@ void CodeGen_Xtensa::visit(const Select *op) {
             << " : " << false_val
             << ")";
     } else {
-        if (is_native_xtensa_vector<int8_t>(op->type)) {
-            rhs << "IVP_MOV2NX8T(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else if (is_native_xtensa_vector<uint8_t>(op->type)) {
-            rhs << "IVP_MOV2NX8UT(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else if (is_native_xtensa_vector<int16_t>(op->type)) {
-            rhs << "IVP_MOVNX16T(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else if (is_native_xtensa_vector<uint16_t>(op->type)) {
-            rhs << "IVP_MOVNX16UT(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else if (is_native_xtensa_vector<int32_t>(op->type)) {
-            rhs << "IVP_MOVN_2X32T(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else if (is_native_xtensa_vector<uint32_t>(op->type)) {
-            rhs << "IVP_MOVN_2X32UT(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else if (is_native_xtensa_vector<float16_t>(op->type)) {
-            rhs << "IVP_MOVNXF16T(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else if (is_native_xtensa_vector<float>(op->type)) {
-            rhs << "IVP_MOVN_2XF32T(" << true_val << ", " << false_val << ", " << cond << ")";
-        } else {
+        const auto print_xtensa_select = [&](std::string_view name) {
+            rhs << name << "(" << true_val << ", " << false_val << ", " << cond << ")";
+        };
+
+        switch (xnv_type(op->type)) {
+        case XNVType::int8:
+            print_xtensa_select("IVP_MOV2NX8T");
+            break;
+        case XNVType::uint8:
+            print_xtensa_select("IVP_MOV2NX8UT");
+            break;
+        case XNVType::int16:
+            print_xtensa_select("IVP_MOVNX16T");
+            break;
+        case XNVType::uint16:
+            print_xtensa_select("IVP_MOVNX16UT");
+            break;
+        case XNVType::int32:
+            print_xtensa_select("IVP_MOVN_2X32T");
+            break;
+        case XNVType::uint32:
+            print_xtensa_select("IVP_MOVN_2X32UT");
+            break;
+        case XNVType::float16:
+            print_xtensa_select("IVP_MOVNXF16T");
+            break;
+        case XNVType::float32:
+            print_xtensa_select("IVP_MOVN_2XF32T");
+            break;
+        default:
+            // Note that the args here are in a different order than for the Xtensa ops,
+            // so we cannot use print_xtensa_select() here.
             rhs << type << "::select(" << cond << ", " << true_val << ", " << false_val << ")";
+            break;
         }
     }
     print_assignment(op->type, rhs.str());
@@ -677,28 +746,41 @@ void CodeGen_Xtensa::visit(const Broadcast *op) {
 }
 
 template<typename ComparisonOp>
-void CodeGen_Xtensa::visit_comparison_op(const ComparisonOp *op, const string &op_name) {
-    string sa = print_expr(op->a);
-    string sb = print_expr(op->b);
+void CodeGen_Xtensa::visit_comparison_op(const ComparisonOp *op, std::string_view op_name) {
+    const auto print_xtensa_comparison = [&](std::string_view prefix, std::string_view suffix) {
+        ostringstream rhs;
+        rhs << prefix << op_name << suffix << "(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+        print_assignment(op->type, rhs.str());
+    };
 
-    if (is_native_xtensa_vector<int8_t>(op->a.type())) {
-        print_assignment(op->type, "IVP_" + op_name + "2NX8(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint8_t>(op->a.type())) {
-        print_assignment(op->type, "IVP_" + op_name + "U2NX8U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<int16_t>(op->a.type())) {
-        print_assignment(op->type, "IVP_" + op_name + "NX16(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint16_t>(op->a.type())) {
-        print_assignment(op->type, "IVP_" + op_name + "UNX16U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<int32_t>(op->a.type())) {
-        print_assignment(op->type, "IVP_" + op_name + "N_2X32(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<uint32_t>(op->a.type())) {
-        print_assignment(op->type, "IVP_" + op_name + "UN_2X32U(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<float16_t>(op->a.type())) {
-        print_assignment(op->type, "IVP_O" + op_name + "NXF16(" + sa + ", " + sb + ")");
-    } else if (is_native_xtensa_vector<float>(op->a.type())) {
-        print_assignment(op->type, "IVP_O" + op_name + "N_2XF32(" + sa + ", " + sb + ")");
-    } else {
+    switch (xnv_type(op->a.type())) {
+    case XNVType::int8:
+        print_xtensa_comparison("IVP_", "2NX8");
+        break;
+    case XNVType::uint8:
+        print_xtensa_comparison("IVP_", "U2NX8U");
+        break;
+    case XNVType::int16:
+        print_xtensa_comparison("IVP_", "NX16");
+        break;
+    case XNVType::uint16:
+        print_xtensa_comparison("IVP_", "UNX16U");
+        break;
+    case XNVType::int32:
+        print_xtensa_comparison("IVP_", "N_2X32");
+        break;
+    case XNVType::uint32:
+        print_xtensa_comparison("IVP_", "UN_2X32U");
+        break;
+    case XNVType::float16:
+        print_xtensa_comparison("IVP_O", "NXF16");
+        break;
+    case XNVType::float32:
+        print_xtensa_comparison("IVP_O", "N_2XF32");
+        break;
+    default:
         CodeGen_C::visit(op);
+        break;
     }
 }
 
@@ -1335,15 +1417,23 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
         return;
     }
 
-    if (op->is_slice() && (op->slice_stride() == 1) &&
-        (is_native_xtensa_vector<int8_t>(op->type) ||
-         is_native_xtensa_vector<uint8_t>(op->type) ||
-         is_native_xtensa_vector<int16_t>(op->type) ||
-         is_native_xtensa_vector<uint16_t>(op->type) ||
-         is_native_xtensa_vector<int32_t>(op->type) ||
-         is_native_xtensa_vector<uint32_t>(op->type) ||
-         is_native_xtensa_vector<float>(op->type) ||
-         is_native_xtensa_vector<float16_t>(op->type))) {
+    const auto is_sliceable_xnv_type = [this](const halide_type_t &t) -> bool {
+        switch (xnv_type(t)) {
+        case XNVType::int8:
+        case XNVType::uint8:
+        case XNVType::int16:
+        case XNVType::uint16:
+        case XNVType::int32:
+        case XNVType::uint32:
+        case XNVType::float16:
+        case XNVType::float32:
+            return true;
+        default:
+            return false;
+        }
+    };
+
+    if (op->is_slice() && op->slice_stride() == 1 && is_sliceable_xnv_type(op->type)) {
         string type_suffix = suffix_for_type(op->type);
         string function_name = "halide_xtensa_slice";
         int slice_begin = op->slice_begin();
