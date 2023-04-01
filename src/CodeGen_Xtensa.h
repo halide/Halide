@@ -24,7 +24,6 @@ protected:
 
     using CodeGen_C::visit;
 
-    std::string print_assignment(Type t, const std::string &rhs) override;
     std::string print_type(Type t, CodeGen_C::AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
     std::string print_xtensa_call(const Call *op);
 
