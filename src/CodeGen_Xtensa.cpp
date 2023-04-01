@@ -30,7 +30,7 @@ extern "C" unsigned char halide_c_template_CodeGen_Xtensa_vectors[];
 
 namespace {
 
-std::string_view intrinsic_suffix_for_type(const halide_type_t &t) {
+const char *intrinsic_suffix_for_type(const halide_type_t &t) {
     switch (t.as_u32()) {
     case halide_type_t(halide_type_float, 16).as_u32():
         return "N_2XF32";
@@ -273,25 +273,6 @@ inline int GetCycleCount() {
     }
 }
 
-string CodeGen_Xtensa::print_assignment(Type t, const std::string &rhs) {
-    auto cached = cache.find(rhs);
-    if (cached == cache.end()) {
-        id = unique_name('_');
-        const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
-        if (t.is_handle()) {
-            // Don't print void *, which might lose useful type information. just use auto.
-            stream << get_indent() << "auto * ";
-        } else {
-            stream << get_indent() << print_type(t, AppendSpace);
-        }
-        stream << const_flag << id << " = " << rhs << ";\n";
-        cache[rhs] = id;
-    } else {
-        id = cached->second;
-    }
-    return id;
-}
-
 std::string CodeGen_Xtensa::print_type(Type t, AppendSpaceIfNeeded space_option) {
     if (t.bits() == 1 && t.is_vector()) {
         return "uint1x" + std::to_string(t.lanes()) + "_t" + (space_option == AppendSpace ? " " : "");
@@ -474,8 +455,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     }
 
     string op_name = op->name;
-    const auto it = op_name_to_intrinsic.find(op_name);
-    if (it != op_name_to_intrinsic.end()) {
+    if (const auto it = op_name_to_intrinsic.find(op_name); it != op_name_to_intrinsic.end()) {
         op_name = it->second;
     }
 
