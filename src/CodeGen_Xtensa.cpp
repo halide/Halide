@@ -85,6 +85,61 @@ public:
 
 }  // namespace
 
+CodeGen_Xtensa::CodeGen_Xtensa(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
+    : CodeGen_C(s, t, output_kind, guard),
+      op_name_to_intrinsic{
+          {"halide_xtensa_abs_i8", "IVP_ABS2NX8"},
+          {"halide_xtensa_abs_i16", "IVP_ABSNX16"},
+          {"halide_xtensa_abs_i32", "IVP_ABSN_2X32"},
+          {"halide_xtensa_abs_f32", "IVP_ABSN_2XF32"},
+          {"halide_xtensa_sat_add_i16", "IVP_ADDSNX16"},
+          {"halide_xtensa_sat_sub_i16", "IVP_SUBSNX16"},
+          {"halide_xtensa_avg_i8", "IVP_AVG2NX8"},
+          {"halide_xtensa_avg_u8", "IVP_AVGU2NX8"},
+          {"halide_xtensa_avg_i16", "IVP_AVGNX16"},
+          {"halide_xtensa_avg_u16", "IVP_AVGUNX16"},
+          {"halide_xtensa_avg_round_i8", "IVP_AVGR2NX8"},
+          {"halide_xtensa_avg_round_u8", "IVP_AVGRU2NX8U"},
+          {"halide_xtensa_avg_round_i16", "IVP_AVGRNX16"},
+          {"halide_xtensa_avg_round_u16", "IVP_AVGRUNX16U"},
+          {"halide_xtensa_widen_mul_i24", "IVP_MUL2NX8"},
+          {"halide_xtensa_widen_mul_u24", "IVP_MULUU2NX8"},
+          {"halide_xtensa_widen_mul_i48", "IVP_MULNX16"},
+          {"halide_xtensa_widen_mul_u48", "IVP_MULUUNX16U"},
+          {"halide_xtensa_mul_i32", "IVP_MULN_2X32"},
+          {"halide_xtensa_widen_mul_ui48", "IVP_MULUSNX16"},
+          {"halide_xtensa_widen_pair_mul_u48", "IVP_MULUUPNX16"},
+          {"halide_xtensa_convert_i48_low_i32", "IVP_CVT32SNX48L"},
+          {"halide_xtensa_convert_i48_high_i32", "IVP_CVT32SNX48H"},
+          {"halide_xtensa_convert_i48_low_u32", "IVP_CVT32UNX48L"},
+          {"halide_xtensa_convert_i48_high_u32", "IVP_CVT32UNX48H"},
+          {"halide_xtensa_narrow_i48_with_shift_i16", "IVP_PACKVRNRNX48"},
+          {"halide_xtensa_narrow_i48_with_rounding_shift_i16", "IVP_PACKVRNX48"},
+          {"halide_xtensa_sat_narrow_i48_with_shift_i16", "IVP_PACKVRNX48"},
+          {"halide_xtensa_sat_narrow_with_rounding_shift_i32", "IVP_PACKVRN_2X64W"},
+          {"halide_xtensa_full_reduce_add_i8", "IVP_RADD2NX8"},
+          {"halide_xtensa_full_reduce_add_i16", "IVP_RADDNX16"},
+          {"halide_xtensa_full_reduce_add_i32", "IVP_RADDN_2X32"},
+
+          {"halide_xtensa_full_reduce_min_u8", "IVP_RMINU2NX8U"},
+          {"halide_xtensa_full_reduce_min_u16", "IVP_RMINUNX16U"},
+          {"halide_xtensa_full_reduce_min_u32", "IVP_RMINUN_2X32U"},
+          {"halide_xtensa_full_reduce_min_i8", "IVP_RMIN2NX8"},
+          {"halide_xtensa_full_reduce_min_i16", "IVP_RMINNX16"},
+          {"halide_xtensa_full_reduce_min_i32", "IVP_RMINN_2X32"},
+
+          {"halide_xtensa_full_reduce_max_u8", "IVP_RMAXU2NX8U"},
+          {"halide_xtensa_full_reduce_max_u16", "IVP_RMAXUNX16U"},
+          {"halide_xtensa_full_reduce_max_u32", "IVP_RMAXUN_2X32U"},
+          {"halide_xtensa_full_reduce_max_i8", "IVP_RMAX2NX8"},
+          {"halide_xtensa_full_reduce_max_i16", "IVP_RMAXNX16"},
+          {"halide_xtensa_full_reduce_max_i32", "IVP_RMAXN_2X32"},
+
+          {"halide_xtensa_sat_left_shift_i16", "IVP_SLSNX16"},
+          {"halide_xtensa_sat_left_shift_i32", "IVP_SLSN_2X32"},
+      } {
+}
+
 void CodeGen_Xtensa::add_platform_prologue() {
     stream << halide_c_template_CodeGen_Xtensa_prologue;
 }
@@ -383,60 +438,8 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     }
 
     string op_name = op->name;
-    std::map<string, string> op_name_to_intrinsic = {
-        {"halide_xtensa_abs_i8", "IVP_ABS2NX8"},
-        {"halide_xtensa_abs_i16", "IVP_ABSNX16"},
-        {"halide_xtensa_abs_i32", "IVP_ABSN_2X32"},
-        {"halide_xtensa_abs_f32", "IVP_ABSN_2XF32"},
-        {"halide_xtensa_sat_add_i16", "IVP_ADDSNX16"},
-        {"halide_xtensa_sat_sub_i16", "IVP_SUBSNX16"},
-        {"halide_xtensa_avg_i8", "IVP_AVG2NX8"},
-        {"halide_xtensa_avg_u8", "IVP_AVGU2NX8"},
-        {"halide_xtensa_avg_i16", "IVP_AVGNX16"},
-        {"halide_xtensa_avg_u16", "IVP_AVGUNX16"},
-        {"halide_xtensa_avg_round_i8", "IVP_AVGR2NX8"},
-        {"halide_xtensa_avg_round_u8", "IVP_AVGRU2NX8U"},
-        {"halide_xtensa_avg_round_i16", "IVP_AVGRNX16"},
-        {"halide_xtensa_avg_round_u16", "IVP_AVGRUNX16U"},
-        {"halide_xtensa_widen_mul_i24", "IVP_MUL2NX8"},
-        {"halide_xtensa_widen_mul_u24", "IVP_MULUU2NX8"},
-        {"halide_xtensa_widen_mul_i48", "IVP_MULNX16"},
-        {"halide_xtensa_widen_mul_u48", "IVP_MULUUNX16U"},
-        {"halide_xtensa_mul_i32", "IVP_MULN_2X32"},
-        {"halide_xtensa_widen_mul_ui48", "IVP_MULUSNX16"},
-        {"halide_xtensa_widen_pair_mul_u48", "IVP_MULUUPNX16"},
-        {"halide_xtensa_convert_i48_low_i32", "IVP_CVT32SNX48L"},
-        {"halide_xtensa_convert_i48_high_i32", "IVP_CVT32SNX48H"},
-        {"halide_xtensa_convert_i48_low_u32", "IVP_CVT32UNX48L"},
-        {"halide_xtensa_convert_i48_high_u32", "IVP_CVT32UNX48H"},
-        {"halide_xtensa_narrow_i48_with_shift_i16", "IVP_PACKVRNRNX48"},
-        {"halide_xtensa_narrow_i48_with_rounding_shift_i16", "IVP_PACKVRNX48"},
-        {"halide_xtensa_sat_narrow_i48_with_shift_i16", "IVP_PACKVRNX48"},
-        {"halide_xtensa_sat_narrow_with_rounding_shift_i32", "IVP_PACKVRN_2X64W"},
-        {"halide_xtensa_full_reduce_add_i8", "IVP_RADD2NX8"},
-        {"halide_xtensa_full_reduce_add_i16", "IVP_RADDNX16"},
-        {"halide_xtensa_full_reduce_add_i32", "IVP_RADDN_2X32"},
-
-        {"halide_xtensa_full_reduce_min_u8", "IVP_RMINU2NX8U"},
-        {"halide_xtensa_full_reduce_min_u16", "IVP_RMINUNX16U"},
-        {"halide_xtensa_full_reduce_min_u32", "IVP_RMINUN_2X32U"},
-        {"halide_xtensa_full_reduce_min_i8", "IVP_RMIN2NX8"},
-        {"halide_xtensa_full_reduce_min_i16", "IVP_RMINNX16"},
-        {"halide_xtensa_full_reduce_min_i32", "IVP_RMINN_2X32"},
-
-        {"halide_xtensa_full_reduce_max_u8", "IVP_RMAXU2NX8U"},
-        {"halide_xtensa_full_reduce_max_u16", "IVP_RMAXUNX16U"},
-        {"halide_xtensa_full_reduce_max_u32", "IVP_RMAXUN_2X32U"},
-        {"halide_xtensa_full_reduce_max_i8", "IVP_RMAX2NX8"},
-        {"halide_xtensa_full_reduce_max_i16", "IVP_RMAXNX16"},
-        {"halide_xtensa_full_reduce_max_i32", "IVP_RMAXN_2X32"},
-
-        {"halide_xtensa_sat_left_shift_i16", "IVP_SLSNX16"},
-        {"halide_xtensa_sat_left_shift_i32", "IVP_SLSN_2X32"},
-    };
-
-    if (op_name_to_intrinsic.count(op_name) > 0) {
-        op_name = op_name_to_intrinsic[op_name];
+    if (const auto it = op_name_to_intrinsic.find(op_name); it != op_name_to_intrinsic.end()) {
+        op_name = it->second;
     }
 
     rhs << op_name << "(" << with_commas(args) << ")";

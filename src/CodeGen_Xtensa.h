@@ -7,6 +7,7 @@
 
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -17,7 +18,10 @@ namespace Internal {
 
 class CodeGen_Xtensa : public CodeGen_C {
 public:
-    using CodeGen_C::CodeGen_C;
+    CodeGen_Xtensa(std::ostream &dest,
+                   const Target &target,
+                   OutputKind output_kind = CImplementation,
+                   const std::string &include_guard = "");
 
 protected:
     Stmt preprocess_function_body(const Stmt &stmt) override;
@@ -94,6 +98,8 @@ protected:
         const halide_type_t native_vector_type = get_native_xtensa_vector(t);
         return t == native_vector_type.with_lanes(2 * native_vector_type.lanes);
     }
+
+    const std::unordered_map<std::string, std::string> op_name_to_intrinsic;
 };
 
 }  // namespace Internal
