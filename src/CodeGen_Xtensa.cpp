@@ -41,26 +41,27 @@ public:
 
 using HalideTypeSet = std::unordered_set<halide_type_t, HalideTypeSetHashFunction>;
 
-std::string intrinsic_suffix_for_type(Type t) {
-    if (t.is_int() && (t.bits() == 8)) {
-        return "2NX8";
-    } else if (t.is_uint() && (t.bits() == 8)) {
-        return "2NX8U";
-    } else if (t.is_int() && (t.bits() == 16)) {
-        return "NX16";
-    } else if (t.is_uint() && (t.bits() == 16)) {
-        return "NX16U";
-    } else if (t.is_int() && (t.bits() == 32)) {
-        return "N_2X32";
-    } else if (t.is_uint() && (t.bits() == 32)) {
-        return "N_2X32U";
-    } else if (t.is_float() && (t.bits() == 32)) {
+const char *intrinsic_suffix_for_type(const halide_type_t &t) {
+    switch (t.as_u32()) {
+    case halide_type_t(halide_type_float, 16).as_u32():
         return "N_2XF32";
-    } else if (t.is_float() && (t.bits() == 16)) {
+    case halide_type_t(halide_type_float, 32).as_u32():
         return "NXF16";
+    case halide_type_t(halide_type_int, 16).as_u32():
+        return "NX16";
+    case halide_type_t(halide_type_int, 32).as_u32():
+        return "N_2X32";
+    case halide_type_t(halide_type_int, 8).as_u32():
+        return "2NX8";
+    case halide_type_t(halide_type_uint, 16).as_u32():
+        return "NX16U";
+    case halide_type_t(halide_type_uint, 32).as_u32():
+        return "N_2X32U";
+    case halide_type_t(halide_type_uint, 8).as_u32():
+        return "2NX8U";
+    default:
+        return "";
     }
-
-    return "";
 }
 
 class UsesDmaCopy : public IRGraphVisitor {
