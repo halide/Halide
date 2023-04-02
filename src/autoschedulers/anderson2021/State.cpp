@@ -217,10 +217,6 @@ void State::FeatureLoopNestMutator::split_compute_root_loops(LoopNest *loop_nest
             continue;
         }
 
-        // Make the vectorized dimension of the inner loop 32 (or as
-        // close as possible)
-        int64_t inner_extent = std::min(c->size[vectorized_loop_index], (int64_t)32);
-
         if (c->stage->index == 0) {
             vector<int64_t> tiling(c->node->dimensions, 1);
 
@@ -228,6 +224,10 @@ void State::FeatureLoopNestMutator::split_compute_root_loops(LoopNest *loop_nest
             c = c->parallelize_in_tiles(tiling, loop_nest, params, target, true, false);
 
             if (vectorized_loop_index >= 0) {
+                // Make the vectorized dimension of the inner loop 32 (or as
+                // close as possible)
+                int64_t inner_extent = std::min(c->size[vectorized_loop_index], (int64_t)32);
+
                 tiling[vectorized_loop_index] = inner_extent;
             }
             // Split parallelized into blocks and threads
@@ -257,6 +257,10 @@ void State::FeatureLoopNestMutator::split_compute_root_loops(LoopNest *loop_nest
             // outer_vec_extent and instead only have a single thread
             vector<int64_t> thread_tiling(c->node->dimensions, 1);
             if (vectorized_loop_index >= 0) {
+                // Make the vectorized dimension of the inner loop 32 (or as
+                // close as possible)
+                int64_t inner_extent = std::min(c->size[vectorized_loop_index], (int64_t)32);
+
                 thread_tiling[c->stage->loop[vectorized_loop_index].pure_dim] = inner_extent;
             }
 

@@ -3,9 +3,12 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    // Loads libautoschedule_anderson2021.so
-    // which is presumed to be in current library search path
-    load_plugin("autoschedule_anderson2021");
+    if (argc != 2 || !strlen(argv[1])) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
+    load_plugin(argv[1]);
 
     constexpr int hardware_parallelism = 80;
     AutoschedulerParams params = {"Anderson2021", {{"parallelism", std::to_string(hardware_parallelism)}}};
