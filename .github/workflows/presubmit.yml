@@ -17,7 +17,7 @@ jobs:
     name: Check clang-format
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: DoozyX/clang-format-lint-action@v0.14
         with:
           source: '.'
@@ -27,7 +27,7 @@ jobs:
     name: Check clang-tidy
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Install clang-tidy
         run: |
           # from apt.llvm.org
@@ -46,7 +46,7 @@ jobs:
     name: Check CMake file lists
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Run test sources check
         run: |
           shopt -s nullglob

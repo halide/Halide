@@ -211,7 +211,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         work **prev_ptr = &work_queue.jobs;
 
         if (owned_job) {
-            if (owned_job->exit_status != 0) {
+            if (owned_job->exit_status != halide_error_code_success) {
                 if (owned_job->active_workers == 0) {
                     while (job != owned_job) {
                         prev_ptr = &job->next_job;
@@ -221,7 +221,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
                     job->task.extent = 0;
                     continue;  // So loop exit is always in the same place.
                 }
-            } else if (owned_job->parent_job && owned_job->parent_job->exit_status != 0) {
+            } else if (owned_job->parent_job && owned_job->parent_job->exit_status != halide_error_code_success) {
                 owned_job->exit_status = owned_job->parent_job->exit_status;
                 // The wakeup can likely be only done under certain conditions, but it is only happening
                 // in when an error has already occured and it seems more important to ensure reliable
@@ -332,7 +332,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             log_message("Reserved " << job->task.min_threads << " on " << job->parent_job->task.name << " for " << job->task.name << " giving " << job->parent_job->threads_reserved << " of " << job->parent_job->task.min_threads);
         }
 
-        int result = 0;
+        int result = halide_error_code_success;
 
         if (job->task.serial) {
             // Remove it from the stack while we work on it
@@ -342,7 +342,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             halide_mutex_unlock(&work_queue.mutex);
             int total_iters = 0;
             int iters = 1;
-            while (result == 0) {
+            while (result == halide_error_code_success) {
                 // Claim as many iterations as possible
                 while ((job->task.extent - total_iters) > iters &&
                        job->make_runnable()) {
@@ -365,7 +365,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             job->task.extent -= total_iters;
 
             // Put it back on the job stack, if it hasn't failed.
-            if (result != 0) {
+            if (result != halide_error_code_success) {
                 job->task.extent = 0;  // Force job to be finished.
             } else if (job->task.extent > 0) {
                 job->next_job = work_queue.jobs;
@@ -396,19 +396,19 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             halide_mutex_lock(&work_queue.mutex);
         }
 
-        if (result != 0) {
-            log_message("Saw thread pool saw error from task: " << result);
+        if (result != halide_error_code_success) {
+            log_message("Saw thread pool saw error from task: " << (int)result);
         }
 
         bool wake_owners = false;
 
         // If this task failed, set the exit status on the job.
-        if (result != 0) {
+        if (result != halide_error_code_success) {
             job->exit_status = result;
             // Mark all siblings as also failed.
             for (int i = 0; i < job->sibling_count; i++) {
                 log_message("Marking " << job->sibling_count << " siblings ");
-                if (job->siblings[i].exit_status == 0) {
+                if (job->siblings[i].exit_status == halide_error_code_success) {
                     job->siblings[i].exit_status = result;
                     wake_owners |= (job->active_workers == 0 && job->siblings[i].owner_is_sleeping);
                 }
@@ -430,7 +430,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         log_message("Done working on job " << job->task.name);
 
         if (wake_owners ||
-            (job->active_workers == 0 && (job->task.extent == 0 || job->exit_status != 0) && job->owner_is_sleeping)) {
+            (job->active_workers == 0 && (job->task.extent == 0 || job->exit_status != halide_error_code_success) && job->owner_is_sleeping)) {
             // The job is done or some owned job failed via sibling linkage. Wake up the owner.
             halide_cond_broadcast(&work_queue.wake_owners);
         }
@@ -607,7 +607,7 @@ WEAK int halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
 WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
                                    int min, int size, uint8_t *closure) {
     if (size <= 0) {
-        return 0;
+        return halide_error_code_success;
     }
 
     work job;
@@ -622,7 +622,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.task.name = nullptr;
     job.task_fn = f;
     job.user_context = user_context;
-    job.exit_status = 0;
+    job.exit_status = halide_error_code_success;
     job.active_workers = 0;
     job.next_semaphore = 0;
     job.owner_is_sleeping = false;
@@ -650,7 +650,7 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
         jobs[i].task = *tasks++;
         jobs[i].task_fn = nullptr;
         jobs[i].user_context = user_context;
-        jobs[i].exit_status = 0;
+        jobs[i].exit_status = halide_error_code_success;
         jobs[i].active_workers = 0;
         jobs[i].next_semaphore = 0;
         jobs[i].owner_is_sleeping = false;
@@ -658,17 +658,17 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
     }
 
     if (num_tasks == 0) {
-        return 0;
+        return halide_error_code_success;
     }
 
     halide_mutex_lock(&work_queue.mutex);
     enqueue_work_already_locked(num_tasks, jobs, (work *)task_parent);
-    int exit_status = 0;
+    int exit_status = halide_error_code_success;
     for (int i = 0; i < num_tasks; i++) {
         // It doesn't matter what order we join the tasks in, because
         // we'll happily assist with siblings too.
         worker_thread_already_locked(jobs + i);
-        if (jobs[i].exit_status != 0) {
+        if (jobs[i].exit_status != halide_error_code_success) {
             exit_status = jobs[i].exit_status;
         }
     }

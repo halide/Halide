@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
             int correct = x + y;
             if (im(x, y) != correct) {
                 printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
                 int correct = x + y * y + z * z * z;
                 if (im2(x, y, z) != correct) {
                     printf("im2(%d, %d, %d) = %d instead of %d\n", x, y, z, im2(x, y, z), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

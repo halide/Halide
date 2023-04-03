@@ -81,22 +81,22 @@ int main(int argc, char **argv) {
 
     if (fast_err() > 0.000001) {
         printf("Error for pow too large\n");
-        return -1;
+        return 1;
     }
 
     if (faster_err() > 0.0001) {
         printf("Error for fast_pow too large\n");
-        return -1;
+        return 1;
     }
 
     if (t1 < t2) {
         printf("powf is faster than Halide's pow\n");
-        return -1;
+        return 1;
     }
 
     if (t2 * 1.5 < t3) {
         printf("pow is more than 1.5x faster than fast_pow\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

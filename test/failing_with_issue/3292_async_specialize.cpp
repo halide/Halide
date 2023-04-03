@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         size_t expected_size = 101 * 3 * sizeof(int) + sizeof(int);
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {
             printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
-            return -1;
+            return 1;
         }
     }
 

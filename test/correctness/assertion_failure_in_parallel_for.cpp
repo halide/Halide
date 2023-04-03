@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
 
     if (!error_occurred) {
         printf("There was supposed to be an error\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

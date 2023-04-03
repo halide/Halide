@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     int err = evaluate_may_gpu<int>(maximum(fib1(r) - fib2(r)));
     if (err > 0) {
         printf("Failed\n");
-        return -1;
+        return 1;
     }
 
     // Now use undef in a tuple. The following code ping-pongs between the two tuple components using a stencil:

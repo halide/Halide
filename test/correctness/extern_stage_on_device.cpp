@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
                 printf("Something went wrong when "
                        "extern_on_device=%d, sink_on_device=%d \n",
                        extern_on_device, sink_on_device);
-                return -1;
+                return 1;
             }
         }
     }

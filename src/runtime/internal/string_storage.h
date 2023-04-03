@@ -1,6 +1,7 @@
 #ifndef HALIDE_RUNTIME_STRING_STORAGE_H
 #define HALIDE_RUNTIME_STRING_STORAGE_H
 
+#include "HalideRuntime.h"
 #include "block_storage.h"
 
 namespace Halide {
@@ -125,7 +126,7 @@ StringStorage::~StringStorage() {
 }
 
 StringStorage *StringStorage::create(void *user_context, const SystemMemoryAllocatorFns &system_allocator) {
-    halide_abort_if_false(user_context, system_allocator.allocate != nullptr);
+    halide_debug_assert(user_context, system_allocator.allocate != nullptr);
     StringStorage *result = reinterpret_cast<StringStorage *>(
         system_allocator.allocate(user_context, sizeof(StringStorage)));
 
@@ -139,10 +140,10 @@ StringStorage *StringStorage::create(void *user_context, const SystemMemoryAlloc
 }
 
 void StringStorage::destroy(void *user_context, StringStorage *instance) {
-    halide_abort_if_false(user_context, instance != nullptr);
+    halide_debug_assert(user_context, instance != nullptr);
     const SystemMemoryAllocatorFns &system_allocator = instance->current_allocator();
     instance->destroy(user_context);
-    halide_abort_if_false(user_context, system_allocator.deallocate != nullptr);
+    halide_debug_assert(user_context, system_allocator.deallocate != nullptr);
     system_allocator.deallocate(user_context, instance);
 }
 

@@ -27,6 +27,8 @@
  *       be doable.
  */
 
+#include "runtime_atomics.h"
+
 // Copied from tsan_interface.h
 #ifndef TSAN_ANNOTATIONS
 #define TSAN_ANNOTATIONS 0
@@ -86,143 +88,6 @@ ALWAYS_INLINE void if_tsan_pre_signal(void *) {
 }
 ALWAYS_INLINE void if_tsan_post_signal(void *) {
 }
-#endif
-
-#ifdef BITS_32
-ALWAYS_INLINE uintptr_t atomic_and_fetch_release(uintptr_t *addr, uintptr_t val) {
-    return __sync_and_and_fetch(addr, val);
-}
-
-template<typename T>
-ALWAYS_INLINE T atomic_fetch_add_acquire_release(T *addr, T val) {
-    return __sync_fetch_and_add(addr, val);
-}
-
-template<typename T>
-ALWAYS_INLINE bool cas_strong_sequentially_consistent_helper(T *addr, T *expected, T *desired) {
-    T oldval = *expected;
-    T gotval = __sync_val_compare_and_swap(addr, oldval, *desired);
-    *expected = gotval;
-    return oldval == gotval;
-}
-
-ALWAYS_INLINE bool atomic_cas_strong_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return cas_strong_sequentially_consistent_helper(addr, expected, desired);
-}
-
-ALWAYS_INLINE bool atomic_cas_weak_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return cas_strong_sequentially_consistent_helper(addr, expected, desired);
-}
-
-template<typename T>
-ALWAYS_INLINE bool atomic_cas_weak_relacq_relaxed(T *addr, T *expected, T *desired) {
-    return cas_strong_sequentially_consistent_helper(addr, expected, desired);
-}
-
-ALWAYS_INLINE bool atomic_cas_weak_relaxed_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return cas_strong_sequentially_consistent_helper(addr, expected, desired);
-}
-
-ALWAYS_INLINE bool atomic_cas_weak_acquire_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return cas_strong_sequentially_consistent_helper(addr, expected, desired);
-}
-
-ALWAYS_INLINE uintptr_t atomic_fetch_and_release(uintptr_t *addr, uintptr_t val) {
-    return __sync_fetch_and_and(addr, val);
-}
-
-template<typename T>
-ALWAYS_INLINE void atomic_load_relaxed(T *addr, T *val) {
-    *val = *addr;
-}
-
-template<typename T>
-ALWAYS_INLINE void atomic_load_acquire(T *addr, T *val) {
-    __sync_synchronize();
-    *val = *addr;
-}
-
-ALWAYS_INLINE uintptr_t atomic_or_fetch_relaxed(uintptr_t *addr, uintptr_t val) {
-    return __sync_or_and_fetch(addr, val);
-}
-
-ALWAYS_INLINE void atomic_store_relaxed(uintptr_t *addr, uintptr_t *val) {
-    *addr = *val;
-}
-
-template<typename T>
-ALWAYS_INLINE void atomic_store_release(T *addr, T *val) {
-    *addr = *val;
-    __sync_synchronize();
-}
-
-ALWAYS_INLINE void atomic_thread_fence_acquire() {
-    __sync_synchronize();
-}
-
-#else
-
-ALWAYS_INLINE uintptr_t atomic_and_fetch_release(uintptr_t *addr, uintptr_t val) {
-    return __atomic_and_fetch(addr, val, __ATOMIC_RELEASE);
-}
-
-template<typename T>
-ALWAYS_INLINE T atomic_fetch_add_acquire_release(T *addr, T val) {
-    return __atomic_fetch_add(addr, val, __ATOMIC_ACQ_REL);
-}
-
-ALWAYS_INLINE bool atomic_cas_strong_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return __atomic_compare_exchange(addr, expected, desired, false, __ATOMIC_RELEASE, __ATOMIC_RELAXED);
-}
-
-template<typename T>
-ALWAYS_INLINE bool atomic_cas_weak_relacq_relaxed(T *addr, T *expected, T *desired) {
-    return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
-}
-
-ALWAYS_INLINE bool atomic_cas_weak_release_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_RELEASE, __ATOMIC_RELAXED);
-}
-
-ALWAYS_INLINE bool atomic_cas_weak_relaxed_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
-}
-
-ALWAYS_INLINE bool atomic_cas_weak_acquire_relaxed(uintptr_t *addr, uintptr_t *expected, uintptr_t *desired) {
-    return __atomic_compare_exchange(addr, expected, desired, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);
-}
-
-ALWAYS_INLINE uintptr_t atomic_fetch_and_release(uintptr_t *addr, uintptr_t val) {
-    return __atomic_fetch_and(addr, val, __ATOMIC_RELEASE);
-}
-
-template<typename T>
-ALWAYS_INLINE void atomic_load_relaxed(T *addr, T *val) {
-    __atomic_load(addr, val, __ATOMIC_RELAXED);
-}
-
-template<typename T>
-ALWAYS_INLINE void atomic_load_acquire(T *addr, T *val) {
-    __atomic_load(addr, val, __ATOMIC_ACQUIRE);
-}
-
-ALWAYS_INLINE uintptr_t atomic_or_fetch_relaxed(uintptr_t *addr, uintptr_t val) {
-    return __atomic_or_fetch(addr, val, __ATOMIC_RELAXED);
-}
-
-ALWAYS_INLINE void atomic_store_relaxed(uintptr_t *addr, uintptr_t *val) {
-    __atomic_store(addr, val, __ATOMIC_RELAXED);
-}
-
-template<typename T>
-ALWAYS_INLINE void atomic_store_release(T *addr, T *val) {
-    __atomic_store(addr, val, __ATOMIC_RELEASE);
-}
-
-ALWAYS_INLINE void atomic_thread_fence_acquire() {
-    __atomic_thread_fence(__ATOMIC_ACQUIRE);
-}
-
 #endif
 
 }  // namespace
@@ -1071,11 +936,11 @@ WEAK void halide_mutex_array_destroy(void *user_context, void *array) {
 
 WEAK int halide_mutex_array_lock(struct halide_mutex_array *array, int entry) {
     halide_mutex_lock(&array->array[entry]);
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry) {
     halide_mutex_unlock(&array->array[entry]);
-    return 0;
+    return halide_error_code_success;
 }
 }

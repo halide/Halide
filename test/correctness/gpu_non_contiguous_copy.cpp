@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
                     }
                     if (full(x, y, z, w) != correct) {
                         printf("Error! Incorrect value %i != %i at %i, %i, %i, %i\n", full(x, y, z, w), correct, x, y, z, w);
-                        return -1;
+                        return 1;
                     }
                 }
             }

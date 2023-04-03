@@ -16,7 +16,7 @@
 #include "HalideBuffer.h"
 
 // Forward declare the cuda_device_interface, for tensor wrapper.
-const halide_device_interface_t *halide_cuda_device_interface();
+extern "C" const halide_device_interface_t *halide_cuda_device_interface();
 
 #define HLPT_CHECK_CONTIGUOUS(x) AT_ASSERTM(x.is_contiguous(), #x " must be contiguous")
 #define HLPT_CHECK_CUDA(x) AT_ASSERTM(x.type().is_cuda(), #x " must be a CUDA tensor")

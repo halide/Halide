@@ -198,7 +198,7 @@ int main(int argc, char **argv) {
     for (int x = 0; x < W; x++) {
         if (input(x) + 1 != output(x)) {
             printf("Error at (%d): %d != %d\n", x, input(x) + 1, output(x));
-            return -1;
+            return 1;
         }
     }
 

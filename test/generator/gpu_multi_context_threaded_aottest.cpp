@@ -135,6 +135,58 @@ int halide_metal_release_context(void *user_context) {
 }
 
 #define HAS_MULTIPLE_CONTEXTS true
+#elif defined(TEST_WEBGPU)
+
+struct gpu_context {
+    WGPUInstance instance = nullptr;
+    WGPUAdapter adapter = nullptr;
+    WGPUDevice device = nullptr;
+    WGPUBuffer staging_buffer = nullptr;
+};
+
+bool init_context(gpu_context &ctx) {
+    return create_webgpu_context(&ctx.instance, &ctx.adapter, &ctx.device, &ctx.staging_buffer);
+}
+
+void destroy_context(gpu_context &ctx) {
+    destroy_webgpu_context(ctx.instance, ctx.adapter, ctx.device, ctx.staging_buffer);
+    ctx.instance = nullptr;
+    ctx.adapter = nullptr;
+    ctx.device = nullptr;
+    ctx.staging_buffer = nullptr;
+}
+
+// These functions replace the acquire/release implementation in src/runtime/webgpu.cpp.
+// Since we don't parallelize access to the GPU in the schedule, we don't need synchronization
+// in our implementation of these functions.
+extern "C" int halide_webgpu_acquire_context(void *user_context,
+                                             WGPUInstance *instance_ret,
+                                             WGPUAdapter *adapter_ret,
+                                             WGPUDevice *device_ret,
+                                             WGPUBuffer *staging_buffer_ret,
+                                             bool create) {
+    if (user_context == nullptr) {
+        assert(!create);
+        *instance_ret = nullptr;
+        *adapter_ret = nullptr;
+        *device_ret = nullptr;
+        *staging_buffer_ret = nullptr;
+        return -1;
+    } else {
+        gpu_context *context = (gpu_context *)user_context;
+        *instance_ret = context->instance;
+        *adapter_ret = context->adapter;
+        *device_ret = context->device;
+        *staging_buffer_ret = context->staging_buffer;
+    }
+    return 0;
+}
+
+extern "C" int halide_webgpu_release_context(void *user_context) {
+    return 0;
+}
+
+#define HAS_MULTIPLE_CONTEXTS true
 #else
 typedef int gpu_context;
 

@@ -60,19 +60,19 @@ int check_error(int exp_heap_peak, int exp_num_mallocs,
             "stack_peak: %d\n", heap_peak, num_mallocs, malloc_avg, stack_peak);*/
     if (heap_peak != exp_heap_peak) {
         printf("Peak heap was %d instead of %d\n", heap_peak, exp_heap_peak);
-        return -1;
+        return 1;
     }
     if (num_mallocs != exp_num_mallocs) {
         printf("Num of mallocs was %d instead of %d\n", num_mallocs, exp_num_mallocs);
-        return -1;
+        return 1;
     }
     if (malloc_avg != exp_malloc_avg) {
         printf("Malloc average was %d instead of %d\n", malloc_avg, exp_malloc_avg);
-        return -1;
+        return 1;
     }
     if (stack_peak != exp_stack_peak) {
         printf("Stack peak was %d instead of %d\n", stack_peak, exp_stack_peak);
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -85,19 +85,19 @@ int check_error_parallel(int min_heap_peak, int max_heap_peak, int exp_num_mallo
     if (heap_peak < min_heap_peak || heap_peak > max_heap_peak) {
         printf("Peak heap was %d which was outside the range of [%d, %d]\n",
                heap_peak, min_heap_peak, max_heap_peak);
-        return -1;
+        return 1;
     }
     if (num_mallocs != exp_num_mallocs) {
         printf("Num of mallocs was %d instead of %d\n", num_mallocs, exp_num_mallocs);
-        return -1;
+        return 1;
     }
     if (malloc_avg != exp_malloc_avg) {
         printf("Malloc average was %d instead of %d\n", malloc_avg, exp_malloc_avg);
-        return -1;
+        return 1;
     }
     if (stack_peak != exp_stack_peak) {
         printf("Stack peak was %d instead of %d\n", stack_peak, exp_stack_peak);
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
         f1.realize({size_x, size_y}, t);
         int stack_size = size_x * size_y * sizeof(int);
         if (check_error(0, 0, 0, stack_size) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
         f2.realize({size_x, size_y}, t);
         int total = (size_x + 1) * (size_y + 1) * sizeof(int);
         if (check_error(total, 1, total, 0) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -167,7 +167,7 @@ int main(int argc, char **argv) {
         reset_stats();
         f3.realize({1000, 1000}, t);
         if (check_error(0, 0, 0, 0) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -184,7 +184,7 @@ int main(int argc, char **argv) {
         reset_stats();
         f3.realize({1000, 1000}, t);
         if (check_error(0, 0, 0, 0) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -216,7 +216,7 @@ int main(int argc, char **argv) {
         f6.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
-            return -1;
+            return 1;
         }
 
         reset_stats();
@@ -225,7 +225,7 @@ int main(int argc, char **argv) {
         f6.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
-            return -1;
+            return 1;
         }
 
         reset_stats();
@@ -234,7 +234,7 @@ int main(int argc, char **argv) {
         f6.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
-            return -1;
+            return 1;
         }
 
         reset_stats();
@@ -242,7 +242,7 @@ int main(int argc, char **argv) {
         toggle2.set(false);
         f6.realize({size_x}, t);
         if (check_error(0, 0, 0, 0) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -266,7 +266,7 @@ int main(int argc, char **argv) {
         int peak = size_x * sizeof(int);
         int total = size_x * size_y * sizeof(int);
         if (check_error(peak, size_y, total / size_y, 0) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -292,7 +292,7 @@ int main(int argc, char **argv) {
         int min_heap_peak = size_x * sizeof(int);
         int total = size_x * size_y * sizeof(int);
         if (check_error_parallel(min_heap_peak, total, size_y, total / size_y, 0) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -312,7 +312,7 @@ int main(int argc, char **argv) {
         f11.realize({size_x, size_y}, t);
         int total = size_x * size_y * sizeof(int);
         if (check_error(total, 1, total, 0) != 0) {
-            return -1;
+            return 1;
         }
     }
 
@@ -333,7 +333,7 @@ int main(int argc, char **argv) {
         f12.realize({size_x, size_y}, t);
         int stack_size = size_x * size_y * sizeof(int);
         if (check_error(0, 0, 0, stack_size) != 0) {
-            return -1;
+            return 1;
         }
     }
 

@@ -115,6 +115,39 @@ void load_metal() {
 #endif
 }
 
+void load_webgpu() {
+    debug(1) << "Looking for a native WebGPU implementation...\n";
+    const char *libnames[] = {
+#ifdef WEBGPU_NATIVE_LIB
+        // Specified via CMake.
+        WEBGPU_NATIVE_LIB,
+#endif
+        // Dawn (Chromium).
+        "libwebgpu_dawn.so",
+        "libwebgpu_dawn.dylib",
+        "webgpu_dawn.dll",
+
+        // wgpu (Firefox).
+        "libwgpu.so",
+        "libwgpu.dylib",
+        "wgpu.dll",
+    };
+    string error;
+    for (const char *libname : libnames) {
+        debug(1) << "Trying " << libname << "... ";
+        error.clear();
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently(libname, &error);
+        if (error.empty()) {
+            debug(1) << "found!\n";
+            break;
+        } else {
+            debug(1) << "not found.\n";
+        }
+    }
+    user_assert(error.empty()) << "Could not find a native WebGPU library: "
+                               << error << "\n";
+}
+
 }  // namespace
 
 using namespace llvm;
@@ -341,6 +374,15 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         for (auto const &iter : module.exports()) {
             orc::SymbolStringPtr name = symbolStringPool->intern(iter.first);
             orc::SymbolStringPtr _name = symbolStringPool->intern("_" + iter.first);
+#if LLVM_VERSION >= 170
+            auto symbol = llvm::orc::ExecutorAddr::fromPtr(iter.second.address);
+            if (!newSymbols.count(name)) {
+                newSymbols.insert({name, {symbol, JITSymbolFlags::Exported}});
+            }
+            if (!newSymbols.count(_name)) {
+                newSymbols.insert({_name, {symbol, JITSymbolFlags::Exported}});
+            }
+#else
             auto symbol = llvm::JITEvaluatedSymbol::fromPointer(iter.second.address);
             if (!newSymbols.count(name)) {
                 newSymbols.insert({name, symbol});
@@ -348,6 +390,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
             if (!newSymbols.count(_name)) {
                 newSymbols.insert({_name, symbol});
             }
+#endif
         }
     }
     err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(newSymbols)));
@@ -693,12 +736,14 @@ enum RuntimeKind {
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
+    WebGPU,
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
     OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,
+    WebGPUDebug,
     MaxRuntimeKind
 };
 
@@ -734,6 +779,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::HVX, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
+        one_gpu.set_feature(Target::WebGPU, false);
         string module_name;
         switch (runtime_kind) {
         case OpenCLDebug:
@@ -796,6 +842,17 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 #if !defined(_WIN32)
             internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
 #endif
+            break;
+        case WebGPUDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::WebGPU);
+            module_name = "debug_webgpu";
+            load_webgpu();
+            break;
+        case WebGPU:
+            one_gpu.set_feature(Target::WebGPU);
+            module_name += "webgpu";
+            load_webgpu();
             break;
         default:
             module_name = "shared runtime";
@@ -990,6 +1047,13 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
+    if (target.has_feature(Target::WebGPU)) {
+        auto kind = target.has_feature(Target::Debug) ? WebGPUDebug : WebGPU;
+        JITModule m = make_module(for_module, target, kind, result, create);
+        if (m.compiled()) {
+            result.push_back(m);
+        }
+    }
 
     return result;
 }
@@ -1137,7 +1201,8 @@ std::string JITErrorBuffer::str() const {
 
 JITFuncCallContext::JITFuncCallContext(JITUserContext *context, const JITHandlers &pipeline_handlers)
     : context(context) {
-    custom_error_handler = (context->handlers.custom_error != nullptr ||
+    custom_error_handler = ((context->handlers.custom_error != nullptr &&
+                             context->handlers.custom_error != JITErrorBuffer::handler) ||
                             pipeline_handlers.custom_error != nullptr);
     // Hook the error handler if not set
     if (!custom_error_handler) {

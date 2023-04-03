@@ -1,6 +1,7 @@
 #ifndef HALIDE_RUNTIME_POINTER_TABLE_H
 #define HALIDE_RUNTIME_POINTER_TABLE_H
 
+#include "HalideRuntime.h"
 #include "memory_resources.h"
 
 namespace Halide {
@@ -72,8 +73,8 @@ private:
 
 PointerTable::PointerTable(void *user_context, size_t initial_capacity, const SystemMemoryAllocatorFns &sma)
     : allocator(sma) {
-    halide_abort_if_false(user_context, allocator.allocate != nullptr);
-    halide_abort_if_false(user_context, allocator.deallocate != nullptr);
+    halide_debug_assert(user_context, allocator.allocate != nullptr);
+    halide_debug_assert(user_context, allocator.deallocate != nullptr);
     if (initial_capacity) {
         reserve(user_context, initial_capacity);
     }
@@ -96,7 +97,7 @@ PointerTable::~PointerTable() {
 }
 
 void PointerTable::destroy(void *user_context) {
-    halide_abort_if_false(user_context, allocator.deallocate != nullptr);
+    halide_debug_assert(user_context, allocator.deallocate != nullptr);
     if (ptr != nullptr) {
         allocator.deallocate(user_context, ptr);
     }
@@ -329,7 +330,7 @@ const void **PointerTable::data() const {
 
 void PointerTable::allocate(void *user_context, size_t new_capacity) {
     if (new_capacity != capacity) {
-        halide_abort_if_false(user_context, allocator.allocate != nullptr);
+        halide_debug_assert(user_context, allocator.allocate != nullptr);
         size_t bytes = new_capacity * sizeof(void *);
 
 #ifdef DEBUG_RUNTIME
@@ -341,7 +342,7 @@ void PointerTable::allocate(void *user_context, size_t new_capacity) {
             memcpy(new_ptr, ptr, count * sizeof(void *));
         }
         if (ptr != nullptr) {
-            halide_abort_if_false(user_context, allocator.deallocate != nullptr);
+            halide_debug_assert(user_context, allocator.deallocate != nullptr);
             allocator.deallocate(user_context, ptr);
         }
         capacity = new_capacity;

@@ -130,7 +130,7 @@ inline void hexagon_cache_pool_put(void *user_context, void *cache_mem) {
     }
 }
 
-inline int hexagon_cache_pool_free(void *user_context) {
+inline halide_error_code_t hexagon_cache_pool_free(void *user_context) {
     ScopedMutexLock lock(&hexagon_cache_mutex);
     pcache_pool temp = hexagon_cache_pool;
     pcache_pool prev = hexagon_cache_pool;
@@ -139,8 +139,8 @@ inline int hexagon_cache_pool_free(void *user_context) {
         if (temp->l2memory != nullptr) {
             err = HAP_cache_unlock(temp->l2memory);
             if (err != QURT_EOK) {
-                error(user_context) << "Hexagon: HAP_cache_unlock failed on pool free\n";
-                return err;
+                error(user_context) << "Hexagon: HAP_cache_unlock failed on pool free";
+                return halide_error_code_generic_error;
             }
         }
         prev = temp->next;
@@ -148,7 +148,7 @@ inline int hexagon_cache_pool_free(void *user_context) {
         temp = prev;
     }
     hexagon_cache_pool = nullptr;
-    return QURT_EOK;
+    return halide_error_code_success;
 }
 
 }  // namespace
@@ -160,6 +160,7 @@ WEAK void *halide_locked_cache_malloc(void *user_context, size_t size) {
     // set by user or pipeline.
     bool retry = false;
     debug(user_context) << "halide_locked_cache_malloc\n";
+    // Our caller will check the result for null
     return hexagon_cache_pool_get(user_context, size, retry);
 }
 

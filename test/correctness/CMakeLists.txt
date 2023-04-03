@@ -216,6 +216,7 @@ tests(GROUPS correctness
       multipass_constraints.cpp
       multiple_outputs.cpp
       mux.cpp
+      narrow_predicates.cpp
       nested_tail_strategies.cpp
       newtons_method.cpp
       non_nesting_extern_bounds_query.cpp
@@ -247,6 +248,7 @@ tests(GROUPS correctness
       realize_condition_depends_on_tuple.cpp
       realize_larger_than_two_gigs.cpp
       realize_over_shifted_domain.cpp
+      recursive_box_filters.cpp
       reduction_chain.cpp
       reduction_predicate_racing.cpp
       reduction_non_rectangular.cpp

@@ -40,21 +40,21 @@ int main(int argc, char **argv) {
     f.realize(&ctx1, {100});
     if (ctx1.which_handler != 1) {
         printf("Fail to call per-call custom print handler 1: %d\n", ctx1.which_handler);
-        return -1;
+        return 1;
     }
 
     ctx2.which_handler = 0;
     f.realize(&ctx2, {100});
     if (ctx2.which_handler != 2) {
         printf("Fail to call per-call custom print handler 2: %d\n", ctx2.which_handler);
-        return -1;
+        return 1;
     }
 
     ctx1.handlers.custom_print = nullptr;
     f.realize(&ctx1, {100});
     if (ctx1.which_handler != 3) {
         printf("Fail to call per-Pipeline custom print handler: %d\n", ctx1.which_handler);
-        return -1;
+        return 1;
     }
 
     Target t = get_jit_target_from_environment();
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         bad_buf.copy_to_host(&ctx1);
         if (ctx1.which_handler != 4) {
             printf("Fail to call custom error handler from context passed to copy_to_host: %d\n", ctx1.which_handler);
-            return -1;
+            return 1;
         }
 
         ctx1.which_handler = 0;
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
         bad_buf.copy_to_device(t, &ctx1);
         if (ctx1.which_handler != 4) {
             printf("Fail to call custom error handler from context passed to copy_to_device: %d\n", ctx1.which_handler);
-            return -1;
+            return 1;
         }
     }
 

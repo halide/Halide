@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     // There should have been vector stores and scalar stores.
     if (!vector_store || !scalar_store) {
         printf("There should have been vector and scalar stores\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

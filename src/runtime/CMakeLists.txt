@@ -79,6 +79,10 @@ set(RUNTIME_CPP
     trace_helper
     tracing
     wasm_cpu_features
+    # TODO(https://github.com/halide/Halide/issues/7248)
+    # webgpu
+    webgpu_dawn
+    webgpu_emscripten
     windows_clock
     windows_cuda
     windows_d3d12compute_arm
@@ -131,6 +135,7 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeOpenCL.h
     HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
+    HalideRuntimeWebGPU.h
     )
 
 # Need to create an object library for this because CMake
@@ -154,6 +159,7 @@ set(RUNTIME_CXX_FLAGS
     # Necessary for using virtual functions in the runtime code.
     -fno-rtti
     -Wall
+    -Wc++20-designator
     -Wcast-qual
     -Werror
     -Wignored-qualifiers

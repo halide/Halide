@@ -260,27 +260,27 @@ int main(int argc, char **argv) {
 
     printf("Running AMX matmul (signed/signed)\n");
     if (!run_tests(matmul_ss, 1)) {
-        return -1;
+        return 1;
     }
 
     printf("Running AMX matmul (signed/unsigned)\n");
     if (!run_tests(matmul_su, 1)) {
-        return -1;
+        return 1;
     }
 
     printf("Running AMX matmul (unsigned/signed)\n");
     if (!run_tests(matmul_us, 1)) {
-        return -1;
+        return 1;
     }
 
     printf("Running AMX matmul (unsigned/unsigned)\n");
     if (!run_tests(matmul_uu, 1)) {
-        return -1;
+        return 1;
     }
 
     printf("Running AMX matmul (bf16)\n");
     if (!run_tests(matmul_bf16, 2)) {
-        return -1;
+        return 1;
     }
 
     return 0;

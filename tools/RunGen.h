@@ -345,7 +345,6 @@ inline bool try_parse_metadata_buffer_estimates(const halide_filter_argument_t *
         const int64_t *extent = md->buffer_estimates[i * 2 + 1];
         if (!min || !extent) {
             return false;
-            fail() << "Argument " << md->name << " was specified as 'estimate', but no estimate was provided for dimension " << i << " of " << md->dimensions;
         }
         result[i] = halide_dimension_t{(int32_t)*min, (int32_t)*extent, stride};
         stride *= result[i].extent;
@@ -1152,14 +1151,17 @@ public:
         }
     }
 
-    void copy_outputs_to_host() {
+    int copy_outputs_to_host() {
         for (auto &arg_pair : args) {
             auto &arg = arg_pair.second;
             if (arg.metadata->kind == halide_argument_kind_output_buffer) {
                 Buffer<> &b = arg.buffer_value;
-                b.copy_to_host();
+                if (auto err = b.copy_to_host(); err != halide_error_code_success) {
+                    return err;
+                }
             }
         }
+        return halide_error_code_success;
     }
 
     uint64_t pixels_out() const {

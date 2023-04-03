@@ -13,10 +13,10 @@ WEAK int halide_qurt_hvx_lock(void *user_context) {
     int result = qurt_hvx_lock(mode);
     debug(user_context) << "        " << result << "\n";
     if (result != QURT_EOK) {
-        error(user_context) << "qurt_hvx_lock failed\n";
-        return -1;
+        error(user_context) << "qurt_hvx_lock failed";
+        return halide_error_code_generic_error;
     }
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK int halide_qurt_hvx_unlock(void *user_context) {
@@ -24,15 +24,15 @@ WEAK int halide_qurt_hvx_unlock(void *user_context) {
     int result = qurt_hvx_unlock();
     debug(user_context) << "        " << result << "\n";
     if (result != QURT_EOK) {
-        error(user_context) << "qurt_hvx_unlock failed\n";
-        return -1;
+        error(user_context) << "qurt_hvx_unlock failed";
+        return halide_error_code_generic_error;
     }
 
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK void halide_qurt_hvx_unlock_as_destructor(void *user_context, void * /*obj*/) {
-    halide_qurt_hvx_unlock(user_context);
+    (void)halide_qurt_hvx_unlock(user_context);  // ignore errors
 }
 
 // These need to inline, otherwise the extern call with the ptr
@@ -74,24 +74,24 @@ WEAK_INLINE int _halide_hexagon_do_par_for(void *user_context, halide_task_t f,
                                            int min, int size, uint8_t *closure,
                                            int use_hvx) {
     if (use_hvx) {
-        const int result = halide_qurt_hvx_unlock(user_context);
-        if (result != 0) {
+        if (auto result = halide_qurt_hvx_unlock(user_context);
+            result != halide_error_code_success) {
             return result;
         }
     }
 
-    const int result = halide_do_par_for(user_context, f, min, size, closure);
-    if (result != 0) {
+    if (auto result = halide_do_par_for(user_context, f, min, size, closure);
+        result != halide_error_code_success) {
         return result;
     }
 
     if (use_hvx) {
-        const int result = halide_qurt_hvx_lock(user_context);
-        if (result != 0) {
+        if (auto result = halide_qurt_hvx_lock(user_context);
+            result != halide_error_code_success) {
             return result;
         }
     }
 
-    return 0;
+    return halide_error_code_success;
 }
 }

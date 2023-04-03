@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
 
     if (t[0] < t[1]) {
         printf("Heap allocation was faster than pseudostack!\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

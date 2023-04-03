@@ -7,12 +7,12 @@
 
 namespace hannk {
 
-using Halide::Internal::rounding_shift_right;
-using Halide::Internal::saturating_add;
-using Halide::Internal::saturating_sub;
-using Halide::Internal::widening_add;
-using Halide::Internal::widening_mul;
-using Halide::Internal::widening_sub;
+using Halide::rounding_shift_right;
+using Halide::saturating_add;
+using Halide::saturating_sub;
+using Halide::widening_add;
+using Halide::widening_mul;
+using Halide::widening_sub;
 
 // Get the number of vector registers available on the target.
 int get_register_count(const Halide::Target &target);

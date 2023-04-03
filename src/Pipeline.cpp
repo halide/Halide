@@ -746,7 +746,8 @@ Realization Pipeline::realize(JITUserContext *context,
         if (needs_crop) {
             r[i].crop(crop);
         }
-        r[i].copy_to_host(context);
+        auto result = r[i].copy_to_host(context);
+        user_assert(result == halide_error_code_success) << "copy_to_host() failed with error: " << result;
     }
     return r;
 }
