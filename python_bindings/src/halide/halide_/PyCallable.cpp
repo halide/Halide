@@ -87,17 +87,24 @@ public:
                 // skip pybuffer_to_halidebuffer entirely, since the latter requires
                 // a non-null host ptr, but we might want such a buffer for bounds inference,
                 // and we don't need the intermediate HalideBuffer wrapper anyway.
+                halide_buffer_t *raw_buffer;
                 if (py::isinstance<Halide::Buffer<>>(value)) {
                     auto b = cast_to<Halide::Buffer<>>(value);
-                    argv[slot] = b.raw_buffer();
+                    raw_buffer = b.raw_buffer();
                 } else {
                     const bool writable = c_arg.is_output();
                     const bool reverse_axes = true;
                     buffers.buffers[slot] =
                         pybuffer_to_halidebuffer<void, AnyDims, MaxFastDimensions>(
                             cast_to<py::buffer>(value), writable, reverse_axes);
-                    argv[slot] = buffers.buffers[slot].raw_buffer();
+                    raw_buffer = buffers.buffers[slot].raw_buffer();
                 }
+                // Mark all input buffers as having a dirty host, so that the Halide call will
+                // do a lazy-copy-to-GPU if needed. (See: https://github.com/halide/Halide/issues/6868)
+                if (c_arg.is_input()) {
+                    raw_buffer->set_host_dirty();
+                }
+                argv[slot] = raw_buffer;
                 cci[slot] = Callable::make_buffer_qcci();
             } else {
                 argv[slot] = &scalar_storage[slot];
@@ -187,6 +194,22 @@ public:
 
         int result = c.call_argv_checked(argc, argv, cci);
         _halide_user_assert(result == 0) << "Halide Runtime Error: " << result;
+
+        // Since the Python Buffer protocol is host-memory-only, we *must*
+        // flush results back to host, otherwise the output buffer will contain
+        // random garbage. (We need a better solution for this,
+        // see https://github.com/halide/Halide/issues/6868)
+        for (size_t i = 0; i < args.size(); i++) {
+            const auto &c_arg = c_args[i + 1];  // c_args[0] is the JITUserContext
+            const size_t slot = i + 1;
+            if (c_arg.kind == Argument::OutputBuffer) {
+                auto *buf = (halide_buffer_t *)argv[slot];
+                if (buf->device_dirty()) {
+                    int result = buf->device_interface->copy_to_host(&empty_jit_user_context, buf);
+                    _halide_user_assert(result == 0) << "Halide Runtime Error: " << result;
+                }
+            }
+        }
     }
 
 #undef TYPED_ALLOCA
