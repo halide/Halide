@@ -398,6 +398,7 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"hexagon", Target::Hexagon},
     {"wasm", Target::WebAssembly},
     {"riscv", Target::RISCV},
+    {"xtensa", Target::Xtensa},
 };
 
 bool lookup_arch(const std::string &tok, Target::Arch &result) {
@@ -513,7 +514,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
     {"arm_fp16", Target::ARMFp16},
-    {"xtensa", Target::Xtensa},
     {"xtensa_q8", Target::XtensaQ8},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
     {"rvv", Target::RVV},
@@ -1090,7 +1090,7 @@ int Target::natural_vector_size(const Halide::Type &t) const {
     const bool is_integer = t.is_int() || t.is_uint();
     const int data_size = t.bytes();
 
-    if (has_feature(Halide::Target::Xtensa)) {
+    if (arch == Target::Xtensa) {
         if (has_feature(Halide::Target::XtensaQ8)) {
             return 128 / data_size;
         }

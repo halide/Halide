@@ -43,7 +43,8 @@ struct Target {
         Hexagon,
         POWERPC,
         WebAssembly,
-        RISCV
+        RISCV,
+        Xtensa
     } arch = ArchUnknown;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
@@ -151,7 +152,6 @@ struct Target {
         SVE2 = halide_target_feature_sve2,
         ARMDotProd = halide_target_feature_arm_dot_prod,
         ARMFp16 = halide_target_feature_arm_fp16,
-        Xtensa = halide_target_feature_xtensa,
         XtensaQ8 = halide_target_feature_xtensa_q8,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         RVV = halide_target_feature_rvv,
