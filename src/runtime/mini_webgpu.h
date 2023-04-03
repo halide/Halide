@@ -30,6 +30,8 @@
 #ifndef WEBGPU_H_
 #define WEBGPU_H_
 
+// clang-format off
+
 #if defined(WGPU_SHARED_LIBRARY)
 #    if defined(_WIN32)
 #        if defined(WGPU_IMPLEMENTATION)
@@ -1906,4 +1908,6 @@ WGPU_EXPORT void wgpuTextureViewRelease(WGPUTextureView textureView);
 } // extern "C"
 #endif
 
-#endif // WEBGPU_H_
+// clang-format on
+
+#endif  // WEBGPU_H_
