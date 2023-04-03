@@ -51,9 +51,9 @@ using HalideTypeSet = std::unordered_set<halide_type_t, HalideTypeSetHashFunctio
 const char *intrinsic_suffix_for_type(const halide_type_t &t) {
     switch (t.with_lanes(1).as_u32()) {
     case halide_type_t(halide_type_float, 16).as_u32():
-        return "N_2XF32";
-    case halide_type_t(halide_type_float, 32).as_u32():
         return "NXF16";
+    case halide_type_t(halide_type_float, 32).as_u32():
+        return "N_2XF32";
     case halide_type_t(halide_type_int, 16).as_u32():
         return "NX16";
     case halide_type_t(halide_type_int, 32).as_u32():
