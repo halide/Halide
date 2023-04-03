@@ -132,7 +132,7 @@ int main(int argc, char **argv) {
                speed_up);
         if (speed_up < 0.5) {
             printf("The nested vectorization schedule was supposed to be faster!\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -219,7 +219,7 @@ int main(int argc, char **argv) {
                speed_up);
         if (speed_up < 0.5) {
             printf("The nested vectorization schedule was supposed to be faster!\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -302,7 +302,7 @@ int main(int argc, char **argv) {
                speed_up);
         if (speed_up < 0.5) {
             printf("The nested vectorization schedule was supposed to be faster!\n");
-            return -1;
+            return 1;
         }
     }
     printf("Success!\n");
@@ -397,7 +397,7 @@ int main(int argc, char **argv) {
                speed_up);
         if (speed_up < 0.5) {
             printf("The nested vectorization schedule was supposed to be faster!\n");
-            return -1;
+            return 1;
         }
     }
 

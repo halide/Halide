@@ -2291,6 +2291,7 @@ WasmModuleContents::WasmModuleContents(
 
 #if WITH_WABT
     user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
+    user_assert(!target.has_feature(Target::WebGPU)) << "wasm_webgpu requires Emscripten (or a similar compiler); it will never be supported under JIT.";
 
     // Compile halide into wasm bytecode.
     std::vector<char> final_wasm = compile_to_wasm(halide_module, fn_name);

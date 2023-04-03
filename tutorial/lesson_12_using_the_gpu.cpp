@@ -240,7 +240,7 @@ public:
                                output(x, y, c),
                                reference_output(x, y, c),
                                x, y, c);
-                        exit(-1);
+                        exit(1);
                     }
                 }
             }

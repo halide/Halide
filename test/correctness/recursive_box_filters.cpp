@@ -35,11 +35,11 @@ int main(int argc, char **argv) {
         int correct4 = i + (i - 1) + (i - 2) + (i - 3);
         if (r0(i) != correct2) {
             printf("r0[%d] = %d instead of %d\n", i, r0(i), correct2);
-            return -1;
+            return 1;
         }
         if (r1(i) != correct4) {
             printf("r1[%d] = %d instead of %d\n", i, r1(i), correct4);
-            return -1;
+            return 1;
         }
     }
 

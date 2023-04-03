@@ -2751,9 +2751,14 @@ void CodeGen_LLVM::visit(const Call *op) {
         string b_name = unique_name('b');
         Expr a_var = Variable::make(op->args[0].type(), a_name);
         Expr b_var = Variable::make(op->args[1].type(), b_name);
+        Expr cond = a_var < b_var;
+        // Cast to unsigned because we want wrapping semantics on the subtract
+        // in the signed case.
+        a_var = cast(op->type, a_var);
+        b_var = cast(op->type, b_var);
         codegen(Let::make(a_name, op->args[0],
                           Let::make(b_name, op->args[1],
-                                    Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
+                                    Select::make(cond, b_var - a_var, a_var - b_var))));
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         // See if we can rewrite it to something faster (e.g. a shift)
         Expr e = lower_int_uint_div(op->args[0], op->args[1], /** round to zero */ true);
@@ -4183,7 +4188,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         binop = Or::make;
         break;
     case VectorReduce::SaturatingAdd:
-        binop = saturating_add;
+        binop = Halide::saturating_add;
         break;
     }
 

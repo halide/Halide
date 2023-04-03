@@ -45,7 +45,7 @@ void check(MemoryType t1, MemoryType t2, MemoryType t3) {
     if (mallocs != expected_mallocs) {
         std::cerr << "Wrong number of mallocs for " << t1 << ", " << t2 << ", " << t3 << "\n"
                   << "Expected " << expected_mallocs << " got " << mallocs << "\n";
-        exit(-1);
+        exit(1);
     }
 }
 

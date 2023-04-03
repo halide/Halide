@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
             if (input(x, y) != levels[0](x, y)) {
                 printf("input(%d, %d) = %f, but levels[0](%d, %d) = %f\n",
                        x, y, input(x, y), x, y, levels[0](x, y));
-                return -1;
+                return 1;
             }
         }
     }
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("levels[%d](%d, %d) = %f instead of %f\n",
                            l, x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

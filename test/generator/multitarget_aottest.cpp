@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
 
     if (HalideTest::multitarget(output) != 0) {
         printf("Error at multitarget\n");
-        return -1;
+        return 1;
     }
 
     // Verify output.
@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
             const uint32_t actual = output(x, y);
             if (actual != expected) {
                 printf("Error at %d, %d: expected %x, got %x\n", x, y, expected, actual);
-                return -1;
+                return 1;
             }
         }
     }
@@ -84,12 +84,12 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 10; ++i) {
         if (HalideTest::multitarget(output) != 0) {
             printf("Error at multitarget\n");
-            return -1;
+            return 1;
         }
     }
     if (can_use_count != 1) {
         printf("Error: halide_can_use_target_features was called %d times!\n", (int)can_use_count);
-        return -1;
+        return 1;
     }
 
     {
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
         int result = HalideTest::multitarget(bad_type);
         if (result != halide_error_code_bad_type) {
             printf("Error: expected to fail with halide_error_code_bad_type (%d) but actually got %d!\n", (int)halide_error_code_bad_type, result);
-            return -1;
+            return 1;
         }
     }
 

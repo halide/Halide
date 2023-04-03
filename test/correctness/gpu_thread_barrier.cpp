@@ -38,7 +38,7 @@ public:
 
         if (c.count != correct) {
             printf("There were %d barriers. There were supposed to be %d\n", c.count, correct);
-            exit(-1);
+            exit(1);
         }
 
         return s;
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
                 if (out(x, y) != correct) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, out(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

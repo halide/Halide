@@ -7,6 +7,7 @@
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_WebGPU_Dev.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -253,20 +254,29 @@ class InjectGpuOffload : public IRMutator {
 public:
     InjectGpuOffload(const Target &target)
         : target(target) {
+        Target device_target = target;
+        // For the GPU target we just want to pass the flags, to avoid the
+        // generated kernel code unintentionally having any dependence on the
+        // host arch or os.
+        device_target.os = Target::OSUnknown;
+        device_target.arch = Target::ArchUnknown;
         if (target.has_feature(Target::OpenGLCompute)) {
-            cgdev[DeviceAPI::OpenGLCompute] = new_CodeGen_OpenGLCompute_Dev(target);
+            cgdev[DeviceAPI::OpenGLCompute] = new_CodeGen_OpenGLCompute_Dev(device_target);
         }
         if (target.has_feature(Target::CUDA)) {
-            cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(target);
+            cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target);
         }
         if (target.has_feature(Target::OpenCL)) {
-            cgdev[DeviceAPI::OpenCL] = new_CodeGen_OpenCL_Dev(target);
+            cgdev[DeviceAPI::OpenCL] = new_CodeGen_OpenCL_Dev(device_target);
         }
         if (target.has_feature(Target::Metal)) {
-            cgdev[DeviceAPI::Metal] = new_CodeGen_Metal_Dev(target);
+            cgdev[DeviceAPI::Metal] = new_CodeGen_Metal_Dev(device_target);
         }
         if (target.has_feature(Target::D3D12Compute)) {
-            cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(target);
+            cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(device_target);
+        }
+        if (target.has_feature(Target::WebGPU)) {
+            cgdev[DeviceAPI::WebGPU] = new_CodeGen_WebGPU_Dev(device_target);
         }
 
         internal_assert(!cgdev.empty()) << "Requested unknown GPU target: " << target.to_string() << "\n";

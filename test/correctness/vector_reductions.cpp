@@ -139,7 +139,7 @@ void add_tasks(const Target &target, std::vector<Task> &tasks) {
                                     << "Reducing from " << src_type.with_lanes(src_lanes)
                                     << " to " << dst_type.with_lanes(dst_lanes) << "\n"
                                     << "RHS: " << f.update_value() << "\n";
-                                exit(-1);
+                                exit(1);
                             }
                         };
                         tasks.push_back({target, fn});

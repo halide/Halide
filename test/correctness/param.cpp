@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
                 for (int i = 0; i < 1024; i++) {
                     printf("%d %d\n", out_17(i), out_123(i));
                 }
-                return -1;
+                return 1;
             }
         }
     }
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
                 for (int i = 0; i < 1024; i++) {
                     printf("%d %d\n", out_17(i), out_123(i));
                 }
-                return -1;
+                return 1;
             }
         }
     }

@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "printer.h"
 
 extern "C" {
 
@@ -77,19 +78,19 @@ WEAK int halide_opengl_create_context(void *user_context) {
 
     if (glXGetCurrentContext()) {
         // Already have a context
-        return 0;
+        return halide_error_code_success;
     }
 
     void *dpy = XOpenDisplay(nullptr);
     if (!dpy) {
-        halide_error(user_context, "Could not open X11 display.\n");
-        return -1;
+        error(user_context) << "Could not open X11 display.";
+        return halide_error_code_generic_error;
     }
 
     // GLX supported?
     if (!glXQueryExtension(dpy, nullptr, nullptr)) {
-        halide_error(user_context, "GLX not supported by X server.\n");
-        return -1;
+        error(user_context) << "GLX not supported by X server.";
+        return halide_error_code_generic_error;
     }
 
     int screen = XDefaultScreen(dpy);
@@ -104,8 +105,8 @@ WEAK int halide_opengl_create_context(void *user_context) {
     int num_configs = 0;
     void **fbconfigs = glXChooseFBConfig(dpy, screen, attribs, &num_configs);
     if (!num_configs) {
-        halide_error(user_context, "Could not get framebuffer config.\n");
-        return -1;
+        error(user_context) << "Could not get framebuffer config.";
+        return halide_error_code_generic_error;
     }
     void *fbconfig = fbconfigs[0];
 
@@ -132,8 +133,8 @@ WEAK int halide_opengl_create_context(void *user_context) {
         context = glXCreateNewContext(dpy, fbconfig, GLX_RGBA_TYPE, share_list, direct);
     }
     if (!context) {
-        halide_error(user_context, "Could not create OpenGL context.\n");
-        return -1;
+        error(user_context) << "Could not create OpenGL context.";
+        return halide_error_code_generic_error;
     }
 
     int pbuffer_attribs[] = {
@@ -146,10 +147,10 @@ WEAK int halide_opengl_create_context(void *user_context) {
     XSync(dpy, 0);
 
     if (!glXMakeContextCurrent(dpy, pbuffer, pbuffer, context)) {
-        halide_error(user_context, "Could not make context current.\n");
-        return -1;
+        error(user_context) << "Could not make context current.";
+        return halide_error_code_generic_error;
     }
 
-    return 0;
+    return halide_error_code_success;
 }
 }

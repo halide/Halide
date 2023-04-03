@@ -155,7 +155,7 @@ int main() {
         const float16_t v(test.val);
         if (v.to_bits() != test.bits) {
             printf("Rounding error: %f -> %u instead of %u\n", test.val, v.to_bits(), test.bits);
-            return -1;
+            return 1;
         }
     }
 

@@ -3,6 +3,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().has_feature(Target::WebGPU)) {
+        printf("[SKIP] WebGPU will (incorrectly) fail here because 8-bit types are currently emulated using atomics.\n");
+        return 0;
+    }
+
     int img_size = 10000;
     int hist_size = 7;
 

@@ -1117,8 +1117,11 @@ enum halide_error_code_t {
      * violates a Halide invariant. */
     halide_error_code_no_device_interface = -19,
 
-    /* unused = -20, */
-    /* unused = -21, */
+    /** This part of the Halide runtime is unimplemented on this platform. */
+    halide_error_code_unimplemented = -20,
+
+    /** A runtime symbol could not be loaded. */
+    halide_error_code_symbol_not_found = -21,
 
     /** There is a bug in the Halide compiler. */
     halide_error_code_internal_error = -22,
@@ -1148,9 +1151,11 @@ enum halide_error_code_t {
     /** At least one of the buffer's extents are negative. */
     halide_error_code_buffer_extents_negative = -28,
 
-    halide_error_code_unused_29 = -29,
+    /** Call(s) to a GPU backend API failed. */
+    halide_error_code_gpu_device_error = -29,
 
-    halide_error_code_unused_30 = -30,
+    /** Failure recording trace packets for one of the halide_target_feature_trace features. */
+    halide_error_code_trace_failed = -30,
 
     /** A specialize_fail() schedule branch was selected at runtime. */
     halide_error_code_specialize_fail = -31,
@@ -1376,6 +1381,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_wasm_sat_float_to_int,  ///< Enable saturating (nontrapping) float-to-int instructions for WebAssembly codegen.
     halide_target_feature_wasm_threads,           ///< Enable use of threads in WebAssembly codegen. Requires the use of a wasm runtime that provides pthread-compatible wrappers (typically, Emscripten with the -pthreads flag). Unsupported under WASI.
     halide_target_feature_wasm_bulk_memory,       ///< Enable +bulk-memory instructions for WebAssembly codegen.
+    halide_target_feature_webgpu,                 ///< Enable the WebGPU runtime.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
     halide_target_feature_egl,                    ///< Force use of EGL support.
@@ -1749,7 +1755,7 @@ void halide_register_argv_and_metadata(
  * alongside the pipeline. */
 
 /** Per-Func state tracked by the sampling profiler. */
-struct halide_profiler_func_stats {
+struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
 
@@ -1777,7 +1783,7 @@ struct halide_profiler_func_stats {
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
  * in a linked list. */
-struct halide_profiler_pipeline_stats {
+struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
     /** Total time spent inside this pipeline (in nanoseconds) */
     uint64_t time;
 
@@ -1951,7 +1957,12 @@ extern double halide_float16_bits_to_double(uint16_t);
  *
  * If set to false, releases all unused device allocations back to the
  * underlying device APIs. For finer-grained control, see specific
- * methods in each device api runtime. */
+ * methods in each device api runtime.
+ *
+ * Note that if the flag is set to true, this call *must* succeed and return
+ * a value of halide_error_code_success (i.e., zero); if you replace
+ * the implementation of this call in the runtime, you must honor this contract.
+ * */
 extern int halide_reuse_device_allocations(void *user_context, bool);
 
 /** Determines whether on device_free the memory is returned

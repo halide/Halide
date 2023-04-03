@@ -375,6 +375,11 @@ public:
         for (const auto &t : targets_to_test) {
             SIMDOpCheckT test(t);
 
+            if (!t.supported()) {
+                std::cout << "Halide was compiled without support for " << t.to_string() << ". Skipping.\n";
+                continue;
+            }
+
             if (argc > 1) {
                 test.filter = argv[1];
             }
@@ -401,7 +406,7 @@ public:
             compile_standalone_runtime(test.output_directory + "simd_op_check_runtime.o", test.target);
 
             if (!success) {
-                return -1;
+                return 1;
             }
         }
 

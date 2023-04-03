@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
             float correct = i * j + 2.4f;
             if (fabs(imf(i, j) - correct) > 0.001f) {
                 printf("imf[%d, %d] = %f instead of %f\n", i, j, imf(i, j), correct);
-                return -1;
+                return 1;
             }
         }
     }

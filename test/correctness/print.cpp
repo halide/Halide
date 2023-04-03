@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 
         for (int32_t i = 0; i < 10; i++) {
             if (result(i) != i * i) {
-                return -1;
+                return 1;
             }
         }
 
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
 
         for (int32_t i = 0; i < 10; i++) {
             if (result(i) != i * i) {
-                return -1;
+                return 1;
             }
         }
 
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
         Buffer<uint64_t> result = f.realize({1});
 
         if (result(0) != 100) {
-            return -1;
+            return 1;
         }
 
         assert(messages.back().size() == 8191);
@@ -173,7 +173,7 @@ int main(int argc, char **argv) {
             if (!strcmp(correct, "-nan\n")) strcpy(correct, "nan\n");
             if (messages[i] != correct) {
                 printf("float %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, imf(i));
-                return -1;
+                return 1;
             }
         }
 
@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
             if (!strcmp(correct, "-nan\n")) strcpy(correct, "nan\n");
             if (messages[i] != correct) {
                 printf("double %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, img(i));
-                return -1;
+                return 1;
             }
         }
     }

@@ -73,32 +73,32 @@ int main(int argc, char **argv) {
                result,
                halide_error_code_out_of_memory,
                halide_error_code_device_malloc_failed);
-        return -1;
+        return 1;
     }
 
     if (failed_mallocs != 1) {
         printf("One of the mallocs was supposed to fail\n");
-        return -1;
+        return 1;
     }
 
     if (successful_mallocs != 1) {
         printf("One of the mallocs was supposed to succeed\n");
-        return -1;
+        return 1;
     }
 
     if (frees != 1) {
         printf("The successful malloc should have been freed\n");
-        return -1;
+        return 1;
     }
 
     if (errors != 1) {
         printf("%d errors. There was supposed to be one error\n", errors);
-        return -1;
+        return 1;
     }
 
     if (device_mallocs != device_frees) {
         printf("There were a different number of device mallocs (%d) and frees (%d)\n", device_mallocs, device_frees);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");
