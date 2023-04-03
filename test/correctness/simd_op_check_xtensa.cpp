@@ -172,7 +172,7 @@ int main(int argc, char **argv) {
     printf("host is:      %s\n", host.to_string().c_str());
     printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
 
-    if (!hl_target.arch != Target::Xtensa) {
+    if (hl_target.arch != Target::Xtensa) {
         printf("[SKIP] Skipping the simd_op_check_xtensa test, because target is not Xtensa\n");
         return 0;
     }
