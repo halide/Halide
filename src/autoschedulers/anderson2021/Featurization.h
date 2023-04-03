@@ -431,7 +431,6 @@ struct ScheduleFeatures {
         for (size_t i = 0; i < n_features; i++) {
             if ((*this)[i] != other[i]) {
                 return false;
-
             }
         }
         return true;
