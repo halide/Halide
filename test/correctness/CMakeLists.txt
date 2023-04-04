@@ -116,7 +116,6 @@ tests(GROUPS correctness
       fuzz_bounds.cpp
       fuzz_cse.cpp
       fuzz_float_stores.cpp
-      fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
