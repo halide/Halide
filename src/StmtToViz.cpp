@@ -1951,7 +1951,7 @@ private:
                 // Update op to the nested if for next loop iteration
                 op = nested_if;
 
-            } else { // Otherwise, print it and we are done!
+            } else {  // Otherwise, print it and we are done!
 
                 int else_id = gen_unique_id();
 
