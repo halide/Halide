@@ -68,8 +68,8 @@ $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT): \
 				$(SRC)/Cache.cpp \
 				$(SRC)/DefaultCostModel.h \
 				$(SRC)/DefaultCostModel.cpp \
-				$(SRC)/Weights.h \
-				$(SRC)/Weights.cpp \
+				$(COMMON_DIR)/Weights.h \
+				$(COMMON_DIR)/Weights.cpp \
 				$(SRC)/FunctionDAG.h \
 				$(SRC)/FunctionDAG.cpp \
 				$(SRC)/LoopNest.h \
@@ -79,38 +79,38 @@ $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT): \
 				$(SRC)/State.h \
 				$(SRC)/State.cpp \
 				$(SRC)/Timer.h \
-				$(SRC)/PerfectHashMap.h \
+				$(COMMON_DIR)/PerfectHashMap.h \
 				$(AUTOSCHED_WEIGHT_OBJECTS) \
 				$(AUTOSCHED_COST_MODEL_LIBS) \
 				$(BIN)/auto_schedule_runtime.a \
 				| $(LIB_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB) -I $(SRC)
 
 $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 				$(COMMON_DIR)/ASLog.cpp \
 				$(SRC)/DefaultCostModel.h \
 				$(SRC)/DefaultCostModel.cpp \
-				$(SRC)/Weights.h \
-				$(SRC)/Weights.cpp \
+				$(COMMON_DIR)/Weights.h \
+				$(COMMON_DIR)/Weights.cpp \
 				$(SRC)/CostModel.h \
 				$(SRC)/NetworkSize.h \
 				$(AUTOSCHED_COST_MODEL_LIBS) \
 				$(AUTOSCHED_WEIGHT_OBJECTS) \
 				$(BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_OPEN_MP) $(HALIDE_RPATH_FOR_BIN)
+	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_OPEN_MP) $(HALIDE_RPATH_FOR_BIN) -I $(SRC)
 
-$(BIN)/featurization_to_sample: $(SRC)/featurization_to_sample.cpp
+$(BIN)/featurization_to_sample: $(COMMON_DIR)/featurization_to_sample.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OPTIMIZE) -o $@ 
 
-$(BIN)/get_host_target: $(SRC)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
+$(BIN)/get_host_target: $(COMMON_DIR)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) $(OPTIMIZE) -o $@ $(HALIDE_RPATH_FOR_BIN)
-$(BIN)/weightsdir_to_weightsfile: $(SRC)/weightsdir_to_weightsfile.cpp $(SRC)/Weights.cpp
+$(BIN)/weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(COMMON_DIR)/Weights.cpp
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@
+	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@ -I $(SRC)
 
 .PHONY: clean
 
