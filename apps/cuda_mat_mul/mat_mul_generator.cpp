@@ -34,28 +34,38 @@ public:
         Var xi, yi, xio, xii, yii, xo, yo, x_pair, xiio, ty;
         RVar rxo, rxi;
 
-        out.bound(x, 0, size)
-            .bound(y, 0, size)
-            .tile(x, y, xi, yi, 64, 16)
-            .tile(xi, yi, xii, yii, 4, 8)
-            .gpu_blocks(x, y)
-            .gpu_threads(xi, yi)
-            .unroll(xii)
-            .unroll(yii);
-        prod.compute_at(out, xi)
-            .vectorize(x)
-            .unroll(y)
-            .update()
-            .reorder(x, y, r)
-            .vectorize(x)
-            .unroll(y)
-            .unroll(r, 8);
-        A.in().compute_at(prod, r).vectorize(_0).unroll(_1);
-        B.in().compute_at(prod, r).vectorize(_0).unroll(_1);
+        if (!using_autoscheduler()) {
+            out.bound(x, 0, size)
+                .bound(y, 0, size)
+                .tile(x, y, xi, yi, 64, 16)
+                .tile(xi, yi, xii, yii, 4, 8)
+                .gpu_blocks(x, y)
+                .gpu_threads(xi, yi)
+                .unroll(xii)
+                .unroll(yii);
+            prod.compute_at(out, xi)
+                .vectorize(x)
+                .unroll(y)
+                .update()
+                .reorder(x, y, r)
+                .vectorize(x)
+                .unroll(y)
+                .unroll(r, 8);
+            A.in().compute_at(prod, r).vectorize(_0).unroll(_1);
+            B.in().compute_at(prod, r).vectorize(_0).unroll(_1);
 
-        set_alignment_and_bounds(A, size);
-        set_alignment_and_bounds(B, size);
-        set_alignment_and_bounds(out, size);
+            set_alignment_and_bounds(A, size);
+            set_alignment_and_bounds(B, size);
+            set_alignment_and_bounds(out, size);
+        } else {
+            A.dim(0).set_estimate(0, size).dim(1).set_estimate(0, size);
+            B.dim(0).set_estimate(0, size).dim(1).set_estimate(0, size);
+        }
+
+        // Always specify bounds for outputs, whether autoscheduled or not
+        out
+            .bound(x, 0, size)
+            .bound(y, 0, size);
     }
 };
 
