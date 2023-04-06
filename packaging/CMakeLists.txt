@@ -79,7 +79,7 @@ else ()
     set(rbase $ORIGIN)
 endif ()
 
-foreach (util IN ITEMS adams2019_retrain_cost_model adams2019_featurization_to_sample adams2019_get_host_target adams2019_weightsdir_to_weightsfile)
+foreach (util IN ITEMS adams2019_retrain_cost_model featurization_to_sample get_host_target adams2019_weightsdir_to_weightsfile)
     if (TARGET ${util})
         if (NOT CMAKE_INSTALL_RPATH)
             set_target_properties(${util} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
@@ -121,7 +121,7 @@ install(DIRECTORY ${Halide_SOURCE_DIR}/tools/
         PATTERN "build_halide_h.cpp" EXCLUDE
         PATTERN "find_inverse.cpp" EXCLUDE)
 
-install(PROGRAMS ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
+install(PROGRAMS ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/adams2019_autotune_loop.sh
         DESTINATION ${Halide_INSTALL_TOOLSDIR}
         COMPONENT Halide_Development)
 

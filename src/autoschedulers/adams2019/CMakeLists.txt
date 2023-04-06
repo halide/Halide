@@ -71,7 +71,7 @@ if (APPLE AND num_archs GREATER 1)
     )
 endif ()
 
-# retrain_cost_model
+# adams2019_retrain_cost_model
 if (WITH_UTILS)
     add_executable(adams2019_retrain_cost_model
                    DefaultCostModel.cpp
@@ -106,10 +106,10 @@ target_link_libraries(Halide_Adams2019 PRIVATE ASLog ParamParser adams2019_cost_
 # TODO(#4053): implement auto-tuning support in CMake?
 
 if (WITH_UTILS)
-    add_executable(adams2019_featurization_to_sample featurization_to_sample.cpp)
+    add_executable(featurization_to_sample featurization_to_sample.cpp)
 
-    add_executable(adams2019_get_host_target get_host_target.cpp)
-    target_link_libraries(adams2019_get_host_target PRIVATE Halide::Halide)
+    add_executable(get_host_target get_host_target.cpp)
+    target_link_libraries(get_host_target PRIVATE Halide::Halide)
 
     add_executable(adams2019_weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp Weights.cpp)
     target_link_libraries(adams2019_weightsdir_to_weightsfile PRIVATE Halide::Runtime)
