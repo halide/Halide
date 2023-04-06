@@ -87,7 +87,7 @@ $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT): \
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
 
-$(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
+$(BIN)/adams2019_retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 				$(COMMON_DIR)/ASLog.cpp \
 				$(SRC)/DefaultCostModel.h \
 				$(SRC)/DefaultCostModel.cpp \
@@ -108,7 +108,7 @@ $(BIN)/featurization_to_sample: $(SRC)/featurization_to_sample.cpp
 $(BIN)/get_host_target: $(SRC)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) $(OPTIMIZE) -o $@ $(HALIDE_RPATH_FOR_BIN)
-$(BIN)/weightsdir_to_weightsfile: $(SRC)/weightsdir_to_weightsfile.cpp $(SRC)/Weights.cpp
+$(BIN)/adams2019_weightsdir_to_weightsfile: $(SRC)/weightsdir_to_weightsfile.cpp $(SRC)/Weights.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@
 

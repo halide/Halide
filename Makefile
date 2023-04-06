@@ -2381,12 +2381,12 @@ endif
 # Adams2019 also includes autotuning tools
 $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_adams2019.$(PLUGIN_EXT)
 	@mkdir -p $(@D)
-	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/retrain_cost_model $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/adams2019_retrain_cost_model $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	cp $< $(DISTRIB_DIR)/lib/
-	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
+	for TOOL in adams2019_retrain_cost_model featurization_to_sample get_host_target; do \
 		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
 	done
-	cp $(SRC_DIR)/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
+	cp $(SRC_DIR)/autoschedulers/adams2019/adams2019_autotune_loop.sh $(DISTRIB_DIR)/tools/
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
