@@ -112,7 +112,7 @@
         "WITH_TESTS": "NO",
         "WITH_TUTORIALS": "NO",
         "WITH_DOCS": "YES",
-        "WITH_UTILS": "NO",
+        "WITH_UTILS": "YES",
         "WITH_PYTHON_BINDINGS": "NO",
         "CMAKE_INSTALL_DATADIR": "share/Halide"
       }
