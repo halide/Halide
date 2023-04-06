@@ -37,7 +37,7 @@ class IRVisualizer;
  * cost through simple op-counting and data-movement cost
  * by counting the number of bits being moved.
  */
- class IRCostModel : public IRVisitor {
+class IRCostModel : public IRVisitor {
 public:
     IRCostModel()
         : max_compute_cost(-1), max_data_cost(-1), max_compute_cost_inclusive(-1),
@@ -514,7 +514,6 @@ private:
     }
 };
 
-
 /** GetAssemblyInfo
  * Used to map some Halide IR nodes to line-numbers in the
  * assembly file containing the corresponding generated code.
@@ -619,7 +618,7 @@ private:
 /** HTMLCodePrinter
  * Prints IR code in HTML. Very similar to generating a stmt
  * file, except that the generated html is more interactive.
- */ 
+ */
 template<typename T>
 class HTMLCodePrinter : public IRVisitor {
 public:
@@ -925,7 +924,7 @@ private:
                << "</button>";
     }
 
-    // CUDA kernels are embedded into modules as PTX assembly. This 
+    // CUDA kernels are embedded into modules as PTX assembly. This
     // routine pretty - prints that assembly format.
     void print_cuda_gpu_source_kernels(const std::string &str) {
         print_opening_tag("code", "ptx");
@@ -2126,7 +2125,7 @@ private:
  * an abstracted version of the code, highlighting the higher
  * level execution pipeline along with key properties of the
  * computation performed at each stage.
- */ 
+ */
 class HTMLVisualizationPrinter : public IRVisitor {
 public:
     explicit HTMLVisualizationPrinter(std::ofstream &os)
@@ -2707,7 +2706,7 @@ private:
  * Generates the output html page. Currently the html page has
  * three key tabs: IR code, Visualized pipeline and the generated
  * assembly.
- */ 
+ */
 class IRVisualizer {
 public:
     // Construct the visualizer and point it to the output file
