@@ -32,7 +32,7 @@ install(TARGETS Halide Halide_Generator Halide_LanguageOptions
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 if (TARGET Halide_Adams2019)
-    install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016
+    install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_Anderson2021
             EXPORT Halide_Interfaces
             LIBRARY DESTINATION ${Halide_INSTALL_PLUGINDIR} COMPONENT Halide_Runtime
             NAMELINK_COMPONENT Halide_Development)
@@ -79,7 +79,12 @@ else ()
     set(rbase $ORIGIN)
 endif ()
 
-foreach (util IN ITEMS adams2019_retrain_cost_model adams2019_featurization_to_sample adams2019_get_host_target adams2019_weightsdir_to_weightsfile)
+foreach (util IN ITEMS adams2019_retrain_cost_model
+                       adams2019_weightsdir_to_weightsfile
+                       anderson2021_retrain_cost_model
+                       anderson2021_weightsdir_to_weightsfile
+                       featurization_to_sample
+                       get_host_target)
     if (TARGET ${util})
         if (NOT CMAKE_INSTALL_RPATH)
             set_target_properties(${util} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
@@ -121,7 +126,8 @@ install(DIRECTORY ${Halide_SOURCE_DIR}/tools/
         PATTERN "build_halide_h.cpp" EXCLUDE
         PATTERN "find_inverse.cpp" EXCLUDE)
 
-install(PROGRAMS ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
+install(PROGRAMS ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/adams2019_autotune_loop.sh
+                 ${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021/anderson2021_autotune_loop.sh
         DESTINATION ${Halide_INSTALL_TOOLSDIR}
         COMPONENT Halide_Development)
 

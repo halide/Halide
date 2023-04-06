@@ -36,23 +36,23 @@ $(BIN)/baseline_weights.o: $(BIN)/baseline_weights.cpp
 	$(CXX) -c $< -o $@
 
 AUTOSCHED_COST_MODEL_LIBS=\
-$(BIN)/cost_model/adams2019_cost_model.a \
-$(BIN)/cost_model/adams2019_train_cost_model.a \
+$(BIN)/adams2019_cost_model/adams2019_cost_model.a \
+$(BIN)/adams2019_cost_model/adams2019_train_cost_model.a \
 
-$(BIN)/cost_model.generator: $(SRC)/cost_model_generator.cpp \
+$(BIN)/adams2019_cost_model.generator: $(SRC)/cost_model_generator.cpp \
 				$(SRC)/cost_model_schedule.h \
 				$(SRC)/NetworkSize.h \
 				$(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(USE_EXPORT_DYNAMIC) $(LIBHALIDE_LDFLAGS)
 
-$(BIN)/auto_schedule_runtime.a: $(BIN)/cost_model.generator
+$(BIN)/auto_schedule_runtime.a: $(BIN)/adams2019_cost_model.generator
 	@mkdir -p $(@D)
 	$^ -r auto_schedule_runtime -o $(BIN) target=$(HL_TARGET)
 
-$(BIN)/cost_model/adams2019_%.a: $(BIN)/cost_model.generator
+$(BIN)/adams2019_cost_model/adams2019_%.a: $(BIN)/adams2019_cost_model.generator
 	@mkdir -p $(@D)
-	$^ -g $* -o $(BIN)/cost_model -f $* -n adams2019_$* target=$(HL_TARGET)-no_runtime -e stmt,static_library,h,assembly
+	$^ -g $* -o $(BIN)/adams2019_cost_model -f $* -n adams2019_$* target=$(HL_TARGET)-no_runtime -e stmt,static_library,h,assembly
 
 # It's important to use dynamic lookups for undefined symbols here: all of libHalide
 # is expected to be present (in the loading binary), so we explicitly make the symbols
@@ -68,8 +68,8 @@ $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT): \
 				$(SRC)/Cache.cpp \
 				$(SRC)/DefaultCostModel.h \
 				$(SRC)/DefaultCostModel.cpp \
-				$(COMMON_DIR)/Weights.h \
-				$(COMMON_DIR)/Weights.cpp \
+				$(SRC)/Weights.h \
+				$(SRC)/Weights.cpp \
 				$(SRC)/FunctionDAG.h \
 				$(SRC)/FunctionDAG.cpp \
 				$(SRC)/LoopNest.h \
@@ -85,30 +85,23 @@ $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT): \
 				$(BIN)/auto_schedule_runtime.a \
 				| $(LIB_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB) -I $(SRC)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/adams2019_cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB) -I $(SRC)
 
-$(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
+$(BIN)/adams2019_retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 				$(COMMON_DIR)/ASLog.cpp \
 				$(SRC)/DefaultCostModel.h \
 				$(SRC)/DefaultCostModel.cpp \
-				$(COMMON_DIR)/Weights.h \
-				$(COMMON_DIR)/Weights.cpp \
+				$(SRC)/Weights.h \
+				$(SRC)/Weights.cpp \
 				$(SRC)/CostModel.h \
 				$(SRC)/NetworkSize.h \
 				$(AUTOSCHED_COST_MODEL_LIBS) \
 				$(AUTOSCHED_WEIGHT_OBJECTS) \
 				$(BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_OPEN_MP) $(HALIDE_RPATH_FOR_BIN) -I $(SRC)
+	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(BIN)/adams2019_cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_OPEN_MP) $(HALIDE_RPATH_FOR_BIN) -I $(SRC)
 
-$(BIN)/featurization_to_sample: $(COMMON_DIR)/featurization_to_sample.cpp
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $< $(OPTIMIZE) -o $@ 
-
-$(BIN)/get_host_target: $(COMMON_DIR)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) $(OPTIMIZE) -o $@ $(HALIDE_RPATH_FOR_BIN)
-$(BIN)/weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(COMMON_DIR)/Weights.cpp
+$(BIN)/adams2019_weightsdir_to_weightsfile: $(SRC)/weightsdir_to_weightsfile.cpp $(SRC)/Weights.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@ -I $(SRC)
 

@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     AutoschedulerParams params = {"Anderson2021", {{"parallelism", std::to_string(hardware_parallelism)}}};
 
     // Use a fixed target for the analysis to get consistent results from this test.
-    Target target("x86-64-linux-sse41-avx-avx2-cuda");
+    Target target("x86-64-linux-sse41-avx-avx2-cuda-debug");
 
     Var x("x"), y("y");
 
