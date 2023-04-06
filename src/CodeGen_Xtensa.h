@@ -75,18 +75,7 @@ protected:
     std::set<std::string> external_buffers;
 
     template<typename T>
-    bool is_native_xtensa_vector(halide_type_t op_type) const {
-        constexpr halide_type_t cpp_type = halide_type_of<T>();
-        return op_type == cpp_type.with_lanes(target.natural_vector_size<T>());
-    }
-
-    template<>
-    bool is_native_xtensa_vector<int64_t>(halide_type_t op_type) const {
-        constexpr halide_type_t cpp_type = halide_type_of<int64_t>();
-        // On Xtensa int64 vectors are *wide* vectors, so the number of lanes match
-        // the number of lanes for 32-bit vectors.
-        return op_type == cpp_type.with_lanes(target.natural_vector_size<int32_t>());
-    }
+    bool is_native_xtensa_vector(halide_type_t op_type) const;
 
     halide_type_t get_native_xtensa_vector(const halide_type_t &t) const;
 
@@ -101,6 +90,23 @@ protected:
 
     const std::unordered_map<std::string, std::string> op_name_to_intrinsic;
 };
+
+// The C++ standard does not allow explicit specialization of a member of a class at class scope;
+// Clang will let you get away with it, but GCC and MSVC won't.
+
+template<typename T>
+inline bool CodeGen_Xtensa::is_native_xtensa_vector(halide_type_t op_type) const {
+    constexpr halide_type_t cpp_type = halide_type_of<T>();
+    return op_type == cpp_type.with_lanes(target.natural_vector_size<T>());
+}
+
+template<>
+inline bool CodeGen_Xtensa::is_native_xtensa_vector<int64_t>(halide_type_t op_type) const {
+    constexpr halide_type_t cpp_type = halide_type_of<int64_t>();
+    // On Xtensa int64 vectors are *wide* vectors, so the number of lanes match
+    // the number of lanes for 32-bit vectors.
+    return op_type == cpp_type.with_lanes(target.natural_vector_size<int32_t>());
+}
 
 }  // namespace Internal
 }  // namespace Halide
