@@ -575,7 +575,7 @@ private:
 
     std::regex gen_loop_asm_marker(int id, const std::string &loop_var) {
         std::regex dollar("\\$");
-        std::string marker = "%\"" + std::to_string(id) + "_for " + loop_var;
+        std::string marker = "%\"" + std::to_string(id) + "_for_" + loop_var;
         marker = std::regex_replace(marker, dollar, "\\$");
         return std::regex(marker);
     }
@@ -588,7 +588,7 @@ private:
 
     std::regex gen_prodcons_asm_marker(int id, const std::string &var, bool is_producer) {
         std::regex dollar("\\$");
-        std::string marker = "%\"" + std::to_string(id) + (is_producer ? "_produce " : "_consume ") + var;
+        std::string marker = "%\"" + std::to_string(id) + (is_producer ? "_produce_" : "_consume_") + var;
         marker = std::regex_replace(marker, dollar, "\\$");
         return std::regex(marker);
     }
@@ -2533,16 +2533,15 @@ private:
         print_if_tree_node(op->then_case, op->condition, "If: ");
 
         // `else if` cases
-        Stmt else_case = op->else_case;
-        const IfThenElse *nested_if;
-        while (else_case.defined() && (nested_if = else_case.as<IfThenElse>())) {
-            print_if_tree_node(nested_if->then_case, op->condition, "Else If: ");
-            else_case = nested_if->else_case;
+        const IfThenElse *nested_if = op;
+        while (nested_if->else_case.defined() && (nested_if->else_case.as<IfThenElse>())) {
+            nested_if = nested_if->else_case.as<IfThenElse>();
+            print_if_tree_node(nested_if->then_case, nested_if->condition, "Else If: ");
         }
 
         // `else` case
-        if (else_case.defined()) {
-            print_if_tree_node(else_case, UIntImm::make(UInt(1), 1), "Else");
+        if (nested_if->else_case.defined()) {
+            print_if_tree_node(nested_if->else_case, UIntImm::make(UInt(1), 1), "Else");
         }
 
         print_closing_tag("ul");
