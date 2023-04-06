@@ -32,11 +32,12 @@ class HTMLCodePrinter;
 class HTMLVisualizationPrinter;
 class IRVisualizer;
 
-/********************** IRCostModel **********************/
-// A basic cost model for Halide IR. Estimates computation
-// cost through simple op-counting and data-movement cost
-// by counting the number of bits being moved.
-class IRCostModel : public IRVisitor {
+/** IRCostModel
+ * A basic cost model for Halide IR. Estimates computation
+ * cost through simple op-counting and data-movement cost
+ * by counting the number of bits being moved.
+ */
+ class IRCostModel : public IRVisitor {
 public:
     IRCostModel()
         : max_compute_cost(-1), max_data_cost(-1), max_compute_cost_inclusive(-1),
@@ -44,7 +45,7 @@ public:
     }
 
     // Pre-compute all costs to avoid repeated work
-    void comput_all_costs(const Module &m) {
+    void compute_all_costs(const Module &m) {
         // Compute all node costs
         for (const auto &fn : m.functions()) {
             fn.body.accept(this);
@@ -513,9 +514,11 @@ private:
     }
 };
 
-/******************* GetAssemblyInfo *******************/
-// Used to map some Halide IR nodes to line-numbers in the
-// assembly file containing the corresponding generated code.
+
+/** GetAssemblyInfo
+ * Used to map some Halide IR nodes to line-numbers in the
+ * assembly file containing the corresponding generated code.
+ */
 class AssemblyInfo : public IRVisitor {
 public:
     AssemblyInfo()
@@ -613,9 +616,10 @@ private:
     }
 };
 
-/******************* HTMLCodePrinter Class *******************/
-// Prints IR code in HTML. Very similar to generating a stmt
-// file, except that the generated html is more interactive.
+/** HTMLCodePrinter
+ * Prints IR code in HTML. Very similar to generating a stmt
+ * file, except that the generated html is more interactive.
+ */ 
 template<typename T>
 class HTMLCodePrinter : public IRVisitor {
 public:
@@ -921,8 +925,8 @@ private:
                << "</button>";
     }
 
-    // Maaz: This is a legacy function from the old html generator. I made sure it works
-    // with the refactored code but I did not dig into why this function does what it does.
+    // CUDA kernels are embedded into modules as PTX assembly. This 
+    // routine pretty - prints that assembly format.
     void print_cuda_gpu_source_kernels(const std::string &str) {
         print_opening_tag("code", "ptx");
 
@@ -2117,11 +2121,12 @@ private:
     }
 };
 
-/************** HTMLVisualizationPrinter Class ***************/
-// Visualizes the IR in HTML. The visualization is essentially
-// an abstracted version of the code, highlighting the higher
-// level execution pipeline along with key properties of the
-// computation performed at each stage.
+/** HTMLVisualizationPrinter
+ * Visualizes the IR in HTML. The visualization is essentially
+ * an abstracted version of the code, highlighting the higher
+ * level execution pipeline along with key properties of the
+ * computation performed at each stage.
+ */ 
 class HTMLVisualizationPrinter : public IRVisitor {
 public:
     explicit HTMLVisualizationPrinter(std::ofstream &os)
@@ -2699,10 +2704,11 @@ private:
     }
 };
 
-/************** IRVisualizer Class **************/
-// Generates the output html page. Currently the html page has
-// three key tabs: IR code, Visualized pipeline and the generated
-// assembly.
+/** IRVisualizer Class
+ * Generates the output html page. Currently the html page has
+ * three key tabs: IR code, Visualized pipeline and the generated
+ * assembly.
+ */ 
 class IRVisualizer {
 public:
     // Construct the visualizer and point it to the output file
@@ -2728,7 +2734,7 @@ public:
 
         // Run the cost model over this module to pre-compute all
         // node costs
-        cost_model.comput_all_costs(m);
+        cost_model.compute_all_costs(m);
         html_code_printer.init_cost_info(cost_model);
         html_viz_printer.init_cost_info(cost_model);
 
@@ -2880,8 +2886,7 @@ private:
     }
 };
 
-/************** The external interface to this module **************/
-
+// The external interface to this module
 void print_to_viz(const std::string &filename, const Module &m) {
     IRVisualizer visualizer(filename);
     visualizer.generate_html(m);
