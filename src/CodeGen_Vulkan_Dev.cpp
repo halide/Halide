@@ -26,12 +26,6 @@ namespace {  // anonymous
 
 // --
 
-template<typename CodeGenT, typename ValueT>
-ValueT lower_int_uint_div(CodeGenT *cg, Expr a, Expr b);
-
-template<typename CodeGenT, typename ValueT>
-ValueT lower_int_uint_mod(CodeGenT *cg, Expr a, Expr b);
-
 class CodeGen_Vulkan_Dev : public CodeGen_GPU_Dev {
 public:
     CodeGen_Vulkan_Dev(Target target);
@@ -159,6 +153,15 @@ protected:
         template<typename StmtOrExpr>
         SpvFactory::BlockVariables emit_if_then_else(const Expr &condition, StmtOrExpr then_case, StmtOrExpr else_case);
 
+        template<typename T>
+        SpvId declare_constant_int(Type value_type, int64_t value);
+
+        template<typename T>
+        SpvId declare_constant_uint(Type value_type, uint64_t value);
+
+        template<typename T>
+        SpvId declare_constant_float(Type value_type, float value);
+
         // Map from Halide built-in names to extended GLSL intrinsics for SPIR-V
         using BuiltinMap = std::unordered_map<std::string, SpvId>;
         const BuiltinMap glsl_builtin = {
@@ -266,7 +269,11 @@ protected:
         using DescriptorSetTable = std::vector<DescriptorSet>;
         DescriptorSetTable descriptor_set_table;
 
-        // The workgroup size.  May vary between kernels.
+        // The workgroup size ... this indicates the extents of the 1-3 dimensional index space
+        // used as part of the kernel dispatch. It can also be used to adjust the layout for work
+        // items (aka GPU threads), based on logical groupings. If a zero sized workgroup is
+        // encountered during CodeGen, it is assumed that the extents are dynamic and specified
+        // at runtime
         uint32_t workgroup_size[3];
 
         // Current index of kernel for module
@@ -459,23 +466,39 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Variable *var) {
     builder.update_id(variable_id);
 }
 
+template<typename T>
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_constant_int(Type value_type, int64_t value) {
+    const T typed_value = (T)(value);
+    SpvId constant_id = builder.declare_constant(value_type, &typed_value);
+    builder.update_id(constant_id);
+    return constant_id;
+}
+
+template<typename T>
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_constant_uint(Type value_type, uint64_t value) {
+    const T typed_value = (T)(value);
+    SpvId constant_id = builder.declare_constant(value_type, &typed_value);
+    builder.update_id(constant_id);
+    return constant_id;
+}
+
+template<typename T>
+SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_constant_float(Type value_type, float value) {
+    const T typed_value = (T)(value);
+    SpvId constant_id = builder.declare_constant(value_type, &typed_value);
+    builder.update_id(constant_id);
+    return constant_id;
+}
+
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const IntImm *imm) {
     if (imm->type.bits() == 8) {
-        const int8_t value = (int8_t)(imm->value);
-        SpvId constant_id = builder.declare_constant(imm->type, &value);
-        builder.update_id(constant_id);
+        declare_constant_int<int8_t>(imm->type, imm->value);
     } else if (imm->type.bits() == 16) {
-        const int16_t value = (int16_t)(imm->value);
-        SpvId constant_id = builder.declare_constant(imm->type, &value);
-        builder.update_id(constant_id);
+        declare_constant_int<int16_t>(imm->type, imm->value);
     } else if (imm->type.bits() == 32) {
-        const int32_t value = (int32_t)(imm->value);
-        SpvId constant_id = builder.declare_constant(imm->type, &value);
-        builder.update_id(constant_id);
+        declare_constant_int<int32_t>(imm->type, imm->value);
     } else if (imm->type.bits() == 64) {
-        const int64_t value = (int64_t)(imm->value);
-        SpvId constant_id = builder.declare_constant(imm->type, &value);
-        builder.update_id(constant_id);
+        declare_constant_int<int64_t>(imm->type, imm->value);
     } else {
         internal_error << "Vulkan backend currently only supports 8-bit, 16-bit, 32-bit or 64-bit signed integers!\n";
     }
@@ -483,21 +506,13 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const IntImm *imm) {
 
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const UIntImm *imm) {
     if (imm->type.bits() == 8) {
-        const uint8_t value = (uint8_t)(imm->value);
-        SpvId constant_id = builder.declare_constant(imm->type, &value);
-        builder.update_id(constant_id);
+        declare_constant_uint<uint8_t>(imm->type, imm->value);
     } else if (imm->type.bits() == 16) {
-        const uint16_t value = (uint16_t)(imm->value);
-        SpvId constant_id = builder.declare_constant(imm->type, &value);
-        builder.update_id(constant_id);
+        declare_constant_uint<uint16_t>(imm->type, imm->value);
     } else if (imm->type.bits() == 32) {
-        const uint32_t value = (uint32_t)(imm->value);
-        SpvId constant_id = builder.declare_constant(imm->type, &value);
-        builder.update_id(constant_id);
+        declare_constant_uint<uint32_t>(imm->type, imm->value);
     } else if (imm->type.bits() == 64) {
-        const uint64_t value = (uint64_t)(imm->value);
-        SpvId constant_id = builder.declare_constant(imm->type, &value);
-        builder.update_id(constant_id);
+        declare_constant_uint<uint64_t>(imm->type, imm->value);
     } else {
         internal_error << "Vulkan backend currently only supports 8-bit, 16-bit, 32-bit or 64-bit unsigned integers!\n";
     }
@@ -511,24 +526,24 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const StringImm *imm) {
 void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const FloatImm *imm) {
     if (imm->type.bits() == 16) {
         if (imm->type.is_bfloat()) {
-            const bfloat16_t value = bfloat16_t(imm->value);
-            SpvId constant_id = builder.declare_constant(imm->type, &value);
-            builder.update_id(constant_id);
+            declare_constant_float<bfloat16_t>(imm->type, imm->value);
         } else {
-            const float16_t value = float16_t(imm->value);
-            SpvId constant_id = builder.declare_constant(imm->type, &value);
-            builder.update_id(constant_id);
+            declare_constant_float<float16_t>(imm->type, imm->value);
         }
     } else if (imm->type.bits() == 32) {
-        const float value = float(imm->value);
-        SpvId constant_id = builder.declare_constant(imm->type, &value);
-        builder.update_id(constant_id);
+        declare_constant_float<float>(imm->type, imm->value);
     } else if (imm->type.bits() == 64) {
-        const double value = double(imm->value);
-        SpvId constant_id = builder.declare_constant(imm->type, &value);
-        builder.update_id(constant_id);
+        declare_constant_float<double>(imm->type, imm->value);
     } else {
         internal_error << "Vulkan backend currently only supports 32-bit or 64-bit floats\n";
+    }
+}
+
+template<typename T>
+void fill_bytes_with_value(uint8_t *bytes, int count, int value) {
+    T *v = reinterpret_cast<T *>(bytes);
+    for (int i = 0; i < count; ++i) {
+        v[i] = (T)value;
     }
 }
 
@@ -536,54 +551,41 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type 
     if (!value_type.is_bool()) {
         value_id = cast_type(Bool(), value_type, value_id);
     }
+
+    const int true_value = 1;
+    const int false_value = 0;
+
     std::vector<uint8_t> true_data(target_type.bytes(), (uint8_t)0);
     std::vector<uint8_t> false_data(target_type.bytes(), (uint8_t)0);
-    for (int i = 0; i < target_type.lanes(); ++i) {
-        if (target_type.is_int_or_uint() && target_type.bits() == 8) {
-            int8_t *td = reinterpret_cast<int8_t *>(&true_data[0]);
-            int8_t *fd = reinterpret_cast<int8_t *>(&false_data[0]);
-            td[i] = (int8_t)1;
-            fd[i] = (int8_t)0;
-        } else if (target_type.is_int_or_uint() && target_type.bits() == 16) {
-            int16_t *td = reinterpret_cast<int16_t *>(&true_data[0]);
-            int16_t *fd = reinterpret_cast<int16_t *>(&false_data[0]);
-            td[i] = (int16_t)1;
-            fd[i] = (int16_t)0;
-        } else if (target_type.is_int_or_uint() && target_type.bits() == 32) {
-            int32_t *td = reinterpret_cast<int32_t *>(&true_data[0]);
-            int32_t *fd = reinterpret_cast<int32_t *>(&false_data[0]);
-            td[i] = (int32_t)1;
-            fd[i] = (int32_t)0;
-        } else if (target_type.is_int_or_uint() && target_type.bits() == 64) {
-            int64_t *td = reinterpret_cast<int64_t *>(&true_data[0]);
-            int64_t *fd = reinterpret_cast<int64_t *>(&false_data[0]);
-            td[i] = (int64_t)1;
-            fd[i] = (int64_t)0;
-        } else if (target_type.is_float() && target_type.bits() == 16) {
-            if (target_type.is_bfloat()) {
-                bfloat16_t *td = reinterpret_cast<bfloat16_t *>(&true_data[0]);
-                bfloat16_t *fd = reinterpret_cast<bfloat16_t *>(&false_data[0]);
-                td[i] = (bfloat16_t)1.0f;
-                fd[i] = (bfloat16_t)0.0f;
-            } else {
-                float16_t *td = reinterpret_cast<float16_t *>(&true_data[0]);
-                float16_t *fd = reinterpret_cast<float16_t *>(&false_data[0]);
-                td[i] = (float16_t)1.0f;
-                fd[i] = (float16_t)0.0f;
-            }
-        } else if (target_type.is_float() && target_type.bits() == 32) {
-            float *td = reinterpret_cast<float *>(&true_data[0]);
-            float *fd = reinterpret_cast<float *>(&false_data[0]);
-            td[i] = (float)1.0f;
-            fd[i] = (float)0.0f;
-        } else if (target_type.is_float() && target_type.bits() == 64) {
-            double *td = reinterpret_cast<double *>(&true_data[0]);
-            double *fd = reinterpret_cast<double *>(&false_data[0]);
-            td[i] = (double)1.0;
-            fd[i] = (double)0.0;
+
+    if (target_type.is_int_or_uint() && target_type.bits() == 8) {
+        fill_bytes_with_value<int8_t>(&true_data[0], target_type.lanes(), true_value);
+        fill_bytes_with_value<int8_t>(&false_data[0], target_type.lanes(), false_value);
+    } else if (target_type.is_int_or_uint() && target_type.bits() == 16) {
+        fill_bytes_with_value<int16_t>(&true_data[0], target_type.lanes(), true_value);
+        fill_bytes_with_value<int16_t>(&false_data[0], target_type.lanes(), false_value);
+    } else if (target_type.is_int_or_uint() && target_type.bits() == 32) {
+        fill_bytes_with_value<int32_t>(&true_data[0], target_type.lanes(), true_value);
+        fill_bytes_with_value<int32_t>(&false_data[0], target_type.lanes(), false_value);
+    } else if (target_type.is_int_or_uint() && target_type.bits() == 64) {
+        fill_bytes_with_value<int64_t>(&true_data[0], target_type.lanes(), true_value);
+        fill_bytes_with_value<int64_t>(&false_data[0], target_type.lanes(), false_value);
+    } else if (target_type.is_float() && target_type.bits() == 16) {
+        if (target_type.is_bfloat()) {
+            fill_bytes_with_value<bfloat16_t>(&true_data[0], target_type.lanes(), true_value);
+            fill_bytes_with_value<bfloat16_t>(&false_data[0], target_type.lanes(), false_value);
         } else {
-            user_error << "Unhandled type cast from value type '" << value_type << "' to target type '" << target_type << "'!";
+            fill_bytes_with_value<float16_t>(&true_data[0], target_type.lanes(), true_value);
+            fill_bytes_with_value<float16_t>(&false_data[0], target_type.lanes(), false_value);
         }
+    } else if (target_type.is_float() && target_type.bits() == 32) {
+        fill_bytes_with_value<float>(&true_data[0], target_type.lanes(), true_value);
+        fill_bytes_with_value<float>(&false_data[0], target_type.lanes(), false_value);
+    } else if (target_type.is_float() && target_type.bits() == 64) {
+        fill_bytes_with_value<double>(&true_data[0], target_type.lanes(), true_value);
+        fill_bytes_with_value<double>(&false_data[0], target_type.lanes(), false_value);
+    } else {
+        user_error << "Unhandled type cast from value type '" << value_type << "' to target type '" << target_type << "'!";
     }
 
     SpvId result_id = builder.reserve_id(SpvResultId);
@@ -1660,11 +1662,12 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const For *op) {
         // This should always be true at this point in codegen
         internal_assert(is_const_zero(op->min));
         auto intrinsic = simt_intrinsic(op->name);
+        const std::string intrinsic_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + intrinsic.first;
 
         // Intrinsics are inserted when adding the kernel
-        internal_assert(symbol_table.contains(intrinsic.first));
-        SpvId intrinsic_id = symbol_table.get(intrinsic.first).first;
-        SpvStorageClass storage_class = symbol_table.get(intrinsic.first).second;
+        internal_assert(symbol_table.contains(intrinsic_var_name));
+        SpvId intrinsic_id = symbol_table.get(intrinsic_var_name).first;
+        SpvStorageClass storage_class = symbol_table.get(intrinsic_var_name).second;
 
         // extract and cast to the extent type (which is what's expected by Halide's for loops)
         Type unsigned_type = UInt(32);
@@ -2559,10 +2562,11 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::declare_entry_point(const Stmt &s, SpvId
         SpvStorageClass storage_class = SpvStorageClassInput;
         SpvId intrinsic_type_id = builder.declare_type(Type(Type::UInt, 32, 3));
         SpvId intrinsic_ptr_type_id = builder.declare_pointer_type(intrinsic_type_id, storage_class);
-        SpvId intrinsic_var_id = builder.declare_global_variable(intrinsic_name, intrinsic_ptr_type_id, storage_class);
+        const std::string intrinsic_var_name = std::string("k") + std::to_string(kernel_index) + std::string("_") + intrinsic_name;
+        SpvId intrinsic_var_id = builder.declare_global_variable(intrinsic_var_name, intrinsic_ptr_type_id, storage_class);
         SpvId intrinsic_loaded_id = builder.reserve_id();
         builder.append(SpvFactory::load(intrinsic_type_id, intrinsic_loaded_id, intrinsic_var_id));
-        symbol_table.push(intrinsic_name, {intrinsic_loaded_id, storage_class});
+        symbol_table.push(intrinsic_var_name, {intrinsic_loaded_id, storage_class});
 
         // Annotate that this is the specific builtin
         SpvBuiltIn built_in_kind = map_simt_builtin(intrinsic_name);
