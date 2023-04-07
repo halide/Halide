@@ -42,10 +42,11 @@ public:
     // Runtime configuration parameters to adjust the behaviour of the block allocator
     struct Config {
         size_t initial_capacity = 0;
-        size_t maximum_pool_size = 0;
-        size_t minimum_block_size = 0;
-        size_t maximum_block_size = 0;
-        size_t maximum_block_count = 0;
+        size_t maximum_pool_size = 0;    //< Maximum number of bytes to allocate for the entire pool (including all blocks). Specified in bytes. Zero means no constraint
+        size_t minimum_block_size = 0;   //< Minimum block size in bytes. Zero mean no constraint.
+        size_t maximum_block_size = 0;   //< Maximum block size in bytes. Zero means no constraint
+        size_t maximum_block_count = 0;  //< Maximum number of blocks to allocate. Zero means no constraint
+        size_t nearest_multiple = 0;     //< Always round up the requested region sizes to the given integer value. Zero means no constraint
     };
 
     // Factory methods for creation / destruction
@@ -151,7 +152,7 @@ void BlockAllocator::initialize(void *user_context, const Config &cfg, const Mem
 }
 
 MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &request) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: Reserve ("
                         << "user_context=" << (void *)(user_context) << " "
                         << "offset=" << (uint32_t)request.offset << " "
@@ -237,13 +238,13 @@ bool BlockAllocator::collect(void *user_context) {
             continue;
         }
 
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
         uint64_t reserved = block->reserved;
 #endif
 
         bool collected = block->allocator->collect(user_context);
         if (collected) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
             debug(user_context) << "Collected block ("
                                 << "block=" << (void *)block << " "
                                 << "reserved=" << (uint32_t)block->reserved << " "
@@ -285,7 +286,7 @@ int BlockAllocator::destroy(void *user_context) {
 MemoryRegion *BlockAllocator::reserve_memory_region(void *user_context, RegionAllocator *allocator, const MemoryRequest &request) {
     MemoryRegion *result = allocator->reserve(user_context, request);
     if (result == nullptr) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "BlockAllocator: Failed to allocate region of size ("
                             << (int32_t)(request.size) << " bytes)!\n";
 #endif
@@ -300,7 +301,7 @@ MemoryRegion *BlockAllocator::reserve_memory_region(void *user_context, RegionAl
 
 bool BlockAllocator::is_block_suitable_for_request(void *user_context, const BlockResource *block, const MemoryProperties &properties, size_t size, bool dedicated) const {
     if (!is_compatible_block(block, properties)) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "BlockAllocator: skipping block ... incompatible properties!\n"
                             << " block_resource=" << (void *)block << "\n"
                             << " block_size=" << (uint32_t)block->memory.size << "\n"
@@ -318,7 +319,7 @@ bool BlockAllocator::is_block_suitable_for_request(void *user_context, const Blo
     }
 
     if (dedicated && (block->reserved > 0)) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "BlockAllocator: skipping block ... can be used for dedicated allocation!\n"
                             << " block_resource=" << (void *)block << "\n"
                             << " block_size=" << (uint32_t)block->memory.size << "\n"
@@ -328,7 +329,7 @@ bool BlockAllocator::is_block_suitable_for_request(void *user_context, const Blo
         return false;
 
     } else if (block->memory.dedicated && (block->reserved > 0)) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "BlockAllocator: skipping block ... already dedicated to an allocation!\n"
                             << " block_resource=" << (void *)block << "\n"
                             << " block_size=" << (uint32_t)block->memory.size << "\n"
@@ -353,7 +354,7 @@ BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &pro
         BlockEntry *prev_entry = block_entry->prev_ptr;
         const BlockResource *block = static_cast<BlockResource *>(block_entry->value);
         if (is_block_suitable_for_request(user_context, block, properties, size, dedicated)) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
             debug(user_context) << "BlockAllocator: found suitable block ...\n"
                                 << " user_context=" << (void *)(user_context) << "\n"
                                 << " block_resource=" << (void *)block << "\n"
@@ -371,7 +372,7 @@ BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &pro
     }
 
     if (block_entry == nullptr) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "BlockAllocator: couldn't find suitable block!\n"
                             << " user_context=" << (void *)(user_context) << "\n"
                             << " request_size=" << (uint32_t)size << "\n"
@@ -386,7 +387,7 @@ BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &pro
 
 BlockAllocator::BlockEntry *
 BlockAllocator::reserve_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: reserving block ... !\n"
                         << " requested_size=" << (uint32_t)size << "\n"
                         << " requested_is_dedicated=" << (dedicated ? "true" : "false") << "\n"
@@ -396,7 +397,7 @@ BlockAllocator::reserve_block_entry(void *user_context, const MemoryProperties &
 #endif
     BlockEntry *block_entry = find_block_entry(user_context, properties, size, dedicated);
     if (block_entry == nullptr) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "BlockAllocator: creating block ... !\n"
                             << " requested_size=" << (uint32_t)size << "\n"
                             << " requested_is_dedicated=" << (dedicated ? "true" : "false") << "\n"
@@ -418,7 +419,7 @@ BlockAllocator::reserve_block_entry(void *user_context, const MemoryProperties &
 
 RegionAllocator *
 BlockAllocator::create_region_allocator(void *user_context, BlockResource *block) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: Creating region allocator ("
                         << "user_context=" << (void *)(user_context) << " "
                         << "block_resource=" << (void *)(block) << ")...\n";
@@ -436,7 +437,7 @@ BlockAllocator::create_region_allocator(void *user_context, BlockResource *block
 }
 
 int BlockAllocator::destroy_region_allocator(void *user_context, RegionAllocator *region_allocator) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: Destroying region allocator ("
                         << "user_context=" << (void *)(user_context) << " "
                         << "region_allocator=" << (void *)(region_allocator) << ")...\n";
@@ -468,7 +469,7 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
         return nullptr;
     }
 
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: Creating block entry ("
                         << "block_entry=" << (void *)(block_entry) << " "
                         << "block=" << (void *)(block_entry->value) << " "
@@ -479,6 +480,7 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
     block->memory.size = constrain_requested_size(size);
     block->memory.handle = nullptr;
     block->memory.properties = properties;
+    block->memory.properties.nearest_multiple = max(config.nearest_multiple, properties.nearest_multiple);
     block->memory.dedicated = dedicated;
     block->reserved = 0;
     block->allocator = create_region_allocator(user_context, block);
@@ -487,7 +489,7 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
 }
 
 int BlockAllocator::release_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: Releasing block entry ("
                         << "block_entry=" << (void *)(block_entry) << " "
                         << "block=" << (void *)(block_entry->value) << ")...\n";
@@ -500,7 +502,7 @@ int BlockAllocator::release_block_entry(void *user_context, BlockAllocator::Bloc
 }
 
 int BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: Destroying block entry ("
                         << "block_entry=" << (void *)(block_entry) << " "
                         << "block=" << (void *)(block_entry->value) << " "
@@ -517,7 +519,7 @@ int BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::Bloc
 }
 
 int BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: Allocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.allocate << ")...\n";
 #endif
     halide_abort_if_false(user_context, allocators.block.allocate != nullptr);
@@ -528,7 +530,7 @@ int BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block)
 }
 
 int BlockAllocator::free_memory_block(void *user_context, BlockResource *block) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "BlockAllocator: Deallocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.deallocate << ")...\n";
 #endif
     halide_abort_if_false(user_context, allocators.block.deallocate != nullptr);
@@ -542,6 +544,9 @@ int BlockAllocator::free_memory_block(void *user_context, BlockResource *block) 
 
 size_t BlockAllocator::constrain_requested_size(size_t size) const {
     size_t actual_size = size;
+    if (config.nearest_multiple) {
+        actual_size = (((actual_size + config.nearest_multiple - 1) / config.nearest_multiple) * config.nearest_multiple);
+    }
     if (config.minimum_block_size) {
         actual_size = ((actual_size < config.minimum_block_size) ?
                            config.minimum_block_size :
@@ -552,6 +557,7 @@ size_t BlockAllocator::constrain_requested_size(size_t size) const {
                            config.maximum_block_size :
                            actual_size);
     }
+
     return actual_size;
 }
 

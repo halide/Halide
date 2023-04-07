@@ -271,7 +271,7 @@ void *MemoryArena::create_entry(void *user_context, Block *block, uint32_t index
     void *entry_ptr = lookup_entry(user_context, block, index);
     block->free_index = block->indices[index];
     block->status[index] = AllocationStatus::InUse;
-#if DEBUG_RUNTIME
+#if DEBUG_RUNTIME_INTERNAL
     memset(entry_ptr, 0, config.entry_size);
 #endif
     return entry_ptr;

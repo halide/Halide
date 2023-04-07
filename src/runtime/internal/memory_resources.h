@@ -57,7 +57,8 @@ struct MemoryProperties {
     MemoryVisibility visibility = MemoryVisibility::InvalidVisibility;
     MemoryUsage usage = MemoryUsage::InvalidUsage;
     MemoryCaching caching = MemoryCaching::InvalidCaching;
-    size_t alignment = 0;  //< required alignment of allocations (zero for no constraint)
+    size_t alignment = 0;         //< required alignment of allocations (zero for no constraint)
+    size_t nearest_multiple = 0;  //< require the allocation size to round up to the nearest multiple (zero means no rounding)
 };
 
 // Client-facing struct for exchanging memory block allocation requests
@@ -143,6 +144,19 @@ ALWAYS_INLINE size_t aligned_size(size_t offset, size_t size, size_t alignment) 
     size_t padding = actual_offset - offset;
     size_t actual_size = padding + size;
     return actual_size;
+}
+
+// Returns a padded size to accommodate an adjusted offset due to alignment constraints rounded up to the nearest multiple
+// -- Alignment must be power of two!
+ALWAYS_INLINE size_t conform_size(size_t offset, size_t size, size_t alignment, size_t nearest_multiple) {
+    size_t adjusted_size = aligned_size(offset, size, alignment);
+    adjusted_size = (alignment > adjusted_size) ? alignment : adjusted_size;
+    if (nearest_multiple > 0) {
+        size_t rounded_size = (((adjusted_size + nearest_multiple - 1) / nearest_multiple) * nearest_multiple);
+        return rounded_size;
+    } else {
+        return adjusted_size;
+    }
 }
 
 // Clamps the given value to be within the [min_value, max_value] range
