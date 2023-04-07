@@ -120,7 +120,6 @@ endif ()
 
 if (WITH_TESTS)
     add_executable(adams2019_test_function_dag test_function_dag.cpp FunctionDAG.cpp)
-    # target_include_directories(adams2019_test_function_dag PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/adams2019" ${COMMON_DIR})
     target_link_libraries(adams2019_test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
     add_test(NAME adams2019_test_function_dag COMMAND adams2019_test_function_dag)
     set_tests_properties(adams2019_test_function_dag PROPERTIES LABELS "adams2019;autoschedulers;auto_schedule")
