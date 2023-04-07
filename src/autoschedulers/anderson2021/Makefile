@@ -42,21 +42,21 @@ $(BIN)/baseline_weights.o: $(BIN)/baseline_weights.cpp
 	$(CXX) -c $< -o $@
 
 AUTOSCHED_COST_MODEL_LIBS=\
-$(BIN)/anderson2021_cost_model/anderson2021_cost_model.a \
-$(BIN)/anderson2021_cost_model/anderson2021_train_cost_model.a \
+$(BIN)/cost_model/anderson2021_cost_model.a \
+$(BIN)/cost_model/anderson2021_train_cost_model.a \
 
-$(BIN)/anderson2021_cost_model.generator: $(SRC)/cost_model_generator.cpp \
+$(BIN)/cost_model.generator: $(SRC)/cost_model_generator.cpp \
 							$(SRC)/cost_model_schedule.h \
 							$(SRC)/NetworkSize.h \
 							$(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_EXPORT_DYNAMIC)
 
-$(BIN)/auto_schedule_runtime.a: $(BIN)/anderson2021_cost_model.generator
+$(BIN)/auto_schedule_runtime.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
 	$^ -r auto_schedule_runtime -o $(BIN) target=$(HL_TARGET)
 
-$(BIN)/anderson2021_cost_model/anderson2021_%.a: $(BIN)/anderson2021_cost_model.generator
+$(BIN)/cost_model/anderson2021_%.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
 	$^ -g $* -o $(BIN)/anderson2021_cost_model -f $* -n anderson2021_$* target=$(HL_TARGET)-no_runtime enable_debug_output=$(ENABLE_DEBUG_OUTPUT) -e stmt,static_library,h,assembly
 

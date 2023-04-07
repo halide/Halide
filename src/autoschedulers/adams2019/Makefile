@@ -36,21 +36,21 @@ $(BIN)/baseline_weights.o: $(BIN)/baseline_weights.cpp
 	$(CXX) -c $< -o $@
 
 AUTOSCHED_COST_MODEL_LIBS=\
-$(BIN)/adams2019_cost_model/adams2019_cost_model.a \
-$(BIN)/adams2019_cost_model/adams2019_train_cost_model.a \
+$(BIN)/cost_model/adams2019_cost_model.a \
+$(BIN)/cost_model/adams2019_train_cost_model.a \
 
-$(BIN)/adams2019_cost_model.generator: $(SRC)/cost_model_generator.cpp \
+$(BIN)/cost_model.generator: $(SRC)/cost_model_generator.cpp \
 				$(SRC)/cost_model_schedule.h \
 				$(SRC)/NetworkSize.h \
 				$(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(USE_EXPORT_DYNAMIC) $(LIBHALIDE_LDFLAGS)
 
-$(BIN)/auto_schedule_runtime.a: $(BIN)/adams2019_cost_model.generator
+$(BIN)/auto_schedule_runtime.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
 	$^ -r auto_schedule_runtime -o $(BIN) target=$(HL_TARGET)
 
-$(BIN)/adams2019_cost_model/adams2019_%.a: $(BIN)/adams2019_cost_model.generator
+$(BIN)/cost_model/adams2019_%.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
 	$^ -g $* -o $(BIN)/adams2019_cost_model -f $* -n adams2019_$* target=$(HL_TARGET)-no_runtime -e stmt,static_library,h,assembly
 
