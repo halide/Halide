@@ -40,7 +40,11 @@ VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context, VkDevice d
                                                   const VkAllocationCallbacks *alloc_callbacks);
 
 int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *allocator);
-
+int vk_clear_device_buffer(void *user_context,
+                           VulkanMemoryAllocator *allocator,
+                           VkCommandPool command_pool,
+                           VkQueue command_queue,
+                           VkBuffer device_buffer);
 // --------------------------------------------------------------------------
 // Context
 // --------------------------------------------------------------------------

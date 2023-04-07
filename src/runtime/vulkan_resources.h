@@ -1380,21 +1380,21 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
 
         void operator()(VulkanCompilationCacheEntry *cache_entry) {
             if (cache_entry != nullptr) {
+                if (cache_entry->descriptor_set_layouts) {
+                    for (uint32_t n = 0; n < cache_entry->shader_count; n++) {
+                        debug(user_context) << "  destroying descriptor set layout [" << n << "] " << cache_entry->shader_bindings[n].entry_point_name << "\n";
+                        vk_destroy_descriptor_set_layout(user_context, allocator, cache_entry->descriptor_set_layouts[n]);
+                        cache_entry->descriptor_set_layouts[n] = {0};
+                    }
+                    vk_host_free(user_context, cache_entry->descriptor_set_layouts, allocator->callbacks());
+                    cache_entry->descriptor_set_layouts = nullptr;
+                }
+                if (cache_entry->pipeline_layout) {
+                    debug(user_context) << "  destroying pipeline layout " << (void *)cache_entry->pipeline_layout << "\n";
+                    vk_destroy_pipeline_layout(user_context, allocator, cache_entry->pipeline_layout);
+                    cache_entry->pipeline_layout = {0};
+                }
                 if (cache_entry->shader_bindings) {
-                    if (cache_entry->descriptor_set_layouts) {
-                        for (uint32_t n = 0; n < cache_entry->shader_count; n++) {
-                            debug(user_context) << "  destroying descriptor set layout [" << n << "] " << cache_entry->shader_bindings[n].entry_point_name << "\n";
-                            vk_destroy_descriptor_set_layout(user_context, allocator, cache_entry->descriptor_set_layouts[n]);
-                            cache_entry->descriptor_set_layouts[n] = {0};
-                        }
-                        vk_host_free(user_context, cache_entry->descriptor_set_layouts, allocator->callbacks());
-                        cache_entry->descriptor_set_layouts = nullptr;
-                    }
-                    if (cache_entry->pipeline_layout) {
-                        debug(user_context) << "  destroying pipeline layout " << (void *)cache_entry->pipeline_layout << "\n";
-                        vk_destroy_pipeline_layout(user_context, allocator, cache_entry->pipeline_layout);
-                        cache_entry->pipeline_layout = {0};
-                    }
                     for (uint32_t n = 0; n < cache_entry->shader_count; n++) {
                         if (cache_entry->shader_bindings[n].args_region) {
                             vk_destroy_scalar_uniform_buffer(user_context, allocator, cache_entry->shader_bindings[n].args_region);
@@ -1428,6 +1428,7 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
                 }
                 cache_entry->shader_count = 0;
                 vk_host_free(user_context, cache_entry, allocator->callbacks());
+                cache_entry = nullptr;
             }
         }
     };

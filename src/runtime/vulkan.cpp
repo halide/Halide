@@ -320,10 +320,12 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
     buf->device_interface = &vulkan_device_interface;
     buf->device_interface->impl->use_module();
 
+#ifdef DEBUG_RUNTIME
     debug(user_context)
         << "    allocated device region=" << (void *)device_region << "\n"
         << "    containing device buffer=" << (void *)device_region->handle << "\n"
         << "    for halide buffer " << buf << "\n";
+#endif
 
     // retrieve the buffer from the region
     VkBuffer *device_buffer = reinterpret_cast<VkBuffer *>(device_region->handle);
@@ -332,69 +334,7 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
         return halide_error_code_internal_error;
     }
 
-    // create a command buffer
-    VkCommandBuffer command_buffer;
-    int error_code = vk_create_command_buffer(user_context, ctx.allocator, ctx.command_pool, &command_buffer);
-    if (error_code != halide_error_code_success) {
-        error(user_context) << "Vulkan: Failed to create command buffer!\n";
-        return error_code;
-    }
-
-    // begin the command buffer
-    VkCommandBufferBeginInfo command_buffer_begin_info =
-        {
-            VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,  // struct type
-            nullptr,                                      // pointer to struct extending this
-            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,  // flags
-            nullptr                                       // pointer to parent command buffer
-        };
-
-    VkResult result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
-    }
-
-    // fill buffer with zero values up to the size of the buffer
-    vkCmdFillBuffer(command_buffer, *device_buffer, 0, VK_WHOLE_SIZE, 0);
-    debug(user_context) << "    zeroing device_buffer=" << (void *)device_buffer
-                        << " size=" << (uint32_t)device_region->size << "\n";
-
-    // end the command buffer
-    result = vkEndCommandBuffer(command_buffer);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
-    }
-
-    // submit the command buffer
-    VkSubmitInfo submit_info =
-        {
-            VK_STRUCTURE_TYPE_SUBMIT_INFO,  // struct type
-            nullptr,                        // pointer to struct extending this
-            0,                              // wait semaphore count
-            nullptr,                        // semaphores
-            nullptr,                        // pipeline stages where semaphore waits occur
-            1,                              // how many command buffers to execute
-            &command_buffer,                // the command buffers
-            0,                              // number of semaphores to signal
-            nullptr                         // the semaphores to signal
-        };
-
-    result = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
-    }
-
-    // wait for memset to finish
-    result = vkQueueWaitIdle(ctx.queue);
-    if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
-        return halide_error_code_generic_error;
-    }
-
-    error_code = vk_destroy_command_buffer(user_context, ctx.allocator, ctx.command_pool, command_buffer);
+    int error_code = vk_clear_device_buffer(user_context, ctx.allocator, ctx.command_pool, ctx.queue, *device_buffer);
     if (error_code != halide_error_code_success) {
         error(user_context) << "Vulkan: Failed to destroy command buffer!\n";
         return error_code;
