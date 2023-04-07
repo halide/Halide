@@ -52,7 +52,7 @@ $(BIN)/auto_schedule_runtime.a: $(BIN)/cost_model.generator
 
 $(BIN)/cost_model/adams2019_%.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
-	$^ -g $* -o $(BIN)/adams2019_cost_model -f $* -n adams2019_$* target=$(HL_TARGET)-no_runtime -e stmt,static_library,h,assembly
+	$^ -g $* -o $(BIN)/cost_model -f $* -n adams2019_$* target=$(HL_TARGET)-no_runtime -e stmt,static_library,h,assembly
 
 # It's important to use dynamic lookups for undefined symbols here: all of libHalide
 # is expected to be present (in the loading binary), so we explicitly make the symbols
@@ -85,7 +85,7 @@ $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT): \
 				$(BIN)/auto_schedule_runtime.a \
 				| $(LIB_HALIDE)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/adams2019_cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB) -I $(SRC)
+	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB) -I $(SRC)
 
 $(BIN)/adams2019_retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 				$(COMMON_DIR)/ASLog.cpp \
@@ -99,7 +99,7 @@ $(BIN)/adams2019_retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 				$(AUTOSCHED_WEIGHT_OBJECTS) \
 				$(BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(BIN)/adams2019_cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_OPEN_MP) $(HALIDE_RPATH_FOR_BIN) -I $(SRC)
+	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_OPEN_MP) $(HALIDE_RPATH_FOR_BIN) -I $(SRC)
 
 $(BIN)/adams2019_weightsdir_to_weightsfile: $(SRC)/weightsdir_to_weightsfile.cpp $(SRC)/Weights.cpp
 	@mkdir -p $(@D)
