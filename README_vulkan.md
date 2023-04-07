@@ -185,11 +185,11 @@ Halide will search for the first 'gpu' like device it can find, or fall back
 to the first compute device it can find.
 
 `HL_VK_ALLOC_CONFIG=...` will tell Halide to configure the Vulkan memory
-allocator use the given constraints specified as four integer values 
+allocator use the given constraints specified as 5x integer values 
 separated by the appropriate environment variable list delimiter 
-(e.g. `N:N:N:N` on Linux/OSX/Posix, or `N;N;N;N` on Windows). These values 
-correspond to `maximum_pool_size`, `minimum_block_size`, `maximum_block_size` 
-and `maximum_block_count`. 
+(e.g. `N:N:N:N:N` on Linux/OSX/Posix, or `N;N;N;N;N` on Windows). These values 
+correspond to `maximum_pool_size`, `minimum_block_size`, `maximum_block_size`, 
+`maximum_block_count` and `nearest_multiple`. 
 
 The `maximum_pool_size` constraint will tell Halide to configure the 
 Vulkan memory allocator to never request more than N megabytes for the
@@ -216,6 +216,11 @@ Vulkan memory allocator to never exceed a total of N block allocations.
 Decreasing this value may free up more memory but may impact performance, 
 and/or restrict allocations. Default is 0 ... meaning no limit.
 
+The `nearest_multiple` constraint will tell Halide to configure the 
+Vulkan memory allocator to always round up the requested allocation sizes
+to the given integer value. This is useful for architectures that
+require specific alignments for subregions allocated within a block.
+Default is 32 ... setting this to zero means no constraint. 
 
 # Debug Environment Variables
 
