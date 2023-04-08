@@ -2188,8 +2188,9 @@ private:
     }
 
     int gen_node_id(const IRNode *node) {
-        if (node_ids.count(node) == 0)
+        if (node_ids.count(node) == 0) {
             node_ids[node] = gen_unique_id();
+        }
         return node_ids[node];
     }
 
