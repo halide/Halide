@@ -622,7 +622,7 @@ private:
 template<typename T>
 class HTMLCodePrinter : public IRVisitor {
 public:
-    HTMLCodePrinter(T &os, std::map<const IRNode*, int> &nids)
+    HTMLCodePrinter(T &os, std::map<const IRNode *, int> &nids)
         : stream(os), id(0), node_ids(nids), context_stack(1, 0) {
     }
 
@@ -697,7 +697,7 @@ private:
 
     // Used to generate unique ids
     int id;
-    std::map<const IRNode*, int> &node_ids;
+    std::map<const IRNode *, int> &node_ids;
 
     // Used to track scope during IR traversal
     Scope<int> scope;
@@ -2147,7 +2147,7 @@ private:
  */
 class HTMLVisualizationPrinter : public IRVisitor {
 public:
-    HTMLVisualizationPrinter(std::ofstream &os, std::map<const IRNode*, int> &nids)
+    HTMLVisualizationPrinter(std::ofstream &os, std::map<const IRNode *, int> &nids)
         : stream(os), id(0), node_ids(nids) {
     }
 
