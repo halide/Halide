@@ -622,8 +622,8 @@ private:
 template<typename T>
 class HTMLCodePrinter : public IRVisitor {
 public:
-    explicit HTMLCodePrinter(T &os)
-        : stream(os), id(0), context_stack(1, 0) {
+    HTMLCodePrinter(T &os, std::map<const IRNode*, int> &nids)
+        : stream(os), id(0), node_ids(nids), context_stack(1, 0) {
     }
 
     // Make class non-copyable and non-moveable
@@ -697,6 +697,7 @@ private:
 
     // Used to generate unique ids
     int id;
+    std::map<const IRNode*, int> &node_ids;
 
     // Used to track scope during IR traversal
     Scope<int> scope;
@@ -785,7 +786,7 @@ private:
         //    Note: We wrap the show/hide buttons in a navigation anchor
         //    that lets us sync text and visualization tabs.
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword nav-anchor", "func ", "lowered-func-" + std::to_string((uint64_t)&fn));
+        print_html_element("span", "keyword nav-anchor", "func ", "lowered-func-" + fn.name);
         print_text(fn.name + "(");
         print_closing_tag("span");
         print_fndecl_args(fn.args);
@@ -794,7 +795,7 @@ private:
         print_toggle_anchor_closing_tag();
 
         // Add a button to jump to this function in the viz
-        print_visualization_button("lowered-func-viz-" + std::to_string((uint64_t)&fn));
+        print_visualization_button("lowered-func-viz-" + std::to_string(id));
 
         // Open code block to hold function body
         print_html_element("span", "matched", "{");
@@ -1132,7 +1133,7 @@ private:
         print_closing_tag("span");
     }
 
-    void print_function_call(std::string fn_name, const std::vector<Expr> &args, uint64_t id) {
+    void print_function_call(std::string fn_name, const std::vector<Expr> &args, int id) {
         print_opening_tag("span", "nav-anchor", "fn-call-" + std::to_string(id));
         print_function_call(fn_name, args);
         print_closing_tag("span");
@@ -1209,7 +1210,8 @@ private:
 
     // Prints compute and data cost buttons/indicators
     void print_cost_buttons(const IRNode *op) {
-        print_cost_buttons(op, (uint64_t)op);
+        int id = gen_node_id(op);
+        print_cost_buttons(op, id);
     }
 
     void print_cost_buttons(const IRNode *op, int id) {
@@ -1220,7 +1222,7 @@ private:
     }
 
     // Prints the button/indicator for the compute cost of a line in the program
-    void print_compute_cost(const IRNode *op, uint64_t id) {
+    void print_compute_cost(const IRNode *op, int id) {
         int max_line_cost = cost_model.get_max_compute_cost(false);
         int line_cost = cost_model.get_compute_cost(op, false);
         int block_cost = cost_model.get_compute_cost(op, true);
@@ -1229,7 +1231,7 @@ private:
     }
 
     // Prints the button/indicator for the data movement cost of a line in the program
-    void print_data_movement_cost(const IRNode *op, uint64_t id) {
+    void print_data_movement_cost(const IRNode *op, int id) {
         int max_line_cost = cost_model.get_max_data_movement_cost(false);
         int line_cost = cost_model.get_data_movement_cost(op, false);
         int block_cost = cost_model.get_data_movement_cost(op, true);
@@ -1268,6 +1270,12 @@ private:
     /* Misc utility methods */
     int gen_unique_id() {
         return id++;
+    }
+
+    int gen_node_id(const IRNode *node) {
+        if (node_ids.count(node) == 0)
+            node_ids[node] = gen_unique_id();
+        return node_ids[node];
     }
 
     /* All visitor functions inherited from IRVisitor */
@@ -1392,7 +1400,8 @@ private:
     }
 
     void visit(const Load *op) override {
-        print_opening_tag("span", "Load nav-anchor", "load-" + std::to_string((uint64_t)op));
+        int id = gen_node_id(op);
+        print_opening_tag("span", "Load nav-anchor", "load-" + std::to_string(id));
         print_opening_tag("span", "matched");
         print_variable(op->name);
         print_text("[");
@@ -1423,8 +1432,9 @@ private:
     }
 
     void visit(const Call *op) override {
+        int id = gen_node_id(op);
         print_opening_tag("span", "Call");
-        print_function_call(op->name, op->args, (uint64_t)op);
+        print_function_call(op->name, op->args, id);
         print_closing_tag("span");
     }
 
@@ -1446,11 +1456,12 @@ private:
     }
 
     void visit(const LetStmt *op) override {
+        int id = gen_node_id(op);
         scope.push(op->name, gen_unique_id());
         print_opening_tag("div", "LetStmt");
         print_cost_buttons(op);
         print_opening_tag("p", "WrapLine");
-        print_opening_tag("span", "cost-highlight", "cost-bg-" + std::to_string((uint64_t)op));
+        print_opening_tag("span", "cost-highlight", "cost-bg-" + std::to_string(id));
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "let ");
         print_variable(op->name);
@@ -1473,7 +1484,7 @@ private:
 
     void visit(const ProducerConsumer *op) override {
         // Give this Producer/Consumer a unique id
-        int id = gen_unique_id();
+        int id = gen_node_id(op);
 
         // Push a new scope
         scope.push(op->name, id);
@@ -1493,14 +1504,14 @@ private:
         // -- print text
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword nav-anchor", op->is_producer ? "produce " : "consume ",
-                           "prodcons-" + std::to_string((uint64_t)op));
+                           "prodcons-" + std::to_string(id));
         print_variable(op->name);
         print_closing_tag("span");
 
         print_toggle_anchor_closing_tag();
 
         // Add a button to jump to this producer/consumer in the viz
-        print_visualization_button("prodcons-viz-" + std::to_string((uint64_t)op));
+        print_visualization_button("prodcons-viz-" + std::to_string(id));
 
         // Open code block to hold function body
         print_html_element("span", "matched", "{");
@@ -1526,7 +1537,7 @@ private:
 
     void visit(const For *op) override {
         // Give this loop a unique id
-        int id = gen_unique_id();
+        int id = gen_node_id(op);
 
         // Push scope
         scope.push(op->name, id);
@@ -1545,7 +1556,7 @@ private:
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_opening_tag("span", "keyword nav-anchor", "loop-" + std::to_string((uint64_t)op));
+        print_opening_tag("span", "keyword nav-anchor", "loop-" + std::to_string(id));
         stream << op->for_type << op->device_api;
         print_closing_tag("span");
         print_text(" (");
@@ -1560,7 +1571,7 @@ private:
         print_toggle_anchor_closing_tag();
 
         // Add a button to jump to this loop in the viz
-        print_visualization_button("loop-viz-" + std::to_string((uint64_t)op));
+        print_visualization_button("loop-viz-" + std::to_string(id));
 
         // Open code block to hold function body
         print_html_element("span", "matched", "{");
@@ -1586,7 +1597,7 @@ private:
 
     void visit(const Acquire *op) override {
         // Give this acquire a unique id
-        int id = gen_unique_id();
+        int id = gen_node_id(op);
 
         // Start a dive to hold code for this acquire
         print_opening_tag("div", "Acquire");
@@ -1599,7 +1610,7 @@ private:
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword", "acquire", "acquire-" + std::to_string((uint64_t)op));
+        print_html_element("span", "keyword", "acquire", "acquire-" + std::to_string(id));
         print_text(" (");
         print_closing_tag("span");
         print(op->semaphore);
@@ -1610,7 +1621,7 @@ private:
         print_toggle_anchor_closing_tag();
 
         // Add a button to jump to this acquire in the viz
-        print_visualization_button("acquire-viz-" + std::to_string((uint64_t)op));
+        print_visualization_button("acquire-viz-" + std::to_string(id));
 
         // Open code block to hold function body
         print_html_element("span", "matched", "{");
@@ -1632,6 +1643,8 @@ private:
     }
 
     void visit(const Store *op) override {
+        int id = gen_node_id(op);
+
         // Start a dive to hold code for this acquire
         print_opening_tag("div", "Store WrapLine");
 
@@ -1640,7 +1653,7 @@ private:
 
         // Print store target
         print_opening_tag("span", "matched");
-        print_opening_tag("span", "nav-anchor", "store-" + std::to_string((uint64_t)op));
+        print_opening_tag("span", "nav-anchor", "store-" + std::to_string(id));
         print_variable(op->name);
         print_text("[");
         print_closing_tag("span");
@@ -1681,6 +1694,8 @@ private:
     }
 
     void visit(const Allocate *op) override {
+        int id = gen_node_id(op);
+
         // Push scope
         scope.push(op->name, gen_unique_id());
 
@@ -1692,7 +1707,7 @@ private:
 
         //  Print allocation name, type and extents
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword nav-anchor", "allocate ", "allocate-" + std::to_string((uint64_t)op));
+        print_html_element("span", "keyword nav-anchor", "allocate ", "allocate-" + std::to_string(id));
         print_variable(op->name);
         print_text("[");
         print_closing_tag("span");
@@ -1735,7 +1750,7 @@ private:
         }
 
         // Add a button to jump to this allocation in the viz
-        print_visualization_button("allocate-viz-" + std::to_string((uint64_t)op));
+        print_visualization_button("allocate-viz-" + std::to_string(id));
 
         // Print allocation body
         print_opening_tag("div", "AllocateBody");
@@ -1759,7 +1774,7 @@ private:
 
     void visit(const Realize *op) override {
         // Give this acquire a unique id
-        int id = gen_unique_id();
+        int id = gen_node_id(op);
 
         // Push scope
         scope.push(op->name, id);
@@ -1775,7 +1790,7 @@ private:
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword", "realize", "realize-" + std::to_string((uint64_t)op));
+        print_html_element("span", "keyword", "realize", "realize-" + std::to_string(id));
         print_variable(op->name);
         print_text(" (");
         for (size_t i = 0; i < op->bounds.size(); i++) {
@@ -1799,7 +1814,7 @@ private:
         print_toggle_anchor_closing_tag();
 
         // Add a button to jump to this realize in the viz
-        print_visualization_button("realize-viz-" + std::to_string((uint64_t)op));
+        print_visualization_button("realize-viz-" + std::to_string(id));
 
         // Open code block to hold function body
         print_html_element("span", "matched", " {");
@@ -1832,7 +1847,7 @@ private:
 
     void visit(const Fork *op) override {
         // Give this acquire a unique id
-        int id = gen_unique_id();
+        int id = gen_node_id(op);
 
         // Start a dive to hold code for this realize
         print_opening_tag("div", "Fork");
@@ -1870,23 +1885,24 @@ private:
 
     void visit(const IfThenElse *op) override {
         // Give this acquire a unique id
-        int id = gen_unique_id();
+        int then_block_id = gen_unique_id();
+        int then_node_id = gen_node_id(op->then_case.get());
 
         // Start a dive to hold code for this conditional
         print_opening_tag("div", "IfThenElse");
 
         // Print cost buttons
-        print_cost_buttons(op, id);
+        print_cost_buttons(op, then_block_id);
 
         // Generate the show hide icon/text buttons
-        print_toggle_anchor_opening_tag(id);
+        print_toggle_anchor_opening_tag(then_block_id);
 
         // -- print icon
-        print_show_hide_icon(id);
+        print_show_hide_icon(then_block_id);
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword nav-anchor IfSpan", "if", "cond-" + std::to_string((uint64_t)&op->then_case));
+        print_html_element("span", "keyword nav-anchor IfSpan", "if", "cond-" + std::to_string(then_node_id));
         print_text(" (");
         print_closing_tag("span");
         print(op->condition);
@@ -1895,7 +1911,7 @@ private:
         print_toggle_anchor_closing_tag();
 
         // Add a button to jump to this conditional in the viz
-        print_visualization_button("cond-viz-" + std::to_string((uint64_t)&op->then_case));
+        print_visualization_button("cond-viz-" + std::to_string(then_node_id));
 
         // Flatten nested if's in the else case as an
         // `if-then-else_if-else` sequence
@@ -1906,7 +1922,7 @@ private:
             print_html_element("span", "matched", " {");
 
             // Open indented div to hold code for the `then` case
-            print_opening_tag("div", "indent ThenBody", id);
+            print_opening_tag("div", "indent ThenBody", then_block_id);
 
             // Print then case body
             print(op->then_case);
@@ -1915,7 +1931,7 @@ private:
             print_closing_tag("div");
 
             // Close code block holding `then` case
-            print_html_element("span", "matched ClosingBrace cb-" + std::to_string(id), "}");
+            print_html_element("span", "matched ClosingBrace cb-" + std::to_string(then_block_id), "}");
 
             // If there is no `else` case, we are done!
             if (!op->else_case.defined()) {
@@ -1927,20 +1943,21 @@ private:
             // If the else-case is another if-then-else, flatten it
             if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
                 // Generate a new id for the `else-if` case
-                id = gen_unique_id();
+                then_block_id = gen_unique_id();
+                then_node_id = gen_node_id(nested_if->then_case.get());
 
                 // Print cost buttons
-                print_cost_buttons(op, id);
+                print_cost_buttons(op, then_block_id);
 
                 // Generate the show hide icon/text buttons
-                print_toggle_anchor_opening_tag(id);
+                print_toggle_anchor_opening_tag(then_block_id);
 
                 // -- print icon
-                print_show_hide_icon(id);
+                print_show_hide_icon(then_block_id);
 
                 // -- print text
                 print_opening_tag("span", "matched");
-                print_html_element("span", "keyword nav-anchor IfSpan", "else if", "cond-" + std::to_string((uint64_t)&nested_if->then_case));
+                print_html_element("span", "keyword nav-anchor IfSpan", "else if", "cond-" + std::to_string(then_node_id));
                 print_text(" (");
                 print_closing_tag("span");
                 print(nested_if->condition);
@@ -1949,39 +1966,40 @@ private:
                 print_toggle_anchor_closing_tag();
 
                 // Add a button to jump to this conditional branch in the viz
-                print_visualization_button("cond-viz-" + std::to_string((uint64_t)nested_if));
+                print_visualization_button("cond-viz-" + std::to_string(then_node_id));
 
                 // Update op to the nested if for next loop iteration
                 op = nested_if;
 
             } else {  // Otherwise, print it and we are done!
 
-                int else_id = gen_unique_id();
+                int else_block_id = gen_unique_id();
+                int else_node_id = gen_node_id(op->else_case.get());
 
                 // Print cost buttons
-                print_cost_buttons(op, else_id);
+                print_cost_buttons(op, else_block_id);
 
                 // Generate the show hide icon/text buttons
-                print_toggle_anchor_opening_tag(else_id);
+                print_toggle_anchor_opening_tag(else_block_id);
 
                 // -- print icon
-                print_show_hide_icon(else_id);
+                print_show_hide_icon(else_block_id);
 
                 // -- print text
                 print_opening_tag("span", "matched");
-                print_html_element("span", "keyword nav-anchor IfSpan", "else", "cond-" + std::to_string((uint64_t)&op->else_case));
+                print_html_element("span", "keyword nav-anchor IfSpan", "else", "cond-" + std::to_string(else_node_id));
                 print_closing_tag("span");
 
                 print_toggle_anchor_closing_tag();
 
                 // Add a button to jump to this conditional branch in the viz
-                print_visualization_button("cond-viz-" + std::to_string((uint64_t)&op->else_case));
+                print_visualization_button("cond-viz-" + std::to_string(else_node_id));
 
                 // Open code block to hold `else` case
                 print_html_element("span", "matched", " {");
 
                 // Open indented div to hold code for the `then` case
-                print_opening_tag("div", "indent ElseBody", else_id);
+                print_opening_tag("div", "indent ElseBody", else_block_id);
 
                 // Print `else` case body
                 print(op->else_case);
@@ -1990,7 +2008,7 @@ private:
                 print_closing_tag("div");
 
                 // Close code block holding `else` case
-                print_html_element("span", "matched ClosingBrace cb-" + std::to_string(else_id), "}");
+                print_html_element("span", "matched ClosingBrace cb-" + std::to_string(else_block_id), "}");
 
                 break;
             }
@@ -2128,8 +2146,8 @@ private:
  */
 class HTMLVisualizationPrinter : public IRVisitor {
 public:
-    explicit HTMLVisualizationPrinter(std::ofstream &os)
-        : stream(os), id(0) {
+    HTMLVisualizationPrinter(std::ofstream &os, std::map<const IRNode*, int> &nids)
+        : stream(os), id(0), node_ids(nids) {
     }
 
     // Make class non-copyable and non-moveable
@@ -2162,8 +2180,16 @@ private:
 
     // Generate unique ids
     int id;
+    std::map<const IRNode *, int> &node_ids;
+
     int gen_unique_id() {
         return id++;
+    }
+
+    int gen_node_id(const IRNode *node) {
+        if (node_ids.count(node) == 0)
+            node_ids[node] = gen_unique_id();
+        return node_ids[node];
     }
 
     /* Private print functions to handle various IR types */
@@ -2176,8 +2202,8 @@ private:
         // Create the header bar
         print_opening_tag("div", "fn-header");
         print_collapse_expand_btn(id);
-        print_code_button("lowered-func-" + std::to_string((uint64_t)&fn));
-        print_html_element("span", "fn-title", "Func: " + fn.name, "lowered-func-viz-" + std::to_string((uint64_t)&fn));
+        print_code_button("lowered-func-" + fn.name);
+        print_html_element("span", "fn-title", "Func: " + fn.name, "lowered-func-viz-" + fn.name);
         print_closing_tag("div");
 
         // Print function body
@@ -2242,7 +2268,7 @@ private:
     }
 
     // Prints a function-call box
-    void print_fn_button(const std::string &name, uint64_t id) {
+    void print_fn_button(const std::string &name, int id) {
         print_opening_tag("div", "fn-call");
         print_code_button("fn-call-" + std::to_string(id));
         print_text(get_as_var(name) + "(...)");
@@ -2352,7 +2378,7 @@ private:
         }
 
         std::ostringstream ss;
-        HTMLCodePrinter<std::ostringstream> printer(ss);
+        HTMLCodePrinter<std::ostringstream> printer(ss, node_ids);
         e.accept(&printer);
         std::string html_e = ss.str();
 
@@ -2397,7 +2423,8 @@ private:
     // Prints a single node in an `if-elseif-...-else` chain
     void print_if_tree_node(const Stmt &node, const Expr &cond, const std::string &prefix) {
         // Assign unique id to this node
-        int id = gen_unique_id();
+        int box_id = gen_unique_id();
+        int node_id = gen_node_id(node.get());
 
         // Start tree node
         print_opening_tag("li", "");
@@ -2407,11 +2434,11 @@ private:
         print_opening_tag("div", "box center IfBox");
 
         // Create viz content
-        std::string aid = std::to_string((uint64_t)&node);
-        print_box_header(id, node.get(), "cond-viz-" + aid, "cond-" + aid, get_as_str(cond, prefix));
+        std::string aid = std::to_string(node_id);
+        print_box_header(box_id, node.get(), "cond-viz-" + aid, "cond-" + aid, get_as_str(cond, prefix));
 
         // Print contents of node
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
+        print_opening_tag("div", "box-body", "viz-" + std::to_string(box_id));
         node.accept(this);
         print_closing_tag("div");
 
@@ -2430,13 +2457,13 @@ private:
 
     void visit(const Allocate *op) override {
         // Assign unique id to this node
-        int id = gen_unique_id();
+        int id = gen_node_id(op);
 
         // Start a box to hold viz
         print_opening_tag("div", "box center AllocateBox");
 
         // Print box header
-        std::string aid = std::to_string((uint64_t)op);
+        std::string aid = std::to_string(id);
         print_box_header(id, op, "allocate-viz-" + aid, "allocate-" + aid, "Allocate: " + op->name);
 
         // Start a box to hold viz
@@ -2472,13 +2499,13 @@ private:
 
     void visit(const For *op) override {
         // Assign unique id to this node
-        int id = gen_unique_id();
+        int id = gen_node_id(op);
 
         // Start a box to hold viz
         print_opening_tag("div", "box center ForBox");
 
         // Print box header
-        std::string aid = std::to_string((uint64_t)op);
+        std::string aid = std::to_string(id);
         int asm_lno = assembly_info.get_asm_lno((uint64_t)op);
         if (asm_lno == -1) {
             print_box_header(id, op, "loop-viz-" + aid, "loop-" + aid, "For: " + get_as_var(op->name));
@@ -2555,14 +2582,14 @@ private:
 
     void visit(const ProducerConsumer *op) override {
         // Assign unique id to this node
-        int id = gen_unique_id();
+        int id = gen_node_id(op);
 
         // Start a box to hold viz
         std::string box_name = op->is_producer ? "ProducerBox" : "ConsumerBox";
         print_opening_tag("div", "box center " + box_name);
 
         // Print box header
-        std::string aid = std::to_string((uint64_t)op);
+        std::string aid = std::to_string(id);
         std::string prefix = op->is_producer ? "Produce: " : "Consume: ";
         int asm_lno = assembly_info.get_asm_lno((uint64_t)op);
         if (asm_lno == -1) {
@@ -2586,13 +2613,13 @@ private:
         op->value.accept(this);
 
         // Assign unique id to this node
-        int id = gen_unique_id();
+        int id = gen_node_id(op);
 
         // Start a box to hold viz
         print_opening_tag("div", "box center StoreBox");
 
         // Print box header
-        std::string aid = std::to_string((uint64_t)op);
+        std::string aid = std::to_string(id);
         print_box_header(id, op, "store-viz-" + aid, "store-" + aid, "Store: " + get_as_var(op->name));
 
         // Start a box to hold viz
@@ -2637,13 +2664,13 @@ private:
 
     void visit(const Load *op) override {
         // Assign unique id to this node
-        int id = gen_unique_id();
+        int id = gen_node_id(op);
 
         // Start a box to hold viz
         print_opening_tag("div", "box center LoadBox");
 
         // Print box header
-        std::string aid = std::to_string((uint64_t)op);
+        std::string aid = std::to_string(id);
         print_box_header(id, op, "load-viz-" + aid, "load-" + aid, "Load: " + get_as_var(op->name));
 
         // Start a box to hold viz
@@ -2687,13 +2714,14 @@ private:
     }
 
     void visit(const Call *op) override {
+        int id = gen_node_id(op);
         // Add viz support for key functions/intrinsics
         if (op->name == "halide_do_par_for") {
-            print_fn_button(op->name, (uint64_t)op);
+            print_fn_button(op->name, id);
         } else if (op->name == "halide_do_par_task") {
-            print_fn_button(op->name, (uint64_t)op);
+            print_fn_button(op->name, id);
         } else if (op->name == "_halide_buffer_init") {
-            print_fn_button(op->name, (uint64_t)op);
+            print_fn_button(op->name, id);
         } else if (op->name.rfind("_halide", 0) != 0) {
             // Assumption: We want to ignore intrinsics starting with _halide
             // but for everything else, generate a warning
@@ -2711,7 +2739,7 @@ class IRVisualizer {
 public:
     // Construct the visualizer and point it to the output file
     explicit IRVisualizer(const std::string &filename)
-        : html_code_printer(stream), html_viz_printer(stream) {
+        : html_code_printer(stream, node_ids), html_viz_printer(stream, node_ids) {
         // Open output file
         stream.open(filename.c_str());
 
@@ -2752,6 +2780,9 @@ private:
 
     // Holds cost information for visualized program
     IRCostModel cost_model;
+
+    // Annotate AST nodes with unique IDs
+    std::map<const IRNode *, int> node_ids;
 
     // Used to translate IR to code in HTML
     HTMLCodePrinter<std::ofstream> html_code_printer;
