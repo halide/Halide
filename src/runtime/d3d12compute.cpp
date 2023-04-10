@@ -2409,7 +2409,7 @@ static void *buffer_contents(d3d12_buffer *buffer) {
     return pData;
 }
 
-static halide_mutex thread_lock;
+WEAK halide_mutex thread_lock;
 
 WEAK Halide::Internal::GPUCompilationCache<d3d12_device *, d3d12_library *> compilation_cache;
 
@@ -2594,7 +2594,7 @@ using namespace Halide::Runtime::Internal::D3D12Compute;
 WEAK bool enable_allocation_cache = false;
 static const int MaxBuffersInCache = 32;
 WEAK d3d12_buffer *buffer_pool[MaxBuffersInCache] = {};
-static halide_mutex buffer_pool_lock;
+WEAK halide_mutex buffer_pool_lock;
 
 static d3d12_buffer *d3d12_allocation_cache_get_buffer(void *user_context, size_t size_in_bytes) {
     TRACELOG;
