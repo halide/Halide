@@ -1500,27 +1500,23 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         if (on_stack) {
             stream << "__attribute__((aligned(XCHAL_VISION_SIMD8))) " << op_name
                    << "[" << size_id << "];\n";
-        } else if (op->memory_type == MemoryType::VTCM) {
+        } else {
+            const char *const alloc_fn = (op->memory_type == MemoryType::VTCM) ?
+                                             "halide_tcm_malloc" :
+                                             "halide_malloc";
             stream << "*"
                    << "__attribute__((aligned(XCHAL_VISION_SIMD8))) "
                    << " __restrict "
                    << op_name
                    << " = ("
                    << op_type
-                   << " *)halide_tcm_malloc(_ucon, sizeof("
+                   << " *)" << alloc_fn << "(_ucon, sizeof("
                    << op_type
                    << ")*" << size_id << ");\n";
-        } else {
-            stream << "*"
-                   << "__attribute__((aligned(XCHAL_VISION_SIMD8)))  "
-                   << " __restrict "
-                   << op_name
-                   << " = ("
-                   << op_type
-                   << " *)halide_malloc(_ucon, sizeof("
-                   << op_type
-                   << ")*" << size_id << ");\n";
-            heap_allocations.push(op->name);
+            // TODO: why doesn't TCM count as a heap allocation?
+            if (op->memory_type != MemoryType::VTCM) {
+                heap_allocations.push(op->name);
+            }
         }
     }
 
