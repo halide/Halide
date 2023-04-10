@@ -674,7 +674,7 @@ WEAK int halide_hexagon_copy_to_device(void *user_context, halide_buffer_t *buf)
 #endif
 
     halide_abort_if_false(user_context, buf->host && buf->device);
-    device_copy c = make_host_to_device_copy(buf);
+    DeviceCopy c = make_host_to_device_copy(buf);
 
     // Get the descriptor associated with the ion buffer.
     c.dst = ptr_to_uint64(halide_hexagon_get_device_handle(user_context, buf));
@@ -698,7 +698,7 @@ WEAK int halide_hexagon_copy_to_host(void *user_context, struct halide_buffer_t 
 #endif
 
     halide_abort_if_false(user_context, buf->host && buf->device);
-    device_copy c = make_device_to_host_copy(buf);
+    DeviceCopy c = make_device_to_host_copy(buf);
 
     // Get the descriptor associated with the ion buffer.
     c.src = ptr_to_uint64(halide_hexagon_get_device_handle(user_context, buf));
@@ -817,7 +817,7 @@ WEAK int halide_hexagon_buffer_copy(void *user_context, struct halide_buffer_t *
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+    DeviceCopy c = make_buffer_copy(src, from_host, dst, to_host);
 
     // Get the descriptor associated with the ion buffer.
     if (!from_host) {

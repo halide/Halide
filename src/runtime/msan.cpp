@@ -27,7 +27,7 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
+WEAK void annotate_helper(void *uc, const DeviceCopy &c, int d, int64_t off) {
     while (d >= 0 && c.extent[d] == 1) {
         d--;
     }
@@ -43,7 +43,7 @@ WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
     }
 };
 
-WEAK void check_helper(void *uc, const device_copy &c, int d, int64_t off, const char *buf_name) {
+WEAK void check_helper(void *uc, const DeviceCopy &c, int d, int64_t off, const char *buf_name) {
     while (d >= 0 && c.extent[d] == 1) {
         d--;
     }
@@ -72,7 +72,7 @@ WEAK int halide_msan_annotate_buffer_is_initialized(void *user_context, halide_b
         return 0;
     }
 
-    Halide::Runtime::Internal::device_copy c = Halide::Runtime::Internal::make_host_to_device_copy(b);
+    Halide::Runtime::Internal::DeviceCopy c = Halide::Runtime::Internal::make_host_to_device_copy(b);
     if (c.chunk_size == 0) {
         return 0;
     }
@@ -100,7 +100,7 @@ WEAK int halide_msan_check_buffer_is_initialized(void *user_context, halide_buff
     (void)halide_msan_check_memory_is_initialized(user_context, (void *)b, sizeof(*b), buf_name);                              // ignore errors
     (void)halide_msan_check_memory_is_initialized(user_context, (void *)b->dim, b->dimensions * sizeof(b->dim[0]), buf_name);  // ignore errors
 
-    Halide::Runtime::Internal::device_copy c = Halide::Runtime::Internal::make_host_to_device_copy(b);
+    Halide::Runtime::Internal::DeviceCopy c = Halide::Runtime::Internal::make_host_to_device_copy(b);
     if (c.chunk_size == 0) {
         return 0;
     }

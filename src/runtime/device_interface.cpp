@@ -533,7 +533,7 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
         }
 
         if (to_host && from_host_valid) {
-            device_copy c = make_buffer_copy(src, true, dst, true);
+            DeviceCopy c = make_buffer_copy(src, true, dst, true);
             copy_memory(c, user_context);
             result = halide_error_code_success;
         } else if (to_host && from_device_valid) {

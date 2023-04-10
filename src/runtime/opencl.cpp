@@ -935,7 +935,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t *buf) {
 
 namespace {
 WEAK int opencl_do_multidimensional_copy(void *user_context, ClContext &ctx,
-                                         const device_copy &c,
+                                         const DeviceCopy &c,
                                          int64_t src_idx, int64_t dst_idx,
                                          int d, bool from_host, bool to_host) {
     if (d > MAX_COPY_DIMS) {
@@ -1010,7 +1010,7 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
     halide_abort_if_false(user_context, from_host || src->device);
     halide_abort_if_false(user_context, to_host || dst->device);
 
-    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+    DeviceCopy c = make_buffer_copy(src, from_host, dst, to_host);
 
     {
         ClContext ctx(user_context);
@@ -1728,7 +1728,7 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
     halide_abort_if_false(user_context, from_host || src->device);
     halide_abort_if_false(user_context, to_host || dst->device);
 
-    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+    DeviceCopy c = make_buffer_copy(src, from_host, dst, to_host);
 
     int err = 0;
     {

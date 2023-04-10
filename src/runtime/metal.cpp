@@ -298,7 +298,7 @@ WEAK mtl_device *metal_api_checked_device;
 
 namespace {
 void do_device_to_device_copy(void *user_context, mtl_blit_command_encoder *encoder,
-                              const device_copy &c, uint64_t src_offset, uint64_t dst_offset, int d) {
+                              const DeviceCopy &c, uint64_t src_offset, uint64_t dst_offset, int d) {
     if (d == 0) {
         buffer_to_buffer_1d_copy(encoder, ((device_handle *)c.src)->buf, c.src_begin + src_offset,
                                  ((device_handle *)c.dst)->buf, dst_offset, c.chunk_size);
@@ -660,7 +660,7 @@ WEAK int halide_metal_copy_to_device(void *user_context, halide_buffer_t *buffer
         return halide_error_code_generic_error;
     }
 
-    device_copy c = make_host_to_device_copy(buffer);
+    DeviceCopy c = make_host_to_device_copy(buffer);
     mtl_buffer *metal_buffer = ((device_handle *)c.dst)->buf;
     c.dst = (uint64_t)buffer_contents(metal_buffer) + ((device_handle *)c.dst)->offset;
 
@@ -711,7 +711,7 @@ WEAK int halide_metal_copy_to_host(void *user_context, halide_buffer_t *buffer) 
         return halide_error_code_generic_error;
     }
 
-    device_copy c = make_device_to_host_copy(buffer);
+    DeviceCopy c = make_device_to_host_copy(buffer);
     c.src = (uint64_t)buffer_contents(((device_handle *)c.src)->buf) + ((device_handle *)c.src)->offset;
 
     copy_memory(c, user_context);
@@ -952,7 +952,7 @@ WEAK int halide_metal_buffer_copy(void *user_context, struct halide_buffer_t *sr
         return halide_error_code_device_buffer_copy_failed;
     }
 
-    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+    DeviceCopy c = make_buffer_copy(src, from_host, dst, to_host);
 
     {
         MetalContextHolder metal_context(user_context, true);

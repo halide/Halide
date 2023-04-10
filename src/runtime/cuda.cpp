@@ -893,7 +893,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 }
 
 namespace {
-WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
+WEAK int cuda_do_multidimensional_copy(void *user_context, const DeviceCopy &c,
                                        uint64_t src, uint64_t dst, int d, bool from_host, bool to_host,
                                        CUstream stream) {
     if (d > MAX_COPY_DIMS) {
@@ -976,7 +976,7 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
     halide_abort_if_false(user_context, from_host || src->device);
     halide_abort_if_false(user_context, to_host || dst->device);
 
-    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+    DeviceCopy c = make_buffer_copy(src, from_host, dst, to_host);
 
     {
         Context ctx(user_context);

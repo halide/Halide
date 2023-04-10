@@ -377,7 +377,7 @@ WEAK int halide_openglcompute_device_free(void *user_context, halide_buffer_t *b
 namespace {
 
 template<typename Source, typename Dest>
-ALWAYS_INLINE void converting_copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
+ALWAYS_INLINE void converting_copy_memory_helper(const DeviceCopy &copy, int d, int64_t src_off, int64_t dst_off) {
     // Skip size-1 dimensions
     while (d >= 0 && copy.extent[d] == 1) {
         d--;
@@ -440,7 +440,7 @@ WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t
     }
     halide_buffer_t buf_copy = *buf;
     buf_copy.device = (uint64_t)device_data;
-    device_copy dev_copy = make_host_to_device_copy(&buf_copy);
+    DeviceCopy dev_copy = make_host_to_device_copy(&buf_copy);
 
     if (buf->type.code == halide_type_int) {
         if (buf->type.bits == 8) {
@@ -532,7 +532,7 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
 
     halide_buffer_t buf_copy = *buf;
     buf_copy.device = (uint64_t)device_data;
-    device_copy dev_copy = make_device_to_host_copy(&buf_copy);
+    DeviceCopy dev_copy = make_device_to_host_copy(&buf_copy);
 
     if (buf->type.code == halide_type_int) {
         if (buf->type.bits == 8) {

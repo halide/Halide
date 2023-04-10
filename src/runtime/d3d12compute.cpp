@@ -2836,7 +2836,7 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
 
 namespace {
 
-void do_multidimensional_copy(d3d12_device *device, const device_copy &c,
+void do_multidimensional_copy(d3d12_device *device, const DeviceCopy &c,
                               uint64_t src_offset, uint64_t dst_offset, int dimensions) {
     TRACELOG;
 
@@ -2878,7 +2878,7 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
     }
 
     // 1. memcpy from halide host memory to "upload" staging memory
-    device_copy c = make_host_to_device_copy(buffer);
+    DeviceCopy c = make_host_to_device_copy(buffer);
     halide_abort_if_false(user_context, (c.dst == buffer->device));
     d3d12_buffer *dev_buffer = peel_buffer(buffer);
     halide_abort_if_false(user_context, buffer->size_in_bytes() == dev_buffer->sizeInBytes);
@@ -2935,7 +2935,7 @@ WEAK int halide_d3d12compute_copy_to_host(void *user_context, halide_buffer_t *b
                              dev_byte_offset, staging_byte_offset, total_size);
 
     // 2. memcpy from "readback" staging memory to halide host memory
-    device_copy c = make_device_to_host_copy(buffer);
+    DeviceCopy c = make_device_to_host_copy(buffer);
     void *staging_data = buffer_contents(staging);
     c.src = reinterpret_cast<uint64_t>(staging_data) + staging_byte_offset;
     // the 'host' buffer already points to the beginning of the cropped region
@@ -3236,7 +3236,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
     halide_abort_if_false(user_context, from_host || src->device);
     halide_abort_if_false(user_context, to_host || dst->device);
 
-    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+    DeviceCopy c = make_buffer_copy(src, from_host, dst, to_host);
     MAYBE_UNUSED(c);
 
     {

@@ -23,14 +23,15 @@ namespace Internal {
 // all, so the strides could be in any order.
 //
 // We solve it by representing a copy job we need to perform as a
-// device_copy struct. It describes a multi-dimensional array of
+// DeviceCopy struct. It describes a multi-dimensional array of
 // copies to perform. Initially it describes copying over a single
 // pixel at a time. We then try to discover contiguous groups of
 // copies that can be coalesced into a single larger copy.
 
+constexpr int MAX_COPY_DIMS = 16;
+
 // The struct that describes a host <-> dev copy to perform.
-#define MAX_COPY_DIMS 16
-struct device_copy {
+struct DeviceCopy {
     // opaque handles for source and device memory.
     uint64_t src, dst;
     // The offset in the source memory to start
@@ -44,7 +45,9 @@ struct device_copy {
     uint64_t chunk_size;
 };
 
-WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
+[[deprecated("The typename device_copy is deprecated; please use DeviceCopy instead.")]] typedef DeviceCopy device_copy;
+
+WEAK void copy_memory_helper(const DeviceCopy &copy, int d, int64_t src_off, int64_t dst_off) {
     // Skip size-1 dimensions
     while (d >= 0 && copy.extent[d] == 1) {
         d--;
@@ -63,7 +66,7 @@ WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, in
     }
 }
 
-WEAK void copy_memory(const device_copy &copy, void *user_context) {
+WEAK void copy_memory(const DeviceCopy &copy, void *user_context) {
     // If this is a zero copy buffer, these pointers will be the same.
     if (copy.src != copy.dst) {
         copy_memory_helper(copy, MAX_COPY_DIMS - 1, copy.src_begin, 0);
@@ -73,10 +76,10 @@ WEAK void copy_memory(const device_copy &copy, void *user_context) {
 }
 
 // Fills the entire dst buffer, which must be contained within src
-WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
-                                  const halide_buffer_t *dst, bool dst_host) {
+WEAK DeviceCopy make_buffer_copy(const halide_buffer_t *src, bool src_host,
+                                 const halide_buffer_t *dst, bool dst_host) {
     // Make a copy job representing copying the first pixel only.
-    device_copy c;
+    DeviceCopy c;
     c.src = src_host ? (uint64_t)src->host : src->device;
     c.dst = dst_host ? (uint64_t)dst->host : dst->device;
     c.chunk_size = src->type.bytes();
@@ -97,14 +100,14 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
         src->type.bytes() != dst->type.bytes() ||
         dst->dimensions > MAX_COPY_DIMS) {
         // These conditions should also be checked for outside this fn.
-        device_copy zero = {0};
+        DeviceCopy zero = {0};
         return zero;
     }
 
     if (c.chunk_size == 0) {
         // This buffer apparently represents no memory. Return a zero'd copy
         // task.
-        device_copy zero = {0};
+        DeviceCopy zero = {0};
         return zero;
     }
 
@@ -160,11 +163,11 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
     return c;
 }
 
-WEAK device_copy make_host_to_device_copy(const halide_buffer_t *buf) {
+WEAK DeviceCopy make_host_to_device_copy(const halide_buffer_t *buf) {
     return make_buffer_copy(buf, true, buf, false);
 }
 
-WEAK device_copy make_device_to_host_copy(const halide_buffer_t *buf) {
+WEAK DeviceCopy make_device_to_host_copy(const halide_buffer_t *buf) {
     return make_buffer_copy(buf, false, buf, true);
 }
 
