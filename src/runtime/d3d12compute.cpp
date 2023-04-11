@@ -47,7 +47,7 @@
 #include "device_interface.h"
 #include "gpu_context_common.h"
 #include "printer.h"
-#include "scoped_spin_lock.h"
+#include "scoped_mutex_lock.h"
 
 #if !defined(INITGUID)
 #define INITGUID
@@ -93,13 +93,13 @@ static void *const user_context = nullptr;
 
 // Trace and logging utilities for debugging.
 #if HALIDE_D3D12_TRACE
-static volatile ScopedSpinLock::AtomicFlag trace_lock = 0;
+static halide_mutex trace_lock;
 static constexpr uint64_t trace_buf_size = 4096;
 static char trace_buf[trace_buf_size] = {};
 static int trace_indent = 0;
 
 struct trace : public BasicPrinter<trace_buf_size> {
-    ScopedSpinLock lock;
+    ScopedMutexLock lock;
 
     explicit trace(void *user_context = nullptr)
         : BasicPrinter<trace_buf_size>(user_context, trace_buf),
@@ -139,7 +139,7 @@ struct TraceScope {
         _func = func;
         t0 = TRACETIME_CHECKPOINT();
 #endif
-        ScopedSpinLock lock(&trace_lock);
+        ScopedMutexLock lock(&trace_lock);
         trace_indent++;
     }
 
@@ -150,7 +150,7 @@ struct TraceScope {
             TRACETIME_REPORT(t0, t1, "Time [" << _func << "]: ");
         }
 #endif
-        ScopedSpinLock lock(&trace_lock);
+        ScopedMutexLock lock(&trace_lock);
         trace_indent--;
     }
 
@@ -2059,7 +2059,8 @@ static void commit_command_list(d3d12_compute_command_list *cmdList) {
     cmdList->signal = queue_insert_checkpoint();
 }
 
-static bool spinlock_until_signaled(uint64_t signal) {
+// WARN(marcos): busywait interface for internal debugging purposes only
+static bool busywait_until_signaled(uint64_t signal) {
     TRACELOG;
     while (queue_fence->GetCompletedValue() < signal) {
         // nothing
@@ -2408,7 +2409,7 @@ static void *buffer_contents(d3d12_buffer *buffer) {
     return pData;
 }
 
-volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
+WEAK halide_mutex thread_lock;
 
 WEAK Halide::Internal::GPUCompilationCache<d3d12_device *, d3d12_library *> compilation_cache;
 
@@ -2504,7 +2505,7 @@ static halide_error_code_t d3d12_create_context(void *user_context) {
 }
 
 // The default implementation of halide_d3d12compute_acquire_context uses the global
-// pointers above, and serializes access with a spin lock.
+// pointers above, and serializes access with a mutex.
 // Overriding implementations of acquire/release must implement the following
 // behavior:
 // - halide_acquire_d3d12compute_context should always store a valid device/command
@@ -2520,9 +2521,12 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
     halide_start_clock(user_context);
 #endif
 
-    halide_abort_if_false(user_context, &thread_lock != nullptr);
-    while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {
-    }
+    // TODO(marcos): acquire_context will acquire the context lock and hold it
+    // until it gets released by release_context; it should be possible to simply
+    // hold it to obtain 'device_ret' and 'queue_ret' and release it immediatley
+    // after -- as a safe-guard, increment the reference count of the underlying
+    // ID3D12Device and ID3D12CommandQueue COM objects.
+    halide_mutex_lock(&thread_lock);
 
     TRACEPRINT("user_context: " << user_context << " | create: " << create << "\n");
     TRACEPRINT("current d3d12_device: " << device << "\n");
@@ -2547,7 +2551,7 @@ WEAK int halide_d3d12compute_acquire_context(void *user_context, halide_d3d12com
 
 WEAK int halide_d3d12compute_release_context(void *user_context) {
     TRACELOG;
-    __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
+    halide_mutex_unlock(&thread_lock);
     return halide_error_code_success;
 }
 
