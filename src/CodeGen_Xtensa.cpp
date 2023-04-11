@@ -92,8 +92,8 @@ public:
 
 }  // namespace
 
-CodeGen_Xtensa::CodeGen_Xtensa(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
-    : CodeGen_C(s, t, output_kind, guard),
+CodeGen_Xtensa::CodeGen_Xtensa(ostream &s, const Target &t, OutputKind k, const std::string &guard)
+    : CodeGen_C(s, t, k, guard),
       op_name_to_intrinsic{
           {"halide_xtensa_abs_i8", "IVP_ABS2NX8"},
           {"halide_xtensa_abs_i16", "IVP_ABSNX16"},
