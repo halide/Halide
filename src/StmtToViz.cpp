@@ -582,7 +582,7 @@ private:
     // Generate asm markers for Halide producer/consumer ndoes
     int prodcons_id;
     int gen_prodcons_id() {
-        return prodcons_id;
+        return ++prodcons_id;
     }
 
     std::regex gen_prodcons_asm_marker(int id, const std::string &var, bool is_producer) {
