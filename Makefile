@@ -2374,15 +2374,23 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
 
+# Build some common tools
+$(DISTRIB_DIR)/bin/featurization_to_sample $(DISTRIB_DIR)/bin/get_host_target: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+	@mkdir -p $(@D)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/common/Makefile $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+	for TOOL in featurization_to_sample get_host_target; do \
+    		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+	done
+
 # Adams2019 also includes autotuning tools
 $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_adams2019.$(PLUGIN_EXT)
 	@mkdir -p $(@D)
-	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/retrain_cost_model $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/adams2019_retrain_cost_model $(BIN_DIR)/adams2019_weightsdir_to_weightsfile HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	cp $< $(DISTRIB_DIR)/lib/
-	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
-		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+	for TOOL in adams2019_retrain_cost_model adams2019_weightsdir_to_weightsfile; do \
+    		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
 	done
-	cp $(SRC_DIR)/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
+	cp $(SRC_DIR)/autoschedulers/adams2019/adams2019_autotune_loop.sh $(DISTRIB_DIR)/tools/
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
@@ -2390,7 +2398,9 @@ endif
 autoschedulers: \
 $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(PLUGIN_EXT) \
 $(DISTRIB_DIR)/lib/libautoschedule_li2018.$(PLUGIN_EXT) \
-$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT) \
+$(DISTRIB_DIR)/bin/featurization_to_sample \
+$(DISTRIB_DIR)/bin/get_host_target
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT) autoschedulers
