@@ -46,7 +46,7 @@ fi
 echo Training target is: ${HL_TARGET}
 
 if [ -z ${GENERATOR} ]; then
-GENERATOR=./bin/demo.generator
+GENERATOR=./bin/adams2019_demo.generator
 fi
 
 if [ -z ${PIPELINE} ]; then
@@ -213,7 +213,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         echo Retraining model...
 
         find ${SAMPLES} -name "*.sample" | \
-            ${AUTOSCHED_BIN}/retrain_cost_model \
+            ${AUTOSCHED_BIN}/adams2019_retrain_cost_model \
                 --epochs=${BATCH_SIZE} \
                 --rates="0.0001" \
                 --num_cores=32 \

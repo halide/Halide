@@ -4,7 +4,7 @@
 # the cost model after each batch. It can be used for generating training data or
 # for autotuning on an individual app.
 #
-# It is a wrapper around autotune_loop.sh, which handles compiling, benchmarking,
+# It is a wrapper around anderson2021_autotune_loop.sh, which handles compiling, benchmarking,
 # and retraining the cost model. This file makes the process more user friendly
 # by providing statistics, support for resuming previous batches, autotuning
 # across multiple apps, etc.
@@ -220,7 +220,7 @@ for app in $APPS; do
         TRAIN_ONLY=${TRAIN_ONLY} \
         SAMPLES_DIR=${SAMPLES_DIR} \
         HL_DEBUG_CODEGEN=0 \
-        bash ${AUTOSCHEDULER_SRC_DIR}/autotune_loop.sh \
+        bash ${AUTOSCHEDULER_SRC_DIR}/anderson2021_autotune_loop.sh \
             ${GENERATOR} \
             ${app} \
             ${HL_TARGET} \

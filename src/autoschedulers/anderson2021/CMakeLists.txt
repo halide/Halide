@@ -32,7 +32,7 @@ add_halide_library(anderson2021_train_cost_model FROM anderson2021_cost_model.ge
 if (WITH_UTILS)
     add_executable(anderson2021_retrain_cost_model
                    DefaultCostModel.cpp
-                   ${COMMON_DIR}/Weights.cpp
+                   Weights.cpp
                    retrain_cost_model.cpp
                    $<TARGET_OBJECTS:anderson2021_weights_obj>)
     target_include_directories(anderson2021_retrain_cost_model PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
@@ -55,7 +55,7 @@ add_autoscheduler(
     SearchSpace.cpp
     State.cpp
     Tiling.cpp
-    ${COMMON_DIR}/Weights.cpp
+    Weights.cpp
     $<TARGET_OBJECTS:anderson2021_weights_obj>
 )
 
@@ -64,17 +64,9 @@ target_link_libraries(Halide_Anderson2021 PRIVATE ASLog ParamParser
     anderson2021_cost_model anderson2021_train_cost_model)
 
 ## ====================================================
-## Auto-tuning support utilities.
-## TODO(#4053): implement auto-tuning support in CMake?
-
 if (WITH_UTILS)
-    add_executable(anderson2021_featurization_to_sample ${COMMON_DIR}/featurization_to_sample.cpp)
-
-    add_executable(anderson2021_get_host_target ${COMMON_DIR}/get_host_target.cpp)
-    target_link_libraries(anderson2021_get_host_target PRIVATE Halide::Halide)
-
-    add_executable(anderson2021_weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp ${COMMON_DIR}/Weights.cpp)
-    target_include_directories(anderson2021_weightsdir_to_weightsfile PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021" ${COMMON_DIR})
+    add_executable(anderson2021_weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp Weights.cpp)
+    target_include_directories(anderson2021_weightsdir_to_weightsfile PRIVATE ${COMMON_DIR})
     target_link_libraries(anderson2021_weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 endif ()
 
@@ -83,17 +75,9 @@ endif ()
 # which is handled in tests/autoschedulers/anderson2021)
 
 if (WITH_TESTS)
-
-    add_executable(anderson2021_test_perfect_hash_map ${COMMON_DIR}/test_perfect_hash_map.cpp)
-
-    add_test(NAME anderson2021_test_perfect_hash_map COMMAND test_perfect_hash_map)
-    set_tests_properties(anderson2021_test_perfect_hash_map
-                         PROPERTIES
-                         LABELS Anderson2021)
-
     ##
 
-    add_executable(anderson2021_test_function_dag ${COMMON_DIR}/test_function_dag.cpp FunctionDAG.cpp)
+    add_executable(anderson2021_test_function_dag test_function_dag.cpp FunctionDAG.cpp)
     target_include_directories(anderson2021_test_function_dag PRIVATE "${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
     target_link_libraries(anderson2021_test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
