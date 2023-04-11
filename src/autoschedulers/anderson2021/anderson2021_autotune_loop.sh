@@ -62,7 +62,7 @@ fi
 echo Training target is: ${HL_TARGET}
 
 if [ -z ${GENERATOR} ]; then
-GENERATOR=./bin/demo.generator
+GENERATOR=./bin/anderson2021_demo.generator
 fi
 
 if [ -z ${PIPELINE} ]; then
@@ -315,7 +315,7 @@ benchmark_sample() {
     S=$2
     FNAME=$6
 
-    ${AUTOSCHEDULER_BUILD_DIR}/anderson2021_featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
+    ${AUTOSCHEDULER_BUILD_DIR}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
 
     rm ${D}/${FNAME}.featurization
     rm ${D}/bench
