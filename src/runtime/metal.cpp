@@ -730,7 +730,7 @@ WEAK int halide_metal_run(void *user_context,
                           int blocksX, int blocksY, int blocksZ,
                           int threadsX, int threadsY, int threadsZ,
                           int shared_mem_bytes,
-                          size_t arg_sizes[],
+                          halide_type_t arg_types[],
                           void *args[],
                           int8_t arg_is_buffer[]) {
 #ifdef DEBUG_RUNTIME
@@ -790,7 +790,7 @@ WEAK int halide_metal_run(void *user_context,
     set_compute_pipeline_state(encoder, pipeline_state);
 
     size_t total_args_size = 0;
-    for (size_t i = 0; arg_sizes[i] != 0; i++) {
+    for (size_t i = 0; arg_types[i].bytes() != 0; i++) {
         if (!arg_is_buffer[i]) {
             // Metal requires natural alignment for all types in structures.
             // Assert arg_size is exactly a power of two and adjust size to start
@@ -799,9 +799,9 @@ WEAK int halide_metal_run(void *user_context,
             // TODO(zalman): This seems fishy - if the arguments are
             // not already sorted in decreasing order of size, wrong
             // results occur. To repro, remove the sorting code in CodeGen_GPU_Host
-            halide_debug_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
-            total_args_size = (total_args_size + arg_sizes[i] - 1) & ~(arg_sizes[i] - 1);
-            total_args_size += arg_sizes[i];
+            halide_debug_assert(user_context, (arg_types[i].bytes() & (arg_types[i].bytes() - 1)) == 0);
+            total_args_size = (total_args_size + arg_types[i].bytes() - 1) & ~(arg_types[i].bytes() - 1);
+            total_args_size += arg_types[i].bytes();
         }
     }
 
@@ -837,11 +837,11 @@ WEAK int halide_metal_run(void *user_context,
             args_ptr = (char *)buffer_contents(args_buffer);
         }
         size_t offset = 0;
-        for (size_t i = 0; arg_sizes[i] != 0; i++) {
+        for (size_t i = 0; arg_types[i].bytes() != 0; i++) {
             if (!arg_is_buffer[i]) {
-                memcpy(&args_ptr[offset], args[i], arg_sizes[i]);
-                offset = (offset + arg_sizes[i] - 1) & ~(arg_sizes[i] - 1);
-                offset += arg_sizes[i];
+                memcpy(&args_ptr[offset], args[i], arg_types[i].bytes());
+                offset = (offset + arg_types[i].bytes() - 1) & ~(arg_types[i].bytes() - 1);
+                offset += arg_types[i].bytes();
             }
         }
         halide_debug_assert(user_context, offset == total_args_size);
@@ -855,9 +855,9 @@ WEAK int halide_metal_run(void *user_context,
         buffer_index++;
     }
 
-    for (size_t i = 0; arg_sizes[i] != 0; i++) {
+    for (size_t i = 0; arg_types[i].bytes() != 0; i++) {
         if (arg_is_buffer[i]) {
-            halide_debug_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
+            halide_debug_assert(user_context, arg_types[i].bytes() == sizeof(uint64_t));
             device_handle *handle = (device_handle *)((halide_buffer_t *)args[i])->device;
             set_input_buffer(encoder, handle->buf, handle->offset, buffer_index);
             buffer_index++;
