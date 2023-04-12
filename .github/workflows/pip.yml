@@ -75,10 +75,13 @@ jobs:
             -DWITH_TUTORIALS=NO -DWITH_UTILS=NO -DWITH_PYTHON_STUBS=NO &&
             cmake --build build --target install
 
+      - name: Tag wheels
+        run: wheel tags --build=${{ github.run_id }} ./wheelhouse/*.whl
+
       - uses: actions/upload-artifact@v3
         with:
           name: wheels
-          path: ./wheelhouse/*.whl
+          path: ./wheelhouse/*${{ github.run_id }}*.whl
 
   pip-other:
     name: Package Halide Python bindings
@@ -192,10 +195,13 @@ jobs:
           CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }}"
           CIBW_ARCHS_MACOS: "universal2"
 
+      - name: Tag wheels
+        run: wheel tags --build=${{ github.run_id }} ./wheelhouse/*.whl
+
       - uses: actions/upload-artifact@v3
         with:
           name: wheels
-          path: ./wheelhouse/*.whl
+          path: ./wheelhouse/*${{ github.run_id }}*.whl
 
   pip-sdist:
     name: Make SDist
