@@ -149,6 +149,7 @@ set(HEADER_FILES
     SplitTuples.h
     StageStridedLoads.h
     StmtToHtml.h
+    StmtToViz.h
     StorageFlattening.h
     StorageFolding.h
     StrictifyFloat.h
@@ -329,6 +330,7 @@ set(SOURCE_FILES
     SplitTuples.cpp
     StageStridedLoads.cpp
     StmtToHtml.cpp
+    StmtToViz.cpp
     StorageFlattening.cpp
     StorageFolding.cpp
     StrictifyFloat.cpp
@@ -350,9 +352,15 @@ set(SOURCE_FILES
     WrapCalls.cpp
     )
 
-set(TEMPLATE_FILES
+set(C_TEMPLATE_FILES
     CodeGen_C_prologue
     CodeGen_C_vectors
+    )
+
+set(HTML_TEMPLATE_FILES
+    StmtToViz_dependencies
+    StmtToViz_javascript
+    StmtToViz_stylesheet
     )
 
 ##
@@ -366,12 +374,23 @@ add_subdirectory(runtime)
 ##
 
 add_library(Halide_c_templates OBJECT)
-foreach (f IN LISTS TEMPLATE_FILES)
+foreach (f IN LISTS C_TEMPLATE_FILES)
     set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${f}.template.cpp>")
     set(DST "c_template.${f}.template.cpp")
 
     add_custom_command(OUTPUT "${DST}"
                        COMMAND binary2cpp "halide_c_template_${f}" < "${SRC}" > "${DST}"
+                       DEPENDS "${SRC}" binary2cpp
+                       VERBATIM)
+    target_sources(Halide_c_templates PRIVATE ${DST})
+endforeach ()
+
+foreach (f IN LISTS HTML_TEMPLATE_FILES)
+    set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/irvisualizer/${f}.template.html>")
+    set(DST "html_template.${f}.template.cpp")
+
+    add_custom_command(OUTPUT "${DST}"
+                       COMMAND binary2cpp "halide_html_template_${f}" < "${SRC}" > "${DST}"
                        DEPENDS "${SRC}" binary2cpp
                        VERBATIM)
     target_sources(Halide_c_templates PRIVATE ${DST})
