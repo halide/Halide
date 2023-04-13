@@ -340,7 +340,7 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
                                        StmtOutputFormat fmt,
                                        const Target &target) {
     Module m = compile_to_module(args, "", target);
-    m.compile(single_output(filename, m, fmt == HTML ? OutputFileType::stmt_html : OutputFileType::stmt));
+    m.compile(single_output(filename, m, fmt == HTML ? OutputFileType::stmt_html : (fmt == StmtViz ? OutputFileType::stmt_viz : OutputFileType::stmt)));
 }
 
 void Pipeline::compile_to_static_library(const string &filename_prefix,

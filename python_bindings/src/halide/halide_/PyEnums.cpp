@@ -62,7 +62,8 @@ void define_enums(py::module &m) {
 
     py::enum_<StmtOutputFormat>(m, "StmtOutputFormat")
         .value("Text", StmtOutputFormat::Text)
-        .value("HTML", StmtOutputFormat::HTML);
+        .value("HTML", StmtOutputFormat::HTML)
+        .value("StmtViz", StmtOutputFormat::StmtViz);
 
     py::enum_<TailStrategy>(m, "TailStrategy")
         .value("RoundUp", TailStrategy::RoundUp)
