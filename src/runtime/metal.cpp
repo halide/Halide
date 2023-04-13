@@ -797,7 +797,11 @@ WEAK int halide_metal_run(void *user_context,
     // NOTE(slomp): arg_sizes[] must terminate with a zero!
     size_t *arg_sizes = (size_t *)__builtin_alloca((num_kernel_args + 1) * sizeof(size_t));
     for (int i = 0; i < num_kernel_args; i++) {
-        arg_sizes[i] = arg_types[i].bytes();
+        if (arg_is_buffer[i]) {
+            arg_sizes[i] = sizeof(void *);  // or should it always be uint64_t as in line 876 below?
+        } else {
+            arg_sizes[i] = arg_types[i].bytes();
+        }
     }
     arg_sizes[num_kernel_args] = 0;
 
