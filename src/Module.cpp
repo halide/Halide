@@ -535,6 +535,10 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
         Internal::print_to_html(output_files.at(OutputFileType::stmt_html), *this);
     }
+    if (contains(output_files, OutputFileType::stmt_viz)) {
+        debug(1) << "Module.compile(): stmt_viz " << output_files.at(OutputFileType::stmt_viz) << "\n";
+        Internal::print_to_viz(output_files.at(OutputFileType::stmt_viz), *this);
+    }
 
     // Minor but worthwhile optimization: if all of the output files are of types that won't
     // ever rely on submodules (e.g.: toplevel declarations in C/C++), don't bother resolving

@@ -204,6 +204,7 @@ void define_enums(py::module &m) {
         .value("static_library", OutputFileType::static_library)
         .value("stmt", OutputFileType::stmt)
         .value("stmt_html", OutputFileType::stmt_html)
+        .value("stmt_viz", OutputFileType::stmt_viz)
         .value("compiler_log", OutputFileType::compiler_log);
 }
 
