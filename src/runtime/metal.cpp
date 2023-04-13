@@ -794,10 +794,12 @@ WEAK int halide_metal_run(void *user_context,
         ++num_kernel_args;
     }
 
-    size_t *arg_sizes = (size_t *)__builtin_alloca(num_kernel_args * sizeof(size_t));
+    // NOTE(slomp): arg_sizes[] must terminate with a zero!
+    size_t *arg_sizes = (size_t *)__builtin_alloca((num_kernel_args + 1) * sizeof(size_t));
     for (int i = 0; i < num_kernel_args; i++) {
         arg_sizes[i] = arg_types[i].bytes();
     }
+    arg_sizes[num_kernel_args] = 0;
 
     size_t total_args_size = 0;
     for (size_t i = 0; arg_sizes[i] != 0; i++) {
