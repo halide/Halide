@@ -43,10 +43,6 @@ def main():
         else:
             assert os.path.isfile(os.path.join(tmpdir, "f_all.o"))
 
-        p = os.path.join(tmpdir, "f.stmt.html")
-        f.compile_to({hl.OutputFileType.stmt_html: p}, args, "f")
-        assert os.path.isfile(p)
-
         p = os.path.join(tmpdir, "f.stmt.viz.html")
         f.compile_to({hl.OutputFileType.stmt_viz: p}, args, "f")
         assert os.path.isfile(p)

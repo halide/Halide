@@ -107,7 +107,7 @@ double run_test(bool auto_schedule) {
             .vectorize(x, 8);
     }
 
-    p.compile_to_lowered_stmt("histogram.html", {in}, HTML, target);
+    p.compile_to_lowered_stmt("histogram.stmt", {in}, Text, target);
     // Inspect the schedule (only for debugging))
     // color.print_loop_nest();
 

@@ -62,7 +62,6 @@ void define_enums(py::module &m) {
 
     py::enum_<StmtOutputFormat>(m, "StmtOutputFormat")
         .value("Text", StmtOutputFormat::Text)
-        .value("HTML", StmtOutputFormat::HTML)
         .value("StmtViz", StmtOutputFormat::StmtViz);
 
     py::enum_<TailStrategy>(m, "TailStrategy")
@@ -204,7 +203,6 @@ void define_enums(py::module &m) {
         .value("schedule", OutputFileType::schedule)
         .value("static_library", OutputFileType::static_library)
         .value("stmt", OutputFileType::stmt)
-        .value("stmt_html", OutputFileType::stmt_html)
         .value("stmt_viz", OutputFileType::stmt_viz)
         .value("compiler_log", OutputFileType::compiler_log);
 }

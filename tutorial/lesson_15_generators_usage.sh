@@ -94,15 +94,14 @@ check_file_exists my_first_generator_win32.h
 # -n file_base_name : Specifies the basename of the generated file(s). If
 # you omit this, it defaults to the name of the generated function.
 
-# -e static_library,object,c_header,assembly,bitcode,stmt,stmt_html,stmt_viz: A list of
+# -e static_library,object,c_header,assembly,bitcode,stmt,stmt_viz: A list of
 # comma-separated values specifying outputs to create. The default is
 # "static_library,c_header,registration". "assembly" generates assembly equivalent to the
 # generated object file. "bitcode" generates llvm bitcode for the pipeline.
 # "stmt" generates human-readable pseudocode for the pipeline (similar to
-# setting HL_DEBUG_CODEGEN). "stmt_html" generates an html version of the
-# pseudocode, which can be much nicer to read than the raw .stmt file.
-# "stmt_viz" produces a very detailed HTML output that includes information
-# about control flow, assembly output, cost indicators, and much more.
+# setting HL_DEBUG_CODEGEN). "stmt_viz" produces a very detailed HTML output
+# that includes information about control flow, assembly output,
+# cost indicators, and much more.
 
 # -r file_base_name : Specifies that the generator should create a
 # standalone file for just the runtime. For use when generating multiple

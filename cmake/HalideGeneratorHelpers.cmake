@@ -195,7 +195,6 @@ function(add_halide_library TARGET)
         REGISTRATION
         SCHEDULE
         STMT
-        STMT_HTML
         STMT_VIZ)
 
     # "hash table" of extra outputs to extensions
@@ -210,7 +209,6 @@ function(add_halide_library TARGET)
     set(REGISTRATION_extension ".registration.cpp")
     set(SCHEDULE_extension ".schedule.h")
     set(STMT_extension ".stmt")
-    set(STMT_HTML_extension ".stmt.html")
     set(STMT_VIZ_extension ".stmt.viz.html")
 
     ##

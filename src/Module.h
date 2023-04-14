@@ -40,7 +40,6 @@ enum class OutputFileType {
     schedule,
     static_library,
     stmt,
-    stmt_html,
     stmt_viz,
 };
 

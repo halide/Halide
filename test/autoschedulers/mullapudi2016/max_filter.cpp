@@ -108,7 +108,7 @@ double run_test(bool auto_schedule) {
         vert.compute_at(final, y).vectorize(x, 8);
     }
 
-    p.compile_to_lowered_stmt("max_filter.html", {in}, HTML, target);
+    p.compile_to_lowered_stmt("max_filter.stmt", {in}, Text, target);
     // Inspect the schedule (only for debugging))
     // final.print_loop_nest();
 

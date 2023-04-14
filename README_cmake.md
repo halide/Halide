@@ -819,7 +819,7 @@ add_halide_library(<target> FROM <generator-target>
 
 extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | FEATURIZATION
              | LLVM_ASSEMBLY | PYTHON_EXTENSION
-             | PYTORCH_WRAPPER | SCHEDULE | STMT | STMT_HTML | STMT_VIZ
+             | PYTORCH_WRAPPER | SCHEDULE | STMT | STMT_VIZ
 ```
 
 This function creates a called `<target>` corresponding to running the

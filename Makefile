@@ -560,7 +560,6 @@ SOURCE_FILES = \
   SpirvIR.cpp \
   SplitTuples.cpp \
   StageStridedLoads.cpp \
-  StmtToHtml.cpp \
   StmtToViz.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
@@ -739,7 +738,6 @@ HEADER_FILES = \
   Solve.h \
   SplitTuples.h \
   StageStridedLoads.h \
-  StmtToHtml.h \
   StmtToViz.h \
   StorageFlattening.h \
   StorageFolding.h \
@@ -1554,7 +1552,7 @@ $(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g multitarget -f "HalideTest::multitarget" $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) \
 		target=$(TARGET)-no_bounds_query-no_runtime-c_plus_plus_name_mangling,$(TARGET)-no_runtime-c_plus_plus_name_mangling  \
-        -e assembly,bitcode,c_source,c_header,stmt_html,static_library,stmt,stmt_viz
+        -e assembly,bitcode,c_source,c_header,static_library,stmt,stmt_viz
 
 $(FILTERS_DIR)/msan.a: $(BIN_DIR)/msan.generator
 	@mkdir -p $(@D)

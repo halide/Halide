@@ -292,7 +292,6 @@ tests(GROUPS correctness
       stack_allocations.cpp
       stage_strided_loads.cpp
       stencil_chain_in_update_definitions.cpp
-      stmt_to_html.cpp
       stmt_to_viz.cpp
       storage_folding.cpp
       store_in.cpp

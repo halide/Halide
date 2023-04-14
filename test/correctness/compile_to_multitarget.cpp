@@ -165,7 +165,7 @@ void test_compile_to_everything(Func j, bool do_object) {
 
     // multi-file outputs
     for (const auto &s : target_strings) {
-        for (const char *ext : {".s", ".bc", ".featurization", ".ll", ".stmt", ".stmt.html", o}) {
+        for (const char *ext : {".s", ".bc", ".featurization", ".ll", ".stmt", ".stmt.viz.html", o}) {
             if (!do_object && !strcmp(ext, o)) continue;
             files.push_back(filename_prefix + "-" + s + ext);
         }
@@ -200,7 +200,7 @@ void test_compile_to_everything(Func j, bool do_object) {
         {OutputFileType::schedule, filename_prefix + ".schedule.h"},                   // IsSingle
         {OutputFileType::static_library, filename_prefix + a},                         // IsSingle
         {OutputFileType::stmt, filename_prefix + ".stmt"},                             // IsMulti
-        {OutputFileType::stmt_html, filename_prefix + ".stmt.html"},                   // IsMulti
+        {OutputFileType::stmt_viz, filename_prefix + ".stmt.viz.html"},                // IsMulti
     };
     if (do_object) {
         outputs.erase(OutputFileType::static_library);
