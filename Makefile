@@ -548,6 +548,7 @@ SOURCE_FILES = \
   Monotonic.cpp \
   ObjectInstanceRegistry.cpp \
   OffloadGPULoops.cpp \
+  OptimizeShuffles.cpp \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
   Parameter.cpp \
@@ -603,6 +604,7 @@ SOURCE_FILES = \
   SplitTuples.cpp \
   StageStridedLoads.cpp \
   StmtToHtml.cpp \
+  StmtToViz.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
   StrictifyFloat.cpp \
@@ -626,6 +628,11 @@ SOURCE_FILES = \
  C_TEMPLATE_FILES = \
    CodeGen_C_prologue \
    CodeGen_C_vectors
+
+HTML_TEMPLATE_FILES = \
+   StmtToViz_dependencies \
+   StmtToViz_javascript \
+   StmtToViz_stylesheet
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
@@ -739,6 +746,7 @@ HEADER_FILES = \
   Monotonic.h \
   ObjectInstanceRegistry.h \
   OffloadGPULoops.h \
+  OptimizeShuffles.h \
   OutputImageParam.h \
   ParallelRVar.h \
   Param.h \
@@ -776,6 +784,7 @@ HEADER_FILES = \
   SplitTuples.h \
   StageStridedLoads.h \
   StmtToHtml.h \
+  StmtToViz.h \
   StorageFlattening.h \
   StorageFolding.h \
   StrictifyFloat.h \
@@ -934,6 +943,7 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) \
                   $(RUNTIME_EXPORTED_INCLUDES:$(INCLUDE_DIR)/%.h=$(BUILD_DIR)/initmod.%_h.o) \
                   $(C_TEMPLATE_FILES:%=$(BUILD_DIR)/c_template.%.o) \
+                  $(HTML_TEMPLATE_FILES:%=$(BUILD_DIR)/html_template.%.o) \
                   $(BUILD_DIR)/initmod.inlined_c.o \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
@@ -1177,6 +1187,9 @@ $(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvid
 $(BUILD_DIR)/c_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/%.template.cpp
 	./$(BIN_DIR)/binary2cpp halide_c_template_$* < $(SRC_DIR)/$*.template.cpp > $@
 
+$(BUILD_DIR)/html_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/irvisualizer/%.template.html
+	./$(BIN_DIR)/binary2cpp halide_html_template_$* < $(SRC_DIR)/irvisualizer/$*.template.html > $@
+
 $(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	@mkdir -p $(@D)
 	$(CXX) $< -o $@
@@ -1192,6 +1205,9 @@ $(BUILD_DIR)/initmod.%.o: $(BUILD_DIR)/initmod.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
 $(BUILD_DIR)/c_template.%.o: $(BUILD_DIR)/c_template.%.cpp
+	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
+
+$(BUILD_DIR)/html_template.%.o: $(BUILD_DIR)/html_template.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(BUILD_DIR)/llvm_ok
@@ -1447,28 +1463,6 @@ $(BIN_DIR)/%.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 	@mkdir -p $(@D)
 	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
 
-# It is not always possible to cross compile between 32-bit and 64-bit via the clang build as part of llvm
-# These next two rules can fail the compilationa nd produce zero length bitcode blobs.
-# If the zero length blob is actually used, the test will fail anyway, but usually only the bitness
-# of the target is used.
-$(BUILD_DIR)/external_code_extern_bitcode_32.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp $(BIN_DIR)/binary2cpp
-	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m32 -target $(RUNTIME_TRIPLE_32) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_32.bc || echo -n > $(BUILD_DIR)/external_code_extern_32.bc
-	./$(BIN_DIR)/binary2cpp external_code_extern_bitcode_32 < $(BUILD_DIR)/external_code_extern_32.bc > $@
-
-$(BUILD_DIR)/external_code_extern_bitcode_64.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp $(BIN_DIR)/binary2cpp
-	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m64 -target $(RUNTIME_TRIPLE_64) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_64.bc || echo -n > $(BUILD_DIR)/external_code_extern_64.bc
-	./$(BIN_DIR)/binary2cpp external_code_extern_bitcode_64 < $(BUILD_DIR)/external_code_extern_64.bc > $@
-
-$(BUILD_DIR)/external_code_extern_cpp_source.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp $(BIN_DIR)/binary2cpp
-	@mkdir -p $(@D)
-	./$(BIN_DIR)/binary2cpp external_code_extern_cpp_source < $(ROOT_DIR)/test/generator/external_code_extern.cpp > $@
-
-$(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BUILD_DIR)/external_code_generator.o $(BUILD_DIR)/external_code_extern_bitcode_32.cpp $(BUILD_DIR)/external_code_extern_bitcode_64.cpp $(BUILD_DIR)/external_code_extern_cpp_source.cpp
-	@mkdir -p $(@D)
-	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
-
 NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
 
 GEN_AOT_OUTPUTS=-e static_library,c_header,c_source,registration
@@ -1674,14 +1668,6 @@ $(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
 $(FILTERS_DIR)/stubuser_auto.a: $(BIN_DIR)/stubuser.generator $(BIN_MULLAPUDI2016)
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g stubuser $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f stubuser_auto target=$(TARGET)-no_runtime autoscheduler=Mullapudi2016 -p $(BIN_MULLAPUDI2016)
-
-$(FILTERS_DIR)/external_code.a: $(BIN_DIR)/external_code.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -g external_code -e static_library,c_header,registration -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=true
-
-$(FILTERS_DIR)/external_code.halide_generated.cpp: $(BIN_DIR)/external_code.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -g external_code -e c_source -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=false
 
 $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(BIN_MULLAPUDI2016)
 	@mkdir -p $(@D)
@@ -2450,15 +2436,23 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
 
+# Build some common tools
+$(DISTRIB_DIR)/bin/featurization_to_sample $(DISTRIB_DIR)/bin/get_host_target: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+	@mkdir -p $(@D)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/common/Makefile $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+	for TOOL in featurization_to_sample get_host_target; do \
+    		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+	done
+
 # Adams2019 also includes autotuning tools
 $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_adams2019.$(PLUGIN_EXT)
 	@mkdir -p $(@D)
-	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/retrain_cost_model $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/adams2019_retrain_cost_model $(BIN_DIR)/adams2019_weightsdir_to_weightsfile HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	cp $< $(DISTRIB_DIR)/lib/
-	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
-		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+	for TOOL in adams2019_retrain_cost_model adams2019_weightsdir_to_weightsfile; do \
+    		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
 	done
-	cp $(SRC_DIR)/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
+	cp $(SRC_DIR)/autoschedulers/adams2019/adams2019_autotune_loop.sh $(DISTRIB_DIR)/tools/
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
@@ -2466,7 +2460,9 @@ endif
 autoschedulers: \
 $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(PLUGIN_EXT) \
 $(DISTRIB_DIR)/lib/libautoschedule_li2018.$(PLUGIN_EXT) \
-$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT) \
+$(DISTRIB_DIR)/bin/featurization_to_sample \
+$(DISTRIB_DIR)/bin/get_host_target
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT) autoschedulers

@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "runtime_atomics.h"
 #include "runtime_internal.h"
 
 extern "C" {
@@ -24,7 +25,7 @@ ALWAYS_INLINE void aligned_free(void *ptr) {
 // which can cause a noticable performance impact on some workloads.
 // 'num_buffers' is the number of pre-allocated buffers and 'buffer_size' is
 // the size of each buffer. The pre-allocated buffers are shared among threads
-// and we use __sync_val_compare_and_swap primitive to synchronize the buffer
+// and we use compare-and-swap primitives to synchronize the buffer
 // allocation.
 // TODO(psuriana): make num_buffers configurable by user
 static const int num_buffers = 10;
@@ -46,11 +47,15 @@ WEAK __attribute__((destructor)) void halide_allocator_cleanup() {
 }  // namespace Halide
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
+    using namespace Halide::Runtime::Internal::Synchronization;
+
     const size_t alignment = ::halide_internal_malloc_alignment();
 
     if (x <= buffer_size) {
         for (int i = 0; i < num_buffers; ++i) {
-            if (__sync_val_compare_and_swap(buf_is_used + i, 0, 1) == 0) {
+            int expected = 0;
+            int desired = 1;
+            if (atomic_cas_strong_sequentially_consistent(&buf_is_used[i], &expected, &desired)) {
                 if (mem_buf[i] == nullptr) {
                     mem_buf[i] = aligned_malloc(alignment, buffer_size);
                 }

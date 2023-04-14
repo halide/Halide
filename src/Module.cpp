@@ -19,6 +19,7 @@
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
+#include "StmtToViz.h"
 
 namespace Halide {
 namespace Internal {
@@ -49,6 +50,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {OutputFileType::stmt, {"stmt", ".stmt", IsMulti}},
         {OutputFileType::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
+        {OutputFileType::stmt_viz, {"stmt_viz", ".stmt.viz.html", IsMulti}},
     };
     return ext;
 }
@@ -551,6 +553,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::map<OutputFileType, std::string> output_files_copy = output_files;
         output_files_copy.erase(OutputFileType::stmt);
         output_files_copy.erase(OutputFileType::stmt_html);
+        output_files_copy.erase(OutputFileType::stmt_viz);
         resolve_submodules().compile(output_files_copy);
         return;
     }
@@ -609,6 +612,11 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             auto out = make_raw_fd_ostream(output_files.at(OutputFileType::llvm_assembly));
             compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
         }
+    }
+
+    if (contains(output_files, OutputFileType::stmt_viz)) {
+        debug(1) << "Module.compile(): stmt_viz " << output_files.at(OutputFileType::stmt_viz) << "\n";
+        Internal::print_to_viz(output_files.at(OutputFileType::stmt_viz), *this);
     }
     if (contains(output_files, OutputFileType::function_info_header)) {
         debug(1) << "Module.compile(): function_info_header " << output_files.at(OutputFileType::function_info_header) << "\n";

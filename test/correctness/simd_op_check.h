@@ -379,6 +379,11 @@ public:
             }
             SIMDOpCheckT test(t);
 
+            if (!t.supported()) {
+                std::cout << "Halide was compiled without support for " << t.to_string() << ". Skipping.\n";
+                continue;
+            }
+
             if (argc > 1) {
                 test.filter = argv[1];
             }

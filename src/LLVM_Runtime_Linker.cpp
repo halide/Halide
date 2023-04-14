@@ -369,8 +369,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
 #endif
         }
     } else {
-        internal_error << "Bad target arch: " << target.arch << "\n";
-        return llvm::DataLayout("unreachable");
+        // Return empty data layout. Must be set later.
+        return llvm::DataLayout("");
     }
 }
 
@@ -505,7 +505,7 @@ llvm::Triple get_triple_for_target(const Target &target) {
             user_error << "No RISCV support for this OS\n";
         }
     } else {
-        internal_error << "Bad target arch: " << target.arch << "\n";
+        // Return default-constructed triple. Must be set later.
     }
 
     return triple;

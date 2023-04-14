@@ -39,6 +39,7 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 if (Python3_VERSION VERSION_LESS "3.8")
     message(FATAL_ERROR "Halide requires Python v3.8 or later, but found ${Python3_VERSION}.")
 endif ()
+message(STATUS "Found Python ${Python3_VERSION} at ${Python3_EXECUTABLE}")
 
 if (PYBIND11_USE_FETCHCONTENT)
     include(FetchContent)

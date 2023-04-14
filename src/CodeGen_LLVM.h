@@ -665,6 +665,13 @@ private:
      */
     int effective_vscale;
 
+    /** Assign a unique ID to each producer-consumer and for-loop node. The IDs
+     * are printed as comments in assembly and used to link visualizations with
+     * the generated assembly code within `StmtToViz`
+     */
+    int producer_consumer_id = 0;
+    int for_loop_id = 0;
+
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)
      * as extern "C" linkage. Note that the return value is a function-returning-
