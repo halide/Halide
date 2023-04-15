@@ -616,7 +616,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
 
     if (contains(output_files, OutputFileType::stmt_viz)) {
         debug(1) << "Module.compile(): stmt_viz " << output_files.at(OutputFileType::stmt_viz) << "\n";
-        Internal::print_to_viz(output_files.at(OutputFileType::stmt_viz), *this);
+        Internal::print_to_viz(output_files.at(OutputFileType::stmt_viz), *this, output_files.at(OutputFileType::assembly));
     }
     if (contains(output_files, OutputFileType::function_info_header)) {
         debug(1) << "Module.compile(): function_info_header " << output_files.at(OutputFileType::function_info_header) << "\n";

@@ -15,8 +15,14 @@ namespace Internal {
 
 struct Stmt;
 
-/** Dump an HTML-formatted visualization of a Module to filename. */
-void print_to_viz(const std::string &filename, const Module &m);
+/** Dump an HTML-formatted visualization of a Module to filename.
+ * If assembly_input_filename is not empty, it is expected to be the path
+ * to assembly output. If empty, the code will attempt to find such a
+ * file based on output_filename (replacing ".stmt.html" with ".s"),
+ * and will assert-fail if no such file is found. */
+void print_to_viz(const std::string &html_output_filename,
+                  const Module &m,
+                  const std::string &assembly_input_filename = "");
 
 }  // namespace Internal
 }  // namespace Halide
