@@ -2740,15 +2740,31 @@ private:
 class IRVisualizer {
 public:
     // Construct the visualizer and point it to the output file
-    explicit IRVisualizer(const std::string &filename)
+    explicit IRVisualizer(const std::string &html_output_filename,
+                          const Module &m,
+                          const std::string &assembly_input_filename)
         : html_code_printer(stream, node_ids), html_viz_printer(stream, node_ids) {
         // Open output file
-        stream.open(filename.c_str());
+        stream.open(html_output_filename.c_str());
 
-        // Load assembly code
-        std::string asm_file = filename;
-        asm_file.replace(asm_file.find(".stmt.viz.html"), 15, ".s");
-        load_asm_code(asm_file);
+        // Load assembly code -- if not explicit specified, assume it will have matching pathname
+        // as our output file, with a different extension.
+        if (assembly_input_filename.empty()) {
+            // get_output_info() is the One True Source Of Truth for expected file suffixes,
+            // so use that rather than hardcoding it here.
+            const auto info = get_output_info(m.target());
+            const std::string stmt_html_extension = info.at(OutputFileType::stmt_html).extension;
+            const size_t pos = html_output_filename.rfind(stmt_html_extension);
+            user_assert(pos != std::string::npos)
+                << "Unable to find expected extension (" << html_output_filename
+                << ") in filename (" << html_output_filename << ")\n";
+
+            const std::string asm_extension = info.at(OutputFileType::assembly).extension;
+            const std::string asm_file = html_output_filename.substr(0, pos) + asm_extension;
+            load_asm_code(asm_file);
+        } else {
+            load_asm_code(assembly_input_filename);
+        }
     }
 
     // Generate the html visualization of the input module
@@ -2866,7 +2882,7 @@ private:
                            <button class='icon-btn resize-btn' onclick='collapse_code_tab()'>
                              <i class='bi bi-arrow-bar-left' title='Collapse code tab'></i>
                            </button>
-                         </div>                         
+                         </div>
                          <div>
                            <button class='icon-btn resize-btn' onclick='collapseR_visualization_tab()'>
                              <i class='bi bi-arrow-bar-right' title='Collapse visualization tab'></i>
@@ -2906,6 +2922,8 @@ private:
     AssemblyInfo asm_info;
 
     void load_asm_code(const std::string &asm_file) {
+        user_assert(file_exists(asm_file)) << "Unable to open assembly file: " << asm_file << "\n";
+
         // Open assembly file
         assembly.open(asm_file.c_str());
 
@@ -2918,10 +2936,12 @@ private:
 };
 
 // The external interface to this module
-void print_to_viz(const std::string &filename, const Module &m) {
-    IRVisualizer visualizer(filename);
+void print_to_viz(const std::string &html_output_filename,
+                  const Module &m,
+                  const std::string &assembly_input_filename) {
+    IRVisualizer visualizer(html_output_filename, m, assembly_input_filename);
     visualizer.generate_html(m);
-    debug(1) << "Done generating HTML IR Visualization - printed to: " << filename << "\n";
+    debug(1) << "Done generating HTML IR Visualization - printed to: " << html_output_filename << "\n";
 }
 
 }  // namespace Internal
