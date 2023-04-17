@@ -560,7 +560,6 @@ SOURCE_FILES = \
   SpirvIR.cpp \
   SplitTuples.cpp \
   StageStridedLoads.cpp \
-  StmtToHtml.cpp \
   StmtToViz.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
