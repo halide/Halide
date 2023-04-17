@@ -790,13 +790,6 @@ gengen
             output_types.insert(OutputFileType::registration);
             output_types.insert(OutputFileType::static_library);
         } else {
-            // if emit_flags contains "stmt_html" but not "assembly", throw an error
-            bool has_stmt_html = std::find(emit_flags.begin(), emit_flags.end(), "stmt_html") != emit_flags.end();
-            bool has_assembly = std::find(emit_flags.begin(), emit_flags.end(), "assembly") != emit_flags.end();
-
-            user_assert(!has_stmt_html || has_assembly)
-                << "Output flag `stmt_html` requires the `assembly` flag to also be set.";
-
             // Build a reverse lookup table. Allow some legacy aliases on the command line,
             // to allow legacy build systems to work more easily.
             std::map<std::string, OutputFileType> output_name_to_enum = {
