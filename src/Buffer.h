@@ -581,13 +581,13 @@ public:
      * given symbolic coordinate. */
     // @{
     template<typename... Args>
-    const Expr operator()(const Expr &first, Args... rest) const {
+    const Expr operator()(const Expr &first, Args... rest) const {  // NOLINT
         std::vector<Expr> args = {first, rest...};
         return (*this)(args);
     }
 
     template<typename... Args>
-    const Expr operator()(const std::vector<Expr> &args) const {
+    const Expr operator()(const std::vector<Expr> &args) const {  // NOLINT
         return buffer_accessor(Buffer<>(*this), args);
     }
     // @}
