@@ -519,7 +519,15 @@ int main(int argc, char **argv) {
         // because it's the only thing needed for current Halide tests.
         //
         // TODO: add checking for other GPU (etc) backends.
-        if (strstr(rf->filter_metadata->target, "cuda")) {
+        std::set<std::string> tokens;
+        {
+            std::stringstream s(rf->filter_metadata->target);
+            std::string tok;
+            while (std::getline(s, tok, '-')) {
+                tokens.insert(tok);
+            }
+        }
+        if (tokens.count("cuda")) {
             int version_required = 20;  // Minimum for any Halide-generated Cuda output
             static const std::pair<const char *, int> capabilities[] = {
                 {"cuda_capability30", 30},
@@ -533,7 +541,7 @@ int main(int argc, char **argv) {
                 {"cuda_capability86", 86},
             };
             for (const auto &it : capabilities) {
-                if (strstr(rf->filter_metadata->target, it.first)) {
+                if (tokens.count(it.first)) {
                     version_required = std::max(version_required, it.second);
                 }
             }
@@ -556,7 +564,7 @@ int main(int argc, char **argv) {
             if (version_available < version_required) {
                 std::cout << "[SKIP] This system supports only Cuda compute capability " << major << "." << minor << " but compute capability "
                           << (version_required / 10) << "." << (version_required % 10) << " is required.\n";
-                    return 0;
+                return 0;
             }
         }
     }
