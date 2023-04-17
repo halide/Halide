@@ -575,17 +575,29 @@ public:
     }
     // @}
 
+    class BufferRef {
+        Expr e;
+
+    public:
+        explicit BufferRef(const Expr &e)
+            : e(e) {
+        }
+        operator Expr() const {
+            return e;
+        }
+    };
+
     /** Make an Expr that loads from this concrete buffer at a computed coordinate. */
     // @{
     template<typename... Args>
-    Expr operator()(const Expr &first, Args... rest) const {
+    BufferRef operator()(const Expr &first, Args... rest) const {
         std::vector<Expr> args = {first, rest...};
-        return (*this)(args);
+        return BufferRef{(*this)(args)};
     }
 
     template<typename... Args>
-    Expr operator()(const std::vector<Expr> &args) const {
-        return buffer_accessor(Buffer<>(*this), args);
+    BufferRef operator()(const std::vector<Expr> &args) const {
+        return BufferRef{buffer_accessor(Buffer<>(*this), args)};
     }
     // @}
 
