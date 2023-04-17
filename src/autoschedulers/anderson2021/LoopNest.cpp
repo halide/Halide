@@ -1660,7 +1660,7 @@ void LoopNest::recompute_inlined_features(const StageMap<Sites> &sites, StageMap
 std::pair<int64_t, bool> LoopNest::compute_alloc_size_of_node_here(const FunctionDAG::Node *f) const {
     const auto &bounds = get_bounds(f);
 
-    auto bytes = f->bytes_per_point;
+    int64_t bytes = f->bytes_per_point;
     bool is_constant = true;
     for (int i = 0; i < f->dimensions; i++) {
         const auto &p = bounds->region_computed(i);
