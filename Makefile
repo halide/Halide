@@ -738,7 +738,6 @@ HEADER_FILES = \
   Solve.h \
   SplitTuples.h \
   StageStridedLoads.h \
-  StmtToHtml.h \
   StmtToViz.h \
   StorageFlattening.h \
   StorageFolding.h \
