@@ -387,7 +387,9 @@ template<typename First, typename... Rest>
 struct select_type : std::conditional<First::value, typename First::type, typename select_type<Rest...>::type> {};
 
 template<typename First>
-struct select_type<First> { using type = typename std::conditional<First::value, typename First::type, void>::type; };
+struct select_type<First> {
+    using type = typename std::conditional<First::value, typename First::type, void>::type;
+};
 
 class GeneratorParamInfo;
 
@@ -2155,7 +2157,9 @@ public:
 };
 
 template<typename>
-struct type_sink { typedef void type; };
+struct type_sink {
+    typedef void type;
+};
 
 template<typename T2, typename = void>
 struct has_static_halide_type_method : std::false_type {};
@@ -3770,7 +3774,9 @@ private:
     // std::is_member_function_pointer will fail if there is no member of that name,
     // so we use a little SFINAE to detect if there are method-shaped members.
     template<typename>
-    struct type_sink { typedef void type; };
+    struct type_sink {
+        typedef void type;
+    };
 
     template<typename T2, typename = void>
     struct has_configure_method : std::false_type {};

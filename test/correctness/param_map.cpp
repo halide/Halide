@@ -2,6 +2,11 @@
 #include <iostream>
 #include <stdio.h>
 
+#ifdef __GNUC__
+// We don't want to emit deprecation warnings for this test
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 using namespace Halide;
 
 int main(int argc, char **argv) {
