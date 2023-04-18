@@ -4,6 +4,11 @@
 #include <functional>
 #include <thread>
 
+#ifdef __GNUC__
+// We don't want to emit deprecation warnings for this test
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 /** \file Test to demonstrate using JIT across multiple threads with
  * varying parameters passed to realizations. Performance is tested
  * by comparing a technique that recompiles vs one that should not.
@@ -27,22 +32,25 @@ struct test_func {
         inner(x) = x * in(clamp(x, 0, 9)) + big;
         f(x) = inner(x - 1) + inner(x) + inner(x + 1);
         inner.compute_at(f, x);
-    }
-};
 
-// The Halide compiler is currently not guaranteed to be thread safe.
-std::mutex compiler_mutex;
+        // The Halide compiler is threadsafe, with the important caveat
+        // that mutable objects like Funcs and ImageParams cannot be
+        // shared across thread boundaries without being guarded by a
+        // mutex. Since we don't share any such objects here, we don't
+        // need any synchronization
+        f.compile_jit();
+    }
+
+    test_func(const test_func &copy) = delete;
+    test_func &operator=(const test_func &) = delete;
+    test_func(test_func &&) = delete;
+    test_func &operator=(test_func &&) = delete;
+};
 
 Buffer<int32_t> bufs[16];
 
 void separate_func_per_thread_executor(int index) {
     test_func test;
-
-    {
-        std::lock_guard<std::mutex> lock(compiler_mutex);
-
-        test.f.compile_jit();
-    }
 
     test.p.set(index);
     test.in.set(bufs[index]);
@@ -87,17 +95,6 @@ void same_func_per_thread_executor(int index, test_func &test) {
 void same_func_per_thread() {
     std::thread threads[16];
     test_func test;
-
-    // In this program, only one thread can call into the compiler
-    // at this point. The mutex guard is still included both to show that in
-    // general Halide compilation is not thread ssafe and also to keep
-    // the performance comparison slightly more equal by including
-    // (minimal) mutex cost on both paths.
-    {
-        std::lock_guard<std::mutex> lock(compiler_mutex);
-
-        test.f.compile_jit();
-    }
 
     for (auto &thread : threads) {
         thread = std::thread(same_func_per_thread_executor,

@@ -19,7 +19,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
-#include "StmtToHtml.h"
+#include "StmtToViz.h"
 
 namespace Halide {
 namespace Internal {
@@ -56,12 +56,12 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
 
 namespace {
 
-class TemporaryObjectFileDir final {
+class TemporaryFileDir final {
 public:
-    TemporaryObjectFileDir()
+    TemporaryFileDir()
         : dir_path(dir_make_temp()) {
     }
-    ~TemporaryObjectFileDir() {
+    ~TemporaryFileDir() {
         for (const auto &f : dir_files) {
             debug(1) << "file_unlink: " << f << "\n";
             file_unlink(f);
@@ -113,10 +113,10 @@ private:
     std::vector<std::string> dir_files;
 
 public:
-    TemporaryObjectFileDir(const TemporaryObjectFileDir &) = delete;
-    TemporaryObjectFileDir &operator=(const TemporaryObjectFileDir &) = delete;
-    TemporaryObjectFileDir(TemporaryObjectFileDir &&) = delete;
-    TemporaryObjectFileDir &operator=(TemporaryObjectFileDir &&) = delete;
+    TemporaryFileDir(const TemporaryFileDir &) = delete;
+    TemporaryFileDir &operator=(const TemporaryFileDir &) = delete;
+    TemporaryFileDir(TemporaryFileDir &&) = delete;
+    TemporaryFileDir &operator=(TemporaryFileDir &&) = delete;
 };
 
 // Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext
@@ -522,17 +522,13 @@ MetadataNameMap Module::get_metadata_name_map() const {
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
 
-    // output stmt and html prior to resolving submodules. We need to
+    // output stmt prior to resolving submodules. We need to
     // clear the output after writing it, otherwise the output will
     // be overwritten by recursive calls after submodules are resolved.
     if (contains(output_files, OutputFileType::stmt)) {
         debug(1) << "Module.compile(): stmt " << output_files.at(OutputFileType::stmt) << "\n";
         std::ofstream file(output_files.at(OutputFileType::stmt));
         file << *this;
-    }
-    if (contains(output_files, OutputFileType::stmt_html)) {
-        debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
-        Internal::print_to_html(output_files.at(OutputFileType::stmt_html), *this);
     }
 
     // Minor but worthwhile optimization: if all of the output files are of types that won't
@@ -556,10 +552,26 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         return;
     }
 
+    TemporaryFileDir temp_dir;
+
+    std::string assembly_path;
+    if (contains(output_files, OutputFileType::assembly)) {
+        assembly_path = output_files.at(OutputFileType::assembly);
+    } else if (contains(output_files, OutputFileType::stmt_html)) {
+        // We need assembly in order to generate stmt_html, but the user doesn't
+        // want it on its own, so we will generate it to a temp directory, since some
+        // build systems (e.g. Bazel) are strict about what you can generate to the 'expected'
+        // build-products directory (but grant exemptions for /tmp).
+        assembly_path = temp_dir.add_temp_file(output_files.at(OutputFileType::stmt_html),
+                                               get_output_info(target()).at(OutputFileType::assembly).extension,
+                                               target());
+        debug(1) << "Module.compile(): creating temp file for assembly output at " << assembly_path << "\n";
+    }
+
     auto *logger = get_compiler_logger();
     if (contains(output_files, OutputFileType::object) || contains(output_files, OutputFileType::assembly) ||
         contains(output_files, OutputFileType::bitcode) || contains(output_files, OutputFileType::llvm_assembly) ||
-        contains(output_files, OutputFileType::static_library)) {
+        contains(output_files, OutputFileType::static_library) || !assembly_path.empty()) {
         llvm::LLVMContext context;
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
@@ -574,12 +586,11 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             }
         }
         if (contains(output_files, OutputFileType::static_library)) {
-            // To simplify the code, we always create a temporary object output
-            // here, even if output_files.at(OutputFileType::object) was also set: in practice,
-            // no real-world code ever sets both object and static_library
+            // To simplify the code, we always emit to a temporary file
+            // here, even if output_files.at(OutputFileType::object) was also set:
+            // in practice, no real-world code ever sets both object and static_library
             // at the same time, so there is no meaningful performance advantage
             // to be had.
-            TemporaryObjectFileDir temp_dir;
             {
                 std::string object = temp_dir.add_temp_object_file(output_files.at(OutputFileType::static_library), "", target());
                 debug(1) << "Module.compile(): temporary object " << object << "\n";
@@ -595,9 +606,10 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             Target base_target(target().os, target().arch, target().bits, target().processor_tune);
             create_static_library(temp_dir.files(), base_target, output_files.at(OutputFileType::static_library));
         }
-        if (contains(output_files, OutputFileType::assembly)) {
-            debug(1) << "Module.compile(): assembly " << output_files.at(OutputFileType::assembly) << "\n";
-            auto out = make_raw_fd_ostream(output_files.at(OutputFileType::assembly));
+        // Don't use contains() here, we might need assembly output for stmt_html
+        if (!assembly_path.empty()) {
+            debug(1) << "Module.compile(): assembly " << assembly_path << "\n";
+            auto out = make_raw_fd_ostream(assembly_path);
             compile_llvm_module_to_assembly(*llvm_module, *out);
         }
         if (contains(output_files, OutputFileType::bitcode)) {
@@ -610,6 +622,12 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             auto out = make_raw_fd_ostream(output_files.at(OutputFileType::llvm_assembly));
             compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
         }
+    }
+
+    if (contains(output_files, OutputFileType::stmt_html)) {
+        internal_assert(!assembly_path.empty());
+        debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
+        Internal::print_to_viz(output_files.at(OutputFileType::stmt_html), *this, assembly_path);
     }
     if (contains(output_files, OutputFileType::function_info_header)) {
         debug(1) << "Module.compile(): function_info_header " << output_files.at(OutputFileType::function_info_header) << "\n";
@@ -823,7 +841,7 @@ void compile_multitarget(const std::string &fn_name,
     constexpr int kFeaturesWordCount = (Target::FeatureEnd + 63) / (sizeof(uint64_t) * 8);
     uint64_t runtime_features[kFeaturesWordCount] = {(uint64_t)-1LL};
 
-    TemporaryObjectFileDir temp_obj_dir, temp_compiler_log_dir;
+    TemporaryFileDir temp_obj_dir, temp_compiler_log_dir;
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;

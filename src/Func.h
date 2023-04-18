@@ -785,7 +785,9 @@ public:
      *
      * One can explicitly construct a ParamMap and
      * use its set method to insert Parameter to scalar or Buffer
-     * value mappings:
+     * value mappings. (NOTE: ParamMap is deprecated in Halide 16 and
+     * will be removed in Halide 17. Callers requiring threadsafe JIT
+     * calls should migrate to use compile_to_callable() instead.)
      *
      \code
      Param<int32> p(42);
