@@ -63,6 +63,14 @@ endif ()
 
 # FIXME: failing_with_issue is dead code :)
 
+# Ensure that basic sanitizer flags are supported;
+# - Address sanitizer is often used in conjunction with fuzzing as it will detect
+#   common high severity bugs. This sanitizer is used as a "default" for fuzzing
+#   when the sanitizer isn't otherwise specified.
+# - Fuzzer sanitizer will link against libfuzzer and is currently only supported
+#   on clang/msvc and isn't supported with GCC. If you need to use these fuzzers
+#   with a GCC based project you should consider looking into the LIB_FUZZING_ENGINE
+#   env variable defined in `test/fuzz/CMakeLists.txt`.
 check_cxx_compiler_flag("-fsanitize=fuzzer,address" HAS_FUZZ_FLAGS)
 
 cmake_dependent_option(
