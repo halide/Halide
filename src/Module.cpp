@@ -18,7 +18,6 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
-#include "StmtToHtml.h"
 #include "StmtToViz.h"
 
 namespace Halide {
@@ -50,7 +49,6 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {OutputFileType::stmt, {"stmt", ".stmt", IsMulti}},
         {OutputFileType::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
-        {OutputFileType::stmt_viz, {"stmt_viz", ".stmt.viz.html", IsMulti}},
     };
     return ext;
 }
@@ -523,17 +521,13 @@ MetadataNameMap Module::get_metadata_name_map() const {
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
 
-    // output stmt and html prior to resolving submodules. We need to
+    // output stmt prior to resolving submodules. We need to
     // clear the output after writing it, otherwise the output will
     // be overwritten by recursive calls after submodules are resolved.
     if (contains(output_files, OutputFileType::stmt)) {
         debug(1) << "Module.compile(): stmt " << output_files.at(OutputFileType::stmt) << "\n";
         std::ofstream file(output_files.at(OutputFileType::stmt));
         file << *this;
-    }
-    if (contains(output_files, OutputFileType::stmt_html)) {
-        debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
-        Internal::print_to_html(output_files.at(OutputFileType::stmt_html), *this);
     }
 
     // Minor but worthwhile optimization: if all of the output files are of types that won't
@@ -553,7 +547,6 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::map<OutputFileType, std::string> output_files_copy = output_files;
         output_files_copy.erase(OutputFileType::stmt);
         output_files_copy.erase(OutputFileType::stmt_html);
-        output_files_copy.erase(OutputFileType::stmt_viz);
         resolve_submodules().compile(output_files_copy);
         return;
     }
@@ -630,9 +623,10 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         }
     }
 
-    if (contains(output_files, OutputFileType::stmt_viz)) {
-        debug(1) << "Module.compile(): stmt_viz " << output_files.at(OutputFileType::stmt_viz) << "\n";
-        Internal::print_to_viz(output_files.at(OutputFileType::stmt_viz), *this, assembly_path);
+    if (contains(output_files, OutputFileType::stmt_html)) {
+        internal_assert(!assembly_path.empty());
+        debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
+        Internal::print_to_viz(output_files.at(OutputFileType::stmt_html), *this, assembly_path);
     }
     if (contains(output_files, OutputFileType::function_info_header)) {
         debug(1) << "Module.compile(): function_info_header " << output_files.at(OutputFileType::function_info_header) << "\n";
