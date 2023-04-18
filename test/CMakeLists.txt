@@ -73,6 +73,10 @@ endif ()
 #   env variable defined in `test/fuzz/CMakeLists.txt`.
 check_cxx_compiler_flag("-fsanitize=fuzzer,address" HAS_FUZZ_FLAGS)
 
+if (NOT HAS_FUZZ_FLAGS)
+    message(VERBOSE "Compiler does not support libfuzzer/address sanitizer.")
+endif ()
+
 cmake_dependent_option(
     WITH_TEST_FUZZ "Build fuzz tests" ON
     HAS_FUZZ_FLAGS ON
