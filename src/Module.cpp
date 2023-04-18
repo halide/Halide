@@ -562,8 +562,8 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         // build systems (e.g. Bazel) are strict about what you can generate to the 'expected'
         // build-products directory (but grant exemptions for /tmp).
         assembly_path = temp_assembly_dir.add_temp_file(output_files.at(OutputFileType::stmt_html),
-                                               get_output_info(target()).at(OutputFileType::assembly).extension,
-                                               target());
+                                                        get_output_info(target()).at(OutputFileType::assembly).extension,
+                                                        target());
         debug(1) << "Module.compile(): creating temp file for assembly output at " << assembly_path << "\n";
     }
 
