@@ -336,9 +336,17 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         }
     } else if (target.arch == Target::POWERPC) {
         if (target.bits == 32) {
+#if LLVM_VERSION >= 170
+            return llvm::DataLayout("E-m:e-p:32:32-Fn32-i64:64-n32");
+#else
             return llvm::DataLayout("E-m:e-p:32:32-i64:64-n32");
+#endif
         } else {
+#if LLVM_VERSION >= 170
+            return llvm::DataLayout("e-m:e-Fn32-i64:64-n32:64-S128-v256:256:256-v512:512:512");
+#else
             return llvm::DataLayout("e-m:e-i64:64-n32:64-S128-v256:256:256-v512:512:512");
+#endif
         }
     } else if (target.arch == Target::Hexagon) {
         return llvm::DataLayout(
