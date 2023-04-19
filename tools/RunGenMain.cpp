@@ -554,9 +554,9 @@ int main(int argc, char **argv) {
             typedef halide_device_interface_t *halide_device_interface_t_ptr;
             typedef halide_device_interface_t_ptr (*GetDeviceInterfaceFn)();
             GetDeviceInterfaceFn fn = reinterpret_cast<GetDeviceInterfaceFn>(cuda_intf);
-            halide_device_interface_t_ptr interface = fn();
+            halide_device_interface_t_ptr intf = fn();
             int major, minor;
-            int err = interface->compute_capability(nullptr, &major, &minor);
+            int err = intf->compute_capability(nullptr, &major, &minor);
             if (err != 0) {
                 std::cout << "[SKIP] This system requires Cuda, which is not available.\n";
                 return 0;
