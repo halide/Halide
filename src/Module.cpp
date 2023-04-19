@@ -546,7 +546,6 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     if (!submodules().empty() && !should_ignore_submodules(output_files)) {
         std::map<OutputFileType, std::string> output_files_copy = output_files;
         output_files_copy.erase(OutputFileType::stmt);
-        output_files_copy.erase(OutputFileType::stmt_html);
         resolve_submodules().compile(output_files_copy);
         return;
     }
