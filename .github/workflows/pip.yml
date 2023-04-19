@@ -8,14 +8,14 @@ on:
   push:
     branches: [ main ]
   release:
-    types: [ created ]
+    types: [ released, edited ]
 
 concurrency:
   group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: true
 
 env:
-  LLVM_VER: 15.0.1
+  LLVM_VER: 15.0.7
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
@@ -202,13 +202,12 @@ jobs:
           name: wheels
           path: dist
 
-      - uses: pypa/gh-action-pypi-publish@v1.5.1
+      - uses: pypa/gh-action-pypi-publish@v1.6.4
         with:
           user: __token__
-          password: ${{ secrets.TEST_PYPI_TOKEN }}
-          repository_url: https://test.pypi.org/legacy/
+          password: ${{ secrets.PYPI_TOKEN }}
 
-      - uses: pypa/gh-action-pypi-publish@v1.5.1
+      - uses: pypa/gh-action-pypi-publish@v1.6.4
         if: github.event_name == 'release' && github.event.action == 'published'
         with:
           user: __token__
