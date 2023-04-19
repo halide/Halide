@@ -672,7 +672,6 @@ gengen
      (=15 minutes). Specify 0 to allow ~infinite time.
 
  -v  If nonzero, log the path to all generated files to stdout.
-
 )INLINE_CODE";
 
     std::map<std::string, std::string> flags_info = {
