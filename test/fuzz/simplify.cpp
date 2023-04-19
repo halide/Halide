@@ -44,7 +44,7 @@ int get_random_divisor(FuzzedDataProvider &fdp, Type t) {
         }
     }
 
-    return divisors[fdp.ConsumeIntegralInRange<size_t>(0, divisors.size()-1)];
+    return divisors[fdp.ConsumeIntegralInRange<size_t>(0, divisors.size() - 1)];
 }
 
 Expr random_leaf(FuzzedDataProvider &fdp, Type T, bool overflow_undef = false, bool imm_only = false) {
