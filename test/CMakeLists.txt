@@ -71,15 +71,19 @@ endif ()
 #   on clang/msvc and isn't supported with GCC. If you need to use these fuzzers
 #   with a GCC based project you should consider looking into the LIB_FUZZING_ENGINE
 #   env variable defined in `test/fuzz/CMakeLists.txt`.
-check_cxx_compiler_flag("-fsanitize=fuzzer,address" HAS_FUZZ_FLAGS)
+set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=fuzzer,address")
+set(CMAKE_REQUIRED_FLAGS "-fsanitize=fuzzer-no-link,address")
+check_cxx_source_compiles("#include <cstdint>\n extern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *Data, std::size_t Size) { return 0; }" HAS_FUZZ_FLAGS)
 
 if (NOT HAS_FUZZ_FLAGS)
-    message(VERBOSE "Compiler does not support libfuzzer/address sanitizer.")
+    message(VERBOSE "Compiler does not support libfuzzer sanitizer.")
+else ()
+    message(VERBOSE "Compiler supports libfuzzer sanitizer.")
 endif ()
 
 cmake_dependent_option(
     WITH_TEST_FUZZ "Build fuzz tests" ON
-    HAS_FUZZ_FLAGS ON
+    HAS_FUZZ_FLAGS OFF
 )
 
 if (WITH_TEST_FUZZ)
