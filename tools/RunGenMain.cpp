@@ -551,7 +551,8 @@ int main(int argc, char **argv) {
                 std::cout << "[SKIP] This system requires Cuda, but the Halide Cuda runtime is not available.\n";
                 return 0;
             }
-            using GetDeviceInterfaceFn = halide_device_interface_t *(*)();
+            typedef halide_device_interface_t *halide_device_interface_t_ptr;
+            typedef halide_device_interface_t_ptr (*GetDeviceInterfaceFn)();
             GetDeviceInterfaceFn fn = reinterpret_cast<GetDeviceInterfaceFn>(cuda_intf);
             const auto *interface = fn();
             int major, minor;
