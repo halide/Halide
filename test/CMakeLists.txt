@@ -73,7 +73,12 @@ endif ()
 #   env variable defined in `test/fuzz/CMakeLists.txt`.
 set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=fuzzer,address")
 set(CMAKE_REQUIRED_FLAGS "-fsanitize=fuzzer-no-link,address")
-check_cxx_source_compiles("#include <cstdint>\n extern \"C\" int LLVMFuzzerTestOneInput(const uint8_t *Data, std::size_t Size) { return 0; }" HAS_FUZZ_FLAGS)
+check_cxx_source_compiles([[
+#include <cstdint>
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, std::size_t Size) {
+  return 0;
+}
+]] HAS_FUZZ_FLAGS)
 
 if (NOT HAS_FUZZ_FLAGS)
     message(VERBOSE "Compiler does not support libfuzzer sanitizer.")
