@@ -575,16 +575,19 @@ public:
     }
     // @}
 
-    /** Make an Expr that loads from this concrete buffer at a computed coordinate. */
+    /** Make an Expr that loads from this concrete buffer at a computed
+     * coordinate. Returned Expr is const so that it's not possible to
+     * accidentally treat a buffer like a Func and try to assign an Expr to a
+     * given symbolic coordinate. */
     // @{
     template<typename... Args>
-    Expr operator()(const Expr &first, Args... rest) const {
+    const Expr operator()(const Expr &first, Args... rest) const {  // NOLINT
         std::vector<Expr> args = {first, rest...};
         return (*this)(args);
     }
 
     template<typename... Args>
-    Expr operator()(const std::vector<Expr> &args) const {
+    const Expr operator()(const std::vector<Expr> &args) const {  // NOLINT
         return buffer_accessor(Buffer<>(*this), args);
     }
     // @}

@@ -551,7 +551,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         return;
     }
 
-    TemporaryFileDir temp_dir;
+    TemporaryFileDir temp_assembly_dir;
 
     std::string assembly_path;
     if (contains(output_files, OutputFileType::assembly)) {
@@ -561,9 +561,9 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         // want it on its own, so we will generate it to a temp directory, since some
         // build systems (e.g. Bazel) are strict about what you can generate to the 'expected'
         // build-products directory (but grant exemptions for /tmp).
-        assembly_path = temp_dir.add_temp_file(output_files.at(OutputFileType::stmt_html),
-                                               get_output_info(target()).at(OutputFileType::assembly).extension,
-                                               target());
+        assembly_path = temp_assembly_dir.add_temp_file(output_files.at(OutputFileType::stmt_html),
+                                                        get_output_info(target()).at(OutputFileType::assembly).extension,
+                                                        target());
         debug(1) << "Module.compile(): creating temp file for assembly output at " << assembly_path << "\n";
     }
 
@@ -590,8 +590,12 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             // in practice, no real-world code ever sets both object and static_library
             // at the same time, so there is no meaningful performance advantage
             // to be had.
+            //
+            // (Use a separate TemporaryFileDir here so we don't try to embed assembly files from
+            // `temp_assembly_dir` into a static library...)
+            TemporaryFileDir temp_object_dir;
             {
-                std::string object = temp_dir.add_temp_object_file(output_files.at(OutputFileType::static_library), "", target());
+                std::string object = temp_object_dir.add_temp_object_file(output_files.at(OutputFileType::static_library), "", target());
                 debug(1) << "Module.compile(): temporary object " << object << "\n";
                 auto out = make_raw_fd_ostream(object);
                 compile_llvm_module_to_object(*llvm_module, *out);
@@ -603,7 +607,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             }
             debug(1) << "Module.compile(): static_library " << output_files.at(OutputFileType::static_library) << "\n";
             Target base_target(target().os, target().arch, target().bits, target().processor_tune);
-            create_static_library(temp_dir.files(), base_target, output_files.at(OutputFileType::static_library));
+            create_static_library(temp_object_dir.files(), base_target, output_files.at(OutputFileType::static_library));
         }
         // Don't use contains() here, we might need assembly output for stmt_html
         if (!assembly_path.empty()) {
