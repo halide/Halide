@@ -521,15 +521,6 @@ MetadataNameMap Module::get_metadata_name_map() const {
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
 
-    // output stmt prior to resolving submodules. We need to
-    // clear the output after writing it, otherwise the output will
-    // be overwritten by recursive calls after submodules are resolved.
-    if (contains(output_files, OutputFileType::stmt)) {
-        debug(1) << "Module.compile(): stmt " << output_files.at(OutputFileType::stmt) << "\n";
-        std::ofstream file(output_files.at(OutputFileType::stmt));
-        file << *this;
-    }
-
     // Minor but worthwhile optimization: if all of the output files are of types that won't
     // ever rely on submodules (e.g.: toplevel declarations in C/C++), don't bother resolving
     // the submodules, which can call compile_to_buffer().
@@ -544,10 +535,9 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     // buffers on a copy of the module being compiled, then compile
     // the copied module.
     if (!submodules().empty() && !should_ignore_submodules(output_files)) {
-        std::map<OutputFileType, std::string> output_files_copy = output_files;
-        output_files_copy.erase(OutputFileType::stmt);
-        output_files_copy.erase(OutputFileType::stmt_html);
-        resolve_submodules().compile(output_files_copy);
+        debug(1) << "Module.compile(): begin submodules\n";
+        resolve_submodules().compile(output_files);
+        debug(1) << "Module.compile(): end submodules\n";
         return;
     }
 
@@ -627,6 +617,11 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         }
     }
 
+    if (contains(output_files, OutputFileType::stmt)) {
+        debug(1) << "Module.compile(): stmt " << output_files.at(OutputFileType::stmt) << "\n";
+        std::ofstream file(output_files.at(OutputFileType::stmt));
+        file << *this;
+    }
     if (contains(output_files, OutputFileType::stmt_html)) {
         internal_assert(!assembly_path.empty());
         debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
