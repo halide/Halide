@@ -177,7 +177,7 @@ Flags:
         which relies on this for successful tests.)
 
     --skip_bad_environement:
-        If the Generator is build for a runtime environment we don't have available
+        If the Generator is built for a runtime environment we don't have available
         (e.g. Cuda on a system without Cuda installed), emit a [SKIP] warning to
         stdout and return an exit code of zero; this allows for quiet "failures"
         when used with CTest.
@@ -528,6 +528,23 @@ int main(int argc, char **argv) {
             }
         }
         if (tokens.count("cuda")) {
+            void *cuda_intf = halide_get_symbol("halide_cuda_device_interface");
+            if (cuda_intf == nullptr) {
+                std::cout << "[SKIP] This system requires Cuda, but the Halide Cuda runtime is not available.\n";
+                return 0;
+            }
+            typedef halide_device_interface_t *halide_device_interface_t_ptr;
+            typedef halide_device_interface_t_ptr (*GetDeviceInterfaceFn)();
+            GetDeviceInterfaceFn fn = reinterpret_cast<GetDeviceInterfaceFn>(cuda_intf);
+            halide_device_interface_t_ptr intf = fn();
+            int major, minor;
+            int err = intf->compute_capability(nullptr, &major, &minor);
+            if (err != 0) {
+                std::cout << "[SKIP] This system requires Cuda, which is not available.\n";
+                return 0;
+            }
+            const int version_available = major * 10 + minor;
+
             int version_required = 20;  // Minimum for any Halide-generated Cuda output
             static const std::pair<const char *, int> capabilities[] = {
                 {"cuda_capability30", 30},
@@ -546,22 +563,6 @@ int main(int argc, char **argv) {
                 }
             }
 
-            void *cuda_intf = halide_get_symbol("halide_cuda_device_interface");
-            if (cuda_intf == nullptr) {
-                std::cout << "[SKIP] This system requires Cuda, but the Halide Cuda runtime is not available.\n";
-                return 0;
-            }
-            typedef halide_device_interface_t *halide_device_interface_t_ptr;
-            typedef halide_device_interface_t_ptr (*GetDeviceInterfaceFn)();
-            GetDeviceInterfaceFn fn = reinterpret_cast<GetDeviceInterfaceFn>(cuda_intf);
-            halide_device_interface_t_ptr intf = fn();
-            int major, minor;
-            int err = intf->compute_capability(nullptr, &major, &minor);
-            if (err != 0) {
-                std::cout << "[SKIP] This system requires Cuda, which is not available.\n";
-                return 0;
-            }
-            const int version_available = major * 10 + minor;
             if (version_available < version_required) {
                 std::cout << "[SKIP] This system supports only Cuda compute capability " << major << "." << minor << " but compute capability "
                           << (version_required / 10) << "." << (version_required % 10) << " is required.\n";
