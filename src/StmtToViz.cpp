@@ -641,9 +641,10 @@ public:
         // Enter new scope for this module
         scope.push(m.name(), id);
 
-        // The implementation currently does not support submodules.
-        // TODO: test it out on a benchmark with submodules
-        internal_assert(m.submodules().empty()) << "StmtToViz does not yet support submodules.";
+        // The implementation doesn't need to support submodules:
+        // we only call this for Modules that have already had their submodules
+        // resolved.
+        internal_assert(m.submodules().empty()) << "StmtToViz does not support submodules.";
 
         // Open div to hold this module
         print_opening_tag("div", "Module");

@@ -521,15 +521,6 @@ MetadataNameMap Module::get_metadata_name_map() const {
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
 
-    // output stmt prior to resolving submodules. We need to
-    // clear the output after writing it, otherwise the output will
-    // be overwritten by recursive calls after submodules are resolved.
-    if (contains(output_files, OutputFileType::stmt)) {
-        debug(1) << "Module.compile(): stmt " << output_files.at(OutputFileType::stmt) << "\n";
-        std::ofstream file(output_files.at(OutputFileType::stmt));
-        file << *this;
-    }
-
     // Minor but worthwhile optimization: if all of the output files are of types that won't
     // ever rely on submodules (e.g.: toplevel declarations in C/C++), don't bother resolving
     // the submodules, which can call compile_to_buffer().
@@ -544,14 +535,13 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     // buffers on a copy of the module being compiled, then compile
     // the copied module.
     if (!submodules().empty() && !should_ignore_submodules(output_files)) {
-        std::map<OutputFileType, std::string> output_files_copy = output_files;
-        output_files_copy.erase(OutputFileType::stmt);
-        output_files_copy.erase(OutputFileType::stmt_html);
-        resolve_submodules().compile(output_files_copy);
+        debug(1) << "Module.compile(): begin submodules\n";
+        resolve_submodules().compile(output_files);
+        debug(1) << "Module.compile(): end submodules\n";
         return;
     }
 
-    TemporaryFileDir temp_dir;
+    TemporaryFileDir temp_assembly_dir;
 
     std::string assembly_path;
     if (contains(output_files, OutputFileType::assembly)) {
@@ -561,9 +551,9 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         // want it on its own, so we will generate it to a temp directory, since some
         // build systems (e.g. Bazel) are strict about what you can generate to the 'expected'
         // build-products directory (but grant exemptions for /tmp).
-        assembly_path = temp_dir.add_temp_file(output_files.at(OutputFileType::stmt_html),
-                                               get_output_info(target()).at(OutputFileType::assembly).extension,
-                                               target());
+        assembly_path = temp_assembly_dir.add_temp_file(output_files.at(OutputFileType::stmt_html),
+                                                        get_output_info(target()).at(OutputFileType::assembly).extension,
+                                                        target());
         debug(1) << "Module.compile(): creating temp file for assembly output at " << assembly_path << "\n";
     }
 
@@ -590,8 +580,12 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             // in practice, no real-world code ever sets both object and static_library
             // at the same time, so there is no meaningful performance advantage
             // to be had.
+            //
+            // (Use a separate TemporaryFileDir here so we don't try to embed assembly files from
+            // `temp_assembly_dir` into a static library...)
+            TemporaryFileDir temp_object_dir;
             {
-                std::string object = temp_dir.add_temp_object_file(output_files.at(OutputFileType::static_library), "", target());
+                std::string object = temp_object_dir.add_temp_object_file(output_files.at(OutputFileType::static_library), "", target());
                 debug(1) << "Module.compile(): temporary object " << object << "\n";
                 auto out = make_raw_fd_ostream(object);
                 compile_llvm_module_to_object(*llvm_module, *out);
@@ -603,7 +597,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             }
             debug(1) << "Module.compile(): static_library " << output_files.at(OutputFileType::static_library) << "\n";
             Target base_target(target().os, target().arch, target().bits, target().processor_tune);
-            create_static_library(temp_dir.files(), base_target, output_files.at(OutputFileType::static_library));
+            create_static_library(temp_object_dir.files(), base_target, output_files.at(OutputFileType::static_library));
         }
         // Don't use contains() here, we might need assembly output for stmt_html
         if (!assembly_path.empty()) {
@@ -623,6 +617,11 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         }
     }
 
+    if (contains(output_files, OutputFileType::stmt)) {
+        debug(1) << "Module.compile(): stmt " << output_files.at(OutputFileType::stmt) << "\n";
+        std::ofstream file(output_files.at(OutputFileType::stmt));
+        file << *this;
+    }
     if (contains(output_files, OutputFileType::stmt_html)) {
         internal_assert(!assembly_path.empty());
         debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
