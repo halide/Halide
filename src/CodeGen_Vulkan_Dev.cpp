@@ -535,7 +535,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const FloatImm *imm) {
     } else if (imm->type.bits() == 64) {
         declare_constant_float<double>(imm->type, imm->value);
     } else {
-        internal_error << "Vulkan backend currently only supports 32-bit or 64-bit floats\n";
+        internal_error << "Vulkan backend currently only supports 16-bit, 32-bit or 64-bit floats\n";
     }
 }
 
@@ -1217,8 +1217,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::visit(const Call *op) {
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (lowered.defined()) {
-            Expr e = lower_intrinsic(op);
-            e.accept(this);
+            lowered.accept(this);
         } else {
             internal_error << "Unhandled intrinsic in Vulkan backend: " << op->name << "\n";
         }
@@ -2795,6 +2794,7 @@ void CodeGen_Vulkan_Dev::SPIRV_Emitter::add_kernel(const Stmt &s,
 
     // Add function definition
     // TODO: can we use one of the function control annotations?
+    // https://github.com/halide/Halide/issues/7533
 
     // Discover the workgroup size
     find_workgroup_size(s);
