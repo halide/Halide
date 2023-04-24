@@ -176,6 +176,12 @@ Flags:
         (This is mainly useful for use with Halide's testing infrastructure,
         which relies on this for successful tests.)
 
+    --skip_bad_environement:
+        If the Generator is built for a runtime environment we don't have available
+        (e.g. Cuda on a system without Cuda installed), emit a [SKIP] warning to
+        stdout and return an exit code of zero; this allows for quiet "failures"
+        when used with CTest.
+
 Known Issues:
 
     * Filters running on GPU (vs CPU) have not been tested.
@@ -319,7 +325,7 @@ int main(int argc, char **argv) {
 
     if (registered_filters == nullptr) {
         std::cerr << "No filters registered. Compile RunGenMain.cpp along with at least one 'registration' output from a generator.\n";
-        return -1;
+        return 1;
     }
 
     // Look for --name
@@ -397,6 +403,7 @@ int main(int argc, char **argv) {
     std::string default_input_scalars;
     std::string benchmarks_flag_value;
     bool emit_success = false;
+    bool skip_bad_environment = false;
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1;  // skip -
@@ -484,6 +491,13 @@ int main(int argc, char **argv) {
                 if (!parse_scalar(flag_value, &emit_success)) {
                     fail() << "Invalid value for flag: " << flag_name;
                 }
+            } else if (flag_name == "skip_bad_environment") {
+                if (flag_value.empty()) {
+                    flag_value = "true";
+                }
+                if (!parse_scalar(flag_value, &skip_bad_environment)) {
+                    fail() << "Invalid value for flag: " << flag_name;
+                }
             } else {
                 usage(argv[0]);
                 fail() << "Unknown flag: " << flag_name;
@@ -496,6 +510,64 @@ int main(int argc, char **argv) {
                 fail() << "Invalid argument: " << argv[i];
             }
             r.parse_one(v[0], v[1], &seen_args);
+        }
+    }
+
+    if (skip_bad_environment) {
+        // Let's do some preflighting to see if we are trying to run on a system that
+        // definitely doesn't support our target. For now, we're just checking Cuda
+        // because it's the only thing needed for current Halide tests.
+        //
+        // TODO: add checking for other GPU (etc) backends.
+        std::set<std::string> tokens;
+        {
+            std::stringstream s(rf->filter_metadata->target);
+            std::string tok;
+            while (std::getline(s, tok, '-')) {
+                tokens.insert(tok);
+            }
+        }
+        if (tokens.count("cuda")) {
+            void *cuda_intf = halide_get_symbol("halide_cuda_device_interface");
+            if (cuda_intf == nullptr) {
+                std::cout << "[SKIP] This system requires Cuda, but the Halide Cuda runtime is not available.\n";
+                return 0;
+            }
+            typedef halide_device_interface_t *halide_device_interface_t_ptr;
+            typedef halide_device_interface_t_ptr (*GetDeviceInterfaceFn)();
+            GetDeviceInterfaceFn fn = reinterpret_cast<GetDeviceInterfaceFn>(cuda_intf);
+            halide_device_interface_t_ptr intf = fn();
+            int major, minor;
+            int err = intf->compute_capability(nullptr, &major, &minor);
+            if (err != 0) {
+                std::cout << "[SKIP] This system requires Cuda, which is not available.\n";
+                return 0;
+            }
+            const int version_available = major * 10 + minor;
+
+            int version_required = 20;  // Minimum for any Halide-generated Cuda output
+            static const std::pair<const char *, int> capabilities[] = {
+                {"cuda_capability30", 30},
+                {"cuda_capability32", 32},
+                {"cuda_capability35", 35},
+                {"cuda_capability50", 50},
+                {"cuda_capability61", 61},
+                {"cuda_capability70", 70},
+                {"cuda_capability75", 75},
+                {"cuda_capability80", 80},
+                {"cuda_capability86", 86},
+            };
+            for (const auto &it : capabilities) {
+                if (tokens.count(it.first)) {
+                    version_required = std::max(version_required, it.second);
+                }
+            }
+
+            if (version_available < version_required) {
+                std::cout << "[SKIP] This system supports only Cuda compute capability " << major << "." << minor << " but compute capability "
+                          << (version_required / 10) << "." << (version_required % 10) << " is required.\n";
+                return 0;
+            }
         }
     }
 
