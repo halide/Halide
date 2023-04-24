@@ -48,6 +48,10 @@ public:
         return "metal";
     }
 
+    bool kernel_run_takes_types() const override {
+        return true;
+    }
+
 protected:
     class CodeGen_Metal_C : public CodeGen_GPU_C {
     public:
