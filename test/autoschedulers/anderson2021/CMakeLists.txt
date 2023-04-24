@@ -52,7 +52,7 @@ add_executable(anderson2021_demo_apps_autoscheduler ${DEMO_REGISTRATION_FILE})
 target_link_libraries(anderson2021_demo_apps_autoscheduler PRIVATE anderson2021_demo Halide::RunGenMain)
 
 add_anderson2021_test(anderson2021_demo_apps_autoscheduler
-                   COMMAND anderson2021_demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
+                   COMMAND anderson2021_demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all --skip_bad_environment)
 
 # =================================================================
 
@@ -70,7 +70,7 @@ add_executable(anderson2021_demo_included_schedule_file ${anderson2021_included_
 target_link_libraries(anderson2021_demo_included_schedule_file PRIVATE anderson2021_included_schedule_file Halide::RunGenMain)
 
 add_anderson2021_test(anderson2021_demo_included_schedule_file
-                   COMMAND anderson2021_demo_included_schedule_file --benchmarks=all --benchmark_min_time=1 --estimate_all)
+                   COMMAND anderson2021_demo_included_schedule_file --benchmarks=all --benchmark_min_time=1 --estimate_all --skip_bad_environment)
 
 # =================================================================
 # Smaller tests
@@ -79,7 +79,7 @@ add_executable(anderson2021_test_apps_autoscheduler test.cpp)
 target_link_libraries(anderson2021_test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 
 add_anderson2021_test(anderson2021_test_apps_autoscheduler
-                   COMMAND anderson2021_test_apps_autoscheduler $<TARGET_FILE:Halide_Anderson2021> $<TARGET_FILE_DIR:Halide_Anderson2021>/baseline.weights
+                   COMMAND anderson2021_test_apps_autoscheduler $<TARGET_FILE:Halide_Anderson2021>
                    LABELS multithreaded
                    ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Anderson2021>:$ENV{LD_LIBRARY_PATH}")
 
