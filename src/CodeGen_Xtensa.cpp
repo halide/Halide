@@ -745,7 +745,8 @@ void CodeGen_Xtensa::visit(const Load *op) {
     // If we're loading a contiguous ramp into a vector, just load the vector
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
     if (!is_const_one(op->predicate)) {
-        const Call *pred = op->predicate.as<Call>();
+        Expr predicate_with_all_lets = substitute_in_all_lets(op->predicate);
+        const Call *pred = predicate_with_all_lets.as<Call>();
         if (pred && (pred->name == "clamped_dense_ramp") && dense_ramp_base.defined()) {
             internal_assert(t.is_vector());
             // The number of elements is difference between upper bound and base of the ramp
@@ -885,7 +886,8 @@ void CodeGen_Xtensa::visit(const Store *op) {
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
 
     if (!is_const_one(op->predicate)) {
-        const Call *pred = op->predicate.as<Call>();
+        Expr predicate_with_all_lets = substitute_in_all_lets(op->predicate);
+        const Call *pred = predicate_with_all_lets.as<Call>();
         if (pred && (pred->name == "clamped_dense_ramp") && dense_ramp_base.defined()) {
             // The number of elements is difference between upper bound and base of the ramp
             // plus one (because the predicate is <=).
