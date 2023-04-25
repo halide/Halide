@@ -125,6 +125,9 @@ function(_add_one_aot_test TARGET)
     if ("${Halide_TARGET}" MATCHES "cuda")
         target_compile_definitions("${TARGET}" PRIVATE TEST_CUDA)
     endif ()
+    if ("${Halide_TARGET}" MATCHES "vulkan")
+        target_compile_definitions("${TARGET}" PRIVATE TEST_VULKAN)
+    endif ()
     if ("${Halide_TARGET}" MATCHES "webgpu")
         target_compile_definitions("${TARGET}" PRIVATE TEST_WEBGPU)
         target_include_directories("${TARGET}" PRIVATE ${args_INCLUDES} "${Halide_SOURCE_DIR}/src/runtime")
@@ -380,7 +383,8 @@ _add_halide_aot_tests(float16_t)
 # gpu_multi_context_threaded_aottest.cpp
 # gpu_multi_context_threaded_generator.cpp
 # (Doesn't build/link properly under wasm, and isn't useful there anyway)
-if (NOT ${_USING_WASM})
+# (Vulkan doesn't build/link properly and adding custom context creation is too much effort)
+if ((NOT ${_USING_WASM}) AND (NOT Halide_TARGET MATCHES "vulkan"))
     add_halide_generator(gpu_multi_context_threaded.generator
                          SOURCES gpu_multi_context_threaded_generator.cpp)
     _add_halide_libraries(gpu_multi_context_threaded_add

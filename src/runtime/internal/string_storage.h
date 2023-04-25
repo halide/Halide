@@ -1,7 +1,7 @@
 #ifndef HALIDE_RUNTIME_STRING_STORAGE_H
 #define HALIDE_RUNTIME_STRING_STORAGE_H
 
-#include "HalideRuntime.h"
+#include "../HalideRuntime.h"
 #include "block_storage.h"
 
 namespace Halide {
@@ -68,6 +68,13 @@ struct StringUtils {
         }
         return size_t(ptr - str);
     }
+
+    static size_t copy_up_to(char *dst, const char *src, size_t max_chars) {
+        size_t length = count_length(src, max_chars);
+        memcpy(dst, src, length);
+        dst[length] = '\0';
+        return length;
+    }
 };
 
 // --
@@ -126,7 +133,7 @@ StringStorage::~StringStorage() {
 }
 
 StringStorage *StringStorage::create(void *user_context, const SystemMemoryAllocatorFns &system_allocator) {
-    halide_debug_assert(user_context, system_allocator.allocate != nullptr);
+    halide_abort_if_false(user_context, system_allocator.allocate != nullptr);
     StringStorage *result = reinterpret_cast<StringStorage *>(
         system_allocator.allocate(user_context, sizeof(StringStorage)));
 
@@ -140,10 +147,10 @@ StringStorage *StringStorage::create(void *user_context, const SystemMemoryAlloc
 }
 
 void StringStorage::destroy(void *user_context, StringStorage *instance) {
-    halide_debug_assert(user_context, instance != nullptr);
+    halide_abort_if_false(user_context, instance != nullptr);
     const SystemMemoryAllocatorFns &system_allocator = instance->current_allocator();
     instance->destroy(user_context);
-    halide_debug_assert(user_context, system_allocator.deallocate != nullptr);
+    halide_abort_if_false(user_context, system_allocator.deallocate != nullptr);
     system_allocator.deallocate(user_context, instance);
 }
 
@@ -257,9 +264,11 @@ void StringStorage::prepend(void *user_context, char ch) {
 }
 
 void StringStorage::terminate(void *user_context, size_t length) {
-    if (contents.data() && (length < contents.size())) {
+    if (contents.is_valid(length)) {
         char *end_ptr = static_cast<char *>(contents[length]);
         (*end_ptr) = '\0';
+    } else {
+        halide_error(user_context, "StringStorage: Failed to terminate string! Out of bounds!\n");
     }
 }
 

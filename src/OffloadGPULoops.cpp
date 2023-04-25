@@ -7,6 +7,7 @@
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_Vulkan_Dev.h"
 #include "CodeGen_WebGPU_Dev.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
@@ -274,6 +275,9 @@ public:
         }
         if (target.has_feature(Target::D3D12Compute)) {
             cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(device_target);
+        }
+        if (target.has_feature(Target::Vulkan)) {
+            cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(target);
         }
         if (target.has_feature(Target::WebGPU)) {
             cgdev[DeviceAPI::WebGPU] = new_CodeGen_WebGPU_Dev(device_target);

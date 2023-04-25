@@ -78,6 +78,7 @@ set(RUNTIME_CPP
     to_string
     trace_helper
     tracing
+    vulkan
     wasm_cpu_features
     # TODO(https://github.com/halide/Halide/issues/7248)
     # webgpu
@@ -93,6 +94,7 @@ set(RUNTIME_CPP
     windows_profiler
     windows_threads
     windows_threads_tsan
+    windows_vulkan
     windows_yield
     write_debug_image
     x86_cpu_features
@@ -135,6 +137,7 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeOpenCL.h
     HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
+    HalideRuntimeVulkan.h
     HalideRuntimeWebGPU.h
     )
 
@@ -229,7 +232,12 @@ foreach (i IN LISTS RUNTIME_CPP)
 
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
 
-        set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DBITS_${j})
+        set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DBITS_${j}
+                            -DHALIDE_VERSION=${Halide_VERSION} 
+                            -DHALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
+                            -DHALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
+                            -DHALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
+
         set(RUNTIME_DEFINES_debug -g -DDEBUG_RUNTIME ${RUNTIME_DEFINES})
 
         foreach (SUFFIX IN ITEMS "" "_debug")

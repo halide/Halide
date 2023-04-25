@@ -115,6 +115,27 @@ void load_metal() {
 #endif
 }
 
+void load_vulkan() {
+    if (have_symbol("vkGetInstanceProcAddr")) {
+        debug(1) << "Vulkan support code already linked in...\n";
+    } else {
+        debug(1) << "Looking for Vulkan support code...\n";
+        string error;
+#if defined(__linux__)
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.so.1", &error);
+        user_assert(error.empty()) << "Could not find libvulkan.so.1\n";
+#elif defined(__APPLE__)
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.1.dylib", &error);
+        user_assert(error.empty()) << "Could not find libvulkan.1.dylib\n";
+#elif defined(_WIN32)
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("vulkan-1.dll", &error);
+        user_assert(error.empty()) << "Could not find vulkan-1.dll\n";
+#else
+        internal_error << "JIT support for Vulkan only available on Linux, OS X and Windows!\n";
+#endif
+    }
+}
+
 void load_webgpu() {
     debug(1) << "Looking for a native WebGPU implementation...\n";
     const char *libnames[] = {
@@ -736,6 +757,7 @@ enum RuntimeKind {
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
+    Vulkan,
     WebGPU,
     OpenCLDebug,
     MetalDebug,
@@ -743,6 +765,7 @@ enum RuntimeKind {
     OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,
+    VulkanDebug,
     WebGPUDebug,
     MaxRuntimeKind
 };
@@ -779,6 +802,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::HVX, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
+        one_gpu.set_feature(Target::Vulkan, false);
         one_gpu.set_feature(Target::WebGPU, false);
         string module_name;
         switch (runtime_kind) {
@@ -842,6 +866,17 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 #if !defined(_WIN32)
             internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
 #endif
+            break;
+        case VulkanDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::Vulkan);
+            load_vulkan();
+            module_name = "debug_vulkan";
+            break;
+        case Vulkan:
+            one_gpu.set_feature(Target::Vulkan);
+            load_vulkan();
+            module_name += "vulkan";
             break;
         case WebGPUDebug:
             one_gpu.set_feature(Target::Debug);
@@ -1047,6 +1082,13 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
+    if (target.has_feature(Target::Vulkan)) {
+        auto kind = target.has_feature(Target::Debug) ? VulkanDebug : Vulkan;
+        JITModule m = make_module(for_module, target, kind, result, create);
+        if (m.compiled()) {
+            result.push_back(m);
+        }
+    }
     if (target.has_feature(Target::WebGPU)) {
         auto kind = target.has_feature(Target::Debug) ? WebGPUDebug : WebGPU;
         JITModule m = make_module(for_module, target, kind, result, create);
@@ -1054,7 +1096,6 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-
     return result;
 }
 

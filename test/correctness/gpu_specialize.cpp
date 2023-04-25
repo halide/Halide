@@ -4,8 +4,13 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    if (!get_jit_target_from_environment().has_gpu_feature()) {
+    Halide::Target target = get_jit_target_from_environment();
+    if (!target.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
+    if (target.has_feature(Target::Vulkan) && ((target.os == Target::IOS) || target.os == Target::OSX)) {
+        printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK doesn't support dynamically allocated shared mem)!\n");
         return 0;
     }
 
