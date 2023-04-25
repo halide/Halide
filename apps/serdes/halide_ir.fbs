@@ -1,4 +1,4 @@
-namespace Halide.IR;
+namespace Halide.Serdes;
 
 // This corresponds to the version.
 file_identifier "HLD0";
@@ -16,18 +16,23 @@ table Func {
     name: string;
     origin_name: string;
     // output_types: [Type];
-    // required_types
+    // required_types: [Type];
     // required_dims
     // args: [string];
     // func_schedule: FuncSchedule;
     // init_def: Definition;
     // updates: [Definition];
+    // debug_file: string;
+    // output_buffers: [Parameter];
+    // extern_arguments: [ExternFuncArgument];
+    // extern_function_name: string;
+
 }
 
 table Pipeline {
-    // outputs: [Func];
+    outputs: [Func];
     // requirements: [Stmt];
-    trace_pipeline: bool;
+    // trace_pipeline: bool;
 }
 
 root_type Pipeline;

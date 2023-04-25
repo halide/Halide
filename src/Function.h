@@ -68,6 +68,9 @@ public:
     /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
     explicit Function(const FunctionPtr &);
 
+    /** Construct a function from deserializing */
+    explicit Function(const std::string &name, const std::string &origin_name);
+
     /** Get a handle on the halide function contents that this Function
      * represents. */
     FunctionPtr get_contents() const {

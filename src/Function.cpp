@@ -331,6 +331,14 @@ Function::Function(const std::vector<Type> &required_types, int required_dims, c
     contents->required_dims = required_dims;
 }
 
+Function::Function(const std::string &name, const std::string &origin_name) {
+    contents.strong = new FunctionGroup;
+    contents.strong->members.resize(1);
+    contents->name = name;
+    contents->origin_name = origin_name;
+}
+
+
 namespace {
 
 template<typename T>
