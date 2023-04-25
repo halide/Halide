@@ -1393,6 +1393,15 @@ typedef enum halide_target_feature_t {
     halide_target_feature_sanitizer_coverage,     ///< Enable hooks for SanitizerCoverage support.
     halide_target_feature_profile_by_timer,       ///< Alternative to halide_target_feature_profile using timer interrupt for systems without threads or applicartions that need to avoid them.
     halide_target_feature_spirv,                  ///< Enable SPIR-V code generation support.
+    halide_target_feature_vulkan,                 ///< Enable Vulkan runtime support.
+    halide_target_feature_vulkan_int8,            ///< Enable Vulkan 8-bit integer support.
+    halide_target_feature_vulkan_int16,           ///< Enable Vulkan 16-bit integer support.
+    halide_target_feature_vulkan_int64,           ///< Enable Vulkan 64-bit integer support.
+    halide_target_feature_vulkan_float16,         ///< Enable Vulkan 16-bit float support.
+    halide_target_feature_vulkan_float64,         ///< Enable Vulkan 64-bit float support.
+    halide_target_feature_vulkan_version10,       ///< Enable Vulkan v1.0 runtime target support.
+    halide_target_feature_vulkan_version12,       ///< Enable Vulkan v1.2 runtime target support.
+    halide_target_feature_vulkan_version13,       ///< Enable Vulkan v1.3 runtime target support.
     halide_target_feature_semihosting,            ///< Used together with Target::NoOS for the baremetal target built with semihosting library and run with semihosting mode where minimum I/O communication with a host PC is available.
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;

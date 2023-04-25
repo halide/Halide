@@ -9,6 +9,12 @@
 #     For correctness and performance tests this include halide build time and run time. For
 #     the tests in test/generator/ this times only the halide build time.
 
+# Halide project version
+HALIDE_VERSION_MAJOR ?= 15
+HALIDE_VERSION_MINOR ?= 0
+HALIDE_VERSION_PATCH ?= 0
+HALIDE_VERSION=$(HALIDE_VERSION_MAJOR).$(HALIDE_VERSION_MINOR).$(HALIDE_VERSION_PATCH)
+
 # Disable built-in makefile rules for all apps to avoid pointless file-system
 # scanning and general weirdness resulting from implicit rules.
 MAKEFLAGS += --no-builtin-rules
@@ -124,6 +130,8 @@ WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGLCOMPUTE ?= not-empty
 WITH_D3D12 ?= not-empty
+WITH_VULKAN ?= not-empty
+WITH_SPIRV ?= not-empty
 WITH_WEBGPU ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
@@ -133,6 +141,12 @@ WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 # If HL_TARGET or HL_JIT_TARGET aren't set, use host
 HL_TARGET ?= host
 HL_JIT_TARGET ?= host
+
+HL_VERSION_FLAGS = \
+	-DHALIDE_VERSION="$(HALIDE_VERSION)" \
+	-DHALIDE_VERSION_MAJOR=$(HALIDE_VERSION_MAJOR) \
+	-DHALIDE_VERSION_MINOR=$(HALIDE_VERSION_MINOR) \
+	-DHALIDE_VERSION_PATCH=$(HALIDE_VERSION_PATCH)
 
 X86_CXX_FLAGS=$(if $(WITH_X86), -DWITH_X86, )
 X86_LLVM_CONFIG_LIB=$(if $(WITH_X86), x86, )
@@ -176,6 +190,12 @@ EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DHALIDE_WITH_EXCEPTIONS -fexcepti
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON, )
 HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
 
+SPIRV_CXX_FLAGS=$(if $(WITH_SPIRV), -DWITH_SPIRV -isystem $(ROOT_DIR)/dependencies/spirv/include, )
+SPIRV_LLVM_CONFIG_LIB=$(if $(WITH_SPIRV), , )
+
+VULKAN_CXX_FLAGS=$(if $(WITH_VULKAN), -DWITH_VULKAN, )
+VULKAN_LLVM_CONFIG_LIB=$(if $(WITH_VULKAN), , )
+
 WEBASSEMBLY_CXX_FLAGS=$(if $(WITH_WEBASSEMBLY), -DWITH_WEBASSEMBLY, )
 WEBASSEMBLY_LLVM_CONFIG_LIB=$(if $(WITH_WEBASSEMBLY), webassembly, )
 
@@ -198,7 +218,7 @@ LLVM_CXX_FLAGS_LIBCPP := $(findstring -stdlib=libc++, $(LLVM_CXX_FLAGS))
 endif
 
 CXX_FLAGS = $(CXXFLAGS) $(CXX_WARNING_FLAGS) $(RTTI_CXX_FLAGS) -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE
-
+CXX_FLAGS += $(HL_VERSION_FLAGS)
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
 CXX_FLAGS += $(ARM_CXX_FLAGS)
@@ -215,6 +235,8 @@ CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 CXX_FLAGS += $(AMDGPU_CXX_FLAGS)
 CXX_FLAGS += $(RISCV_CXX_FLAGS)
+CXX_FLAGS += $(SPIRV_CXX_FLAGS)
+CXX_FLAGS += $(VULKAN_CXX_FLAGS)
 CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
@@ -241,6 +263,8 @@ LLVM_STATIC_LIBFILES = \
 	$(POWERPC_LLVM_CONFIG_LIB) \
 	$(HEXAGON_LLVM_CONFIG_LIB) \
 	$(AMDGPU_LLVM_CONFIG_LIB) \
+	$(SPIRV_LLVM_CONFIG_LIB) \
+	$(VULKAN_LLVM_CONFIG_LIB) \
 	$(WEBASSEMBLY_LLVM_CONFIG_LIB) \
 	$(RISCV_LLVM_CONFIG_LIB)
 
@@ -265,6 +289,7 @@ TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
 # In the tests, some of our expectations change depending on the llvm version
 TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
+TEST_CXX_FLAGS += $(HL_VERSION_FLAGS)
 
 # In the tests, default to exporting no symbols that aren't explicitly exported
 TEST_CXX_FLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
@@ -305,12 +330,21 @@ TEST_METAL = 1
 endif
 endif
 
+ifneq ($(WITH_VULKAN), )
+ifneq (,$(findstring vulkan,$(HL_TARGET)))
+TEST_VULKAN = 1
+endif
+endif
+
 ifeq ($(UNAME), Linux)
 ifneq ($(TEST_CUDA), )
 CUDA_LD_FLAGS ?= -L/usr/lib/nvidia-current -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -lOpenCL
+endif
+ifneq ($(TEST_VULKAN), )
+VULKAN_LD_FLAGS ?= -lvulkan
 endif
 OPENGL_LD_FLAGS ?= -lGL
 HOST_OS=linux
@@ -324,6 +358,10 @@ endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -framework OpenCL
 endif
+ifneq ($(TEST_VULKAN), )
+# The Vulkan loader is distributed as a dylib on OSX (not a framework)
+VULKAN_LD_FLAGS ?= -lvulkan
+endif
 ifneq ($(TEST_METAL), )
 METAL_LD_FLAGS ?= -framework Metal -framework Foundation
 endif
@@ -333,6 +371,10 @@ endif
 
 ifneq ($(TEST_OPENCL), )
 TEST_CXX_FLAGS += -DTEST_OPENCL
+endif
+
+ifneq ($(TEST_VULKAN), )
+TEST_CXX_FLAGS += -DTEST_VULKAN
 endif
 
 ifneq ($(TEST_METAL), )
@@ -433,6 +475,7 @@ SOURCE_FILES = \
   CodeGen_LLVM.cpp \
   CodeGen_Metal_Dev.cpp \
   CodeGen_OpenCL_Dev.cpp \
+  CodeGen_Vulkan_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
@@ -623,6 +666,7 @@ HEADER_FILES = \
   CodeGen_LLVM.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenCL_Dev.h \
+  CodeGen_Vulkan_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
   CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
@@ -853,8 +897,10 @@ RUNTIME_CPP_COMPONENTS = \
   windows_profiler \
   windows_threads \
   windows_threads_tsan \
+  windows_vulkan \
   windows_yield \
   write_debug_image \
+  vulkan \
   x86_cpu_features \
 
 RUNTIME_LL_COMPONENTS = \
@@ -883,6 +929,7 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
+                            $(INCLUDE_DIR)/HalideRuntimeVulkan.h \
                             $(INCLUDE_DIR)/HalideRuntimeWebGPU.h \
                             $(INCLUDE_DIR)/HalideBuffer.h \
                             $(INCLUDE_DIR)/HalidePyTorchHelpers.h \
@@ -1049,6 +1096,7 @@ RUNTIME_CXX_FLAGS = \
     -Wno-unused-function \
     -Wvla \
     -Wsign-compare
+RUNTIME_CXX_FLAGS += $(HL_VERSION_FLAGS)
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)

@@ -23,6 +23,7 @@ enum class DeviceAPI {
     Hexagon,
     HexagonDma,
     D3D12Compute,
+    Vulkan,
     WebGPU,
 };
 
@@ -38,6 +39,7 @@ const DeviceAPI all_device_apis[] = {DeviceAPI::None,
                                      DeviceAPI::Hexagon,
                                      DeviceAPI::HexagonDma,
                                      DeviceAPI::D3D12Compute,
+                                     DeviceAPI::Vulkan,
                                      DeviceAPI::WebGPU};
 
 }  // namespace Halide

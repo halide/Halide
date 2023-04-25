@@ -369,6 +369,29 @@ Target::Feature get_host_cuda_capability(Target t) {
     return cap;
 }
 
+Target::Feature calculate_host_vulkan_capability(Target t) {
+    const auto *interface = get_device_interface_for_device_api(DeviceAPI::Vulkan, t);
+    internal_assert(interface->compute_capability);
+    int major, minor;
+    int err = interface->compute_capability(nullptr, &major, &minor);
+    internal_assert(err == 0) << "Failed to query vulkan compute capability\n";
+    int ver = major * 10 + minor;
+    if (ver < 10) {
+        return Target::FeatureEnd;
+    } else if (ver < 12) {
+        return Target::VulkanV10;
+    } else if (ver < 13) {
+        return Target::VulkanV12;
+    } else {
+        return Target::VulkanV13;
+    }
+}
+
+Target::Feature get_host_vulkan_capability(Target t) {
+    static Target::Feature cap = calculate_host_vulkan_capability(t);
+    return cap;
+}
+
 const std::map<std::string, Target::OS> os_name_map = {
     {"os_unknown", Target::OSUnknown},
     {"linux", Target::Linux},
@@ -519,6 +542,15 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
     {"spirv", Target::SPIRV},
+    {"vulkan", Target::Vulkan},
+    {"vk_int8", Target::VulkanInt8},
+    {"vk_int16", Target::VulkanInt16},
+    {"vk_int64", Target::VulkanInt64},
+    {"vk_float16", Target::VulkanFloat16},
+    {"vk_float64", Target::VulkanFloat64},
+    {"vk_v10", Target::VulkanV10},
+    {"vk_v12", Target::VulkanV12},
+    {"vk_v13", Target::VulkanV13},
     {"semihosting", Target::Semihosting},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
@@ -667,6 +699,15 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::CUDACapability86)) {
         // Detect host cuda capability
         t.set_feature(get_host_cuda_capability(t));
+    }
+
+    if (is_host &&
+        t.has_feature(Target::Vulkan) &&
+        !t.has_feature(Target::VulkanV10) &&
+        !t.has_feature(Target::VulkanV12) &&
+        !t.has_feature(Target::VulkanV13)) {
+        // Detect host vulkan capability
+        t.set_feature(get_host_vulkan_capability(t));
     }
 
     if (arch_specified && !bits_specified) {
@@ -860,6 +901,9 @@ bool Target::supported() const {
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
 #endif
+#if !defined(WITH_VULKAN)
+    bad |= has_feature(Target::Vulkan);
+#endif
 #if !defined(WITH_WEBGPU)
     bad |= has_feature(Target::WebGPU);
 #endif
@@ -928,6 +972,7 @@ bool Target::has_gpu_feature() const {
             has_feature(Metal) ||
             has_feature(D3D12Compute) ||
             has_feature(OpenGLCompute) ||
+            has_feature(Vulkan) ||
             has_feature(WebGPU));
 }
 
@@ -965,18 +1010,36 @@ int Target::get_cuda_capability_lower_bound() const {
     return 20;
 }
 
+int Target::get_vulkan_capability_lower_bound() const {
+    if (!has_feature(Target::Vulkan)) {
+        return -1;
+    }
+    if (has_feature(Target::VulkanV10)) {
+        return 10;
+    }
+    if (has_feature(Target::VulkanV12)) {
+        return 12;
+    }
+    if (has_feature(Target::VulkanV13)) {
+        return 13;
+    }
+    return 10;
+}
+
 bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
-            return !has_feature(Metal) &&
-                   !has_feature(OpenGLCompute) &&
-                   !has_feature(D3D12Compute) &&
-                   !has_feature(WebGPU) &&
-                   (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
+            return (!has_feature(Metal) &&
+                    !has_feature(OpenGLCompute) &&
+                    !has_feature(D3D12Compute) &&
+                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles)) &&
+                    (!has_feature(Vulkan) || has_feature(Target::VulkanFloat64)) &&
+                    !has_feature(WebGPU));
         } else {
             return (!has_feature(Metal) &&
                     !has_feature(OpenGLCompute) &&
                     !has_feature(D3D12Compute) &&
+                    (!has_feature(Vulkan) || has_feature(Target::VulkanInt64)) &&
                     !has_feature(WebGPU));
         }
     }
@@ -1008,6 +1071,18 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
         return t.bits() < 64;
     } else if (device == DeviceAPI::OpenGLCompute) {
         return t.bits() < 64;
+    } else if (device == DeviceAPI::Vulkan) {
+        if (t.is_float() && t.bits() == 64) {
+            return has_feature(Target::VulkanFloat64);
+        } else if (t.is_float() && t.bits() == 16) {
+            return has_feature(Target::VulkanFloat16);
+        } else if (t.is_int_or_uint() && t.bits() == 64) {
+            return has_feature(Target::VulkanInt64);
+        } else if (t.is_int_or_uint() && t.bits() == 16) {
+            return has_feature(Target::VulkanInt16);
+        } else if (t.is_int_or_uint() && t.bits() == 8) {
+            return has_feature(Target::VulkanInt8);
+        }
     } else if (device == DeviceAPI::WebGPU) {
         return t.bits() < 64;
     }
@@ -1054,6 +1129,9 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     }
+    if (has_feature(Target::Vulkan)) {
+        return DeviceAPI::Vulkan;
+    }
     if (has_feature(Target::WebGPU)) {
         return DeviceAPI::WebGPU;
     }
@@ -1074,6 +1152,8 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::HVX;
     case DeviceAPI::D3D12Compute:
         return Target::D3D12Compute;
+    case DeviceAPI::Vulkan:
+        return Target::Vulkan;
     case DeviceAPI::WebGPU:
         return Target::WebGPU;
     default:
@@ -1158,7 +1238,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
     // clang-format off
-    const std::array<Feature, 19> union_features = {{
+    const std::array<Feature, 23> union_features = {{
         // These are true union features.
         CUDA,
         D3D12Compute,
@@ -1166,6 +1246,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         NoNEON,
         OpenCL,
         OpenGLCompute,
+        Vulkan,
         WebGPU,
 
         // These features are actually intersection-y, but because targets only record the _highest_,
@@ -1182,6 +1263,9 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         HVX_v62,
         HVX_v65,
         HVX_v66,
+        VulkanV10,
+        VulkanV12,
+        VulkanV13,
     }};
     // clang-format on
 
@@ -1291,6 +1375,22 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         output.features.reset(CUDACapability86);
     }
 
+    // Pick tight lower bound for Vulkan capability. Use fall-through to clear redundant features
+    int vulkan_a = get_vulkan_capability_lower_bound();
+    int vulkan_b = other.get_vulkan_capability_lower_bound();
+
+    // Same trick as above for CUDA
+    int vulkan_capability = std::min((unsigned)vulkan_a, (unsigned)vulkan_b);
+    if (vulkan_capability < 10) {
+        output.features.reset(VulkanV10);
+    }
+    if (vulkan_capability < 12) {
+        output.features.reset(VulkanV12);
+    }
+    if (vulkan_capability < 13) {
+        output.features.reset(VulkanV13);
+    }
+
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
     int hvx_b = get_hvx_lower_bound(other);
@@ -1331,6 +1431,9 @@ void target_test() {
         {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
+        {{"x86-64-linux-vulkan", "x86-64-linux", "x86-64-linux-vulkan"}},
+        {{"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan", "x86-64-linux-vulkan"}},
+        {{"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan-vk_v10", "x86-64-linux-vulkan-vk_v10"}},
         {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
         {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
         {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},

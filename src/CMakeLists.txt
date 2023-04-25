@@ -39,6 +39,7 @@ set(HEADER_FILES
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
+    CodeGen_Vulkan_Dev.h
     CodeGen_WebGPU_Dev.h
     CompilerLogger.h
     ConciseCasts.h
@@ -207,6 +208,7 @@ set(SOURCE_FILES
     CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
     CodeGen_RISCV.cpp
+    CodeGen_Vulkan_Dev.cpp
     CodeGen_WebAssembly.cpp
     CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
@@ -441,6 +443,13 @@ set_target_properties(Halide PROPERTIES
                       VERSION ${Halide_VERSION}
                       SOVERSION ${Halide_SOVERSION_OVERRIDE})
 
+target_compile_definitions(Halide PUBLIC 
+                           HALIDE_VERSION=${Halide_VERSION} 
+                           HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
+                           HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
+                           HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
+
+
 target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 add_dependencies(Halide HalideIncludes)
 
@@ -570,6 +579,18 @@ if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
 
+if (TARGET_VULKAN)
+    message(STATUS "Enabling Vulkan target")
+    target_compile_definitions(Halide PRIVATE WITH_VULKAN)
+endif()
+
+if (TARGET_SPIRV)
+    # Our vendored SPIRV headers are only used internally; users do not need
+    # them installed.
+    target_compile_definitions(Halide PRIVATE WITH_SPIRV)
+    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:Halide::SPIRV>")
+endif ()
+
 option(TARGET_WEBGPU "Include WebGPU target" ON)
 if (TARGET_WEBGPU)
     target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
@@ -582,12 +603,6 @@ if (TARGET_WEBGPU)
     endif ()
 endif()
 
-if (TARGET_SPIRV)
-    # Our vendored SPIRV headers are only used internally; users do not need
-    # them installed.
-    target_compile_definitions(Halide PRIVATE WITH_SPIRV)
-    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:Halide::SPIRV>")
-endif ()
 
 ##
 # Add autoschedulers to the build.

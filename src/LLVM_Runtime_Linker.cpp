@@ -235,6 +235,14 @@ DECLARE_CPP_INITMOD_LOOKUP(windows_d3d12compute_arm)
 DECLARE_NO_INITMOD(windows_d3d12compute_arm)
 #endif  // WITH_D3D12
 
+#ifdef WITH_VULKAN
+DECLARE_CPP_INITMOD(vulkan)
+DECLARE_CPP_INITMOD(windows_vulkan)
+#else
+DECLARE_NO_INITMOD(vulkan)
+DECLARE_NO_INITMOD(windows_vulkan)
+#endif  // WITH_VULKAN
+
 #ifdef WITH_X86
 DECLARE_LL_INITMOD(x86_amx)
 DECLARE_LL_INITMOD(x86_avx512)
@@ -1197,6 +1205,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_windows_d3d12compute_arm(c, bits_64, debug));
             } else {
                 user_error << "Direct3D 12 can only be used on ARM or X86 architectures.\n";
+            }
+        }
+        if (t.has_feature(Target::Vulkan)) {
+            if (t.os == Target::Windows) {
+                modules.push_back(get_initmod_windows_vulkan(c, bits_64, debug));
+            } else {
+                modules.push_back(get_initmod_vulkan(c, bits_64, debug));
             }
         }
         if (t.has_feature(Target::WebGPU)) {
