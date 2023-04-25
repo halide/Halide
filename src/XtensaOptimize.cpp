@@ -1237,6 +1237,8 @@ private:
         }
 
         const std::vector<Expr> patterns = {
+            ramp(0, 1, pred.type().lanes()) <= bc(wild_i8, pred.type().lanes()),
+            ramp(0, 1, pred.type().lanes()) <= bc(wild_i16, pred.type().lanes()),
             ramp(wild_i32, 1, pred.type().lanes()) <= bc(wild_i32, pred.type().lanes())};
 
         vector<Expr> matches;
