@@ -141,7 +141,8 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
     // strides must be greater than or equal to the chunk size, this
     // means we can just delete the innermost dimension as long as its
     // stride in both src and dst is equal to the chunk size.
-    while (c.chunk_size == c.src_stride_bytes[0] &&
+    while (c.chunk_size &&
+           c.chunk_size == c.src_stride_bytes[0] &&
            c.chunk_size == c.dst_stride_bytes[0]) {
         // Fold the innermost dimension's extent into the chunk_size.
         c.chunk_size *= c.extent[0];
