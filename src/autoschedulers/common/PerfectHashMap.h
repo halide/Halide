@@ -22,7 +22,7 @@ struct PerfectHashMapAsserter {
     }
     ~PerfectHashMapAsserter() {
         if (!c) {
-            exit(-1);
+            exit(1);
         }
     }
 };
