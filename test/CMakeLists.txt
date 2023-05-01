@@ -1,4 +1,5 @@
 include(HalideTestHelpers)
+include(CheckCXXCompilerFlag)
 
 # Internal tests are a special case.
 # HalideTestHelpers depends on this test being present.
@@ -61,3 +62,38 @@ else ()
 endif ()
 
 # FIXME: failing_with_issue is dead code :)
+
+# Ensure that basic sanitizer flags are supported;
+# - Address sanitizer is often used in conjunction with fuzzing as it will detect
+#   common high severity bugs. This sanitizer is used as a "default" for fuzzing
+#   when the sanitizer isn't otherwise specified.
+# - Fuzzer sanitizer will link against libfuzzer and is currently only supported
+#   on clang/msvc and isn't supported with GCC. If you need to use these fuzzers
+#   with a GCC based project you should consider looking into the LIB_FUZZING_ENGINE
+#   env variable defined in `test/fuzz/CMakeLists.txt`.
+set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=fuzzer,address")
+set(CMAKE_REQUIRED_FLAGS "-fsanitize=fuzzer-no-link,address")
+check_cxx_source_compiles([[
+#include <cstdint>
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, std::size_t Size) {
+  return 0;
+}
+]] HAS_FUZZ_FLAGS)
+
+if (NOT HAS_FUZZ_FLAGS)
+    message(VERBOSE "Compiler does not support libfuzzer sanitizer.")
+else ()
+    message(VERBOSE "Compiler supports libfuzzer sanitizer.")
+endif ()
+
+cmake_dependent_option(
+    WITH_TEST_FUZZ "Build fuzz tests" ON
+    HAS_FUZZ_FLAGS OFF
+)
+
+if (WITH_TEST_FUZZ)
+    message(STATUS "Building fuzz tests enabled")
+    add_subdirectory(fuzz)
+else ()
+    message(STATUS "Building fuzz tests disabled")
+endif ()
