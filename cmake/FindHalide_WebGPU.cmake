@@ -8,11 +8,7 @@ if (EXISTS "$ENV{HL_WEBGPU_NATIVE_LIB}")
       CACHE FILEPATH "")
 endif ()
 
-find_library(
-  Halide_WebGPU_NATIVE_LIB
-  NAMES ${WEBGPU_NATIVE_NAMES}
-  HINTS ${WEBGPU_NATIVE_DIR}
-)
+find_library(Halide_WebGPU_NATIVE_LIB NAMES webgpu_dawn wgpu)
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(
