@@ -75,6 +75,7 @@ set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=fuzzer,address")
 set(CMAKE_REQUIRED_FLAGS "-fsanitize=fuzzer-no-link,address")
 check_cxx_source_compiles([[
 #include <cstdint>
+#include <cstddef>
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, std::size_t Size) {
   return 0;
 }
