@@ -3,24 +3,10 @@ cmake_minimum_required(VERSION 3.22)
 # tip: uncomment this line to get better debugging information if find_library() fails
 # set(CMAKE_FIND_DEBUG_MODE TRUE)
 
-# ENV{HL_WEBGPU_NATIVE_LIB} is expected to be an absolute path
-# to the actual Dawn shared library, e.g. "/path/to/libwebgpu_dawn.dylib".
-# However, find_library() won't accept this format, and instead requires a
-# directory-and-stripped-library name, e.g. "/path/to" and "webgpu_dawn".
-# So, we'll do the necessary surgery.
-if (DEFINED ENV{HL_WEBGPU_NATIVE_LIB})
-  set(WEBGPU_NATIVE_LIB $ENV{HL_WEBGPU_NATIVE_LIB})
-  cmake_path(GET WEBGPU_NATIVE_LIB PARENT_PATH WEBGPU_NATIVE_DIR)
-  cmake_path(GET WEBGPU_NATIVE_LIB STEM WEBGPU_NATIVE_NAME)
-  # strip the "lib" prefix from the stem (if any)
-  string(REGEX REPLACE "^lib" "" WEBGPU_NATIVE_NAME "${WEBGPU_NATIVE_NAME}")
-  set(WEBGPU_NATIVE_NAMES ${WEBGPU_NATIVE_NAME})
-else ()
-  # Just default to whatever search paths CMake wants to use,
-  # and specify two common names for the NAMES part.
-  set(WEBGPU_NATIVE_DIR "")
-  set(WEBGPU_NATIVE_NAMES "webgpu_dawn;wgpu")
-endif()
+if (EXISTS "$ENV{HL_WEBGPU_NATIVE_LIB}")
+  set(Halide_WebGPU_NATIVE_LIB "$ENV{HL_WEBGPU_NATIVE_LIB}"
+      CACHE FILEPATH "")
+endif ()
 
 find_library(
   Halide_WebGPU_NATIVE_LIB
