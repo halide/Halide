@@ -1016,6 +1016,17 @@ void compile_multitarget(const std::string &fn_name,
         std::string scheduler = autoscheduler_params.name.empty() ? "(None)" : autoscheduler_params.name;
         std::string autoscheduler_params_string = autoscheduler_params.name.empty() ? "(None)" : autoscheduler_params.to_string();
 
+        // TODO(https://github.com/halide/Halide/issues/7539): this is a horrible hack;
+        // the Anderson2021 autoscheduler is GPU-only, and emits the same schedule for each subtarget.
+        // Avoid confusing noise in the output by just lopping off all results aftet the first one.
+        // This isn't a good fix; aside from the hack here, we also are wasting time recomputing the
+        // same schedule multiple times above.
+        if (scheduler == "Anderson2021") {
+            while (auto_scheduler_results.size() > 1) {
+                auto_scheduler_results.pop_back();
+            }
+        }
+
         // Find the features that are unique to each stage (vs the baseline case).
         const auto &baseline_target = auto_scheduler_results.back().target;
         const auto &baseline_features = baseline_target.get_features_bitset();
