@@ -594,13 +594,6 @@ endif ()
 option(TARGET_WEBGPU "Include WebGPU target" ON)
 if (TARGET_WEBGPU)
     target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
-    set(WEBGPU_NATIVE_LIB "" CACHE STRING
-        "WebGPU native library to link against")
-    if (WEBGPU_NATIVE_LIB)
-        set_property(SOURCE JITModule.cpp PROPERTY COMPILE_DEFINITIONS
-                     WEBGPU_NATIVE_LIB=\"${WEBGPU_NATIVE_LIB}\"
-                     APPEND_STRING)
-    endif ()
 endif()
 
 

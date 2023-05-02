@@ -153,18 +153,9 @@ function(add_wasm_halide_test TARGET)
         return()
     endif ()
 
-    set(script "require('./${TARGET}.js')")
-    if (WEBGPU_NODE_BINDINGS)
-        set(script "\
-            const provider = require('${WEBGPU_NODE_BINDINGS}')\n\
-            const gpu = provider.create([])\n\
-            const navigator = { gpu: gpu }\n
-            ${script}")
-    endif ()
-
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
-                    COMMAND ${NODE_JS_EXECUTABLE} "-e" "${script}")
+                    COMMAND ${NODE_JS_EXECUTABLE} "${Halide_SOURCE_DIR}/tools/launch_wasm_test.js" "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.js" "${Halide_TARGET}")
 endfunction()
 
 function(find_node_js)
