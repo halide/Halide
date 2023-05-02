@@ -1,8 +1,12 @@
 #ifndef STATISTICS_H
 #define STATISTICS_H
 
+#include <chrono>
 #include <set>
+#include <string>
 #include <vector>
+
+#include "ASLog.h"
 
 namespace Halide {
 namespace Internal {

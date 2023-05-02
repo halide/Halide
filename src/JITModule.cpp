@@ -138,35 +138,43 @@ void load_vulkan() {
 
 void load_webgpu() {
     debug(1) << "Looking for a native WebGPU implementation...\n";
-    const char *libnames[] = {
-#ifdef WEBGPU_NATIVE_LIB
-        // Specified via CMake.
-        WEBGPU_NATIVE_LIB,
-#endif
-        // Dawn (Chromium).
-        "libwebgpu_dawn.so",
-        "libwebgpu_dawn.dylib",
-        "webgpu_dawn.dll",
 
-        // wgpu (Firefox).
-        "libwgpu.so",
-        "libwgpu.dylib",
-        "wgpu.dll",
-    };
-    string error;
-    for (const char *libname : libnames) {
+    const auto try_load = [](const char *libname) -> string {
         debug(1) << "Trying " << libname << "... ";
-        error.clear();
+        string error;
         llvm::sys::DynamicLibrary::LoadLibraryPermanently(libname, &error);
-        if (error.empty()) {
-            debug(1) << "found!\n";
-            break;
-        } else {
-            debug(1) << "not found.\n";
+        debug(1) << (error.empty() ? "found!\n" : "not found.\n");
+        return error;
+    };
+
+    string error;
+
+    auto env_libname = get_env_variable("HL_WEBGPU_NATIVE_LIB");
+    if (!env_libname.empty()) {
+        error = try_load(env_libname.c_str());
+    }
+    if (!error.empty()) {
+        const char *libnames[] = {
+            // Dawn (Chromium).
+            "libwebgpu_dawn.so",
+            "libwebgpu_dawn.dylib",
+            "webgpu_dawn.dll",
+
+            // wgpu (Firefox).
+            "libwgpu.so",
+            "libwgpu.dylib",
+            "wgpu.dll",
+        };
+
+        for (const char *libname : libnames) {
+            error = try_load(libname);
+            if (error.empty()) {
+                break;
+            }
         }
     }
-    user_assert(error.empty()) << "Could not find a native WebGPU library: "
-                               << error << "\n";
+    user_assert(error.empty()) << "Could not find a native WebGPU library: " << error << "\n"
+                               << "(Try setting the env var HL_WEBGPU_NATIVE_LIB to an explicit path to fix this.)\n";
 }
 
 }  // namespace

@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "ASLog.h"
+#include "Errors.h"
 
 /** \file
  *

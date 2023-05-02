@@ -175,10 +175,8 @@ function(_add_halide_aot_tests NAME)
     if (${_USING_WASM})
         if ("${Halide_TARGET}" MATCHES "webgpu")
             set(OPTIONS "-DTEST_WEBGPU")
-            if (WEBGPU_NODE_BINDINGS)
-                # for mini_webgpu.h
-                list(APPEND args_INCLUDES "${Halide_SOURCE_DIR}/src/runtime")
-            endif ()
+            # for mini_webgpu.h
+            list(APPEND args_INCLUDES "${Halide_SOURCE_DIR}/src/runtime")
         endif ()
         add_wasm_executable("${TARGET}"
                             SRCS "${NAME}_aottest.cpp"
