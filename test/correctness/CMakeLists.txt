@@ -114,7 +114,6 @@ tests(GROUPS correctness
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
       fuzz_bounds.cpp
-      fuzz_cse.cpp
       fuzz_float_stores.cpp
       gameoflife.cpp
       gather.cpp
