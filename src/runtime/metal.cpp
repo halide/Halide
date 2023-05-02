@@ -3,7 +3,7 @@
 #include "device_interface.h"
 #include "gpu_context_common.h"
 #include "printer.h"
-#include "scoped_spin_lock.h"
+#include "scoped_mutex_lock.h"
 
 #include "objc_support.h"
 
@@ -280,7 +280,7 @@ WEAK mtl_device *get_default_mtl_device() {
 
 extern WEAK halide_device_interface_t metal_device_interface;
 
-volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
+WEAK halide_mutex thread_lock;
 WEAK mtl_device *device;
 WEAK mtl_command_queue *queue;
 
@@ -326,7 +326,7 @@ using namespace Halide::Runtime::Internal::Metal;
 extern "C" {
 
 // The default implementation of halide_metal_acquire_context uses the global
-// pointers above, and serializes access with a spin lock.
+// pointers above, and serializes access with a mutex.
 // Overriding implementations of acquire/release must implement the following
 // behavior:
 // - halide_acquire_metal_context should always store a valid device/command
@@ -337,8 +337,7 @@ extern "C" {
 WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_ret,
                                       mtl_command_queue **queue_ret, bool create) {
     halide_debug_assert(user_context, &thread_lock != nullptr);
-    while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {
-    }
+    halide_mutex_lock(&thread_lock);
 
 #ifdef DEBUG_RUNTIME
     halide_start_clock(user_context);
@@ -348,7 +347,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
         debug(user_context) << "Metal - Allocating: MTLCreateSystemDefaultDevice\n";
         device = get_default_mtl_device();
         if (device == nullptr) {
-            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
+            halide_mutex_unlock(&thread_lock);
             error(user_context) << "halide_metal_acquire_context: cannot allocate system default device.";
             return halide_error_code_generic_error;
         }
@@ -357,7 +356,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
         if (queue == nullptr) {
             release_ns_object(device);
             device = nullptr;
-            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
+            halide_mutex_unlock(&thread_lock);
             error(user_context) << "halide_metal_acquire_context: cannot allocate command queue.";
             return halide_error_code_generic_error;
         }
@@ -376,7 +375,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
 }
 
 WEAK int halide_metal_release_context(void *user_context) {
-    __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
+    halide_mutex_unlock(&thread_lock);
     return halide_error_code_success;
 }
 
