@@ -290,6 +290,7 @@ using native_vector_u16_x2 = MultipleOfNativeVector<native_vector_u16, 2>;
 using native_vector_u16_x3 = MultipleOfNativeVector<native_vector_u16, 3>;
 using native_vector_u16_x4 = MultipleOfNativeVector<native_vector_u16, 4>;
 using native_vector_u16_x6 = MultipleOfNativeVector<native_vector_u16, 6>;
+using native_vector_u16_x8 = MultipleOfNativeVector<native_vector_u16, 8>;
 
 using native_vector_i24_x2 = MultipleOfNativeVector<native_vector_i24, 2>;
 
