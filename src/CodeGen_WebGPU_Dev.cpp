@@ -345,7 +345,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
                 user_warning
                     << "buffers of small integer types are currently emulated "
                     << "using atomics in the WebGPU backend, and accesses to "
-                    << "them will be slow";
+                    << "them will be slow.";
                 buffers_with_emulated_accesses.insert(arg.name);
                 type_decl = "atomic<u32>";
             } else {
