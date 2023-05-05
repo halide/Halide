@@ -91,7 +91,6 @@ Expr random_condition(FuzzedDataProvider &fdp, Type T, int depth, bool maybe_sca
         GT::make,
         GE::make,
     };
-    const int op_count = sizeof(make_bin_op) / sizeof(make_bin_op[0]);
 
     if (maybe_scalar && fdp.ConsumeBool()) {
         T = T.element_of();
