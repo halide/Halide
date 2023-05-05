@@ -1,5 +1,7 @@
 #include "Halide.h"
 
+#include "fuzz_helpers.h"
+#include <functional>
 #include <fuzzer/FuzzedDataProvider.h>
 #include <time.h>
 
@@ -11,57 +13,52 @@ Expr random_expr(FuzzedDataProvider &fdp, int depth, vector<Expr> &exprs) {
     if (depth <= 0) {
         return fdp.ConsumeIntegralInRange<int>(-5, 4);
     }
-
     if (!exprs.empty() && fdp.ConsumeBool()) {
         // Reuse an existing expression
-        return exprs[fdp.ConsumeIntegralInRange<size_t>(0, exprs.size() - 1)];
+        return pick_value_in_vector(fdp, exprs);
     }
-
-    Expr next;
-    switch (fdp.ConsumeIntegralInRange<int>(0, 8)) {
-    case 0:
-        next = Var("x");
-        break;
-    case 1:
-        next = Var("y");
-        break;
-    case 2:
-        next = Var("z");
-        break;
-    case 3:
-        // Any binary op is equally good
-        next = random_expr(fdp, depth - 1, exprs);
-        next += random_expr(fdp, depth - 1, exprs);
-        break;
-    case 4: {
-        Expr a = random_expr(fdp, depth - 2, exprs);
-        Expr b = random_expr(fdp, depth - 2, exprs);
-        Expr c = random_expr(fdp, depth - 2, exprs);
-        Expr d = random_expr(fdp, depth - 2, exprs);
-        next = select(a > b, c, d);
-        break;
-    }
-    case 5: {
-        Expr a = random_expr(fdp, depth - 1, exprs);
-        Expr b = random_expr(fdp, depth - 1, exprs);
-        next = Let::make("x", a, b);
-        break;
-    }
-    case 6: {
-        Expr a = random_expr(fdp, depth - 1, exprs);
-        Expr b = random_expr(fdp, depth - 1, exprs);
-        next = Let::make("y", a, b);
-        break;
-    }
-    case 7: {
-        Expr a = random_expr(fdp, depth - 1, exprs);
-        Expr b = random_expr(fdp, depth - 1, exprs);
-        next = Let::make("z", a, b);
-        break;
-    }
-    default:
-        next = fdp.ConsumeIntegralInRange<int>(-5, 4);
-    }
+    std::function<Expr()> build_next_expr[] = {
+        [&]() {
+            return Var("x");
+        },
+        [&]() {
+            return Var("y");
+        },
+        [&]() {
+            return Var("z");
+        },
+        [&]() {
+            Expr next = random_expr(fdp, depth - 1, exprs);
+            next += random_expr(fdp, depth - 1, exprs);
+            return next;
+        },
+        [&]() {
+            Expr a = random_expr(fdp, depth - 2, exprs);
+            Expr b = random_expr(fdp, depth - 2, exprs);
+            Expr c = random_expr(fdp, depth - 2, exprs);
+            Expr d = random_expr(fdp, depth - 2, exprs);
+            return select(a > b, c, d);
+        },
+        [&]() {
+            Expr a = random_expr(fdp, depth - 1, exprs);
+            Expr b = random_expr(fdp, depth - 1, exprs);
+            return Let::make("x", a, b);
+        },
+        [&]() {
+            Expr a = random_expr(fdp, depth - 1, exprs);
+            Expr b = random_expr(fdp, depth - 1, exprs);
+            return Let::make("y", a, b);
+        },
+        [&]() {
+            Expr a = random_expr(fdp, depth - 1, exprs);
+            Expr b = random_expr(fdp, depth - 1, exprs);
+            return Let::make("z", a, b);
+        },
+        [&]() {
+            return fdp.ConsumeIntegralInRange<int>(-5, 4);
+        },
+    };
+    Expr next = fdp.PickValueInArray(build_next_expr)();
     exprs.push_back(next);
     return next;
 }
