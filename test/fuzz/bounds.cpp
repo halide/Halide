@@ -35,12 +35,12 @@ Expr random_var(FuzzedDataProvider &fdp) {
 }
 
 Type random_type(FuzzedDataProvider &fdp, int width) {
-    Type T = fdp.PickValueInArray(fuzz_types);
+    Type t = fdp.PickValueInArray(fuzz_types);
 
     if (width > 1) {
-        T = T.with_lanes(width);
+        t = t.with_lanes(width);
     }
-    return T;
+    return t;
 }
 
 int get_random_divisor(FuzzedDataProvider &fdp, Type t) {
@@ -54,38 +54,38 @@ int get_random_divisor(FuzzedDataProvider &fdp, Type t) {
     return pick_value_in_vector(fdp, divisors);
 }
 
-Expr random_leaf(FuzzedDataProvider &fdp, Type T, bool overflow_undef = false, bool imm_only = false) {
-    if (T.is_int() && T.bits() == 32) {
+Expr random_leaf(FuzzedDataProvider &fdp, Type t, bool overflow_undef = false, bool imm_only = false) {
+    if (t.is_int() && t.bits() == 32) {
         overflow_undef = true;
     }
-    if (T.is_scalar()) {
+    if (t.is_scalar()) {
         if (!imm_only && fdp.ConsumeBool()) {
             auto v1 = random_var(fdp);
-            return cast(T, v1);
+            return cast(t, v1);
         } else if (overflow_undef) {
             // For Int(32), we don't care about correctness during
             // overflow, so just use numbers that are unlikely to
             // overflow.
-            return cast(T, fdp.ConsumeIntegralInRange<int>(-128, 127));
+            return cast(t, fdp.ConsumeIntegralInRange<int>(-128, 127));
         } else {
-            return cast(T, fdp.ConsumeIntegral<int>());
+            return cast(t, fdp.ConsumeIntegral<int>());
         }
     } else {
-        int lanes = get_random_divisor(fdp, T);
+        int lanes = get_random_divisor(fdp, t);
         if (fdp.ConsumeBool()) {
-            auto e1 = random_leaf(fdp, T.with_lanes(T.lanes() / lanes), overflow_undef);
-            auto e2 = random_leaf(fdp, T.with_lanes(T.lanes() / lanes), overflow_undef);
+            auto e1 = random_leaf(fdp, t.with_lanes(t.lanes() / lanes), overflow_undef);
+            auto e2 = random_leaf(fdp, t.with_lanes(t.lanes() / lanes), overflow_undef);
             return Ramp::make(e1, e2, lanes);
         } else {
-            auto e1 = random_leaf(fdp, T.with_lanes(T.lanes() / lanes), overflow_undef);
+            auto e1 = random_leaf(fdp, t.with_lanes(t.lanes() / lanes), overflow_undef);
             return Broadcast::make(e1, lanes);
         }
     }
 }
 
-Expr random_expr(FuzzedDataProvider &fdp, Type T, int depth, bool overflow_undef = false);
+Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef = false);
 
-Expr random_condition(FuzzedDataProvider &fdp, Type T, int depth, bool maybe_scalar) {
+Expr random_condition(FuzzedDataProvider &fdp, Type t, int depth, bool maybe_scalar) {
     typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
         EQ::make,
@@ -97,74 +97,74 @@ Expr random_condition(FuzzedDataProvider &fdp, Type T, int depth, bool maybe_sca
     };
 
     if (maybe_scalar && fdp.ConsumeBool()) {
-        T = T.element_of();
+        t = t.element_of();
     }
 
-    Expr a = random_expr(fdp, T, depth);
-    Expr b = random_expr(fdp, T, depth);
+    Expr a = random_expr(fdp, t, depth);
+    Expr b = random_expr(fdp, t, depth);
     return fdp.PickValueInArray(make_bin_op)(a, b);
 }
 
-Expr random_expr(FuzzedDataProvider &fdp, Type T, int depth, bool overflow_undef) {
+Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef) {
 
-    if (T.is_int() && T.bits() == 32) {
+    if (t.is_int() && t.bits() == 32) {
         overflow_undef = true;
     }
     if (depth-- <= 0) {
-        return random_leaf(fdp, T, overflow_undef);
+        return random_leaf(fdp, t, overflow_undef);
     }
 
     std::function<Expr()> operations[] = {
         [&]() {
-            return random_leaf(fdp, T);
+            return random_leaf(fdp, t);
         },
         [&]() {
-            auto c = random_condition(fdp, T, depth, true);
-            auto e1 = random_expr(fdp, T, depth, overflow_undef);
-            auto e2 = random_expr(fdp, T, depth, overflow_undef);
+            auto c = random_condition(fdp, t, depth, true);
+            auto e1 = random_expr(fdp, t, depth, overflow_undef);
+            auto e2 = random_expr(fdp, t, depth, overflow_undef);
             return Select::make(c, e1, e2);
         },
         [&]() {
-            if (T.lanes() != 1) {
-                int lanes = get_random_divisor(fdp, T);
-                auto e1 = random_expr(fdp, T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
+            if (t.lanes() != 1) {
+                int lanes = get_random_divisor(fdp, t);
+                auto e1 = random_expr(fdp, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
                 return Broadcast::make(e1, lanes);
             }
             // If we got here, try again.
-            return random_expr(fdp, T, depth, overflow_undef);
+            return random_expr(fdp, t, depth, overflow_undef);
         },
         [&]() {
-            if (T.lanes() != 1) {
-                int lanes = get_random_divisor(fdp, T);
-                auto e1 = random_expr(fdp, T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
-                auto e2 = random_expr(fdp, T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
+            if (t.lanes() != 1) {
+                int lanes = get_random_divisor(fdp, t);
+                auto e1 = random_expr(fdp, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
+                auto e2 = random_expr(fdp, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
                 return Ramp::make(e1, e2, lanes);
             }
             // If we got here, try again.
-            return random_expr(fdp, T, depth, overflow_undef);
+            return random_expr(fdp, t, depth, overflow_undef);
         },
         [&]() {
-            if (T.is_bool()) {
-                auto e1 = random_expr(fdp, T, depth);
+            if (t.is_bool()) {
+                auto e1 = random_expr(fdp, t, depth);
                 return Not::make(e1);
             }
             // If we got here, try again.
-            return random_expr(fdp, T, depth, overflow_undef);
+            return random_expr(fdp, t, depth, overflow_undef);
         },
         [&]() {
-            if (T.is_bool()) {
-                return random_condition(fdp, random_type(fdp, T.lanes()), depth, false);
+            if (t.is_bool()) {
+                return random_condition(fdp, random_type(fdp, t.lanes()), depth, false);
             }
             // If we got here, try again.
-            return random_expr(fdp, T, depth, overflow_undef);
+            return random_expr(fdp, t, depth, overflow_undef);
         },
         [&]() {
             Type subT;
             do {
-                subT = random_type(fdp, T.lanes());
-            } while (subT == T || (subT.is_int() && subT.bits() == 32));
+                subT = random_type(fdp, t.lanes());
+            } while (subT == t || (subT.is_int() && subT.bits() == 32));
             auto e1 = random_expr(fdp, subT, depth, overflow_undef);
-            return Cast::make(T, e1);
+            return Cast::make(t, e1);
         },
         [&]() {
             typedef Expr (*make_bin_op_fn)(Expr, Expr);
@@ -182,8 +182,8 @@ Expr random_expr(FuzzedDataProvider &fdp, Type T, int depth, bool overflow_undef
                 Or::make,
             };
             make_bin_op_fn maker = fdp.PickValueInArray(make_bin_op);
-            Expr a = random_expr(fdp, T, depth, overflow_undef);
-            Expr b = random_expr(fdp, T, depth, overflow_undef);
+            Expr a = random_expr(fdp, t, depth, overflow_undef);
+            Expr b = random_expr(fdp, t, depth, overflow_undef);
             return maker(a, b);
         },
     };
@@ -272,13 +272,13 @@ std::ostream &operator<<(std::ostream &stream, const Interval &interval) {
     return stream;
 }
 
-Interval random_interval(FuzzedDataProvider &fdp, Type T) {
+Interval random_interval(FuzzedDataProvider &fdp, Type t) {
     Interval interval;
 
     int min_value = -128;
     int max_value = 128;
 
-    Type t = T.element_of();
+    Type t = t.element_of();
     if ((t.is_uint() || (t.is_int() && t.bits() <= 16))) {
         Expr t_min = t.min();
         Expr t_max = t.max();
@@ -287,7 +287,7 @@ Interval random_interval(FuzzedDataProvider &fdp, Type T) {
         } else if (auto ptr = as_const_uint(t_min)) {
             min_value = *ptr;
         } else {
-            std::cerr << "random_interval failed to find min of: " << T << "\n";
+            std::cerr << "random_interval failed to find min of: " << t << "\n";
         }
         if (auto ptr = as_const_int(t_max)) {
             max_value = *ptr;
@@ -297,7 +297,7 @@ Interval random_interval(FuzzedDataProvider &fdp, Type T) {
                 max_value = *ptr;
             }
         } else {
-            std::cerr << "random_interval failed to find max of: " << T << "\n";
+            std::cerr << "random_interval failed to find max of: " << t << "\n";
         }
     }
 
@@ -307,10 +307,10 @@ Interval random_interval(FuzzedDataProvider &fdp, Type T) {
 
     // change the min_value for the calculation of max
     min_value = fdp.ConsumeIntegralInRange<int>(min_value, max_value);
-    interval.min = cast(T, min_value);
+    interval.min = cast(t, min_value);
 
     max_value = fdp.ConsumeIntegralInRange<int>(min_value, max_value);
-    interval.max = cast(T, max_value);
+    interval.max = cast(t, max_value);
 
     if (min_value > max_value || (interval.is_bounded() && can_prove(interval.min > interval.max))) {
         std::cerr << "random_interval failed: ";
@@ -351,10 +351,10 @@ int sample_interval(FuzzedDataProvider &fdp, const Interval &interval) {
     return fdp.ConsumeIntegralInRange<int>(min_value, max_value);
 }
 
-bool test_bounds(Expr test, const Interval &interval, Type T, const map<string, Expr> &vars) {
-    for (int j = 0; j < T.lanes(); j++) {
+bool test_bounds(Expr test, const Interval &interval, Type t, const map<string, Expr> &vars) {
+    for (int j = 0; j < t.lanes(); j++) {
         Expr a_j = test;
-        if (T.lanes() != 1) {
+        if (t.lanes() != 1) {
             a_j = extract_lane(test, j);
         }
 
