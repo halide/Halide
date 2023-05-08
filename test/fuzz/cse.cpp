@@ -79,9 +79,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     Expr csed = common_subexpression_elimination(orig);
 
     Expr check = (orig == csed);
-    check = i16(Let::make("x", 1, check));
-    check = i16(Let::make("y", 2, check));
-    check = i16(Let::make("z", 3, check));
+    check = Let::make("x", i16(1), check);
+    check = Let::make("y", i16(2), check);
+    check = Let::make("z", i16(3), check);
     Stmt check_stmt = uniquify_variable_names(Evaluate::make(check));
     check = check_stmt.as<Evaluate>()->value;
 
