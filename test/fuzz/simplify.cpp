@@ -15,6 +15,8 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
+typedef Expr (*make_bin_op_fn)(Expr, Expr);
+
 const int fuzz_var_count = 5;
 
 Type fuzz_types[] = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
@@ -82,7 +84,6 @@ Expr random_leaf(FuzzedDataProvider &fdp, Type t, bool overflow_undef = false, b
 Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef = false);
 
 Expr random_condition(FuzzedDataProvider &fdp, Type t, int depth, bool maybe_scalar) {
-    typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
         EQ::make,
         NE::make,
@@ -167,7 +168,6 @@ Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef
             return Cast::make(t, e1);
         },
         [&]() {
-            typedef Expr (*make_bin_op_fn)(Expr, Expr);
             static make_bin_op_fn make_bin_op[] = {
                 // Arithmetic operations.
                 Add::make,
@@ -178,14 +178,23 @@ Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef
                 Div::make,
                 Mod::make,
                 make_absd,
-                // Boolean operations.
-                And::make,
-                Or::make,
             };
 
             Expr a = random_expr(fdp, t, depth, overflow_undef);
             Expr b = random_expr(fdp, t, depth, overflow_undef);
             return fdp.PickValueInArray(make_bin_op)(a, b);
+        },
+        [&]() {
+            static make_bin_op_fn make_bin_op[] = {
+                And::make,
+                Or::make,
+            };
+
+            // Boolean operations -- both sides must be cast to booleans,
+            // and then we must cast the result back to 't'.
+            Expr a = cast<bool>(random_expr(fdp, t, depth, overflow_undef));
+            Expr b = cast<bool>(random_expr(fdp, t, depth, overflow_undef));
+            return cast(t, fdp.PickValueInArray(make_bin_op)(a, b));
         }};
     return fdp.PickValueInArray(operations)();
 }
