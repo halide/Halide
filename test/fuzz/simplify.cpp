@@ -18,7 +18,6 @@ using namespace Halide::Internal;
 const int fuzz_var_count = 5;
 
 Type fuzz_types[] = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
-const int fuzz_type_count = sizeof(fuzz_types) / sizeof(fuzz_types[0]);
 
 std::string fuzz_var(int i) {
     return std::string(1, 'a' + i);
@@ -92,7 +91,6 @@ Expr random_condition(FuzzedDataProvider &fdp, Type T, int depth, bool maybe_sca
         GT::make,
         GE::make,
     };
-    const int op_count = sizeof(make_bin_op) / sizeof(make_bin_op[0]);
 
     if (maybe_scalar && fdp.ConsumeBool()) {
         T = T.element_of();
@@ -250,7 +248,10 @@ bool test_expression(FuzzedDataProvider &fdp, Expr test, int samples) {
     return true;
 }
 
-// These are here to enable copy of failed output expressions and pasting them into the test for debugging.
+// These are here to enable copy of failed output expressions
+// and pasting them into the test for debugging; they are commented out
+// to avoid "unused function" warnings in some build environments.
+#if 0
 Expr ramp(Expr b, Expr s, int w) {
     return Ramp::make(b, s, w);
 }
@@ -314,6 +315,7 @@ Expr int16x2(Expr x) {
 Expr int32x2(Expr x) {
     return Cast::make(Int(32).with_lanes(2), x);
 }
+#endif
 
 Expr a(Variable::make(Int(0), fuzz_var(0)));
 Expr b(Variable::make(Int(0), fuzz_var(1)));
