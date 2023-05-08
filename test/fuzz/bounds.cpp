@@ -15,6 +15,8 @@ using namespace Halide::Internal;
 
 #define internal_assert _halide_user_assert
 
+typedef Expr (*make_bin_op_fn)(Expr, Expr);
+
 const int fuzz_var_count = 5;
 
 std::mt19937 rng(0);
@@ -86,7 +88,6 @@ Expr random_leaf(FuzzedDataProvider &fdp, Type t, bool overflow_undef = false, b
 Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef = false);
 
 Expr random_condition(FuzzedDataProvider &fdp, Type t, int depth, bool maybe_scalar) {
-    typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
         EQ::make,
         NE::make,
@@ -167,7 +168,6 @@ Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef
             return Cast::make(t, e1);
         },
         [&]() {
-            typedef Expr (*make_bin_op_fn)(Expr, Expr);
             static make_bin_op_fn make_bin_op[] = {
                 // Arithmetic operations.
                 Add::make,
@@ -177,14 +177,24 @@ Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef
                 Max::make,
                 Div::make,
                 Mod::make,
-                // Binary operations.
-                And::make,
-                Or::make,
             };
             make_bin_op_fn maker = fdp.PickValueInArray(make_bin_op);
             Expr a = random_expr(fdp, t, depth, overflow_undef);
             Expr b = random_expr(fdp, t, depth, overflow_undef);
             return maker(a, b);
+        },
+        [&]() {
+            static make_bin_op_fn make_bin_op[] = {
+                // Binary operations.
+                And::make,
+                Or::make,
+            };
+            // Boolean operations -- both sides must be cast to booleans,
+            // and then we must cast the result back to 't'.
+            make_bin_op_fn maker = fdp.PickValueInArray(make_bin_op);
+            Expr a = cast<bool>(random_expr(fdp, t, depth, overflow_undef));
+            Expr b = cast<bool>(random_expr(fdp, t, depth, overflow_undef));
+            return cast(t, maker(a, b));
         },
     };
     return fdp.PickValueInArray(operations)();
@@ -278,10 +288,10 @@ Interval random_interval(FuzzedDataProvider &fdp, Type t) {
     int min_value = -128;
     int max_value = 128;
 
-    Type t = t.element_of();
-    if ((t.is_uint() || (t.is_int() && t.bits() <= 16))) {
-        Expr t_min = t.min();
-        Expr t_max = t.max();
+    Type t_elem = t.element_of();
+    if ((t_elem.is_uint() || (t_elem.is_int() && t_elem.bits() <= 16))) {
+        Expr t_min = t_elem.min();
+        Expr t_max = t_elem.max();
         if (auto ptr = as_const_int(t_min)) {
             min_value = *ptr;
         } else if (auto ptr = as_const_uint(t_min)) {
