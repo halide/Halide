@@ -47,7 +47,6 @@ int main(int argc, char **argv) {
         assert(b_bool.type() == t_bool);
     }
 
-
     printf("Success!\n");
     return 0;
 }
