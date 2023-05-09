@@ -107,7 +107,6 @@ Expr random_condition(FuzzedDataProvider &fdp, Type t, int depth, bool maybe_sca
 }
 
 Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef) {
-
     if (t.is_int() && t.bits() == 32) {
         overflow_undef = true;
     }
@@ -192,15 +191,21 @@ Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef
             // Boolean operations -- both sides must be cast to booleans,
             // and then we must cast the result back to 't'.
             make_bin_op_fn maker = fdp.PickValueInArray(make_bin_op);
-            Expr a = cast<bool>(random_expr(fdp, t, depth, overflow_undef));
-            Expr b = cast<bool>(random_expr(fdp, t, depth, overflow_undef));
+            Expr a = random_expr(fdp, t, depth, overflow_undef);
+            Expr b = random_expr(fdp, t, depth, overflow_undef);
+            Type bool_with_lanes = Bool(t.lanes());
+            a = cast(bool_with_lanes, a);
+            b = cast(bool_with_lanes, b);
             return cast(t, maker(a, b));
         },
     };
     return fdp.PickValueInArray(operations)();
 }
 
-// These are here to enable copy of failed output expressions and pasting them into the test for debugging.
+// These are here to enable copy of failed output expressions
+// and pasting them into the test for debugging; they are commented out
+// to avoid "unused function" warnings in some build environments.
+#if 0
 Expr ramp(Expr b, Expr s, int w) {
     return Ramp::make(b, s, w);
 }
@@ -270,6 +275,7 @@ Expr int16x3(Expr x) {
 Expr int32x2(Expr x) {
     return Cast::make(Int(32).with_lanes(2), x);
 }
+#endif
 
 Expr a(Variable::make(global_var_type, fuzz_var(0)));
 Expr b(Variable::make(global_var_type, fuzz_var(1)));
