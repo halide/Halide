@@ -187,6 +187,7 @@ int VulkanMemoryAllocator::initialize(void *user_context,
     block_allocator_config.maximum_block_count = cfg.maximum_block_count;
     block_allocator_config.maximum_block_size = cfg.maximum_block_size;
     block_allocator_config.minimum_block_size = cfg.minimum_block_size;
+    block_allocator_config.nearest_multiple = cfg.nearest_multiple;
     block_allocator = BlockAllocator::create(user_context, block_allocator_config, allocators);
     if (block_allocator == nullptr) {
         error(user_context) << "VulkanMemoryAllocator: Failed to create BlockAllocator! Out of memory?!\n";
