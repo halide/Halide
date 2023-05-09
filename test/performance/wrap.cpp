@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (target.has_feature(Target::Vulkan)) {
-        // FIXME: See issue #7559 : performance_wrap test results don't match 
+        // FIXME: See issue #7559 : performance_wrap test results don't match
         printf("[SKIP] Skipping test for Vulkan. Wrap results don't match ... \n");
         return 0;
     }
