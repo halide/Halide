@@ -1914,8 +1914,6 @@ Expr min(int a, Expr b) {
 
 Expr cast(Type t, Expr a) {
     user_assert(a.defined()) << "cast of undefined Expr\n";
-    user_assert(a.type().lanes() == t.lanes()) << "cast() must have identical lanes in both types";
-
     if (a.type() == t) {
         return a;
     }
