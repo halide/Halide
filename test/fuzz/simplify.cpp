@@ -192,8 +192,11 @@ Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef
 
             // Boolean operations -- both sides must be cast to booleans,
             // and then we must cast the result back to 't'.
-            Expr a = cast<bool>(random_expr(fdp, t, depth, overflow_undef));
-            Expr b = cast<bool>(random_expr(fdp, t, depth, overflow_undef));
+            Expr a = random_expr(fdp, t, depth, overflow_undef);
+            Expr b = random_expr(fdp, t, depth, overflow_undef);
+            Type bool_with_lanes = Bool(t.lanes());
+            a = cast(bool_with_lanes, a);
+            b = cast(bool_with_lanes, b);
             return cast(t, fdp.PickValueInArray(make_bin_op)(a, b));
         }};
     return fdp.PickValueInArray(operations)();

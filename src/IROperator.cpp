@@ -1943,8 +1943,17 @@ Expr cast(Type t, Expr a) {
         if (a.type().is_scalar()) {
             return Broadcast::make(cast(t.element_of(), std::move(a)), t.lanes());
         } else if (const Broadcast *b = a.as<Broadcast>()) {
-            internal_assert(b->lanes == t.lanes());
-            return Broadcast::make(cast(t.element_of(), b->value), t.lanes());
+            if (b->lanes == t.lanes()) {
+                return Broadcast::make(cast(t.element_of(), b->value), t.lanes());
+            }
+            // else fall thru: we could have a situation like
+            //
+            //   a=x3(ramp(x, y, 2))  # type=uint32x6
+            //   t=uint1x6
+            //
+            // this should be legal to cast, but requiring b->lanes == t.lanes
+            // would make it fail. Just fall through and let the Cast IR node
+            // deal with possible errors. (https://github.com/halide/Halide/issues/7556)
         }
     }
     return Cast::make(t, std::move(a));
