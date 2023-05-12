@@ -159,12 +159,16 @@ Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef
             return random_expr(fdp, t, depth, overflow_undef);
         },
         [&]() {
-            // Get a random t that isn't t or int32 (int32 can overflow and we don't care about that).
-            Type subT;
+            // Get a random type that isn't t or int32 (int32 can overflow and we don't care about that).
+            // Note also that the FuzzedDataProvider doesn't actually promise to return a random distribution --
+            // it can (e.g.) decide to just return 0 for all data, forever -- so this loop has no guarantee
+            // of eventually finding a different type. To remedy this, we'll just put a limit on the retries.
+            int count = 0;
+            Type subtype;
             do {
-                subT = random_type(fdp, t.lanes());
-            } while (subT == t || (subT.is_int() && subT.bits() == 32));
-            auto e1 = random_expr(fdp, subT, depth, overflow_undef);
+                subtype = random_type(fdp, t.lanes());
+            } while (++count < 10 && (subtype == t || (subtype.is_int() && subtype.bits() == 32)));
+            auto e1 = random_expr(fdp, subtype, depth, overflow_undef);
             return Cast::make(t, e1);
         },
         [&]() {
