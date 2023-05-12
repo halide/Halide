@@ -163,6 +163,29 @@
       "cacheVariables": {
         "LLVM_ROOT": "$penv{LLVM_ROOT}"
       }
+    },
+    {
+      "name": "linux-x64-fuzzer",
+      "inherits": "ci",
+      "displayName": "Fuzzer (Linux x64)",
+      "description": "Build everything with fuzzing enabled",
+      "cacheVariables": {
+        "LLVM_ROOT": "$penv{LLVM_ROOT}",
+        "TARGET_WEBASSEMBLY": "NO",
+        "WITH_TUTORIALS": "NO",
+        "WITH_UTILS": "NO",
+        "WITH_PYTHON_BINDINGS": "NO",
+        "WITH_TESTS": "YES",
+        "WITH_TEST_AUTO_SCHEDULE": "NO",
+        "WITH_TEST_CORRECTNESS": "NO",
+        "WITH_TEST_ERROR": "NO",
+        "WITH_TEST_WARNING": "NO",
+        "WITH_TEST_PERFORMANCE": "NO",
+        "WITH_TEST_RUNTIME": "NO",
+        "WITH_TEST_GENERATOR": "NO",
+        "WITH_TEST_FUZZ": "YES",
+        "BUILD_SHARED_LIBS": "NO"
+      }
     }
   ],
   "buildPresets": [
@@ -183,6 +206,12 @@
       "configurePreset": "linux-x64-asan",
       "displayName": "ASAN (Linux x64)",
       "description": "Build everything with ASAN enabled"
+    },
+    {
+      "name": "linux-x64-fuzzer",
+      "configurePreset": "linux-x64-fuzzer",
+      "displayName": "Fuzzing (Linux x64)",
+      "description": "Build everything with fuzzing enabled"
     }
   ],
   "testPresets": [
@@ -212,6 +241,15 @@
       "environment": {
         "ASAN_OPTIONS": "detect_leaks=0:detect_container_overflow=0"
       },
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-x64-fuzzer",
+      "configurePreset": "linux-x64-fuzzer",
+      "displayName": "Fuzzing (Linux x64)",
+      "description": "Test everything with fuzzing enabled",
       "output": {
         "outputOnFailure": true
       }
