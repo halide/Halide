@@ -22,8 +22,7 @@ if (WITH_WABT)
     FetchContent_Declare(wabt
                          GIT_REPOSITORY https://github.com/WebAssembly/wabt.git
                          GIT_TAG ${WABT_VER}
-                         GIT_SHALLOW TRUE
-                         GIT_SUBMODULES "")
+                         GIT_SHALLOW TRUE)
 
     # configuration for wabt
     set(WITH_EXCEPTIONS ${Halide_ENABLE_EXCEPTIONS})
