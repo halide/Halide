@@ -29,6 +29,7 @@ if (WITH_WABT)
     set(BUILD_TESTS OFF)
     set(BUILD_TOOLS OFF)
     set(BUILD_LIBWASM OFF)
+    set(USE_INTERNAL_SHA256 ON)
     FetchContent_MakeAvailable(wabt)
 
     set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE ON)
