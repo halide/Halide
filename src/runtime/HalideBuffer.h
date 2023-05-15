@@ -1242,6 +1242,13 @@ public:
     }
     // @}
 
+    /** Add some syntactic sugar to allow autoconversion from Buffer<T> to Buffer<const T>& when
+     * passing arguments */
+    template<typename T2 = T, typename = typename std::enable_if<!std::is_const<T2>::value>::type>
+    operator Buffer<typename std::add_const<T2>::type, Dims, InClassDimStorage> &() & {
+        return as_const();
+    }
+
     /** Conventional names for the first three dimensions. */
     // @{
     int width() const {
