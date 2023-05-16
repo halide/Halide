@@ -1249,6 +1249,28 @@ public:
         return as_const();
     }
 
+    /** Add some syntactic sugar to allow autoconversion from Buffer<T> to Buffer<void>& when
+     * passing arguments */
+    template<typename TVoid,
+             typename T2 = T,
+             typename = typename std::enable_if<std::is_same<TVoid, void>::value &&
+                                                !std::is_void<T2>::value &&
+                                                !std::is_const<T2>::value>::type>
+    operator Buffer<TVoid, Dims, InClassDimStorage> &() & {
+        return as<TVoid, Dims>();
+    }
+
+    /** Add some syntactic sugar to allow autoconversion from Buffer<const T> to Buffer<const void>& when
+     * passing arguments */
+    template<typename TVoid,
+             typename T2 = T,
+             typename = typename std::enable_if<std::is_same<TVoid, void>::value &&
+                                                !std::is_void<T2>::value &&
+                                                std::is_const<T2>::value>::type>
+    operator Buffer<const TVoid, Dims, InClassDimStorage> &() & {
+        return as<const TVoid, Dims>();
+    }
+
     /** Conventional names for the first three dimensions. */
     // @{
     int width() const {
