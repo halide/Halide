@@ -221,6 +221,34 @@ int main(int argc, char **argv) {
     }
 
     {
+        Buffer<float> a(100, 80, 3);
+        a.for_each_element([&](int x, int y, int c) {
+            a(x, y, c) = x + 100.0f * y + 100000.0f * c;
+        });
+        Buffer<float> b(a);
+
+        // Check that Buffer<T> will autoconvert to Buffer<const T>&
+        const auto check_equal_non_const_ref = [](Buffer<const float> &a, Buffer<const float> &b) {
+            check_equal(a, b);
+        };
+        check_equal_non_const_ref(a, b);
+
+        // Check that Buffer<T> will autoconvert to Buffer<void>&
+        const auto check_equal_non_const_void_ref = [](Buffer<void> &a, Buffer<void> &b) {
+            check_equal(a.as<float>(), b.as<float>());
+        };
+        check_equal_non_const_void_ref(a, b);
+
+        // Check that Buffer<const T> will autoconvert to Buffer<const void>&
+        const auto check_equal_const_void_ref = [](Buffer<const void> &a, Buffer<const void> &b) {
+            check_equal(a.as<const float>(), b.as<const float>());
+        };
+        Buffer<const float> ac = a;
+        Buffer<const float> bc = b;
+        check_equal_const_void_ref(ac, bc);
+    }
+
+    {
         // Check lifting a function over scalars to a function over entire buffers.
         const int W = 5, H = 4, C = 3;
         Buffer<float> a(W, H, C);
