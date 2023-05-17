@@ -27,13 +27,13 @@ Expr random_expr(FuzzedDataProvider &fdp, int depth, vector<Expr> &exprs) {
             // Can't use Var() here because that would require i32 values,
             // which we are avoiding here because we don't want to end
             // up with signed_integer_overflow()
-            return Variable::make(Int(16), unique_name("x"));
+            return Variable::make(Int(16), "x");
         },
         [&]() {
-            return Variable::make(Int(16), unique_name("y"));
+            return Variable::make(Int(16), "y");
         },
         [&]() {
-            return Variable::make(Int(16), unique_name("z"));
+            return Variable::make(Int(16), "z");
         },
         [&]() {
             Expr next = random_expr(fdp, depth - 1, exprs);
