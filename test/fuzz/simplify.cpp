@@ -223,15 +223,17 @@ bool test_simplification(Expr a, Expr b, Type t, const map<string, Expr> &vars) 
             continue;
         }
         if (!equal(a_j_v, b_j_v)) {
+            std::cerr << "Simplified Expr is not equal() to Original Expr!\n";
+
             for (map<string, Expr>::const_iterator i = vars.begin(); i != vars.end(); i++) {
-                std::cout << i->first << " = " << i->second << "\n";
+                std::cerr << "Var " << i->first << " = " << i->second << "\n";
             }
 
-            std::cout << a << "\n";
-            std::cout << b << "\n";
-            std::cout << "In vector lane " << j << ":\n";
-            std::cout << a_j << " -> " << a_j_v << "\n";
-            std::cout << b_j << " -> " << b_j_v << "\n";
+            std::cerr << "Original Expr is: " << a << "\n";
+            std::cerr << "Simplified Expr is: " << b << "\n";
+            std::cerr << "In vector lane " << j << ", original -> simplified:\n";
+            std::cerr << "   " << a_j << " -> " << a_j_v << "\n";
+            std::cerr << "   " << b_j << " -> " << b_j_v << "\n";
             return false;
         }
     }
