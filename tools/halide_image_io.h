@@ -1886,7 +1886,7 @@ bool save_tiff(ImageType &im, const std::string &filename) {
                     offsetof(halide_tiff_header, width_resolution));  // XResolution
     tag++->assign32(283, 5, 1,
                     offsetof(halide_tiff_header, height_resolution));      // YResolution
-    tag++->assign16(284, 1, 2);                                            // PlanarConfiguration -- planar
+    tag++->assign16(284, 1, channels == 1 ? 1 : 2);                        // PlanarConfiguration -- contig or planar
     tag++->assign16(296, 1, 1);                                            // ResolutionUnit -- none
     tag++->assign16(339, 1, type_code_to_tiff_sample_type[im_type.code]);  // SampleFormat
     tag++->assign32(32997, 1, depth);                                      // Image depth

@@ -16,20 +16,20 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    set(WABT_VER 1.0.32)
+    set(WABT_VER 1.0.33)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
                          GIT_REPOSITORY https://github.com/WebAssembly/wabt.git
                          GIT_TAG ${WABT_VER}
-                         GIT_SHALLOW TRUE
-                         GIT_SUBMODULES "")
+                         GIT_SHALLOW TRUE)
 
     # configuration for wabt
     set(WITH_EXCEPTIONS ${Halide_ENABLE_EXCEPTIONS})
     set(BUILD_TESTS OFF)
     set(BUILD_TOOLS OFF)
     set(BUILD_LIBWASM OFF)
+    set(USE_INTERNAL_SHA256 ON)
     FetchContent_MakeAvailable(wabt)
 
     set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE ON)

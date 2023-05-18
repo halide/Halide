@@ -187,6 +187,7 @@ int VulkanMemoryAllocator::initialize(void *user_context,
     block_allocator_config.maximum_block_count = cfg.maximum_block_count;
     block_allocator_config.maximum_block_size = cfg.maximum_block_size;
     block_allocator_config.minimum_block_size = cfg.minimum_block_size;
+    block_allocator_config.nearest_multiple = cfg.nearest_multiple;
     block_allocator = BlockAllocator::create(user_context, block_allocator_config, allocators);
     if (block_allocator == nullptr) {
         error(user_context) << "VulkanMemoryAllocator: Failed to create BlockAllocator! Out of memory?!\n";
@@ -619,11 +620,14 @@ int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block
                    << "dedicated=" << (block->dedicated ? "true" : "false") << ")\n";
 #endif
 
+    // Enforce any alignment constrainst reported by the device limits for each usage type
     if (usage_flags & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) {
         block->properties.alignment = instance->physical_device_limits.minStorageBufferOffsetAlignment;
     } else if (usage_flags & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) {
         block->properties.alignment = instance->physical_device_limits.minUniformBufferOffsetAlignment;
-    } else {
+    }
+    // Some drivers appear to report a buffer alignment constraint (regardless of usage) that can be larger than either of the above
+    if (memory_requirements.alignment > block->properties.alignment) {
         block->properties.alignment = memory_requirements.alignment;
     }
     block->handle = (void *)device_memory;

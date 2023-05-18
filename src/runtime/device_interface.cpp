@@ -96,15 +96,18 @@ ALWAYS_INLINE int debug_log_and_validate_buf(void *user_context, const halide_bu
     bool device_interface_set = (buf.device_interface != nullptr);
     bool device_set = (buf.device != 0);
     if (device_set && !device_interface_set) {
+        debug(user_context) << routine << " halide_error_no_device_interface for: " << buf << "\n";
         return halide_error_no_device_interface(user_context);
     }
     if (device_interface_set && !device_set) {
+        debug(user_context) << routine << " halide_error_device_interface_no_device for: " << buf << "\n";
         return halide_error_device_interface_no_device(user_context);
     }
 
     bool host_dirty = buf.host_dirty();
     bool device_dirty = buf.device_dirty();
     if (host_dirty && device_dirty) {
+        debug(user_context) << routine << " halide_error_host_and_device_dirty for: " << buf << "\n";
         return halide_error_host_and_device_dirty(user_context);
     }
     /* TODO: we could test:

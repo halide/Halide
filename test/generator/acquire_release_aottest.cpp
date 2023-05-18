@@ -207,6 +207,9 @@ bool run_test() {
 }
 
 int main(int argc, char **argv) {
+#if defined(TEST_VULKAN)
+    printf("[SKIP] Vulkan doesn't implement a custom context for this test.\n");
+#else
     if (!run_test()) {
         return 1;
     }
@@ -214,7 +217,7 @@ int main(int argc, char **argv) {
     if (!run_test()) {
         return 1;
     }
-
+#endif
     return 0;
 }
 
