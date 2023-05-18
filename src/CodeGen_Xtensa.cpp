@@ -1141,9 +1141,9 @@ void CodeGen_Xtensa::visit(const Call *op) {
     } else if (op->name == "sqrt" || op->name == "sqrt_f32") {
         string a0 = print_expr(op->args[0]);
         if (is_native_xtensa_vector<float>(op->type)) {
-            rhs << "IVP_FSQRTN_2XF32(" << a0 << ")";
+            rhs << "IVP_SQRTN_2XF32(" << a0 << ")";
         } else if (is_native_xtensa_vector<float16_t>(op->type)) {
-            rhs << "IVP_FSQRTNXF16(" << a0 << ")";
+            rhs << "IVP_SQRTNXF16(" << a0 << ")";
         } else {
             rhs << "sqrtf(" << a0 << ")";
         }
