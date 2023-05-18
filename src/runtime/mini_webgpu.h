@@ -1047,6 +1047,7 @@ typedef struct WGPUShaderModuleSPIRVDescriptor {
 typedef struct WGPUShaderModuleWGSLDescriptor {
     WGPUChainedStruct chain;
     char const *source;
+    char const *code;
 } WGPUShaderModuleWGSLDescriptor;
 
 typedef struct WGPUStencilFaceState {
