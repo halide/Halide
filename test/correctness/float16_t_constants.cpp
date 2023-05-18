@@ -77,9 +77,9 @@ int main() {
         // Try converting to native float types
         float infinityPf = (float)infinityP;
         double infinityPd = (double)infinityP;
-        h_assert(std::isinf(infinityPf) & !std::signbit(infinityPf),
+        h_assert(std::isinf(infinityPf) && !std::signbit(infinityPf),
                  "positive infinity conversion to float invalid");
-        h_assert(std::isinf(infinityPd) & !std::signbit(infinityPd),
+        h_assert(std::isinf(infinityPd) && !std::signbit(infinityPd),
                  "positive infinity conversion to double invalid");
     }
 
@@ -101,9 +101,9 @@ int main() {
         // Try converting to native float types
         float infinityNf = (float)infinityN;
         double infinityNd = (double)infinityN;
-        h_assert(std::isinf(infinityNf) & std::signbit(infinityNf),
+        h_assert(std::isinf(infinityNf) && std::signbit(infinityNf),
                  "negative infinity conversion to float invalid");
-        h_assert(std::isinf(infinityNd) & std::signbit(infinityNd),
+        h_assert(std::isinf(infinityNd) && std::signbit(infinityNd),
                  "negative infinity conversion to double invalid");
     }
 

@@ -270,7 +270,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 #endif
 
     // This loop is beam search over the sequence of decisions to make.
-    for (int i = 0;; i++) {
+    for (;;) {
         std::unordered_map<uint64_t, int> hashes;
         q.swap(pending);
 
