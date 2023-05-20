@@ -10,7 +10,7 @@ Fuzz testing requires specific instrumentation across the entire build;
 to do this we make use of a fuzzing-specific-toolchain/preset. e.g.
 
 ```
-cmake . --preset linux-x64-fuzzer -DLLVM_ROOT=/path/to/llvminstall
+cmake -B build --preset linux-x64-fuzzer -DLLVM_ROOT=/path/to/llvminstall
 cmake --build ./build -j$(nproc)
 ```
 
