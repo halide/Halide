@@ -2,29 +2,29 @@
 Halide has a set of fuzz-testing harnesses that can be used to find those
 tricky to find, edge cases and bugs that would otherwise not be caught
 by a regular unit-testing suite. At the moment these fuzz-tests are housed
-in the `//test/fuzz` directory. The fuzz testing suite use the common,
+in the `test/fuzz` directory. The fuzz testing suite use the common,
 [libfuzzer](https://www.llvm.org/docs/LibFuzzer.html) interface for fuzz-tests.
 
 ## Building fuzz tests
-Fuzz testing requires specific instrumentation across the entire build,
+Fuzz testing requires specific instrumentation across the entire build;
 to do this we make use of a fuzzing-specific-toolchain/preset. e.g.
 
 ```
-cmake . --preset linux-x64-fuzzer
+cmake . --preset linux-x64-fuzzer -DLLVM_ROOT=/path/to/llvminstall
 cmake --build ./build -j$(nproc)
 ```
 
 ## Using the fuzz-harnesses
 Fuzz-testing harnesses are a little different to a more traditional unit-test
-and would don't have a definitive end of test. In other words a fuzz test will
-run;
+and don't have a definitive end of test. In other words a fuzz test will
+run:
 - for an infinite amount of time (the default),
 - for a user specified maximum amount of time,
 - until the fuzzer finds a bug and crashes,
 - you manually kill the process e.g. (ctrl-C).
 
 Once you have built the fuzz testing suite using the commands listed above you
-can list the fuzz testing harnesses using the command;
+can list the fuzz testing harnesses using the command:
 
 ```
 ls ./build/test/fuzz/fuzz_*
@@ -34,7 +34,7 @@ To run a fuzzer simply run the fuzz-testing harness with no arguments. e.g.
 
 `./build/test/fuzz/fuzz_simplify`
 
-By default this will run the fuzz test on a single-core and discard whatever.
+By default this will run the fuzz test on a single core and discard whatever.
 temporary corpus is created.
 
 To reuse a given corpus (recommended) create a new directory to store the
@@ -51,7 +51,7 @@ that your fuzzer makes improving code-coverage will remain persistent on
 your disk.
 
 Up until this point the fuzzer has only been running on a single core. To
-speed things up a little, let's run the fuzzer in parrelell across all
+speed things up a little, let's run the fuzzer in parallel across all
 available cores on our machine.
 
 ```
@@ -60,27 +60,27 @@ available cores on our machine.
 
 ## Reproducing crashes
 An important part of fuzz testing is reproducing the crashing input. To
-handle this, a libfuzzer based fuzz harness will create a crash file
-whenever the fuzzer exists unexpectedly. This will look something like.
+handle this, a libfuzzer-based fuzz harness will create a crash file
+whenever the fuzzer exits unexpectedly. This will look something like:
 
 `crash-<some_random_hash>`
 
-To reproduce a crase we simply rerun our fuzz harness with our crash
+To reproduce a crash we simply rerun our fuzz harness with our crash
 file as the first argument.
 
 `./build/test/fuzz/fuzz_simplify crash-<some_random_hash>`
 
-So long as your fuzz harness and library is deterministic this should
+So long as your fuzz harness and library are deterministic this should
 reproduce the original crash.
 
 ## Adding new fuzz tests
-A bare-bones fuzzer will look something like follows;
+A bare-bones fuzzer will look something like the following:
 ```cpp
 #include <stdint.h>
 #include <stddef.h>
 #include <my_library.h>
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-  // Randomly through data at our function and hope it doesn't crash.
+  // Randomly throw data at our function and hope it doesn't crash.
   foo(data, size);
   return 0;
 }
