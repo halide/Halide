@@ -22,8 +22,8 @@ foreach(fuzzer "fuzz_simplify" "fuzz_cse")
     target_link_libraries(${fuzzer} PRIVATE "${LIB_FUZZING_ENGINE}")
   else ()
     # By default just build with address-sanitizers/libfuzzer for local testing
-    target_compile_options(${fuzzer} PRIVATE -fsanitize=fuzzer-no-link,address)
-    target_link_options(${fuzzer} PRIVATE -fsanitize=fuzzer,address)
+    target_compile_options(${fuzzer} PRIVATE -fsanitize=fuzzer-no-link)
+    target_link_options(${fuzzer} PRIVATE -fsanitize=fuzzer)
   endif ()
 endforeach()
 
