@@ -12,6 +12,7 @@ set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
 
 find_package(LLVM ${Halide_REQUIRE_LLVM_VERSION} REQUIRED)
 find_package(Clang REQUIRED CONFIG HINTS "${LLVM_DIR}/../clang" "${LLVM_DIR}/../lib/cmake/clang")
+find_package(MLIR CONFIG HINTS "${LLVM_DIR}/../mlir" "${LLVM_DIR}/../lib/cmake/mlir")
 
 set(LLVM_PACKAGE_VERSION "${LLVM_PACKAGE_VERSION}"
     CACHE INTERNAL "LLVM version")
@@ -19,6 +20,9 @@ set(LLVM_PACKAGE_VERSION "${LLVM_PACKAGE_VERSION}"
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
+if (MLIR_FOUND)
+    message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
+endif ()
 
 if (LLVM_PACKAGE_VERSION VERSION_LESS 15.0)
     message(FATAL_ERROR "LLVM version must be 15.0 or newer")
@@ -141,6 +145,21 @@ else ()
     else ()
         target_link_libraries(Halide_LLVM INTERFACE ${llvm_targets})
     endif ()
+endif ()
+
+
+if (MLIR_FOUND)
+    target_include_directories(Halide_LLVM INTERFACE "$<BUILD_INTERFACE:${MLIR_INCLUDE_DIRS}>")
+
+    target_link_libraries(Halide_LLVM INTERFACE
+        MLIRAnalysis
+        MLIRIR
+        MLIRArithDialect
+        MLIRFuncDialect
+        MLIRMemRefDialect
+        MLIRSCFDialect
+        MLIRVectorDialect
+    )
 endif ()
 
 ##
