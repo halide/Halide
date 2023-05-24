@@ -1,5 +1,7 @@
 #include "Halide.h"
+#include "fuzz_helpers.h"
 #include <array>
+#include <fuzzer/FuzzedDataProvider.h>
 #include <random>
 #include <stdio.h>
 #include <time.h>
@@ -12,6 +14,8 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 #define internal_assert _halide_user_assert
+
+typedef Expr (*make_bin_op_fn)(Expr, Expr);
 
 const int fuzz_var_count = 5;
 
@@ -27,21 +31,21 @@ std::string fuzz_var(int i) {
 // This is modified for each round.
 static Type global_var_type = Int(32);
 
-Expr random_var() {
-    int fuzz_count = rng() % fuzz_var_count;
+Expr random_var(FuzzedDataProvider &fdp) {
+    int fuzz_count = fdp.ConsumeIntegralInRange(0, fuzz_var_count - 1);
     return Variable::make(global_var_type, fuzz_var(fuzz_count));
 }
 
-Type random_type(int width) {
-    Type T = fuzz_types[rng() % fuzz_type_count];
+Type random_type(FuzzedDataProvider &fdp, int width) {
+    Type t = fdp.PickValueInArray(fuzz_types);
 
     if (width > 1) {
-        T = T.with_lanes(width);
+        t = t.with_lanes(width);
     }
-    return T;
+    return t;
 }
 
-int get_random_divisor(Type t) {
+int get_random_divisor(FuzzedDataProvider &fdp, Type t) {
     std::vector<int> divisors = {t.lanes()};
     for (int dd = 2; dd < t.lanes(); dd++) {
         if (t.lanes() % dd == 0) {
@@ -49,43 +53,41 @@ int get_random_divisor(Type t) {
         }
     }
 
-    return divisors[rng() % divisors.size()];
+    return pick_value_in_vector(fdp, divisors);
 }
 
-Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
-    if (T.is_int() && T.bits() == 32) {
+Expr random_leaf(FuzzedDataProvider &fdp, Type t, bool overflow_undef = false, bool imm_only = false) {
+    if (t.is_int() && t.bits() == 32) {
         overflow_undef = true;
     }
-    if (T.is_scalar()) {
-        int var = rng() % fuzz_var_count + 1;
-        if (!imm_only && var < fuzz_var_count) {
-            auto v1 = random_var();
-            return cast(T, v1);
+    if (t.is_scalar()) {
+        if (!imm_only && fdp.ConsumeBool()) {
+            auto v1 = random_var(fdp);
+            return cast(t, v1);
         } else if (overflow_undef) {
             // For Int(32), we don't care about correctness during
             // overflow, so just use numbers that are unlikely to
             // overflow.
-            return cast(T, (int)(rng() % 256 - 128));
+            return cast(t, fdp.ConsumeIntegralInRange<int>(-128, 127));
         } else {
-            return cast(T, (int)(rng() - RAND_MAX / 2));
+            return cast(t, fdp.ConsumeIntegral<int>());
         }
     } else {
-        int lanes = get_random_divisor(T);
-        if (rng() % 2 == 0) {
-            auto e1 = random_leaf(T.with_lanes(T.lanes() / lanes), overflow_undef);
-            auto e2 = random_leaf(T.with_lanes(T.lanes() / lanes), overflow_undef);
+        int lanes = get_random_divisor(fdp, t);
+        if (fdp.ConsumeBool()) {
+            auto e1 = random_leaf(fdp, t.with_lanes(t.lanes() / lanes), overflow_undef);
+            auto e2 = random_leaf(fdp, t.with_lanes(t.lanes() / lanes), overflow_undef);
             return Ramp::make(e1, e2, lanes);
         } else {
-            auto e1 = random_leaf(T.with_lanes(T.lanes() / lanes), overflow_undef);
+            auto e1 = random_leaf(fdp, t.with_lanes(t.lanes() / lanes), overflow_undef);
             return Broadcast::make(e1, lanes);
         }
     }
 }
 
-Expr random_expr(Type T, int depth, bool overflow_undef = false);
+Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef = false);
 
-Expr random_condition(Type T, int depth, bool maybe_scalar) {
-    typedef Expr (*make_bin_op_fn)(Expr, Expr);
+Expr random_condition(FuzzedDataProvider &fdp, Type t, int depth, bool maybe_scalar) {
     static make_bin_op_fn make_bin_op[] = {
         EQ::make,
         NE::make,
@@ -94,113 +96,116 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
         GT::make,
         GE::make,
     };
-    const int op_count = sizeof(make_bin_op) / sizeof(make_bin_op[0]);
 
-    if (maybe_scalar && rng() % T.lanes() == 0) {
-        T = T.element_of();
+    if (maybe_scalar && fdp.ConsumeBool()) {
+        t = t.element_of();
     }
 
-    Expr a = random_expr(T, depth);
-    Expr b = random_expr(T, depth);
-    int op = rng() % op_count;
-    return make_bin_op[op](a, b);
+    Expr a = random_expr(fdp, t, depth);
+    Expr b = random_expr(fdp, t, depth);
+    return fdp.PickValueInArray(make_bin_op)(a, b);
 }
 
-Expr random_expr(Type T, int depth, bool overflow_undef) {
-    typedef Expr (*make_bin_op_fn)(Expr, Expr);
-    static make_bin_op_fn make_bin_op[] = {
-        Add::make,
-        Sub::make,
-        Mul::make,
-        Min::make,
-        Max::make,
-        Div::make,
-        Mod::make,
-    };
-
-    static make_bin_op_fn make_bool_bin_op[] = {
-        And::make,
-        Or::make,
-    };
-
-    if (T.is_int() && T.bits() == 32) {
+Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef) {
+    if (t.is_int() && t.bits() == 32) {
         overflow_undef = true;
     }
-
     if (depth-- <= 0) {
-        return random_leaf(T, overflow_undef);
+        return random_leaf(fdp, t, overflow_undef);
     }
 
-    const int bin_op_count = sizeof(make_bin_op) / sizeof(make_bin_op[0]);
-    const int bool_bin_op_count = sizeof(make_bool_bin_op) / sizeof(make_bool_bin_op[0]);
-    const int op_count = bin_op_count + bool_bin_op_count + 5;
-
-    int op = rng() % op_count;
-    switch (op) {
-    case 0:
-        return random_leaf(T);
-    case 1: {
-        auto c = random_condition(T, depth, true);
-        auto e1 = random_expr(T, depth, overflow_undef);
-        auto e2 = random_expr(T, depth, overflow_undef);
-        return Select::make(c, e1, e2);
-    }
-    case 2:
-        if (T.lanes() != 1) {
-            int lanes = get_random_divisor(T);
-            auto e1 = random_expr(T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
-            return Broadcast::make(e1, lanes);
-        }
-        break;
-    case 3:
-        if (T.lanes() != 1) {
-            int lanes = get_random_divisor(T);
-            auto e1 = random_expr(T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
-            auto e2 = random_expr(T.with_lanes(T.lanes() / lanes), depth, overflow_undef);
-            return Ramp::make(e1, e2, lanes);
-        }
-        break;
-
-    case 4:
-        if (T.is_bool()) {
-            auto e1 = random_expr(T, depth);
-            return Not::make(e1);
-        }
-        break;
-
-    case 5:
-        // When generating boolean expressions, maybe throw in a condition on non-bool types.
-        if (T.is_bool()) {
-            return random_condition(random_type(T.lanes()), depth, false);
-        }
-        break;
-
-    case 6: {
-        // Get a random type that isn't T or int32 (int32 can overflow and we don't care about that).
-        Type subT;
-        do {
-            subT = random_type(T.lanes());
-        } while (subT == T || (subT.is_int() && subT.bits() == 32));
-        auto e1 = random_expr(subT, depth, overflow_undef);
-        return Cast::make(T, e1);
-    }
-
-    default:
-        make_bin_op_fn maker;
-        if (T.is_bool()) {
-            maker = make_bool_bin_op[op % bool_bin_op_count];
-        } else {
-            maker = make_bin_op[op % bin_op_count];
-        }
-        Expr a = random_expr(T, depth, overflow_undef);
-        Expr b = random_expr(T, depth, overflow_undef);
-        return maker(a, b);
-    }
-    // If we got here, try again.
-    return random_expr(T, depth, overflow_undef);
+    std::function<Expr()> operations[] = {
+        [&]() {
+            return random_leaf(fdp, t);
+        },
+        [&]() {
+            auto c = random_condition(fdp, t, depth, true);
+            auto e1 = random_expr(fdp, t, depth, overflow_undef);
+            auto e2 = random_expr(fdp, t, depth, overflow_undef);
+            return Select::make(c, e1, e2);
+        },
+        [&]() {
+            if (t.lanes() != 1) {
+                int lanes = get_random_divisor(fdp, t);
+                auto e1 = random_expr(fdp, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
+                return Broadcast::make(e1, lanes);
+            }
+            // If we got here, try again.
+            return random_expr(fdp, t, depth, overflow_undef);
+        },
+        [&]() {
+            if (t.lanes() != 1) {
+                int lanes = get_random_divisor(fdp, t);
+                auto e1 = random_expr(fdp, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
+                auto e2 = random_expr(fdp, t.with_lanes(t.lanes() / lanes), depth, overflow_undef);
+                return Ramp::make(e1, e2, lanes);
+            }
+            // If we got here, try again.
+            return random_expr(fdp, t, depth, overflow_undef);
+        },
+        [&]() {
+            if (t.is_bool()) {
+                auto e1 = random_expr(fdp, t, depth);
+                return Not::make(e1);
+            }
+            // If we got here, try again.
+            return random_expr(fdp, t, depth, overflow_undef);
+        },
+        [&]() {
+            if (t.is_bool()) {
+                return random_condition(fdp, random_type(fdp, t.lanes()), depth, false);
+            }
+            // If we got here, try again.
+            return random_expr(fdp, t, depth, overflow_undef);
+        },
+        [&]() {
+            Type subT;
+            do {
+                subT = random_type(fdp, t.lanes());
+            } while (subT == t || (subT.is_int() && subT.bits() == 32));
+            auto e1 = random_expr(fdp, subT, depth, overflow_undef);
+            return Cast::make(t, e1);
+        },
+        [&]() {
+            static make_bin_op_fn make_bin_op[] = {
+                // Arithmetic operations.
+                Add::make,
+                Sub::make,
+                Mul::make,
+                Min::make,
+                Max::make,
+                Div::make,
+                Mod::make,
+            };
+            make_bin_op_fn maker = fdp.PickValueInArray(make_bin_op);
+            Expr a = random_expr(fdp, t, depth, overflow_undef);
+            Expr b = random_expr(fdp, t, depth, overflow_undef);
+            return maker(a, b);
+        },
+        [&]() {
+            static make_bin_op_fn make_bin_op[] = {
+                // Binary operations.
+                And::make,
+                Or::make,
+            };
+            // Boolean operations -- both sides must be cast to booleans,
+            // and then we must cast the result back to 't'.
+            make_bin_op_fn maker = fdp.PickValueInArray(make_bin_op);
+            Expr a = random_expr(fdp, t, depth, overflow_undef);
+            Expr b = random_expr(fdp, t, depth, overflow_undef);
+            Type bool_with_lanes = Bool(t.lanes());
+            a = cast(bool_with_lanes, a);
+            b = cast(bool_with_lanes, b);
+            return cast(t, maker(a, b));
+        },
+    };
+    return fdp.PickValueInArray(operations)();
 }
 
-// These are here to enable copy of failed output expressions and pasting them into the test for debugging.
+// These are here to enable copy of failed output expressions
+// and pasting them into the test for debugging; they are commented out
+// to avoid "unused function" warnings in some build environments.
+#if 0
 Expr ramp(Expr b, Expr s, int w) {
     return Ramp::make(b, s, w);
 }
@@ -270,6 +275,7 @@ Expr int16x3(Expr x) {
 Expr int32x2(Expr x) {
     return Cast::make(Int(32).with_lanes(2), x);
 }
+#endif
 
 Expr a(Variable::make(global_var_type, fuzz_var(0)));
 Expr b(Variable::make(global_var_type, fuzz_var(1)));
@@ -277,34 +283,27 @@ Expr c(Variable::make(global_var_type, fuzz_var(2)));
 Expr d(Variable::make(global_var_type, fuzz_var(3)));
 Expr e(Variable::make(global_var_type, fuzz_var(4)));
 
-int random_in_range(int min_value, int max_value) {
-    if (min_value == max_value) {
-        return min_value;
-    }
-    return (rng() % (max_value - min_value)) + min_value;
-}
-
 std::ostream &operator<<(std::ostream &stream, const Interval &interval) {
     stream << "[" << interval.min << ", " << interval.max << "]";
     return stream;
 }
 
-Interval random_interval(Type T) {
+Interval random_interval(FuzzedDataProvider &fdp, Type t) {
     Interval interval;
 
     int min_value = -128;
     int max_value = 128;
 
-    Type t = T.element_of();
-    if ((t.is_uint() || (t.is_int() && t.bits() <= 16))) {
-        Expr t_min = t.min();
-        Expr t_max = t.max();
+    Type t_elem = t.element_of();
+    if ((t_elem.is_uint() || (t_elem.is_int() && t_elem.bits() <= 16))) {
+        Expr t_min = t_elem.min();
+        Expr t_max = t_elem.max();
         if (auto ptr = as_const_int(t_min)) {
             min_value = *ptr;
         } else if (auto ptr = as_const_uint(t_min)) {
             min_value = *ptr;
         } else {
-            std::cerr << "random_interval failed to find min of: " << T << "\n";
+            std::cerr << "random_interval failed to find min of: " << t << "\n";
         }
         if (auto ptr = as_const_int(t_max)) {
             max_value = *ptr;
@@ -314,7 +313,7 @@ Interval random_interval(Type T) {
                 max_value = *ptr;
             }
         } else {
-            std::cerr << "random_interval failed to find max of: " << T << "\n";
+            std::cerr << "random_interval failed to find max of: " << t << "\n";
         }
     }
 
@@ -323,11 +322,11 @@ Interval random_interval(Type T) {
     max_value = std::min(max_value, 128);
 
     // change the min_value for the calculation of max
-    min_value = random_in_range(min_value, max_value);
-    interval.min = cast(T, min_value);
+    min_value = fdp.ConsumeIntegralInRange<int>(min_value, max_value);
+    interval.min = cast(t, min_value);
 
-    max_value = random_in_range(min_value, max_value);
-    interval.max = cast(T, max_value);
+    max_value = fdp.ConsumeIntegralInRange<int>(min_value, max_value);
+    interval.max = cast(t, max_value);
 
     if (min_value > max_value || (interval.is_bounded() && can_prove(interval.min > interval.max))) {
         std::cerr << "random_interval failed: ";
@@ -340,7 +339,7 @@ Interval random_interval(Type T) {
     return interval;
 }
 
-int sample_interval(const Interval &interval) {
+int sample_interval(FuzzedDataProvider &fdp, const Interval &interval) {
     // Values chosen so intervals don't repeatedly produce signed_overflow when simplified.
     int min_value = -128;
     int max_value = 128;
@@ -365,14 +364,13 @@ int sample_interval(const Interval &interval) {
         }
     }
 
-    int value = random_in_range(min_value, max_value);
-    return value;
+    return fdp.ConsumeIntegralInRange<int>(min_value, max_value);
 }
 
-bool test_bounds(Expr test, const Interval &interval, Type T, const map<string, Expr> &vars) {
-    for (int j = 0; j < T.lanes(); j++) {
+bool test_bounds(Expr test, const Interval &interval, Type t, const map<string, Expr> &vars) {
+    for (int j = 0; j < t.lanes(); j++) {
         Expr a_j = test;
-        if (T.lanes() != 1) {
+        if (t.lanes() != 1) {
             a_j = extract_lane(test, j);
         }
 
@@ -418,7 +416,7 @@ bool test_bounds(Expr test, const Interval &interval, Type T, const map<string, 
     return true;
 }
 
-bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
+bool test_expression_bounds(FuzzedDataProvider &fdp, Expr test, int trials, int samples_per_trial) {
 
     map<string, Expr> vars;
     for (int i = 0; i < fuzz_var_count; i++) {
@@ -430,7 +428,7 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
 
         for (auto v = vars.begin(); v != vars.end(); v++) {
             // This type is used because the variables will be this type for a given round.
-            Interval interval = random_interval(global_var_type);
+            Interval interval = random_interval(fdp, global_var_type);
             scope.push(v->first, interval);
         }
 
@@ -459,7 +457,7 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
         for (int j = 0; j < samples_per_trial; j++) {
             for (std::map<string, Expr>::iterator v = vars.begin(); v != vars.end(); v++) {
                 Interval interval = scope.get(v->first);
-                v->second = cast(global_var_type, sample_interval(interval));
+                v->second = cast(global_var_type, sample_interval(fdp, interval));
             }
 
             if (!test_bounds(test, interval, test.type(), vars)) {
@@ -479,7 +477,9 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
 
 }  // namespace
 
-int main(int argc, char **argv) {
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    FuzzedDataProvider fdp(data, size);
+
     // Number of random expressions to test.
     const int count = 100;
     // Depth of the randomly generated expression trees.
@@ -489,23 +489,17 @@ int main(int argc, char **argv) {
     // Number of samples of the intervals per trial to test.
     const int samples = 10;
 
-    // We want different fuzz tests every time, to increase coverage.
-    // We also report the seed to enable reproducing failures.
-    int fuzz_seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
-    rng.seed(fuzz_seed);
-    std::cout << "bounds inference fuzz test seed: " << fuzz_seed << "\n";
-
     std::array<int, 6> vector_widths = {1, 2, 3, 4, 6, 8};
     for (int n = 0; n < count; n++) {
         // int width = 1;
-        int width = vector_widths[rng() % vector_widths.size()];
+        int width = fdp.PickValueInArray(vector_widths);
         // This is the type that will be the innermost (leaf) value type.
-        Type expr_type = random_type(width);
-        Type var_type = random_type(1);
+        Type expr_type = random_type(fdp, width);
+        Type var_type = random_type(fdp, 1);
         global_var_type = var_type;
         // Generate a random expr...
-        Expr test = random_expr(expr_type, depth);
-        if (!test_expression_bounds(test, trials, samples)) {
+        Expr test = random_expr(fdp, expr_type, depth);
+        if (!test_expression_bounds(fdp, test, trials, samples)) {
             return 1;
         }
     }
