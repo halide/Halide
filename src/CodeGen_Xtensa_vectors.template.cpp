@@ -2095,7 +2095,11 @@ HALIDE_ALWAYS_INLINE native_vector_i32 halide_xtensa_narrow_high_i32(const nativ
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i32 halide_xtensa_sat_narrow_shift_i32(const native_vector_i64 &a, int shift) {
-    return IVP_PACKVN_2X64W(a, shift);
+    // There is only saturation *and rounding* intrinsic, so we correct for
+    // rounding by subtracting the rounding factor first.
+    native_vector_i64 r = a;
+    IVP_MULSN_2X32(r, 1, 1 << (shift - 1));
+    return IVP_PACKVN_2X64W(r, shift);
 }
 
 HALIDE_ALWAYS_INLINE int32_t halide_xtensa_full_reduce_add_u8_to_i32(const native_vector_u8 &a) {
