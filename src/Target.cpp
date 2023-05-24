@@ -714,6 +714,13 @@ bool merge_string(Target &t, const std::string &target) {
         }
     }
 
+    if (arch == Target::Xtensa) {
+        // The only legal arch-bits-os for Xtensa is "xtensa-32-noos"
+        if (t.bits != 32 || t.os != Target::NoOS) {
+            return false;
+        }
+    }
+
     return true;
 }
 
