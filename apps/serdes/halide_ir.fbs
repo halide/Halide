@@ -26,6 +26,44 @@ union Stmt {
     Atomic,
 }
 
+enum ForType: byte {
+    Serial,
+    Parallel,
+    Vectorized,
+    Unrolled,
+    Extern,
+    GPUBlock,
+    GPUThread,
+    GPULane,
+}
+
+enum DeviceAPI: byte {
+    None,
+    Host,
+    Default_GPU,
+    CUDA,
+    OpenCL,
+    OpenGLCompute,
+    Metal,
+    Hexagon,
+    HexagonDma,
+    D3D12Compute,
+    Vulkan,
+    WebGPU,
+}
+
+enum MemoryType: byte {
+    Auto,
+    Heap,
+    Stack,
+    Register,
+    GPUShared,
+    GPUTexture,
+    LockedCache,
+    VTCM,
+    AMXTile,
+}
+
 table LetStmt {
     name: string;
     // value: Expr;
@@ -47,8 +85,8 @@ table For {
     name: string;
     // min: Expr;
     // extent: Expr;
-    // for_type: ForType;
-    // device_api: DeviceAPI; TODO: no DeviceAPI yet
+    for_type: ForType;
+    device_api: DeviceAPI;
     body: Stmt;
 }
 
@@ -71,7 +109,7 @@ table Provide {
 table Allocate {
     name: string;
     type: Type;
-    // memory_type: MemoryType;
+    memory_type: MemoryType;
     // extents: [Expr];
     // condition: Expr;
     // new_expr: Expr;
@@ -87,7 +125,7 @@ table Free {
 table Realize {
     name: string;
     types: [Type];
-    // memory_type: MemoryType; TODO: no MemoryType yet
+    memory_type: MemoryType;
     // bounds: Region; TODO: no Range yet
     // condition: Expr;
     body: Stmt;

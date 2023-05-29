@@ -54,9 +54,95 @@ std::pair<Halide::Serdes::Stmt, flatbuffers::Offset<void>> Serializer::serialize
             auto for_stmt = stmt.as<Halide::Internal::For>();
             std::string name = for_stmt->name;
             auto name_serialized = serialize_string(builder, name);
+            Halide::Serdes::ForType for_type = Halide::Serdes::ForType::ForType_Serial;
+            switch (for_stmt->for_type) {
+                case Halide::Internal::ForType::Serial: {
+                    for_type = Halide::Serdes::ForType::ForType_Serial;
+                    break;
+                }
+                case Halide::Internal::ForType::Parallel: {
+                    for_type = Halide::Serdes::ForType::ForType_Parallel;
+                    break;
+                }
+                case Halide::Internal::ForType::Vectorized: {
+                    for_type = Halide::Serdes::ForType::ForType_Vectorized;
+                    break;
+                }
+                case Halide::Internal::ForType::Unrolled: {
+                    for_type = Halide::Serdes::ForType::ForType_Unrolled;
+                    break;
+                }
+                case Halide::Internal::ForType::Extern: {
+                    for_type = Halide::Serdes::ForType::ForType_Extern;
+                    break;
+                }
+                case Halide::Internal::ForType::GPUBlock: {
+                    for_type = Halide::Serdes::ForType::ForType_GPUBlock;
+                    break;
+                }
+                case Halide::Internal::ForType::GPUThread: {
+                    for_type = Halide::Serdes::ForType::ForType_GPUThread;
+                    break;
+                }
+                case Halide::Internal::ForType::GPULane: {
+                    for_type = Halide::Serdes::ForType::ForType_GPULane;
+                    break;
+                }
+            }
+            Halide::Serdes::DeviceAPI device_api = Halide::Serdes::DeviceAPI::DeviceAPI_None;
+            switch (for_stmt->device_api) {
+                case Halide::DeviceAPI::None: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_None;
+                    break;
+                }
+                case Halide::DeviceAPI::Host: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_Host;
+                    break;
+                }
+                case Halide::DeviceAPI::Default_GPU: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_Default_GPU;
+                    break;
+                }
+                case Halide::DeviceAPI::CUDA: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_CUDA;
+                    break;
+                }
+                case Halide::DeviceAPI::OpenCL: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_OpenCL;
+                    break;
+                }
+                case Halide::DeviceAPI::OpenGLCompute: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_OpenGLCompute;
+                    break;
+                }
+                case Halide::DeviceAPI::Metal: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_Metal;
+                    break;
+                }
+                case Halide::DeviceAPI::Hexagon: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_Hexagon;
+                    break;
+                }
+                case Halide::DeviceAPI::HexagonDma: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_HexagonDma;
+                    break;
+                }
+                case Halide::DeviceAPI::D3D12Compute: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_D3D12Compute;
+                    break;
+                }
+                case Halide::DeviceAPI::Vulkan: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_Vulkan;
+                    break;
+                }
+                case Halide::DeviceAPI::WebGPU: {
+                    device_api = Halide::Serdes::DeviceAPI::DeviceAPI_WebGPU;
+                    break;
+                }
+            }
             auto body = for_stmt->body;
             auto body_serialized = serialize_stmt(builder, body);
-            return std::make_pair(Halide::Serdes::Stmt::Stmt_For, Halide::Serdes::CreateFor(builder, name_serialized, body_serialized.first, body_serialized.second).Union());
+            return std::make_pair(Halide::Serdes::Stmt::Stmt_For, Halide::Serdes::CreateFor(builder, name_serialized, for_type, device_api, body_serialized.first, body_serialized.second).Union());
         }
         case Halide::Internal::IRNodeType::Store: {
             auto store_stmt = stmt.as<Halide::Internal::Store>();
@@ -76,12 +162,51 @@ std::pair<Halide::Serdes::Stmt, flatbuffers::Offset<void>> Serializer::serialize
             auto name_serialized = serialize_string(builder, name);
             auto type = allocate_stmt->type;
             auto type_serialized = serialize_type(builder, type);
+            Halide::Serdes::MemoryType memory_type = Halide::Serdes::MemoryType::MemoryType_Auto;
+            switch (allocate_stmt->memory_type) {
+                case Halide::MemoryType::Auto: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_Auto;
+                    break;
+                }
+                case Halide::MemoryType::Heap: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_Heap;
+                    break;
+                }
+                case Halide::MemoryType::Stack: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_Stack;
+                    break;
+                }
+                case Halide::MemoryType::Register: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_Register;
+                    break;
+                }
+                case Halide::MemoryType::GPUShared: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_GPUShared;
+                    break;
+                }
+                case Halide::MemoryType::GPUTexture: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_GPUTexture;
+                    break;
+                }
+                case Halide::MemoryType::LockedCache: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_LockedCache;
+                    break;
+                }
+                case Halide::MemoryType::VTCM: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_VTCM;
+                    break;
+                }
+                case Halide::MemoryType::AMXTile: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_AMXTile;
+                    break;
+                }
+            }
             auto free_function = allocate_stmt->free_function;
             auto free_function_serialized = serialize_string(builder, free_function);
             auto padding = allocate_stmt->padding;
             auto body = allocate_stmt->body;
             auto body_serialized = serialize_stmt(builder, body);
-            return std::make_pair(Halide::Serdes::Stmt::Stmt_Allocate, Halide::Serdes::CreateAllocate(builder, name_serialized, type_serialized, free_function_serialized, padding, body_serialized.first, body_serialized.second).Union());
+            return std::make_pair(Halide::Serdes::Stmt::Stmt_Allocate, Halide::Serdes::CreateAllocate(builder, name_serialized, type_serialized, memory_type, free_function_serialized, padding, body_serialized.first, body_serialized.second).Union());
         }
         case Halide::Internal::IRNodeType::Free : {
             auto free_stmt = stmt.as<Halide::Internal::Free>();
@@ -98,10 +223,50 @@ std::pair<Halide::Serdes::Stmt, flatbuffers::Offset<void>> Serializer::serialize
             for (const auto& type : types) {
                 types_serialized.push_back(serialize_type(builder, type));
             }
+            // TODO: make this a func
+            Halide::Serdes::MemoryType memory_type = Halide::Serdes::MemoryType::MemoryType_Auto;
+            switch (realize_stmt->memory_type) {
+                case Halide::MemoryType::Auto: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_Auto;
+                    break;
+                }
+                case Halide::MemoryType::Heap: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_Heap;
+                    break;
+                }
+                case Halide::MemoryType::Stack: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_Stack;
+                    break;
+                }
+                case Halide::MemoryType::Register: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_Register;
+                    break;
+                }
+                case Halide::MemoryType::GPUShared: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_GPUShared;
+                    break;
+                }
+                case Halide::MemoryType::GPUTexture: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_GPUTexture;
+                    break;
+                }
+                case Halide::MemoryType::LockedCache: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_LockedCache;
+                    break;
+                }
+                case Halide::MemoryType::VTCM: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_VTCM;
+                    break;
+                }
+                case Halide::MemoryType::AMXTile: {
+                    memory_type = Halide::Serdes::MemoryType::MemoryType_AMXTile;
+                    break;
+                }
+            }
             auto types_vector = builder.CreateVector(types_serialized);
             auto body = realize_stmt->body;
             auto body_serialized = serialize_stmt(builder, body);
-            return std::make_pair(Halide::Serdes::Stmt::Stmt_Realize, Halide::Serdes::CreateRealize(builder, name_serialized, types_vector, body_serialized.first, body_serialized.second).Union());
+            return std::make_pair(Halide::Serdes::Stmt::Stmt_Realize, Halide::Serdes::CreateRealize(builder, name_serialized, types_vector, memory_type, body_serialized.first, body_serialized.second).Union());
         }
         case Halide::Internal::IRNodeType::Block: {
             auto block_stmt = stmt.as<Halide::Internal::Block>();
