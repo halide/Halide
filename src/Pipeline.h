@@ -190,6 +190,9 @@ public:
     /** Get the Funcs this pipeline outputs. */
     std::vector<Func> outputs() const;
 
+    /** Get the requirements of this pipeline. */
+    std::vector<Internal::Stmt> requirements() const;
+
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults apply_autoscheduler(const Target &target,
                                              const AutoschedulerParams &autoscheduler_params) const;

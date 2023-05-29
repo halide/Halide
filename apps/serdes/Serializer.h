@@ -3,6 +3,8 @@
 
 #include <vector>
 #include <string>
+#include <utility>
+
 
 #include "halide_ir_generated.h"
 #include <Halide.h>
@@ -19,6 +21,9 @@ private:
     flatbuffers::Offset<flatbuffers::String> serialize_string(flatbuffers::FlatBufferBuilder& builder, const std::string& str);
 
     flatbuffers::Offset<Halide::Serdes::Type> serialize_type(flatbuffers::FlatBufferBuilder& builder, const Halide::Type& type);
+
+    // Stmt is special because it is a union type so we need to return both the type and serialized object
+    std::pair<Halide::Serdes::Stmt, flatbuffers::Offset<void>> serialize_stmt(flatbuffers::FlatBufferBuilder& builder, const Halide::Internal::Stmt& stmt);
 
     flatbuffers::Offset<Halide::Serdes::Func> serialize_func(flatbuffers::FlatBufferBuilder& builder, const Halide::Internal::Function& function);
 };

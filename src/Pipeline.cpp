@@ -214,6 +214,10 @@ vector<Func> Pipeline::outputs() const {
     return funcs;
 }
 
+std::vector<Internal::Stmt> Pipeline::requirements() const {
+    return contents->requirements;
+}
+
 /* static */
 std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
     static std::map<std::string, AutoSchedulerFn> autoschedulers = {};

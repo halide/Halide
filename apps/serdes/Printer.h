@@ -16,6 +16,8 @@ public:
     void print_function(const Halide::Internal::Function& function);
 
     void print_type(const Halide::Type& type);
+
+    void print_stmt(const Halide::Internal::Stmt& stmt);
 };
 
 

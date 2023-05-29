@@ -6,8 +6,132 @@ file_identifier "HLD0";
 // File extension of any written files.
 file_extension "hir";
 
-table Stmt {
+// from src/IR.cpp
+union Stmt {
+    LetStmt,
+    AssertStmt,
+    ProducerConsumer,
+    For,
+    Store,
+    Provide,
+    Allocate,
+    Free,
+    Realize,
+    Block,
+    IfThenElse,
+    Evaluate,
+    Prefetch,
+    Acquire,
+    Fork,
+    Atomic,
+}
 
+table LetStmt {
+    name: string;
+    // value: Expr;
+    body: Stmt;
+}
+
+table AssertStmt {
+    // condition: Expr;
+    // message: Expr;
+}
+
+table ProducerConsumer {
+    name: string;
+    is_producer: bool;
+    body: Stmt;
+}
+
+table For {
+    name: string;
+    // min: Expr;
+    // extent: Expr;
+    // for_type: ForType;
+    // device_api: DeviceAPI; TODO: no DeviceAPI yet
+    body: Stmt;
+}
+
+table Store {
+    name: string;
+    // predicate: Expr;
+    // value: Expr;
+    // index: Expr;
+    // param: Parameter; TODO: no Parameter yet
+    // alignment: ModulusRemainder; TODO: no ModulusRemainder yet
+}
+
+table Provide {
+    name: string;
+    // values: [Expr];
+    // args: [Expr];
+    // predicate: Expr;
+}
+
+table Allocate {
+    name: string;
+    type: Type;
+    // memory_type: MemoryType;
+    // extents: [Expr];
+    // condition: Expr;
+    // new_expr: Expr;
+    free_function: string;
+    padding: int32;
+    body: Stmt;
+}
+
+table Free {
+    name: string;
+}
+
+table Realize {
+    name: string;
+    types: [Type];
+    // memory_type: MemoryType; TODO: no MemoryType yet
+    // bounds: Region; TODO: no Range yet
+    // condition: Expr;
+    body: Stmt;
+}
+
+table Block {
+    first: Stmt;
+    rest: Stmt;
+}
+
+table IfThenElse {
+    // condition: Expr;
+    then_case: Stmt;
+    else_case: Stmt;
+}
+
+table Evaluate {
+    // value: Expr;
+}
+
+table Prefetch {
+    name: string;
+    types: [Type];
+    // bounds: Region; TODO: no Region yet
+    // prefetch: PrefetchDirective; TODO: no PrefetchDirective yet
+    // condition: Expr;
+    body: Stmt;
+}
+
+table Acquire {
+    // semaphores: Expr;
+    // count: Expr;
+    body: Stmt;
+}
+
+table Fork {
+    first: Stmt;
+    rest: Stmt;
+}
+
+table Atomic {
+    producer_name: string;
+    mutex_name: string;
+    body: Stmt;
 }
 
 enum TypeCode: byte {
@@ -22,7 +146,7 @@ enum TypeCode: byte {
 table Type {
     code: TypeCode;
     bits: uint8;
-    lanes: int;
+    lanes: int32;
 }
 
 // Halide::internal::Function
@@ -44,7 +168,7 @@ table Func {
 
 table Pipeline {
     outputs: [Func];
-    // requirements: [Stmt];
+    requirements: [Stmt];
     // trace_pipeline: bool;
 }
 
