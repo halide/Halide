@@ -331,11 +331,16 @@ Function::Function(const std::vector<Type> &required_types, int required_dims, c
     contents->required_dims = required_dims;
 }
 
-Function::Function(const std::string &name, const std::string &origin_name) {
+Function::Function(const std::string &name, const std::string &origin_name, const std::vector<Halide::Type> &output_types,
+                     const std::vector<Halide::Type> &required_types, int required_dims, const std::vector<std::string> &args) {
     contents.strong = new FunctionGroup;
     contents.strong->members.resize(1);
     contents->name = name;
     contents->origin_name = origin_name;
+    contents->output_types = output_types;
+    contents->required_types = required_types;
+    contents->required_dims = required_dims;
+    contents->args = args;
 }
 
 

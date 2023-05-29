@@ -10,15 +10,29 @@ table Stmt {
 
 }
 
+enum TypeCode: byte {
+    Int,
+    UInt,
+    Float,
+    Handle,
+    BFloat,
+}
+
+// TODO: no halide_handle_cplusplus_type yet
+table Type {
+    code: TypeCode;
+    bits: uint8;
+    lanes: int;
+}
 
 // Halide::internal::Function
 table Func {
     name: string;
     origin_name: string;
-    // output_types: [Type];
-    // required_types: [Type];
-    // required_dims
-    // args: [string];
+    output_types: [Type];
+    required_types: [Type];
+    required_dims: int32;
+    args: [string];
     // func_schedule: FuncSchedule;
     // init_def: Definition;
     // updates: [Definition];
@@ -26,7 +40,6 @@ table Func {
     // output_buffers: [Parameter];
     // extern_arguments: [ExternFuncArgument];
     // extern_function_name: string;
-
 }
 
 table Pipeline {
