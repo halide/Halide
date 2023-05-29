@@ -13,6 +13,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (target.has_feature(Target::Vulkan)) {
+        printf("[SKIP] Skipping test for Vulkan (which doesn't support dynamically allocated shared mem)!\n");
+        return 0;
+    }
+
     // Workaround for https://github.com/halide/Halide/issues/7420
     if (target.has_feature(Target::WebGPU)) {
         printf("[SKIP] workaround for issue #7420\n");
@@ -160,7 +165,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = (uint8_t)(((int)in_buf(x + 1, y) - in_buf(x - 1, y)) >> 1);
                 if (out_buf(x, y) != correct) {
                     printf("out_buf(%d, %d) = %d instead of %d\n", x, y, out_buf(x, y), correct);
-                    return 1;
+                    return -1;
                 }
             }
         }
@@ -189,7 +194,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = (uint8_t)((int)std::floor(std::sqrt(a * a + b * b)));
                 if (out_buf(x, y) != correct) {
                     printf("out_buf(%d, %d) = %d instead of %d\n", x, y, out_buf(x, y), correct);
-                    return 1;
+                    return -1;
                 }
             }
         }

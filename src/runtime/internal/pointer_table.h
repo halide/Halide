@@ -1,7 +1,7 @@
 #ifndef HALIDE_RUNTIME_POINTER_TABLE_H
 #define HALIDE_RUNTIME_POINTER_TABLE_H
 
-#include "HalideRuntime.h"
+#include "../HalideRuntime.h"
 #include "memory_resources.h"
 
 namespace Halide {
@@ -185,7 +185,7 @@ void PointerTable::resize(void *user_context, size_t entry_count, bool realloc) 
     size_t actual_size = current_size;
     count = requested_size;
 
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "PointerTable: Resize ("
                         << "requested_size=" << (int32_t)requested_size << " "
                         << "current_size=" << (int32_t)current_size << " "
@@ -235,7 +235,7 @@ void PointerTable::remove(void *user_context, size_t index, size_t entry_count) 
         size_t src_offset = (index + entry_count) * sizeof(void *);
         size_t bytes = (last_index - index - entry_count) * sizeof(void *);
 
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "PointerTable: Remove ("
                             << "index=" << (int32_t)index << " "
                             << "entry_count=" << (int32_t)entry_count << " "
@@ -254,8 +254,7 @@ void PointerTable::replace(void *user_context, size_t index, const void **array,
     size_t remaining = count - index;
     size_t copy_count = min(remaining, array_size);
 
-#ifdef DEBUG_RUNTIME
-
+#ifdef DEBUG_RUNTIME_INTERNAL
     debug(user_context) << "PointerTable: Replace ("
                         << "index=" << (int32_t)index << " "
                         << "array_size=" << (int32_t)array_size << " "
@@ -333,7 +332,7 @@ void PointerTable::allocate(void *user_context, size_t new_capacity) {
         halide_debug_assert(user_context, allocator.allocate != nullptr);
         size_t bytes = new_capacity * sizeof(void *);
 
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_RUNTIME_INTERNAL
         debug(user_context) << "PointerTable: Allocating (bytes=" << (int32_t)bytes << " allocator=" << (void *)allocator.allocate << ")...\n";
 #endif
 

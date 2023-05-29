@@ -373,7 +373,16 @@ public:
         std::cout << "simd_op_check test seed: " << seed << "\n";
 
         for (const auto &t : targets_to_test) {
+            if (!t.supported()) {
+                std::cout << "[SKIP] Unsupported target: " << t << "\n";
+                return 0;
+            }
             SIMDOpCheckT test(t);
+
+            if (!t.supported()) {
+                std::cout << "Halide was compiled without support for " << t.to_string() << ". Skipping.\n";
+                continue;
+            }
 
             if (argc > 1) {
                 test.filter = argv[1];

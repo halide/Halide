@@ -30,6 +30,13 @@ bool is_type_supported(int vec_width, const Target &target) {
     if (target.has_feature(Target::HVX)) {
         device = DeviceAPI::Hexagon;
     }
+    if (target.has_feature(Target::Vulkan)) {
+        if (type_of<T>() == Float(64)) {
+            if ((target.os == Target::OSX || target.os == Target::IOS)) {
+                return false;  // MoltenVK doesn't support Float64
+            }
+        }
+    }
     return target.supports_type(type_of<T>().with_lanes(vec_width), device);
 }
 

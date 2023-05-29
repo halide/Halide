@@ -759,7 +759,7 @@ public:
         // lifetimes, and then cluster the groups according to which
         // ones can share a single allocation. For cuda, opencl, and
         // similar we get one big combined allocation per memory
-        // type. For openglcompute and direct3d, we also separate by
+        // type. For vulkan, openglcompute and direct3d, we also separate by
         // element type.
         map<pair<MemoryType, Type>, vector<AllocGroup>> clustered_allocs;
 
@@ -1029,6 +1029,7 @@ public:
           num_threads_var_name(unique_name('t')),
           may_merge_allocs_of_different_type(device_api != DeviceAPI::OpenGLCompute &&
                                              device_api != DeviceAPI::D3D12Compute &&
+                                             device_api != DeviceAPI::Vulkan &&
                                              device_api != DeviceAPI::WebGPU) {
     }
 };  // namespace Internal
@@ -1490,7 +1491,8 @@ class ZeroGPULoopMins : public IRMutator {
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
                           (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
                           (op->device_api == DeviceAPI::Metal) ||
-                          (op->device_api == DeviceAPI::D3D12Compute);
+                          (op->device_api == DeviceAPI::D3D12Compute) ||
+                          (op->device_api == DeviceAPI::Vulkan);
 
         Stmt stmt = IRMutator::visit(op);
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_const_zero(op->min)) {

@@ -16,20 +16,20 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    set(WABT_VER 1.0.32)
+    set(WABT_VER 1.0.33)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
                          GIT_REPOSITORY https://github.com/WebAssembly/wabt.git
                          GIT_TAG ${WABT_VER}
-                         GIT_SHALLOW TRUE
-                         GIT_SUBMODULES "")
+                         GIT_SHALLOW TRUE)
 
     # configuration for wabt
     set(WITH_EXCEPTIONS ${Halide_ENABLE_EXCEPTIONS})
     set(BUILD_TESTS OFF)
     set(BUILD_TOOLS OFF)
     set(BUILD_LIBWASM OFF)
+    set(USE_INTERNAL_SHA256 ON)
     FetchContent_MakeAvailable(wabt)
 
     set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -153,18 +153,9 @@ function(add_wasm_halide_test TARGET)
         return()
     endif ()
 
-    set(script "require('./${TARGET}.js')")
-    if (WEBGPU_NODE_BINDINGS)
-        set(script "\
-            const provider = require('${WEBGPU_NODE_BINDINGS}')\n\
-            const gpu = provider.create([])\n\
-            const navigator = { gpu: gpu }\n
-            ${script}")
-    endif ()
-
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
-                    COMMAND ${NODE_JS_EXECUTABLE} "-e" "${script}")
+                    COMMAND ${NODE_JS_EXECUTABLE} "${Halide_SOURCE_DIR}/tools/launch_wasm_test.js" "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.js" "${Halide_TARGET}")
 endfunction()
 
 function(find_node_js)

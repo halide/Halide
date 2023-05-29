@@ -1,7 +1,7 @@
 #ifndef HALIDE_RUNTIME_MEMORY_RESOURCES_H
 #define HALIDE_RUNTIME_MEMORY_RESOURCES_H
 
-#include "HalideRuntime.h"
+#include "../HalideRuntime.h"
 
 namespace Halide {
 namespace Runtime {
@@ -57,6 +57,8 @@ struct MemoryProperties {
     MemoryVisibility visibility = MemoryVisibility::InvalidVisibility;
     MemoryUsage usage = MemoryUsage::InvalidUsage;
     MemoryCaching caching = MemoryCaching::InvalidCaching;
+    size_t alignment = 0;         //< required alignment of allocations (zero for no constraint)
+    size_t nearest_multiple = 0;  //< require the allocation size to round up to the nearest multiple (zero means no rounding)
 };
 
 // Client-facing struct for exchanging memory block allocation requests
@@ -67,12 +69,20 @@ struct MemoryBlock {
     MemoryProperties properties;  //< properties for the allocated block
 };
 
+// Client-facing struct for specifying a range of a memory region (eg for crops)
+struct MemoryRange {
+    size_t head_offset = 0;  //< byte offset from start of region
+    size_t tail_offset = 0;  //< byte offset from end of region
+};
+
 // Client-facing struct for exchanging memory region allocation requests
 struct MemoryRegion {
-    void *handle = nullptr;       //< client data storing native handle (managed by alloc_block_region/free_block_region)
+    void *handle = nullptr;       //< client data storing native handle (managed by alloc_block_region/free_block_region) or a pointer to region owning allocation
     size_t offset = 0;            //< offset from base address in block (in bytes)
     size_t size = 0;              //< allocated size (in bytes)
+    MemoryRange range;            //< optional range (e.g. for handling crops, etc)
     bool dedicated = false;       //< flag indicating whether allocation is one dedicated resource (or split/shared into other resources)
+    bool is_owner = true;         //< flag indicating whether allocation is owned by this region, in which case handle is a native handle. Otherwise handle points to owning region of alloction.
     MemoryProperties properties;  //< properties for the allocated region
 };
 
@@ -101,25 +111,52 @@ struct BlockResource {
 // -- Note: first field must MemoryRegion
 struct BlockRegion {
     MemoryRegion memory;                                        //< memory info for the allocated region
+    uint32_t usage_count = 0;                                   //< number of active clients using region
     AllocationStatus status = AllocationStatus::InvalidStatus;  //< allocation status indicator
     BlockRegion *next_ptr = nullptr;                            //< pointer to next block region in linked list
     BlockRegion *prev_ptr = nullptr;                            //< pointer to prev block region in linked list
     BlockResource *block_ptr = nullptr;                         //< pointer to parent block resource
 };
 
+// Returns true if given byte alignment is a power of two
+ALWAYS_INLINE bool is_power_of_two_alignment(size_t x) {
+    return (x & (x - 1)) == 0;
+}
+
 // Returns an aligned byte offset to adjust the given offset based on alignment constraints
 // -- Alignment must be power of two!
 ALWAYS_INLINE size_t aligned_offset(size_t offset, size_t alignment) {
+    halide_abort_if_false(nullptr, is_power_of_two_alignment(alignment));
     return (offset + (alignment - 1)) & ~(alignment - 1);
 }
 
-// Returns a padded size to accomodate an adjusted offset due to alignment constraints
+// Returns a suitable alignment such that requested alignment is a suitable
+// integer multiple of the required alignment
+ALWAYS_INLINE size_t conform_alignment(size_t requested, size_t required) {
+    size_t alignment = max(requested, required);
+    return ((required > 0) && (alignment > required)) ? (required * ((alignment / required) + 1)) : alignment;
+}
+
+// Returns a padded size to accommodate an adjusted offset due to alignment constraints
 // -- Alignment must be power of two!
 ALWAYS_INLINE size_t aligned_size(size_t offset, size_t size, size_t alignment) {
     size_t actual_offset = aligned_offset(offset, alignment);
     size_t padding = actual_offset - offset;
     size_t actual_size = padding + size;
     return actual_size;
+}
+
+// Returns a padded size to accommodate an adjusted offset due to alignment constraints rounded up to the nearest multiple
+// -- Alignment must be power of two!
+ALWAYS_INLINE size_t conform_size(size_t offset, size_t size, size_t alignment, size_t nearest_multiple) {
+    size_t adjusted_size = aligned_size(offset, size, alignment);
+    adjusted_size = (alignment > adjusted_size) ? alignment : adjusted_size;
+    if (nearest_multiple > 0) {
+        size_t rounded_size = (((adjusted_size + nearest_multiple - 1) / nearest_multiple) * nearest_multiple);
+        return rounded_size;
+    } else {
+        return adjusted_size;
+    }
 }
 
 // Clamps the given value to be within the [min_value, max_value] range
@@ -163,16 +200,16 @@ struct HalideSystemAllocatorFns {
     DeallocateSystemFn deallocate = halide_free;
 };
 
-typedef void (*AllocateBlockFn)(void *, MemoryBlock *);
-typedef void (*DeallocateBlockFn)(void *, MemoryBlock *);
+typedef int (*AllocateBlockFn)(void *, MemoryBlock *);
+typedef int (*DeallocateBlockFn)(void *, MemoryBlock *);
 
 struct MemoryBlockAllocatorFns {
     AllocateBlockFn allocate = nullptr;
     DeallocateBlockFn deallocate = nullptr;
 };
 
-typedef void (*AllocateRegionFn)(void *, MemoryRegion *);
-typedef void (*DeallocateRegionFn)(void *, MemoryRegion *);
+typedef int (*AllocateRegionFn)(void *, MemoryRegion *);
+typedef int (*DeallocateRegionFn)(void *, MemoryRegion *);
 
 struct MemoryRegionAllocatorFns {
     AllocateRegionFn allocate = nullptr;

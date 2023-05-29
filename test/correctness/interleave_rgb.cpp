@@ -112,7 +112,6 @@ int main(int argc, char **argv) {
         if (!test_deinterleave<uint16_t>(x_stride)) return 1;
         if (!test_deinterleave<uint32_t>(x_stride)) return 1;
     }
-
     printf("Success!\n");
     return 0;
 }

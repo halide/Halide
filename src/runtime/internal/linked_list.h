@@ -1,7 +1,7 @@
 #ifndef HALIDE_RUNTIME_LINKED_LIST_H
 #define HALIDE_RUNTIME_LINKED_LIST_H
 
-#include "HalideRuntime.h"
+#include "../HalideRuntime.h"
 #include "memory_arena.h"
 
 namespace Halide {

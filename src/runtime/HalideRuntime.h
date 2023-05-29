@@ -1393,6 +1393,15 @@ typedef enum halide_target_feature_t {
     halide_target_feature_sanitizer_coverage,     ///< Enable hooks for SanitizerCoverage support.
     halide_target_feature_profile_by_timer,       ///< Alternative to halide_target_feature_profile using timer interrupt for systems without threads or applicartions that need to avoid them.
     halide_target_feature_spirv,                  ///< Enable SPIR-V code generation support.
+    halide_target_feature_vulkan,                 ///< Enable Vulkan runtime support.
+    halide_target_feature_vulkan_int8,            ///< Enable Vulkan 8-bit integer support.
+    halide_target_feature_vulkan_int16,           ///< Enable Vulkan 16-bit integer support.
+    halide_target_feature_vulkan_int64,           ///< Enable Vulkan 64-bit integer support.
+    halide_target_feature_vulkan_float16,         ///< Enable Vulkan 16-bit float support.
+    halide_target_feature_vulkan_float64,         ///< Enable Vulkan 64-bit float support.
+    halide_target_feature_vulkan_version10,       ///< Enable Vulkan v1.0 runtime target support.
+    halide_target_feature_vulkan_version12,       ///< Enable Vulkan v1.2 runtime target support.
+    halide_target_feature_vulkan_version13,       ///< Enable Vulkan v1.3 runtime target support.
     halide_target_feature_semihosting,            ///< Used together with Target::NoOS for the baremetal target built with semihosting library and run with semihosting mode where minimum I/O communication with a host PC is available.
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
@@ -1767,7 +1776,7 @@ void halide_register_argv_and_metadata(
  * alongside the pipeline. */
 
 /** Per-Func state tracked by the sampling profiler. */
-struct halide_profiler_func_stats {
+struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
 
@@ -1795,7 +1804,7 @@ struct halide_profiler_func_stats {
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
  * in a linked list. */
-struct halide_profiler_pipeline_stats {
+struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_pipeline_stats {
     /** Total time spent inside this pipeline (in nanoseconds) */
     uint64_t time;
 
@@ -1969,7 +1978,12 @@ extern double halide_float16_bits_to_double(uint16_t);
  *
  * If set to false, releases all unused device allocations back to the
  * underlying device APIs. For finer-grained control, see specific
- * methods in each device api runtime. */
+ * methods in each device api runtime.
+ *
+ * Note that if the flag is set to true, this call *must* succeed and return
+ * a value of halide_error_code_success (i.e., zero); if you replace
+ * the implementation of this call in the runtime, you must honor this contract.
+ * */
 extern int halide_reuse_device_allocations(void *user_context, bool);
 
 /** Determines whether on device_free the memory is returned

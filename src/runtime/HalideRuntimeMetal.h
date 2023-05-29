@@ -33,7 +33,7 @@ extern int halide_metal_run(void *user_context,
                             int blocksX, int blocksY, int blocksZ,
                             int threadsX, int threadsY, int threadsZ,
                             int shared_mem_bytes,
-                            size_t arg_sizes[],
+                            struct halide_type_t arg_types[],
                             void *args[],
                             int8_t arg_is_buffer[]);
 // @}

@@ -115,37 +115,66 @@ void load_metal() {
 #endif
 }
 
+void load_vulkan() {
+    if (have_symbol("vkGetInstanceProcAddr")) {
+        debug(1) << "Vulkan support code already linked in...\n";
+    } else {
+        debug(1) << "Looking for Vulkan support code...\n";
+        string error;
+#if defined(__linux__)
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.so.1", &error);
+        user_assert(error.empty()) << "Could not find libvulkan.so.1\n";
+#elif defined(__APPLE__)
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.1.dylib", &error);
+        user_assert(error.empty()) << "Could not find libvulkan.1.dylib\n";
+#elif defined(_WIN32)
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("vulkan-1.dll", &error);
+        user_assert(error.empty()) << "Could not find vulkan-1.dll\n";
+#else
+        internal_error << "JIT support for Vulkan only available on Linux, OS X and Windows!\n";
+#endif
+    }
+}
+
 void load_webgpu() {
     debug(1) << "Looking for a native WebGPU implementation...\n";
-    const char *libnames[] = {
-#ifdef WEBGPU_NATIVE_LIB
-        // Specified via CMake.
-        WEBGPU_NATIVE_LIB,
-#endif
-        // Dawn (Chromium).
-        "libwebgpu_dawn.so",
-        "libwebgpu_dawn.dylib",
-        "webgpu_dawn.dll",
 
-        // wgpu (Firefox).
-        "libwgpu.so",
-        "libwgpu.dylib",
-        "wgpu.dll",
-    };
-    string error;
-    for (const char *libname : libnames) {
+    const auto try_load = [](const char *libname) -> string {
         debug(1) << "Trying " << libname << "... ";
-        error.clear();
+        string error;
         llvm::sys::DynamicLibrary::LoadLibraryPermanently(libname, &error);
-        if (error.empty()) {
-            debug(1) << "found!\n";
-            break;
-        } else {
-            debug(1) << "not found.\n";
+        debug(1) << (error.empty() ? "found!\n" : "not found.\n");
+        return error;
+    };
+
+    string error;
+
+    auto env_libname = get_env_variable("HL_WEBGPU_NATIVE_LIB");
+    if (!env_libname.empty()) {
+        error = try_load(env_libname.c_str());
+    }
+    if (!error.empty()) {
+        const char *libnames[] = {
+            // Dawn (Chromium).
+            "libwebgpu_dawn.so",
+            "libwebgpu_dawn.dylib",
+            "webgpu_dawn.dll",
+
+            // wgpu (Firefox).
+            "libwgpu.so",
+            "libwgpu.dylib",
+            "wgpu.dll",
+        };
+
+        for (const char *libname : libnames) {
+            error = try_load(libname);
+            if (error.empty()) {
+                break;
+            }
         }
     }
-    user_assert(error.empty()) << "Could not find a native WebGPU library: "
-                               << error << "\n";
+    user_assert(error.empty()) << "Could not find a native WebGPU library: " << error << "\n"
+                               << "(Try setting the env var HL_WEBGPU_NATIVE_LIB to an explicit path to fix this.)\n";
 }
 
 }  // namespace
@@ -374,6 +403,15 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         for (auto const &iter : module.exports()) {
             orc::SymbolStringPtr name = symbolStringPool->intern(iter.first);
             orc::SymbolStringPtr _name = symbolStringPool->intern("_" + iter.first);
+#if LLVM_VERSION >= 170
+            auto symbol = llvm::orc::ExecutorAddr::fromPtr(iter.second.address);
+            if (!newSymbols.count(name)) {
+                newSymbols.insert({name, {symbol, JITSymbolFlags::Exported}});
+            }
+            if (!newSymbols.count(_name)) {
+                newSymbols.insert({_name, {symbol, JITSymbolFlags::Exported}});
+            }
+#else
             auto symbol = llvm::JITEvaluatedSymbol::fromPointer(iter.second.address);
             if (!newSymbols.count(name)) {
                 newSymbols.insert({name, symbol});
@@ -381,6 +419,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
             if (!newSymbols.count(_name)) {
                 newSymbols.insert({_name, symbol});
             }
+#endif
         }
     }
     err = JIT->getMainJITDylib().define(orc::absoluteSymbols(std::move(newSymbols)));
@@ -726,6 +765,7 @@ enum RuntimeKind {
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
+    Vulkan,
     WebGPU,
     OpenCLDebug,
     MetalDebug,
@@ -733,6 +773,7 @@ enum RuntimeKind {
     OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,
+    VulkanDebug,
     WebGPUDebug,
     MaxRuntimeKind
 };
@@ -769,6 +810,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::HVX, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
+        one_gpu.set_feature(Target::Vulkan, false);
         one_gpu.set_feature(Target::WebGPU, false);
         string module_name;
         switch (runtime_kind) {
@@ -832,6 +874,17 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 #if !defined(_WIN32)
             internal_error << "JIT support for Direct3D 12 is only implemented on Windows 10 and above.\n";
 #endif
+            break;
+        case VulkanDebug:
+            one_gpu.set_feature(Target::Debug);
+            one_gpu.set_feature(Target::Vulkan);
+            load_vulkan();
+            module_name = "debug_vulkan";
+            break;
+        case Vulkan:
+            one_gpu.set_feature(Target::Vulkan);
+            load_vulkan();
+            module_name += "vulkan";
             break;
         case WebGPUDebug:
             one_gpu.set_feature(Target::Debug);
@@ -1037,6 +1090,13 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
+    if (target.has_feature(Target::Vulkan)) {
+        auto kind = target.has_feature(Target::Debug) ? VulkanDebug : Vulkan;
+        JITModule m = make_module(for_module, target, kind, result, create);
+        if (m.compiled()) {
+            result.push_back(m);
+        }
+    }
     if (target.has_feature(Target::WebGPU)) {
         auto kind = target.has_feature(Target::Debug) ? WebGPUDebug : WebGPU;
         JITModule m = make_module(for_module, target, kind, result, create);
@@ -1044,7 +1104,6 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-
     return result;
 }
 

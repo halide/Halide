@@ -9,6 +9,7 @@
 #include "HalideRuntimeOpenCL.h"
 #include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeQurt.h"
+#include "HalideRuntimeVulkan.h"
 #include "HalideRuntimeWebGPU.h"
 #include "cpu_features.h"
 
@@ -213,6 +214,11 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_d3d12compute_finalize_kernels,
     (void *)&halide_d3d12compute_release_context,
     (void *)&halide_d3d12compute_run,
+    (void *)&halide_vulkan_acquire_context,
+    (void *)&halide_vulkan_device_interface,
+    (void *)&halide_vulkan_initialize_kernels,
+    (void *)&halide_vulkan_release_context,
+    (void *)&halide_vulkan_run,
     (void *)&halide_webgpu_device_interface,
     (void *)&halide_webgpu_initialize_kernels,
     (void *)&halide_webgpu_finalize_kernels,

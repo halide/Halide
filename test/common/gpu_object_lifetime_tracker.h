@@ -22,7 +22,7 @@ class GpuObjectLifetimeTracker {
         }
     };
 
-    std::array<ObjectType, 14> object_types = {{
+    std::array<ObjectType, 22> object_types = {{
         {"Caching compiled kernel:", "Releasing cached compilation:"},
 
         // OpenCL objects
@@ -44,6 +44,16 @@ class GpuObjectLifetimeTracker {
         // Hexagon objects
         {"halide_remote_load_library", "halide_remote_release_library"},
         {"ion_alloc", "ion_free"},
+
+        // Vulkan objects
+        {"vk_create_context", "vk_destroy_context", true},
+        {"vk_create_command_pool", "vk_destroy_command_pool"},
+        {"vk_create_command_buffer", "vk_destroy_command_buffer"},
+        {"vk_create_pipeline_layout", "vk_destroy_pipeline_layout"},
+        {"vk_create_compute_pipeline", "vk_destroy_compute_pipeline"},
+        {"vk_create_descriptor_pool", "vk_destroy_descriptor_pool"},
+        {"Vulkan: Allocated memory for device region", "Vulkan: Deallocated memory for device region"},
+        {"Vulkan: Created buffer", "Vulkan: Destroyed buffer"},
 
         // WebGPU objects
         {"wgpuCreateInstance", "wgpuInstanceRelease", true},

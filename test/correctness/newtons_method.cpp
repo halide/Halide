@@ -10,8 +10,14 @@ using namespace Halide;
 template<typename T>
 int find_pi() {
     // Skip test if data type is not supported by the target.
+    Type type = type_of<T>();
     Target target = get_jit_target_from_environment();
-    if (!target.supports_type(type_of<T>())) {
+    if (!target.supports_type(type)) {
+        return 0;
+    }
+
+    // Vulkan lacks trig functions for 64-bit floats ... skip
+    if (target.has_feature(Target::Vulkan) && (type.is_float() && type.bits() > 32)) {
         return 0;
     }
 
@@ -53,8 +59,9 @@ int find_pi() {
 
     T secant_result = evaluate_may_gpu<T>(g()[0]);
 
-    // Trig in openglcompute/d3d12 is approximate
-    float tolerance = target.has_feature(Target::OpenGLCompute) ||
+    // Trig in vulkan/openglcompute/d3d12 is approximate
+    float tolerance = target.has_feature(Target::Vulkan) ||
+                              target.has_feature(Target::OpenGLCompute) ||
                               target.has_feature(Target::D3D12Compute) ?
                           1e-5f :
                           1e-20f;

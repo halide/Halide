@@ -29,6 +29,11 @@ foreach (test IN LISTS tests)
         continue()
     endif ()
 
+    if (TARGET_VULKAN AND Halide_TARGET MATCHES "vulkan" AND test MATCHES "lesson_10")
+        message(WARNING "Not all tutorials build under Vulkan.")
+        continue()
+    endif ()
+
     cmake_path(GET test STEM test_name)
     add_python_test(
         FILE "${test}"
@@ -39,6 +44,8 @@ endforeach ()
 
 if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
     message(WARNING "Not all tutorials build under WASM.")
+elseif (TARGET_VULKAN AND Halide_TARGET MATCHES "vulkan")
+    message(WARNING "Not all tutorials build under Vulkan.")
 else ()
     ## Add some hacks for getting CMake to delay compiling lesson_10_halide until after the test has run. The "better" way
     ## of doing this might be to treat lesson 10 like an app and give it its own CMakeLists.txt, but since this is a one-off

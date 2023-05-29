@@ -157,6 +157,15 @@ struct Target {
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
         SPIRV = halide_target_feature_spirv,
+        Vulkan = halide_target_feature_vulkan,
+        VulkanInt8 = halide_target_feature_vulkan_int8,
+        VulkanInt16 = halide_target_feature_vulkan_int16,
+        VulkanInt64 = halide_target_feature_vulkan_int64,
+        VulkanFloat16 = halide_target_feature_vulkan_float16,
+        VulkanFloat64 = halide_target_feature_vulkan_float64,
+        VulkanV10 = halide_target_feature_vulkan_version10,
+        VulkanV12 = halide_target_feature_vulkan_version12,
+        VulkanV13 = halide_target_feature_vulkan_version13,
         Semihosting = halide_target_feature_semihosting,
         FeatureEnd = halide_target_feature_end
     };
@@ -319,6 +328,11 @@ struct Target {
      * 20 (our minimum supported cuda compute capability) if no cuda
      * features are set. */
     int get_cuda_capability_lower_bound() const;
+
+    /** Get the minimum Vulkan capability found as an integer. Returns
+     * 10 (our minimum supported Vulkan compute capability) if no Vulkan
+     * features are set. */
+    int get_vulkan_capability_lower_bound() const;
 
     /** Was libHalide compiled with support for this target? */
     bool supported() const;

@@ -3,7 +3,7 @@
 #include "device_interface.h"
 #include "gpu_context_common.h"
 #include "printer.h"
-#include "scoped_spin_lock.h"
+#include "scoped_mutex_lock.h"
 
 #include "objc_support.h"
 
@@ -280,7 +280,7 @@ WEAK mtl_device *get_default_mtl_device() {
 
 extern WEAK halide_device_interface_t metal_device_interface;
 
-volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
+WEAK halide_mutex thread_lock;
 WEAK mtl_device *device;
 WEAK mtl_command_queue *queue;
 
@@ -326,7 +326,7 @@ using namespace Halide::Runtime::Internal::Metal;
 extern "C" {
 
 // The default implementation of halide_metal_acquire_context uses the global
-// pointers above, and serializes access with a spin lock.
+// pointers above, and serializes access with a mutex.
 // Overriding implementations of acquire/release must implement the following
 // behavior:
 // - halide_acquire_metal_context should always store a valid device/command
@@ -337,8 +337,7 @@ extern "C" {
 WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_ret,
                                       mtl_command_queue **queue_ret, bool create) {
     halide_debug_assert(user_context, &thread_lock != nullptr);
-    while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {
-    }
+    halide_mutex_lock(&thread_lock);
 
 #ifdef DEBUG_RUNTIME
     halide_start_clock(user_context);
@@ -348,7 +347,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
         debug(user_context) << "Metal - Allocating: MTLCreateSystemDefaultDevice\n";
         device = get_default_mtl_device();
         if (device == nullptr) {
-            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
+            halide_mutex_unlock(&thread_lock);
             error(user_context) << "halide_metal_acquire_context: cannot allocate system default device.";
             return halide_error_code_generic_error;
         }
@@ -357,7 +356,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
         if (queue == nullptr) {
             release_ns_object(device);
             device = nullptr;
-            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
+            halide_mutex_unlock(&thread_lock);
             error(user_context) << "halide_metal_acquire_context: cannot allocate command queue.";
             return halide_error_code_generic_error;
         }
@@ -376,7 +375,7 @@ WEAK int halide_metal_acquire_context(void *user_context, mtl_device **device_re
 }
 
 WEAK int halide_metal_release_context(void *user_context) {
-    __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
+    halide_mutex_unlock(&thread_lock);
     return halide_error_code_success;
 }
 
@@ -730,7 +729,7 @@ WEAK int halide_metal_run(void *user_context,
                           int blocksX, int blocksY, int blocksZ,
                           int threadsX, int threadsY, int threadsZ,
                           int shared_mem_bytes,
-                          size_t arg_sizes[],
+                          halide_type_t arg_types[],
                           void *args[],
                           int8_t arg_is_buffer[]) {
 #ifdef DEBUG_RUNTIME
@@ -789,8 +788,13 @@ WEAK int halide_metal_run(void *user_context,
 
     set_compute_pipeline_state(encoder, pipeline_state);
 
+    int num_kernel_args = 0;
+    for (int i = 0; arg_types[i].as_u32() != 0; i++) {
+        ++num_kernel_args;
+    }
+
     size_t total_args_size = 0;
-    for (size_t i = 0; arg_sizes[i] != 0; i++) {
+    for (int i = 0; i < num_kernel_args; i++) {
         if (!arg_is_buffer[i]) {
             // Metal requires natural alignment for all types in structures.
             // Assert arg_size is exactly a power of two and adjust size to start
@@ -799,9 +803,10 @@ WEAK int halide_metal_run(void *user_context,
             // TODO(zalman): This seems fishy - if the arguments are
             // not already sorted in decreasing order of size, wrong
             // results occur. To repro, remove the sorting code in CodeGen_GPU_Host
-            halide_debug_assert(user_context, (arg_sizes[i] & (arg_sizes[i] - 1)) == 0);
-            total_args_size = (total_args_size + arg_sizes[i] - 1) & ~(arg_sizes[i] - 1);
-            total_args_size += arg_sizes[i];
+            size_t arg_size = arg_types[i].bytes();
+            halide_debug_assert(user_context, (arg_size & (arg_size - 1)) == 0);
+            total_args_size = (total_args_size + arg_size - 1) & ~(arg_size - 1);
+            total_args_size += arg_size;
         }
     }
 
@@ -837,11 +842,12 @@ WEAK int halide_metal_run(void *user_context,
             args_ptr = (char *)buffer_contents(args_buffer);
         }
         size_t offset = 0;
-        for (size_t i = 0; arg_sizes[i] != 0; i++) {
+        for (int i = 0; i < num_kernel_args; i++) {
             if (!arg_is_buffer[i]) {
-                memcpy(&args_ptr[offset], args[i], arg_sizes[i]);
-                offset = (offset + arg_sizes[i] - 1) & ~(arg_sizes[i] - 1);
-                offset += arg_sizes[i];
+                size_t arg_size = arg_types[i].bytes();
+                memcpy(&args_ptr[offset], args[i], arg_size);
+                offset = (offset + arg_size - 1) & ~(arg_size - 1);
+                offset += arg_size;
             }
         }
         halide_debug_assert(user_context, offset == total_args_size);
@@ -855,9 +861,8 @@ WEAK int halide_metal_run(void *user_context,
         buffer_index++;
     }
 
-    for (size_t i = 0; arg_sizes[i] != 0; i++) {
+    for (int i = 0; i < num_kernel_args; i++) {
         if (arg_is_buffer[i]) {
-            halide_debug_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
             device_handle *handle = (device_handle *)((halide_buffer_t *)args[i])->device;
             set_input_buffer(encoder, handle->buf, handle->offset, buffer_index);
             buffer_index++;

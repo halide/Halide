@@ -711,6 +711,11 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
         endif ()
     endif ()
 
+    if ("${ARGN}" MATCHES "vulkan")
+        find_package(Vulkan REQUIRED)
+        target_link_libraries(${TARGET} ${VISIBILITY} Vulkan::Vulkan)
+    endif ()
+
     if ("${ARGN}" MATCHES "metal")
         find_library(FOUNDATION_LIBRARY Foundation REQUIRED)
         find_library(METAL_LIBRARY Metal REQUIRED)
@@ -718,9 +723,8 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
     endif ()
 
     if ("${ARGN}" MATCHES "webgpu")
-        if (WEBGPU_NATIVE_LIB)
-            target_link_libraries(${TARGET} INTERFACE ${WEBGPU_NATIVE_LIB})
-        endif ()
+        find_package(Halide_WebGPU REQUIRED)
+        target_link_libraries(${TARGET} ${VISIBILITY} Halide::WebGPU)
     endif ()
 endfunction()
 

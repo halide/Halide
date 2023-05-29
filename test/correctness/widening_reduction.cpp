@@ -7,6 +7,13 @@ using namespace Halide::ConciseCasts;
 using namespace Halide::Internal;
 
 int main(int arch, char **argv) {
+
+    Halide::Target target = get_jit_target_from_environment();
+    if (target.has_feature(Target::Vulkan) && ((target.os == Target::IOS) || target.os == Target::OSX)) {
+        printf("[SKIP] Skipping test for Vulkan on iOS/OSX (MoltenVK fails to convert max/min intrinsics correctly)!\n");
+        return 0;
+    }
+
     const int W = 256, H = 256;
 
     Buffer<uint8_t> in(W, H);
@@ -39,7 +46,6 @@ int main(int arch, char **argv) {
         f(x, y) = u8_sat(sum(i16(input(x + r.x, y + r.y)) * kernel(r.x, r.y)) / 16);
 
         // Schedule.
-        Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
         } else if (target.has_feature(Target::HVX)) {
@@ -81,7 +87,6 @@ int main(int arch, char **argv) {
         g(x, y) = u8_sat((f(x, y)[0] + f(x, y)[1]) / 16);
 
         // Schedule.
-        Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             g.gpu_tile(x, y, xi, yi, 16, 16);
         } else if (target.has_feature(Target::HVX)) {
@@ -122,7 +127,6 @@ int main(int arch, char **argv) {
         g(x, y) = u8_sat((f(x, y) + f(x + 1, y)) / 2);
 
         // Schedule.
-        Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             g.gpu_tile(x, y, xi, yi, 16, 16);
         } else if (target.has_feature(Target::HVX)) {
