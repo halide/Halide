@@ -26,6 +26,41 @@ union Stmt {
     Atomic,
 }
 
+// TODO: handle type?
+union Expr {
+    IntImm,
+    UIntImm,
+    FloatImm,
+    StringImm,
+    Cast,
+    Reinterpret,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Min,
+    Max,
+    EQ,
+    NE,
+    LT,
+    LE,
+    GT,
+    GE,
+    And,
+    Or,
+    Not,
+    Select,
+    Load,
+    Ramp,
+    Broadcast,
+    Let,
+    Call,
+    Variable,
+    Shuffle,
+    VectorReduce,
+}
+
 enum ForType: byte {
     Serial,
     Parallel,
@@ -170,6 +205,169 @@ table Atomic {
     producer_name: string;
     mutex_name: string;
     body: Stmt;
+}
+
+table IntImm {
+    value: int64;
+}
+
+table UIntImm {
+    value: uint64;
+}
+
+table FloatImm {
+    value: float64;
+}
+
+table StringImm {
+    value: string;
+}
+
+table Cast {
+    value: Expr;
+}
+
+table Reinterpret {
+    value: Expr;
+}
+
+table Add {
+    a: Expr;
+    b: Expr;
+}
+
+table Sub {
+    a: Expr;
+    b: Expr;
+}
+
+table Mul {
+    a: Expr;
+    b: Expr;
+}
+
+table Div {
+    a: Expr;
+    b: Expr;
+}
+
+table Mod {
+    a: Expr;
+    b: Expr;
+}
+
+table Min {
+    a: Expr;
+    b: Expr;
+}
+
+table Max {
+    a: Expr;
+    b: Expr;
+}
+
+table EQ {
+    a: Expr;
+    b: Expr;
+}
+
+table NE {
+    a: Expr;
+    b: Expr;
+}
+
+table LT {
+    a: Expr;
+    b: Expr;
+}
+
+table LE {
+    a: Expr;
+    b: Expr;
+}
+
+table GT {
+    a: Expr;
+    b: Expr;
+}
+
+table GE {
+    a: Expr;
+    b: Expr;
+}
+
+table And {
+    a: Expr;
+    b: Expr;
+}
+
+table Or {
+    a: Expr;
+    b: Expr;
+}
+
+table Not {
+    a: Expr;
+}
+
+table Select {
+    condition: Expr;
+    true_value: Expr;
+    false_value: Expr;
+}
+
+table Load {
+    name: string;
+    predicate: Expr;
+    index: Expr;
+    // image: Buffer;  TODO: no Buffer yet
+    // param: Parameter; TODO: no Parameter yet
+    // alignment: ModulusRemainder; TODO: no ModulusRemainder yet
+}
+
+table Ramp {
+    base: Expr;
+    stride: Expr;
+    lanes: int32;
+}
+
+table Broadcast {
+    value: Expr;
+    lanes: int32;
+}
+
+table Let {
+    name: string;
+    value: Expr;
+    body: Expr;
+}
+
+table Call {
+    name: string;
+    args: [Expr];
+    // call_type: CallType;
+    // func: FunctionPtr; TODO: no FunctionPtr yet
+    value_index: int32;
+    // image: Buffer; TODO: no Buffer yet
+    // param: Parameter; TODO: no Parameter yet
+}
+
+table Variable {
+    name: string;
+    // param: Parameter; TODO: no Parameter yet
+    // image: Buffer; TODO: no Buffer yet
+    // reduction_domain: ReductionDomain; TODO: no ReductionDomain yet
+}
+
+table Shuffle {
+    vectors: [Expr];
+    indices: [int32];
+}
+
+// TODO: lanes is not stored
+table VectorReduce {
+    value: Expr;
+    // reduction_op: VectorReduceOp;
 }
 
 enum TypeCode: byte {

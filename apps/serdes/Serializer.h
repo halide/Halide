@@ -25,7 +25,11 @@ private:
     // Stmt is special because it is a union type so we need to return both the type and serialized object
     std::pair<Halide::Serdes::Stmt, flatbuffers::Offset<void>> serialize_stmt(flatbuffers::FlatBufferBuilder& builder, const Halide::Internal::Stmt& stmt);
 
+    // similar to Stmt, Expr is a union type so we need to return both the type and serialized object
+    std::pair<Halide::Serdes::Expr, flatbuffers::Offset<void>> serialize_expr(flatbuffers::FlatBufferBuilder& builder, const Halide::Expr& expr);
+
     flatbuffers::Offset<Halide::Serdes::Func> serialize_func(flatbuffers::FlatBufferBuilder& builder, const Halide::Internal::Function& function);
+
 };
 
 

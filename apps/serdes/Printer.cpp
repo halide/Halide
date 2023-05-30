@@ -14,7 +14,7 @@ void Printer::print_pipeline(const Halide::Pipeline& pipeline) {
 }
 
 void Printer::print_function(const Halide::Internal::Function& function) {
-    std::cout << "Printing function\n";
+    std::cout << "Printing Function\n";
     std::cout << "name: " << function.name() << "\n";
     std::cout << "origin_name: " << function.origin_name() << "\n";
     std::cout << "output_types: [Type]\n";
@@ -33,7 +33,7 @@ void Printer::print_function(const Halide::Internal::Function& function) {
 }
 
 void Printer::print_type(const Halide::Type& type) {
-    std::cout << "Printing type\n";
+    std::cout << "Printing Type\n";
     std::cout << "bits: " << type.bits() << "\n";
     std::cout << "lanes: " << type.lanes() << "\n";
     switch (type.code()) {
@@ -59,7 +59,7 @@ void Printer::print_type(const Halide::Type& type) {
 }
 
 void Printer::print_stmt(const Halide::Internal::Stmt& stmt) {
-    std::cout << "Printing stmt\n";
+    std::cout << "Printing Stmt\n";
     switch  (stmt->node_type) {
         case Halide::Internal::IRNodeType::LetStmt: {
             std::cout << "node_type: LetStmt\n";
@@ -199,5 +199,284 @@ void Printer::print_stmt(const Halide::Internal::Stmt& stmt) {
         default:
             std::cerr << "Unsupported stmt type\n";
             exit(1);
+    }
+}
+
+void Printer::print_expr(const Halide::Expr& expr) {
+    std::cout << "Printing Expr\n";
+    switch (expr->node_type) {
+        case Halide::Internal::IRNodeType::IntImm: {
+            std::cout << "node_type: IntImm\n";
+            std::cout << "value: " << expr.as<Halide::Internal::IntImm>()->value << "\n";
+        }
+        case Halide::Internal::IRNodeType::UIntImm: {
+            std::cout << "node_type: UIntImm\n";
+            std::cout << "value: " << expr.as<Halide::Internal::UIntImm>()->value << "\n";
+        }
+        case Halide::Internal::IRNodeType::FloatImm: {
+            std::cout << "node_type: FloatImm\n";
+            std::cout << "value: " << expr.as<Halide::Internal::FloatImm>()->value << "\n";
+        }
+        case Halide::Internal::IRNodeType::StringImm: {
+            std::cout << "node_type: StringImm\n";
+            std::cout << "value: " << expr.as<Halide::Internal::StringImm>()->value << "\n";
+        }
+        case Halide::Internal::IRNodeType::Cast: {
+            std::cout << "node_type: Cast\n";
+            auto cast_expr = expr.as<Halide::Internal::Cast>();
+            auto value = cast_expr->value;
+            std::cout << "value: Expr\n";
+            print_expr(value);
+        }
+        case Halide::Internal::IRNodeType::Reinterpret: {
+            std::cout << "node_type: Reinterpret\n";
+            auto reinterpret_expr = expr.as<Halide::Internal::Reinterpret>();
+            auto value = reinterpret_expr->value;
+            std::cout << "value: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::Add: {
+            std::cout << "node_type: Add\n";
+            auto add_expr = expr.as<Halide::Internal::Add>();
+            auto a = add_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = add_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::Sub: {
+            std::cout << "node_type: Sub\n";
+            auto sub_expr = expr.as<Halide::Internal::Sub>();
+            auto a = sub_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = sub_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::Mul: {
+            std::cout << "node_type: Mul\n";
+            auto mul_expr = expr.as<Halide::Internal::Mul>();
+            auto a = mul_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = mul_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::Div: {
+            std::cout << "node_type: Div\n";
+            auto div_expr = expr.as<Halide::Internal::Div>();
+            auto a = div_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = div_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::Mod: {
+            std::cout << "node_type: Mod\n";
+            auto mod_expr = expr.as<Halide::Internal::Mod>();
+            auto a = mod_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = mod_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::Min: {
+            std::cout << "node_type: Min\n";
+            auto min_expr = expr.as<Halide::Internal::Min>();
+            auto a = min_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = min_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::Max: {
+            std::cout << "node_type: Max\n";
+            auto max_expr = expr.as<Halide::Internal::Max>();
+            auto a = max_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = max_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::EQ: {
+            std::cout << "node_type: EQ\n";
+            auto eq_expr = expr.as<Halide::Internal::EQ>();
+            auto a = eq_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = eq_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::NE: {
+            std::cout << "node_type: NE\n";
+            auto ne_expr = expr.as<Halide::Internal::NE>();
+            auto a = ne_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = ne_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::LT: {
+            std::cout << "node_type: LT\n";
+            auto lt_expr = expr.as<Halide::Internal::LT>();
+            auto a = lt_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = lt_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::LE: {
+            std::cout << "node_type: LE\n";
+            auto le_expr = expr.as<Halide::Internal::LE>();
+            auto a = le_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = le_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::GT: {
+            std::cout << "node_type: GT\n";
+            auto gt_expr = expr.as<Halide::Internal::GT>();
+            auto a = gt_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = gt_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::GE: {
+            std::cout << "node_type: GE\n";
+            auto ge_expr = expr.as<Halide::Internal::GE>();
+            auto a = ge_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = ge_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::And: {
+            std::cout << "node_type: And\n";
+            auto and_expr = expr.as<Halide::Internal::And>();
+            auto a = and_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = and_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::Or: {
+            std::cout << "node_type: Or\n";
+            auto or_expr = expr.as<Halide::Internal::Or>();
+            auto a = or_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+            auto b = or_expr->b;
+            std::cout << "b: Expr\n";
+        }
+        case Halide::Internal::IRNodeType::Not: {
+            std::cout << "node_type: Not\n";
+            auto not_expr = expr.as<Halide::Internal::Not>();
+            auto a = not_expr->a;
+            std::cout << "a: Expr\n";
+            print_expr(a);
+        }
+        case Halide::Internal::IRNodeType::Select: {
+            std::cout << "node_type: Select\n";
+            auto select_expr = expr.as<Halide::Internal::Select>();
+            auto condition = select_expr->condition;
+            std::cout << "condition: Expr\n";
+            print_expr(condition);
+            auto true_value = select_expr->true_value;
+            std::cout << "true_value: Expr\n";
+            print_expr(true_value);
+            auto false_value = select_expr->false_value;
+            std::cout << "false_value: Expr\n";
+            print_expr(false_value);
+        }
+        case Halide::Internal::IRNodeType::Load: {
+            std::cout << "node_type: Load\n";
+            auto load_expr = expr.as<Halide::Internal::Load>();
+            auto name = load_expr->name;
+            std::cout << "name: " << name << "\n";
+            auto predicate = load_expr->predicate;
+            std::cout << "predicate: Expr\n";
+            print_expr(predicate);
+            auto index = load_expr->index;
+            std::cout << "index: Expr\n";
+            print_expr(index);
+        }
+        case Halide::Internal::IRNodeType::Ramp: {
+            std::cout << "node_type: Ramp\n";
+            auto ramp_expr = expr.as<Halide::Internal::Ramp>();
+            auto base = ramp_expr->base;
+            std::cout << "base: Expr\n";
+            print_expr(base);
+            auto stride = ramp_expr->stride;
+            std::cout << "stride: Expr\n";
+            print_expr(stride);
+            auto lanes = ramp_expr->lanes;
+            std::cout << "lanes: " << lanes << "\n";
+        }
+        case Halide::Internal::IRNodeType::Broadcast: {
+            std::cout << "node_type: Broadcast\n";
+            auto broadcast_expr = expr.as<Halide::Internal::Broadcast>();
+            auto value = broadcast_expr->value;
+            std::cout << "value: Expr\n";
+            print_expr(value);
+            auto lanes = broadcast_expr->lanes;
+            std::cout << "lanes: " << lanes << "\n";
+        }
+        case Halide::Internal::IRNodeType::Let: {
+            std::cout << "node_type: Let\n";
+            auto let_expr = expr.as<Halide::Internal::Let>();
+            auto name = let_expr->name;
+            std::cout << "name: " << name << "\n";
+            auto value = let_expr->value;
+            std::cout << "value: Expr\n";
+            print_expr(value);
+            auto body = let_expr->body;
+            std::cout << "body: Expr\n";
+            print_expr(body);
+        }
+        case Halide::Internal::IRNodeType::Call: {
+            std::cout << "node_type: Call\n";
+            auto call_expr = expr.as<Halide::Internal::Call>();
+            auto name = call_expr->name;
+            std::cout << "name: " << name << "\n";
+            auto args = call_expr->args;
+            std::cout << "args: [Expr]\n";
+            for (const auto& arg : args) {
+                print_expr(arg);
+            }
+            auto value_index = call_expr->value_index;
+            std::cout << "value_index: " << value_index << "\n";
+        }
+        case Halide::Internal::IRNodeType::Variable: {
+            std::cout << "node_type: Variable\n";
+            auto variable_expr = expr.as<Halide::Internal::Variable>();
+            auto name = variable_expr->name;
+            std::cout << "name: " << name << "\n";
+        }
+        case Halide::Internal::IRNodeType::Shuffle: {
+            std::cout << "node_type: Shuffle\n";
+            auto shuffle_expr = expr.as<Halide::Internal::Shuffle>();
+            auto vectors = shuffle_expr->vectors;
+            std::cout << "vectors: [Expr]\n";
+            for (const auto& vector : vectors) {
+                print_expr(vector);
+            }
+            auto indices = shuffle_expr->indices;
+            std::cout << "indices: [int]\n";
+            for (const auto& index : indices) {
+                std::cout << index << "\n";
+            }
+        }
+        case Halide::Internal::IRNodeType::VectorReduce: {
+            std::cout << "node_type: VectorReduce\n";
+            auto vector_reduce_expr = expr.as<Halide::Internal::VectorReduce>();
+            auto value = vector_reduce_expr->value;
+            std::cout << "value: Expr\n";
+            print_expr(value);
+        }
+        default:
+            std::cerr << "Unsupported Expr type\n";
+            exit(1);
+
     }
 }

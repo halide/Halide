@@ -23,6 +23,8 @@ private:
     Halide::Internal::Function deserialize_function(const Halide::Serdes::Func* function);
 
     Halide::Internal::Stmt deserialize_stmt(uint8_t type_code, const void * stmt);
+
+    Halide::Expr deserialize_expr(uint8_t type_code, const void * expr);
 };
 
 

@@ -310,6 +310,217 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
     }
 }
 
+Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void * expr) {
+    switch (type_code) {
+        case Halide::Serdes::Expr::Expr_IntImm: {
+            const Halide::Serdes::IntImm* int_imm_expr = (const Halide::Serdes::IntImm *)expr;
+            auto value = int_imm_expr->value();
+            // TODO: fix this hard-coding
+            return Halide::Internal::IntImm::make(Halide::Int(64), value);
+        }
+        case Halide::Serdes::Expr::Expr_UIntImm: {
+            const Halide::Serdes::UIntImm* uint_imm_expr = (const Halide::Serdes::UIntImm *)expr;
+            auto value = uint_imm_expr->value();
+            return Halide::Internal::UIntImm::make(Halide::UInt(64), value);
+        }
+        case Halide::Serdes::Expr::Expr_FloatImm: {
+            const Halide::Serdes::FloatImm* float_imm_expr = (const Halide::Serdes::FloatImm *)expr;
+            auto value = float_imm_expr->value();
+            return Halide::Internal::FloatImm::make(Halide::Float(64), value);
+        }
+        case Halide::Serdes::Expr::Expr_StringImm: {
+            const Halide::Serdes::StringImm* string_imm_expr = (const Halide::Serdes::StringImm *)expr;
+            auto value = deserialize_string(string_imm_expr->value());
+            return Halide::Internal::StringImm::make(value);
+        }
+        case Halide::Serdes::Expr::Expr_Cast: {
+            const Halide::Serdes::Cast* cast_expr = (const Halide::Serdes::Cast *)expr;
+            auto value = deserialize_expr(cast_expr->value_type(), cast_expr->value());
+            // TODO: this is clearly wrong as well
+            return Halide::Internal::Cast::make(Halide::Int(64), value);
+        }
+        case Halide::Serdes::Expr::Expr_Reinterpret: {
+            const Halide::Serdes::Reinterpret* reinterpret_expr = (const Halide::Serdes::Reinterpret *)expr;
+            auto value = deserialize_expr(reinterpret_expr->value_type(), reinterpret_expr->value());
+            return Halide::Internal::Reinterpret::make(Halide::Int(64), value);
+        }
+        case Halide::Serdes::Expr::Expr_Add: {
+            const Halide::Serdes::Add* add_expr = (const Halide::Serdes::Add *)expr;
+            auto a = deserialize_expr(add_expr->a_type(), add_expr->a());
+            auto b = deserialize_expr(add_expr->b_type(), add_expr->b());
+            return Halide::Internal::Add::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_Sub: {
+            const Halide::Serdes::Sub* sub_expr = (const Halide::Serdes::Sub *)expr;
+            auto a = deserialize_expr(sub_expr->a_type(), sub_expr->a());
+            auto b = deserialize_expr(sub_expr->b_type(), sub_expr->b());
+            return Halide::Internal::Sub::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_Mul: {
+            const Halide::Serdes::Mul* mul_expr = (const Halide::Serdes::Mul *)expr;
+            auto a = deserialize_expr(mul_expr->a_type(), mul_expr->a());
+            auto b = deserialize_expr(mul_expr->b_type(), mul_expr->b());
+            return Halide::Internal::Mul::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_Div: {
+            const Halide::Serdes::Div* div_expr = (const Halide::Serdes::Div *)expr;
+            auto a = deserialize_expr(div_expr->a_type(), div_expr->a());
+            auto b = deserialize_expr(div_expr->b_type(), div_expr->b());
+            return Halide::Internal::Div::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_Mod: {
+            const Halide::Serdes::Mod* mod_expr = (const Halide::Serdes::Mod *)expr;
+            auto a = deserialize_expr(mod_expr->a_type(), mod_expr->a());
+            auto b = deserialize_expr(mod_expr->b_type(), mod_expr->b());
+            return Halide::Internal::Mod::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_Min: {
+            const Halide::Serdes::Min* min_expr = (const Halide::Serdes::Min *)expr;
+            auto a = deserialize_expr(min_expr->a_type(), min_expr->a());
+            auto b = deserialize_expr(min_expr->b_type(), min_expr->b());
+            return Halide::Internal::Min::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_Max: {
+            const Halide::Serdes::Max* max_expr = (const Halide::Serdes::Max *)expr;
+            auto a = deserialize_expr(max_expr->a_type(), max_expr->a());
+            auto b = deserialize_expr(max_expr->b_type(), max_expr->b());
+            return Halide::Internal::Max::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_EQ: {
+            const Halide::Serdes::EQ* eq_expr = (const Halide::Serdes::EQ *)expr;
+            auto a = deserialize_expr(eq_expr->a_type(), eq_expr->a());
+            auto b = deserialize_expr(eq_expr->b_type(), eq_expr->b());
+            return Halide::Internal::EQ::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_NE: {
+            const Halide::Serdes::NE* ne_expr = (const Halide::Serdes::NE *)expr;
+            auto a = deserialize_expr(ne_expr->a_type(), ne_expr->a());
+            auto b = deserialize_expr(ne_expr->b_type(), ne_expr->b());
+            return Halide::Internal::NE::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_LT: {
+            const Halide::Serdes::LT* lt_expr = (const Halide::Serdes::LT *)expr;
+            auto a = deserialize_expr(lt_expr->a_type(), lt_expr->a());
+            auto b = deserialize_expr(lt_expr->b_type(), lt_expr->b());
+            return Halide::Internal::LT::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_LE: {
+            const Halide::Serdes::LE* le_expr = (const Halide::Serdes::LE *)expr;
+            auto a = deserialize_expr(le_expr->a_type(), le_expr->a());
+            auto b = deserialize_expr(le_expr->b_type(), le_expr->b());
+            return Halide::Internal::LE::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_GT: {
+            const Halide::Serdes::GT* gt_expr = (const Halide::Serdes::GT *)expr;
+            auto a = deserialize_expr(gt_expr->a_type(), gt_expr->a());
+            auto b = deserialize_expr(gt_expr->b_type(), gt_expr->b());
+            return Halide::Internal::GT::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_GE: {
+            const Halide::Serdes::GE* ge_expr = (const Halide::Serdes::GE *)expr;
+            auto a = deserialize_expr(ge_expr->a_type(), ge_expr->a());
+            auto b = deserialize_expr(ge_expr->b_type(), ge_expr->b());
+            return Halide::Internal::GE::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_And: {
+            const Halide::Serdes::And* and_expr = (const Halide::Serdes::And *)expr;
+            auto a = deserialize_expr(and_expr->a_type(), and_expr->a());
+            auto b = deserialize_expr(and_expr->b_type(), and_expr->b());
+            return Halide::Internal::And::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_Or: {
+            const Halide::Serdes::Or* or_expr = (const Halide::Serdes::Or *)expr;
+            auto a = deserialize_expr(or_expr->a_type(), or_expr->a());
+            auto b = deserialize_expr(or_expr->b_type(), or_expr->b());
+            return Halide::Internal::Or::make(a, b);
+        }
+        case Halide::Serdes::Expr::Expr_Not: {
+            const Halide::Serdes::Not* not_expr = (const Halide::Serdes::Not *)expr;
+            auto a = deserialize_expr(not_expr->a_type(), not_expr->a());
+            return Halide::Internal::Not::make(a);
+        }
+        case Halide::Serdes::Expr::Expr_Select: {
+            const Halide::Serdes::Select* select_expr = (const Halide::Serdes::Select *)expr;
+            auto condition = deserialize_expr(select_expr->condition_type(), select_expr->condition());
+            auto true_value = deserialize_expr(select_expr->true_value_type(), select_expr->true_value());
+            auto false_value = deserialize_expr(select_expr->false_value_type(), select_expr->false_value());
+            return Halide::Internal::Select::make(condition, true_value, false_value);
+        }
+        case Halide::Serdes::Expr::Expr_Load: {
+            const Halide::Serdes::Load* load_expr = (const Halide::Serdes::Load *)expr;
+            auto name = deserialize_string(load_expr->name());
+            auto predicate = deserialize_expr(load_expr->predicate_type(), load_expr->predicate());
+            auto index = deserialize_expr(load_expr->index_type(), load_expr->index());
+            return Halide::Internal::Load::make(Halide::Int(64), name, index, Halide::Buffer<float, 3>(), Halide::Internal::Parameter(), predicate, Halide::Internal::ModulusRemainder());
+        }
+        case Halide::Serdes::Expr::Expr_Ramp: {
+            const Halide::Serdes::Ramp* ramp_expr = (const Halide::Serdes::Ramp *)expr;
+            auto base = deserialize_expr(ramp_expr->base_type(), ramp_expr->base());
+            auto stride = deserialize_expr(ramp_expr->stride_type(), ramp_expr->stride());
+            auto lanes = ramp_expr->lanes();
+            return Halide::Internal::Ramp::make(base, stride, lanes);
+        }
+        case Halide::Serdes::Expr::Expr_Broadcast: {
+            const Halide::Serdes::Broadcast* broadcast_expr = (const Halide::Serdes::Broadcast *)expr;
+            auto value = deserialize_expr(broadcast_expr->value_type(), broadcast_expr->value());
+            auto lanes = broadcast_expr->lanes();
+            return Halide::Internal::Broadcast::make(value, lanes);
+        }
+        case Halide::Serdes::Expr::Expr_Let: {
+            const Halide::Serdes::Let* let_expr = (const Halide::Serdes::Let *)expr;
+            auto name = deserialize_string(let_expr->name());
+            auto value = deserialize_expr(let_expr->value_type(), let_expr->value());
+            auto body = deserialize_expr(let_expr->body_type(), let_expr->body());
+            return Halide::Internal::Let::make(name, value, body);
+        }
+        case Halide::Serdes::Expr::Expr_Call: {
+            const Halide::Serdes::Call* call_expr = (const Halide::Serdes::Call *)expr;
+            auto name = deserialize_string(call_expr->name());
+            auto args_type = call_expr->args_type();
+            auto args_serialized = call_expr->args();
+            std::vector<Halide::Expr> args;
+            for (size_t i = 0; i < args_serialized->size(); ++i) {
+                auto arg = deserialize_expr(args_type->Get(i), args_serialized->Get(i));
+                args.push_back(arg);
+            }
+            auto value_index = call_expr->value_index();
+            // TODO: fix type and function ptr here once function DAG is fixed
+            return Halide::Internal::Call::make(Halide::Int(64), name, args, Halide::Internal::Call::CallType::Extern, Halide::Internal::FunctionPtr(), value_index);
+        }
+        case Halide::Serdes::Expr::Expr_Variable: {
+            const Halide::Serdes::Variable* variable_expr = (const Halide::Serdes::Variable *)expr;
+            auto name = deserialize_string(variable_expr->name());
+            return Halide::Internal::Variable::make(Halide::Int(64), name);
+        }
+        case Halide::Serdes::Expr::Expr_Shuffle: {
+            const Halide::Serdes::Shuffle* shuffle_expr = (const Halide::Serdes::Shuffle *)expr;
+            auto vectors_type = shuffle_expr->vectors_type();
+            auto vectors_serialized = shuffle_expr->vectors();
+            std::vector<Halide::Expr> vectors;
+            for (size_t i = 0; i < vectors_serialized->size(); ++i) {
+                auto vector = deserialize_expr(vectors_type->Get(i), vectors_serialized->Get(i));
+                vectors.push_back(vector);
+            }
+            auto indices_serialized = shuffle_expr->indices();
+            std::vector<int32_t> indices;
+            for (size_t i = 0; i < indices_serialized->size(); ++i) {
+                indices.push_back(indices_serialized->Get(i));
+            }
+            return Halide::Internal::Shuffle::make(vectors, indices);
+        }
+        case Halide::Serdes::Expr::Expr_VectorReduce: {
+            const Halide::Serdes::VectorReduce* vector_reduce_expr = (const Halide::Serdes::VectorReduce *)expr;
+            auto value = deserialize_expr(vector_reduce_expr->value_type(), vector_reduce_expr->value());
+            // TODO: fix op here and store lanes during serialization
+            return Halide::Internal::VectorReduce::make(Halide::Internal::VectorReduce::Operator::Add, value, 16);
+        }
+        default: {
+            std::cerr << "unknown type code " << type_code << "\n";
+            return Halide::Expr();
+        }
+    }
+}
+
 Pipeline Deserializer::deserialize(const std::string& filename) {
     // unpack binary file
     std::ifstream in(filename, std::ios::binary | std::ios::in);
