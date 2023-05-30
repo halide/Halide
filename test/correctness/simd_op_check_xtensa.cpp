@@ -105,18 +105,24 @@ public:
         check("IVP_SLLIN_2X32U", vector_width / 4, u32_1 * 4);
 
         // Casts.
+        // Note: we deliberately leave out the spaces here, to keep the symbols
+        // short in length; Xtensa runtimes may limit imported symbols to
+        // <= 65 bytes in length, and after adding short prefixes and suffixes,
+        // some of these could overflow that limit. (Omitting the spaces is
+        // a bit of a band-aid here; a better solution would probably be
+        // to allow arbitrary names that don't match, but for now, this will do.)
         check("convert<float16x32_t,float32x32_t>", vector_width / 2, f16(f32_1));
-        check("convert<float32x32_t, float16x32_t>", vector_width / 2, f32(f16_1));
-        check("convert<float32x32_t, int16x32_t>", vector_width / 2, f32(i16_1));
-        check("convert<float32x32_t, uint16x32_t>", vector_width / 2, f32(u16_1));
-        check("convert<uint32x32_t, uint16x32_t>", vector_width / 2, u32(u16_1));
-        check("convert<int32x32_t, uint16x32_t>", vector_width / 2, i32(u16_1));
-        check("convert<int32x32_t, int16x32_t>", vector_width / 2, i32(i16_1));
-        check("store_narrowing<int32x16_t, int16_t, 16>", vector_width / 4, i16(i32_1));
-        check("store_narrowing<uint32x16_t, uint16_t, 16>", vector_width / 4, u16(u32_1));
-        check("store_narrowing<int16x32_t, int8_t, 32>", vector_width / 2, i8(i16_1));
-        check("store_narrowing<int16x32_t, uint8_t, 32>", vector_width / 2, u8(i16_1));
-        check("store_narrowing<uint16x32_t, uint8_t, 32>", vector_width / 2, u8(u16_1));
+        check("convert<float32x32_t,float16x32_t>", vector_width / 2, f32(f16_1));
+        check("convert<float32x32_t,int16x32_t>", vector_width / 2, f32(i16_1));
+        check("convert<float32x32_t,uint16x32_t>", vector_width / 2, f32(u16_1));
+        check("convert<uint32x32_t,uint16x32_t>", vector_width / 2, u32(u16_1));
+        check("convert<int32x32_t,uint16x32_t>", vector_width / 2, i32(u16_1));
+        check("convert<int32x32_t,int16x32_t>", vector_width / 2, i32(i16_1));
+        check("store_narrowing<int32x16_t,int16_t,16>", vector_width / 4, i16(i32_1));
+        check("store_narrowing<uint32x16_t,uint16_t,16>", vector_width / 4, u16(u32_1));
+        check("store_narrowing<int16x32_t,int8_t,32>", vector_width / 2, i8(i16_1));
+        check("store_narrowing<int16x32_t,uint8_t,32>", vector_width / 2, u8(i16_1));
+        check("store_narrowing<uint16x32_t,uint8_t,32>", vector_width / 2, u8(u16_1));
 
         // Averaging instructions.
         check("IVP_AVGUNX16", vector_width / 2, u16((u32(u16_1) + u32(u16_2)) / 2));
@@ -179,7 +185,6 @@ int main(int argc, char **argv) {
     SimdOpCheckXtensa test_xtensa(hl_target);
 
     if (argc > 1) {
-        test_xtensa.filter = argv[1];
     }
 
     if (argc > 2) {
@@ -191,10 +196,10 @@ int main(int argc, char **argv) {
         //
         test_xtensa.output_directory = argv[2];
     }
-    bool success = test_xtensa.test_all();
 
+    bool success = test_xtensa.test_all();
     if (!success) {
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");
