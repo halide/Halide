@@ -70,7 +70,7 @@ public:
 
     /** Construct a function from deserializing */
     explicit Function(const std::string &name, const std::string &origin_name, const std::vector<Halide::Type> &output_types,
-                     const std::vector<Halide::Type> &required_types, int required_dims, const std::vector<std::string> &args);
+                      const std::vector<Halide::Type> &required_types, int required_dims, const std::vector<std::string> &args);
 
     /** Get a handle on the halide function contents that this Function
      * represents. */

@@ -1,7 +1,7 @@
-#include <Halide.h>
-#include "Serializer.h"
 #include "Deserializer.h"
 #include "Printer.h"
+#include "Serializer.h"
+#include <Halide.h>
 using namespace Halide;
 
 int main(int argc, char **argv) {
@@ -21,7 +21,6 @@ int main(int argc, char **argv) {
     serializer.serialize(pipe, "test.hlb");
     Deserializer deserializer;
     Pipeline p = deserializer.deserialize("test.hlb");
-
 
     // print after deserialization
     std::cout << "\nafter deserialization\n";
