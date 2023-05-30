@@ -25,6 +25,8 @@ private:
     Halide::Internal::Stmt deserialize_stmt(uint8_t type_code, const void *stmt);
 
     Halide::Expr deserialize_expr(uint8_t type_code, const void *expr);
+
+    Halide::Range deserialize_range(const Halide::Serdes::Range *range);
 };
 
 #endif

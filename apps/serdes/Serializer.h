@@ -28,6 +28,8 @@ private:
     std::pair<Halide::Serdes::Expr, flatbuffers::Offset<void>> serialize_expr(flatbuffers::FlatBufferBuilder &builder, const Halide::Expr &expr);
 
     flatbuffers::Offset<Halide::Serdes::Func> serialize_func(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Function &function);
+
+    flatbuffers::Offset<Halide::Serdes::Range> serialize_range(flatbuffers::FlatBufferBuilder &builder, const Halide::Range &range);
 };
 
 #endif

@@ -20,6 +20,8 @@ public:
     void print_stmt(const Halide::Internal::Stmt &stmt);
 
     void print_expr(const Halide::Expr &expr);
+
+    void print_range(const Halide::Range &range);
 };
 
 #endif

@@ -99,6 +99,11 @@ enum MemoryType: byte {
     AMXTile,
 }
 
+table Range {
+    min: Expr;
+    extent: Expr;
+}
+
 table LetStmt {
     name: string;
     value: Expr;
@@ -161,7 +166,7 @@ table Realize {
     name: string;
     types: [Type];
     memory_type: MemoryType;
-    // bounds: Region; TODO: no Range yet
+    bounds: [Range];
     condition: Expr;
     body: Stmt;
 }
@@ -184,7 +189,7 @@ table Evaluate {
 table Prefetch {
     name: string;
     types: [Type];
-    // bounds: Region; TODO: no Region yet
+    bounds: [Range];
     // prefetch: PrefetchDirective; TODO: no PrefetchDirective yet
     condition: Expr;
     body: Stmt;

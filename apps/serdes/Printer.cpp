@@ -165,6 +165,10 @@ void Printer::print_stmt(const Halide::Internal::Stmt &stmt) {
         for (const auto &type : realize_stmt->types) {
             print_type(type);
         }
+        std::cout << "bounds: [Range]\n";
+        for (const auto &bound : realize_stmt->bounds) {
+            print_range(bound);
+        }
         std::cout << "condition: Expr\n";
         print_expr(realize_stmt->condition);
         std::cout << "body: Stmt\n";
@@ -202,6 +206,10 @@ void Printer::print_stmt(const Halide::Internal::Stmt &stmt) {
         std::cout << "types: [Type]\n";
         for (const auto &type : prefetch_stmt->types) {
             print_type(type);
+        }
+        std::cout << "bounds: [Range]\n";
+        for (const auto &bound : prefetch_stmt->bounds) {
+            print_range(bound);
         }
         std::cout << "condition: Expr\n";
         print_expr(prefetch_stmt->condition);
@@ -523,4 +531,12 @@ void Printer::print_expr(const Halide::Expr &expr) {
         std::cerr << "Unsupported Expr type\n";
         exit(1);
     }
+}
+
+void Printer::print_range(const Halide::Range &range) {
+    std::cout << "Printing Range\n";
+    std::cout << "min: Expr\n";
+    print_expr(range.min);
+    std::cout << "extent: Expr\n";
+    print_expr(range.extent);
 }

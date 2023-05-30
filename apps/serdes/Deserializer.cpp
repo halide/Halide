@@ -287,9 +287,13 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
             memory_type = Halide::MemoryType::AMXTile;
             break;
         }
+        std::vector<Halide::Range> bounds;
+        for (const auto &bound : *realize_stmt->bounds()) {
+            bounds.push_back(deserialize_range(bound));
+        }
         auto condition = deserialize_expr(realize_stmt->condition_type(), realize_stmt->condition());
         auto body = deserialize_stmt(realize_stmt->body_type(), realize_stmt->body());
-        return Halide::Internal::Realize::make(name, types, memory_type, Halide::Region(), condition, body);
+        return Halide::Internal::Realize::make(name, types, memory_type, bounds, condition, body);
     }
     case Halide::Serdes::Stmt_Block: {
         const Halide::Serdes::Block *block_stmt = (const Halide::Serdes::Block *)stmt;
@@ -316,9 +320,13 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         for (const auto &type : *prefetch_stmt->types()) {
             types.push_back(deserialize_type(type));
         }
+        std::vector<Range> bounds;
+        for (const auto &bound : *prefetch_stmt->bounds()) {
+            bounds.push_back(deserialize_range(bound));
+        }
         auto condition = deserialize_expr(prefetch_stmt->condition_type(), prefetch_stmt->condition());
         auto body = deserialize_stmt(prefetch_stmt->body_type(), prefetch_stmt->body());
-        return Halide::Internal::Prefetch::make(name, types, Region(),
+        return Halide::Internal::Prefetch::make(name, types, bounds,
                                                 Halide::Internal::PrefetchDirective(),
                                                 condition, body);
     }
@@ -557,6 +565,12 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         return Halide::Expr();
     }
     }
+}
+
+Halide::Range Deserializer::deserialize_range(const Halide::Serdes::Range *range) {
+    auto min = deserialize_expr(range->min_type(), range->min());
+    auto extent = deserialize_expr(range->extent_type(), range->extent());
+    return Halide::Range(min, extent);
 }
 
 Pipeline Deserializer::deserialize(const std::string &filename) {

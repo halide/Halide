@@ -307,12 +307,17 @@ std::pair<Halide::Serdes::Stmt, flatbuffers::Offset<void>> Serializer::serialize
             break;
         }
         }
+        auto bounds = realize_stmt->bounds;
+        std::vector<flatbuffers::Offset<Halide::Serdes::Range>> bounds_serialized;
+        for (const auto &bound : bounds) {
+            bounds_serialized.push_back(serialize_range(builder, bound));
+        }
         auto types_vector = builder.CreateVector(types_serialized);
         auto condition = realize_stmt->condition;
         auto condition_serialized = serialize_expr(builder, condition);
         auto body = realize_stmt->body;
         auto body_serialized = serialize_stmt(builder, body);
-        return std::make_pair(Halide::Serdes::Stmt::Stmt_Realize, Halide::Serdes::CreateRealize(builder, name_serialized, types_vector, memory_type, condition_serialized.first, condition_serialized.second, body_serialized.first, body_serialized.second).Union());
+        return std::make_pair(Halide::Serdes::Stmt::Stmt_Realize, Halide::Serdes::CreateRealize(builder, name_serialized, types_vector, memory_type, builder.CreateVector(bounds_serialized), condition_serialized.first, condition_serialized.second, body_serialized.first, body_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Block: {
         auto block_stmt = stmt.as<Halide::Internal::Block>();
@@ -348,11 +353,16 @@ std::pair<Halide::Serdes::Stmt, flatbuffers::Offset<void>> Serializer::serialize
             types_serialized.push_back(serialize_type(builder, type));
         }
         auto types_vector = builder.CreateVector(types_serialized);
+        auto bounds = prefetch_stmt->bounds;
+        std::vector<flatbuffers::Offset<Halide::Serdes::Range>> bounds_serialized;
+        for (const auto &bound : bounds) {
+            bounds_serialized.push_back(serialize_range(builder, bound));
+        }
         auto condition = prefetch_stmt->condition;
         auto condition_serialized = serialize_expr(builder, condition);
         auto body = prefetch_stmt->body;
         auto body_serialized = serialize_stmt(builder, body);
-        return std::make_pair(Halide::Serdes::Stmt::Stmt_Prefetch, Halide::Serdes::CreatePrefetch(builder, name_serialized, types_vector, condition_serialized.first, condition_serialized.second, body_serialized.first, body_serialized.second).Union());
+        return std::make_pair(Halide::Serdes::Stmt::Stmt_Prefetch, Halide::Serdes::CreatePrefetch(builder, name_serialized, types_vector, builder.CreateVector(bounds_serialized), condition_serialized.first, condition_serialized.second, body_serialized.first, body_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Acquire: {
         auto acquire_stmt = stmt.as<Halide::Internal::Acquire>();
@@ -677,6 +687,15 @@ flatbuffers::Offset<Halide::Serdes::Func> Serializer::serialize_func(flatbuffers
 
     auto func = Halide::Serdes::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim, args_vector);
     return func;
+}
+
+flatbuffers::Offset<Halide::Serdes::Range> Serializer::serialize_range(flatbuffers::FlatBufferBuilder &builder, const Halide::Range &range) {
+    auto min = range.min;
+    auto min_serialized = serialize_expr(builder, min);
+    auto extent = range.extent;
+    auto extent_serialized = serialize_expr(builder, extent);
+    auto range_obj = Halide::Serdes::CreateRange(builder, min_serialized.first, min_serialized.second, extent_serialized.first, extent_serialized.second);
+    return range_obj;
 }
 
 void Serializer::serialize(const Pipeline &pipeline, const std::string &filename) {
