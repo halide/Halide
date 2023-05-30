@@ -78,12 +78,15 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         case Halide::Serdes::Stmt_LetStmt : {
             const Halide::Serdes::LetStmt* let_stmt = (const Halide::Serdes::LetStmt *)stmt;
             auto name = deserialize_string(let_stmt->name());
+            auto value = deserialize_expr(let_stmt->value_type(), let_stmt->value());
             auto body = deserialize_stmt(let_stmt->body_type(), let_stmt->body());
-            return Halide::Internal::LetStmt::make(name, Expr(), body);
+            return Halide::Internal::LetStmt::make(name, value, body);
         }
         case Halide::Serdes::Stmt_AssertStmt : {
-            // Halide::Serdes::AssertStmt* assert_stmt = (Halide::Serdes::AssertStmt *)stmt;
-            return Halide::Internal::AssertStmt::make(Expr(), Expr());
+            const Halide::Serdes::AssertStmt* assert_stmt = (const Halide::Serdes::AssertStmt *)stmt;
+            auto condition = deserialize_expr(assert_stmt->condition_type(), assert_stmt->condition());
+            auto message = deserialize_expr(assert_stmt->message_type(), assert_stmt->message());
+            return Halide::Internal::AssertStmt::make(condition, message);
         }
         case Halide::Serdes::Stmt_ProducerConsumer : {
             const Halide::Serdes::ProducerConsumer* producer_consumer = (const Halide::Serdes::ProducerConsumer *)stmt;
@@ -95,6 +98,8 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         case Halide::Serdes::Stmt_For : {
             const Halide::Serdes::For* for_stmt = (const Halide::Serdes::For *)stmt;
             auto name = deserialize_string(for_stmt->name());
+            auto min = deserialize_expr(for_stmt->min_type(), for_stmt->min());
+            auto extent = deserialize_expr(for_stmt->extent_type(), for_stmt->extent());
             Halide::Internal::ForType for_type = Halide::Internal::ForType::Serial;
             switch (for_stmt->for_type()) {
                 case Halide::Serdes::ForType::ForType_Serial:
@@ -162,17 +167,35 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
                     break;
             }
             auto body = deserialize_stmt(for_stmt->body_type(), for_stmt->body());
-            return Halide::Internal::For::make(name, Expr(), Expr(), for_type, device_api, body);
+            return Halide::Internal::For::make(name, min, extent, for_type, device_api, body);
         }
         case Halide::Serdes::Stmt_Store : {
             const Halide::Serdes::Store* store_stmt = (const Halide::Serdes::Store *)stmt;
             auto name = deserialize_string(store_stmt->name());
-            return Halide::Internal::Store::make(name, Expr(), Expr(), Halide::Internal::Parameter(), Expr(), Halide::Internal::ModulusRemainder());
+            auto predicate = deserialize_expr(store_stmt->predicate_type(), store_stmt->predicate());
+            auto value = deserialize_expr(store_stmt->value_type(), store_stmt->value());
+            auto index = deserialize_expr(store_stmt->index_type(), store_stmt->index());
+            return Halide::Internal::Store::make(name, value, index, Halide::Internal::Parameter(), predicate, Halide::Internal::ModulusRemainder());
         }
         case Halide::Serdes::Stmt_Provide : {
             const Halide::Serdes::Provide* provide_stmt = (const Halide::Serdes::Provide *)stmt;
             auto name = deserialize_string(provide_stmt->name());
-            return Halide::Internal::Provide::make(name, std::vector<Expr>(), std::vector<Expr>(), Expr());
+            std::vector<Expr> values;
+            auto values_serialized = provide_stmt->values();
+            auto values_types = provide_stmt->values_type();
+            for (size_t i = 0; i < values_serialized->size(); ++i) {
+                auto value = deserialize_expr(values_types->Get(i), values_serialized->Get(i));
+                values.push_back(value);
+            }
+            std::vector<Expr> args;
+            auto args_serialized = provide_stmt->args();
+            auto args_types = provide_stmt->args_type();
+            for (size_t i = 0; i < args_serialized->size(); ++i) {
+                auto arg = deserialize_expr(args_types->Get(i), args_serialized->Get(i));
+                args.push_back(arg);
+            }
+            auto predicate = deserialize_expr(provide_stmt->predicate_type(), provide_stmt->predicate());
+            return Halide::Internal::Provide::make(name, values, args, predicate);
         }
         case Halide::Serdes::Stmt_Allocate : {
             const Halide::Serdes::Allocate* allocate_stmt = (const Halide::Serdes::Allocate *)stmt;
@@ -208,10 +231,19 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
                     memory_type = Halide::MemoryType::AMXTile;
                     break;
             }
+            auto extents_serialized = allocate_stmt->extents();
+            auto extents_types = allocate_stmt->extents_type();
+            std::vector<Expr> extents;
+            for (size_t i = 0; i < extents_serialized->size(); ++i) {
+                auto extent = deserialize_expr(extents_types->Get(i), extents_serialized->Get(i));
+                extents.push_back(extent);
+            }
+            auto condition = deserialize_expr(allocate_stmt->condition_type(), allocate_stmt->condition());
+            auto new_expr = deserialize_expr(allocate_stmt->new_expr_type(), allocate_stmt->new_expr());
             auto free_function = deserialize_string(allocate_stmt->free_function());
             auto padding = allocate_stmt->padding();
             auto body = deserialize_stmt(allocate_stmt->body_type(), allocate_stmt->body());
-            return Halide::Internal::Allocate::make(name, type, memory_type, std::vector<Expr>(), Expr(), body, Expr(), free_function, padding);
+            return Halide::Internal::Allocate::make(name, type, memory_type, extents, condition, body, new_expr, free_function, padding);
         }
         case Halide::Serdes::Stmt_Free : {
             const Halide::Serdes::Free* free_stmt = (const Halide::Serdes::Free *)stmt;
@@ -255,8 +287,9 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
                     memory_type = Halide::MemoryType::AMXTile;
                     break;
             }
+            auto condition = deserialize_expr(realize_stmt->condition_type(), realize_stmt->condition());
             auto body = deserialize_stmt(realize_stmt->body_type(), realize_stmt->body());
-            return Halide::Internal::Realize::make(name, types, memory_type, Halide::Region(), Expr(), body);
+            return Halide::Internal::Realize::make(name, types, memory_type, Halide::Region(), condition, body);
         }
         case Halide::Serdes::Stmt_Block : {
             const Halide::Serdes::Block* block_stmt = (const Halide::Serdes::Block *)stmt;
@@ -266,13 +299,15 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         }
         case Halide::Serdes::Stmt_IfThenElse : {
             const Halide::Serdes::IfThenElse* if_then_else_stmt = (const Halide::Serdes::IfThenElse *)stmt;
+            auto condition = deserialize_expr(if_then_else_stmt->condition_type(), if_then_else_stmt->condition());
             auto then_case = deserialize_stmt(if_then_else_stmt->then_case_type(), if_then_else_stmt->then_case());
             auto else_case = deserialize_stmt(if_then_else_stmt->else_case_type(), if_then_else_stmt->else_case());
-            return Halide::Internal::IfThenElse::make(Expr(), then_case, else_case);
+            return Halide::Internal::IfThenElse::make(condition, then_case, else_case);
         }
         case Halide::Serdes::Stmt_Evaluate : {
-            // Halide::Serdes::Evaluate* evaluate_stmt = (Halide::Serdes::Evaluate *)stmt;
-            return Halide::Internal::Evaluate::make(Expr());
+            const Halide::Serdes::Evaluate* evaluate_stmt = (const Halide::Serdes::Evaluate *)stmt;
+            auto value = deserialize_expr(evaluate_stmt->value_type(), evaluate_stmt->value());
+            return Halide::Internal::Evaluate::make(value);
         }
         case Halide::Serdes::Stmt_Prefetch : {
             const Halide::Serdes::Prefetch* prefetch_stmt = (const Halide::Serdes::Prefetch *)stmt;
@@ -281,15 +316,18 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
             for (const auto& type : *prefetch_stmt->types()) {
                 types.push_back(deserialize_type(type));
             }
+            auto condition = deserialize_expr(prefetch_stmt->condition_type(), prefetch_stmt->condition());
             auto body = deserialize_stmt(prefetch_stmt->body_type(), prefetch_stmt->body());
             return Halide::Internal::Prefetch::make(name, types, Region(),
                     Halide::Internal::PrefetchDirective(),
-                    Expr(), body);
+                    condition, body);
         }
         case Halide::Serdes::Stmt_Acquire : {
             const Halide::Serdes::Acquire* acquire_stmt = (const Halide::Serdes::Acquire *)stmt;
+            auto semaphore = deserialize_expr(acquire_stmt->semaphore_type(), acquire_stmt->semaphore());
+            auto count = deserialize_expr(acquire_stmt->count_type(), acquire_stmt->count());
             auto body = deserialize_stmt(acquire_stmt->body_type(), acquire_stmt->body());
-            return Halide::Internal::Acquire::make(Expr(), Expr(), body);
+            return Halide::Internal::Acquire::make(semaphore, count, body);
         }
         case Halide::Serdes::Stmt_Fork : {
             const Halide::Serdes::Fork* fork_stmt = (const Halide::Serdes::Fork *)stmt;

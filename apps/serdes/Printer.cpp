@@ -66,12 +66,18 @@ void Printer::print_stmt(const Halide::Internal::Stmt& stmt) {
             auto let_stmt = stmt.as<Halide::Internal::LetStmt>();
             std::string name = let_stmt->name;
             std::cout << "name: " << name << "\n";
+            std::cout << "value: Expr\n";
+            print_expr(let_stmt->value);
             std::cout << "body: Stmt\n";
             print_stmt(let_stmt->body);
         }
         case Halide::Internal::IRNodeType::AssertStmt: {
             std::cout << "node_type: AssertStmt\n";
-            // auto assert_stmt = stmt.as<Halide::Internal::AssertStmt>();
+            auto assert_stmt = stmt.as<Halide::Internal::AssertStmt>();
+            std::cout << "condition: Expr\n";
+            print_expr(assert_stmt->condition);
+            std::cout << "message: Expr\n";
+            print_expr(assert_stmt->message);
         }
         case Halide::Internal::IRNodeType::ProducerConsumer: {
             std::cout << "node_type: ProducerConsumer\n";
@@ -88,6 +94,10 @@ void Printer::print_stmt(const Halide::Internal::Stmt& stmt) {
             auto for_stmt = stmt.as<Halide::Internal::For>();
             std::string name = for_stmt->name;
             std::cout << "name: " << name << "\n";
+            std::cout << "min: Expr\n";
+            print_expr(for_stmt->min);
+            std::cout << "extent: Expr\n";
+            print_expr(for_stmt->extent);
             std::cout << "body: Stmt\n";
             print_stmt(for_stmt->body);
         }
@@ -96,12 +106,28 @@ void Printer::print_stmt(const Halide::Internal::Stmt& stmt) {
             auto store_stmt = stmt.as<Halide::Internal::Store>();
             std::string name = store_stmt->name;
             std::cout << "name: " << name << "\n";
+            std::cout << "predicate: Expr\n";
+            print_expr(store_stmt->predicate);
+            std::cout << "value: Expr\n";
+            print_expr(store_stmt->value);
+            std::cout << "index: Expr\n";
+            print_expr(store_stmt->index);
         }
         case Halide::Internal::IRNodeType::Provide: {
             std::cout << "node_type: Provide\n";
             auto provide_stmt = stmt.as<Halide::Internal::Provide>();
             std::string name = provide_stmt->name;
             std::cout << "name: " << name << "\n";
+            std::cout << "values: [Expr]\n";
+            for (const auto& value : provide_stmt->values) {
+                print_expr(value);
+            }
+            std::cout << "args: [Expr]\n";
+            for (const auto& arg : provide_stmt->args) {
+                print_expr(arg);
+            }
+            std::cout << "predicate: Expr\n";
+            print_expr(provide_stmt->predicate);
         }
         case Halide::Internal::IRNodeType::Allocate: {
             std::cout << "node_type: Allocate\n";
@@ -110,6 +136,14 @@ void Printer::print_stmt(const Halide::Internal::Stmt& stmt) {
             std::cout << "name: " << name << "\n";
             std::cout << "type: Type\n";
             print_type(allocate_stmt->type);
+            std::cout << "extents: [Expr]\n";
+            for (const auto& extent : allocate_stmt->extents) {
+                print_expr(extent);
+            }
+            std::cout << "condition: Expr\n";
+            print_expr(allocate_stmt->condition);
+            std::cout << "new_expr: Expr\n";
+            print_expr(allocate_stmt->new_expr);
             std::string free_function = allocate_stmt->free_function;
             std::cout << "free_function: " << free_function << "\n";
             std::cout << "padding: " << allocate_stmt->padding << "\n";
@@ -132,6 +166,8 @@ void Printer::print_stmt(const Halide::Internal::Stmt& stmt) {
             for (const auto& type : realize_stmt->types) {
                 print_type(type);
             }
+            std::cout << "condition: Expr\n";
+            print_expr(realize_stmt->condition);
             std::cout << "body: Stmt\n";
             print_stmt(realize_stmt->body);
         }
@@ -146,6 +182,8 @@ void Printer::print_stmt(const Halide::Internal::Stmt& stmt) {
         case Halide::Internal::IRNodeType::IfThenElse: {
             std::cout << "node_type: IfThenElse\n";
             auto if_then_else_stmt = stmt.as<Halide::Internal::IfThenElse>();
+            std::cout << "condition: Expr\n";
+            print_expr(if_then_else_stmt->condition);
             std::cout << "then_case: Stmt\n";
             print_stmt(if_then_else_stmt->then_case);
             std::cout << "else_case: Stmt\n";
@@ -153,7 +191,9 @@ void Printer::print_stmt(const Halide::Internal::Stmt& stmt) {
         }
         case Halide::Internal::IRNodeType::Evaluate: {
             std::cout << "node_type: Evaluate\n";
-            // auto evaluate_stmt = stmt.as<Halide::Internal::Evaluate>();
+            auto evaluate_stmt = stmt.as<Halide::Internal::Evaluate>();
+            std::cout << "value: Expr\n";
+            print_expr(evaluate_stmt->value);
         }
         case Halide::Internal::IRNodeType::Prefetch: {
             std::cout << "node_type: Prefetch\n";
@@ -164,6 +204,8 @@ void Printer::print_stmt(const Halide::Internal::Stmt& stmt) {
             for (const auto& type : prefetch_stmt->types) {
                 print_type(type);
             }
+            std::cout << "condition: Expr\n";
+            print_expr(prefetch_stmt->condition);
             auto body = prefetch_stmt->body;
             std::cout << "body: Stmt\n";
             print_stmt(body);
@@ -171,6 +213,10 @@ void Printer::print_stmt(const Halide::Internal::Stmt& stmt) {
         case Halide::Internal::IRNodeType::Acquire: {
             std::cout << "node_type: Acquire\n";
             auto acquire_stmt = stmt.as<Halide::Internal::Acquire>();
+            std::cout << "semaphore: Expr\n";
+            auto semaphore = acquire_stmt->semaphore;
+            std::cout << "count: Expr\n";
+            auto count = acquire_stmt->count;
             auto body = acquire_stmt->body;
             std::cout << "body: Stmt\n";
             print_stmt(body);

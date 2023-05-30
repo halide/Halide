@@ -101,13 +101,13 @@ enum MemoryType: byte {
 
 table LetStmt {
     name: string;
-    // value: Expr;
+    value: Expr;
     body: Stmt;
 }
 
 table AssertStmt {
-    // condition: Expr;
-    // message: Expr;
+    condition: Expr;
+    message: Expr;
 }
 
 table ProducerConsumer {
@@ -118,8 +118,8 @@ table ProducerConsumer {
 
 table For {
     name: string;
-    // min: Expr;
-    // extent: Expr;
+    min: Expr;
+    extent: Expr;
     for_type: ForType;
     device_api: DeviceAPI;
     body: Stmt;
@@ -127,27 +127,27 @@ table For {
 
 table Store {
     name: string;
-    // predicate: Expr;
-    // value: Expr;
-    // index: Expr;
+    predicate: Expr;
+    value: Expr;
+    index: Expr;
     // param: Parameter; TODO: no Parameter yet
     // alignment: ModulusRemainder; TODO: no ModulusRemainder yet
 }
 
 table Provide {
     name: string;
-    // values: [Expr];
-    // args: [Expr];
-    // predicate: Expr;
+    values: [Expr];
+    args: [Expr];
+    predicate: Expr;
 }
 
 table Allocate {
     name: string;
     type: Type;
     memory_type: MemoryType;
-    // extents: [Expr];
-    // condition: Expr;
-    // new_expr: Expr;
+    extents: [Expr];
+    condition: Expr;
+    new_expr: Expr;
     free_function: string;
     padding: int32;
     body: Stmt;
@@ -162,7 +162,7 @@ table Realize {
     types: [Type];
     memory_type: MemoryType;
     // bounds: Region; TODO: no Range yet
-    // condition: Expr;
+    condition: Expr;
     body: Stmt;
 }
 
@@ -172,13 +172,13 @@ table Block {
 }
 
 table IfThenElse {
-    // condition: Expr;
+    condition: Expr;
     then_case: Stmt;
     else_case: Stmt;
 }
 
 table Evaluate {
-    // value: Expr;
+    value: Expr;
 }
 
 table Prefetch {
@@ -186,13 +186,13 @@ table Prefetch {
     types: [Type];
     // bounds: Region; TODO: no Region yet
     // prefetch: PrefetchDirective; TODO: no PrefetchDirective yet
-    // condition: Expr;
+    condition: Expr;
     body: Stmt;
 }
 
 table Acquire {
-    // semaphores: Expr;
-    // count: Expr;
+    semaphore: Expr;
+    count: Expr;
     body: Stmt;
 }
 
