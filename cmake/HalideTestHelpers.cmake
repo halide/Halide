@@ -42,7 +42,7 @@ endif ()
 ##
 
 function(add_halide_test TARGET)
-    set(options EXPECT_FAILURE)
+    set(options EXPECT_FAILURE USE_EXIT_CODE_ONLY)
     set(oneValueArgs WORKING_DIRECTORY)
     set(multiValueArgs GROUPS COMMAND ARGS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -65,9 +65,13 @@ function(add_halide_test TARGET)
     set_tests_properties(${TARGET} PROPERTIES
                          LABELS "${args_GROUPS}"
                          ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
-                         PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
                          WILL_FAIL ${args_EXPECT_FAILURE})
+
+    if (NOT args_USE_EXIT_CODE_ONLY)
+        set_tests_properties(${TARGET} PROPERTIES
+                             PASS_REGULAR_EXPRESSION "Success!")
+    endif ()
 
     set_target_properties(${TARGET} PROPERTIES
                           CXX_VISIBILITY_PRESET hidden
@@ -85,7 +89,7 @@ function(add_halide_test TARGET)
 endfunction()
 
 function(tests)
-    set(options EXPECT_FAILURE)
+    set(options EXPECT_FAILURE USE_EXIT_CODE_ONLY)
     set(oneValueArgs)
     set(multiValueArgs SOURCES GROUPS ARGS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -106,11 +110,19 @@ function(tests)
         endif ()
 
         if (args_EXPECT_FAILURE)
-            add_halide_test("${TARGET}" ARGS ${args_ARGS} GROUPS ${args_GROUPS} EXPECT_FAILURE)
             target_link_libraries("${TARGET}" PRIVATE Halide::ExpectAbort)
+            set(args_EXPECT_FAILURE EXPECT_FAILURE)
         else ()
-            add_halide_test("${TARGET}" ARGS ${args_ARGS} GROUPS ${args_GROUPS})
+            set(args_EXPECT_FAILURE "")
         endif ()
+
+        if (args_USE_EXIT_CODE_ONLY)
+            set(args_USE_EXIT_CODE_ONLY USE_EXIT_CODE_ONLY)
+        else ()
+            set(args_USE_EXIT_CODE_ONLY "")
+        endif ()
+
+        add_halide_test("${TARGET}" ARGS ${args_ARGS} GROUPS ${args_GROUPS} ${args_EXPECT_FAILURE} ${args_USE_EXIT_CODE_ONLY})
     endforeach ()
 
     set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
