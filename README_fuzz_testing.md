@@ -14,6 +14,12 @@ cmake -B build --preset linux-x64-fuzzer -DLLVM_ROOT=/path/to/llvminstall
 cmake --build ./build -j$(nproc)
 ```
 
+Note that the LLVM install that you use must be built with
+`-D LLVM_ENABLE_RUNTIMES="compiler-rt"` set if you want to build the fuzzer
+tests (failing to do so will fail at configure time); not all prebuilt LLVM
+installs include this, so you may need to build LLVM from source to run the
+fuzz tests locally.
+
 ## Using the fuzz-harnesses
 Fuzz-testing harnesses are a little different to a more traditional unit-test
 and don't have a definitive end of test. In other words a fuzz test will
