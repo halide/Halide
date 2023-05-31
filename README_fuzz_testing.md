@@ -22,7 +22,7 @@ fuzz tests locally.
 
 ## Using the fuzz-harnesses
 Fuzz-testing harnesses are a little different to a more traditional unit-test
-and don't have a definitive end of test. In other words a fuzz test will
+and don't have a definitive end of test. In other words, a fuzz test will
 run:
 - for an infinite amount of time (the default),
 - for a user specified maximum amount of time,
