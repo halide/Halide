@@ -416,8 +416,6 @@ int main(int argc, char **argv) {
         float v_correct_ordering_rate_count[kModels] = {0};
 
         for (int e = 0; e < flags.epochs; e++) {
-            int counter = 0;
-
             float worst_miss = 0;
             uint64_t worst_miss_pipeline_id = 0;
             uint64_t worst_miss_schedule_id = 0;
@@ -536,8 +534,6 @@ int main(int argc, char **argv) {
                         }
                     }
                 }
-
-                counter++;
             }
 
             std::cout << "Loss: ";
