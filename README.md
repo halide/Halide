@@ -141,6 +141,7 @@ Then build it like so:
         -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly" \
         -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_ASSERTIONS=ON \
         -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_BUILD_32_BITS=OFF \
+        -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
         -S llvm-project/llvm -B llvm-build
 % cmake --build llvm-build
 % cmake --install llvm-build --prefix llvm-install
@@ -157,11 +158,12 @@ Then, point Halide to it:
 ```
 
 Note that you _must_ add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to
-`LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, and adding
-`clang-tools-extra` is only necessary if you plan to contribute code to Halide
-(so that you can run `clang-tidy` on your pull requests). We recommend enabling
-both in all cases to simplify builds. You can disable exception handling (EH)
-and RTTI if you don't want the Python bindings.
+`LLVM_ENABLE_PROJECTS` is only required when using WebAssembly,
+`LLVM_ENABLE_RUNTIMES="compiler-rt"` is only required if building the fuzz
+tests, and adding `clang-tools-extra` is only necessary if you plan to
+contribute code to Halide (so that you can run `clang-tidy` on your pull
+requests). We recommend enabling both in all cases to simplify builds. You can
+disable exception handling (EH) and RTTI if you don't want the Python bindings.
 
 ### Building Halide with make
 
