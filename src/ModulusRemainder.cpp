@@ -453,7 +453,9 @@ ModulusRemainder operator/(const ModulusRemainder &a, const ModulusRemainder &b)
 
     if (b.modulus == 0 && b.remainder != 0) {
         if (mod(a.modulus, b.remainder) == 0) {
-            return {a.modulus / b.remainder, div_imp(a.remainder, b.remainder)};
+            int64_t m = a.modulus / b.remainder;
+            int64_t r = mod(div_imp(a.remainder, b.remainder), m);
+            return {m, r};
         }
     }
 
