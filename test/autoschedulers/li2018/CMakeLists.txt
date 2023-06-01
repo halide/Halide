@@ -25,6 +25,7 @@ tests(GROUPS li2018 autoschedulers auto_schedule
       SOURCES
       test.cpp
       ARGS $<TARGET_FILE:Halide::Li2018>)
+add_dependencies(li2018_test Halide_Anderson2021)
 
 if (WITH_PYTHON_BINDINGS)
     if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "webgpu")
@@ -39,6 +40,7 @@ if (WITH_PYTHON_BINDINGS)
         list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
         set_tests_properties(li2018_gradient_autoscheduler_test_py PROPERTIES
+                             DEPENDS Halide_Anderson2021
                              LABELS "li2018;autoschedulers;auto_schedule"
                              ENVIRONMENT_MODIFICATION "${PYTHONPATH}")
     endif()

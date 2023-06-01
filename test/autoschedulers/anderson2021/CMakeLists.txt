@@ -77,6 +77,7 @@ add_anderson2021_test(anderson2021_demo_included_schedule_file
 
 add_executable(anderson2021_test_apps_autoscheduler test.cpp)
 target_link_libraries(anderson2021_test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
+add_dependencies(anderson2021_test_apps_autoscheduler Halide_Anderson2021)
 
 add_anderson2021_test(anderson2021_test_apps_autoscheduler
                    COMMAND anderson2021_test_apps_autoscheduler $<TARGET_FILE:Halide_Anderson2021>
