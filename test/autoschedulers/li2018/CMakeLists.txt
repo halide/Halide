@@ -25,7 +25,7 @@ tests(GROUPS li2018 autoschedulers auto_schedule
       SOURCES
       test.cpp
       ARGS $<TARGET_FILE:Halide::Li2018>)
-add_dependencies(li2018_test Li2018)
+add_dependencies(li2018_test Halide::Li2018)
 
 if (WITH_PYTHON_BINDINGS)
     if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "webgpu")
