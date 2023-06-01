@@ -40,6 +40,7 @@ if (WITH_PYTHON_BINDINGS)
 
         set_tests_properties(li2018_gradient_autoscheduler_test_py PROPERTIES
                              LABELS "li2018;autoschedulers;auto_schedule"
+                             ENVIRONMENT "${Halide_SANITIZER_ENV_VARS}"
                              ENVIRONMENT_MODIFICATION "${PYTHONPATH}")
     endif()
 endif ()

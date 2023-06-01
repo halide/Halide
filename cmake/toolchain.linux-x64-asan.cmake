@@ -33,3 +33,16 @@ set(CMAKE_CROSSCOMPILING_EMULATOR /usr/bin/env)
 
 # Can't mix -fsanitize=address with -fsanitize=fuzzer
 set(WITH_TEST_FUZZ OFF)
+
+if (NOT DEFINED Halide_SHARED_ASAN_RUNTIME_LIBRARY)
+    execute_process(
+        COMMAND ${CMAKE_CXX_COMPILER} "-print-file-name=libclang_rt.asan.so"
+        OUTPUT_VARIABLE Halide_SHARED_ASAN_RUNTIME_LIBRARY
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+endif ()
+
+set(Halide_SHARED_ASAN_RUNTIME_LIBRARY "${Halide_SHARED_ASAN_RUNTIME_LIBRARY}"
+    CACHE FILEPATH "Library to preload when running Python tests.")
+
+set(Halide_SANITIZER_ENV_VARS "LD_PRELOAD=${Halide_SHARED_ASAN_RUNTIME_LIBRARY}")

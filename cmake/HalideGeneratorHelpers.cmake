@@ -248,7 +248,12 @@ function(add_halide_library TARGET)
             message(FATAL_ERROR "You must call find_package(Python3) in your CMake code in order to use this rule with Python Generators.")
         endif ()
         set(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
-        set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${Python3_EXECUTABLE} $<SHELL_PATH:${py_src}>)
+        if (Halide_SHARED_ASAN_RUNTIME_LIBRARY)
+            # ASAN's Leak detector will report that we leaked all the PyBind11
+            # Module-support code, so disable it here.
+            set(EXTRA_ENV_VARS ASAN_OPTIONS=detect_leaks=0 ${Halide_SANITIZER_ENV_VARS})
+        endif ()
+        set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${EXTRA_ENV_VARS} ${Python3_EXECUTABLE} $<SHELL_PATH:${py_src}>)
         set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python ${py_src})
     else()
         set(GENERATOR_CMD "${ARG_FROM}")
@@ -414,6 +419,9 @@ function(add_halide_library TARGET)
         set_target_properties("${TARGET}" PROPERTIES
                               POSITION_INDEPENDENT_CODE ON
                               LINKER_LANGUAGE CXX)
+        # Silence many useless warnings in generated C++ code compilation
+        target_compile_options("${TARGET}" PRIVATE
+            $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-psabi>)
         _Halide_fix_xcode("${TARGET}")
     endif ()
 
