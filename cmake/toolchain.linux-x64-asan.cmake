@@ -30,3 +30,6 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
 set(CMAKE_CROSSCOMPILING_EMULATOR /usr/bin/env)
+
+# Can't mix -fsanitize=address with -fsanitize=fuzzer
+set(WITH_TEST_FUZZ OFF)
