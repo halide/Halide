@@ -80,7 +80,6 @@ function(add_python_test)
         NAME "${test_name}"
         COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>" ${ARG_TEST_ARGS}
     )
-    # message(STATUS "test_name ${test_name} ARG_ENVIRONMENT ${ARG_ENVIRONMENT} ARG_PYTHONPATH ${ARG_PYTHONPATH}")
     set_tests_properties(
         "${test_name}"
         PROPERTIES

@@ -427,15 +427,6 @@ target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
 target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
 target_compile_features(Halide PUBLIC cxx_std_17)
 
-# get_property(halide_lib_type TARGET Halide PROPERTY TYPE)
-# if (Halide_ASAN_ENABLED AND NOT "${halide_lib_type}" STREQUAL "STATIC_LIBRARY")
-#     set_target_properties(
-#         Halide
-#         PROPERTIES
-#         CMAKE_SHARED_LINKER_FLAGS -shared-libasan
-#     )
-# endif ()
-
 include(TargetExportScript)
 ## TODO: implement something similar for Windows/link.exe
 # https://github.com/halide/Halide/issues/4651
