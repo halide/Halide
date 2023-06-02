@@ -1072,6 +1072,8 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
             buffer_estimates_array_ptr = Constant::getNullValue(i64_t->getPointerTo()->getPointerTo());
         }
 
+std::cerr<<"name for arg " << arg << " named " << args[arg].name << " ...\n";
+std::cerr<<"... is " << map_string(args[arg].name) << " ...\n";
         Constant *argument_fields[] = {
             create_string_constant(map_string(args[arg].name)),
             ConstantInt::get(i32_t, args[arg].kind),
@@ -3573,10 +3575,12 @@ void CodeGen_LLVM::visit(const AssertStmt *op) {
 Constant *CodeGen_LLVM::create_string_constant(const string &s) {
     map<string, Constant *>::iterator iter = string_constants.find(s);
     if (iter == string_constants.end()) {
+        std::cerr << "create_string_constant: ("<<s<<") not found in map, constructing\n";
         vector<char> data;
         data.reserve(s.size() + 1);
         data.insert(data.end(), s.begin(), s.end());
         data.push_back(0);
+        std::cerr << "create_string_constant: constructed ("<<data.data() <<")\n";
         Constant *val = create_binary_blob(data, "str");
         string_constants[s] = val;
         return val;
@@ -3586,11 +3590,16 @@ Constant *CodeGen_LLVM::create_string_constant(const string &s) {
 }
 
 Constant *CodeGen_LLVM::create_binary_blob(const vector<char> &data, const string &name, bool constant) {
+    std::cerr << "create_binary_blob name="<<name<<" constant="<<(int)constant<<" data.size()="<<data.size()<<"\n";
     internal_assert(!data.empty());
+    std::cerr << "create_binary_blob data="<<data.data()<<"\n";
     llvm::Type *type = ArrayType::get(i8_t, data.size());
+    internal_assert(module != nullptr);
+    internal_assert(type != nullptr);
     GlobalVariable *global = new GlobalVariable(*module, type,
                                                 constant, GlobalValue::PrivateLinkage,
                                                 nullptr, name);
+    internal_assert(global != nullptr);
     ArrayRef<unsigned char> data_array((const unsigned char *)&data[0], data.size());
     global->setInitializer(ConstantDataArray::get(*context, data_array));
     size_t alignment = 32;
