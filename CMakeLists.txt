@@ -56,11 +56,10 @@ mark_as_advanced(Halide_CCACHE_BUILD)
 if (Halide_CCACHE_BUILD)
     find_program(CCACHE_PROGRAM ccache REQUIRED)
 
-    # TODO: ccache recommends setting CCACHE_SLOPPINESS=pch_defines,time_macros to
-    # enable precompiled header caching. Our timing found it slightly faster with
-    # just CCACHE_SLOPPINESS=pch_defines, so that's what we're using. Maybe revisit
-    # if issues occur (but we don't use any of the time macros so should be irrelevant).
-    set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines
+    set(Halide_CCACHE_PARAMS
+        CCACHE_CPP2=yes
+        CCACHE_HASHDIR=yes
+        CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime
         CACHE STRING "Parameters to pass through to ccache")
     mark_as_advanced(Halide_CCACHE_PARAMS)
 
