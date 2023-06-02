@@ -142,8 +142,6 @@ void define_enums(py::module &m) {
         .value("LargeBuffers", Target::Feature::LargeBuffers)
         .value("HVX", Target::Feature::HVX)
         .value("HVX_128", Target::Feature::HVX_128)
-        .value("HVX_v62", Target::Feature::HVX_v62)
-        .value("HVX_v65", Target::Feature::HVX_v65)
         .value("HVX_v66", Target::Feature::HVX_v66)
         .value("FuzzFloatStores", Target::Feature::FuzzFloatStores)
         .value("SoftFloatABI", Target::Feature::SoftFloatABI)

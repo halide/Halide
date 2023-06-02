@@ -54,10 +54,6 @@ protected:
                                          std::vector<Type> arg_types,
                                          int flags);
 
-    int is_hvx_v65_or_later() const {
-        return (isa_version >= 65);
-    }
-
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific hexagon intrinsics */
@@ -130,10 +126,8 @@ CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
     : CodeGen_Posix(t) {
     if (target.has_feature(Halide::Target::HVX_v66)) {
         isa_version = 66;
-    } else if (target.has_feature(Halide::Target::HVX_v65)) {
-        isa_version = 65;
     } else {
-        isa_version = 62;
+        isa_version = 65;
     }
     user_assert(target.has_feature(Target::HVX))
         << "Creating a Codegen target for Hexagon without the hvx target feature.\n";
@@ -484,13 +478,11 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(2) << "Hexagon: Lowering after unpredicating loads/stores:\n"
              << body << "\n\n";
 
-    if (is_hvx_v65_or_later()) {
-        // Generate vscatter-vgathers before optimize_hexagon_shuffles.
-        debug(1) << "Hexagon: Looking for vscatter-vgather...\n";
-        body = scatter_gather_generator(body);
-        debug(2) << "Hexagon: Lowering after vscatter-vgather:\n"
-                 << body << "\n\n";
-    }
+    // Generate vscatter-vgathers before optimize_hexagon_shuffles.
+    debug(1) << "Hexagon: Looking for vscatter-vgather...\n";
+    body = scatter_gather_generator(body);
+    debug(2) << "Hexagon: Lowering after vscatter-vgather:\n"
+                << body << "\n\n";
 
     debug(1) << "Hexagon: Optimizing shuffles...\n";
     // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
@@ -537,7 +529,6 @@ struct HvxIntrinsic {
     enum {
         BroadcastScalarsToWords = 1 << 0,  // Some intrinsics need scalar arguments
                                            // broadcasted up to 32 bits.
-        v65OrLater = 1 << 1,
     };
     llvm::Intrinsic::ID id;
     halide_type_t ret_type;
@@ -664,7 +655,7 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     // Absolute value:
     {INTRINSIC_128B(vabsh), u16v1, "abs.vh", {i16v1}},
     {INTRINSIC_128B(vabsw), u32v1, "abs.vw", {i32v1}},
-    {INTRINSIC_128B(vabsb), u8v1, "abs.vb", {i8v1}, HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vabsb), u8v1, "abs.vb", {i8v1}},
 
     // Absolute difference:
     {INTRINSIC_128B(vabsdiffub), u8v1, "absd.vub.vub", {u8v1, u8v1}},
@@ -675,21 +666,21 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     // Averaging:
     {INTRINSIC_128B(vavgub), u8v1, "avg.vub.vub", {u8v1, u8v1}},
     {INTRINSIC_128B(vavguh), u16v1, "avg.vuh.vuh", {u16v1, u16v1}},
-    {INTRINSIC_128B(vavguw), u32v1, "avg.vuw.vuw", {u32v1, u32v1}, HvxIntrinsic::v65OrLater},
-    {INTRINSIC_128B(vavgb), i8v1, "avg.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vavguw), u32v1, "avg.vuw.vuw", {u32v1, u32v1}},
+    {INTRINSIC_128B(vavgb), i8v1, "avg.vb.vb", {i8v1, i8v1}},
     {INTRINSIC_128B(vavgh), i16v1, "avg.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vavgw), i32v1, "avg.vw.vw", {i32v1, i32v1}},
 
     {INTRINSIC_128B(vavgubrnd), u8v1, "avg_rnd.vub.vub", {u8v1, u8v1}},
     {INTRINSIC_128B(vavguhrnd), u16v1, "avg_rnd.vuh.vuh", {u16v1, u16v1}},
-    {INTRINSIC_128B(vavguwrnd), u32v1, "avg_rnd.vuw.vuw", {u32v1, u32v1}, HvxIntrinsic::v65OrLater},
-    {INTRINSIC_128B(vavgbrnd), i8v1, "avg_rnd.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vavguwrnd), u32v1, "avg_rnd.vuw.vuw", {u32v1, u32v1}},
+    {INTRINSIC_128B(vavgbrnd), i8v1, "avg_rnd.vb.vb", {i8v1, i8v1}},
     {INTRINSIC_128B(vavghrnd), i16v1, "avg_rnd.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vavgwrnd), i32v1, "avg_rnd.vw.vw", {i32v1, i32v1}},
 
      // This one is weird: i8_sat((u8 - u8)/2). It both saturates and averages.
     {INTRINSIC_128B(vnavgub), i8v1, "navg.vub.vub", {u8v1, u8v1}},
-    {INTRINSIC_128B(vnavgb), i8v1, "navg.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vnavgb), i8v1, "navg.vb.vb", {i8v1, i8v1}},
     {INTRINSIC_128B(vnavgh), i16v1, "navg.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vnavgw), i32v1, "navg.vw.vw", {i32v1, i32v1}},
 
@@ -805,7 +796,7 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     // Rounding shift right
     {INTRINSIC_128B(vasrhubrndsat), u8v1, "trunc_satub_shr_rnd.vh", {i16v2, u16}},
     {INTRINSIC_128B(vasrhbrndsat), i8v1, "trunc_satb_shr_rnd.vh", {i16v2, u16}},
-    {INTRINSIC_128B(vasruhubrndsat), u8v1, "trunc_satub_shr_rnd.vuh", {u16v2, u16}, HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vasruhubrndsat), u8v1, "trunc_satub_shr_rnd.vuh", {u16v2, u16}},
     {INTRINSIC_128B(vasrwuhrndsat), u16v1, "trunc_satuh_shr_rnd.vw", {i32v2, u32}},
     {INTRINSIC_128B(vasrwhrndsat), i16v1, "trunc_sath_shr_rnd.vw", {i32v2, u32}},
     {INTRINSIC_128B(vasruwuhrndsat), u16v1, "trunc_satuh_shr_rnd.vuw", {u32v2, u32}},
@@ -824,8 +815,8 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vaslw), u32v1, "shl.vuw.w", {u32v1, u32}},
     {INTRINSIC_128B(vaslh), i16v1, "shl.vh.h", {i16v1, u16}},
     {INTRINSIC_128B(vaslw), i32v1, "shl.vw.w", {i32v1, u32}},
-    {INTRINSIC_128B(vasrh_acc), i16v1, "add_shr.vh.vh.uh", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords | HvxIntrinsic::v65OrLater},
-    {INTRINSIC_128B(vaslh_acc), i16v1, "add_shl.vh.vh.uh", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords | HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vasrh_acc), i16v1, "add_shr.vh.vh.uh", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    {INTRINSIC_128B(vaslh_acc), i16v1, "add_shl.vh.vh.uh", {i16v1, i16v1, i16}, HvxIntrinsic::BroadcastScalarsToWords},
     {INTRINSIC_128B(vasrw_acc), i32v1, "add_shr.vw.vw.uw", {i32v1, i32v1, i32}},
     {INTRINSIC_128B(vaslw_acc), i32v1, "add_shl.vw.vw.uw", {i32v1, i32v1, i32}},
 
@@ -886,11 +877,6 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
     internal_assert(intrin) << "Null definition for intrinsic '" << name << "'\n";
     llvm::FunctionType *intrin_ty = intrin->getFunctionType();
     bool broadcast_scalar_word = flags & HvxIntrinsic::BroadcastScalarsToWords;
-    bool v65OrLater = flags & HvxIntrinsic::v65OrLater;
-
-    if (v65OrLater && !is_hvx_v65_or_later()) {
-        return nullptr;
-    }
 
     // Get the types of the arguments we want to pass.
     vector<llvm::Type *> llvm_arg_types;
@@ -1789,10 +1775,8 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
 string CodeGen_Hexagon::mcpu_target() const {
     if (target.has_feature(Halide::Target::HVX_v66)) {
         return "hexagonv66";
-    } else if (target.has_feature(Halide::Target::HVX_v65)) {
-        return "hexagonv65";
     } else {
-        return "hexagonv62";
+        return "hexagonv65";
     }
 }
 
@@ -1923,12 +1907,10 @@ void CodeGen_Hexagon::visit(const Call *op) {
             internal_assert(op->args.size() == 1);
             Type ty = op->args[0].type();
             if ((ty.is_vector() && ty.is_int())) {
-                if (ty.bits() != 8 || is_hvx_v65_or_later()) {
-                    value = call_intrin(op->type,
-                                        "halide.hexagon.abs" + type_suffix(op->args[0]),
-                                        op->args);
-                    return;
-                }
+                value = call_intrin(op->type,
+                                    "halide.hexagon.abs" + type_suffix(op->args[0]),
+                                    op->args);
+                return;
             }
         } else if (op->is_intrinsic(Call::cast_mask)) {
             internal_error
@@ -2252,9 +2234,6 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         }
     } else if (alloc->memory_type == MemoryType::VTCM &&
                !alloc->new_expr.defined()) {
-        if (!is_hvx_v65_or_later()) {
-            user_error << "VTCM store_in requires HVX_v65 or later.\n";
-        }
         // Calculate size of allocation.
         Expr size = alloc->type.bytes();
         for (const auto &extent : alloc->extents) {

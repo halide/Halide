@@ -286,8 +286,6 @@ Target calculate_host_target() {
 
 bool is_using_hexagon(const Target &t) {
     return (t.has_feature(Target::HVX) ||
-            t.has_feature(Target::HVX_v62) ||
-            t.has_feature(Target::HVX_v65) ||
             t.has_feature(Target::HVX_v66) ||
             t.has_feature(Target::HexagonDma) ||
             t.arch == Target::Hexagon);
@@ -297,16 +295,10 @@ int get_hvx_lower_bound(const Target &t) {
     if (!is_using_hexagon(t)) {
         return -1;
     }
-    if (t.has_feature(Target::HVX_v62)) {
-        return 62;
-    }
-    if (t.has_feature(Target::HVX_v65)) {
-        return 65;
-    }
     if (t.has_feature(Target::HVX_v66)) {
         return 66;
     }
-    return 60;
+    return 65;
 }
 
 }  // namespace
@@ -491,8 +483,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"large_buffers", Target::LargeBuffers},
     {"hvx", Target::HVX_128},
     {"hvx_128", Target::HVX_128},
-    {"hvx_v62", Target::HVX_v62},
-    {"hvx_v65", Target::HVX_v65},
     {"hvx_v66", Target::HVX_v66},
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
@@ -1248,8 +1238,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         CUDACapability75,
         CUDACapability80,
         CUDACapability86,
-        HVX_v62,
-        HVX_v65,
         HVX_v66,
         VulkanV10,
         VulkanV12,
@@ -1385,12 +1373,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
     // Same trick as above for CUDA
     int hvx_version = std::min((unsigned)hvx_a, (unsigned)hvx_b);
-    if (hvx_version < 62) {
-        output.features.reset(HVX_v62);
-    }
-    if (hvx_version < 65) {
-        output.features.reset(HVX_v65);
-    }
     if (hvx_version < 66) {
         output.features.reset(HVX_v66);
     }
@@ -1422,10 +1404,9 @@ void target_test() {
         {{"x86-64-linux-vulkan", "x86-64-linux", "x86-64-linux-vulkan"}},
         {{"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan", "x86-64-linux-vulkan"}},
         {{"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan-vk_v10", "x86-64-linux-vulkan-vk_v10"}},
-        {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
-        {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
-        {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},
-        {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt-hvx", "hexagon-32-qurt-hvx"}},
+        {{"hexagon-32-qurt-hvx_v66", "hexagon-32-qurt", "hexagon-32-qurt"}},
+        {{"hexagon-32-qurt-hvx_v66-hvx", "hexagon-32-qurt", ""}},
+        {{"hexagon-32-qurt-hvx_v66-hvx", "hexagon-32-qurt-hvx", "hexagon-32-qurt-hvx"}},
     };
 
     for (const auto &test : gcd_tests) {

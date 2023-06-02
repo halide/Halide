@@ -184,7 +184,6 @@ struct Pattern {
         // re-interleave the result.
         ReinterleaveOp0 = InterleaveResult | DeinterleaveOp0,
 
-        v65orLater = 1 << 10,  // Pattern should be matched only for v65 target or later
         v66orLater = 1 << 11,  // Pattern should be matched only for v66 target or later
     };
 
@@ -218,10 +217,6 @@ Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
 
 // Check if a pattern with flags 'flags' is supported on the target.
 bool check_pattern_target(int flags, const Target &target) {
-    if ((flags & (Pattern::v65orLater)) &&
-        !target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
-        return false;
-    }
     if ((flags & (Pattern::v66orLater)) &&
         !target.features_any_of({Target::HVX_v66})) {
         return false;
@@ -697,11 +692,11 @@ class OptimizePatterns : public IRMutator {
             {"halide.hexagon.add_shr.vw.vw.uw", wild_i32x + (wild_i32x >> wild_u32)},
             {"halide.hexagon.add_shl.vw.vw.uw", wild_i32x + (wild_i32x << wild_u32)},
             {"halide.hexagon.add_shl.vw.vw.uw", wild_u32x + (wild_u32x << wild_u32)},
-            {"halide.hexagon.add_shl.vh.vh.uh", wild_i16x + (wild_i16x << wild_u16), Pattern::v65orLater},
-            {"halide.hexagon.add_shl.vh.vh.uh", wild_u16x + (wild_u16x << wild_u16), Pattern::v65orLater},
-            {"halide.hexagon.add_shr.vh.vh.uh", wild_i16x + (wild_i16x >> wild_u16), Pattern::v65orLater},
-            {"halide.hexagon.add_shl.vh.vh.uh", wild_i16x + (wild_i16x << wild_i16), Pattern::v65orLater},
-            {"halide.hexagon.add_shl.vh.vh.uh", wild_u16x + (wild_u16x << wild_u16), Pattern::v65orLater},
+            {"halide.hexagon.add_shl.vh.vh.uh", wild_i16x + (wild_i16x << wild_u16)},
+            {"halide.hexagon.add_shl.vh.vh.uh", wild_u16x + (wild_u16x << wild_u16)},
+            {"halide.hexagon.add_shr.vh.vh.uh", wild_i16x + (wild_i16x >> wild_u16)},
+            {"halide.hexagon.add_shl.vh.vh.uh", wild_i16x + (wild_i16x << wild_i16)},
+            {"halide.hexagon.add_shl.vh.vh.uh", wild_u16x + (wild_u16x << wild_u16)},
 
             // Non-widening multiply-accumulates with a scalar.
             {"halide.hexagon.add_mul.vh.vh.b", wild_i16x + widen_right_mul(wild_i16x, wild_i8)},
@@ -892,7 +887,7 @@ class OptimizePatterns : public IRMutator {
             // Saturating narrowing casts with rounding
             {"halide.hexagon.trunc_satub_shr_rnd.vh", u8_sat(rounding_shift_right(wild_i16x, wild_u16)), Pattern::DeinterleaveOp0},
             {"halide.hexagon.trunc_satb_shr_rnd.vh", i8_sat(rounding_shift_right(wild_i16x, wild_u16)), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_satub_shr_rnd.vuh", u8_sat(rounding_shift_right(wild_u16x, wild_u16)), Pattern::DeinterleaveOp0 | Pattern::v65orLater},
+            {"halide.hexagon.trunc_satub_shr_rnd.vuh", u8_sat(rounding_shift_right(wild_u16x, wild_u16)), Pattern::DeinterleaveOp0},
             {"halide.hexagon.trunc_satuh_shr_rnd.vw", u16_sat(rounding_shift_right(wild_i32x, wild_u32)), Pattern::DeinterleaveOp0},
             {"halide.hexagon.trunc_sath_shr_rnd.vw", i16_sat(rounding_shift_right(wild_i32x, wild_u32)), Pattern::DeinterleaveOp0},
             {"halide.hexagon.trunc_satuh_shr_rnd.vuw", u16_sat(rounding_shift_right(wild_u32x, wild_u32)), Pattern::DeinterleaveOp0},
@@ -2318,7 +2313,7 @@ Stmt optimize_hexagon_shuffles(const Stmt &s, int lut_alignment) {
 }
 
 Stmt scatter_gather_generator(Stmt s) {
-    // Generate vscatter-vgather instruction if target >= v65
+    // Generate vscatter-vgather instruction
     s = substitute_in_all_lets(s);
     s = ScatterGatherGenerator().mutate(s);
     s = SyncronizationBarriers().mutate(s);

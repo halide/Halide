@@ -50,14 +50,12 @@ bool test() {
             .compute_at(g, Var::outermost())
             .vectorize(x, vector_size);
 
-        if (target.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
-            hist.store_in(MemoryType::VTCM);
+        hist.store_in(MemoryType::VTCM);
 
-            hist
-                .update(0)
-                .allow_race_conditions()
-                .vectorize(r.x, vector_size);
-        }
+        hist
+            .update(0)
+            .allow_race_conditions()
+            .vectorize(r.x, vector_size);
     } else {
         hist.compute_root();
     }

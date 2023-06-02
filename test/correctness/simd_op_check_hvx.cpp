@@ -13,7 +13,7 @@
 // simd_op_check into two tests, simd_op_check.cpp and simd_op_check_hvx.cpp
 // so that the latter is free to do its own thing - for simd_op_check_hvx.cpp
 // to run any tests, all that is needed is that HL_TARGET have a HVX related
-// target feature, i.e. one of HVX, HVX_v62, HVX_v65 and HVX_v66.
+// target feature, i.e. one of HVX and HVX_v66.
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -52,10 +52,8 @@ public:
         int isa_version;
         if (target.has_feature(Halide::Target::HVX_v66)) {
             isa_version = 66;
-        } else if (target.has_feature(Halide::Target::HVX_v65)) {
-            isa_version = 65;
         } else {
-            isa_version = 62;
+            isa_version = 65;
         }
 
         // Verify that unaligned loads use the right instructions, and don't try to use
@@ -166,13 +164,11 @@ public:
         check("vnavg(v*.ub,v*.ub)", hvx_width / 1, i8((i16(u8_1) - i16(u8_2)) / 2));
         check("vnavg(v*.h,v*.h)", hvx_width / 2, i16((i32(i16_1) - i32(i16_2)) / 2));
         check("vnavg(v*.w,v*.w)", hvx_width / 4, i32((i64(i32_1) - i64(i32_2)) / 2));
-        if (isa_version >= 65) {
-            check("vavg(v*.b,v*.b)", hvx_width / 1, i8((i16(i8_1) + i16(i8_2)) / 2));
-            check("vavg(v*.b,v*.b):rnd", hvx_width / 1, i8((i16(i8_1) + i16(i8_2) + 1) / 2));
-            check("vavg(v*.uw,v*.uw)", hvx_width / 4, u32((u64(u32_1) + u64(u32_2)) / 2));
-            check("vavg(v*.uw,v*.uw):rnd", hvx_width / 4, u32((u64(u32_1) + u64(u32_2) + 1) / 2));
-            check("vnavg(v*.b,v*.b)", hvx_width / 1, i8((i16(i8_1) - i16(i8_2)) / 2));
-        }
+        check("vavg(v*.b,v*.b)", hvx_width / 1, i8((i16(i8_1) + i16(i8_2)) / 2));
+        check("vavg(v*.b,v*.b):rnd", hvx_width / 1, i8((i16(i8_1) + i16(i8_2) + 1) / 2));
+        check("vavg(v*.uw,v*.uw)", hvx_width / 4, u32((u64(u32_1) + u64(u32_2)) / 2));
+        check("vavg(v*.uw,v*.uw):rnd", hvx_width / 4, u32((u64(u32_1) + u64(u32_2) + 1) / 2));
+        check("vnavg(v*.b,v*.b)", hvx_width / 1, i8((i16(i8_1) - i16(i8_2)) / 2));
 
         // The behavior of shifts larger than the type behave differently
         // on HVX vs. the scalar processor, so we clamp.
@@ -334,9 +330,7 @@ public:
 
         check("v*.ub = vasr(v*.h,v*.h,r*):rnd:sat", hvx_width / 1, u8_sat((i32(i16_1) + 8) / 16));
         check("v*.b = vasr(v*.h,v*.h,r*):rnd:sat", hvx_width / 1, i8_sat((i32(i16_1) + 16) / 32));
-        if (isa_version >= 65) {
-            check("v*.ub = vasr(v*.uh,v*.uh,r*):rnd:sat", hvx_width / 1, u8_sat((u32(u16_1) + 32) / 64));
-        }
+        check("v*.ub = vasr(v*.uh,v*.uh,r*):rnd:sat", hvx_width / 1, u8_sat((u32(u16_1) + 32) / 64));
         // int32 is safe for overflow, allow non-widening rounding.
         check("v*.uh = vasr(v*.w,v*.w,r*):rnd:sat", hvx_width / 2, u16_sat((i32_1 + 64) / 128));
         check("v*.h = vasr(v*.w,v*.w,r*):rnd:sat", hvx_width / 2, i16_sat((i32_1 + 128) / 256));
@@ -447,9 +441,7 @@ public:
 
         check("vabs(v*.h)", hvx_width / 2, abs(i16_1));
         check("vabs(v*.w)", hvx_width / 4, abs(i32_1));
-        if (isa_version >= 65) {
-            check("vabs(v*.b)", hvx_width / 1, abs(i8_1));
-        }
+        check("vabs(v*.b)", hvx_width / 1, abs(i8_1));
 
         check("vmpy(v*.ub,v*.ub)", hvx_width / 1, u16(u8_1) * u16(u8_2));
         check("vmpy(v*.b,v*.b)", hvx_width / 1, i16(i8_1) * i16(i8_2));
@@ -632,15 +624,13 @@ public:
         check("v*.w += vasl(v*.w,r*)", hvx_width / 4, i32_1 + (i32_2 << u32(y % 32)));
         check("v*.w += vasr(v*.w,r*)", hvx_width / 4, i32_1 + (i32_2 >> u32(y % 32)));
 
-        if (isa_version >= 65) {
-            check("v*.h += vasl(v*.h,r*)", hvx_width / 2, i16_1 + (i16_2 << u16(y % 16)));
-            check("v*.h += vasr(v*.h,r*)", hvx_width / 2, i16_1 + (i16_2 >> u16(y % 16)));
-            check("v*.h += vasl(v*.h,r*)", hvx_width / 2, u16_1 + (u16_2 * 16));
-            check("v*.h += vasl(v*.h,r*)", hvx_width / 2, i16_1 + (i16_2 * 16));
-            check("v*.h += vasl(v*.h,r*)", hvx_width / 2, u16_1 + (16 * u16_2));
-            check("v*.h += vasl(v*.h,r*)", hvx_width / 2, i16_1 + (16 * i16_2));
-            check("v*.h += vasr(v*.h,r*)", hvx_width / 2, i16_1 + (i16_2 / 16));
-        }
+        check("v*.h += vasl(v*.h,r*)", hvx_width / 2, i16_1 + (i16_2 << u16(y % 16)));
+        check("v*.h += vasr(v*.h,r*)", hvx_width / 2, i16_1 + (i16_2 >> u16(y % 16)));
+        check("v*.h += vasl(v*.h,r*)", hvx_width / 2, u16_1 + (u16_2 * 16));
+        check("v*.h += vasl(v*.h,r*)", hvx_width / 2, i16_1 + (i16_2 * 16));
+        check("v*.h += vasl(v*.h,r*)", hvx_width / 2, u16_1 + (16 * u16_2));
+        check("v*.h += vasl(v*.h,r*)", hvx_width / 2, i16_1 + (16 * i16_2));
+        check("v*.h += vasr(v*.h,r*)", hvx_width / 2, i16_1 + (i16_2 / 16));
 
         check("vcl0(v*.uh)", hvx_width / 2, count_leading_zeros(u16_1));
         check("vcl0(v*.uw)", hvx_width / 4, count_leading_zeros(u32_1));
@@ -710,8 +700,6 @@ int main(int argc, char **argv) {
         {
             Target("hexagon-32-noos-hvx"),
             Target("hexagon-32-noos-hvx-hvx_128"),
-            Target("hexagon-32-noos-hvx-hvx_128-hvx_v62"),
-            Target("hexagon-32-noos-hvx-hvx_128-hvx_v65"),
             Target("hexagon-32-noos-hvx-hvx_128-hvx_v66"),
         });
 }
