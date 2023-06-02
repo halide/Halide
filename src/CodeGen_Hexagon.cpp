@@ -482,7 +482,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     debug(1) << "Hexagon: Looking for vscatter-vgather...\n";
     body = scatter_gather_generator(body);
     debug(2) << "Hexagon: Lowering after vscatter-vgather:\n"
-                << body << "\n\n";
+             << body << "\n\n";
 
     debug(1) << "Hexagon: Optimizing shuffles...\n";
     // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
