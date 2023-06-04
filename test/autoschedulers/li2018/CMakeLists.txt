@@ -40,7 +40,7 @@ if (WITH_PYTHON_BINDINGS)
         list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
         set_tests_properties(li2018_gradient_autoscheduler_test_py PROPERTIES
-                             DEPENDS Li2018
+                             DEPENDS li2018_test
                              LABELS "li2018;autoschedulers;auto_schedule"
                              ENVIRONMENT_MODIFICATION "${PYTHONPATH}")
     endif()
