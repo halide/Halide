@@ -24,6 +24,7 @@ union Stmt {
     Acquire,
     Fork,
     Atomic,
+    UndefinedStmt,
 }
 
 // TODO: handle type?
@@ -59,6 +60,7 @@ union Expr {
     Variable,
     Shuffle,
     VectorReduce,
+    UndefinedExpr,
 }
 
 enum ForType: byte {
@@ -210,6 +212,9 @@ table Atomic {
     producer_name: string;
     mutex_name: string;
     body: Stmt;
+}
+
+table UndefinedStmt {
 }
 
 table IntImm {
@@ -373,6 +378,9 @@ table Shuffle {
 table VectorReduce {
     value: Expr;
     // reduction_op: VectorReduceOp;
+}
+
+table UndefinedExpr {
 }
 
 enum TypeCode: byte {

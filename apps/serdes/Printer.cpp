@@ -60,6 +60,10 @@ void Printer::print_type(const Halide::Type &type) {
 
 void Printer::print_stmt(const Halide::Internal::Stmt &stmt) {
     std::cout << "Printing Stmt\n";
+    if (!stmt.defined()) {
+        std::cout << "(undefined)\n";
+        return;
+    }
     switch (stmt->node_type) {
     case Halide::Internal::IRNodeType::LetStmt: {
         std::cout << "node_type: LetStmt\n";
@@ -257,6 +261,10 @@ void Printer::print_stmt(const Halide::Internal::Stmt &stmt) {
 
 void Printer::print_expr(const Halide::Expr &expr) {
     std::cout << "Printing Expr\n";
+    if (!expr.defined()) {
+        std::cout << "(undefined)\n";
+        return;
+    }
     switch (expr->node_type) {
     case Halide::Internal::IRNodeType::IntImm: {
         std::cout << "node_type: IntImm\n";

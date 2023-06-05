@@ -350,6 +350,9 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         auto body = deserialize_stmt(atomic_stmt->body_type(), atomic_stmt->body());
         return Halide::Internal::Atomic::make(producer_name, mutex_name, body);
     }
+    case Halide::Serdes::Stmt_UndefinedStmt: {
+        return Halide::Internal::Stmt();
+    }
     default:
         std::cerr << "unknown type code " << type_code << "\n";
         return Halide::Internal::Stmt();
@@ -559,6 +562,9 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         auto value = deserialize_expr(vector_reduce_expr->value_type(), vector_reduce_expr->value());
         // TODO: fix op here and store lanes during serialization
         return Halide::Internal::VectorReduce::make(Halide::Internal::VectorReduce::Operator::Add, value, 16);
+    }
+    case Halide::Serdes::Expr::Expr_UndefinedExpr: {
+        return Halide::Expr();
     }
     default: {
         std::cerr << "unknown type code " << type_code << "\n";

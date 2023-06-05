@@ -26,6 +26,9 @@ flatbuffers::Offset<Halide::Serdes::Type> Serializer::serialize_type(flatbuffers
 }
 
 std::pair<Halide::Serdes::Stmt, flatbuffers::Offset<void>> Serializer::serialize_stmt(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Stmt &stmt) {
+    if (!stmt.defined()) {
+        return std::make_pair(Halide::Serdes::Stmt::Stmt_UndefinedStmt, Halide::Serdes::CreateUndefinedStmt(builder).Union());
+    }
     switch (stmt->node_type) {
     case Halide::Internal::IRNodeType::LetStmt: {
         auto let_stmt = stmt.as<Halide::Internal::LetStmt>();
@@ -399,6 +402,9 @@ std::pair<Halide::Serdes::Stmt, flatbuffers::Offset<void>> Serializer::serialize
 }
 
 std::pair<Halide::Serdes::Expr, flatbuffers::Offset<void>> Serializer::serialize_expr(flatbuffers::FlatBufferBuilder &builder, const Halide::Expr &expr) {
+    if (!expr.defined()) {
+        return std::make_pair(Halide::Serdes::Expr::Expr_UndefinedExpr, Halide::Serdes::CreateUndefinedExpr(builder).Union());
+    }
     switch (expr->node_type) {
     case Halide::Internal::IRNodeType::IntImm: {
         auto int_imm = expr.as<Halide::Internal::IntImm>();
