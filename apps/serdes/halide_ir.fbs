@@ -1,4 +1,4 @@
-namespace Halide.Serdes;
+namespace Halide.Serialize;
 
 // This corresponds to the version.
 file_identifier "HLD0";

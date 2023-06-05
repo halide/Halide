@@ -5,28 +5,27 @@
 #include <vector>
 
 #include "halide_ir_generated.h"
-#include <Halide.h>
-using namespace Halide;
+#include "Halide.h"
 
 class Deserializer {
 public:
     Deserializer() = default;
 
-    Pipeline deserialize(const std::string &filename);
+    Halide::Pipeline deserialize(const std::string &filename);
 
 private:
     // helper functions to deserialize each type of object
     std::string deserialize_string(const flatbuffers::String *str);
 
-    Halide::Type deserialize_type(const Halide::Serdes::Type *type);
+    Halide::Type deserialize_type(const Halide::Serialize::Type *type);
 
-    Halide::Internal::Function deserialize_function(const Halide::Serdes::Func *function);
+    Halide::Internal::Function deserialize_function(const Halide::Serialize::Func *function);
 
     Halide::Internal::Stmt deserialize_stmt(uint8_t type_code, const void *stmt);
 
     Halide::Expr deserialize_expr(uint8_t type_code, const void *expr);
 
-    Halide::Range deserialize_range(const Halide::Serdes::Range *range);
+    Halide::Range deserialize_range(const Halide::Serialize::Range *range);
 };
 
 #endif

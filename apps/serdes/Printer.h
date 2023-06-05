@@ -4,8 +4,7 @@
 #include <string>
 #include <vector>
 
-#include <Halide.h>
-using namespace Halide;
+#include "Halide.h"
 
 class Printer {
 public:
