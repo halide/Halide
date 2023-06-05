@@ -83,11 +83,11 @@ and running the Halide compiler library.
 
 | Compiler   | Version      | OS                     | Architectures   |
 |------------|--------------|------------------------|-----------------|
-| GCC        | 7.5          | Ubuntu Linux 20.04 LTS | x86, x64, ARM32 |
-| GCC        | 7.5          | Ubuntu Linux 18.04 LTS | ARM32, ARM64    |
+| GCC        | 9.4          | Ubuntu Linux 20.04 LTS | x86, x64, ARM32 |
+| GCC        | 9.4          | Ubuntu Linux 18.04 LTS | ARM32, ARM64    |
 | MSVC       | 2019 (19.28) | Windows 10 (20H2)      | x86, x64        |
-| AppleClang | 12.0.0       | macOS 10.15            | x86_64          |
-| AppleClang | 12.0.0       | macOS 11.1             | ARM64           |
+| AppleClang | 14.0.3       | macOS 13.4             | x86_64          |
+| AppleClang | 14.0.3       | macOS 13.4             | ARM64           |
 
 Some users have successfully built Halide for Linux using Clang 9.0.0+, for
 Windows using ClangCL 11.0.0+, and for Windows ARM64 by cross-compiling with
@@ -141,6 +141,7 @@ Then build it like so:
         -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly" \
         -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_ASSERTIONS=ON \
         -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_BUILD_32_BITS=OFF \
+        -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
         -S llvm-project/llvm -B llvm-build
 % cmake --build llvm-build
 % cmake --install llvm-build --prefix llvm-install
@@ -157,11 +158,12 @@ Then, point Halide to it:
 ```
 
 Note that you _must_ add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to
-`LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, and adding
-`clang-tools-extra` is only necessary if you plan to contribute code to Halide
-(so that you can run `clang-tidy` on your pull requests). We recommend enabling
-both in all cases to simplify builds. You can disable exception handling (EH)
-and RTTI if you don't want the Python bindings.
+`LLVM_ENABLE_PROJECTS` is only required when using WebAssembly,
+`LLVM_ENABLE_RUNTIMES="compiler-rt"` is only required if building the fuzz
+tests, and adding `clang-tools-extra` is only necessary if you plan to
+contribute code to Halide (so that you can run `clang-tidy` on your pull
+requests). We recommend enabling both in all cases to simplify builds. You can
+disable exception handling (EH) and RTTI if you don't want the Python bindings.
 
 ### Building Halide with make
 
