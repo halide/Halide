@@ -74,7 +74,7 @@ CCFLAGS-arm-32-android = -target armv7a-linux-androideabi21
 CCFLAGS-host := ${CCFLAGS} -I../ -I ${HEXAGON_TOOLS_ROOT}/Tools/include/iss/ -fPIC \
 	-L${HEXAGON_TOOLS_ROOT}/Tools/lib/iss/ -lwrapper
 
-CCFLAGS-v65 := $(CCFLAGS-v65) -I ${HEXAGON_SDK_LIBS}/common/rtld/ship/hexagon_Release_toolv83_v65 ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/../rtos/qurt/computev65/include/qurt -mhvx -mhvx-length=128B -fno-exceptions -mv65
+CCFLAGS-v65 := $(CCFLAGS-v65) -I ${HEXAGON_SDK_LIBS}/common/rtld/ship/hexagon_Release_toolv83_v65 ${COMMON_CCFLAGS} -I ${HEXAGON_SDK_INCLUDES} -I ${HEXAGON_SDK_LIBS}/../rtos/qurt/computev65/include/qurt -I ${HEXAGON_SDK_LIBS}/../rtos/qurt/computev65/include/posix -mhvx -mhvx-length=128B -fno-exceptions -mv65
 
 CCFLAGS-arm-64-android := $(CCFLAGS-arm-64-android) ${COMMON_CCFLAGS} -llog -fPIE -pie -L${HEXAGON_SDK_LIBS}/../ipc/fastrpc/remote/ship/android_aarch64/
 CCFLAGS-arm-32-android := $(CCFLAGS-arm-32-android) ${COMMON_CCFLAGS} -llog -fPIE -pie -L${HEXAGON_SDK_LIBS}/../ipc/fastrpc/remote/ship/android

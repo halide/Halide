@@ -620,11 +620,14 @@ int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block
                    << "dedicated=" << (block->dedicated ? "true" : "false") << ")\n";
 #endif
 
+    // Enforce any alignment constrainst reported by the device limits for each usage type
     if (usage_flags & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) {
         block->properties.alignment = instance->physical_device_limits.minStorageBufferOffsetAlignment;
     } else if (usage_flags & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) {
         block->properties.alignment = instance->physical_device_limits.minUniformBufferOffsetAlignment;
-    } else {
+    }
+    // Some drivers appear to report a buffer alignment constraint (regardless of usage) that can be larger than either of the above
+    if (memory_requirements.alignment > block->properties.alignment) {
         block->properties.alignment = memory_requirements.alignment;
     }
     block->handle = (void *)device_memory;
