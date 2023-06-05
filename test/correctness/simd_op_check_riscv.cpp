@@ -37,7 +37,17 @@ public:
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
         Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
 
+        // Basic math operations on full vector width.
+        check("vadd.vv", target.natural_vector_size<uint8_t>(), u8_1 + u8_2);
+
+        // Basic math operations on >1 LMUL width.
+        // Basic math operations on fractional (<1) LMUL width.
+
+        // Inrinsics mapping.
         check("vmseq.vv", target.natural_vector_size<uint8_t>(), select(u8_1 == u8_2, u8(1), u8(2)));
+        check("vaaddu.vv", target.natural_vector_size<uint8_t>(), halving_add(u8_1, u8_2));
+
+        // Non-power-of-2 sizes.
     }
 
 private:

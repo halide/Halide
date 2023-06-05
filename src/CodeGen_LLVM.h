@@ -539,8 +539,16 @@ protected:
     virtual bool supports_call_as_float16(const Call *op) const;
 
     /** Ensure that a vector value is either fixed or vscale depending to match desired_type.
-     */
+     * allow_lanes_adjustment will adapt the size, automatically rounding up a fixed vector
+     * to vscale size, or truncating a vscale vector to fixed size. This is to handle vscale
+     * quantization. */
     llvm::Value *normalize_fixed_scalable_vector_type(llvm::Type *desired_type, llvm::Value *result);
+
+    /** Convert between two LLVM vectors of potentially different scalable/fixed and size.
+     * Used to handle converting to/from fixed vectors that are smaller than the minimum
+     * size scalable vector. */
+    llvm::Value *convert_fixed_or_scalable_vector_type(llvm::Value *arg,
+                                                       llvm::Type *desired_type);
 
     /** Convert an LLVM fixed vector value to the corresponding vscale vector value. */
     llvm::Value *fixed_to_scalable_vector_type(llvm::Value *fixed);

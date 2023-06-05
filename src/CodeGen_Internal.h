@@ -109,6 +109,8 @@ void set_function_attributes_from_halide_target_options(llvm::Function &);
  * inclusion requirements.  */
 void embed_bitcode(llvm::Module *M, const std::string &halide_command);
 
+std::string vector_mangle_name(llvm::Type *type);
+
 }  // namespace Internal
 }  // namespace Halide
 

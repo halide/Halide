@@ -4961,6 +4961,84 @@ llvm::Value *CodeGen_LLVM::normalize_fixed_scalable_vector_type(llvm::Type *desi
     return result;
 }
 
+llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *arg,
+                                                                 llvm::Type *desired_type) {
+    llvm::Type *arg_type = arg->getType();
+    internal_assert(arg_type->getScalarType() == desired_type->getScalarType());
+    if (!arg_type->isVectorTy()) {
+        arg = create_broadcast(arg, 1);
+        arg_type = arg->getType();
+    }
+    llvm::Type *result_type = desired_type;
+    if (!result_type->isVectorTy()) {
+        result_type = get_vector_type(result_type, 1);
+    }
+
+    int arg_elements = get_vector_num_elements(arg_type);
+    int result_elements = get_vector_num_elements(result_type);
+
+    bool use_insert;
+    if (isa<llvm::FixedVectorType>(arg_type) &&
+        isa<llvm::ScalableVectorType>(result_type)) {
+        use_insert = true;
+    } else if (isa<llvm::FixedVectorType>(result_type) &&
+        isa<llvm::ScalableVectorType>(arg_type)) {
+        use_insert = false;
+    } else {
+        // Use extract to make smaller, insert to make bigger.
+        // A somewhat arbitary decision.
+        use_insert = (arg_elements > result_elements);
+    }
+
+    std::string arg_mangle = vector_mangle_name(arg_type);
+    std::string result_mangle = vector_mangle_name(result_type);
+    std::string intrin_name = "llvm.vector.";
+
+    intrin_name += use_insert ? "insert." : "extract.";
+    intrin_name += vector_mangle_name(result_type) + ".";
+    intrin_name += vector_mangle_name(arg_type);
+
+    std::vector<llvm::Value *> args;
+
+    // Vector insert has takes an argument which is being inserted into as well
+    // as a value and index. Extract only takes the value and index.
+    if (use_insert) {
+        Constant *poison = PoisonValue::get(result_type->getScalarType());
+        llvm::ElementCount element_count;
+        if (isa<VectorType>(result_type)) {
+            element_count = cast<llvm::VectorType>(result_type)->getElementCount();
+        } else {
+            element_count = ElementCount::getFixed(1);
+        }
+        llvm::Value *result_vec = ConstantVector::getSplat(element_count, poison);
+
+        args.push_back(result_vec);
+    }
+    args.push_back(value);
+    args.push_back(ConstantInt::get(i64_t, 0));
+
+    llvm::Function *function = module->getFunction(intrin_name);
+
+    if (!function) {
+        vector<llvm::Type *> arg_types(args.size());
+        for (size_t i = 0; i < args.size(); i++) {
+            arg_types[i] = args[i]->getType();
+        }
+
+        FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
+        function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
+        function->setCallingConv(CallingConv::C);
+    }
+
+    llvm::Value *result = builder->CreateCall(function, args);
+
+    if (result_type != desired_type) {
+        internal_assert(!desired_type->isVectorTy()) << "Type mismatch should not happen unless result is scalar and requires conversion of single element vector.\n";
+        result = builder->CreateExtractElement(result, ConstantInt::get(i32_t, 0));
+    }
+    return result;
+}
+
 llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg) {
     internal_assert(effective_vscale != 0);
     internal_assert(isa<llvm::FixedVectorType>(fixed_arg->getType()));
