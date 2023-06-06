@@ -1327,7 +1327,9 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
     }
 
     // Make sure fixed/vscale property of vector types match what is exepected.
-    value = convert_fixed_or_scalable_vector_type(value, llvm_type_of(e.type()));
+    if (!value->getType()->isVoidTy()) {
+        value = convert_fixed_or_scalable_vector_type(value, llvm_type_of(e.type()));
+    }
 
     // TODO: skip this correctness check for bool vectors,
     // as eliminate_bool_vectors() will cause a discrepancy for some backends
