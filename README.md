@@ -83,11 +83,11 @@ and running the Halide compiler library.
 
 | Compiler   | Version      | OS                     | Architectures   |
 |------------|--------------|------------------------|-----------------|
-| GCC        | 7.5          | Ubuntu Linux 20.04 LTS | x86, x64, ARM32 |
-| GCC        | 7.5          | Ubuntu Linux 18.04 LTS | ARM32, ARM64    |
+| GCC        | 9.4          | Ubuntu Linux 20.04 LTS | x86, x64, ARM32 |
+| GCC        | 9.4          | Ubuntu Linux 18.04 LTS | ARM32, ARM64    |
 | MSVC       | 2019 (19.28) | Windows 10 (20H2)      | x86, x64        |
-| AppleClang | 12.0.0       | macOS 10.15            | x86_64          |
-| AppleClang | 12.0.0       | macOS 11.1             | ARM64           |
+| AppleClang | 14.0.3       | macOS 13.4             | x86_64          |
+| AppleClang | 14.0.3       | macOS 13.4             | ARM64           |
 
 Some users have successfully built Halide for Linux using Clang 9.0.0+, for
 Windows using ClangCL 11.0.0+, and for Windows ARM64 by cross-compiling with
