@@ -76,8 +76,8 @@ public:
         check("vadd.vx", lanes, u_1 + 42);
         check("vsub.vv", lanes, i_1 - i_2);
         check("vsub.vv", lanes, u_1 - u_2);
-// TODO: these seem to compile to a vector add
-// for some lanes/sizes.
+        // TODO: these seem to compile to a vector add
+        // for some lanes/sizes.
         // check("vsub.v", lanes, i_1 - 42);
         // check("vsub.v", lanes, u_1 - 42);
         check("vmul.vv", lanes, i_1 * i_2);
@@ -86,23 +86,19 @@ public:
         check("vmul.v", lanes, u_1 * 42);
 
         // Intrinsics mapping.
-        check("vmseq.vv", lanes, select(i_1 == i_2, cast(Int(base_bit_width), 1),
-                                        cast(Int(base_bit_width), 2)));
-        check("vmseq.vv", lanes, select(i_1 == i_2, cast(UInt(base_bit_width), 1),
-                                        cast(UInt(base_bit_width), 2)));
+        check("vmseq.vv", lanes, select(i_1 == i_2, cast(Int(base_bit_width), 1), cast(Int(base_bit_width), 2)));
+        check("vmseq.vv", lanes, select(i_1 == i_2, cast(UInt(base_bit_width), 1), cast(UInt(base_bit_width), 2)));
         check("vaadd.vv", lanes, halving_add(i_1, i_2));
         check("vaaddu.vv", lanes, halving_add(u_1, u_2));
         check("vaadd.vv", lanes, rounding_halving_add(i_1, i_2));
         check("vaaddu.vv", lanes, rounding_halving_add(u_1, u_2));
-
-
 
         // Widening intrinsics
         if (base_bit_width < 64) {
             Expr i_2xbits_1 = int_image_param(base_bit_width * 2, x);
             Expr i_2xbits_2 = int_image_param(base_bit_width * 2, x + 16);
             Expr u_2xbits_1 = uint_image_param(base_bit_width * 2, x);
-            Expr u_2xbits_2 = uint_image_param(base_bit_width* 2, x + 16);
+            Expr u_2xbits_2 = uint_image_param(base_bit_width * 2, x + 16);
 
             check("vwadd.vv", lanes, widening_add(i_1, i_2));
             check("vwaddu.vv", lanes, widening_add(u_1, u_2));
@@ -124,7 +120,7 @@ public:
             for (int lanes = std::max(2, 64 / bit_width);
                  lanes < (natural_lanes * 8);
                  lanes *= 2) {
-               check_rvv_integer_bits(bit_width, lanes, "");
+                check_rvv_integer_bits(bit_width, lanes, "");
             }
         }
     }

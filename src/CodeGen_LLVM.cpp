@@ -5010,7 +5010,7 @@ llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *ar
         isa<llvm::ScalableVectorType>(result_type)) {
         use_insert = true;
     } else if (isa<llvm::FixedVectorType>(result_type) &&
-        isa<llvm::ScalableVectorType>(arg_type)) {
+               isa<llvm::ScalableVectorType>(arg_type)) {
         use_insert = false;
     } else {
         // Use extract to make smaller, insert to make bigger.
@@ -5054,68 +5054,68 @@ llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *ar
 llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg) {
     internal_assert(effective_vscale != 0);
     internal_assert(isa<llvm::FixedVectorType>(fixed_arg->getType()));
-    const llvm::FixedVectorType *fixed = cast<llvm::FixedVectorType>(fixed_arg->getType());
-    internal_assert(fixed != nullptr);
-    auto lanes = fixed->getNumElements();
+    const llvm::FixedVectorType *fixed_type = cast<llvm::FixedVectorType>(fixed_arg->getType());
+    internal_assert(fixed_type != nullptr);
+    auto lanes = fixed_type->getNumElements();
 
-    llvm::ScalableVectorType *scalable = cast<llvm::ScalableVectorType>(get_vector_type(fixed->getElementType(),
-                                                                                              lanes / effective_vscale, VectorTypeConstraint::VScale));
-    internal_assert(fixed != nullptr);
+    llvm::ScalableVectorType *scalable_type = cast<llvm::ScalableVectorType>(get_vector_type(fixed_type->getElementType(),
+                                                                                             lanes / effective_vscale, VectorTypeConstraint::VScale));
+    internal_assert(fixed_type != nullptr);
 
-    internal_assert(fixed->getElementType() == scalable->getElementType());
-    internal_assert(lanes == (scalable->getMinNumElements() * effective_vscale));
+    internal_assert(fixed_type->getElementType() == scalable_type->getElementType());
+    internal_assert(lanes == (scalable_type->getMinNumElements() * effective_vscale));
 
     // E.g. <vscale x 2 x i64> llvm.vector.insert.nxv2i64.v4i64(<vscale x 2 x i64>, <4 x i64>, i64)
     const char *type_designator;
-    if (fixed->getElementType()->isIntegerTy()) {
+    if (fixed_type->getElementType()->isIntegerTy()) {
         type_designator = "i";
     } else {
         type_designator = "f";
     }
-    std::string intrin = "llvm.vector.insert.nxv" + std::to_string(scalable->getMinNumElements());
+    std::string intrin = "llvm.vector.insert.nxv" + std::to_string(scalable_type->getMinNumElements());
     intrin += type_designator;
-    std::string bits_designator = std::to_string(fixed->getScalarSizeInBits());
+    std::string bits_designator = std::to_string(fixed_type->getScalarSizeInBits());
     intrin += bits_designator;
     intrin += ".v" + std::to_string(lanes) + type_designator + bits_designator;
-    Constant *poison = PoisonValue::get(scalable->getElementType());
-    llvm::Value *result_vec = ConstantVector::getSplat(scalable->getElementCount(), poison);
+    Constant *poison = PoisonValue::get(scalable_type->getElementType());
+    llvm::Value *result_vec = ConstantVector::getSplat(scalable_type->getElementCount(), poison);
 
     std::vector<llvm::Value *> args;
     args.push_back(result_vec);
     args.push_back(value);
     args.push_back(ConstantInt::get(i64_t, 0));
 
-    return simple_call_intrin(intrin, args, scalable);
+    return simple_call_intrin(intrin, args, scalable_type);
 }
 
 llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_arg) {
     internal_assert(effective_vscale != 0);
     internal_assert(isa<llvm::ScalableVectorType>(scalable_arg->getType()));
-    const llvm::ScalableVectorType *scalable = cast<llvm::ScalableVectorType>(scalable_arg->getType());
-    internal_assert(scalable != nullptr);
+    const llvm::ScalableVectorType *scalable_type = cast<llvm::ScalableVectorType>(scalable_arg->getType());
+    internal_assert(scalable_type != nullptr);
 
-    llvm::FixedVectorType *fixed = cast<llvm::FixedVectorType>(get_vector_type(scalable->getElementType(),
-                                                                                     scalable->getMinNumElements() * effective_vscale, VectorTypeConstraint::Fixed));
-    internal_assert(fixed != nullptr);
+    llvm::FixedVectorType *fixed_type = cast<llvm::FixedVectorType>(get_vector_type(scalable_type->getElementType(),
+                                                                               scalable_type->getMinNumElements() * effective_vscale, VectorTypeConstraint::Fixed));
+    internal_assert(fixed_type != nullptr);
 
-    internal_assert(fixed->getElementType() == scalable->getElementType());
-    internal_assert(fixed->getNumElements() == (scalable->getMinNumElements() * effective_vscale));
+    internal_assert(fixed_type->getElementType() == scalable_type->getElementType());
+    internal_assert(fixed_type->getNumElements() == (scalable_type->getMinNumElements() * effective_vscale));
 
     // E.g. <64 x i8> @llvm.vector.extract.v64i8.nxv8i8(<vscale x 8 x i8> %vresult, i64 0)
     const char *type_designator;
-    if (scalable->getElementType()->isIntegerTy()) {
+    if (scalable_type->getElementType()->isIntegerTy()) {
         type_designator = "i";
     } else {
         type_designator = "f";
     }
-    std::string bits_designator = std::to_string(fixed->getScalarSizeInBits());
-    std::string intrin = "llvm.vector.extract.v" + std::to_string(fixed->getNumElements()) + type_designator + bits_designator;
-    intrin += ".nxv" + std::to_string(scalable->getMinNumElements()) + type_designator + bits_designator;
+    std::string bits_designator = std::to_string(fixed_type->getScalarSizeInBits());
+    std::string intrin = "llvm.vector.extract.v" + std::to_string(fixed_type->getNumElements()) + type_designator + bits_designator;
+    intrin += ".nxv" + std::to_string(scalable_type->getMinNumElements()) + type_designator + bits_designator;
     std::vector<llvm::Value *> args;
     args.push_back(scalable_arg);
     args.push_back(ConstantInt::get(i64_t, 0));
 
-    return simple_call_intrin(intrin, args, fixed);
+    return simple_call_intrin(intrin, args, fixed_type);
 }
 
 int CodeGen_LLVM::get_vector_num_elements(const llvm::Type *t) {
@@ -5223,17 +5223,17 @@ std::string CodeGen_LLVM::mangle_llvm_type(llvm::Type *type) {
     }
 
     if (isa<PointerType>(type)) {
-         const auto *vt = cast<llvm::PointerType>(type);
-         type_string += "p" + std::to_string(vt->getAddressSpace());
+        const auto *vt = cast<llvm::PointerType>(type);
+        type_string += "p" + std::to_string(vt->getAddressSpace());
     } else if (type->isIntegerTy()) {
-         type_string += "i" + std::to_string(type->getScalarSizeInBits());
+        type_string += "i" + std::to_string(type->getScalarSizeInBits());
     } else if (type->isFloatingPointTy()) {
-         type_string += "f" + std::to_string(type->getScalarSizeInBits());
+        type_string += "f" + std::to_string(type->getScalarSizeInBits());
     } else {
-         std::string type_name;
-         llvm::raw_string_ostream type_name_stream(type_name);
-         type->print(type_name_stream, true);
-         internal_error << "Attempt to mangle unknown LLVM type " << type_name << "\n";
+        std::string type_name;
+        llvm::raw_string_ostream type_name_stream(type_name);
+        type->print(type_name_stream, true);
+        internal_error << "Attempt to mangle unknown LLVM type " << type_name << "\n";
     }
     return type_string;
 }

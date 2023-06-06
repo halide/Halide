@@ -60,36 +60,24 @@ struct RISCVIntrinsic {
 
 // TODO: Consider moving enum out to global scope to eliminate "RISCVIntrinsic::"
 const RISCVIntrinsic signed_intrinsic_defs[] = {
-    {"vaadd", Type::Int, "halving_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::RoundDown | RISCVIntrinsic::Commutes},
-    {"vaadd", Type::Int, "rounding_halving_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::RoundUp | RISCVIntrinsic::Commutes},
-    {"vwadd", {Type::Int, 2}, "widening_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
-    {"vwsub", {Type::Int, 2}, "widening_sub", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::MangleReturnType},
-    {"vwmul", {Type::Int, 2}, "widening_mul", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
+    {"vaadd", Type::Int, "halving_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundDown | RISCVIntrinsic::Commutes},
+    {"vaadd", Type::Int, "rounding_halving_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundUp | RISCVIntrinsic::Commutes},
+    {"vwadd", {Type::Int, 2}, "widening_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
+    {"vwsub", {Type::Int, 2}, "widening_sub", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
+    {"vwmul", {Type::Int, 2}, "widening_mul", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
 };
 
 const RISCVIntrinsic unsigned_intrinsic_defs[] = {
-    {"vaaddu", Type::UInt, "halving_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::RoundDown|RISCVIntrinsic::Commutes},
-    {"vaaddu", Type::UInt, "rounding_halving_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::RoundUp | RISCVIntrinsic::Commutes},
-    {"vwaddu", {Type::UInt, 2}, "widening_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
-    {"vwsubu", {Type::UInt, 2}, "widening_sub", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::MangleReturnType},
-    {"vwmulu", {Type::UInt, 2}, "widening_mul", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
+    {"vaaddu", Type::UInt, "halving_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundDown|RISCVIntrinsic::Commutes},
+    {"vaaddu", Type::UInt, "rounding_halving_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundUp | RISCVIntrinsic::Commutes},
+    {"vwaddu", {Type::UInt, 2}, "widening_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
+    {"vwsubu", {Type::UInt, 2}, "widening_sub", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
+    {"vwmulu", {Type::UInt, 2}, "widening_mul", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
 };
 
 const RISCVIntrinsic mixed_sign_intrinsic_defs[] = {
-    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::Int, Type::UInt}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::MangleReturnType},
-    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::UInt, Type::Int}, RISCVIntrinsic::AddVLArg |
-        RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::ReverseBinOp},
+    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::Int, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
+    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::UInt, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::ReverseBinOp},
 };
 
 const RISCVIntrinsic *MatchRISCVIntrisic(const Call *op) {
@@ -105,7 +93,7 @@ const RISCVIntrinsic *MatchRISCVIntrisic(const Call *op) {
                 }
             }
         } else if (op->args[0].type().is_uint() &&
-                  op->args[1].type().is_uint()) {
+                   op->args[1].type().is_uint()) {
             for (auto const &i : unsigned_intrinsic_defs) {
                 if (i.name == op->name) {
                     return &i;
@@ -133,8 +121,6 @@ public:
 
 protected:
     using CodeGen_Posix::visit;
-
-    void init_module() override;
 
     string mcpu_target() const override;
     string mcpu_tune() const override;
@@ -224,12 +210,8 @@ int CodeGen_RISCV::target_vscale() const {
     return 0;
 }
 
-void CodeGen_RISCV::init_module() {
-  CodeGen_Posix::init_module();
-}
-
 void CodeGen_RISCV::visit(const Call *op) {
-    const RISCVIntrinsic *intrinsic_def = MatchRISCVIntrisic(op);;
+    const RISCVIntrinsic *intrinsic_def = MatchRISCVIntrisic(op);
 
     bool handled = (intrinsic_def != nullptr) &&
                    call_riscv_vector_intrinsic(*intrinsic_def, op);
@@ -238,13 +220,9 @@ void CodeGen_RISCV::visit(const Call *op) {
     }
 }
 
-namespace {
-
 // For vscale types, the lane count must be rounded up to a multiple of vscale.
 int vscale_lanes(int vscale, const Type &type) {
     return ((type.lanes() + vscale - 1) / vscale) * vscale;
-}
-
 }
 
 /* Currently this assumes the default pattern for RISC V intrinsics:
@@ -310,11 +288,11 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
     }
 
     llvm::Value *left_arg = codegen(op->args[0]);
-    llvm::Value *right_arg = codegen(op->args[1]);;
+    llvm::Value *right_arg = codegen(op->args[1]);
 
     internal_assert(!((intrin.flags & RISCVIntrinsic::ReverseBinOp) &&
-                      (intrin.flags & RISCVIntrinsic::Commutes))) <<
-        "Cannot have bot Commutes and REverseBinOp set on an intrinsic.\n";
+                      (intrin.flags & RISCVIntrinsic::Commutes)))
+        << "Cannot have both Commutes and ReverseBinOp set on an intrinsic.\n";
 
     if (((intrin.flags & RISCVIntrinsic::Commutes) &&
          op->args[0].type().is_scalar()) ||
@@ -345,7 +323,7 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
             llvm::FixedVectorType *fixed = cast<llvm::FixedVectorType>(right_arg_type);
             right_arg_type = get_vector_type(right_arg_type->getScalarType(),
                                              (fixed->getNumElements() + effective_vscale - 1) / effective_vscale,
-                                            VectorTypeConstraint::VScale);
+                                             VectorTypeConstraint::VScale);
         }
         if (right_arg_type->isVectorTy()) {
             right_arg = convert_fixed_or_scalable_vector_type(right_arg, right_arg_type);
@@ -395,8 +373,7 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
     llvm::Constant *actual_vlen = llvm::ConstantInt::get(xlen_type, actual_lanes);
 
     value = builder->CreateCall(llvm_intrinsic, {llvm::UndefValue::get(llvm_ret_type),
-            left_arg, right_arg,
-            actual_vlen});
+                                                 left_arg, right_arg, actual_vlen});
 
     if (ret_type.lanes() != op->type.lanes()) {
         value = convert_fixed_or_scalable_vector_type(value,
