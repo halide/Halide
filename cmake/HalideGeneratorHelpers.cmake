@@ -414,6 +414,11 @@ function(add_halide_library TARGET)
         set_target_properties("${TARGET}" PROPERTIES
                               POSITION_INDEPENDENT_CODE ON
                               LINKER_LANGUAGE CXX)
+        if (NOT Halide_NO_DEFAULT_FLAGS)
+            # Silence many useless warnings in generated C++ code compilation
+            target_compile_options("${TARGET}" PRIVATE
+                $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-psabi>)
+        endif ()
         _Halide_fix_xcode("${TARGET}")
     endif ()
 

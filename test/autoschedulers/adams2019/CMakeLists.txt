@@ -76,6 +76,7 @@ add_adams2019_test(adams2019_demo_included_schedule_file
 
 add_executable(adams2019_test_apps_autoscheduler test.cpp)
 target_link_libraries(adams2019_test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
+add_dependencies(adams2019_test_apps_autoscheduler Halide_Adams2019)
 
 add_adams2019_test(adams2019_test_apps_autoscheduler
                    COMMAND adams2019_test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019> $<TARGET_FILE_DIR:Halide_Adams2019>/baseline.weights
