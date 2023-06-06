@@ -1,2 +1,2 @@
 # ignore halide serialized buffer files
-*.hlb
+*.hlpipe

@@ -3,8 +3,8 @@ namespace Halide.Serialize;
 // This corresponds to the version.
 file_identifier "HLD0";
 
-// File extension of any written files.
-file_extension "hir";
+// File extension of any written files. "hlpipe" stands for Halide Pipeline.
+file_extension "hlpipe";
 
 // from src/IR.cpp
 union Stmt {

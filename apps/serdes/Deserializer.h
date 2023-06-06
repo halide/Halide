@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-#include "halide_ir_generated.h"
 #include "Halide.h"
+#include "halide_ir_generated.h"
 
 class Deserializer {
 public:

@@ -18,9 +18,9 @@ int main(int argc, char **argv) {
 
     // serialize and deserialize
     Serializer serializer;
-    serializer.serialize(pipe, "test.hlb");
+    serializer.serialize(pipe, "test.hlpipe");
     Deserializer deserializer;
-    Pipeline p = deserializer.deserialize("test.hlb");
+    Pipeline p = deserializer.deserialize("test.hlpipe");
 
     // print after deserialization
     std::cout << "\nafter deserialization\n";

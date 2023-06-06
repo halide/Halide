@@ -38,15 +38,18 @@ Halide::Internal::Function Deserializer::deserialize_function(const Halide::Seri
     std::string name = deserialize_string(function->name());
     std::string origin_name = deserialize_string(function->origin_name());
     std::vector<Halide::Type> output_types;
+    output_types.reserve(function->output_types()->size());
     for (const auto &type : *function->output_types()) {
         output_types.push_back(deserialize_type(type));
     }
     std::vector<Halide::Type> required_types;
+    required_types.reserve(function->required_types()->size());
     for (const auto &type : *function->required_types()) {
         required_types.push_back(deserialize_type(type));
     }
     int required_dim = function->required_dims();
     std::vector<std::string> args;
+    args.reserve(function->args()->size());
     for (const auto &arg : *function->args()) {
         args.push_back(deserialize_string(arg));
     }
@@ -161,6 +164,7 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         const Halide::Serialize::Provide *provide_stmt = (const Halide::Serialize::Provide *)stmt;
         auto name = deserialize_string(provide_stmt->name());
         std::vector<Halide::Expr> values;
+        values.reserve(provide_stmt->values()->size());
         auto values_serialized = provide_stmt->values();
         auto values_types = provide_stmt->values_type();
         for (size_t i = 0; i < values_serialized->size(); ++i) {
@@ -168,6 +172,7 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
             values.push_back(value);
         }
         std::vector<Halide::Expr> args;
+        args.reserve(provide_stmt->args()->size());
         auto args_serialized = provide_stmt->args();
         auto args_types = provide_stmt->args_type();
         for (size_t i = 0; i < args_serialized->size(); ++i) {
@@ -214,6 +219,7 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         auto extents_serialized = allocate_stmt->extents();
         auto extents_types = allocate_stmt->extents_type();
         std::vector<Halide::Expr> extents;
+        extents.reserve(extents_serialized->size());
         for (size_t i = 0; i < extents_serialized->size(); ++i) {
             auto extent = deserialize_expr(extents_types->Get(i), extents_serialized->Get(i));
             extents.push_back(extent);
@@ -234,6 +240,7 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         const Halide::Serialize::Realize *realize_stmt = (const Halide::Serialize::Realize *)stmt;
         auto name = deserialize_string(realize_stmt->name());
         std::vector<Halide::Type> types;
+        types.reserve(realize_stmt->types()->size());
         for (const auto &type : *realize_stmt->types()) {
             types.push_back(deserialize_type(type));
         }
@@ -268,6 +275,7 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
             break;
         }
         std::vector<Halide::Range> bounds;
+        bounds.reserve(realize_stmt->bounds()->size());
         for (const auto &bound : *realize_stmt->bounds()) {
             bounds.push_back(deserialize_range(bound));
         }
@@ -297,10 +305,12 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         const Halide::Serialize::Prefetch *prefetch_stmt = (const Halide::Serialize::Prefetch *)stmt;
         auto name = deserialize_string(prefetch_stmt->name());
         std::vector<Halide::Type> types;
+        types.reserve(prefetch_stmt->types()->size());
         for (const auto &type : *prefetch_stmt->types()) {
             types.push_back(deserialize_type(type));
         }
         std::vector<Halide::Range> bounds;
+        bounds.reserve(prefetch_stmt->bounds()->size());
         for (const auto &bound : *prefetch_stmt->bounds()) {
             bounds.push_back(deserialize_range(bound));
         }
@@ -508,6 +518,7 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         auto args_type = call_expr->args_type();
         auto args_serialized = call_expr->args();
         std::vector<Halide::Expr> args;
+        args.reserve(args_serialized->size());
         for (size_t i = 0; i < args_serialized->size(); ++i) {
             auto arg = deserialize_expr(args_type->Get(i), args_serialized->Get(i));
             args.push_back(arg);
@@ -526,12 +537,14 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         auto vectors_type = shuffle_expr->vectors_type();
         auto vectors_serialized = shuffle_expr->vectors();
         std::vector<Halide::Expr> vectors;
+        vectors.reserve(vectors_serialized->size());
         for (size_t i = 0; i < vectors_serialized->size(); ++i) {
             auto vector = deserialize_expr(vectors_type->Get(i), vectors_serialized->Get(i));
             vectors.push_back(vector);
         }
         auto indices_serialized = shuffle_expr->indices();
         std::vector<int32_t> indices;
+        indices.reserve(indices_serialized->size());
         for (size_t i = 0; i < indices_serialized->size(); ++i) {
             indices.push_back(indices_serialized->Get(i));
         }
@@ -569,13 +582,14 @@ Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     in.seekg(0, std::ios::end);
     int size = in.tellg();
     in.seekg(0, std::ios::beg);
-    char *data = new char[size];
-    in.read(data, size);
+    std::vector<char> data(size);
+    in.read(data.data(), size);
     in.close();
 
-    const auto *pipeline_obj = Halide::Serialize::GetPipeline(data);
+    const auto *pipeline_obj = Halide::Serialize::GetPipeline(data.data());
     const auto *func_objs = pipeline_obj->outputs();
     std::vector<Halide::Func> funcs;
+    funcs.reserve(func_objs->size());
     for (const auto &fo : *func_objs) {
         auto function_deserialized = deserialize_function(fo);
         Halide::Func func(function_deserialized);
@@ -586,10 +600,10 @@ Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     const auto *requirement_type_objs = pipeline_obj->requirements_type();
 
     std::vector<Halide::Internal::Stmt> requirements;
+    requirements.reserve(requirements_objs->size());
     for (size_t i = 0; i < requirements_objs->size(); ++i) {
         auto requirement_deserialized = deserialize_stmt(requirement_type_objs->Get(i), requirements_objs->Get(i));
         requirements.push_back(requirement_deserialized);
     }
-    delete[] data;
     return Halide::Pipeline(funcs);
 }

@@ -171,7 +171,9 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         auto name_serialized = serialize_string(builder, name);
         auto values = provide_stmt->values;
         std::vector<uint8_t> values_types;
+        values_types.reserve(values.size());
         std::vector<flatbuffers::Offset<void>> values_serialized;
+        values_serialized.reserve(values.size());
         for (const auto &value : values) {
             auto value_serialized = serialize_expr(builder, value);
             values_types.push_back(value_serialized.first);
@@ -179,7 +181,9 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         }
         auto args = provide_stmt->args;
         std::vector<uint8_t> args_types;
+        args_types.reserve(args.size());
         std::vector<flatbuffers::Offset<void>> args_serialized;
+        args_serialized.reserve(args.size());
         for (const auto &arg : args) {
             auto arg_serialized = serialize_expr(builder, arg);
             args_types.push_back(arg_serialized.first);
@@ -236,7 +240,9 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         }
         auto extents = allocate_stmt->extents;
         std::vector<uint8_t> extents_types;
+        extents_types.reserve(extents.size());
         std::vector<flatbuffers::Offset<void>> extents_serialized;
+        extents_serialized.reserve(extents.size());
         for (const auto &extent : extents) {
             auto extent_serialized = serialize_expr(builder, extent);
             extents_types.push_back(extent_serialized.first);
@@ -265,6 +271,7 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         auto name_serialized = serialize_string(builder, name);
         auto types = realize_stmt->types;
         std::vector<flatbuffers::Offset<Halide::Serialize::Type>> types_serialized;
+        types_serialized.reserve(types.size());
         for (const auto &type : types) {
             types_serialized.push_back(serialize_type(builder, type));
         }
@@ -310,6 +317,7 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         }
         auto bounds = realize_stmt->bounds;
         std::vector<flatbuffers::Offset<Halide::Serialize::Range>> bounds_serialized;
+        bounds_serialized.reserve(bounds.size());
         for (const auto &bound : bounds) {
             bounds_serialized.push_back(serialize_range(builder, bound));
         }
@@ -350,12 +358,14 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         auto name_serialized = serialize_string(builder, name);
         auto types = prefetch_stmt->types;
         std::vector<flatbuffers::Offset<Halide::Serialize::Type>> types_serialized;
+        types_serialized.reserve(types.size());
         for (const auto &type : types) {
             types_serialized.push_back(serialize_type(builder, type));
         }
         auto types_vector = builder.CreateVector(types_serialized);
         auto bounds = prefetch_stmt->bounds;
         std::vector<flatbuffers::Offset<Halide::Serialize::Range>> bounds_serialized;
+        bounds_serialized.reserve(bounds.size());
         for (const auto &bound : bounds) {
             bounds_serialized.push_back(serialize_range(builder, bound));
         }
@@ -615,7 +625,9 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         auto name_serialized = serialize_string(builder, name);
         auto args = call_expr->args;
         std::vector<uint8_t> args_types;
+        args_types.reserve(args.size());
         std::vector<flatbuffers::Offset<void>> args_serialized;
+        args_serialized.reserve(args.size());
         for (const auto &arg : args) {
             auto arg_serialized = serialize_expr(builder, arg);
             args_types.push_back(arg_serialized.first);
@@ -634,7 +646,9 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         auto shuffle_expr = expr.as<Halide::Internal::Shuffle>();
         auto vectors = shuffle_expr->vectors;
         std::vector<uint8_t> vectors_types;
+        vectors_types.reserve(vectors.size());
         std::vector<flatbuffers::Offset<void>> vectors_serialized;
+        vectors_serialized.reserve(vectors.size());
         for (const auto &vector : vectors) {
             auto vector_serialized = serialize_expr(builder, vector);
             vectors_types.push_back(vector_serialized.first);
@@ -656,34 +670,31 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
 }
 
 flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_func(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Function &function) {
-    // name
     auto name_serialized = serialize_string(builder, function.name());
 
-    // origin_name
     auto origin_name_serialized = serialize_string(builder, function.origin_name());
 
-    // output_types
     std::vector<Halide::Type> output_types = function.output_types();
     std::vector<flatbuffers::Offset<Halide::Serialize::Type>> output_types_serialized;
+    output_types_serialized.reserve(output_types.size());
     for (const auto &type : output_types) {
         output_types_serialized.push_back(serialize_type(builder, type));
     }
     auto output_types_vector = builder.CreateVector(output_types_serialized);
 
-    // required_types
     std::vector<Halide::Type> required_types = function.required_types();
     std::vector<flatbuffers::Offset<Halide::Serialize::Type>> required_types_serialized;
+    required_types_serialized.reserve(required_types.size());
     for (const auto &type : required_types) {
         required_types_serialized.push_back(serialize_type(builder, type));
     }
     auto required_types_vector = builder.CreateVector(required_types_serialized);
 
-    // required_dimensions
     int required_dim = function.required_dimensions();
 
-    // args
     std::vector<std::string> args = function.args();
     std::vector<flatbuffers::Offset<flatbuffers::String>> args_serialized;
+    args_serialized.reserve(args.size());
     for (const auto &arg : args) {
         args_serialized.push_back(serialize_string(builder, arg));
     }
@@ -734,7 +745,9 @@ void Serializer::serialize(const Halide::Pipeline &pipeline, const std::string &
     // requirements
     auto requirements = pipeline.requirements();
     std::vector<flatbuffers::Offset<void>> requirements_serialized;
+    requirements_serialized.reserve(requirements.size());
     std::vector<uint8_t> requirements_types;
+    requirements_types.reserve(requirements.size());
     for (const auto &stmt : requirements) {
         auto stmt_serialized = serialize_stmt(builder, stmt);
         requirements_serialized.push_back(stmt_serialized.second);
