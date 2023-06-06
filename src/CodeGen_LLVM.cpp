@@ -5095,7 +5095,7 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
     internal_assert(scalable_type != nullptr);
 
     llvm::FixedVectorType *fixed_type = cast<llvm::FixedVectorType>(get_vector_type(scalable_type->getElementType(),
-                                                                               scalable_type->getMinNumElements() * effective_vscale, VectorTypeConstraint::Fixed));
+                                                                                    scalable_type->getMinNumElements() * effective_vscale, VectorTypeConstraint::Fixed));
     internal_assert(fixed_type != nullptr);
 
     internal_assert(fixed_type->getElementType() == scalable_type->getElementType());
