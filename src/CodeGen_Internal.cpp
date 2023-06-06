@@ -809,24 +809,5 @@ Expr lower_extract_bits(const Call *op) {
     return e;
 }
 
-std::string vector_mangle_name(llvm::Type *type) {
-    std::string result;
-    if (isa<llvm::ScalableVectorType>(type)) {
-        result = "nxv";
-        result += std::to_string(cast<llvm::ScalableVectorType>(type)->getMinNumElements());
-    } else if (isa<llvm::FixedVectorType>(type)) {
-        result = "v";
-        result += std::to_string(cast<llvm::FixedVectorType>(type)->getNumElements());
-    }
-
-    if (type->getScalarType()->isIntegerTy()) {
-        result += "i";
-    } else {
-        result += "f";
-    }
-    result += std::to_string(type->getScalarSizeInBits());
-    return result;
-}
-
 }  // namespace Internal
 }  // namespace Halide

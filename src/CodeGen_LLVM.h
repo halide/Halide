@@ -538,6 +538,14 @@ protected:
         This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
     virtual bool supports_call_as_float16(const Call *op) const;
 
+    /** call_intrin does far too much to be useful and generally breaks things
+     * when one has carefully set things up for a specific architecture. This
+     * just does the bare minimum. call_intrin should be refactored and could
+     * call this, possibly with renaming of the methods. */
+    llvm::Value *simple_call_intrin(const std::string &intrin,
+                                    const std::vector<llvm::Value *> &args,
+                                    llvm::Type *result_type);
+
     /** Ensure that a vector value is either fixed or vscale depending to match desired_type.
      * allow_lanes_adjustment will adapt the size, automatically rounding up a fixed vector
      * to vscale size, or truncating a vscale vector to fixed size. This is to handle vscale
