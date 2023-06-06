@@ -163,22 +163,8 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
     case Halide::Serialize::Stmt_Provide: {
         const Halide::Serialize::Provide *provide_stmt = (const Halide::Serialize::Provide *)stmt;
         auto name = deserialize_string(provide_stmt->name());
-        std::vector<Halide::Expr> values;
-        values.reserve(provide_stmt->values()->size());
-        auto values_serialized = provide_stmt->values();
-        auto values_types = provide_stmt->values_type();
-        for (size_t i = 0; i < values_serialized->size(); ++i) {
-            auto value = deserialize_expr(values_types->Get(i), values_serialized->Get(i));
-            values.push_back(value);
-        }
-        std::vector<Halide::Expr> args;
-        args.reserve(provide_stmt->args()->size());
-        auto args_serialized = provide_stmt->args();
-        auto args_types = provide_stmt->args_type();
-        for (size_t i = 0; i < args_serialized->size(); ++i) {
-            auto arg = deserialize_expr(args_types->Get(i), args_serialized->Get(i));
-            args.push_back(arg);
-        }
+        std::vector<Halide::Expr> values = deserialize_expr_vector(provide_stmt->values_type(), provide_stmt->values());
+        std::vector<Halide::Expr> args = deserialize_expr_vector(provide_stmt->args_type(), provide_stmt->args());
         auto predicate = deserialize_expr(provide_stmt->predicate_type(), provide_stmt->predicate());
         return Halide::Internal::Provide::make(name, values, args, predicate);
     }
@@ -216,14 +202,7 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
             memory_type = Halide::MemoryType::AMXTile;
             break;
         }
-        auto extents_serialized = allocate_stmt->extents();
-        auto extents_types = allocate_stmt->extents_type();
-        std::vector<Halide::Expr> extents;
-        extents.reserve(extents_serialized->size());
-        for (size_t i = 0; i < extents_serialized->size(); ++i) {
-            auto extent = deserialize_expr(extents_types->Get(i), extents_serialized->Get(i));
-            extents.push_back(extent);
-        }
+        std::vector<Halide::Expr> extents = deserialize_expr_vector(allocate_stmt->extents_type(), allocate_stmt->extents());
         auto condition = deserialize_expr(allocate_stmt->condition_type(), allocate_stmt->condition());
         auto new_expr = deserialize_expr(allocate_stmt->new_expr_type(), allocate_stmt->new_expr());
         auto free_function = deserialize_string(allocate_stmt->free_function());
@@ -515,14 +494,7 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
     case Halide::Serialize::Expr::Expr_Call: {
         const Halide::Serialize::Call *call_expr = (const Halide::Serialize::Call *)expr;
         auto name = deserialize_string(call_expr->name());
-        auto args_type = call_expr->args_type();
-        auto args_serialized = call_expr->args();
-        std::vector<Halide::Expr> args;
-        args.reserve(args_serialized->size());
-        for (size_t i = 0; i < args_serialized->size(); ++i) {
-            auto arg = deserialize_expr(args_type->Get(i), args_serialized->Get(i));
-            args.push_back(arg);
-        }
+        std::vector<Halide::Expr> args = deserialize_expr_vector(call_expr->args_type(), call_expr->args());
         auto value_index = call_expr->value_index();
         // TODO: fix type and function ptr here once function DAG is fixed
         return Halide::Internal::Call::make(Halide::Int(64), name, args, Halide::Internal::Call::CallType::Extern, Halide::Internal::FunctionPtr(), value_index);
@@ -534,14 +506,7 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
     }
     case Halide::Serialize::Expr::Expr_Shuffle: {
         const Halide::Serialize::Shuffle *shuffle_expr = (const Halide::Serialize::Shuffle *)expr;
-        auto vectors_type = shuffle_expr->vectors_type();
-        auto vectors_serialized = shuffle_expr->vectors();
-        std::vector<Halide::Expr> vectors;
-        vectors.reserve(vectors_serialized->size());
-        for (size_t i = 0; i < vectors_serialized->size(); ++i) {
-            auto vector = deserialize_expr(vectors_type->Get(i), vectors_serialized->Get(i));
-            vectors.push_back(vector);
-        }
+        std::vector<Halide::Expr> vectors = deserialize_expr_vector(shuffle_expr->vectors_type(), shuffle_expr->vectors());
         auto indices_serialized = shuffle_expr->indices();
         std::vector<int32_t> indices;
         indices.reserve(indices_serialized->size());
@@ -564,6 +529,16 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         return Halide::Expr();
     }
     }
+}
+
+std::vector<Halide::Expr> Deserializer::deserialize_expr_vector(const flatbuffers::Vector<uint8_t> *exprs_types, const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized) {
+    std::vector<Halide::Expr> result;
+    result.reserve(exprs_serialized->size());
+    for (size_t i = 0; i < exprs_serialized->size(); ++i) {
+        auto expr = deserialize_expr(exprs_types->Get(i), exprs_serialized->Get(i));
+        result.push_back(expr);
+    }
+    return result;
 }
 
 Halide::Range Deserializer::deserialize_range(const Halide::Serialize::Range *range) {

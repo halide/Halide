@@ -25,6 +25,8 @@ private:
 
     Halide::Expr deserialize_expr(uint8_t type_code, const void *expr);
 
+    std::vector<Halide::Expr> deserialize_expr_vector(const flatbuffers::Vector<uint8_t> *exprs_types, const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized);
+
     Halide::Range deserialize_range(const Halide::Serialize::Range *range);
 };
 
