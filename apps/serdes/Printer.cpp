@@ -548,3 +548,61 @@ void Printer::print_range(const Halide::Range &range) {
     std::cout << "extent: Expr\n";
     print_expr(range.extent);
 }
+
+void Printer::print_bound(const Halide::Internal::Bound &bound) {
+    std::cout << "Printing Bound\n";
+    std::cout << "var: " << bound.var << "\n";
+    std::cout << "min: Expr\n";
+    print_expr(bound.min);
+    std::cout << "extent: Expr\n";
+    print_expr(bound.extent);
+    std::cout << "modulus: Expr\n";
+    print_expr(bound.modulus);
+    std::cout << "remainder: Expr\n";
+    print_expr(bound.remainder);
+}
+
+void Printer::print_storage_dim(const Halide::Internal::StorageDim &storage_dim) {
+    std::cout << "Printing StorageDim\n";
+    std::cout << "var: " << storage_dim.var << "\n";
+    std::cout << "alignment: Expr\n";
+    print_expr(storage_dim.alignment);
+    std::cout << "bound: Expr\n";
+    print_expr(storage_dim.bound);
+    std::cout << "fold_factor: Expr\n";
+    print_expr(storage_dim.fold_factor);
+    std::cout << "fold_forward: " << storage_dim.fold_forward << "\n";
+}
+
+void Printer::print_loop_level(const Halide::LoopLevel &loop_level) {
+    std::cout << "Printing LoopLevel\n";
+    std::cout << "func_name: " << loop_level.func() << "\n";
+    std::cout << "stage_index: " << loop_level.stage_index() << "\n";
+    std::cout << "var_name: " << loop_level.var_name() << "\n";
+    std::cout << "is_rvar: " << loop_level.is_rvar() << "\n";
+    std::cout << "locked: " << loop_level.locked() << "\n";
+}
+
+void Printer::print_func_schedule(const Halide::Internal::FuncSchedule &func_schedule) {
+    std::cout << "Printing FuncSchedule\n";
+    std::cout << "store_level: LoopLevel\n";
+    print_loop_level(func_schedule.store_level());
+    std::cout << "compute_level: LoopLevel\n";
+    print_loop_level(func_schedule.compute_level());
+    std::cout << "storage_dims: [StorageDim]\n";
+    for (const auto &storage_dim : func_schedule.storage_dims()) {
+        print_storage_dim(storage_dim);
+    }
+    std::cout << "bounds: [Bound]\n";
+    for (const auto &bound : func_schedule.bounds()) {
+        print_bound(bound);
+    }
+    std::cout << "estimates: [Bound]\n";
+    for (const auto &estimate : func_schedule.estimates()) {
+        print_bound(estimate);
+    }
+    std::cout << "memoized: " << func_schedule.memoized() << "\n";
+    std::cout << "async: " << func_schedule.async() << "\n";
+    std::cout << "memoize_eviction_key: Expr\n";
+    print_expr(func_schedule.memoize_eviction_key());
+}

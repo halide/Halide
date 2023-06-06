@@ -8,7 +8,34 @@ std::string Deserializer::deserialize_string(const flatbuffers::String *str) {
     return str->str();
 }
 
+Halide::MemoryType Deserializer::deserialize_memory_type(const Halide::Serialize::MemoryType memory_type) {
+    switch (memory_type) {
+        case Halide::Serialize::MemoryType::MemoryType_Auto:
+            return Halide::MemoryType::Auto;
+        case Halide::Serialize::MemoryType::MemoryType_Heap:
+            return Halide::MemoryType::Heap;
+        case Halide::Serialize::MemoryType::MemoryType_Stack:
+            return Halide::MemoryType::Stack;
+        case Halide::Serialize::MemoryType::MemoryType_Register:
+            return Halide::MemoryType::Register;
+        case Halide::Serialize::MemoryType::MemoryType_GPUShared:
+            return Halide::MemoryType::GPUShared;
+        case Halide::Serialize::MemoryType::MemoryType_GPUTexture:
+            return Halide::MemoryType::GPUTexture;
+        case Halide::Serialize::MemoryType::MemoryType_LockedCache:
+            return Halide::MemoryType::LockedCache;
+        case Halide::Serialize::MemoryType::MemoryType_VTCM:
+            return Halide::MemoryType::VTCM;
+        case Halide::Serialize::MemoryType::MemoryType_AMXTile:
+            return Halide::MemoryType::AMXTile;
+        default:
+            std::cerr << "unknown memory type " << memory_type << "\n";
+            return Halide::MemoryType::Auto;
+    }
+}
+
 Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type) {
+    // bits
     int bits = type->bits();
     int lanes = type->lanes();
     TypeCode code_deserialized = type->code();
@@ -53,7 +80,10 @@ Halide::Internal::Function Deserializer::deserialize_function(const Halide::Seri
     for (const auto &arg : *function->args()) {
         args.push_back(deserialize_string(arg));
     }
-    return Halide::Internal::Function(name, origin_name, output_types, required_types, required_dim, args);
+
+    auto func_schedule = deserialize_func_schedule(function->func_schedule());
+
+    return Halide::Internal::Function(name, origin_name, output_types, required_types, required_dim, args, func_schedule);
 }
 
 Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const void *stmt) {
@@ -172,36 +202,7 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         const Halide::Serialize::Allocate *allocate_stmt = (const Halide::Serialize::Allocate *)stmt;
         auto name = deserialize_string(allocate_stmt->name());
         auto type = deserialize_type(allocate_stmt->type());
-        Halide::MemoryType memory_type = Halide::MemoryType::Auto;
-        switch (allocate_stmt->memory_type()) {
-        case Halide::Serialize::MemoryType::MemoryType_Auto:
-            memory_type = Halide::MemoryType::Auto;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_Heap:
-            memory_type = Halide::MemoryType::Heap;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_Stack:
-            memory_type = Halide::MemoryType::Stack;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_Register:
-            memory_type = Halide::MemoryType::Register;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_GPUShared:
-            memory_type = Halide::MemoryType::GPUShared;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_GPUTexture:
-            memory_type = Halide::MemoryType::GPUTexture;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_LockedCache:
-            memory_type = Halide::MemoryType::LockedCache;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_VTCM:
-            memory_type = Halide::MemoryType::VTCM;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_AMXTile:
-            memory_type = Halide::MemoryType::AMXTile;
-            break;
-        }
+        Halide::MemoryType memory_type = deserialize_memory_type(allocate_stmt->memory_type());
         std::vector<Halide::Expr> extents = deserialize_expr_vector(allocate_stmt->extents_type(), allocate_stmt->extents());
         auto condition = deserialize_expr(allocate_stmt->condition_type(), allocate_stmt->condition());
         auto new_expr = deserialize_expr(allocate_stmt->new_expr_type(), allocate_stmt->new_expr());
@@ -223,36 +224,7 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         for (const auto &type : *realize_stmt->types()) {
             types.push_back(deserialize_type(type));
         }
-        Halide::MemoryType memory_type = Halide::MemoryType::Auto;
-        switch (realize_stmt->memory_type()) {
-        case Halide::Serialize::MemoryType::MemoryType_Auto:
-            memory_type = Halide::MemoryType::Auto;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_Heap:
-            memory_type = Halide::MemoryType::Heap;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_Stack:
-            memory_type = Halide::MemoryType::Stack;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_Register:
-            memory_type = Halide::MemoryType::Register;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_GPUShared:
-            memory_type = Halide::MemoryType::GPUShared;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_GPUTexture:
-            memory_type = Halide::MemoryType::GPUTexture;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_LockedCache:
-            memory_type = Halide::MemoryType::LockedCache;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_VTCM:
-            memory_type = Halide::MemoryType::VTCM;
-            break;
-        case Halide::Serialize::MemoryType::MemoryType_AMXTile:
-            memory_type = Halide::MemoryType::AMXTile;
-            break;
-        }
+        Halide::MemoryType memory_type = deserialize_memory_type(realize_stmt->memory_type());
         std::vector<Halide::Range> bounds;
         bounds.reserve(realize_stmt->bounds()->size());
         for (const auto &bound : *realize_stmt->bounds()) {
@@ -547,6 +519,76 @@ Halide::Range Deserializer::deserialize_range(const Halide::Serialize::Range *ra
     return Halide::Range(min, extent);
 }
 
+Halide::Internal::Bound Deserializer::deserialize_bound(const Halide::Serialize::Bound *bound) {
+    auto var = deserialize_string(bound->var());
+    auto min = deserialize_expr(bound->min_type(), bound->min());
+    auto extent = deserialize_expr(bound->extent_type(), bound->extent());
+    auto modulus = deserialize_expr(bound->modulus_type(), bound->modulus());
+    auto remainder = deserialize_expr(bound->remainder_type(), bound->remainder());
+    auto hl_bound = Halide::Internal::Bound();
+    hl_bound.var = var;
+    hl_bound.min = min;
+    hl_bound.extent = extent;
+    hl_bound.modulus = modulus;
+    hl_bound.remainder = remainder;
+    return hl_bound;
+}
+
+Halide::Internal::StorageDim Deserializer::deserialize_storage_dim(const Halide::Serialize::StorageDim *storage_dim) {
+    auto var = deserialize_string(storage_dim->var());
+    auto alignment = deserialize_expr(storage_dim->alignment_type(), storage_dim->alignment());
+    auto bound = deserialize_expr(storage_dim->bound_type(), storage_dim->bound());
+    auto fold_factor = deserialize_expr(storage_dim->fold_factor_type(), storage_dim->fold_factor());
+    auto fold_forward = storage_dim->fold_forward();
+    auto hl_storage_dim = Halide::Internal::StorageDim();
+    hl_storage_dim.var = var;
+    hl_storage_dim.alignment = alignment;
+    hl_storage_dim.bound = bound;
+    hl_storage_dim.fold_factor = fold_factor;
+    hl_storage_dim.fold_forward = fold_forward;
+    return hl_storage_dim;
+}
+
+Halide::LoopLevel Deserializer::deserialize_loop_level(const Halide::Serialize::LoopLevel *loop_level) {
+    auto func_name = deserialize_string(loop_level->func_name());
+    auto stage_index = loop_level->stage_index();
+    auto var_name = deserialize_string(loop_level->var_name());
+    auto is_rvar = loop_level->is_rvar();
+    auto locked = loop_level->locked();
+    return Halide::LoopLevel(func_name, var_name, is_rvar, stage_index, locked);
+}
+
+Halide::Internal::FuncSchedule Deserializer::deserialize_func_schedule(const Halide::Serialize::FuncSchedule *func_schedule) {
+    auto store_level = deserialize_loop_level(func_schedule->store_level());
+    auto compute_level = deserialize_loop_level(func_schedule->compute_level());
+    std::vector<Halide::Internal::StorageDim> storage_dims;
+    for (const auto &storage_dim : *func_schedule->storage_dims()) {
+        storage_dims.push_back(deserialize_storage_dim(storage_dim));
+    }
+    std::vector<Halide::Internal::Bound> bounds;
+    for (const auto &bound : *func_schedule->bounds()) {
+        bounds.push_back(deserialize_bound(bound));
+    }
+    std::vector<Halide::Internal::Bound> estimates;
+    for (const auto &estimate : *func_schedule->estimates()) {
+        estimates.push_back(deserialize_bound(estimate));
+    }
+    auto memory_type = deserialize_memory_type(func_schedule->memory_type());
+    auto memoized = func_schedule->memoized();
+    auto async = func_schedule->async();
+    auto memoize_eviction_key = deserialize_expr(func_schedule->memoize_eviction_key_type(), func_schedule->memoize_eviction_key());
+    auto hl_func_schedule = Halide::Internal::FuncSchedule();
+    hl_func_schedule.store_level() = store_level;
+    hl_func_schedule.compute_level() = compute_level;
+    hl_func_schedule.bounds() = bounds;
+    hl_func_schedule.estimates() = estimates;
+    hl_func_schedule.memory_type() = memory_type;
+    hl_func_schedule.memoized() = memoized;
+    hl_func_schedule.async() = async;
+    hl_func_schedule.memoize_eviction_key() = memoize_eviction_key;
+    return hl_func_schedule;
+}
+
 Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     // unpack binary file
     std::ifstream in(filename, std::ios::binary | std::ios::in);
@@ -554,6 +596,7 @@ Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
         std::cerr << "failed to open file " << filename << "\n";
         return Halide::Pipeline();
     }
+    std::cout << "Deserializing from file " << filename << "\n";
     in.seekg(0, std::ios::end);
     int size = in.tellg();
     in.seekg(0, std::ios::beg);

@@ -165,6 +165,26 @@ bool LoopLevel::is_root() const {
     return contents->var_name == root_looplevel_name;
 }
 
+int LoopLevel::get_stage_index() const {
+    return contents->stage_index;
+}
+
+std::string LoopLevel::func_name() const {
+    return contents->func_name;
+}
+
+std::string LoopLevel::var_name() const {
+    return contents->var_name;
+}
+
+bool LoopLevel::is_rvar() const {
+    return contents->is_rvar;
+}
+
+bool LoopLevel::locked() const {
+    return contents->locked;
+}
+
 std::string LoopLevel::to_string() const {
     check_defined_and_locked();
     if (contents->stage_index == -1) {

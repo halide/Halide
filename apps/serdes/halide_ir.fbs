@@ -398,6 +398,43 @@ table Type {
     lanes: int32;
 }
 
+table Bound {
+    var: string;
+    min: Expr;
+    extent: Expr;
+    modulus: Expr;
+    remainder: Expr;
+}
+
+table StorageDim {
+    var: string;
+    alignment: Expr;
+    bound: Expr;
+    fold_factor: Expr;
+    fold_forward: bool;
+}
+
+table LoopLevel {
+    func_name: string;
+    stage_index: int32;
+    var_name: string;
+    is_rvar: bool;
+    locked: bool;
+}
+
+table FuncSchedule {
+    store_level: LoopLevel;
+    compute_level: LoopLevel;
+    storage_dims: [StorageDim];
+    bounds: [Bound];
+    estimates: [Bound];
+    // wrappers: [WrapperRef]; TODO: no WrapperRef yet
+    memory_type: MemoryType = Auto;
+    memoized: bool;
+    async: bool;
+    memoize_eviction_key: Expr;
+}
+
 // Halide::internal::Function
 table Func {
     name: string;
@@ -406,7 +443,7 @@ table Func {
     required_types: [Type];
     required_dims: int32;
     args: [string];
-    // func_schedule: FuncSchedule;
+    func_schedule: FuncSchedule;
     // init_def: Definition;
     // updates: [Definition];
     // debug_file: string;

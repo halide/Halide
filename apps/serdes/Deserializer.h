@@ -28,6 +28,16 @@ private:
     std::vector<Halide::Expr> deserialize_expr_vector(const flatbuffers::Vector<uint8_t> *exprs_types, const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized);
 
     Halide::Range deserialize_range(const Halide::Serialize::Range *range);
+
+    Halide::Internal::Bound deserialize_bound(const Halide::Serialize::Bound *bound);
+
+    Halide::Internal::StorageDim deserialize_storage_dim(const Halide::Serialize::StorageDim *storage_dim);
+
+    Halide::LoopLevel deserialize_loop_level(const Halide::Serialize::LoopLevel *loop_level);
+
+    Halide::Internal::FuncSchedule deserialize_func_schedule(const Halide::Serialize::FuncSchedule *func_schedule);
+
+    Halide::MemoryType deserialize_memory_type(const Halide::Serialize::MemoryType memory_type);
 };
 
 #endif

@@ -669,7 +669,7 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
     }
 }
 
-flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_func(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Function &function) {
+flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_function(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Function &function) {
     auto name_serialized = serialize_string(builder, function.name());
 
     auto origin_name_serialized = serialize_string(builder, function.origin_name());
@@ -700,7 +700,10 @@ flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_func(flatbuff
     }
     auto args_vector = builder.CreateVector(args_serialized);
 
-    auto func = Halide::Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim, args_vector);
+    auto func_schedule = function.schedule();
+    auto func_schedule_serialized = serialize_func_schedule(builder, func_schedule);
+
+    auto func = Halide::Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim, args_vector, func_schedule_serialized);
     return func;
 }
 
@@ -711,6 +714,111 @@ flatbuffers::Offset<Halide::Serialize::Range> Serializer::serialize_range(flatbu
     auto extent_serialized = serialize_expr(builder, extent);
     auto range_obj = Halide::Serialize::CreateRange(builder, min_serialized.first, min_serialized.second, extent_serialized.first, extent_serialized.second);
     return range_obj;
+}
+
+flatbuffers::Offset<Halide::Serialize::Bound> Serializer::serialize_bound(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Bound &bound) {
+    auto var = bound.var;
+    auto var_serialized = serialize_string(builder, var);
+    auto min = bound.min;
+    auto min_serialized = serialize_expr(builder, min);
+    auto extent = bound.extent;
+    auto extent_serialized = serialize_expr(builder, extent);
+    auto modulus = bound.modulus;
+    auto modulus_serialized = serialize_expr(builder, modulus);
+    auto remainder = bound.remainder;
+    auto remainder_serialized = serialize_expr(builder, remainder);
+    auto bound_obj = Halide::Serialize::CreateBound(builder, var_serialized, min_serialized.first, min_serialized.second, extent_serialized.first, extent_serialized.second, modulus_serialized.first, modulus_serialized.second, remainder_serialized.first, remainder_serialized.second);
+    return bound_obj;
+}
+
+flatbuffers::Offset<Halide::Serialize::StorageDim> Serializer::serialize_storage_dim(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::StorageDim &storage_dim) {
+    auto var = storage_dim.var;
+    auto var_serialized = serialize_string(builder, var);
+    auto alignment = storage_dim.alignment;
+    auto alignment_serialized = serialize_expr(builder, alignment);
+    auto bound = storage_dim.bound;
+    auto bound_serialized = serialize_expr(builder, bound);
+    auto fold_factor = storage_dim.fold_factor;
+    auto fold_factor_serialized = serialize_expr(builder, fold_factor);
+    auto fold_forward = storage_dim.fold_forward;
+    auto storage_dim_obj = Halide::Serialize::CreateStorageDim(builder, var_serialized, alignment_serialized.first, alignment_serialized.second, bound_serialized.first, bound_serialized.second, fold_factor_serialized.first, fold_factor_serialized.second, fold_forward);
+    return storage_dim_obj;
+}
+
+flatbuffers::Offset<Halide::Serialize::LoopLevel> Serializer::serialize_loop_level(flatbuffers::FlatBufferBuilder &builder, const Halide::LoopLevel &loop_level) {
+    auto func_name = loop_level.func_name();
+    auto func_name_serialized = serialize_string(builder, func_name);
+    auto stage_index = loop_level.get_stage_index();
+    auto var_name = loop_level.var_name();
+    auto var_name_serialized = serialize_string(builder, var_name);
+    bool is_rvar = loop_level.is_rvar();
+    auto locked = loop_level.locked();
+    auto loop_level_obj = Halide::Serialize::CreateLoopLevel(builder, func_name_serialized, stage_index, var_name_serialized, is_rvar, locked);
+    return loop_level_obj;
+}
+
+flatbuffers::Offset<Halide::Serialize::FuncSchedule> Serializer::serialize_func_schedule(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::FuncSchedule &func_schedule) {
+    auto store_level = func_schedule.store_level();
+    auto store_level_serialized = serialize_loop_level(builder, store_level);
+    auto compute_level = func_schedule.compute_level();
+    auto compute_level_serialized = serialize_loop_level(builder, compute_level);
+    std::vector<flatbuffers::Offset<Halide::Serialize::StorageDim>> storage_dims_serialized;
+    for (const auto &storage_dim : func_schedule.storage_dims()) {
+        storage_dims_serialized.push_back(serialize_storage_dim(builder, storage_dim));
+    }
+    std::vector<flatbuffers::Offset<Halide::Serialize::Bound>> bounds_serialized;
+    for (const auto &bound : func_schedule.bounds()) {
+        bounds_serialized.push_back(serialize_bound(builder, bound));
+    }
+    std::vector<flatbuffers::Offset<Halide::Serialize::Bound>> estimates_serialized;
+    for (const auto &estimate : func_schedule.estimates()) {
+        estimates_serialized.push_back(serialize_bound(builder, estimate));
+    }
+    // TODO: make this a func
+    Halide::Serialize::MemoryType memory_type = Halide::Serialize::MemoryType::MemoryType_Auto;
+    switch (func_schedule.memory_type()) {
+    case Halide::MemoryType::Auto: {
+        memory_type = Halide::Serialize::MemoryType::MemoryType_Auto;
+        break;
+    }
+    case Halide::MemoryType::Heap: {
+        memory_type = Halide::Serialize::MemoryType::MemoryType_Heap;
+        break;
+    }
+    case Halide::MemoryType::Stack: {
+        memory_type = Halide::Serialize::MemoryType::MemoryType_Stack;
+        break;
+    }
+    case Halide::MemoryType::Register: {
+        memory_type = Halide::Serialize::MemoryType::MemoryType_Register;
+        break;
+    }
+    case Halide::MemoryType::GPUShared: {
+        memory_type = Halide::Serialize::MemoryType::MemoryType_GPUShared;
+        break;
+    }
+    case Halide::MemoryType::GPUTexture: {
+        memory_type = Halide::Serialize::MemoryType::MemoryType_GPUTexture;
+        break;
+    }
+    case Halide::MemoryType::LockedCache: {
+        memory_type = Halide::Serialize::MemoryType::MemoryType_LockedCache;
+        break;
+    }
+    case Halide::MemoryType::VTCM: {
+        memory_type = Halide::Serialize::MemoryType::MemoryType_VTCM;
+        break;
+    }
+    case Halide::MemoryType::AMXTile: {
+        memory_type = Halide::Serialize::MemoryType::MemoryType_AMXTile;
+        break;
+    }
+    }
+    auto memoized = func_schedule.memoized();
+    auto async = func_schedule.async();
+    auto memoize_eviction_key = func_schedule.memoize_eviction_key();
+    auto memoize_eviction_key_serialized = serialize_expr(builder, memoize_eviction_key);
+    return Halide::Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized, builder.CreateVector(storage_dims_serialized), builder.CreateVector(bounds_serialized), builder.CreateVector(estimates_serialized), memory_type, memoized, async, memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
 }
 
 void Serializer::serialize(const Halide::Pipeline &pipeline, const std::string &filename) {
@@ -738,7 +846,7 @@ void Serializer::serialize(const Halide::Pipeline &pipeline, const std::string &
     auto outpus = pipeline.outputs();
     std::vector<flatbuffers::Offset<Halide::Serialize::Func>> funcs_serialized;
     for (const auto &func : outpus) {
-        funcs_serialized.push_back(this->serialize_func(builder, func.function()));
+        funcs_serialized.push_back(this->serialize_function(builder, func.function()));
     }
     auto funcs = builder.CreateVector(funcs_serialized);
 

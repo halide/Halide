@@ -21,6 +21,14 @@ public:
     void print_expr(const Halide::Expr &expr);
 
     void print_range(const Halide::Range &range);
+
+    void print_bound(const Halide::Internal::Bound &bound);
+
+    void print_storage_dim(const Halide::Internal::StorageDim &storage_dim);
+
+    void print_loop_level(const Halide::LoopLevel &loop_level);
+
+    void print_func_schedule(const Halide::Internal::FuncSchedule &func_schedule);
 };
 
 #endif
