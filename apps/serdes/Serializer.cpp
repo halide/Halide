@@ -700,10 +700,13 @@ flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_function(flat
     }
     auto args_vector = builder.CreateVector(args_serialized);
 
-    auto func_schedule = function.schedule();
-    auto func_schedule_serialized = serialize_func_schedule(builder, func_schedule);
-
-    auto func = Halide::Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim, args_vector, func_schedule_serialized);
+    auto func_schedule_serialized = serialize_func_schedule(builder, function.schedule());
+    auto init_def_serialized = serialize_definition(builder, function.definition());
+    std::vector<flatbuffers::Offset<Halide::Serialize::Definition>> updates_serialized;
+    for (const auto &update : function.updates()) {
+        updates_serialized.push_back(serialize_definition(builder, update));
+    }
+    auto func = Halide::Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim, args_vector, func_schedule_serialized, init_def_serialized, builder.CreateVector(updates_serialized));
     return func;
 }
 
@@ -818,7 +821,45 @@ flatbuffers::Offset<Halide::Serialize::FuncSchedule> Serializer::serialize_func_
     auto async = func_schedule.async();
     auto memoize_eviction_key = func_schedule.memoize_eviction_key();
     auto memoize_eviction_key_serialized = serialize_expr(builder, memoize_eviction_key);
-    return Halide::Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized, builder.CreateVector(storage_dims_serialized), builder.CreateVector(bounds_serialized), builder.CreateVector(estimates_serialized), memory_type, memoized, async, memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
+    return Halide::Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized, builder.CreateVector(storage_dims_serialized), builder.CreateVector(bounds_serialized),
+                                                 builder.CreateVector(estimates_serialized), memory_type, memoized, async, memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
+}
+
+flatbuffers::Offset<Halide::Serialize::Specialization> Serializer::serialize_specialization(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Specialization &specialization) {
+    auto condition_serialized = serialize_expr(builder, specialization.condition);
+    auto definition_serialized = serialize_definition(builder, specialization.definition);
+    auto failure_message_serialized = serialize_string(builder, specialization.failure_message);
+    return Halide::Serialize::CreateSpecialization(builder, condition_serialized.first, condition_serialized.second, definition_serialized, failure_message_serialized);
+}
+
+flatbuffers::Offset<Halide::Serialize::Definition> Serializer::serialize_definition(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Definition &definition) {
+    auto is_init = definition.is_init();
+    auto predicate_serialized = serialize_expr(builder, definition.predicate());
+    std::vector<uint8_t> values_types;
+    values_types.reserve(definition.values().size());
+    std::vector<flatbuffers::Offset<void>> values_serialized;
+    values_serialized.reserve(definition.values().size());
+    for (const auto &value : definition.values()) {
+        auto value_serialized = serialize_expr(builder, value);
+        values_types.push_back(value_serialized.first);
+        values_serialized.push_back(value_serialized.second);
+    }
+    std::vector<uint8_t> args_types;
+    args_types.reserve(definition.args().size());
+    std::vector<flatbuffers::Offset<void>> args_serialized;
+    args_serialized.reserve(definition.args().size());
+    for (const auto &arg : definition.args()) {
+        auto arg_serialized = serialize_expr(builder, arg);
+        args_types.push_back(arg_serialized.first);
+        args_serialized.push_back(arg_serialized.second);
+    }
+    std::vector<flatbuffers::Offset<Halide::Serialize::Specialization>> specializations_serialized;
+    for (const auto &specialization : definition.specializations()) {
+        specializations_serialized.push_back(serialize_specialization(builder, specialization));
+    }
+    auto source_location_serialized = serialize_string(builder, definition.source_location());
+    return Halide::Serialize::CreateDefinition(builder, is_init, predicate_serialized.first, predicate_serialized.second, builder.CreateVector(values_types),
+                                               builder.CreateVector(values_serialized), builder.CreateVector(args_types), builder.CreateVector(args_serialized), builder.CreateVector(specializations_serialized), source_location_serialized);
 }
 
 void Serializer::serialize(const Halide::Pipeline &pipeline, const std::string &filename) {

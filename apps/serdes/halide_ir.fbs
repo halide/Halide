@@ -435,6 +435,22 @@ table FuncSchedule {
     memoize_eviction_key: Expr;
 }
 
+table Specialization {
+    condition: Expr;
+    definition: Definition;
+    failure_message: string;
+}
+
+table Definition {
+    is_init: bool;
+    predicate: Expr;
+    values: [Expr];
+    args: [Expr];
+    // stage_schedule: StageSchedule;
+    specializations: [Specialization];
+    source_location: string;
+}
+
 // Halide::internal::Function
 table Func {
     name: string;
@@ -444,8 +460,8 @@ table Func {
     required_dims: int32;
     args: [string];
     func_schedule: FuncSchedule;
-    // init_def: Definition;
-    // updates: [Definition];
+    init_def: Definition;
+    updates: [Definition];
     // debug_file: string;
     // output_buffers: [Parameter];
     // extern_arguments: [ExternFuncArgument];

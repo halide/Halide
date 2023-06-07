@@ -15,6 +15,8 @@ public:
 
 private:
     // helper functions to deserialize each type of object
+    Halide::MemoryType deserialize_memory_type(const Halide::Serialize::MemoryType memory_type);
+
     std::string deserialize_string(const flatbuffers::String *str);
 
     Halide::Type deserialize_type(const Halide::Serialize::Type *type);
@@ -37,7 +39,9 @@ private:
 
     Halide::Internal::FuncSchedule deserialize_func_schedule(const Halide::Serialize::FuncSchedule *func_schedule);
 
-    Halide::MemoryType deserialize_memory_type(const Halide::Serialize::MemoryType memory_type);
+    Halide::Internal::Specialization deserialize_specialization(const Halide::Serialize::Specialization *specialization);
+
+    Halide::Internal::Definition deserialize_definition(const Halide::Serialize::Definition *definition);
 };
 
 #endif

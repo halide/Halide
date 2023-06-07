@@ -333,7 +333,7 @@ Function::Function(const std::vector<Type> &required_types, int required_dims, c
 
 Function::Function(const std::string &name, const std::string &origin_name, const std::vector<Halide::Type> &output_types,
                    const std::vector<Halide::Type> &required_types, int required_dims, const std::vector<std::string> &args,
-                   const FuncSchedule &func_schedule) {
+                   const FuncSchedule &func_schedule, const Definition &init_def, const std::vector<Definition> &updates) {
     contents.strong = new FunctionGroup;
     contents.strong->members.resize(1);
     contents->name = name;
@@ -343,6 +343,8 @@ Function::Function(const std::string &name, const std::string &origin_name, cons
     contents->required_dims = required_dims;
     contents->args = args;
     contents->func_schedule = func_schedule;
+    contents->init_def = init_def;
+    contents->updates = updates;
 }
 
 namespace {

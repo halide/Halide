@@ -10,27 +10,27 @@ std::string Deserializer::deserialize_string(const flatbuffers::String *str) {
 
 Halide::MemoryType Deserializer::deserialize_memory_type(const Halide::Serialize::MemoryType memory_type) {
     switch (memory_type) {
-        case Halide::Serialize::MemoryType::MemoryType_Auto:
-            return Halide::MemoryType::Auto;
-        case Halide::Serialize::MemoryType::MemoryType_Heap:
-            return Halide::MemoryType::Heap;
-        case Halide::Serialize::MemoryType::MemoryType_Stack:
-            return Halide::MemoryType::Stack;
-        case Halide::Serialize::MemoryType::MemoryType_Register:
-            return Halide::MemoryType::Register;
-        case Halide::Serialize::MemoryType::MemoryType_GPUShared:
-            return Halide::MemoryType::GPUShared;
-        case Halide::Serialize::MemoryType::MemoryType_GPUTexture:
-            return Halide::MemoryType::GPUTexture;
-        case Halide::Serialize::MemoryType::MemoryType_LockedCache:
-            return Halide::MemoryType::LockedCache;
-        case Halide::Serialize::MemoryType::MemoryType_VTCM:
-            return Halide::MemoryType::VTCM;
-        case Halide::Serialize::MemoryType::MemoryType_AMXTile:
-            return Halide::MemoryType::AMXTile;
-        default:
-            std::cerr << "unknown memory type " << memory_type << "\n";
-            return Halide::MemoryType::Auto;
+    case Halide::Serialize::MemoryType::MemoryType_Auto:
+        return Halide::MemoryType::Auto;
+    case Halide::Serialize::MemoryType::MemoryType_Heap:
+        return Halide::MemoryType::Heap;
+    case Halide::Serialize::MemoryType::MemoryType_Stack:
+        return Halide::MemoryType::Stack;
+    case Halide::Serialize::MemoryType::MemoryType_Register:
+        return Halide::MemoryType::Register;
+    case Halide::Serialize::MemoryType::MemoryType_GPUShared:
+        return Halide::MemoryType::GPUShared;
+    case Halide::Serialize::MemoryType::MemoryType_GPUTexture:
+        return Halide::MemoryType::GPUTexture;
+    case Halide::Serialize::MemoryType::MemoryType_LockedCache:
+        return Halide::MemoryType::LockedCache;
+    case Halide::Serialize::MemoryType::MemoryType_VTCM:
+        return Halide::MemoryType::VTCM;
+    case Halide::Serialize::MemoryType::MemoryType_AMXTile:
+        return Halide::MemoryType::AMXTile;
+    default:
+        std::cerr << "unknown memory type " << memory_type << "\n";
+        return Halide::MemoryType::Auto;
     }
 }
 
@@ -83,7 +83,15 @@ Halide::Internal::Function Deserializer::deserialize_function(const Halide::Seri
 
     auto func_schedule = deserialize_func_schedule(function->func_schedule());
 
-    return Halide::Internal::Function(name, origin_name, output_types, required_types, required_dim, args, func_schedule);
+    auto init_def = deserialize_definition(function->init_def());
+
+    std::vector<Halide::Internal::Definition> updates;
+    for (const auto &update : *function->updates()) {
+        updates.push_back(deserialize_definition(update));
+    }
+
+    return Halide::Internal::Function(name, origin_name, output_types, required_types,
+                                      required_dim, args, func_schedule, init_def, updates);
 }
 
 Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const void *stmt) {
@@ -587,6 +595,31 @@ Halide::Internal::FuncSchedule Deserializer::deserialize_func_schedule(const Hal
     hl_func_schedule.async() = async;
     hl_func_schedule.memoize_eviction_key() = memoize_eviction_key;
     return hl_func_schedule;
+}
+
+Halide::Internal::Specialization Deserializer::deserialize_specialization(const Halide::Serialize::Specialization *specialization) {
+    auto condition = deserialize_expr(specialization->condition_type(), specialization->condition());
+    auto defintion = deserialize_definition(specialization->definition());
+    auto failure_message = deserialize_string(specialization->failure_message());
+    Halide::Internal::Specialization hl_specialization;
+    hl_specialization.condition = condition;
+    hl_specialization.definition = defintion;
+    hl_specialization.failure_message = failure_message;
+    return hl_specialization;
+}
+
+Halide::Internal::Definition Deserializer::deserialize_definition(const Halide::Serialize::Definition *definition) {
+    auto is_init = definition->is_init();
+    auto predicate = deserialize_expr(definition->predicate_type(), definition->predicate());
+    auto args = deserialize_expr_vector(definition->args_type(), definition->args());
+    auto values = deserialize_expr_vector(definition->values_type(), definition->values());
+
+    std::vector<Halide::Internal::Specialization> specializations;
+    for (const auto &specialization : *definition->specializations()) {
+        specializations.push_back(deserialize_specialization(specialization));
+    }
+    auto source_location = deserialize_string(definition->source_location());
+    return Halide::Internal::Definition(is_init, predicate, args, values, Halide::Internal::StageSchedule(), specializations, source_location);
 }
 
 Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
