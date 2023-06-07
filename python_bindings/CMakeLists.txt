@@ -25,7 +25,7 @@ cmake_dependent_option(
 
 # Set the expected (downloaded) version of pybind11
 option(PYBIND11_USE_FETCHCONTENT "Enable to download pybind11 via FetchContent" ON)
-set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
+set(PYBIND11_VER 2.10.4 CACHE STRING "The pybind11 version to use (or download)")
 
 ##
 # Dependencies
