@@ -368,7 +368,7 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
         builder->CreateCall(inline_csrw, {rounding_mode});
     }
 
-    // TODO: Should handle inrinsics other than binary operators.
+    // TODO: Should handle intrinsics other than binary operators.
     // Call the LLVM intrinsic.
     int actual_lanes = op->type.lanes();
     llvm::Constant *actual_vlen = llvm::ConstantInt::get(xlen_type, actual_lanes);
