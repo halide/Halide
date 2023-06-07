@@ -4989,11 +4989,12 @@ llvm::Value *CodeGen_LLVM::normalize_fixed_scalable_vector_type(llvm::Type *desi
 
 llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *arg,
                                                                  llvm::Type *desired_type) {
-    if (arg->getType() == desired_type) {
+    llvm::Type *arg_type = arg->getType();
+    // If types are already equal or neither is a vector type, do nothing.
+    if (arg_type == desired_type || !(arg_type->isVectorTy() || desired_type->isVectorTy())) {
         return arg;
     }
 
-    llvm::Type *arg_type = arg->getType();
     internal_assert(arg_type->getScalarType() == desired_type->getScalarType());
     if (!arg_type->isVectorTy()) {
         arg = create_broadcast(arg, 1);

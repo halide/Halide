@@ -42,42 +42,43 @@ struct IntrinsicArgPattern {
     }
 };
 
+enum RVVIntrinsicFlags {
+    AddVLArg = 1 << 0,          // Add a constant full size vector length argument
+    RoundDown = 1 << 1,         // Set vxrm rounding mode to down (rdn) before intrinsic.
+    RoundUp = 1 << 2,           // Set vxrm rounding mode to up (rdu) before intrinsic.
+    MangleReturnType = 1 << 3,  // Put return type mangling at start of type list.
+    ReverseBinOp = 1 << 4,      // Switch first two arguments to handle asymmetric ops.
+    Commutes = 1 << 5,          // Indicates first two arguments can flip, for vector/scalar ops.
+};
+
 struct RISCVIntrinsic {
     const char *riscv_name;
     IntrinsicArgPattern ret_type;
     const char *name;
     IntrinsicArgPattern arg_types[max_intrinsic_args];
     int flags;
-    enum {
-        AddVLArg = 1 << 0,          // Add a constant full size vector length argument
-        RoundDown = 1 << 1,         // Set vxrm rounding mode to down (rdn) before intrinsic.
-        RoundUp = 1 << 2,           // Set vxrm rounding mode to up (rdu) before intrinsic.
-        MangleReturnType = 1 << 3,  // Put return type mangling at start of type list.
-        ReverseBinOp = 1 << 4,      // Switch first two arguments to handle asymmetric ops.
-        Commutes = 1 << 5,          // Indicates first two arguments can flip, for vector/scalar ops.
-    };
 };
 
 // TODO: Consider moving enum out to global scope to eliminate "RISCVIntrinsic::"
 const RISCVIntrinsic signed_intrinsic_defs[] = {
-    {"vaadd", Type::Int, "halving_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundDown | RISCVIntrinsic::Commutes},
-    {"vaadd", Type::Int, "rounding_halving_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundUp | RISCVIntrinsic::Commutes},
-    {"vwadd", {Type::Int, 2}, "widening_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
-    {"vwsub", {Type::Int, 2}, "widening_sub", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwmul", {Type::Int, 2}, "widening_mul", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
+    {"vaadd", Type::Int, "halving_add", {Type::Int, Type::Int}, AddVLArg | RoundDown | Commutes},
+    {"vaadd", Type::Int, "rounding_halving_add", {Type::Int, Type::Int}, AddVLArg | RoundUp | Commutes},
+    {"vwadd", {Type::Int, 2}, "widening_add", {Type::Int, Type::Int}, AddVLArg | MangleReturnType | Commutes},
+    {"vwsub", {Type::Int, 2}, "widening_sub", {Type::Int, Type::Int}, AddVLArg | MangleReturnType},
+    {"vwmul", {Type::Int, 2}, "widening_mul", {Type::Int, Type::Int}, AddVLArg | MangleReturnType | Commutes},
 };
 
 const RISCVIntrinsic unsigned_intrinsic_defs[] = {
-    {"vaaddu", Type::UInt, "halving_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundDown | RISCVIntrinsic::Commutes},
-    {"vaaddu", Type::UInt, "rounding_halving_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundUp | RISCVIntrinsic::Commutes},
-    {"vwaddu", {Type::UInt, 2}, "widening_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
-    {"vwsubu", {Type::UInt, 2}, "widening_sub", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwmulu", {Type::UInt, 2}, "widening_mul", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::Commutes},
+    {"vaaddu", {Type::UInt}, "halving_add", {Type::UInt, Type::UInt}, AddVLArg | RoundDown | Commutes},
+    {"vaaddu", {Type::UInt}, "rounding_halving_add", {Type::UInt, Type::UInt}, AddVLArg | RoundUp | Commutes},
+    {"vwaddu", {Type::UInt, 2}, "widening_add", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType | Commutes},
+    {"vwsubu", {Type::UInt, 2}, "widening_sub", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType},
+    {"vwmulu", {Type::UInt, 2}, "widening_mul", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType | Commutes},
 };
 
 const RISCVIntrinsic mixed_sign_intrinsic_defs[] = {
-    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::Int, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::UInt, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::ReverseBinOp},
+    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::Int, Type::UInt}, AddVLArg | MangleReturnType},
+    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::UInt, Type::Int}, AddVLArg | MangleReturnType | ReverseBinOp},
 };
 
 const RISCVIntrinsic *MatchRISCVIntrisic(const Call *op) {
@@ -226,7 +227,7 @@ int vscale_lanes(int vscale, const Type &type) {
 }
 
 /* Currently this assumes the default pattern for RISC V intrinsics:
- *     - All widths of signed/unsigned/flaoting-point are supported.
+ *     - All widths of signed/unsigned/floating-point are supported.
  *     - All LMUL values are supported.
  *     - There is a vector/scalar version in which the second argument is a scalar.
  *       The Commutative flag is used to decide whether to automatically
@@ -251,9 +252,9 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
         return false;
     }
 
-    // Using vscale types is still highly desirable as LLVM has still
+    // Using vscale types is still highly desirable as LLVM still has
     // instruction selection issues with fixed vector types. The cleanest model
-    // would be to use fixed vector types with vector predictated and RISC V
+    // would be to use fixed vector types with vector predicated and RISC V
     // specific intrinsics, both of which take a vector length. With the
     // hardware vector register size asserted at a specific width, this should
     // generate the ideal code (for a fixed vector size) as well.
@@ -290,13 +291,13 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
     llvm::Value *left_arg = codegen(op->args[0]);
     llvm::Value *right_arg = codegen(op->args[1]);
 
-    internal_assert(!((intrin.flags & RISCVIntrinsic::ReverseBinOp) &&
-                      (intrin.flags & RISCVIntrinsic::Commutes)))
+    internal_assert(!((intrin.flags & ReverseBinOp) &&
+                      (intrin.flags & Commutes)))
         << "Cannot have both Commutes and ReverseBinOp set on an intrinsic.\n";
 
-    if (((intrin.flags & RISCVIntrinsic::Commutes) &&
+    if (((intrin.flags & Commutes) &&
          op->args[0].type().is_scalar()) ||
-        (intrin.flags & RISCVIntrinsic::ReverseBinOp)) {
+        (intrin.flags & ReverseBinOp)) {
         std::swap(left_arg, right_arg);
     }
 
@@ -337,13 +338,13 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
     llvm_arg_types.push_back(llvm_ret_type);
     llvm_arg_types.push_back(left_arg->getType());
     llvm_arg_types.push_back(right_arg->getType());
-    if (intrin.flags & RISCVIntrinsic::MangleReturnType) {
+    if (intrin.flags & MangleReturnType) {
         mangled_name += mangle_llvm_type(llvm_ret_type);
     }
     mangled_name += mangle_llvm_type(llvm_arg_types[1]);
     mangled_name += mangle_llvm_type(llvm_arg_types[2]);
 
-    if (intrin.flags & RISCVIntrinsic::AddVLArg) {
+    if (intrin.flags & AddVLArg) {
         mangled_name += (target.bits == 64) ? ".i64" : ".i32";
         llvm_arg_types.push_back(xlen_type);
     }
@@ -352,8 +353,8 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
         get_llvm_intrin(llvm_ret_type, mangled_name, llvm_arg_types);
 
     // Set vector fixed-point rounding flag if needed for intrinsic.
-    bool round_down = intrin.flags & RISCVIntrinsic::RoundDown;
-    bool round_up = intrin.flags & RISCVIntrinsic::RoundUp;
+    bool round_down = intrin.flags & RoundDown;
+    bool round_up = intrin.flags & RoundUp;
     if (round_down || round_up) {
         internal_assert(!(round_down && round_up));
         llvm::Value *rounding_mode = llvm::ConstantInt::get(xlen_type, round_down ? 2 : 0);
