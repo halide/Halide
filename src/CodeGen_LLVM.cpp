@@ -5027,6 +5027,7 @@ llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *ar
     intrin_name += mangle_llvm_type(arg_type);
 
     std::vector<llvm::Value *> args;
+    args.reserve(3);
 
     // Vector insert has takes an argument which is being inserted into as well
     // as a value and index. Extract only takes the value and index.
