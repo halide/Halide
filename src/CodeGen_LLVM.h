@@ -547,9 +547,7 @@ protected:
                                     llvm::Type *result_type);
 
     /** Ensure that a vector value is either fixed or vscale depending to match desired_type.
-     * allow_lanes_adjustment will adapt the size, automatically rounding up a fixed vector
-     * to vscale size, or truncating a vscale vector to fixed size. This is to handle vscale
-     * quantization. */
+     */
     llvm::Value *normalize_fixed_scalable_vector_type(llvm::Type *desired_type, llvm::Value *result);
 
     /** Convert between two LLVM vectors of potentially different scalable/fixed and size.
