@@ -538,9 +538,23 @@ protected:
         This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
     virtual bool supports_call_as_float16(const Call *op) const;
 
+    /** call_intrin does far too much to be useful and generally breaks things
+     * when one has carefully set things up for a specific architecture. This
+     * just does the bare minimum. call_intrin should be refactored and could
+     * call this, possibly with renaming of the methods. */
+    llvm::Value *simple_call_intrin(const std::string &intrin,
+                                    const std::vector<llvm::Value *> &args,
+                                    llvm::Type *result_type);
+
     /** Ensure that a vector value is either fixed or vscale depending to match desired_type.
      */
     llvm::Value *normalize_fixed_scalable_vector_type(llvm::Type *desired_type, llvm::Value *result);
+
+    /** Convert between two LLVM vectors of potentially different scalable/fixed and size.
+     * Used to handle converting to/from fixed vectors that are smaller than the minimum
+     * size scalable vector. */
+    llvm::Value *convert_fixed_or_scalable_vector_type(llvm::Value *arg,
+                                                       llvm::Type *desired_type);
 
     /** Convert an LLVM fixed vector value to the corresponding vscale vector value. */
     llvm::Value *fixed_to_scalable_vector_type(llvm::Value *fixed);

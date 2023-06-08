@@ -25,32 +25,30 @@ namespace {
 constexpr int max_intrinsic_args = 4;
 
 struct IntrinsicArgPattern {
-    enum TypePattern {
-        Undefined,      // Invalid value for sentinel.
-        Fixed,          // Argument is a fixed width vector.
-        Scalable,       // Argument is a scalable vector.
-        AllTypeWidths,  // Argument generalizes to all bit widths of type.
-    } type_pattern;
-
     Type type;
     int relative_scale;
 
     IntrinsicArgPattern(const Type &type)
-        : type_pattern(type.is_vector() ? Fixed : Scalable),
-          type(type), relative_scale(1) {
+        : type(type), relative_scale(1) {
     }
     IntrinsicArgPattern(halide_type_code_t code)
-        : type_pattern(AllTypeWidths),
-          type(code, 8, 1), relative_scale(1) {
+        : type(code, 8, 1), relative_scale(1) {
     }
     IntrinsicArgPattern(halide_type_code_t code, int relative_scale)
-        : type_pattern(AllTypeWidths),
-          type(code, 8, 1), relative_scale(relative_scale) {
+        : type(code, 8, 1), relative_scale(relative_scale) {
     }
     IntrinsicArgPattern()
-        : type_pattern(Undefined),
-          type(), relative_scale(0) {
+        : type(), relative_scale(0) {
     }
+};
+
+enum RVVIntrinsicFlags {
+    AddVLArg = 1 << 0,          // Add a constant full size vector length argument
+    RoundDown = 1 << 1,         // Set vxrm rounding mode to down (rdn) before intrinsic.
+    RoundUp = 1 << 2,           // Set vxrm rounding mode to up (rdu) before intrinsic.
+    MangleReturnType = 1 << 3,  // Put return type mangling at start of type list.
+    ReverseBinOp = 1 << 4,      // Switch first two arguments to handle asymmetric ops.
+    Commutes = 1 << 5,          // Indicates first two arguments can flip, for vector/scalar ops.
 };
 
 struct RISCVIntrinsic {
@@ -59,42 +57,60 @@ struct RISCVIntrinsic {
     const char *name;
     IntrinsicArgPattern arg_types[max_intrinsic_args];
     int flags;
-    enum {
-        AddVLArg = 1 << 0,          // Add a constant full size vector length argument
-        RoundDown = 1 << 1,         // Set vxrm rounding mode to down (rdn) before intrinsic.
-        RoundUp = 1 << 2,           // Set vxrm rounding mode to up (rdu) before intrinsic.
-        MangleReturnType = 1 << 3,  // Put return type mangling at start of type list.
-        ReverseBinOp = 1 << 4,      // Switch first two arguments to handle asymmetric ops.
-    };
 };
 
-Type concretize_fixed_or_scalable(const IntrinsicArgPattern &f_or_v, int type_width_scale, int vector_bits) {
-    if (f_or_v.type_pattern == IntrinsicArgPattern::Fixed) {
-        return f_or_v.type;
-    }
-    int bit_width = f_or_v.type.bits() * f_or_v.relative_scale * type_width_scale;
-    return Type(f_or_v.type.code(), bit_width, (vector_bits * f_or_v.relative_scale) / bit_width);
-}
+// TODO: Consider moving enum out to global scope to eliminate "RISCVIntrinsic::"
+const RISCVIntrinsic signed_intrinsic_defs[] = {
+    {"vaadd", Type::Int, "halving_add", {Type::Int, Type::Int}, AddVLArg | RoundDown | Commutes},
+    {"vaadd", Type::Int, "rounding_halving_add", {Type::Int, Type::Int}, AddVLArg | RoundUp | Commutes},
+    {"vwadd", {Type::Int, 2}, "widening_add", {Type::Int, Type::Int}, AddVLArg | MangleReturnType | Commutes},
+    {"vwsub", {Type::Int, 2}, "widening_sub", {Type::Int, Type::Int}, AddVLArg | MangleReturnType},
+    {"vwmul", {Type::Int, 2}, "widening_mul", {Type::Int, Type::Int}, AddVLArg | MangleReturnType | Commutes},
+};
 
-// Produce LLVM IR intrisic type name mangling for Halide type, with vector codegen info provided.
-std::string mangle_vector_argument_type(const Type &arg_type, bool scalable, int effective_vscale) {
-    std::string result;
-    if (arg_type.is_vector()) {
-        int lanes = arg_type.lanes();
-        if (!scalable) {
-            result = "v" + std::to_string(lanes);
+const RISCVIntrinsic unsigned_intrinsic_defs[] = {
+    {"vaaddu", {Type::UInt}, "halving_add", {Type::UInt, Type::UInt}, AddVLArg | RoundDown | Commutes},
+    {"vaaddu", {Type::UInt}, "rounding_halving_add", {Type::UInt, Type::UInt}, AddVLArg | RoundUp | Commutes},
+    {"vwaddu", {Type::UInt, 2}, "widening_add", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType | Commutes},
+    {"vwsubu", {Type::UInt, 2}, "widening_sub", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType},
+    {"vwmulu", {Type::UInt, 2}, "widening_mul", {Type::UInt, Type::UInt}, AddVLArg | MangleReturnType | Commutes},
+};
+
+const RISCVIntrinsic mixed_sign_intrinsic_defs[] = {
+    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::Int, Type::UInt}, AddVLArg | MangleReturnType},
+    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::UInt, Type::Int}, AddVLArg | MangleReturnType | ReverseBinOp},
+};
+
+const RISCVIntrinsic *MatchRISCVIntrisic(const Call *op) {
+    if (op->is_intrinsic() && op->args.size() == 2 &&
+        op->type.is_int_or_uint() &&
+        op->args[0].type().is_int_or_uint() &&
+        op->args[1].type().is_int_or_uint()) {
+        if (op->args[0].type().is_int() &&
+            op->args[1].type().is_int()) {
+            for (auto const &i : signed_intrinsic_defs) {
+                if (i.name == op->name) {
+                    return &i;
+                }
+            }
+        } else if (op->args[0].type().is_uint() &&
+                   op->args[1].type().is_uint()) {
+            for (auto const &i : unsigned_intrinsic_defs) {
+                if (i.name == op->name) {
+                    return &i;
+                }
+            }
         } else {
-            result = "nxv" + std::to_string(lanes / effective_vscale);
+            for (auto const &i : mixed_sign_intrinsic_defs) {
+                if (i.name == op->name &&
+                    op->args[0].type().code() != i.arg_types[0].type.code()) {
+                    return &i;
+                }
+            }
         }
     }
-    if (arg_type.is_int() || arg_type.is_uint()) {
-        result += "i";
-    } else {
-        result += "f";
-    }
-    result += std::to_string(arg_type.bits());
 
-    return result;
+    return nullptr;
 }
 
 /** A code generator that emits RISC-V code from a given Halide stmt. */
@@ -103,13 +119,9 @@ public:
     /** Create a RISC-V code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
     CodeGen_RISCV(const Target &);
-    llvm::Function *define_riscv_intrinsic_wrapper(const RISCVIntrinsic &intrin,
-                                                   int type_width_scale);
 
 protected:
     using CodeGen_Posix::visit;
-
-    void init_module() override;
 
     string mcpu_target() const override;
     string mcpu_tune() const override;
@@ -119,6 +131,11 @@ protected:
     int native_vector_bits() const override;
     int maximum_vector_bits() const override;
     int target_vscale() const override;
+
+    void visit(const Call *) override;
+
+private:
+    bool call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, const Call *op);
 };
 
 CodeGen_RISCV::CodeGen_RISCV(const Target &t)
@@ -194,163 +211,150 @@ int CodeGen_RISCV::target_vscale() const {
     return 0;
 }
 
-const RISCVIntrinsic intrinsic_defs[] = {
-    {"vaadd", Type::Int, "halving_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundDown},
-    {"vaaddu", Type::UInt, "halving_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundDown},
-    {"vaadd", Type::Int, "rounding_halving_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundUp},
-    {"vaaddu", Type::UInt, "rounding_halving_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::RoundUp},
-    {"vwadd", {Type::Int, 2}, "widening_add", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwaddu", {Type::UInt, 2}, "widening_add", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwsub", {Type::Int, 2}, "widening_sub", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwsubu", {Type::UInt, 2}, "widening_sub", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwmul", {Type::Int, 2}, "widening_mul", {Type::Int, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwmulu", {Type::UInt, 2}, "widening_mul", {Type::UInt, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::Int, Type::UInt}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType},
-    {"vwmulsu", {Type::Int, 2}, "widening_mul", {Type::UInt, Type::Int}, RISCVIntrinsic::AddVLArg | RISCVIntrinsic::MangleReturnType | RISCVIntrinsic::ReverseBinOp},
-};
+void CodeGen_RISCV::visit(const Call *op) {
+    const RISCVIntrinsic *intrinsic_def = MatchRISCVIntrisic(op);
 
-void CodeGen_RISCV::init_module() {
-    CodeGen_Posix::init_module();
-
-    int effective_vscale = target_vscale();
-    if (effective_vscale != 0) {
-        for (const RISCVIntrinsic &intrin : intrinsic_defs) {
-            std::vector<Type> arg_types;
-            arg_types.reserve(max_intrinsic_args);
-            if (intrin.ret_type.type_pattern == IntrinsicArgPattern::AllTypeWidths) {
-                // Iterate over 8/16/32/64 bit integer type widths via log2 shift amount.
-                // TODO: Will need to add floating point bit widths when an intrinsic is added.
-                //     Not doing this now as it is there would be no coverage, it requires
-                //     deciding whether to get floatness from an argument or return type,
-                //     and it probably has to check target flags to figure out Float(16)
-                //     and BFloat(16) availability.
-                for (int log2_of_scale = 0; log2_of_scale < 4; log2_of_scale++) {
-                    int bit_width_scale = 1 << log2_of_scale;
-
-                    Type ret_type = concretize_fixed_or_scalable(intrin.ret_type, bit_width_scale,
-                                                                 target.vector_bits);
-
-                    if ((intrin.ret_type.relative_scale * bit_width_scale * intrin.ret_type.type.bits()) > 64) {
-                        break;
-                    }
-
-                    for (const auto &arg_type : intrin.arg_types) {
-                        if (arg_type.type_pattern == IntrinsicArgPattern::Undefined) {
-                            break;
-                        }
-                        if ((arg_type.relative_scale * bit_width_scale * arg_type.type.bits()) > 64) {
-                            break;
-                        }
-                        arg_types.push_back(concretize_fixed_or_scalable(arg_type, bit_width_scale,
-                                                                         target.vector_bits));
-                    }
-                    llvm::Function *intrin_impl = define_riscv_intrinsic_wrapper(intrin, bit_width_scale);
-                    declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
-                    arg_types.clear();
-                }
-            } else {
-                llvm::Function *intrin_impl = define_riscv_intrinsic_wrapper(intrin, 1);
-                Type ret_type = concretize_fixed_or_scalable(intrin.ret_type, 1,
-                                                             target.vector_bits);
-                for (const auto &arg_type : intrin.arg_types) {
-                    if (arg_type.type_pattern == IntrinsicArgPattern::Undefined) {
-                        break;
-                    }
-                    arg_types.push_back(concretize_fixed_or_scalable(arg_type, 1, target.vector_bits));
-                }
-                declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
-                arg_types.clear();
-            }
-        }
+    bool handled = (intrinsic_def != nullptr) &&
+                   call_riscv_vector_intrinsic(*intrinsic_def, op);
+    if (!handled) {
+        CodeGen_Posix::visit(op);
     }
 }
 
-llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrinsic &intrin,
-                                                              int bit_width_scale) {
-    int effective_vscale = target_vscale();
+// For vscale types, the lane count must be rounded up to a multiple of vscale.
+int vscale_lanes(int vscale, const Type &type) {
+    return ((type.lanes() + vscale - 1) / vscale) * vscale;
+}
+
+/* Currently this assumes the default pattern for RISC V intrinsics:
+ *     - All widths of signed/unsigned/floating-point are supported.
+ *     - All LMUL values are supported.
+ *     - There is a vector/scalar version in which the second argument is a scalar.
+ *       The Commutative flag is used to decide whether to automatically
+ *       flip arguments to ensure the scalar is second. (LLVM may handle this, don't know.)
+ *     - Widening and narrowing are supported via the relative_scale field of
+ *       the RISCVIntrinsic structure is used to indicate a difference in type
+ *       bit wdith, not lanes, between the slot and the smallest size used in the call.
+ *       ("Slot" is either return type or an argument.
+ *     - Currently this only handles two argument ops.
+ *
+ * TODO: Curently there are no floating-point intrinsics supported.
+ *       Add masking support.
+ *       Handle RISC V specific reductions.
+ */
+bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, const Call *op) {
+    // This is mostly handled by not having ops that don't take two arguments in
+    // the intrinsics tables. However MatchRISCVIntrisic doesn't ensure at least
+    // one argument is a vector and it seems likely this guard will grom in the
+    // future.
+    if (op->args.size() != 2 ||
+        (op->args[0].type().is_scalar() && op->args[1].type().is_scalar())) {
+        return false;
+    }
+
+    // Using vscale types is still highly desirable as LLVM still has
+    // instruction selection issues with fixed vector types. The cleanest model
+    // would be to use fixed vector types with vector predicated and RISC V
+    // specific intrinsics, both of which take a vector length. With the
+    // hardware vector register size asserted at a specific width, this should
+    // generate the ideal code (for a fixed vector size) as well.
+    // For now, this is set to use vscale.
+    int scalable = true;
+    int effective_vscale = scalable ? target_vscale() : 1;
+
+    int op_max_lanes = vscale_lanes(effective_vscale, op->type);
+
+    for (const Expr &arg : op->args) {
+        op_max_lanes = std::max(op_max_lanes,
+                                vscale_lanes(effective_vscale, arg.type()));
+    }
+
+    std::string mangled_name = "llvm.riscv.";
+    mangled_name += intrin.riscv_name;
+
+    Type ret_type = op->type.with_lanes(op_max_lanes);
 
     llvm::Type *xlen_type = target.bits == 32 ? i32_t : i64_t;
 
     // Produce intrinsic name and type mangling.
-    std::vector<llvm::Type *> llvm_arg_types;
-    std::string mangled_name = "llvm.riscv.";
-    mangled_name += intrin.riscv_name;
-    Type ret_type = concretize_fixed_or_scalable(intrin.ret_type, bit_width_scale,
-                                                 target.vector_bits);
-    if (intrin.flags & RISCVIntrinsic::MangleReturnType) {
-        bool scalable = (intrin.ret_type.type_pattern != IntrinsicArgPattern::Fixed);
-        mangled_name += "." + mangle_vector_argument_type(ret_type, scalable, effective_vscale);
-    }
     llvm::Type *llvm_ret_type;
     if (ret_type.is_vector()) {
         int lanes = ret_type.lanes();
-        bool scalable = (intrin.ret_type.type_pattern != IntrinsicArgPattern::Fixed);
-        if (scalable) {
-            lanes /= effective_vscale;
-        }
+        internal_assert(lanes >= effective_vscale) << "Vector type not correctly promoted.\n";
+        lanes /= effective_vscale;
         llvm_ret_type = llvm::VectorType::get(llvm_type_of(ret_type.element_of()),
                                               lanes, scalable);
     } else {
         llvm_ret_type = llvm_type_of(ret_type);
     }
 
-    llvm_arg_types.push_back(llvm_ret_type);
-    for (const auto &arg_type_pattern : intrin.arg_types) {
-        if (arg_type_pattern.type_pattern == IntrinsicArgPattern::Undefined) {
-            break;
-        }
-        Type arg_type = concretize_fixed_or_scalable(arg_type_pattern, bit_width_scale, target.vector_bits);
+    llvm::Value *left_arg = codegen(op->args[0]);
+    llvm::Value *right_arg = codegen(op->args[1]);
 
-        bool scalable = (arg_type_pattern.type_pattern != IntrinsicArgPattern::Fixed);
-        mangled_name += "." + mangle_vector_argument_type(arg_type, scalable, effective_vscale);
-        llvm::Type *llvm_type;
-        if (arg_type.is_vector()) {
-            int lanes = arg_type.lanes();
-            if (scalable) {
-                lanes /= effective_vscale;
-            }
-            llvm_type = llvm::VectorType::get(llvm_type_of(arg_type.element_of()),
-                                              lanes, scalable);
-        } else {
-            llvm_type = llvm_type_of(arg_type);
+    internal_assert(!((intrin.flags & ReverseBinOp) &&
+                      (intrin.flags & Commutes)))
+        << "Cannot have both Commutes and ReverseBinOp set on an intrinsic.\n";
+
+    if (((intrin.flags & Commutes) &&
+         op->args[0].type().is_scalar()) ||
+        (intrin.flags & ReverseBinOp)) {
+        std::swap(left_arg, right_arg);
+    }
+
+    // Promote args to vector types if necessary.
+    // TODO: break out into method. Scopes are to ensure no temporaries are
+    // used elsewhere.
+    {
+        llvm::Type *left_arg_type = left_arg->getType();
+        if (!left_arg_type->isVectorTy()) {
+            left_arg = create_broadcast(left_arg, op_max_lanes);
+            left_arg_type = left_arg->getType();
         }
-        llvm_arg_types.push_back(llvm_type);
+        if (llvm::isa<llvm::FixedVectorType>(left_arg_type)) {
+            llvm::FixedVectorType *fixed = cast<llvm::FixedVectorType>(left_arg_type);
+            left_arg_type = get_vector_type(left_arg_type->getScalarType(),
+                                            (fixed->getNumElements() + effective_vscale - 1) / effective_vscale,
+                                            VectorTypeConstraint::VScale);
+        }
+        left_arg = convert_fixed_or_scalable_vector_type(left_arg, left_arg_type);
     }
-    if (intrin.flags & RISCVIntrinsic::ReverseBinOp) {
-        internal_assert(llvm_arg_types.size() > 2);
-        std::swap(llvm_arg_types[1], llvm_arg_types[2]);
+    {
+        llvm::Type *right_arg_type = right_arg->getType();
+        if (llvm::isa<llvm::FixedVectorType>(right_arg_type)) {
+            llvm::FixedVectorType *fixed = cast<llvm::FixedVectorType>(right_arg_type);
+            right_arg_type = get_vector_type(right_arg_type->getScalarType(),
+                                             (fixed->getNumElements() + effective_vscale - 1) / effective_vscale,
+                                             VectorTypeConstraint::VScale);
+        }
+        if (right_arg_type->isVectorTy()) {
+            right_arg = convert_fixed_or_scalable_vector_type(right_arg, right_arg_type);
+        }
     }
-    if (intrin.flags & RISCVIntrinsic::AddVLArg) {
+
+    // This is the vector tail argument that provides values for uncomputed but
+    // within the type length values in the result. This is always passed as
+    // undef here.
+    std::vector<llvm::Type *> llvm_arg_types;
+    llvm_arg_types.push_back(llvm_ret_type);
+    llvm_arg_types.push_back(left_arg->getType());
+    llvm_arg_types.push_back(right_arg->getType());
+    if (intrin.flags & MangleReturnType) {
+        mangled_name += mangle_llvm_type(llvm_ret_type);
+    }
+    mangled_name += mangle_llvm_type(llvm_arg_types[1]);
+    mangled_name += mangle_llvm_type(llvm_arg_types[2]);
+
+    if (intrin.flags & AddVLArg) {
         mangled_name += (target.bits == 64) ? ".i64" : ".i32";
         llvm_arg_types.push_back(xlen_type);
     }
 
-    llvm::Function *inner =
+    llvm::Function *llvm_intrinsic =
         get_llvm_intrin(llvm_ret_type, mangled_name, llvm_arg_types);
-    llvm::FunctionType *inner_ty = inner->getFunctionType();
-
-    // Remove vector tail preservation argument.
-    llvm_arg_types.erase(llvm_arg_types.begin());
-    // Remove vector length argument passed to inrinsic for wrapper.
-    // Wrapper will supply a constant for the fixed vector length.
-    if (intrin.flags & RISCVIntrinsic::AddVLArg) {
-        llvm_arg_types.resize(llvm_arg_types.size() - 1);
-    }
-
-    string wrapper_name = unique_name(std::string(intrin.name) + "_wrapper");
-    llvm::FunctionType *wrapper_ty = llvm::FunctionType::get(
-        inner_ty->getReturnType(), llvm_arg_types, false);
-    llvm::Function *wrapper =
-        llvm::Function::Create(wrapper_ty, llvm::GlobalValue::InternalLinkage,
-                               wrapper_name, module.get());
-    llvm::BasicBlock *block =
-        llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
-    llvm::IRBuilderBase::InsertPoint here = builder->saveIP();
-    builder->SetInsertPoint(block);
 
     // Set vector fixed-point rounding flag if needed for intrinsic.
-    bool round_down = intrin.flags & RISCVIntrinsic::RoundDown;
-    bool round_up = intrin.flags & RISCVIntrinsic::RoundUp;
+    bool round_down = intrin.flags & RoundDown;
+    bool round_up = intrin.flags & RoundUp;
     if (round_down || round_up) {
         internal_assert(!(round_down && round_up));
         llvm::Value *rounding_mode = llvm::ConstantInt::get(xlen_type, round_down ? 2 : 0);
@@ -364,30 +368,21 @@ llvm::Function *CodeGen_RISCV::define_riscv_intrinsic_wrapper(const RISCVIntrins
         builder->CreateCall(inline_csrw, {rounding_mode});
     }
 
+    // TODO: Should handle intrinsics other than binary operators.
     // Call the LLVM intrinsic.
-    int actual_lanes = ret_type.lanes();
-    llvm::Constant *vtype = llvm::ConstantInt::get(xlen_type, actual_lanes);
-    // Add an initial argument to handle tail propagation. Only done if result is vector type.
-    int left_arg = 0;
-    int right_arg = 1;
-    if (intrin.flags & RISCVIntrinsic::ReverseBinOp) {
-        std::swap(left_arg, right_arg);
+    int actual_lanes = op->type.lanes();
+    llvm::Constant *actual_vlen = llvm::ConstantInt::get(xlen_type, actual_lanes);
+
+    value = builder->CreateCall(llvm_intrinsic, {llvm::UndefValue::get(llvm_ret_type),
+                                                 left_arg, right_arg, actual_vlen});
+
+    if (ret_type.lanes() != op->type.lanes()) {
+        value = convert_fixed_or_scalable_vector_type(value,
+                                                      get_vector_type(llvm_type_of(op->type.element_of()),
+                                                                      op->type.lanes()));
     }
-    llvm::Value *ret = builder->CreateCall(inner, {llvm::UndefValue::get(llvm_ret_type),
-                                                   wrapper->getArg(left_arg), wrapper->getArg(right_arg),
-                                                   vtype});
-    builder->CreateRet(ret);
 
-    // Always inline these wrappers.
-    wrapper->addFnAttr(llvm::Attribute::AlwaysInline);
-
-    builder->restoreIP(here);
-
-    function_does_not_access_memory(wrapper);
-    wrapper->addFnAttr(llvm::Attribute::NoUnwind);
-
-    llvm::verifyFunction(*wrapper);
-    return wrapper;
+    return true;
 }
 
 }  // anonymous namespace
