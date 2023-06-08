@@ -1334,12 +1334,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
     // (eg OpenCL, HVX, WASM); for now we're just ignoring the assert, but
     // in the long run we should improve the smarts. See https://github.com/halide/Halide/issues/4194.
     const bool is_bool_vector = e.type().is_bool() && e.type().lanes() > 1;
-    // TODO: skip this correctness check for prefetch, because the return type
-    // of prefetch indicates the type being prefetched, which does not match the
-    // implementation of prefetch.
-    // See https://github.com/halide/Halide/issues/4211.
-    const bool is_prefetch = Call::as_intrinsic(e, {Call::prefetch});
-    bool types_match = is_bool_vector || is_prefetch ||
+    bool types_match = is_bool_vector ||
                        e.type().is_handle() ||
                        value->getType()->isVoidTy() ||
                        value->getType() == llvm_type_of(e.type());
@@ -3282,19 +3277,21 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
         value = call;
     } else if (op->is_intrinsic(Call::prefetch)) {
-        user_assert((op->args.size() == 4) && is_const_one(op->args[2]))
+        internal_assert(op->type == Int(32));
+        user_assert((op->args.size() == 5) && is_const_one(op->args[3]))
             << "Only prefetch of 1 cache line is supported.\n";
 
-        const Expr &base_address = op->args[0];
-        const Expr &base_offset = op->args[1];
-        // const Expr &extent0 = op->args[2];  // unused
-        // const Expr &stride0 = op->args[3];  // unused
+        const Type prefetch_element_type = op->args[0].type();
+        const Expr &base_address = op->args[1];
+        const Expr &base_offset = op->args[2];
+        // const Expr &extent0 = op->args[3];  // unused
+        // const Expr &stride0 = op->args[4];  // unused
 
         llvm::Function *prefetch_fn = module->getFunction("_halide_prefetch");
         internal_assert(prefetch_fn);
 
         vector<llvm::Value *> args;
-        args.push_back(codegen_buffer_pointer(codegen(base_address), op->type, base_offset));
+        args.push_back(codegen_buffer_pointer(codegen(base_address), prefetch_element_type, base_offset));
         // The first argument is a pointer, which has type i8*. We
         // need to cast the argument, which might be a pointer to a
         // different type.
@@ -3302,6 +3299,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         args[0] = builder->CreateBitCast(args[0], ptr_type);
 
         value = builder->CreateCall(prefetch_fn, args);
+        internal_assert(value->getType() == i32_t);
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"

@@ -356,7 +356,7 @@ private:
 
         Expr base_offset = mutate(flatten_args(op->name, prefetch_min, Buffer<>(), op->prefetch.param));
         Expr base_address = Variable::make(Handle(), op->name);
-        vector<Expr> args = {base_address, base_offset};
+        vector<Expr> args = {make_zero(op->types[0]), base_address, base_offset};
 
         auto iter = env.find(op->name);
         if (iter != env.end()) {
@@ -391,7 +391,7 @@ private:
         }
 
         // TODO: Consider generating a prefetch call for each tuple element.
-        Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
+        Stmt prefetch_call = Evaluate::make(Call::make(Int(32), Call::prefetch, args, Call::Intrinsic));
         if (!is_const_one(condition)) {
             prefetch_call = IfThenElse::make(condition, prefetch_call);
         }

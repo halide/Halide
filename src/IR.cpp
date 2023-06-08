@@ -703,8 +703,11 @@ Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &arg
                 FunctionPtr func, int value_index,
                 Buffer<> image, Parameter param) {
     if (name == intrinsic_op_names[Call::prefetch] && call_type == Call::Intrinsic) {
-        internal_assert(args.size() % 2 == 0)
-            << "Number of args to a prefetch call should be even: {base, offset, extent0, stride0, extent1, stride1, ...}\n";
+        internal_assert(type == Int(32))
+            << "The return type of a prefetch call must be Int(32)";
+        internal_assert(args.size() >= 5 && (args.size() % 2) == 1)  // Prefetch: {prefetch_element_type(0), base, offset, extent0, stride0, ...}
+            << "Number of args to a prefetch call should be even: {prefetch_element_type(0), base, offset, extent0, stride0, extent1, stride1, ...}\n";
+        internal_assert(is_const_zero(args[0])) << "The first arg to a prefetch call should be a constant zero of the type to prefetch";
     }
     for (size_t i = 0; i < args.size(); i++) {
         internal_assert(args[i].defined()) << "Call of " << name << " with argument " << i << " undefined.\n";

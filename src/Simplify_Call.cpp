@@ -422,7 +422,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // Collapse the prefetched region into lower dimension whenever is possible.
         // TODO(psuriana): Deal with negative strides and overlaps.
 
-        internal_assert(op->args.size() % 2 == 0);  // Prefetch: {base, offset, extent0, stride0, ...}
+        internal_assert(op->args.size() >= 5 && (op->args.size() % 2) == 1);  // Prefetch: {prefetch_element_type(0), base, offset, extent0, stride0, ...}
 
         auto [args, changed] = mutate_with_changes(op->args, nullptr);
 
@@ -430,7 +430,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // based on the storage dimension in ascending order (i.e. innermost
         // first and outermost last), so, it is enough to check for the upper
         // triangular pairs to see if any contiguous addresses exist.
-        for (size_t i = 2; i < args.size(); i += 2) {
+        for (size_t i = 3; i < args.size(); i += 2) {
             Expr extent_0 = args[i];
             Expr stride_0 = args[i + 1];
             for (size_t j = i + 2; j < args.size(); j += 2) {

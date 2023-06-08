@@ -278,10 +278,12 @@ class ReducePrefetchDimension : public IRMutator {
         // the dimensions with larger strides and keep the smaller ones in
         // the prefetch call.
 
-        const size_t max_arg_size = 2 + 2 * max_dim;  // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...}
+        const size_t max_arg_size = 3 + 2 * max_dim;  // Prefetch: {prefetch_element_type(0), base, offset, extent0, stride0, extent1, stride1, ...}
         if (prefetch && (prefetch->args.size() > max_arg_size)) {
-            const Expr &base_address = prefetch->args[0];
-            const Expr &base_offset = prefetch->args[1];
+            internal_assert(prefetch->type == Int(32));
+            // const Type prefetch_element_type = prefetch->args[0].type();  unused
+            const Expr &base_address = prefetch->args[1];
+            const Expr &base_offset = prefetch->args[2];
 
             const Variable *base = base_address.as<Variable>();
             internal_assert(base && base->type.is_handle());
@@ -296,14 +298,14 @@ class ReducePrefetchDimension : public IRMutator {
                 new_offset += Variable::make(Int(32), index_name) * stride;
             }
 
-            vector<Expr> args = {base, new_offset};
-            for (size_t i = 2; i < max_arg_size; ++i) {
+            vector<Expr> args = {prefetch->args[0], base, new_offset};
+            for (size_t i = 3; i < max_arg_size; ++i) {
                 args.push_back(prefetch->args[i]);
             }
 
-            stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
+            stmt = Evaluate::make(Call::make(Int(32), Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
-                stmt = For::make(index_names[i], 0, prefetch->args[(i + max_dim) * 2 + 2],
+                stmt = For::make(index_names[i], 0, prefetch->args[(i + max_dim) * 2 + 3],
                                  ForType::Serial, DeviceAPI::None, stmt);
             }
             debug(5) << "\nReduce prefetch to " << max_dim << " dim:\n"
@@ -333,18 +335,20 @@ class SplitPrefetch : public IRMutator {
         op = stmt.as<Evaluate>();
         internal_assert(op);
         if (const Call *prefetch = Call::as_intrinsic(op->value, {Call::prefetch})) {
-            const Expr &base_address = prefetch->args[0];
-            const Expr &base_offset = prefetch->args[1];
+            internal_assert(prefetch->type == Int(32));
+            const Type prefetch_element_type = prefetch->args[0].type();
+            const Expr &base_address = prefetch->args[1];
+            const Expr &base_offset = prefetch->args[2];
 
             const Variable *base = base_address.as<Variable>();
             internal_assert(base && base->type.is_handle());
 
-            int elem_size = prefetch->type.bytes();
+            const int elem_size = prefetch_element_type.bytes();
 
             vector<string> index_names;
             vector<Expr> extents;
             Expr new_offset = base_offset;
-            for (size_t i = 2; i < prefetch->args.size(); i += 2) {
+            for (size_t i = 3; i < prefetch->args.size(); i += 2) {
                 Expr extent = prefetch->args[i];
                 Expr stride = prefetch->args[i + 1];
                 Expr stride_bytes = stride * elem_size;
@@ -371,8 +375,8 @@ class SplitPrefetch : public IRMutator {
 
             Expr new_extent = 1;
             Expr new_stride = simplify(max_byte_size / elem_size);
-            vector<Expr> args = {base, std::move(new_offset), std::move(new_extent), std::move(new_stride)};
-            stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
+            vector<Expr> args = {prefetch->args[0], base, std::move(new_offset), std::move(new_extent), std::move(new_stride)};
+            stmt = Evaluate::make(Call::make(Int(32), Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
                 stmt = For::make(index_names[i], 0, extents[i],
                                  ForType::Serial, DeviceAPI::None, stmt);

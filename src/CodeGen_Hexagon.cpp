@@ -1937,20 +1937,22 @@ void CodeGen_Hexagon::visit(const Call *op) {
     }
 
     if (op->is_intrinsic(Call::prefetch)) {
-        internal_assert((op->args.size() == 4) || (op->args.size() == 6))
+        internal_assert(op->type == Int(32));
+        internal_assert((op->args.size() == 5) || (op->args.size() == 7))
             << "Hexagon only supports 1D or 2D prefetch\n";
 
-        const int elem_size = op->type.bytes();
-        const Expr &base_address = op->args[0];
-        const Expr &base_offset = op->args[1];
-        const Expr &extent0 = op->args[2];
-        const Expr &stride0 = op->args[3];
+        const Type prefetch_element_type = op->args[0].type();
+        const Expr &base_address = op->args[1];
+        const Expr &base_offset = op->args[2];
+        const Expr &extent0 = op->args[3];
+        const Expr &stride0 = op->args[4];
 
+        const int elem_size = prefetch_element_type.bytes();
         Expr width_bytes = extent0 * stride0 * elem_size;
         Expr height, stride_bytes;
-        if (op->args.size() == 6) {
-            const Expr &extent1 = op->args[4];
-            const Expr &stride1 = op->args[5];
+        if (op->args.size() == 7) {
+            const Expr &extent1 = op->args[5];
+            const Expr &stride1 = op->args[6];
             height = extent1;
             stride_bytes = stride1 * elem_size;
         } else {
@@ -1959,7 +1961,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         }
 
         vector<llvm::Value *> args;
-        args.push_back(codegen_buffer_pointer(codegen(base_address), op->type, base_offset));
+        args.push_back(codegen_buffer_pointer(codegen(base_address), prefetch_element_type, base_offset));
         args.push_back(codegen(width_bytes));
         args.push_back(codegen(height));
         args.push_back(codegen(stride_bytes));
@@ -1974,6 +1976,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         args[0] = builder->CreateBitCast(args[0], ptr_type);
 
         value = builder->CreateCall(prefetch_fn, args);
+        internal_assert(value->getType() == i32_t);
         return;
     }
 

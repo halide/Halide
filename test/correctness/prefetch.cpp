@@ -67,9 +67,10 @@ Expr get_max_byte_size(const Target &t) {
     return max_byte_size;
 }
 
-Expr get_stride(const Target &t, const Expr &elem_byte_size) {
+template<typename ElemType>
+Expr get_stride(const Target &t) {
     Expr max_byte_size = get_max_byte_size(t);
-    return max_byte_size.defined() ? simplify(max_byte_size / elem_byte_size) : 1;
+    return max_byte_size.defined() ? simplify(max_byte_size / Expr((int)sizeof(ElemType))) : 1;
 }
 
 int test1(const Target &t) {
@@ -86,7 +87,7 @@ int test1(const Target &t) {
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
+    vector<vector<Expr>> expected = {{make_zero(Int(32)), Variable::make(Handle(), f.name()), 0, 1, get_stride<int>(t)}};
     if (!check(expected, collect.prefetches)) {
         return 1;
     }
@@ -99,7 +100,7 @@ int test2(const Target &t) {
     Func f("f"), g("g");
     Var x("x");
 
-    f(x) = x;
+    f(x) = cast<int16_t>(x);
     g(x) = f(0);
 
     f.compute_root();
@@ -110,7 +111,7 @@ int test2(const Target &t) {
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
+    vector<vector<Expr>> expected = {{make_zero(Int(16)), Variable::make(Handle(), f.name()), 0, 1, get_stride<int16_t>(t)}};
     if (!check(expected, collect.prefetches)) {
         return 1;
     }
@@ -134,7 +135,7 @@ int test3(const Target &t) {
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
+    vector<vector<Expr>> expected = {{make_zero(Int(32)), Variable::make(Handle(), f.name()), 0, 1, get_stride<int>(t)}};
     if (!check(expected, collect.prefetches)) {
         return 1;
     }
@@ -180,7 +181,7 @@ int test5(const Target &t) {
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
+    vector<vector<Expr>> expected = {{make_zero(Int(32)), Variable::make(Handle(), f.name()), 0, 1, get_stride<int>(t)}};
     if (!check(expected, collect.prefetches)) {
         return 1;
     }
@@ -204,7 +205,7 @@ int test6(const Target &t) {
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
+    vector<vector<Expr>> expected = {{make_zero(Int(32)), Variable::make(Handle(), f.name()), 0, 1, get_stride<int>(t)}};
     if (!check(expected, collect.prefetches)) {
         return 1;
     }
@@ -228,7 +229,7 @@ int test7(const Target &t) {
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
-    vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
+    vector<vector<Expr>> expected = {{make_zero(Int(32)), Variable::make(Handle(), f.name()), 0, 1, get_stride<int>(t)}};
     if (!check(expected, collect.prefetches)) {
         return 1;
     }
@@ -288,13 +289,13 @@ int test9(const Target &t) {
         // The offset arg is a variable that is ticklish to get right, so just use a wildcard for matching
         Expr offset = wild<int>();
         Expr extent0 = 1;
-        Expr stride0 = get_stride(t, 4);
+        Expr stride0 = get_stride<int>(t);
         if (t.has_feature(Target::HVX)) {
             Expr extent1 = 1;
             Expr stride1 = wild<int>();
-            expected.push_back({base, offset, extent0, stride0, extent1, stride1});
+            expected.push_back({make_zero(Int(32)), base, offset, extent0, stride0, extent1, stride1});
         } else {
-            expected.push_back({base, offset, extent0, stride0});
+            expected.push_back({make_zero(Int(32)), base, offset, extent0, stride0});
         }
     }
     if (!check(expected, collect.prefetches)) {
@@ -337,14 +338,14 @@ int test10(const Target &t) {
         Expr offset = wild<int>();
         if (t.has_feature(Target::HVX)) {
             Expr extent0 = 4;
-            Expr stride0 = get_stride(t, 4);
+            Expr stride0 = get_stride<int>(t);
             Expr extent1 = 1;
             Expr stride1 = wild<int>();
-            expected.push_back({base, offset, extent0, stride0, extent1, stride1});
+            expected.push_back({make_zero(Int(32)), base, offset, extent0, stride0, extent1, stride1});
         } else {
             Expr extent0 = 1;
-            Expr stride0 = get_stride(t, 4);
-            expected.push_back({base, offset, extent0, stride0});
+            Expr stride0 = get_stride<int>(t);
+            expected.push_back({make_zero(Int(32)), base, offset, extent0, stride0});
         }
     }
     if (!check(expected, collect.prefetches)) {
@@ -387,14 +388,14 @@ int test11(const Target &t) {
         Expr offset = wild<int>();
         if (t.has_feature(Target::HVX)) {
             Expr extent0 = 4;
-            Expr stride0 = get_stride(t, 4);
+            Expr stride0 = get_stride<int>(t);
             Expr extent1 = 1;
             Expr stride1 = wild<int>();
-            expected.push_back({base, offset, extent0, stride0, extent1, stride1});
+            expected.push_back({make_zero(Int(32)), base, offset, extent0, stride0, extent1, stride1});
         } else {
             Expr extent0 = 1;
-            Expr stride0 = get_stride(t, 4);
-            expected.push_back({base, offset, extent0, stride0});
+            Expr stride0 = get_stride<int>(t);
+            expected.push_back({make_zero(Int(32)), base, offset, extent0, stride0});
         }
     }
     if (!check(expected, collect.prefetches)) {
@@ -453,14 +454,14 @@ int test12(const Target &t) {
         Expr offset = wild<int>();
         if (t.has_feature(Target::HVX)) {
             Expr extent0 = 16;
-            Expr stride0 = get_stride(t, 4);
+            Expr stride0 = get_stride<int>(t);
             Expr extent1 = 1;
             Expr stride1 = wild<int>();
-            expected.push_back({base, offset, extent0, stride0, extent1, stride1});
+            expected.push_back({make_zero(Int(32)), base, offset, extent0, stride0, extent1, stride1});
         } else {
             Expr extent0 = 1;
-            Expr stride0 = get_stride(t, 4);
-            expected.push_back({base, offset, extent0, stride0});
+            Expr stride0 = get_stride<int>(t);
+            expected.push_back({make_zero(Int(32)), base, offset, extent0, stride0});
         }
     }
     if (!check(expected, collect.prefetches)) {

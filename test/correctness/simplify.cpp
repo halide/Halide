@@ -2160,8 +2160,8 @@ int main(int argc, char **argv) {
         // Check that contiguous prefetch call get collapsed
         Expr base = Variable::make(Handle(), "buf");
         Expr offset = x;
-        check(Call::make(Int(32), Call::prefetch, {base, offset, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
-              Call::make(Int(32), Call::prefetch, {base, offset, min(x + y, 128) * 256, 1}, Call::Intrinsic));
+        check(Call::make(Int(32), Call::prefetch, {make_zero(Int(32)), base, offset, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
+              Call::make(Int(32), Call::prefetch, {make_zero(Int(32)), base, offset, min(x + y, 128) * 256, 1}, Call::Intrinsic));
     }
 
     // This expression is a good stress-test. It caused exponential
