@@ -507,6 +507,9 @@ llvm::Triple get_triple_for_target(const Target &target) {
 
         if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
+        } else if (target.os == Target::Android) {
+            triple.setOS(llvm::Triple::Linux);
+            triple.setEnvironment(llvm::Triple::Android);
         } else if (target.os == Target::NoOS) {
             // for baremetal environment
         } else {
@@ -873,7 +876,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 add_allocator();
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-                if (t.arch == Target::ARM) {
+                if (t.arch == Target::ARM || t.arch == Target::RISCV) {
                     modules.push_back(get_initmod_android_clock(c, bits_64, debug));
                 } else {
                     modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
