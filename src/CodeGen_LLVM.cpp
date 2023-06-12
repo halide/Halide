@@ -1326,7 +1326,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
         value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
     }
 
-    // Make sure fixed/vscale property of vector types match what is exepected.
+    // Make sure fixed/vscale property of vector types match what is expected.
     value = normalize_fixed_scalable_vector_type(llvm_type_of(e.type()), value);
 
     // TODO: skip this correctness check for bool vectors,
@@ -1334,12 +1334,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
     // (eg OpenCL, HVX, WASM); for now we're just ignoring the assert, but
     // in the long run we should improve the smarts. See https://github.com/halide/Halide/issues/4194.
     const bool is_bool_vector = e.type().is_bool() && e.type().lanes() > 1;
-    // TODO: skip this correctness check for prefetch, because the return type
-    // of prefetch indicates the type being prefetched, which does not match the
-    // implementation of prefetch.
-    // See https://github.com/halide/Halide/issues/4211.
-    const bool is_prefetch = Call::as_intrinsic(e, {Call::prefetch});
-    bool types_match = is_bool_vector || is_prefetch ||
+    bool types_match = is_bool_vector ||
                        e.type().is_handle() ||
                        value->getType()->isVoidTy() ||
                        value->getType() == llvm_type_of(e.type());
@@ -3301,7 +3296,10 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::Type *ptr_type = prefetch_fn->getFunctionType()->params()[0];
         args[0] = builder->CreateBitCast(args[0], ptr_type);
 
-        value = builder->CreateCall(prefetch_fn, args);
+        builder->CreateCall(prefetch_fn, args);
+
+        // Prefetch evaluates to zero of the prefetched type.
+        value = codegen(make_zero(op->type));
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"
