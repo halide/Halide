@@ -2063,6 +2063,259 @@ public:
     SimplifySliceConcat() = default;
 };
 
+// Lifts Stack or VTCM allocation up the loop nest if possible.
+//
+// The idea is that we traverse a loop nest and look for allocations which are
+// of the right type (Stack or VTCM) and don't depend on any of the Let's
+// defined in the given loop. If these conditions are met then allocation can
+// be lifted out of the given loop (or potentially out of multiple of loops).
+// The difficulty is that due to loop partitioning there might be a multiple
+// instances of the same allocation in different instance of the loops. If all
+// instances can be lifted then we can have a single allocation outside of the
+// loop (we need to take max ot total extents as an extent for it to make sure
+// all instances are satisfied).
+// However, there might be a situation when only some of the allocations can be
+// lifted, which potentially could lead to duplicate allocation being generated.
+// Consider an example:
+// for yo:
+//   for xo:
+//        for x:
+//           allocate tmp[depends on let's inside of the loop x]
+//        for x:
+//           allocate tmp[doesn't depend on let's inside of the loop x]
+//        for x:
+//           allocate tmp[depends on let's inside of the loop x]
+// in which if we only consider a local context, the tmp allocation can be
+// lifted from the second inner loop, but couldn't be lifted from the first and
+// third loops.
+// In order to handle cases like this, LiftAllocations has two passes:
+// ** During the first pass, for each loop we compute a list of allocations which
+// are *not* allowed to be lifted to this loop level. This is done by finding a
+// *last* loop (i.e we are not able to lift allocation from the parent loop)
+// from which we *can* lift the allocation and then updating all of it's parent
+// loop lists to disallow given allocation.
+// ** In the second pass, we simply push allocations as far as we can up the
+// loop nest, while making sure that they satisfy all of the conditions (
+// including absence in the "disallowed" list).
+class LiftAllocations : public IRMutator {
+    using IRMutator::visit;
+
+    // Index of the current loop.
+    int loop_index = 0;
+    // Is this a first sub-pass of the pass?
+    bool first_run = true;
+
+    struct Allocation {
+        std::string name;
+        Type type;
+        MemoryType memory_type;
+        Expr total_extent;
+        int const_allocation_size;
+
+        Expr condition;
+        Expr new_expr;
+        std::string free_function;
+        int padding;
+
+        Allocation(std::string name, Type type, MemoryType memory_type,
+                   Expr total_extent, int const_allocation_size,
+                   Expr condition, Expr new_expr,
+                   std::string free_function, int padding)
+            : name(name),
+              type(type),
+              memory_type(memory_type),
+              total_extent(total_extent),
+              const_allocation_size(const_allocation_size),
+              condition(condition),
+              new_expr(new_expr),
+              free_function(free_function),
+              padding(padding) {
+        }
+    };
+
+    struct Loop {
+        std::string name;
+        int loop_index;
+        Expr min;
+        Expr extent;
+        bool is_parallel = false;
+
+        Scope<void> lets_in_for;
+        std::map<std::string, Allocation> allocations_to_move;
+        std::set<std::string> blocked_allocations;
+
+        Loop(bool is_parallel)
+            : is_parallel(is_parallel) {
+        }
+    };
+
+    // Scope of the loops.
+    std::vector<Loop> loops;
+    // Lists of the allocation which are not allowed to be lifted to this specific
+    // loop level. The number of these corresponds to a total number of loops and
+    // they are stored in a loop traversal order.
+    std::vector<std::set<std::string>> blocked_allocations;
+
+    Stmt visit(const LetStmt *op) override {
+        if (!loops.empty()) {
+            loops.back().lets_in_for.push(op->name);
+        }
+        Stmt let_op = IRMutator::visit(op);
+        if (!loops.empty()) {
+            loops.back().lets_in_for.pop(op->name);
+        }
+        return let_op;
+    }
+
+    Stmt visit(const For *op) {
+        // Store current loop in the scope.
+        loops.push_back(Loop(op->for_type == ForType::Parallel));
+        loops.back().name = op->name;
+        loops.back().min = op->min;
+        loops.back().extent = op->extent;
+        loops.back().loop_index = loop_index++;
+
+        // On the first pass we will compute a list of allocations which are not
+        // allowed to be lifted to this loop level/
+        if (first_run) {
+            blocked_allocations.push_back({});
+        }
+
+        Stmt for_op = IRMutator::visit(op);
+        // Move allocations by wrapping them around this loop.
+        if (!loops.back().allocations_to_move.empty()) {
+            debug(3) << "Starting to move allocations "
+                     << loops.back().allocations_to_move.size() << "\n";
+            for (const auto &a : loops.back().allocations_to_move) {
+                const auto &alloc = a.second;
+                debug(3) << "Moving allocation - " << alloc.name << "\n";
+                Expr total_extent = alloc.total_extent;
+                if (alloc.const_allocation_size > 0) {
+                    total_extent = alloc.const_allocation_size;
+                }
+                for_op = Allocate::make(alloc.name, alloc.type, alloc.memory_type,
+                                        {total_extent}, alloc.condition, for_op,
+                                        alloc.new_expr, alloc.free_function,
+                                        alloc.padding);
+            }
+            debug(3) << "Finished moving allocations\n";
+        }
+        loops.pop_back();
+        return for_op;
+    }
+
+    Stmt visit(const Allocate *op) {
+        if (!loops.empty() &&
+            (op->memory_type == MemoryType::Stack || op->memory_type == MemoryType::VTCM) && !op->new_expr.defined() &&
+            (op->constant_allocation_size() == 0 ||
+             // Don't lift small allocations, constant-sized allocations.
+             op->constant_allocation_size() > 512)) {
+            debug(3) << "Found an allocation: " << op->name << " "
+                     << static_cast<int>(op->memory_type) << " "
+                     << op->constant_allocation_size() << "\n";
+            int loop_to_lift_to = loops.size();
+            // Iterate loop nest in a reverse order and try to push allocation as far
+            // as possible.
+            for (int i = loops.size() - 1; i >= 0; i--) {
+                debug(3) << "Loop: " << i << " " << loops[i].name
+                         << " " << loops[i].loop_index << " " << loops[i].min
+                         << " " << loops[i].extent << " " << loops[i].is_parallel << "\n";
+                // Don't lift outside of parallel loops.
+                if (loops[i].is_parallel) {
+                    debug(3) << "Breaking because we reached a parallel loop"
+                             << "\n";
+                    break;
+                }
+
+                // Check if allocation can't be lifted out of the loop due to a conflict
+                // with same allocation from a different loop.
+                if (blocked_allocations[loops[i].loop_index].count(op->name) > 0) {
+                    debug(3) << "Breaking because allocation can't be lifted due to a conflict"
+                             << "\n";
+                    break;
+                }
+
+                // The allocation is already in the list for this loop, so we won't be
+                // able to go any further.
+                bool already_in_to_move_list = (loops[i].allocations_to_move.count(op->name) > 0);
+
+                bool depends_on_loop_vars = false;
+
+                // Make sure that allocation doesn't depend on the let's inside of the
+                // loop and can be lifted.
+                for (const auto &e : op->extents) {
+                    debug(3) << "Extent: " << expr_uses_vars(e, loops[i].lets_in_for) << " "
+                             << e << "\n";
+                    depends_on_loop_vars =
+                        depends_on_loop_vars || expr_uses_vars(e, loops[i].lets_in_for);
+                }
+                debug(3) << "Depends on loop vars: " << depends_on_loop_vars << "\n";
+                if (already_in_to_move_list) {
+                    debug(3) << "Found an allocation with duplicate name " << op->name << ", trying to merge\n";
+                    user_assert(!depends_on_loop_vars)
+                        << "Allocation with the same was lifted, but this allocation can't be.";
+                    loop_to_lift_to = i;
+                    break;
+                }
+                if (!depends_on_loop_vars) {
+                    // Update the loop index to lift to.
+                    loop_to_lift_to = i;
+                } else {
+                    // Allocation depends on local vars, so can't be lifted any further.
+                    break;
+                }
+            }
+
+            if (first_run) {
+                // Update the lists of disallowed allocations.
+                for (int ix = 0; ix < loop_to_lift_to; ix++) {
+                    debug(3) << "Blocking allocation " << op->name << " " << loop_index
+                             << " at " << loops[ix].name << "\n";
+                    blocked_allocations[loops[ix].loop_index].insert(op->name);
+                }
+            } else {
+                if (loop_to_lift_to < loops.size()) {
+                    // Combine extents, so we can take a maximum in case there are
+                    // multiple allocations.
+                    Expr total_extent = 1;
+                    for (const auto &e : op->extents) {
+                        total_extent *= e;
+                    }
+                    auto a = loops[loop_to_lift_to].allocations_to_move.find(op->name);
+                    if (a != loops[loop_to_lift_to].allocations_to_move.end()) {
+                        debug(0) << "Found an allocation with duplicate name #2 " << op->name << "\n";
+                        Allocation &alloc = a->second;
+                        alloc.total_extent = Max::make(total_extent, alloc.total_extent);
+                        alloc.padding = std::max(op->padding, alloc.padding);
+                        if (alloc.const_allocation_size > 0 && op->constant_allocation_size() > 0) {
+                            alloc.const_allocation_size = std::max(alloc.const_allocation_size,
+                                                                   op->constant_allocation_size());
+                        }
+                    } else {
+                        loops[loop_to_lift_to].allocations_to_move.emplace(op->name,
+                                                                           Allocation(op->name, op->type, op->memory_type, total_extent,
+                                                                                      op->constant_allocation_size(),
+                                                                                      op->condition, op->new_expr, op->free_function,
+                                                                                      op->padding));
+                    }
+
+                    return mutate(op->body);
+                }
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
+public:
+    void switch_to_second_pass() {
+        first_run = false;
+        loop_index = 0;
+    }
+
+    LiftAllocations() {
+    }
+};
+
 Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     const int alignment = target.natural_vector_size<uint8_t>();
     const int lut_size_in_bytes = 2 * target.natural_vector_size<uint8_t>();
@@ -2092,8 +2345,15 @@ Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     }
 
     s = DualQuadMulMutator().mutate(s);
-    s = common_subexpression_elimination(s);
 
+    {
+        LiftAllocations lift_stack_allocations;
+        s = lift_stack_allocations.mutate(s);
+        lift_stack_allocations.switch_to_second_pass();
+        s = lift_stack_allocations.mutate(s);
+    }
+
+    s = common_subexpression_elimination(s);
     // debug(0) << s << "\n";
     return s;
 }
