@@ -2121,14 +2121,14 @@ class LiftAllocations : public IRMutator {
                    Expr total_extent, int const_allocation_size,
                    Expr condition, Expr new_expr,
                    std::string free_function, int padding)
-            : name(name),
+            : name(std::move(name)),
               type(type),
               memory_type(memory_type),
-              total_extent(total_extent),
+              total_extent(std::move(total_extent)),
               const_allocation_size(const_allocation_size),
-              condition(condition),
-              new_expr(new_expr),
-              free_function(free_function),
+              condition(std::move(condition)),
+              new_expr(std::move(new_expr)),
+              free_function(std::move(free_function)),
               padding(padding) {
         }
     };
@@ -2167,9 +2167,9 @@ class LiftAllocations : public IRMutator {
         return let_op;
     }
 
-    Stmt visit(const For *op) {
+    Stmt visit(const For *op) override {
         // Store current loop in the scope.
-        loops.push_back(Loop(op->for_type == ForType::Parallel));
+        loops.emplace_back(op->for_type == ForType::Parallel);
         loops.back().name = op->name;
         loops.back().min = op->min;
         loops.back().extent = op->extent;
@@ -2178,7 +2178,7 @@ class LiftAllocations : public IRMutator {
         // On the first pass we will compute a list of allocations which are not
         // allowed to be lifted to this loop level/
         if (first_run) {
-            blocked_allocations.push_back({});
+            blocked_allocations.emplace_back();
         }
 
         Stmt for_op = IRMutator::visit(op);
@@ -2204,7 +2204,7 @@ class LiftAllocations : public IRMutator {
         return for_op;
     }
 
-    Stmt visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         if (!loops.empty() &&
             (op->memory_type == MemoryType::Stack || op->memory_type == MemoryType::VTCM) && !op->new_expr.defined() &&
             (op->constant_allocation_size() == 0 ||
@@ -2312,8 +2312,7 @@ public:
         loop_index = 0;
     }
 
-    LiftAllocations() {
-    }
+    LiftAllocations() = default;
 };
 
 Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
