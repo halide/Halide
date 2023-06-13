@@ -2183,8 +2183,12 @@ class LiftAllocations : public IRMutator {
 
         Stmt for_op = IRMutator::visit(op);
         // Move allocations by wrapping them around this loop.
+        if (first_run) {
+            internal_assert(loops.back().allocations_to_move.empty()) << "allocation_to_move list is expected to be empty after the first pass";
+        }
         if (!loops.back().allocations_to_move.empty()) {
             debug(3) << "Starting to move allocations "
+                     << loops.back().name << " "
                      << loops.back().allocations_to_move.size() << "\n";
             for (const auto &a : loops.back().allocations_to_move) {
                 const auto &alloc = a.second;
@@ -2198,10 +2202,31 @@ class LiftAllocations : public IRMutator {
                                         alloc.new_expr, alloc.free_function,
                                         alloc.padding);
             }
-            debug(3) << "Finished moving allocations\n";
+            debug(3) << "Finished moving allocations : \n"
+                     << ""
+                     << "\n";
         }
         loops.pop_back();
         return for_op;
+    }
+
+    Stmt visit(const Block *block) override {
+        if (const Free *maybe_free = block->first.as<Free>()) {
+            for (const auto &loop : loops) {
+                if (loop.allocations_to_move.count(maybe_free->name) > 0) {
+                    return mutate(block->rest);
+                }
+            }
+        }
+        if (const Free *maybe_free = block->rest.as<Free>()) {
+            for (const auto &loop : loops) {
+                if (loop.allocations_to_move.count(maybe_free->name) > 0) {
+                    return mutate(block->first);
+                }
+            }
+        }
+
+        return IRMutator::visit(block);
     }
 
     Stmt visit(const Allocate *op) override {
@@ -2210,9 +2235,9 @@ class LiftAllocations : public IRMutator {
             (op->constant_allocation_size() == 0 ||
              // Don't lift small allocations, constant-sized allocations.
              op->constant_allocation_size() > 512)) {
-            debug(3) << "Found an allocation: " << op->name << " "
+            debug(3) << ">>>> Found an allocation: " << op->name << " "
                      << static_cast<int>(op->memory_type) << " "
-                     << op->constant_allocation_size() << "\n";
+                     << op->constant_allocation_size() << " >>>>\n";
             int loop_to_lift_to = loops.size();
             // Iterate loop nest in a reverse order and try to push allocation as far
             // as possible.
@@ -2283,7 +2308,7 @@ class LiftAllocations : public IRMutator {
                     }
                     auto a = loops[loop_to_lift_to].allocations_to_move.find(op->name);
                     if (a != loops[loop_to_lift_to].allocations_to_move.end()) {
-                        debug(0) << "Found an allocation with duplicate name #2 " << op->name << "\n";
+                        debug(3) << "Found an allocation with duplicate name #2 " << op->name << "\n";
                         Allocation &alloc = a->second;
                         alloc.total_extent = Max::make(total_extent, alloc.total_extent);
                         alloc.padding = std::max(op->padding, alloc.padding);
@@ -2308,6 +2333,7 @@ class LiftAllocations : public IRMutator {
 
 public:
     void switch_to_second_pass() {
+        debug(3) << "****** Switching to second pass ****** \n";
         first_run = false;
         loop_index = 0;
     }
