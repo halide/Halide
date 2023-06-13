@@ -520,7 +520,7 @@ MetadataNameMap Module::get_metadata_name_map() const {
 
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
-    
+
     if (target().has_feature(Target::OpenGLCompute)) {
         user_warning << "WARNING: OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.\n";
     }
