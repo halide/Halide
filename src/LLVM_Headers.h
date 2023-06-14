@@ -22,6 +22,9 @@
 
 #if WITH_WABT || WITH_V8
 #include <lld/Common/Driver.h>
+#if LLVM_VERSION >= 170
+#include <lld/Common/ErrorHandler.h>
+#endif
 #endif
 #include <llvm/ADT/APFloat.h>
 #include <llvm/ADT/ArrayRef.h>

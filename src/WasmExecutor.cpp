@@ -45,6 +45,10 @@
 #endif  // WITH_V8
 // clang-format on
 
+#if LLVM_VERSION >= 170
+LLD_HAS_DRIVER(wasm)
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -335,6 +339,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
 
     std::string lld_arg_strs[] = {
         "HalideJITLinker",
+        "-flavor", "wasm",
         // For debugging purposes:
         // "--verbose",
         // "-error-limit=0",
@@ -353,6 +358,17 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         lld_args[i] = lld_arg_strs[i].c_str();
     }
 
+#if LLVM_VERSION >= 170
+    llvm::ArrayRef<const char *> args(lld_args, lld_args + c);
+    auto r = lld::lldMain(args, llvm::outs(), llvm::errs(), {{lld::Wasm, &lld::wasm::link}});
+    if (!r.canRunAgain) {
+        std::cerr << "lld::wasm::link failed catastrophically, exiting with: " << r.retCode << "\n";
+        lld::exitLld(r.retCode);  // Exit now, can't re-execute again.
+    }
+    if (r.retCode != 0) {
+        internal_error << "lld::wasm::link failed with: " << r.retCode << "\n";
+    }
+#else
     // lld will temporarily hijack the signal handlers to ensure that temp files get cleaned up,
     // but rather than preserving custom handlers in place, it restores the default handlers.
     // This conflicts with some of our testing infrastructure, which relies on a SIGABRT handler
@@ -366,6 +382,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     }
 
     std::signal(SIGABRT, old_abort_handler);
+#endif
 
 #if WASM_DEBUG_LEVEL
     wasm_output.detach();

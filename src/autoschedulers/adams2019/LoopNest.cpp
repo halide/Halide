@@ -1258,7 +1258,7 @@ void LoopNest::inline_func(const FunctionDAG::Node *f) {
 void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v, const Adams2019Params &params) {
     const auto &bounds = get_bounds(f);
 
-    const bool may_subtile = (params.disable_subtiling != 0);
+    const bool may_subtile = (params.disable_subtiling == 0);
     if (!may_subtile) {
         // If we are restricting ourselves to the Mullapudi et al
         // scheduling space, then once something is computed here
@@ -1346,7 +1346,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const Adams2019Param
                                                             const vector<int64_t> &tiling,
                                                             const LoopNest *parent) const {
 
-    const bool may_subtile = (params.disable_subtiling != 0);
+    const bool may_subtile = (params.disable_subtiling == 0);
 
     // Split this loop and move factors to the inner loop
     LoopNest *inner = new LoopNest, *outer = new LoopNest;
@@ -1415,7 +1415,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                                                                 const Adams2019Params &params,
                                                                 int v,
                                                                 bool in_realization) const {
-    const bool may_subtile = (params.disable_subtiling != 0);
+    const bool may_subtile = (params.disable_subtiling == 0);
 
     internal_assert(f);
 
