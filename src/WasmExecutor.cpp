@@ -341,7 +341,9 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
 
     std::string lld_arg_strs[] = {
         "HalideJITLinker",
+#if LLVM_VERSION >= 170
         "-flavor", "wasm",
+#endif
         // For debugging purposes:
         // "--verbose",
         // "-error-limit=0",
@@ -361,15 +363,29 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     }
 
 #if LLVM_VERSION >= 170
+    // lld will temporarily hijack the signal handlers to ensure that temp files get cleaned up,
+    // but rather than preserving custom handlers in place, it restores the default handlers.
+    // This conflicts with some of our testing infrastructure, which relies on a SIGABRT handler
+    // set at global-ctor time to stay set. Therefore we'll save and restore this ourselves.
+    // Note that we must restore it before using internal_error (and also on the non-error path).
+    auto old_abort_handler = std::signal(SIGABRT, SIG_DFL);
+
     llvm::ArrayRef<const char *> args(lld_args, lld_args + c);
     auto r = lld::lldMain(args, llvm::outs(), llvm::errs(), {{lld::Wasm, &lld::wasm::link}});
-    if (!r.canRunAgain) {
-        std::cerr << "lld::wasm::link failed catastrophically, exiting with: " << r.retCode << "\n";
-        lld::exitLld(r.retCode);  // Exit now, can't re-execute again.
-    }
+    // TODO: https://reviews.llvm.org/D119049 suggests that you should call exitLld()
+    // if canRunAgain is false, but doing do fails with SIGABRT rather than exit(1), which
+    // breaks our error tests. For now, just following the old practice.
+    //
+    // if (!r.canRunAgain) {
+    //     std::cerr << "lld::wasm::link failed catastrophically, exiting with: " << r.retCode << "\n";
+    //     lld::exitLld(r.retCode);  // Exit now, can't re-execute again.
+    // }
     if (r.retCode != 0) {
+        std::signal(SIGABRT, old_abort_handler);
         internal_error << "lld::wasm::link failed with: " << r.retCode << "\n";
     }
+
+    std::signal(SIGABRT, old_abort_handler);
 #else
     // lld will temporarily hijack the signal handlers to ensure that temp files get cleaned up,
     // but rather than preserving custom handlers in place, it restores the default handlers.
