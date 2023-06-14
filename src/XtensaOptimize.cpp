@@ -816,6 +816,10 @@ private:
             // Casts from bool.
             {"halide_xtensa_convert_u1_to_i16", i16(i8(wild_u1x))},
 
+            // Casts from int.
+            {"halide_xtensa_convert_to_f32_from_i32", f32(u16(wild_i32x))},
+            {"halide_xtensa_convert_to_f32_from_i32", f32(i16(wild_i32x))},
+
             // Narrowing with shifting.
             {"halide_xtensa_narrow_i48_with_shift_i16", i16(i32(wild_i48x) >> wild_i32)},
             {"halide_xtensa_narrow_i48_with_shift_i16", i16(i32(wild_i48x) / wild_i32), Pattern::ExactLog2Op1},
