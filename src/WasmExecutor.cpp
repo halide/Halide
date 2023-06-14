@@ -45,8 +45,10 @@
 #endif  // WITH_V8
 // clang-format on
 
+#if WITH_WABT || WITH_V8
 #if LLVM_VERSION >= 170
 LLD_HAS_DRIVER(wasm)
+#endif
 #endif
 
 namespace Halide {
