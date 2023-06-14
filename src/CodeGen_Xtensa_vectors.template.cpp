@@ -2595,6 +2595,10 @@ HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_convert_to_f32_from_i32(con
     return convert<native_vector_f32, native_vector_i32>(src);
 }
 
+HALIDE_ALWAYS_INLINE native_vector_f32_x2 halide_xtensa_convert_to_f32_from_i32(const native_vector_i32_x2 &src) {
+    return convert<native_vector_f32_x2, native_vector_i32_x2>(src);
+}
+
 HALIDE_ALWAYS_INLINE native_mask_i32 halide_xtensa_slice_to_native(const native_mask_i16 &src, int index, int native_lanes, int total_lanes) {
     return (index == 0) ? IVP_EXTRACTBLN(src) : IVP_EXTRACTBHN(src);
 }
