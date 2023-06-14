@@ -1467,7 +1467,8 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
                 size_id = print_expr(make_const(size_id_type, constant_size));
 
                 if (op->memory_type == MemoryType::Stack ||
-                    op->memory_type == MemoryType::Register) {
+                    op->memory_type == MemoryType::Register ||
+                    (op->memory_type == MemoryType::Auto && (stack_bytes <= 512))) {
                     on_stack = true;
                 }
             }
