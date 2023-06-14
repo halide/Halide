@@ -1139,6 +1139,34 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i32_x4 load<native_vector
     return native_vector_i32_x4(native_vector_i32_x4::from_native_vector, nv8_0, nv8_1, nv8_2, nv8_3);
 }
 
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 load<native_vector_f32, float32_t, VECTOR_WIDTH_F32>(const void *base, int32_t offset) {
+    native_vector_f32 r;
+    const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const float32_t *)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    IVP_LAN_2XF32_IP(r, align, (const native_vector_f32 *)ptr8);
+    return r;
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void store<native_vector_f32, float32_t, VECTOR_WIDTH_F32>(const native_vector_f32 &a, void *base, int32_t offset) {
+    valign align = IVP_ZALIGN();
+    native_vector_f32 *ptr = (native_vector_f32 *)((float32_t *)base + offset);
+    IVP_SAN_2XF32_IP(a, align, ptr);
+    // Flush alignment register.
+    IVP_SAPOSN_2XF32_FP(align, ptr);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void store<native_vector_f32_x2, float32_t, 2 * VECTOR_WIDTH_F32>(const native_vector_f32_x2 &a, void *base, int32_t offset) {
+    valign align = IVP_ZALIGN();
+    native_vector_f32 *ptr = (native_vector_f32 *)((float32_t *)base + offset);
+    IVP_SAN_2XF32_IP(a.native_vector[0], align, ptr);
+    IVP_SAN_2XF32_IP(a.native_vector[1], align, ptr);
+    // Flush alignment register.
+    IVP_SAPOSN_2XF32_FP(align, ptr);
+}
+
 template<typename ResultType, typename LoadType>
 HALIDE_ALWAYS_INLINE ResultType widening_load(const void *base, int32_t offset) = delete;
 
