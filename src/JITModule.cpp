@@ -762,7 +762,7 @@ enum RuntimeKind {
     OpenCL,
     Metal,
     CUDA,
-    OpenGLCompute,
+    OpenGLCompute,  // NOTE: this feature is deprecated and will be removed in Halide 17
     Hexagon,
     D3D12Compute,
     Vulkan,
@@ -770,7 +770,7 @@ enum RuntimeKind {
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
-    OpenGLComputeDebug,
+    OpenGLComputeDebug,  // NOTE: this feature is deprecated and will be removed in Halide 17
     HexagonDebug,
     D3D12ComputeDebug,
     VulkanDebug,

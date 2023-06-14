@@ -929,6 +929,10 @@ void Pipeline::realize(JITUserContext *context,
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
+    if (t.has_feature(Target::OpenGLCompute)) {
+        user_warning << "WARNING: OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.\n";
+    }
+
     debug(2) << "Realizing Pipeline for " << target << "\n";
 
     if (target.has_unknowns()) {

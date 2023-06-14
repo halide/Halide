@@ -18,6 +18,7 @@ extern "C" {
 
 #define HALIDE_RUNTIME_OPENGLCOMPUTE
 
+HALIDE_ATTRIBUTE_DEPRECATED("OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.")
 extern const struct halide_device_interface_t *halide_openglcompute_device_interface();
 
 /** These are forward declared here to allow clients to override the
@@ -27,6 +28,7 @@ extern const struct halide_device_interface_t *halide_openglcompute_device_inter
 /** This function sets up OpenGL context, loads relevant GL functions, then
  *  compiles src OpenGL compute shader into OpenGL program and stores it for future use.
  */
+HALIDE_ATTRIBUTE_DEPRECATED("OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.")
 extern int halide_openglcompute_initialize_kernels(void *user_context, void **state_ptr,
                                                    const char *src, int size);
 
@@ -36,6 +38,7 @@ extern int halide_openglcompute_initialize_kernels(void *user_context, void **st
  *  This function doesn't wait for the completion of the shader, but it sets memory
  *  barrier which forces successive retrieval of output data to wait until shader is done.
  */
+HALIDE_ATTRIBUTE_DEPRECATED("OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.")
 extern int halide_openglcompute_run(void *user_context,
                                     void *state_ptr,
                                     const char *entry_name,
@@ -46,6 +49,7 @@ extern int halide_openglcompute_run(void *user_context,
                                     void *args[],
                                     int8_t is_buffer[]);
 
+HALIDE_ATTRIBUTE_DEPRECATED("OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.")
 extern void halide_openglcompute_finalize_kernels(void *user_context, void *state_ptr);
 // @}
 
@@ -54,6 +58,7 @@ extern void halide_openglcompute_finalize_kernels(void *user_context, void *stat
  *  You may have to implement this yourself. Halide only provides implementations
  *  for some platforms."
  */
+HALIDE_ATTRIBUTE_DEPRECATED("OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.")
 extern void *halide_opengl_get_proc_address(void *user_context, const char *name);
 
 /** This function creates an OpenGL context for use by the OpenGL backend.
@@ -61,6 +66,7 @@ extern void *halide_opengl_get_proc_address(void *user_context, const char *name
  *  You may have to implement this yourself as well. Halide only provides
  *   implementations for some platforms."
  */
+HALIDE_ATTRIBUTE_DEPRECATED("OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.")
 extern int halide_opengl_create_context(void *user_context);
 
 #ifdef __cplusplus
