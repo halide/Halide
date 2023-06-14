@@ -8,23 +8,23 @@ ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 FIX=$1
 
-# We are currently standardized on using LLVM/Clang14 for this script.
+# We are currently standardized on using LLVM/Clang15 for this script.
 # Note that this is totally independent of the version of LLVM that you
 # are using to build Halide itself. If you don't have LLVM14 installed,
 # you can usually install what you need easily via:
 #
-# sudo apt-get install llvm-14 clang-14 libclang-14-dev clang-tidy-14
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-14
+# sudo apt-get install llvm-15 clang-14 libclang-15-dev clang-tidy-15
+# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-15
 
 [ -z "$CLANG_TIDY_LLVM_INSTALL_DIR" ] && echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script." && exit
 echo CLANG_TIDY_LLVM_INSTALL_DIR = ${CLANG_TIDY_LLVM_INSTALL_DIR}
 
 VERSION=$(${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy --version)
-if [[ ${VERSION} =~ .*version\ 14.* ]]
+if [[ ${VERSION} =~ .*version\ 15.* ]]
 then
-    echo "clang-tidy version 14 found."
+    echo "clang-tidy version 15 found."
 else
-    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 14 install!"
+    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 15 install!"
     exit 1
 fi
 
