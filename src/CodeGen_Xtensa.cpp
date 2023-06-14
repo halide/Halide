@@ -483,7 +483,12 @@ void CodeGen_Xtensa::visit(const Div *op) {
 }
 
 void CodeGen_Xtensa::visit(const Mod *op) {
-    if (is_native_xtensa_vector<int32_t>(op->type)) {
+    int bits;
+    if (is_native_vector_type(op->type) && is_const_power_of_two_integer(op->b, &bits)) {
+        print_expr(op->a &
+                   Broadcast::make(
+                       Cast::make(op->type.with_lanes(1), Expr((1 << bits) - 1)), op->type.lanes()));
+    } else if (is_native_xtensa_vector<int32_t>(op->type)) {
         string sa = print_expr(op->a);
         string sb = print_expr(op->b);
         string common_type = "common_" + print_type(op->type);
