@@ -1322,10 +1322,8 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     }
 
     // Generate intrinsics for the interleave op.
-    int vector_size_in_bytes = get_target().natural_vector_size<uint8_t>();
-    if (op->is_interleave() && (is_native_vector_type(op->vectors[0].type()) ||
-                                is_double_native_vector_type(op->vectors[0].type()) ||
-                                (op->vectors[0].type().is_bool() && op->vectors[0].type().lanes() == vector_size_in_bytes))) {
+    if (op->is_interleave() &&
+        (is_native_vector_type(op->vectors[0].type()) || is_double_native_vector_type(op->vectors[0].type()) || (op->vectors[0].type().is_bool()))) {
         string type_suffix = suffix_for_type(op->type);
 
         Expr call = Call::make(op->type, "halide_xtensa_interleave" + type_suffix,

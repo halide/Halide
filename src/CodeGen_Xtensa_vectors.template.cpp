@@ -1454,6 +1454,21 @@ HALIDE_ALWAYS_INLINE native_mask_i8_x3 halide_xtensa_interleave_u1(const native_
     return native_mask_i8_x3(native_mask_i8_x3::from_native_vector, ra, rb, rc);
 }
 
+HALIDE_ALWAYS_INLINE native_mask_i16_x3 halide_xtensa_interleave_u1(const native_mask_i16 &a, const native_mask_i16 &b, const native_mask_i16 &c) {
+    native_vector_u16 a8 = 0, b8 = 0, c8 = 0;
+    IVP_INJBINX16(a8, a, 0);
+    IVP_INJBINX16(b8, b, 0);
+    IVP_INJBINX16(c8, c, 0);
+
+    native_vector_u16_x3 interleaved8 = halide_xtensa_interleave_u16(a8, b8, c8);
+
+    native_mask_i16 ra = IVP_EXTBINX16(interleaved8.native_vector[0], 0);
+    native_mask_i16 rb = IVP_EXTBINX16(interleaved8.native_vector[1], 0);
+    native_mask_i16 rc = IVP_EXTBINX16(interleaved8.native_vector[2], 0);
+
+    return native_mask_i16_x3(native_mask_i16_x3::from_native_vector, ra, rb, rc);
+}
+
 HALIDE_ALWAYS_INLINE native_vector_f32_x2 halide_xtensa_interleave_f32(const native_vector_f32 &a, const native_vector_f32 &b) {
     return native_vector_f32_x2(native_vector_f32_x2::from_native_vector,
                                 IVP_SELN_2XF32I(b, a, IVP_SELI_32B_INTERLEAVE_1_LO),
