@@ -446,4 +446,3 @@ Now build and run the blur example using the script to run it on device:
 export HL_HEXAGON_TOOLS=$SDK_LOC/HEXAGON_Tools/8.4.11/Tools/
 HL_TARGET=arm-64-android-hvx ./adb_run_on_device.sh
 ```
-
