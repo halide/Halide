@@ -14,6 +14,9 @@ public:
     Halide::Pipeline deserialize(const std::string &filename);
 
 private:
+    std::map<std::string, int32_t> func_mappings_str2idx;
+    std::map<int32_t, Halide::Internal::FunctionPtr> func_mappings_idx2ptr;
+
     // helper functions to deserialize each type of object
     Halide::MemoryType deserialize_memory_type(const Halide::Serialize::MemoryType memory_type);
 
@@ -42,6 +45,10 @@ private:
     Halide::Internal::Specialization deserialize_specialization(const Halide::Serialize::Specialization *specialization);
 
     Halide::Internal::Definition deserialize_definition(const Halide::Serialize::Definition *definition);
+
+    std::map<std::string, Halide::Internal::FunctionPtr> deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs);
+
+    std::map<std::string, int32_t> deserialize_func_mappings(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> *func_mappings);
 };
 
 #endif

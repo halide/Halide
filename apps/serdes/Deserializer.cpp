@@ -2,7 +2,6 @@
 #include <fstream>
 #include <iostream>
 
-using Halide::Serialize::TypeCode;
 
 std::string Deserializer::deserialize_string(const flatbuffers::String *str) {
     return str->str();
@@ -35,7 +34,7 @@ Halide::MemoryType Deserializer::deserialize_memory_type(const Halide::Serialize
 }
 
 Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type) {
-    // bits
+    using Halide::Serialize::TypeCode;
     int bits = type->bits();
     int lanes = type->lanes();
     TypeCode code_deserialized = type->code();
@@ -622,6 +621,22 @@ Halide::Internal::Definition Deserializer::deserialize_definition(const Halide::
     return Halide::Internal::Definition(is_init, predicate, args, values, Halide::Internal::StageSchedule(), specializations, source_location);
 }
 
+// TODO: will need to serialize a reverse table of map<address, func_name> to
+//       later reconstruct a map of <name, func_ptr> find out which function ptrs to use here
+std::map<std::string, Halide::Internal::FunctionPtr> Deserializer::deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs) {
+    return std::map<std::string, Halide::Internal::FunctionPtr>();
+}
+
+std::map<std::string, int32_t> Deserializer::deserialize_func_mappings(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> *func_mappings) {
+    std::map<std::string, int32_t> result;
+    for (const auto &func_mapping : *func_mappings) {
+        auto name = deserialize_string(func_mapping->name());
+        auto index = func_mapping->index();
+        result[name] = index;
+    }
+    return result;
+}
+
 Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     // unpack binary file
     std::ifstream in(filename, std::ios::binary | std::ios::in);
@@ -636,6 +651,9 @@ Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     std::vector<char> data(size);
     in.read(data.data(), size);
     in.close();
+
+    this->func_mappings_str2idx = deserialize_func_mappings(Halide::Serialize::GetPipeline(data.data())->func_mappings());
+    this->func_mappings_idx2ptr = reconstruct_func_ptr_mappings();
 
     const auto *pipeline_obj = Halide::Serialize::GetPipeline(data.data());
     const auto *func_objs = pipeline_obj->outputs();

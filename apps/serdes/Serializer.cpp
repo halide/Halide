@@ -777,6 +777,7 @@ flatbuffers::Offset<Halide::Serialize::FuncSchedule> Serializer::serialize_func_
     for (const auto &estimate : func_schedule.estimates()) {
         estimates_serialized.push_back(serialize_bound(builder, estimate));
     }
+    auto wrappers_serialized = serialize_wrapper_refs(builder, func_schedule.wrappers());
     // TODO: make this a func
     Halide::Serialize::MemoryType memory_type = Halide::Serialize::MemoryType::MemoryType_Auto;
     switch (func_schedule.memory_type()) {
@@ -822,7 +823,7 @@ flatbuffers::Offset<Halide::Serialize::FuncSchedule> Serializer::serialize_func_
     auto memoize_eviction_key = func_schedule.memoize_eviction_key();
     auto memoize_eviction_key_serialized = serialize_expr(builder, memoize_eviction_key);
     return Halide::Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized, builder.CreateVector(storage_dims_serialized), builder.CreateVector(bounds_serialized),
-                                                 builder.CreateVector(estimates_serialized), memory_type, memoized, async, memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
+                                                 builder.CreateVector(estimates_serialized), builder.CreateVector(wrappers_serialized), memory_type, memoized, async, memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
 }
 
 flatbuffers::Offset<Halide::Serialize::Specialization> Serializer::serialize_specialization(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Specialization &specialization) {
@@ -862,16 +863,49 @@ flatbuffers::Offset<Halide::Serialize::Definition> Serializer::serialize_definit
                                                builder.CreateVector(values_serialized), builder.CreateVector(args_types), builder.CreateVector(args_serialized), builder.CreateVector(specializations_serialized), source_location_serialized);
 }
 
+std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers) {
+    std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> wrapper_refs_serialized;
+    for (const auto& it : wrappers) {
+        std::string name = it.first;
+        const Halide::Internal::FunctionPtr& func_ptr = it.second;
+        uint64_t func_address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(func_ptr.get()));
+        auto name_serialized = serialize_string(builder, name);
+        wrapper_refs_serialized.push_back(Halide::Serialize::CreateWrapperRef(builder, name_serialized, func_address));
+    }
+    return wrapper_refs_serialized;
+}
+
+std::vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> Serializer::serialize_func_mappings(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, int32_t> &func_mappings) {
+    std::vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> func_mappings_serialized;
+    for (const auto& it : func_mappings) {
+        std::string name = it.first;
+        int32_t index = it.second;
+        auto name_serialized = serialize_string(builder, name);
+        func_mappings_serialized.push_back(Halide::Serialize::CreateFuncMapping(builder, name_serialized, index));
+    }
+    return func_mappings_serialized;
+}
+
 void Serializer::serialize(const Halide::Pipeline &pipeline, const std::string &filename) {
     std::cout << "Serializing a pipeline into " << filename << "\n";
     flatbuffers::FlatBufferBuilder builder(1024);
     std::map<std::string, Halide::Internal::Function> env;
+    std::map<std::string, int32_t> func_mappings;
 
     // extract the DAG, unwarp function from Funcs
     for (const Halide::Func &func : pipeline.outputs()) {
         const Halide::Internal::Function &f = func.function();
         std::map<std::string, Halide::Internal::Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
+    }
+
+    // construct the internal func mapping that will be used
+    // through serialization/deserialization to reassamble the DAG
+    {
+        int32_t i = 0;
+        for (const auto& it: env) {
+            func_mappings[it.first] = i++;
+        }
     }
 
     // serialize each func
@@ -905,7 +939,9 @@ void Serializer::serialize(const Halide::Pipeline &pipeline, const std::string &
     auto requirements_vector = builder.CreateVector(requirements_serialized);
     auto requirements_types_vector = builder.CreateVector(requirements_types);
 
-    auto pipeline_obj = Halide::Serialize::CreatePipeline(builder, funcs, requirements_types_vector, requirements_vector);
+    auto func_mappings_serialized = serialize_func_mappings(builder, func_mappings);
+
+    auto pipeline_obj = Halide::Serialize::CreatePipeline(builder, funcs, requirements_types_vector, requirements_vector, builder.CreateVector(func_mappings_serialized));
     builder.Finish(pipeline_obj);
 
     // write the binary file

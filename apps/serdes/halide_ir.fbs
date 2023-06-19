@@ -422,13 +422,18 @@ table LoopLevel {
     locked: bool;
 }
 
+table WrapperRef {
+    name: string;
+    func_address: uint64;
+}
+
 table FuncSchedule {
     store_level: LoopLevel;
     compute_level: LoopLevel;
     storage_dims: [StorageDim];
     bounds: [Bound];
     estimates: [Bound];
-    // wrappers: [WrapperRef]; TODO: no WrapperRef yet
+    wrappers: [WrapperRef];
     memory_type: MemoryType = Auto;
     memoized: bool;
     async: bool;
@@ -451,6 +456,11 @@ table Definition {
     source_location: string;
 }
 
+table FuncMapping {
+    name: string;
+    index: int32;
+}
+
 // Halide::internal::Function
 table Func {
     name: string;
@@ -466,12 +476,16 @@ table Func {
     // output_buffers: [Parameter];
     // extern_arguments: [ExternFuncArgument];
     // extern_function_name: string;
+    // extern_mangling: NameMangling;
+    // extern_device_api: DeviceAPI;
+    // extern_proxy_expr: Expr;
 }
 
 table Pipeline {
     outputs: [Func];
     requirements: [Stmt];
     // trace_pipeline: bool;
+    func_mappings: [FuncMapping];
 }
 
 root_type Pipeline;
