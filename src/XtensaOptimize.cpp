@@ -682,10 +682,10 @@ private:
                 {"halide_xtensa_widen_pair_mul_add_u24", i16(halide_xtensa_widen_mul_add_u24(wild_i24x, wild_u8x, wild_u8x)) + i16(halide_xtensa_widen_mul_u24(wild_u8x, wild_u8x)), Pattern::AccumulatorOutput24},
                 {"halide_xtensa_widen_pair_mul_add_u24", halide_xtensa_widen_mul_add_u24(wild_i24x, wild_u8x, wild_u8x) + halide_xtensa_widen_mul_u24(wild_u8x, wild_u8x)},
 
-                {"halide_xtensa_mul_add_u16", wild_u16x + wild_u16x*wild_u16x},
+                {"halide_xtensa_mul_add_u16", wild_u16x + wild_u16x * wild_u16x},
 
-                {"halide_xtensa_widen_add_u24", i24(wild_u8x) + i24(wild_u8x) , Pattern::AccumulatorOutput24},
-                {"halide_xtensa_widen_accum_u24", wild_i24x + i24(wild_u8x) , Pattern::AccumulatorOutput24},
+                {"halide_xtensa_widen_add_u24", i24(wild_u8x) + i24(wild_u8x), Pattern::AccumulatorOutput24},
+                {"halide_xtensa_widen_accum_u24", wild_i24x + i24(wild_u8x), Pattern::AccumulatorOutput24},
             };
 
             Expr new_expr = apply_commutative_patterns(op, adds, this);
@@ -995,12 +995,12 @@ private:
 
             if (op->type.bits() == 16) {
                 return Call::make(op->type, "halide_xtensa_absd_i16",
-                                {mutate(op->args[0]), mutate(op->args[1])},
-                                Call::PureExtern);
+                                  {mutate(op->args[0]), mutate(op->args[1])},
+                                  Call::PureExtern);
             } else if (op->type.bits() == 8) {
                 return Call::make(op->type, "halide_xtensa_absd_u8",
-                              {mutate(op->args[0]), mutate(op->args[1])},
-                              Call::PureExtern);
+                                  {mutate(op->args[0]), mutate(op->args[1])},
+                                  Call::PureExtern);
             }
         } else if (op->is_intrinsic(Call::widening_shift_left)) {
             // Replace widening left shift with multiplication.
@@ -1114,7 +1114,7 @@ private:
             {"halide_xtensa_widen_quad_mul_add_i24",
              call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8, wild_i8x, wild_i8}), wild_i8x, wild_i8, wild_i8x, wild_i8})},
             {"halide_xtensa_widen_pair_mul_add_i24",
-             call("halide_xtensa_widen_mul_add_i24", wild_i24x, {call("halide_xtensa_widen_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8x}), wild_i8x, wild_i8x})}, 
+             call("halide_xtensa_widen_mul_add_i24", wild_i24x, {call("halide_xtensa_widen_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8x}), wild_i8x, wild_i8x})},
             {"halide_xtensa_widen_pair_mul_add_i48",
              call("halide_xtensa_widen_mul_add_i48", wild_i48x,
                   {call("halide_xtensa_widen_mul_add_i48", wild_i48x, {wild_i48x, wild_i16x, wild_i16x}), wild_i16x, wild_i16x})},
