@@ -411,6 +411,9 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
             rhs << "IVP_ABSSUBUNX16U(" << args[0] + ", " + args[1] + ")";
         }
         return rhs.str();
+    } else if (op->name == "halide_xtensa_absd_u8") {
+        rhs << "IVP_ABSSUBU2NX8(" << args[0] + ", " + args[1] + ")";
+        return rhs.str();
     } else if (op->name == "halide_xtensa_narrow_i48_with_shift_u16") {
         rhs << "xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKVRNRNX48(" << args[0] + ", " + args[1] + "))";
         return rhs.str();
@@ -465,6 +468,10 @@ void CodeGen_Xtensa::visit(const Div *op) {
         ostringstream rhs;
         rhs << "IVP_DIVN_2XF32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         print_assignment(op->type, rhs.str());
+    } else if (is_native_xtensa_vector<uint32_t>(op->type)) {
+        string sa = print_expr(op->a);
+        string sb = print_expr(op->b);
+        print_assignment(op->type, "halide_xtensa_div32(" + sa + ", " + sb + ")");
     } else {
         string sa = print_expr(op->a);
         string sb = print_expr(op->b);

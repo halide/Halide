@@ -2484,6 +2484,8 @@ XTENSA_RUNTIME_SRC=$(ROOT_DIR)/src/runtime/alignment_128.cpp \
                    $(ROOT_DIR)/src/runtime/to_string.cpp \
                    $(ROOT_DIR)/src/runtime/posix_print.cpp \
                    $(ROOT_DIR)/src/runtime/posix_io.cpp \
+                   $(ROOT_DIR)/src/runtime/posix_aligned_alloc.cpp \
+                   $(ROOT_DIR)/src/runtime/posix_allocator.cpp \
                    $(ROOT_DIR)/src/runtime/xtensa_dma.cpp \
 
 XTENSA_RUNTIME_OBJS=$(patsubst $(ROOT_DIR)/src/runtime/%,$(BIN_DIR)/%,$(patsubst %.cpp,%.o,$(XTENSA_RUNTIME_SRC)))
