@@ -58,19 +58,6 @@ public:
         }
     }
 
-    // TODO: Move to IROperator.h
-    Tuple mux(Expr c, std::vector<Tuple> tup) {
-        std::vector<Expr> result(tup[0].size());
-        for (size_t i = 0; i < result.size(); i++) {
-            std::vector<Expr> elems(tup.size());
-            for (size_t j = 0; j < tup.size(); j++) {
-                elems[j] = tup[j][i];
-            }
-            result[i] = Halide::mux(c, elems);
-        }
-        return Tuple{result};
-    }
-
     Expr invert(const Expr &e) {
         if (e.type().is_float()) {
             return 1 - e;
@@ -144,7 +131,7 @@ public:
         std::vector<Tuple> blends = {over(a, b), atop(a, b), xor_(a, b), in(a, b), out(a, b)};
         blended(x, y) = mux(r[0], blends);
 
-        output(x, y, c) = Halide::mux(c, normalize(blended(x, y)));
+        output(x, y, c) = mux(c, normalize(blended(x, y)));
 
         /* ESTIMATES */
         for (int i = 0; i < num_layers; i++) {
@@ -154,7 +141,6 @@ public:
         ops.set_estimates({{0, num_layers - 1}});
 
         /* THE SCHEDULE */
-
         if (using_autoscheduler()) {
             // Nothing.
         } else if (get_target().has_gpu_feature()) {

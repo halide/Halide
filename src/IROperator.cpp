@@ -1547,6 +1547,23 @@ Expr mux(const Expr &id, const std::initializer_list<Expr> &values) {
     return mux(id, std::vector<Expr>(values));
 }
 
+Tuple mux(const Expr &id, const std::initializer_list<Tuple> &values) {
+    return mux(id, std::vector<Tuple>(values));
+}
+
+Tuple mux(const Expr &id, const std::vector<Tuple> &values) {
+    user_assert(!values.empty()) << "mux() requires a non-empty vector of values";
+    std::vector<Expr> result(values[0].size());
+    for (size_t i = 0; i < result.size(); i++) {
+        std::vector<Expr> elems(values.size());
+        for (size_t j = 0; j < values.size(); j++) {
+            elems[j] = values[j][i];
+        }
+        result[i] = mux(id, elems);
+    }
+    return Tuple{result};
+}
+
 Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
     user_assert(value.defined()) << "unsafe_promise_clamped with undefined value.\n";
     Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
