@@ -6,110 +6,167 @@ constexpr int num_layers = 6;
 
 class Compositing : public Halide::Generator<Compositing> {
     Var x{"x"}, y{"y"}, c{"c"};
+
 public:
-    Input<Buffer<uint8_t, 3>[num_layers]> layer_rgba{"layer_rgba"};
+    Input<Buffer<uint8_t, 3>[num_layers]> layer_rgba { "layer_rgba" };
     Input<Buffer<int, 1>> ops{"ops"};
     Output<Buffer<uint8_t, 3>> output{"output"};
 
-    Func extract_alpha(Func in) {
-        Func alpha{in.name() + "_alpha"};
-        alpha(x, y) = in(x, y, 3);
-        return alpha;
+    Tuple premultiply_alpha(Tuple in) {
+        if (get_target().has_gpu_feature()) {
+            const float scale = 1/255.0f;
+            // Use floats on GPU
+            in[3] = in[3] * scale;
+            for (int i = 0; i < 3; i++) {
+                in[i] = in[i] * (scale * in[3]);
+            }
+        } else {
+            // On CPU, use uint16s for color components, and uint8 for alpha.
+            for (int i = 0; i < 3; i++) {
+                in[i] = widening_mul(in[i], in[3]);
+            }
+        }
+        return in;
     }
-    
-    Func premultiply_alpha(Func in) {
-        Func out{in.name() + "_premul"};
-        out(x, y, c) = widening_mul(in(x, y, c), in(x, y, 3));
-        return out;
-    }    
+
+    Tuple normalize(Tuple in) {
+        if (in[0].type().is_float()) {
+            for (int i = 0; i < 4; i++) {
+                Expr scale = i < 3 ? 255.0f / in[3] : 255.0f;
+                in[i] *= scale;
+                in[i] = saturating_cast(UInt(8), in[i]);
+            }
+        } else {
+            for (int i = 0; i < 3; i++) {
+                in[i] = fast_integer_divide(in[i] + in[3]/2, in[3]);
+                in[i] = saturating_cast(UInt(8), in[i]);
+            }
+        }
+        return in;
+    }
     
     Expr scale(Expr a, Expr b) {
-        assert(b.type() == UInt(8));
-        Expr c = widening_mul(a, cast(a.type(), b));
-        //c = (c + 127) / 255;
-        c += rounding_shift_right(c, 8);
-        c = rounding_shift_right(c, 8);        
-        return cast(a.type(), c);
+        if (a.type().is_float()) {
+            return a * b;
+        } else {
+            assert(b.type() == UInt(8));
+            Expr c = widening_mul(a, cast(a.type(), b));
+            // The below is equivalent to c = (c + 127) / 255;
+            c += rounding_shift_right(c, 8);
+            c = rounding_shift_right(c, 8);
+            return cast(a.type(), c);
+        }
+    }
+
+    // TODO: Move to IROperator.h
+    Tuple mux(Expr c, std::vector<Tuple> tup) {
+        std::vector<Expr> result(tup[0].size());
+        for (size_t i = 0; i < result.size(); i++) {
+            std::vector<Expr> elems(tup.size());
+            for (size_t j = 0; j < tup.size(); j++) {
+                elems[j] = tup[j][i];
+            }
+            result[i] = Halide::mux(c, elems);
+        }
+        return Tuple{result};
+    }
+
+    Expr invert(const Expr &e) {
+        if (e.type().is_float()) {
+            return 1 - e;
+        } else {
+            return ~e;
+        }
     }
     
-    struct RGBA {
-        Expr rgb;
-        Expr alpha;
-    };
-    
-    RGBA over(const RGBA &a, const RGBA &b) {
-        RGBA c;
-        c.rgb = b.rgb + scale(a.rgb, ~b.alpha);
-        c.alpha = b.alpha + scale(a.alpha, ~b.alpha);
-        return c;
+    Tuple over(const Tuple &a, const Tuple &b) {
+        std::vector<Expr> c(4);
+        for (int i = 0; i < 3; i++) {
+            c[i] = b[i] + scale(a[i], invert(b[3]));
+        }
+        c[3] = b[3] + scale(a[3], invert(b[3]));
+        return Tuple{c};
     }
 
-    RGBA atop(const RGBA &a, const RGBA &b) {
-        RGBA c;
-        c.rgb = scale(b.rgb, a.alpha) + scale(a.rgb, ~b.alpha);
-        c.alpha = a.alpha;
-        return c;
+    Tuple atop(const Tuple &a, const Tuple &b) {
+        std::vector<Expr> c(4);
+        for (int i = 0; i < 3; i++) {
+            c[i] = scale(b[i], a[3]) + scale(a[i], invert(b[3]));
+        }
+        c[3] = a[3];
+        return Tuple{c};
     }
 
-    RGBA xor_(const RGBA &a, const RGBA &b) {
-        RGBA c;
-        c.rgb = scale(b.rgb, ~a.alpha) + scale(a.rgb, ~b.alpha);
-        c.alpha = scale(b.alpha, ~a.alpha) + scale(a.alpha, ~b.alpha);
-        return c;
-    }        
-
-    RGBA in(const RGBA &a, const RGBA &b) {
-        RGBA c;
-        c.rgb = scale(a.rgb, b.alpha);
-        c.alpha = scale(a.alpha, b.alpha);
-        return c;
+    Tuple xor_(const Tuple &a, const Tuple &b) {
+        std::vector<Expr> c(4);
+        for (int i = 0; i < 3; i++) {
+            c[i] = scale(b[i], invert(a[3])) + scale(a[i], invert(b[3]));
+        }
+        c[3] = scale(b[3], invert(a[3])) + scale(a[3], invert(b[3]));
+        return Tuple{c};
     }
 
-    RGBA out(const RGBA &a, const RGBA &b) {
-        RGBA c;
-        c.rgb = scale(a.rgb, ~b.alpha);
-        c.alpha = scale(a.alpha, ~b.alpha);
-        return c;
-    }    
+    Tuple in(const Tuple &a, const Tuple &b) {
+        std::vector<Expr> c(4);
+        for (int i = 0; i < 3; i++) {
+            c[i] = scale(a[i], b[3]);
+        }
+        c[3] = scale(a[3], b[3]);
+        return Tuple{c};
+    }
+
+    Tuple out(const Tuple &a, const Tuple &b) {
+        std::vector<Expr> c(4);
+        for (int i = 0; i < 3; i++) {
+            c[i] = scale(a[i], invert(b[3]));
+        }
+        c[3] = scale(a[3], invert(b[3]));
+        return Tuple{c};
+    }
 
     void generate() {
-        // Convert everything to pre-multiplied alpha
-        Func layer[num_layers], layer_alpha[num_layers];
+        std::vector<Tuple> layer_vec;
         for (int i = 0; i < num_layers; i++) {
-            layer[i] = premultiply_alpha(layer_rgba[i]);
-            layer_alpha[i] = extract_alpha(layer_rgba[i]);
+            layer_vec.push_back({layer_rgba[i](x, y, 0), layer_rgba[i](x, y, 1), layer_rgba[i](x, y, 2), layer_rgba[i](x, y, 3)});
         }
 
-        RGBA a {layer[0](x, y, c), layer_alpha[0](x, y)};
-        for (int i = 1; i < num_layers; i++) {
-            RGBA b {layer[i](x, y, c), layer_alpha[i](x, y)};
-            RGBA blends[] = {over(a, b), atop(a, b), xor_(a, b), in(a, b), out(a, b)};
-            a.rgb = mux(ops(i-1), {blends[0].rgb, blends[1].rgb, blends[2].rgb, blends[3].rgb, blends[4].rgb});
-            a.alpha = mux(ops(i-1), {blends[0].alpha, blends[1].alpha, blends[2].alpha, blends[3].alpha, blends[4].alpha});            
-        }
+        Func layer_muxed{"layer_muxed"};
+        Var k{"k"};
+        layer_muxed(x, y, k) = mux(k, layer_vec);
 
-        output(x, y, c) = select(c < 3, cast<uint8_t>(min(255, fast_integer_divide(a.rgb + a.alpha/2,  a.alpha))),
-                                 a.alpha);
-        
+        Func blended{"blended"};
+        blended(x, y) = premultiply_alpha(layer_vec[0]);  
+
+        RDom r(0, 5, 0, num_layers - 1);
+        r.where(r[0] == ops(r[1]));
+        Tuple a = blended(x, y);
+        Tuple b = premultiply_alpha(layer_muxed(x, y, r[1] + 1));
+        std::vector<Tuple> blends = {over(a, b), atop(a, b), xor_(a, b), in(a, b), out(a, b)};
+        blended(x, y) = mux(r[0], blends);
+
+        output(x, y, c) = Halide::mux(c, normalize(blended(x, y)));
+
         /* ESTIMATES */
-        // TODO
-        for (int i = 0; i < num_layers; i++)  {
-            layer_rgba[i].set_estimates({{0, 1536}, {0, 2560}, {0, 4}});            
+        for (int i = 0; i < num_layers; i++) {
+            layer_rgba[i].set_estimates({{0, 1536}, {0, 2560}, {0, 4}});
         }
         output.set_estimates({{0, 1536}, {0, 2560}, {0, 4}});
-        ops.set_estimates({{0, num_layers-1}});
-        
+        ops.set_estimates({{0, num_layers - 1}});
+
         /* THE SCHEDULE */
+
         if (using_autoscheduler()) {
             // Nothing.
         } else if (get_target().has_gpu_feature()) {
-            // GPU schedule.
-            // TODO
+            Var xi, yi;
+            output.gpu_tile(x, y, xi, yi, 32, 8);
+            blended.update().unroll(r[0]).unroll(r[1]);
         } else {
-            output.parallel(y, 8).vectorize(x, natural_vector_size<uint8_t>()).reorder(c, x, y).bound(c, 0, 4).unroll(c);
-            // CPU schedule.
-            // TODO
+            const int vec = natural_vector_size<uint8_t>();
+            Var yo{"yo"}, yi{"yi"};
+            output.split(y, yo, yi, 8).parallel(yo).vectorize(x, vec).reorder(c, x, yi, yo).bound(c, 0, 4).unroll(c);
 
+            blended.store_in(MemoryType::Stack).compute_at(output, yi).vectorize(x, vec).update().reorder(x, r[0], r[1]).unroll(r[0]).unroll(r[1]).vectorize(x, vec);
         }
     }
 };

@@ -25,9 +25,9 @@ int main(int argc, char **argv) {
     Buffer<uint8_t, 3> output(input.width(), input.height(), 4);
     int timing = atoi(argv[2]);
 
-    // Make some soft circles to composite over the input, each using a different blend mode
+    // Make a ring of colored blobs to composite over the input, each using a different blend mode
     Buffer<uint8_t, 3> blobs[5];
-    int op_codes[] = {4, 3, 2, 1, 0};
+    int op_codes[] = {4, 3, 2, 1, 0}; // These op codes specify the blend mode to use for each layer.
     Buffer<int, 1> ops(op_codes);
     for (int i = 0; i < 5; i++) {
         blobs[i] = Buffer<uint8_t, 3>::make_with_shape_of(input);
