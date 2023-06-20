@@ -85,6 +85,28 @@ Halide::Serialize::DeviceAPI Serializer::serialize_device_api(const Halide::Devi
     }
 }
 
+Halide::Serialize::CallType Serializer::serialize_call_type(const Halide::Internal::Call::CallType &call_type) {
+    switch (call_type) {
+    case Halide::Internal::Call::CallType::Image:
+        return Halide::Serialize::CallType::CallType_Image;
+    case Halide::Internal::Call::CallType::Extern:
+        return Halide::Serialize::CallType::CallType_Extern;
+    case Halide::Internal::Call::CallType::ExternCPlusPlus:
+        return Halide::Serialize::CallType::CallType_ExternCPlusPlus;
+    case Halide::Internal::Call::CallType::PureExtern:
+        return Halide::Serialize::CallType::CallType_PureExtern;
+    case Halide::Internal::Call::CallType::Halide:
+        return Halide::Serialize::CallType::CallType_Halide;
+    case Halide::Internal::Call::CallType::Intrinsic:
+        return Halide::Serialize::CallType::CallType_Intrinsic;
+    case Halide::Internal::Call::CallType::PureIntrinsic:
+        return Halide::Serialize::CallType::CallType_PureIntrinsic;
+    default:
+        std::cerr << "Unsupported call type\n";
+        exit(1);
+    }
+}
+
 flatbuffers::Offset<flatbuffers::String> Serializer::serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str) {
     return builder.CreateString(str);
 }
@@ -547,14 +569,16 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
             args_types.push_back(arg_serialized.first);
             args_serialized.push_back(arg_serialized.second);
         }
+        auto call_type = serialize_call_type(call_expr->call_type);
         auto value_index = call_expr->value_index;
-        return std::make_pair(Halide::Serialize::Expr::Expr_Call, Halide::Serialize::CreateCall(builder, name_serialized, builder.CreateVector(args_types), builder.CreateVector(args_serialized), value_index).Union());
+        return std::make_pair(Halide::Serialize::Expr::Expr_Call, Halide::Serialize::CreateCall(builder, name_serialized, builder.CreateVector(args_types), builder.CreateVector(args_serialized), call_type, value_index).Union());
     }
     case Halide::Internal::IRNodeType::Variable: {
         auto variable_expr = expr.as<Halide::Internal::Variable>();
         std::string name = variable_expr->name;
         auto name_serialized = serialize_string(builder, name);
-        return std::make_pair(Halide::Serialize::Expr::Expr_Variable, Halide::Serialize::CreateVariable(builder, name_serialized).Union());
+        auto reduction_domain_serialized = serialize_reduction_domain(builder, variable_expr->reduction_domain);
+        return std::make_pair(Halide::Serialize::Expr::Expr_Variable, Halide::Serialize::CreateVariable(builder, name_serialized, reduction_domain_serialized).Union());
     }
     case Halide::Internal::IRNodeType::Shuffle: {
         auto shuffle_expr = expr.as<Halide::Internal::Shuffle>();
@@ -736,6 +760,22 @@ flatbuffers::Offset<Halide::Serialize::Definition> Serializer::serialize_definit
     auto source_location_serialized = serialize_string(builder, definition.source_location());
     return Halide::Serialize::CreateDefinition(builder, is_init, predicate_serialized.first, predicate_serialized.second, builder.CreateVector(values_types),
                                                builder.CreateVector(values_serialized), builder.CreateVector(args_types), builder.CreateVector(args_serialized), builder.CreateVector(specializations_serialized), source_location_serialized);
+}
+
+flatbuffers::Offset<Halide::Serialize::ReductionVariable> Serializer::serialize_reduction_variable(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ReductionVariable &reduction_variable) {
+    auto var_serialized = serialize_string(builder, reduction_variable.var);
+    auto min_serialized = serialize_expr(builder, reduction_variable.min);
+    auto extent_serialized = serialize_expr(builder, reduction_variable.extent);
+    return Halide::Serialize::CreateReductionVariable(builder, var_serialized, min_serialized.first, min_serialized.second, extent_serialized.first, extent_serialized.second);
+}
+
+flatbuffers::Offset<Halide::Serialize::ReductionDomain> Serializer::serialize_reduction_domain(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ReductionDomain &reduction_domain) {
+    std::vector<flatbuffers::Offset<Halide::Serialize::ReductionVariable>> domain_serialized;
+    for (const auto &reduction_variable : reduction_domain.domain()) {
+        domain_serialized.push_back(serialize_reduction_variable(builder, reduction_variable));
+    }
+    auto predicate_serialized = serialize_expr(builder, reduction_domain.predicate());
+    return Halide::Serialize::CreateReductionDomain(builder, builder.CreateVector(domain_serialized), predicate_serialized.first, predicate_serialized.second, reduction_domain.frozen());
 }
 
 // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers) {

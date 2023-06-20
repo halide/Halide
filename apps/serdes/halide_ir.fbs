@@ -352,31 +352,43 @@ table Let {
     body: Expr;
 }
 
-// enum CallType: ubyte {
-//     Image,
-//     Extern,
-//     ExternCPlusPlus,
-//     PureExtern,
-//     Halide,
-//     Intrinsic,
-//     PureIntrinsic,
-// }
+enum CallType: ubyte {
+    Image,
+    Extern,
+    ExternCPlusPlus,
+    PureExtern,
+    Halide,
+    Intrinsic,
+    PureIntrinsic,
+}
 
 table Call {
     name: string;
     args: [Expr];
-    // call_type: CallType;
+    call_type: CallType;
     // func: FunctionPtr; TODO: no FunctionPtr yet
     value_index: int32;
     // image: Buffer; TODO: no Buffer yet
     // param: Parameter; TODO: no Parameter yet
 }
 
+table ReductionVariable {
+    var: string;
+    min: Expr;
+    extent: Expr;
+}
+
+table ReductionDomain {
+    domain: [ReductionVariable];
+    predicate: Expr;
+    frozen: bool = false;
+}
+
 table Variable {
     name: string;
     // param: Parameter; TODO: no Parameter yet
     // image: Buffer; TODO: no Buffer yet
-    // reduction_domain: ReductionDomain; TODO: no ReductionDomain yet
+    reduction_domain: ReductionDomain;
 }
 
 table Shuffle {

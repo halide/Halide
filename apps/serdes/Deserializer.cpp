@@ -88,6 +88,26 @@ Halide::DeviceAPI Deserializer::deserialize_device_api(const Halide::Serialize::
     }
 }
 
+Halide::Internal::Call::CallType Deserializer::deserialize_call_type(const Halide::Serialize::CallType call_type) {
+    switch (call_type) {
+    case Halide::Serialize::CallType::CallType_Image:
+        return Halide::Internal::Call::CallType::Image;
+    case Halide::Serialize::CallType::CallType_Extern:
+        return Halide::Internal::Call::CallType::Extern;
+    case Halide::Serialize::CallType::CallType_ExternCPlusPlus:
+        return Halide::Internal::Call::CallType::ExternCPlusPlus;
+    case Halide::Serialize::CallType::CallType_PureExtern:
+        return Halide::Internal::Call::CallType::PureExtern;
+    case Halide::Serialize::CallType::CallType_Halide:
+        return Halide::Internal::Call::CallType::Halide;
+    case Halide::Serialize::CallType::CallType_PureIntrinsic:
+        return Halide::Internal::Call::CallType::PureIntrinsic;
+    default:
+        std::cerr << "unknown call type " << call_type << "\n";
+        exit(1);
+    }
+}
+
 Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type) {
     using Halide::Serialize::TypeCode;
     int bits = type->bits();
@@ -467,13 +487,15 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         auto name = deserialize_string(call_expr->name());
         std::vector<Halide::Expr> args = deserialize_expr_vector(call_expr->args_type(), call_expr->args());
         auto value_index = call_expr->value_index();
+        auto call_type = deserialize_call_type(call_expr->call_type());
         // TODO: fix type and function ptr here once function DAG is fixed
-        return Halide::Internal::Call::make(Halide::Int(64), name, args, Halide::Internal::Call::CallType::Extern, Halide::Internal::FunctionPtr(), value_index);
+        return Halide::Internal::Call::make(Halide::Int(64), name, args, call_type, Halide::Internal::FunctionPtr(), value_index);
     }
     case Halide::Serialize::Expr::Expr_Variable: {
         const Halide::Serialize::Variable *variable_expr = (const Halide::Serialize::Variable *)expr;
         auto name = deserialize_string(variable_expr->name());
-        return Halide::Internal::Variable::make(Halide::Int(64), name);
+        auto reduction_domain = deserialize_reduction_domain(variable_expr->reduction_domain());
+        return Halide::Internal::Variable::make(Halide::Int(64), name, reduction_domain);
     }
     case Halide::Serialize::Expr::Expr_Shuffle: {
         const Halide::Serialize::Shuffle *shuffle_expr = (const Halide::Serialize::Shuffle *)expr;
@@ -611,6 +633,27 @@ Halide::Internal::Definition Deserializer::deserialize_definition(const Halide::
     }
     auto source_location = deserialize_string(definition->source_location());
     return Halide::Internal::Definition(is_init, predicate, args, values, Halide::Internal::StageSchedule(), specializations, source_location);
+}
+
+Halide::Internal::ReductionVariable Deserializer::deserialize_reduction_variable(const Halide::Serialize::ReductionVariable *reduction_variable) {
+    auto var = deserialize_string(reduction_variable->var());
+    auto min = deserialize_expr(reduction_variable->min_type(), reduction_variable->min());
+    auto extent = deserialize_expr(reduction_variable->extent_type(), reduction_variable->extent());
+    auto hl_reduction_variable = Halide::Internal::ReductionVariable();
+    hl_reduction_variable.var = var;
+    hl_reduction_variable.min = min;
+    hl_reduction_variable.extent = extent;
+    return hl_reduction_variable;
+}
+
+Halide::Internal::ReductionDomain Deserializer::deserialize_reduction_domain(const Halide::Serialize::ReductionDomain *reduction_domain) {
+    std::vector<Halide::Internal::ReductionVariable> domain;
+    for (const auto &reduction_variable : *reduction_domain->domain()) {
+        domain.push_back(deserialize_reduction_variable(reduction_variable));
+    }
+    auto predicate = deserialize_expr(reduction_domain->predicate_type(), reduction_domain->predicate());
+    auto frozen = reduction_domain->frozen();
+    return Halide::Internal::ReductionDomain(domain, predicate, frozen);
 }
 
 // TODO: will need to serialize a reverse table of map<address, func_name> to

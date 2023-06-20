@@ -25,6 +25,8 @@ private:
 
     Halide::Serialize::DeviceAPI serialize_device_api(const Halide::DeviceAPI &device_api);
 
+    Halide::Serialize::CallType serialize_call_type(const Halide::Internal::Call::CallType &call_type);
+
     flatbuffers::Offset<flatbuffers::String> serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str);
 
     flatbuffers::Offset<Halide::Serialize::Type> serialize_type(flatbuffers::FlatBufferBuilder &builder, const Halide::Type &type);
@@ -50,6 +52,10 @@ private:
     flatbuffers::Offset<Halide::Serialize::Specialization> serialize_specialization(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Specialization &specialization);
 
     flatbuffers::Offset<Halide::Serialize::Definition> serialize_definition(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Definition &definition);
+
+    flatbuffers::Offset<Halide::Serialize::ReductionVariable> serialize_reduction_variable(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ReductionVariable &reduction_variable);
+
+    flatbuffers::Offset<Halide::Serialize::ReductionDomain> serialize_reduction_domain(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ReductionDomain &reduction_domain);
 
     // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers);
 
