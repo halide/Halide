@@ -33,6 +33,10 @@ private:
 
     Halide::Serialize::NameMangling serialize_name_mangling(const Halide::NameMangling &name_mangling);
 
+    Halide::Serialize::TailStrategy serialize_tail_strategy(const Halide::TailStrategy &tail_strategy);
+
+    Halide::Serialize::SplitType serialize_split_type(const Halide::Internal::Split::SplitType &split_type);
+
     flatbuffers::Offset<flatbuffers::String> serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str);
 
     flatbuffers::Offset<Halide::Serialize::Type> serialize_type(flatbuffers::FlatBufferBuilder &builder, const Halide::Type &type);
@@ -66,6 +70,8 @@ private:
     flatbuffers::Offset<Halide::Serialize::ModulusRemainder> serialize_modulus_remainder(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ModulusRemainder &modulus_remainder);
 
     flatbuffers::Offset<Halide::Serialize::PrefetchDirective> serialize_prefetch_directive(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::PrefetchDirective &prefetch_directive);
+
+    flatbuffers::Offset<Halide::Serialize::Split> serialize_split(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Split &split);
 
     // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers);
 

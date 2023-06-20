@@ -158,6 +158,42 @@ Halide::NameMangling Deserializer::deserialize_name_mangling(const Halide::Seria
     }
 }
 
+Halide::TailStrategy Deserializer::deserialize_tail_strategy(const Halide::Serialize::TailStrategy tail_strategy) {
+    switch (tail_strategy) {
+    case Halide::Serialize::TailStrategy::TailStrategy_RoundUp:
+        return Halide::TailStrategy::RoundUp;
+    case Halide::Serialize::TailStrategy::TailStrategy_GuardWithIf:
+        return Halide::TailStrategy::GuardWithIf;
+    case Halide::Serialize::TailStrategy::TailStrategy_PredicateLoads:
+        return Halide::TailStrategy::PredicateLoads;
+    case Halide::Serialize::TailStrategy::TailStrategy_PredicateStores:
+        return Halide::TailStrategy::PredicateStores;
+    case Halide::Serialize::TailStrategy::TailStrategy_ShiftInwards:
+        return Halide::TailStrategy::ShiftInwards;
+    case Halide::Serialize::TailStrategy::TailStrategy_Auto:
+        return Halide::TailStrategy::Auto;
+    default:
+        std::cerr << "unknown tail strategy " << tail_strategy << "\n";
+        exit(1);
+    }
+}
+
+Halide::Internal::Split::SplitType Deserializer::deserialize_split_type(const Halide::Serialize::SplitType split_type) {
+    switch (split_type) {
+    case Halide::Serialize::SplitType::SplitType_SplitVar:
+        return Halide::Internal::Split::SplitType::SplitVar;
+    case Halide::Serialize::SplitType::SplitType_RenameVar:
+        return Halide::Internal::Split::SplitType::RenameVar;
+    case Halide::Serialize::SplitType::SplitType_FuseVars:
+        return Halide::Internal::Split::SplitType::FuseVars;
+    case Halide::Serialize::SplitType::SplitType_PurifyRVar:
+        return Halide::Internal::Split::SplitType::PurifyRVar;
+    default:
+        std::cerr << "unknown split type " << split_type << "\n";
+        exit(1);
+    }
+}
+
 Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type) {
     using Halide::Serialize::TypeCode;
     int bits = type->bits();
@@ -741,6 +777,23 @@ Halide::Internal::PrefetchDirective Deserializer::deserialize_prefetch_directive
     hl_prefetch_directive.offset = offset;
     hl_prefetch_directive.strategy = strategy;
     return hl_prefetch_directive;
+}
+
+Halide::Internal::Split Deserializer::deserialize_split(const Halide::Serialize::Split *split) {
+    auto old_var = deserialize_string(split->old_var());
+    auto outer = deserialize_string(split->outer());
+    auto inner = deserialize_string(split->inner());
+    auto factor = deserialize_expr(split->factor_type(), split->factor());
+    auto tail = deserialize_tail_strategy(split->tail());
+    auto split_type = deserialize_split_type(split->split_type());
+    auto hl_split = Halide::Internal::Split();
+    hl_split.old_var = old_var;
+    hl_split.outer = outer;
+    hl_split.inner = inner;
+    hl_split.factor = factor;
+    hl_split.tail = tail;
+    hl_split.split_type = split_type;
+    return hl_split;
 }
 
 // TODO: will need to serialize a reverse table of map<address, func_name> to

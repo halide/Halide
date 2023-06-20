@@ -157,6 +157,42 @@ Halide::Serialize::NameMangling Serializer::serialize_name_mangling(const Halide
     }
 }
 
+Halide::Serialize::TailStrategy Serializer::serialize_tail_strategy(const Halide::TailStrategy &tail_strategy) {
+    switch (tail_strategy) {
+    case Halide::TailStrategy::RoundUp:
+        return Halide::Serialize::TailStrategy::TailStrategy_RoundUp;
+    case Halide::TailStrategy::GuardWithIf:
+        return Halide::Serialize::TailStrategy::TailStrategy_GuardWithIf;
+    case Halide::TailStrategy::PredicateLoads:
+        return Halide::Serialize::TailStrategy::TailStrategy_PredicateLoads;
+    case Halide::TailStrategy::PredicateStores:
+        return Halide::Serialize::TailStrategy::TailStrategy_PredicateStores;
+    case Halide::TailStrategy::ShiftInwards:
+        return Halide::Serialize::TailStrategy::TailStrategy_ShiftInwards;
+    case Halide::TailStrategy::Auto:
+        return Halide::Serialize::TailStrategy::TailStrategy_Auto;
+    default:
+        std::cerr << "Unsupported tail strategy\n";
+        exit(1);
+    }
+}
+
+Halide::Serialize::SplitType Serializer::serialize_split_type(const Halide::Internal::Split::SplitType &split_type) {
+    switch (split_type) {
+    case Halide::Internal::Split::SplitType::SplitVar:
+        return Halide::Serialize::SplitType::SplitType_SplitVar;
+    case Halide::Internal::Split::SplitType::RenameVar:
+        return Halide::Serialize::SplitType::SplitType_RenameVar;
+    case Halide::Internal::Split::SplitType::FuseVars:
+        return Halide::Serialize::SplitType::SplitType_FuseVars;
+    case Halide::Internal::Split::SplitType::PurifyRVar:
+        return Halide::Serialize::SplitType::SplitType_PurifyRVar;
+    default:
+        std::cerr << "Unsupported split type\n";
+        exit(1);
+    }
+}
+
 flatbuffers::Offset<flatbuffers::String> Serializer::serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str) {
     return builder.CreateString(str);
 }
@@ -616,11 +652,11 @@ flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_function(flat
     bool trace_realizations = function.is_tracing_realizations();
     std::vector<flatbuffers::Offset<flatbuffers::String>> trace_tags_serialized;
     trace_tags_serialized.reserve(function.get_trace_tags().size());
-    for (const auto& tag: function.get_trace_tags()) {
+    for (const auto &tag : function.get_trace_tags()) {
         trace_tags_serialized.push_back(serialize_string(builder, tag));
     }
     bool frozen = function.frozen();
-    auto func = Halide::Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim, 
+    auto func = Halide::Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim,
                                               args_vector, func_schedule_serialized, init_def_serialized, builder.CreateVector(updates_serialized), debug_file_serialized,
                                               extern_function_name_serialized, extern_mangling_serialized, extern_function_device_api_serialized, extern_proxy_expr_serialized.first,
                                               extern_proxy_expr_serialized.second, trace_loads, trace_stores, trace_realizations, builder.CreateVector(trace_tags_serialized), frozen);
@@ -768,6 +804,16 @@ flatbuffers::Offset<Halide::Serialize::PrefetchDirective> Serializer::serialize_
     auto offset_serialized = serialize_expr(builder, prefetch_directive.offset);
     auto strategy_serialized = serialize_prefetch_bound_strategy(prefetch_directive.strategy);
     return Halide::Serialize::CreatePrefetchDirective(builder, name_serialized, at_serialized, from_serialized, offset_serialized.first, offset_serialized.second, strategy_serialized);
+}
+
+flatbuffers::Offset<Halide::Serialize::Split> Serializer::serialize_split(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Split &split) {
+    auto old_var_serialized = serialize_string(builder, split.old_var);
+    auto outer_serialized = serialize_string(builder, split.outer);
+    auto inner_serialized = serialize_string(builder, split.inner);
+    auto factor_serialized = serialize_expr(builder, split.factor);
+    auto tail_serialized = serialize_tail_strategy(split.tail);
+    auto inner_to_outer_serialized = serialize_split_type(split.split_type);
+    return Halide::Serialize::CreateSplit(builder, old_var_serialized, outer_serialized, inner_serialized, factor_serialized.first, factor_serialized.second, tail_serialized, inner_to_outer_serialized);
 }
 
 // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers) {

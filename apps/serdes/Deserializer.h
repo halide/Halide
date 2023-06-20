@@ -32,6 +32,10 @@ private:
 
     Halide::NameMangling deserialize_name_mangling(const Halide::Serialize::NameMangling name_mangling);
 
+    Halide::TailStrategy deserialize_tail_strategy(const Halide::Serialize::TailStrategy tail_strategy);
+
+    Halide::Internal::Split::SplitType deserialize_split_type(const Halide::Serialize::SplitType split_type);
+
     std::string deserialize_string(const flatbuffers::String *str);
 
     Halide::Type deserialize_type(const Halide::Serialize::Type *type);
@@ -66,6 +70,7 @@ private:
 
     Halide::Internal::PrefetchDirective deserialize_prefetch_directive(const Halide::Serialize::PrefetchDirective *prefetch_directive);
 
+    Halide::Internal::Split deserialize_split(const Halide::Serialize::Split *split);
     // std::map<std::string, Halide::Internal::FunctionPtr> deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs);
 
     // std::map<std::string, int32_t> deserialize_func_mappings(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> *func_mappings);
