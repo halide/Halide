@@ -194,6 +194,20 @@ Halide::Internal::Split::SplitType Deserializer::deserialize_split_type(const Ha
     }
 }
 
+Halide::Internal::DimType Deserializer::deserialize_dim_type(const Halide::Serialize::DimType dim_type) {
+    switch (dim_type) {
+    case Halide::Serialize::DimType::DimType_PureVar:
+        return Halide::Internal::DimType::PureVar;
+    case Halide::Serialize::DimType::DimType_PureRVar:
+        return Halide::Internal::DimType::PureRVar;
+    case Halide::Serialize::DimType::DimType_ImpureRVar:
+        return Halide::Internal::DimType::ImpureRVar;
+    default:
+        std::cerr << "unknown dim type " << dim_type << "\n";
+        exit(1);
+    }
+}
+
 Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type) {
     using Halide::Serialize::TypeCode;
     int bits = type->bits();
@@ -794,6 +808,19 @@ Halide::Internal::Split Deserializer::deserialize_split(const Halide::Serialize:
     hl_split.tail = tail;
     hl_split.split_type = split_type;
     return hl_split;
+}
+
+Halide::Internal::Dim Deserializer::deserialize_dim(const Halide::Serialize::Dim *dim) {
+    auto var = deserialize_string(dim->var());
+    auto for_type = deserialize_for_type(dim->for_type());
+    auto device_api = deserialize_device_api(dim->device_api());
+    auto dim_type = deserialize_dim_type(dim->dim_type());
+    auto hl_dim = Halide::Internal::Dim();
+    hl_dim.var = var;
+    hl_dim.for_type = for_type;
+    hl_dim.device_api = device_api;
+    hl_dim.dim_type = dim_type;
+    return hl_dim;
 }
 
 // TODO: will need to serialize a reverse table of map<address, func_name> to

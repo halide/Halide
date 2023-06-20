@@ -523,12 +523,18 @@ table Split {
     split_type: SplitType;
 }
 
-// table Dim {
-//     var: string;
-//     for_type: ForType;
-//     device_api: DeviceAPI;
-//     dim_type: DimType;
-// }
+enum DimType: ubyte {
+    PureVar,
+    PureRVar,
+    ImpureRVar,
+}
+
+table Dim {
+    var: string;
+    for_type: ForType;
+    device_api: DeviceAPI;
+    dim_type: DimType;
+}
 
 // enum LoopAlignStrategy: ubyte {
 //     AlignStart,

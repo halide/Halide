@@ -193,6 +193,20 @@ Halide::Serialize::SplitType Serializer::serialize_split_type(const Halide::Inte
     }
 }
 
+Halide::Serialize::DimType Serializer::serialize_dim_type(const Halide::Internal::DimType &dim_type) {
+    switch (dim_type) {
+    case Halide::Internal::DimType::PureVar:
+        return Halide::Serialize::DimType::DimType_PureVar;
+    case Halide::Internal::DimType::PureRVar:
+        return Halide::Serialize::DimType::DimType_PureRVar;
+    case Halide::Internal::DimType::ImpureRVar:
+        return Halide::Serialize::DimType::DimType_ImpureRVar;
+    default:
+        std::cerr << "Unsupported dim type\n";
+        exit(1);
+    }
+}
+
 flatbuffers::Offset<flatbuffers::String> Serializer::serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str) {
     return builder.CreateString(str);
 }
@@ -814,6 +828,14 @@ flatbuffers::Offset<Halide::Serialize::Split> Serializer::serialize_split(flatbu
     auto tail_serialized = serialize_tail_strategy(split.tail);
     auto inner_to_outer_serialized = serialize_split_type(split.split_type);
     return Halide::Serialize::CreateSplit(builder, old_var_serialized, outer_serialized, inner_serialized, factor_serialized.first, factor_serialized.second, tail_serialized, inner_to_outer_serialized);
+}
+
+flatbuffers::Offset<Halide::Serialize::Dim> Serializer::serialize_dim(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Dim &dim) {
+    auto var_serialized = serialize_string(builder, dim.var);
+    auto for_type_serialized = serialize_for_type(dim.for_type);
+    auto device_api_serialized = serialize_device_api(dim.device_api);
+    auto dim_type_serialized = serialize_dim_type(dim.dim_type);
+    return Halide::Serialize::CreateDim(builder, var_serialized, for_type_serialized, device_api_serialized, dim_type_serialized);
 }
 
 // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers) {

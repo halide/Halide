@@ -36,6 +36,8 @@ private:
 
     Halide::Internal::Split::SplitType deserialize_split_type(const Halide::Serialize::SplitType split_type);
 
+    Halide::Internal::DimType deserialize_dim_type(const Halide::Serialize::DimType dim_type);
+
     std::string deserialize_string(const flatbuffers::String *str);
 
     Halide::Type deserialize_type(const Halide::Serialize::Type *type);
@@ -71,6 +73,9 @@ private:
     Halide::Internal::PrefetchDirective deserialize_prefetch_directive(const Halide::Serialize::PrefetchDirective *prefetch_directive);
 
     Halide::Internal::Split deserialize_split(const Halide::Serialize::Split *split);
+
+    Halide::Internal::Dim deserialize_dim(const Halide::Serialize::Dim *dim);
+
     // std::map<std::string, Halide::Internal::FunctionPtr> deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs);
 
     // std::map<std::string, int32_t> deserialize_func_mappings(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> *func_mappings);

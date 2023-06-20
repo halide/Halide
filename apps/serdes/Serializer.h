@@ -37,6 +37,8 @@ private:
 
     Halide::Serialize::SplitType serialize_split_type(const Halide::Internal::Split::SplitType &split_type);
 
+    Halide::Serialize::DimType serialize_dim_type(const Halide::Internal::DimType &dim_type);
+
     flatbuffers::Offset<flatbuffers::String> serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str);
 
     flatbuffers::Offset<Halide::Serialize::Type> serialize_type(flatbuffers::FlatBufferBuilder &builder, const Halide::Type &type);
@@ -72,6 +74,8 @@ private:
     flatbuffers::Offset<Halide::Serialize::PrefetchDirective> serialize_prefetch_directive(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::PrefetchDirective &prefetch_directive);
 
     flatbuffers::Offset<Halide::Serialize::Split> serialize_split(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Split &split);
+
+    flatbuffers::Offset<Halide::Serialize::Dim> serialize_dim(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Dim &dim);
 
     // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers);
 
