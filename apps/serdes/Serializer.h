@@ -31,6 +31,8 @@ private:
 
     Halide::Serialize::PrefetchBoundStrategy serialize_prefetch_bound_strategy(const Halide::PrefetchBoundStrategy &prefetch_bound_strategy);
 
+    Halide::Serialize::NameMangling serialize_name_mangling(const Halide::NameMangling &name_mangling);
+
     flatbuffers::Offset<flatbuffers::String> serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str);
 
     flatbuffers::Offset<Halide::Serialize::Type> serialize_type(flatbuffers::FlatBufferBuilder &builder, const Halide::Type &type);

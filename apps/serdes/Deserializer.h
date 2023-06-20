@@ -30,6 +30,8 @@ private:
 
     Halide::PrefetchBoundStrategy deserialize_prefetch_bound_strategy(const Halide::Serialize::PrefetchBoundStrategy prefetch_bound_strategy);
 
+    Halide::NameMangling deserialize_name_mangling(const Halide::Serialize::NameMangling name_mangling);
+
     std::string deserialize_string(const flatbuffers::String *str);
 
     Halide::Type deserialize_type(const Halide::Serialize::Type *type);

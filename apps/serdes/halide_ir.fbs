@@ -513,6 +513,12 @@ table FuncMapping {
     index: int32;
 }
 
+enum NameMangling: ubyte {
+    Default,
+    C,
+    CPlusPlus,
+}
+
 // Halide::internal::Function
 table Func {
     name: string;
@@ -524,13 +530,18 @@ table Func {
     func_schedule: FuncSchedule;
     init_def: Definition;
     updates: [Definition];
-    // debug_file: string;
+    debug_file: string;
     // output_buffers: [Parameter];
     // extern_arguments: [ExternFuncArgument];
-    // extern_function_name: string;
-    // extern_mangling: NameMangling;
-    // extern_device_api: DeviceAPI;
-    // extern_proxy_expr: Expr;
+    extern_function_name: string;
+    extern_mangling: NameMangling;
+    extern_function_device_api: DeviceAPI;
+    extern_proxy_expr: Expr;
+    trace_loads: bool = false;
+    trace_stores: bool = false;
+    trace_realizations: bool = false;
+    trace_tags: [string];
+    frozen: bool = false;
 }
 
 table Pipeline {

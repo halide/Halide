@@ -143,6 +143,20 @@ Halide::Serialize::PrefetchBoundStrategy Serializer::serialize_prefetch_bound_st
     }
 }
 
+Halide::Serialize::NameMangling Serializer::serialize_name_mangling(const Halide::NameMangling &name_mangling) {
+    switch (name_mangling) {
+    case Halide::NameMangling::Default:
+        return Halide::Serialize::NameMangling::NameMangling_Default;
+    case Halide::NameMangling::C:
+        return Halide::Serialize::NameMangling::NameMangling_C;
+    case Halide::NameMangling::CPlusPlus:
+        return Halide::Serialize::NameMangling::NameMangling_CPlusPlus;
+    default:
+        std::cerr << "Unsupported name mangling\n";
+        exit(1);
+    }
+}
+
 flatbuffers::Offset<flatbuffers::String> Serializer::serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str) {
     return builder.CreateString(str);
 }
@@ -591,7 +605,25 @@ flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_function(flat
     for (const auto &update : function.updates()) {
         updates_serialized.push_back(serialize_definition(builder, update));
     }
-    auto func = Halide::Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim, args_vector, func_schedule_serialized, init_def_serialized, builder.CreateVector(updates_serialized));
+
+    auto debug_file_serialized = serialize_string(builder, function.debug_file());
+    auto extern_function_name_serialized = serialize_string(builder, function.extern_function_name());
+    auto extern_mangling_serialized = serialize_name_mangling(function.extern_definition_name_mangling());
+    auto extern_function_device_api_serialized = serialize_device_api(function.extern_function_device_api());
+    auto extern_proxy_expr_serialized = serialize_expr(builder, function.extern_definition_proxy_expr());
+    bool trace_loads = function.is_tracing_loads();
+    bool trace_stores = function.is_tracing_stores();
+    bool trace_realizations = function.is_tracing_realizations();
+    std::vector<flatbuffers::Offset<flatbuffers::String>> trace_tags_serialized;
+    trace_tags_serialized.reserve(function.get_trace_tags().size());
+    for (const auto& tag: function.get_trace_tags()) {
+        trace_tags_serialized.push_back(serialize_string(builder, tag));
+    }
+    bool frozen = function.frozen();
+    auto func = Halide::Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim, 
+                                              args_vector, func_schedule_serialized, init_def_serialized, builder.CreateVector(updates_serialized), debug_file_serialized,
+                                              extern_function_name_serialized, extern_mangling_serialized, extern_function_device_api_serialized, extern_proxy_expr_serialized.first,
+                                              extern_proxy_expr_serialized.second, trace_loads, trace_stores, trace_realizations, builder.CreateVector(trace_tags_serialized), frozen);
     return func;
 }
 

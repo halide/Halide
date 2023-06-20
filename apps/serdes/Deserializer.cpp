@@ -144,6 +144,20 @@ Halide::PrefetchBoundStrategy Deserializer::deserialize_prefetch_bound_strategy(
     }
 }
 
+Halide::NameMangling Deserializer::deserialize_name_mangling(const Halide::Serialize::NameMangling name_mangling) {
+    switch (name_mangling) {
+    case Halide::Serialize::NameMangling::NameMangling_Default:
+        return Halide::NameMangling::Default;
+    case Halide::Serialize::NameMangling::NameMangling_C:
+        return Halide::NameMangling::C;
+    case Halide::Serialize::NameMangling::NameMangling_CPlusPlus:
+        return Halide::NameMangling::CPlusPlus;
+    default:
+        std::cerr << "unknown name mangling " << name_mangling << "\n";
+        exit(1);
+    }
+}
+
 Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type) {
     using Halide::Serialize::TypeCode;
     int bits = type->bits();
@@ -200,8 +214,24 @@ Halide::Internal::Function Deserializer::deserialize_function(const Halide::Seri
         updates.push_back(deserialize_definition(update));
     }
 
+    std::string debug_file = deserialize_string(function->debug_file());
+    std::string extern_function_name = deserialize_string(function->extern_function_name());
+    auto name_mangling = deserialize_name_mangling(function->extern_mangling());
+    auto extern_function_device_api = deserialize_device_api(function->extern_function_device_api());
+    auto extern_proxy_expr = deserialize_expr(function->extern_proxy_expr_type(), function->extern_proxy_expr());
+    bool trace_loads = function->trace_loads(), trace_stores = function->trace_stores(), trace_realizations = function->trace_realizations();
+    std::vector<std::string> trace_tags;
+    trace_tags.reserve(function->trace_tags()->size());
+    for (const auto &tag : *function->trace_tags()) {
+        trace_tags.push_back(deserialize_string(tag));
+    }
+    bool frozen = function->frozen();
+
     return Halide::Internal::Function(name, origin_name, output_types, required_types,
-                                      required_dim, args, func_schedule, init_def, updates);
+                                      required_dim, args, func_schedule, init_def, updates,
+                                      debug_file, extern_function_name, name_mangling,
+                                      extern_function_device_api, extern_proxy_expr,
+                                      trace_loads, trace_stores, trace_realizations, trace_tags, frozen);
 }
 
 Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const void *stmt) {
