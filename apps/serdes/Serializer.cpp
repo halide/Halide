@@ -3,22 +3,97 @@
 #include <iostream>
 #include <map>
 
+Halide::Serialize::MemoryType Serializer::serialize_memory_type(const Halide::MemoryType &memory_type) {
+    switch (memory_type) {
+    case Halide::MemoryType::Auto:
+        return Halide::Serialize::MemoryType::MemoryType_Auto;
+    case Halide::MemoryType::Heap:
+        return Halide::Serialize::MemoryType::MemoryType_Heap;
+    case Halide::MemoryType::Stack:
+        return Halide::Serialize::MemoryType::MemoryType_Stack;
+    case Halide::MemoryType::Register:
+        return Halide::Serialize::MemoryType::MemoryType_Register;
+    case Halide::MemoryType::GPUShared:
+        return Halide::Serialize::MemoryType::MemoryType_GPUShared;
+    case Halide::MemoryType::GPUTexture:
+        return Halide::Serialize::MemoryType::MemoryType_GPUTexture;
+    case Halide::MemoryType::LockedCache:
+        return Halide::Serialize::MemoryType::MemoryType_LockedCache;
+    case Halide::MemoryType::VTCM:
+        return Halide::Serialize::MemoryType::MemoryType_VTCM;
+    case Halide::MemoryType::AMXTile:
+        return Halide::Serialize::MemoryType::MemoryType_AMXTile;
+    default:
+        std::cerr << "Unsupported memory type\n";
+        exit(1);
+    }
+}
+
+Halide::Serialize::ForType Serializer::serialize_for_type(const Halide::Internal::ForType &for_type) {
+    switch (for_type) {
+    case Halide::Internal::ForType::Serial:
+        return Halide::Serialize::ForType::ForType_Serial;
+    case Halide::Internal::ForType::Parallel:
+        return Halide::Serialize::ForType::ForType_Parallel;
+    case Halide::Internal::ForType::Vectorized:
+        return Halide::Serialize::ForType::ForType_Vectorized;
+    case Halide::Internal::ForType::Unrolled:
+        return Halide::Serialize::ForType::ForType_Unrolled;
+    case Halide::Internal::ForType::Extern:
+        return Halide::Serialize::ForType::ForType_Extern;
+    case Halide::Internal::ForType::GPUBlock:
+        return Halide::Serialize::ForType::ForType_GPUBlock;
+    case Halide::Internal::ForType::GPUThread:
+        return Halide::Serialize::ForType::ForType_GPUThread;
+    case Halide::Internal::ForType::GPULane:
+        return Halide::Serialize::ForType::ForType_GPULane;
+    default:
+        std::cerr << "Unsupported for type\n";
+        exit(1);
+    }
+}
+
+Halide::Serialize::DeviceAPI Serializer::serialize_device_api(const Halide::DeviceAPI &device_api) {
+    switch (device_api) {
+    case Halide::DeviceAPI::None:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_None;
+    case Halide::DeviceAPI::Host:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_Host;
+    case Halide::DeviceAPI::Default_GPU:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_Default_GPU;
+    case Halide::DeviceAPI::CUDA:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_CUDA;
+    case Halide::DeviceAPI::OpenCL:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_OpenCL;
+    case Halide::DeviceAPI::OpenGLCompute:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_OpenGLCompute;
+    case Halide::DeviceAPI::Metal:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_Metal;
+    case Halide::DeviceAPI::Hexagon:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_Hexagon;
+    case Halide::DeviceAPI::HexagonDma:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_HexagonDma;
+    case Halide::DeviceAPI::D3D12Compute:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_D3D12Compute;
+    case Halide::DeviceAPI::Vulkan:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_Vulkan;
+    case Halide::DeviceAPI::WebGPU:
+        return Halide::Serialize::DeviceAPI::DeviceAPI_WebGPU;
+    default:
+        std::cerr << "Unsupported device API\n";
+        exit(1);
+    }
+}
+
 flatbuffers::Offset<flatbuffers::String> Serializer::serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str) {
     return builder.CreateString(str);
 }
 
 flatbuffers::Offset<Halide::Serialize::Type> Serializer::serialize_type(flatbuffers::FlatBufferBuilder &builder, const Halide::Type &type) {
-    // bits
     int bits = type.bits();
-
-    // lanes
     int lanes = type.lanes();
-
-    // code
     halide_type_code_t code = type.code();
-
     auto code_serialized = Halide::Serialize::TypeCode(code);
-
     auto type_obj = Halide::Serialize::CreateType(builder, code_serialized, bits, lanes);
     return type_obj;
 }
@@ -63,92 +138,8 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         auto min_serialized = serialize_expr(builder, min);
         auto extent = for_stmt->extent;
         auto extent_serialized = serialize_expr(builder, extent);
-        Halide::Serialize::ForType for_type = Halide::Serialize::ForType::ForType_Serial;
-        switch (for_stmt->for_type) {
-        case Halide::Internal::ForType::Serial: {
-            for_type = Halide::Serialize::ForType::ForType_Serial;
-            break;
-        }
-        case Halide::Internal::ForType::Parallel: {
-            for_type = Halide::Serialize::ForType::ForType_Parallel;
-            break;
-        }
-        case Halide::Internal::ForType::Vectorized: {
-            for_type = Halide::Serialize::ForType::ForType_Vectorized;
-            break;
-        }
-        case Halide::Internal::ForType::Unrolled: {
-            for_type = Halide::Serialize::ForType::ForType_Unrolled;
-            break;
-        }
-        case Halide::Internal::ForType::Extern: {
-            for_type = Halide::Serialize::ForType::ForType_Extern;
-            break;
-        }
-        case Halide::Internal::ForType::GPUBlock: {
-            for_type = Halide::Serialize::ForType::ForType_GPUBlock;
-            break;
-        }
-        case Halide::Internal::ForType::GPUThread: {
-            for_type = Halide::Serialize::ForType::ForType_GPUThread;
-            break;
-        }
-        case Halide::Internal::ForType::GPULane: {
-            for_type = Halide::Serialize::ForType::ForType_GPULane;
-            break;
-        }
-        }
-        Halide::Serialize::DeviceAPI device_api = Halide::Serialize::DeviceAPI::DeviceAPI_None;
-        switch (for_stmt->device_api) {
-        case Halide::DeviceAPI::None: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_None;
-            break;
-        }
-        case Halide::DeviceAPI::Host: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_Host;
-            break;
-        }
-        case Halide::DeviceAPI::Default_GPU: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_Default_GPU;
-            break;
-        }
-        case Halide::DeviceAPI::CUDA: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_CUDA;
-            break;
-        }
-        case Halide::DeviceAPI::OpenCL: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_OpenCL;
-            break;
-        }
-        case Halide::DeviceAPI::OpenGLCompute: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_OpenGLCompute;
-            break;
-        }
-        case Halide::DeviceAPI::Metal: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_Metal;
-            break;
-        }
-        case Halide::DeviceAPI::Hexagon: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_Hexagon;
-            break;
-        }
-        case Halide::DeviceAPI::HexagonDma: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_HexagonDma;
-            break;
-        }
-        case Halide::DeviceAPI::D3D12Compute: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_D3D12Compute;
-            break;
-        }
-        case Halide::DeviceAPI::Vulkan: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_Vulkan;
-            break;
-        }
-        case Halide::DeviceAPI::WebGPU: {
-            device_api = Halide::Serialize::DeviceAPI::DeviceAPI_WebGPU;
-            break;
-        }
-        }
+        Halide::Serialize::ForType for_type = serialize_for_type(for_stmt->for_type);
+        Halide::Serialize::DeviceAPI device_api = serialize_device_api(for_stmt->device_api);
         auto body = for_stmt->body;
         auto body_serialized = serialize_stmt(builder, body);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_For, Halide::Serialize::CreateFor(builder, name_serialized, min_serialized.first, min_serialized.second, extent_serialized.first, extent_serialized.second, for_type, device_api, body_serialized.first, body_serialized.second).Union());
@@ -199,45 +190,7 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         auto name_serialized = serialize_string(builder, name);
         auto type = allocate_stmt->type;
         auto type_serialized = serialize_type(builder, type);
-        Halide::Serialize::MemoryType memory_type = Halide::Serialize::MemoryType::MemoryType_Auto;
-        switch (allocate_stmt->memory_type) {
-        case Halide::MemoryType::Auto: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_Auto;
-            break;
-        }
-        case Halide::MemoryType::Heap: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_Heap;
-            break;
-        }
-        case Halide::MemoryType::Stack: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_Stack;
-            break;
-        }
-        case Halide::MemoryType::Register: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_Register;
-            break;
-        }
-        case Halide::MemoryType::GPUShared: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_GPUShared;
-            break;
-        }
-        case Halide::MemoryType::GPUTexture: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_GPUTexture;
-            break;
-        }
-        case Halide::MemoryType::LockedCache: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_LockedCache;
-            break;
-        }
-        case Halide::MemoryType::VTCM: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_VTCM;
-            break;
-        }
-        case Halide::MemoryType::AMXTile: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_AMXTile;
-            break;
-        }
-        }
+        Halide::Serialize::MemoryType memory_type = serialize_memory_type(allocate_stmt->memory_type);
         auto extents = allocate_stmt->extents;
         std::vector<uint8_t> extents_types;
         extents_types.reserve(extents.size());
@@ -275,46 +228,7 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         for (const auto &type : types) {
             types_serialized.push_back(serialize_type(builder, type));
         }
-        // TODO: make this a func
-        Halide::Serialize::MemoryType memory_type = Halide::Serialize::MemoryType::MemoryType_Auto;
-        switch (realize_stmt->memory_type) {
-        case Halide::MemoryType::Auto: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_Auto;
-            break;
-        }
-        case Halide::MemoryType::Heap: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_Heap;
-            break;
-        }
-        case Halide::MemoryType::Stack: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_Stack;
-            break;
-        }
-        case Halide::MemoryType::Register: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_Register;
-            break;
-        }
-        case Halide::MemoryType::GPUShared: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_GPUShared;
-            break;
-        }
-        case Halide::MemoryType::GPUTexture: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_GPUTexture;
-            break;
-        }
-        case Halide::MemoryType::LockedCache: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_LockedCache;
-            break;
-        }
-        case Halide::MemoryType::VTCM: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_VTCM;
-            break;
-        }
-        case Halide::MemoryType::AMXTile: {
-            memory_type = Halide::Serialize::MemoryType::MemoryType_AMXTile;
-            break;
-        }
-        }
+        Halide::Serialize::MemoryType memory_type = serialize_memory_type(realize_stmt->memory_type);
         auto bounds = realize_stmt->bounds;
         std::vector<flatbuffers::Offset<Halide::Serialize::Range>> bounds_serialized;
         bounds_serialized.reserve(bounds.size());
@@ -778,46 +692,7 @@ flatbuffers::Offset<Halide::Serialize::FuncSchedule> Serializer::serialize_func_
         estimates_serialized.push_back(serialize_bound(builder, estimate));
     }
     // auto wrappers_serialized = serialize_wrapper_refs(builder, func_schedule.wrappers());
-    // TODO: make this a func
-    Halide::Serialize::MemoryType memory_type = Halide::Serialize::MemoryType::MemoryType_Auto;
-    switch (func_schedule.memory_type()) {
-    case Halide::MemoryType::Auto: {
-        memory_type = Halide::Serialize::MemoryType::MemoryType_Auto;
-        break;
-    }
-    case Halide::MemoryType::Heap: {
-        memory_type = Halide::Serialize::MemoryType::MemoryType_Heap;
-        break;
-    }
-    case Halide::MemoryType::Stack: {
-        memory_type = Halide::Serialize::MemoryType::MemoryType_Stack;
-        break;
-    }
-    case Halide::MemoryType::Register: {
-        memory_type = Halide::Serialize::MemoryType::MemoryType_Register;
-        break;
-    }
-    case Halide::MemoryType::GPUShared: {
-        memory_type = Halide::Serialize::MemoryType::MemoryType_GPUShared;
-        break;
-    }
-    case Halide::MemoryType::GPUTexture: {
-        memory_type = Halide::Serialize::MemoryType::MemoryType_GPUTexture;
-        break;
-    }
-    case Halide::MemoryType::LockedCache: {
-        memory_type = Halide::Serialize::MemoryType::MemoryType_LockedCache;
-        break;
-    }
-    case Halide::MemoryType::VTCM: {
-        memory_type = Halide::Serialize::MemoryType::MemoryType_VTCM;
-        break;
-    }
-    case Halide::MemoryType::AMXTile: {
-        memory_type = Halide::Serialize::MemoryType::MemoryType_AMXTile;
-        break;
-    }
-    }
+    Halide::Serialize::MemoryType memory_type = serialize_memory_type(func_schedule.memory_type());
     auto memoized = func_schedule.memoized();
     auto async = func_schedule.async();
     auto memoize_eviction_key = func_schedule.memoize_eviction_key();

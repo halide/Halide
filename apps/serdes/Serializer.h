@@ -1,10 +1,10 @@
 #ifndef HALIDE_SERIALIZER_H
 #define HALIDE_SERIALIZER_H
 
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
-#include <map>
 
 #include "Halide.h"
 #include "halide_ir_generated.h"
@@ -19,6 +19,12 @@ private:
     // std::map<std::string, int32_t> func_mappings;
 
     // helper functions to serialize each type of object
+    Halide::Serialize::MemoryType serialize_memory_type(const Halide::MemoryType &memory_type);
+
+    Halide::Serialize::ForType serialize_for_type(const Halide::Internal::ForType &for_type);
+
+    Halide::Serialize::DeviceAPI serialize_device_api(const Halide::DeviceAPI &device_api);
+
     flatbuffers::Offset<flatbuffers::String> serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str);
 
     flatbuffers::Offset<Halide::Serialize::Type> serialize_type(flatbuffers::FlatBufferBuilder &builder, const Halide::Type &type);

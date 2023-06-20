@@ -20,6 +20,10 @@ private:
     // helper functions to deserialize each type of object
     Halide::MemoryType deserialize_memory_type(const Halide::Serialize::MemoryType memory_type);
 
+    Halide::Internal::ForType deserialize_for_type(const Halide::Serialize::ForType for_type);
+
+    Halide::DeviceAPI deserialize_device_api(const Halide::Serialize::DeviceAPI device_api);
+
     std::string deserialize_string(const flatbuffers::String *str);
 
     Halide::Type deserialize_type(const Halide::Serialize::Type *type);

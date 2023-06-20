@@ -2,7 +2,6 @@
 #include <fstream>
 #include <iostream>
 
-
 std::string Deserializer::deserialize_string(const flatbuffers::String *str) {
     return str->str();
 }
@@ -29,7 +28,63 @@ Halide::MemoryType Deserializer::deserialize_memory_type(const Halide::Serialize
         return Halide::MemoryType::AMXTile;
     default:
         std::cerr << "unknown memory type " << memory_type << "\n";
-        return Halide::MemoryType::Auto;
+        exit(1);
+    }
+}
+
+Halide::Internal::ForType Deserializer::deserialize_for_type(const Halide::Serialize::ForType for_type) {
+    switch (for_type) {
+    case Halide::Serialize::ForType::ForType_Serial:
+        return Halide::Internal::ForType::Serial;
+    case Halide::Serialize::ForType::ForType_Parallel:
+        return Halide::Internal::ForType::Parallel;
+    case Halide::Serialize::ForType::ForType_Vectorized:
+        return Halide::Internal::ForType::Vectorized;
+    case Halide::Serialize::ForType::ForType_Unrolled:
+        return Halide::Internal::ForType::Unrolled;
+    case Halide::Serialize::ForType::ForType_Extern:
+        return Halide::Internal::ForType::Extern;
+    case Halide::Serialize::ForType::ForType_GPUBlock:
+        return Halide::Internal::ForType::GPUBlock;
+    case Halide::Serialize::ForType::ForType_GPUThread:
+        return Halide::Internal::ForType::GPUThread;
+    case Halide::Serialize::ForType::ForType_GPULane:
+        return Halide::Internal::ForType::GPULane;
+    default:
+        std::cerr << "unknown for type " << for_type << "\n";
+        exit(1);
+    }
+}
+
+Halide::DeviceAPI Deserializer::deserialize_device_api(const Halide::Serialize::DeviceAPI device_api) {
+    switch (device_api) {
+    case Halide::Serialize::DeviceAPI::DeviceAPI_None:
+        return Halide::DeviceAPI::None;
+    case Halide::Serialize::DeviceAPI::DeviceAPI_Host:
+        return Halide::DeviceAPI::Host;
+    case Halide::Serialize::DeviceAPI::DeviceAPI_Default_GPU:
+        return Halide::DeviceAPI::Default_GPU;
+    case Halide::Serialize::DeviceAPI::DeviceAPI_CUDA:
+        return Halide::DeviceAPI::CUDA;
+    case Halide::Serialize::DeviceAPI::DeviceAPI_OpenCL:
+        return Halide::DeviceAPI::OpenCL;
+    case Halide::Serialize::DeviceAPI::DeviceAPI_OpenGLCompute:
+        return Halide::DeviceAPI::OpenGLCompute;
+    case Halide::Serialize::DeviceAPI::DeviceAPI_Metal:
+        return Halide::DeviceAPI::Metal;
+    case Halide::Serialize::DeviceAPI::DeviceAPI_Hexagon:
+        return Halide::DeviceAPI::Hexagon;
+    case Halide::Serialize::DeviceAPI::DeviceAPI_HexagonDma:
+        return Halide::DeviceAPI::HexagonDma;
+    case Halide::Serialize::DeviceAPI::DeviceAPI_D3D12Compute:
+        return Halide::DeviceAPI::D3D12Compute;
+    case Halide::Serialize::DeviceAPI::DeviceAPI_Vulkan:
+        return Halide::DeviceAPI::Vulkan;
+    case Halide::Serialize::DeviceAPI::DeviceAPI_WebGPU:
+        return Halide::DeviceAPI::WebGPU;
+    default:
+        std::cerr << "unknown device api " << device_api << "\n";
+        exit(1);
     }
 }
 
@@ -120,72 +175,9 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         auto name = deserialize_string(for_stmt->name());
         auto min = deserialize_expr(for_stmt->min_type(), for_stmt->min());
         auto extent = deserialize_expr(for_stmt->extent_type(), for_stmt->extent());
-        Halide::Internal::ForType for_type = Halide::Internal::ForType::Serial;
-        switch (for_stmt->for_type()) {
-        case Halide::Serialize::ForType::ForType_Serial:
-            for_type = Halide::Internal::ForType::Serial;
-            break;
-        case Halide::Serialize::ForType::ForType_Parallel:
-            for_type = Halide::Internal::ForType::Parallel;
-            break;
-        case Halide::Serialize::ForType::ForType_Vectorized:
-            for_type = Halide::Internal::ForType::Vectorized;
-            break;
-        case Halide::Serialize::ForType::ForType_Unrolled:
-            for_type = Halide::Internal::ForType::Unrolled;
-            break;
-        case Halide::Serialize::ForType::ForType_Extern:
-            for_type = Halide::Internal::ForType::Extern;
-            break;
-        case Halide::Serialize::ForType::ForType_GPUBlock:
-            for_type = Halide::Internal::ForType::GPUBlock;
-            break;
-        case Halide::Serialize::ForType::ForType_GPUThread:
-            for_type = Halide::Internal::ForType::GPUThread;
-            break;
-        case Halide::Serialize::ForType::ForType_GPULane:
-            for_type = Halide::Internal::ForType::GPULane;
-            break;
-        }
-        Halide::DeviceAPI device_api = Halide::DeviceAPI::None;
-        switch (for_stmt->device_api()) {
-        case Halide::Serialize::DeviceAPI::DeviceAPI_None:
-            device_api = Halide::DeviceAPI::None;
-            break;
-        case Halide::Serialize::DeviceAPI::DeviceAPI_Host:
-            device_api = Halide::DeviceAPI::Host;
-            break;
-        case Halide::Serialize::DeviceAPI::DeviceAPI_Default_GPU:
-            device_api = Halide::DeviceAPI::Default_GPU;
-            break;
-        case Halide::Serialize::DeviceAPI::DeviceAPI_CUDA:
-            device_api = Halide::DeviceAPI::CUDA;
-            break;
-        case Halide::Serialize::DeviceAPI::DeviceAPI_OpenCL:
-            device_api = Halide::DeviceAPI::OpenCL;
-            break;
-        case Halide::Serialize::DeviceAPI::DeviceAPI_OpenGLCompute:
-            device_api = Halide::DeviceAPI::OpenGLCompute;
-            break;
-        case Halide::Serialize::DeviceAPI::DeviceAPI_Metal:
-            device_api = Halide::DeviceAPI::Metal;
-            break;
-        case Halide::Serialize::DeviceAPI::DeviceAPI_Hexagon:
-            device_api = Halide::DeviceAPI::Hexagon;
-            break;
-        case Halide::Serialize::DeviceAPI::DeviceAPI_HexagonDma:
-            device_api = Halide::DeviceAPI::HexagonDma;
-            break;
-        case Halide::Serialize::DeviceAPI::DeviceAPI_D3D12Compute:
-            device_api = Halide::DeviceAPI::D3D12Compute;
-            break;
-        case Halide::Serialize::DeviceAPI::DeviceAPI_Vulkan:
-            device_api = Halide::DeviceAPI::Vulkan;
-            break;
-        case Halide::Serialize::DeviceAPI::DeviceAPI_WebGPU:
-            device_api = Halide::DeviceAPI::WebGPU;
-            break;
-        }
+        Halide::Internal::ForType for_type = deserialize_for_type(for_stmt->for_type());
+
+        Halide::DeviceAPI device_api = deserialize_device_api(for_stmt->device_api());
         auto body = deserialize_stmt(for_stmt->body_type(), for_stmt->body());
         return Halide::Internal::For::make(name, min, extent, for_type, device_api, body);
     }

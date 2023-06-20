@@ -352,6 +352,16 @@ table Let {
     body: Expr;
 }
 
+// enum CallType: ubyte {
+//     Image,
+//     Extern,
+//     ExternCPlusPlus,
+//     PureExtern,
+//     Halide,
+//     Intrinsic,
+//     PureIntrinsic,
+// }
+
 table Call {
     name: string;
     args: [Expr];
