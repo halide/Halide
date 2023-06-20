@@ -130,6 +130,20 @@ Halide::Internal::VectorReduce::Operator Deserializer::deserialize_vector_reduce
     }
 }
 
+Halide::PrefetchBoundStrategy Deserializer::deserialize_prefetch_bound_strategy(const Halide::Serialize::PrefetchBoundStrategy prefetch_bound_strategy) {
+    switch (prefetch_bound_strategy) {
+    case Halide::Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_Clamp:
+        return Halide::PrefetchBoundStrategy::Clamp;
+    case Halide::Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_GuardWithIf:
+        return Halide::PrefetchBoundStrategy::GuardWithIf;
+    case Halide::Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_NonFaulting:
+        return Halide::PrefetchBoundStrategy::NonFaulting;
+    default:
+        std::cerr << "unknown prefetch bound strategy " << prefetch_bound_strategy << "\n";
+        exit(1);
+    }
+}
+
 Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type) {
     using Halide::Serialize::TypeCode;
     int bits = type->bits();
@@ -307,11 +321,10 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         for (const auto &bound : *prefetch_stmt->bounds()) {
             bounds.push_back(deserialize_range(bound));
         }
+        auto prefetch = deserialize_prefetch_directive(prefetch_stmt->prefetch());
         auto condition = deserialize_expr(prefetch_stmt->condition_type(), prefetch_stmt->condition());
         auto body = deserialize_stmt(prefetch_stmt->body_type(), prefetch_stmt->body());
-        return Halide::Internal::Prefetch::make(name, types, bounds,
-                                                Halide::Internal::PrefetchDirective(),
-                                                condition, body);
+        return Halide::Internal::Prefetch::make(name, types, bounds, prefetch, condition, body);
     }
     case Halide::Serialize::Stmt_Acquire: {
         const Halide::Serialize::Acquire *acquire_stmt = (const Halide::Serialize::Acquire *)stmt;
@@ -683,6 +696,21 @@ Halide::Internal::ReductionDomain Deserializer::deserialize_reduction_domain(con
 
 Halide::Internal::ModulusRemainder Deserializer::deserialize_modulus_remainder(const Halide::Serialize::ModulusRemainder *modulus_remainder) {
     return Halide::Internal::ModulusRemainder(modulus_remainder->modulus(), modulus_remainder->remainder());
+}
+
+Halide::Internal::PrefetchDirective Deserializer::deserialize_prefetch_directive(const Halide::Serialize::PrefetchDirective *prefetch_directive) {
+    auto name = deserialize_string(prefetch_directive->name());
+    auto at = deserialize_string(prefetch_directive->at());
+    auto from = deserialize_string(prefetch_directive->from());
+    auto offset = deserialize_expr(prefetch_directive->offset_type(), prefetch_directive->offset());
+    auto strategy = deserialize_prefetch_bound_strategy(prefetch_directive->strategy());
+    auto hl_prefetch_directive = Halide::Internal::PrefetchDirective();
+    hl_prefetch_directive.name = name;
+    hl_prefetch_directive.at = at;
+    hl_prefetch_directive.from = from;
+    hl_prefetch_directive.offset = offset;
+    hl_prefetch_directive.strategy = strategy;
+    return hl_prefetch_directive;
 }
 
 // TODO: will need to serialize a reverse table of map<address, func_name> to

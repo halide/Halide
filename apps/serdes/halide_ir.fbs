@@ -193,11 +193,26 @@ table Evaluate {
     value: Expr;
 }
 
+enum PrefetchBoundStrategy: ubyte {
+    Clamp,
+    GuardWithIf,
+    NonFaulting,
+}
+
+table PrefetchDirective {
+    name: string;
+    at: string;
+    from: string;
+    offset: Expr;
+    strategy: PrefetchBoundStrategy;
+    // param: Parameter;
+}
+
 table Prefetch {
     name: string;
     types: [Type];
     bounds: [Range];
-    // prefetch: PrefetchDirective;
+    prefetch: PrefetchDirective;
     condition: Expr;
     body: Stmt;
 }

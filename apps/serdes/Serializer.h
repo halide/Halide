@@ -29,6 +29,8 @@ private:
 
     Halide::Serialize::VectorReduceOp serialize_vector_reduce_op(const Halide::Internal::VectorReduce::Operator &vector_reduce_op);
 
+    Halide::Serialize::PrefetchBoundStrategy serialize_prefetch_bound_strategy(const Halide::PrefetchBoundStrategy &prefetch_bound_strategy);
+
     flatbuffers::Offset<flatbuffers::String> serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str);
 
     flatbuffers::Offset<Halide::Serialize::Type> serialize_type(flatbuffers::FlatBufferBuilder &builder, const Halide::Type &type);
@@ -60,6 +62,8 @@ private:
     flatbuffers::Offset<Halide::Serialize::ReductionDomain> serialize_reduction_domain(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ReductionDomain &reduction_domain);
 
     flatbuffers::Offset<Halide::Serialize::ModulusRemainder> serialize_modulus_remainder(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ModulusRemainder &modulus_remainder);
+
+    flatbuffers::Offset<Halide::Serialize::PrefetchDirective> serialize_prefetch_directive(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::PrefetchDirective &prefetch_directive);
 
     // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers);
 

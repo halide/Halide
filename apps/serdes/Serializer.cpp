@@ -129,6 +129,20 @@ Halide::Serialize::VectorReduceOp Serializer::serialize_vector_reduce_op(const H
     }
 }
 
+Halide::Serialize::PrefetchBoundStrategy Serializer::serialize_prefetch_bound_strategy(const Halide::PrefetchBoundStrategy &prefetch_bound_strategy) {
+    switch (prefetch_bound_strategy) {
+    case Halide::PrefetchBoundStrategy::Clamp:
+        return Halide::Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_Clamp;
+    case Halide::PrefetchBoundStrategy::GuardWithIf:
+        return Halide::Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_GuardWithIf;
+    case Halide::PrefetchBoundStrategy::NonFaulting:
+        return Halide::Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_NonFaulting;
+    default:
+        std::cerr << "Unsupported prefetch bound strategy\n";
+        exit(1);
+    }
+}
+
 flatbuffers::Offset<flatbuffers::String> Serializer::serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str) {
     return builder.CreateString(str);
 }
@@ -293,9 +307,10 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         for (const auto &bound : bounds) {
             bounds_serialized.push_back(serialize_range(builder, bound));
         }
+        auto prefetch_serialized = serialize_prefetch_directive(builder, prefetch_stmt->prefetch);
         auto condition_serialized = serialize_expr(builder, prefetch_stmt->condition);
         auto body_serialized = serialize_stmt(builder, prefetch_stmt->body);
-        return std::make_pair(Halide::Serialize::Stmt::Stmt_Prefetch, Halide::Serialize::CreatePrefetch(builder, name_serialized, types_vector, builder.CreateVector(bounds_serialized), condition_serialized.first, condition_serialized.second, body_serialized.first, body_serialized.second).Union());
+        return std::make_pair(Halide::Serialize::Stmt::Stmt_Prefetch, Halide::Serialize::CreatePrefetch(builder, name_serialized, types_vector, builder.CreateVector(bounds_serialized), prefetch_serialized, condition_serialized.first, condition_serialized.second, body_serialized.first, body_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Acquire: {
         auto acquire_stmt = stmt.as<Halide::Internal::Acquire>();
@@ -712,6 +727,15 @@ flatbuffers::Offset<Halide::Serialize::ReductionDomain> Serializer::serialize_re
 
 flatbuffers::Offset<Halide::Serialize::ModulusRemainder> Serializer::serialize_modulus_remainder(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ModulusRemainder &modulus_remainder) {
     return Halide::Serialize::CreateModulusRemainder(builder, modulus_remainder.modulus, modulus_remainder.remainder);
+}
+
+flatbuffers::Offset<Halide::Serialize::PrefetchDirective> Serializer::serialize_prefetch_directive(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::PrefetchDirective &prefetch_directive) {
+    auto name_serialized = serialize_string(builder, prefetch_directive.name);
+    auto at_serialized = serialize_string(builder, prefetch_directive.at);
+    auto from_serialized = serialize_string(builder, prefetch_directive.from);
+    auto offset_serialized = serialize_expr(builder, prefetch_directive.offset);
+    auto strategy_serialized = serialize_prefetch_bound_strategy(prefetch_directive.strategy);
+    return Halide::Serialize::CreatePrefetchDirective(builder, name_serialized, at_serialized, from_serialized, offset_serialized.first, offset_serialized.second, strategy_serialized);
 }
 
 // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers) {
