@@ -107,6 +107,28 @@ Halide::Serialize::CallType Serializer::serialize_call_type(const Halide::Intern
     }
 }
 
+Halide::Serialize::VectorReduceOp Serializer::serialize_vector_reduce_op(const Halide::Internal::VectorReduce::Operator &vector_reduce_op) {
+    switch (vector_reduce_op) {
+    case Halide::Internal::VectorReduce::Operator::Add:
+        return Halide::Serialize::VectorReduceOp::VectorReduceOp_Add;
+    case Halide::Internal::VectorReduce::Operator::SaturatingAdd:
+        return Halide::Serialize::VectorReduceOp::VectorReduceOp_SaturatingAdd;
+    case Halide::Internal::VectorReduce::Operator::Mul:
+        return Halide::Serialize::VectorReduceOp::VectorReduceOp_Mul;
+    case Halide::Internal::VectorReduce::Operator::Min:
+        return Halide::Serialize::VectorReduceOp::VectorReduceOp_Min;
+    case Halide::Internal::VectorReduce::Operator::Max:
+        return Halide::Serialize::VectorReduceOp::VectorReduceOp_Max;
+    case Halide::Internal::VectorReduce::Operator::And:
+        return Halide::Serialize::VectorReduceOp::VectorReduceOp_And;
+    case Halide::Internal::VectorReduce::Operator::Or:
+        return Halide::Serialize::VectorReduceOp::VectorReduceOp_Or;
+    default:
+        std::cerr << "Unsupported vector reduce op\n";
+        exit(1);
+    }
+}
+
 flatbuffers::Offset<flatbuffers::String> Serializer::serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str) {
     return builder.CreateString(str);
 }
@@ -127,61 +149,45 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
     switch (stmt->node_type) {
     case Halide::Internal::IRNodeType::LetStmt: {
         auto let_stmt = stmt.as<Halide::Internal::LetStmt>();
-        std::string name = let_stmt->name;
-        auto name_serialized = serialize_string(builder, name);
-        auto value = let_stmt->value;
-        auto value_serialized = serialize_expr(builder, value);
-        auto body = let_stmt->body;
-        auto body_serialized = serialize_stmt(builder, body);
+        auto name_serialized = serialize_string(builder, let_stmt->name);
+        auto value_serialized = serialize_expr(builder, let_stmt->value);
+        auto body_serialized = serialize_stmt(builder, let_stmt->body);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_LetStmt, Halide::Serialize::CreateLetStmt(builder, name_serialized, value_serialized.first, value_serialized.second, body_serialized.first, body_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::AssertStmt: {
         auto assert_stmt = stmt.as<Halide::Internal::AssertStmt>();
-        auto condition = assert_stmt->condition;
-        auto condition_serialized = serialize_expr(builder, condition);
-        auto message = assert_stmt->message;
-        auto message_serialized = serialize_expr(builder, message);
+        auto condition_serialized = serialize_expr(builder, assert_stmt->condition);
+        auto message_serialized = serialize_expr(builder, assert_stmt->message);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_AssertStmt, Halide::Serialize::CreateAssertStmt(builder, condition_serialized.first, condition_serialized.second, message_serialized.first, message_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::ProducerConsumer: {
         auto producer_consumer = stmt.as<Halide::Internal::ProducerConsumer>();
-        std::string name = producer_consumer->name;
-        auto name_serialized = serialize_string(builder, name);
-        bool is_producer = producer_consumer->is_producer;
-        auto body = producer_consumer->body;
-        auto body_serialized = serialize_stmt(builder, body);
-        return std::make_pair(Halide::Serialize::Stmt::Stmt_ProducerConsumer, Halide::Serialize::CreateProducerConsumer(builder, name_serialized, is_producer, body_serialized.first, body_serialized.second).Union());
+        auto name_serialized = serialize_string(builder, producer_consumer->name);
+        auto body_serialized = serialize_stmt(builder, producer_consumer->body);
+        return std::make_pair(Halide::Serialize::Stmt::Stmt_ProducerConsumer, Halide::Serialize::CreateProducerConsumer(builder, name_serialized, producer_consumer->is_producer, body_serialized.first, body_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::For: {
         auto for_stmt = stmt.as<Halide::Internal::For>();
-        std::string name = for_stmt->name;
-        auto name_serialized = serialize_string(builder, name);
-        auto min = for_stmt->min;
-        auto min_serialized = serialize_expr(builder, min);
-        auto extent = for_stmt->extent;
-        auto extent_serialized = serialize_expr(builder, extent);
+        auto name_serialized = serialize_string(builder, for_stmt->name);
+        auto min_serialized = serialize_expr(builder, for_stmt->min);
+        auto extent_serialized = serialize_expr(builder, for_stmt->extent);
         Halide::Serialize::ForType for_type = serialize_for_type(for_stmt->for_type);
         Halide::Serialize::DeviceAPI device_api = serialize_device_api(for_stmt->device_api);
-        auto body = for_stmt->body;
-        auto body_serialized = serialize_stmt(builder, body);
+        auto body_serialized = serialize_stmt(builder, for_stmt->body);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_For, Halide::Serialize::CreateFor(builder, name_serialized, min_serialized.first, min_serialized.second, extent_serialized.first, extent_serialized.second, for_type, device_api, body_serialized.first, body_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Store: {
         auto store_stmt = stmt.as<Halide::Internal::Store>();
-        std::string name = store_stmt->name;
-        auto name_serialized = serialize_string(builder, name);
-        auto predicate = store_stmt->predicate;
-        auto predicate_serialized = serialize_expr(builder, predicate);
-        auto value = store_stmt->value;
-        auto value_serialized = serialize_expr(builder, value);
-        auto index = store_stmt->index;
-        auto index_serialized = serialize_expr(builder, index);
-        return std::make_pair(Halide::Serialize::Stmt::Stmt_Store, Halide::Serialize::CreateStore(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, value_serialized.first, value_serialized.second, index_serialized.first, index_serialized.second).Union());
+        auto name_serialized = serialize_string(builder, store_stmt->name);
+        auto predicate_serialized = serialize_expr(builder, store_stmt->predicate);
+        auto value_serialized = serialize_expr(builder, store_stmt->value);
+        auto index_serialized = serialize_expr(builder, store_stmt->index);
+        auto alignment_serialized = serialize_modulus_remainder(builder, store_stmt->alignment);
+        return std::make_pair(Halide::Serialize::Stmt::Stmt_Store, Halide::Serialize::CreateStore(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, value_serialized.first, value_serialized.second, index_serialized.first, index_serialized.second, alignment_serialized).Union());
     }
     case Halide::Internal::IRNodeType::Provide: {
         auto provide_stmt = stmt.as<Halide::Internal::Provide>();
-        std::string name = provide_stmt->name;
-        auto name_serialized = serialize_string(builder, name);
+        auto name_serialized = serialize_string(builder, provide_stmt->name);
         auto values = provide_stmt->values;
         std::vector<uint8_t> values_types;
         values_types.reserve(values.size());
@@ -202,16 +208,13 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
             args_types.push_back(arg_serialized.first);
             args_serialized.push_back(arg_serialized.second);
         }
-        auto predicate = provide_stmt->predicate;
-        auto predicate_serialized = serialize_expr(builder, predicate);
+        auto predicate_serialized = serialize_expr(builder, provide_stmt->predicate);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_Provide, Halide::Serialize::CreateProvide(builder, name_serialized, builder.CreateVector(values_types), builder.CreateVector(values_serialized), builder.CreateVector(args_types), builder.CreateVector(args_serialized), predicate_serialized.first, predicate_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Allocate: {
         auto allocate_stmt = stmt.as<Halide::Internal::Allocate>();
-        std::string name = allocate_stmt->name;
-        auto name_serialized = serialize_string(builder, name);
-        auto type = allocate_stmt->type;
-        auto type_serialized = serialize_type(builder, type);
+        auto name_serialized = serialize_string(builder, allocate_stmt->name);
+        auto type_serialized = serialize_type(builder, allocate_stmt->type);
         Halide::Serialize::MemoryType memory_type = serialize_memory_type(allocate_stmt->memory_type);
         auto extents = allocate_stmt->extents;
         std::vector<uint8_t> extents_types;
@@ -223,27 +226,21 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
             extents_types.push_back(extent_serialized.first);
             extents_serialized.push_back(extent_serialized.second);
         }
-        auto condition = allocate_stmt->condition;
-        auto condition_serialized = serialize_expr(builder, condition);
-        auto new_expr = allocate_stmt->new_expr;
-        auto new_expr_serialized = serialize_expr(builder, new_expr);
-        auto free_function = allocate_stmt->free_function;
-        auto free_function_serialized = serialize_string(builder, free_function);
+        auto condition_serialized = serialize_expr(builder, allocate_stmt->condition);
+        auto new_expr_serialized = serialize_expr(builder, allocate_stmt->new_expr);
+        auto free_function_serialized = serialize_string(builder, allocate_stmt->free_function);
         auto padding = allocate_stmt->padding;
-        auto body = allocate_stmt->body;
-        auto body_serialized = serialize_stmt(builder, body);
+        auto body_serialized = serialize_stmt(builder, allocate_stmt->body);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_Allocate, Halide::Serialize::CreateAllocate(builder, name_serialized, type_serialized, memory_type, builder.CreateVector(extents_types), builder.CreateVector(extents_serialized), condition_serialized.first, condition_serialized.second, new_expr_serialized.first, new_expr_serialized.second, free_function_serialized, padding, body_serialized.first, body_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Free: {
         auto free_stmt = stmt.as<Halide::Internal::Free>();
-        std::string name = free_stmt->name;
-        auto name_serialized = serialize_string(builder, name);
+        auto name_serialized = serialize_string(builder, free_stmt->name);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_Free, Halide::Serialize::CreateFree(builder, name_serialized).Union());
     }
     case Halide::Internal::IRNodeType::Realize: {
         auto realize_stmt = stmt.as<Halide::Internal::Realize>();
-        std::string name = realize_stmt->name;
-        auto name_serialized = serialize_string(builder, name);
+        auto name_serialized = serialize_string(builder, realize_stmt->name);
         auto types = realize_stmt->types;
         std::vector<flatbuffers::Offset<Halide::Serialize::Type>> types_serialized;
         types_serialized.reserve(types.size());
@@ -258,40 +255,31 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
             bounds_serialized.push_back(serialize_range(builder, bound));
         }
         auto types_vector = builder.CreateVector(types_serialized);
-        auto condition = realize_stmt->condition;
-        auto condition_serialized = serialize_expr(builder, condition);
-        auto body = realize_stmt->body;
-        auto body_serialized = serialize_stmt(builder, body);
+        auto condition_serialized = serialize_expr(builder, realize_stmt->condition);
+        auto body_serialized = serialize_stmt(builder, realize_stmt->body);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_Realize, Halide::Serialize::CreateRealize(builder, name_serialized, types_vector, memory_type, builder.CreateVector(bounds_serialized), condition_serialized.first, condition_serialized.second, body_serialized.first, body_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Block: {
         auto block_stmt = stmt.as<Halide::Internal::Block>();
-        auto first = block_stmt->first;
-        auto first_serialized = serialize_stmt(builder, first);
-        auto rest = block_stmt->rest;
-        auto rest_serialized = serialize_stmt(builder, rest);
+        auto first_serialized = serialize_stmt(builder, block_stmt->first);
+        auto rest_serialized = serialize_stmt(builder, block_stmt->rest);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_Block, Halide::Serialize::CreateBlock(builder, first_serialized.first, first_serialized.second, rest_serialized.first, rest_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::IfThenElse: {
         auto if_then_else_stmt = stmt.as<Halide::Internal::IfThenElse>();
-        auto condition = if_then_else_stmt->condition;
-        auto condition_serialized = serialize_expr(builder, condition);
-        auto then_case = if_then_else_stmt->then_case;
-        auto then_case_serialized = serialize_stmt(builder, then_case);
-        auto else_case = if_then_else_stmt->else_case;
-        auto else_case_serialized = serialize_stmt(builder, else_case);
+        auto condition_serialized = serialize_expr(builder, if_then_else_stmt->condition);
+        auto then_case_serialized = serialize_stmt(builder, if_then_else_stmt->then_case);
+        auto else_case_serialized = serialize_stmt(builder, if_then_else_stmt->else_case);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_IfThenElse, Halide::Serialize::CreateIfThenElse(builder, condition_serialized.first, condition_serialized.second, then_case_serialized.first, then_case_serialized.second, else_case_serialized.first, else_case_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Evaluate: {
         auto evaluate_stmt = stmt.as<Halide::Internal::Evaluate>();
-        auto value = evaluate_stmt->value;
-        auto value_serialized = serialize_expr(builder, value);
+        auto value_serialized = serialize_expr(builder, evaluate_stmt->value);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_Evaluate, Halide::Serialize::CreateEvaluate(builder, value_serialized.first, value_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Prefetch: {
         auto prefetch_stmt = stmt.as<Halide::Internal::Prefetch>();
-        std::string name = prefetch_stmt->name;
-        auto name_serialized = serialize_string(builder, name);
+        auto name_serialized = serialize_string(builder, prefetch_stmt->name);
         auto types = prefetch_stmt->types;
         std::vector<flatbuffers::Offset<Halide::Serialize::Type>> types_serialized;
         types_serialized.reserve(types.size());
@@ -305,38 +293,28 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         for (const auto &bound : bounds) {
             bounds_serialized.push_back(serialize_range(builder, bound));
         }
-        auto condition = prefetch_stmt->condition;
-        auto condition_serialized = serialize_expr(builder, condition);
-        auto body = prefetch_stmt->body;
-        auto body_serialized = serialize_stmt(builder, body);
+        auto condition_serialized = serialize_expr(builder, prefetch_stmt->condition);
+        auto body_serialized = serialize_stmt(builder, prefetch_stmt->body);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_Prefetch, Halide::Serialize::CreatePrefetch(builder, name_serialized, types_vector, builder.CreateVector(bounds_serialized), condition_serialized.first, condition_serialized.second, body_serialized.first, body_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Acquire: {
         auto acquire_stmt = stmt.as<Halide::Internal::Acquire>();
-        auto semaphore = acquire_stmt->semaphore;
-        auto semaphore_serialized = serialize_expr(builder, semaphore);
-        auto count = acquire_stmt->count;
-        auto count_serialized = serialize_expr(builder, count);
-        auto body = acquire_stmt->body;
-        auto body_serialized = serialize_stmt(builder, body);
+        auto semaphore_serialized = serialize_expr(builder, acquire_stmt->semaphore);
+        auto count_serialized = serialize_expr(builder, acquire_stmt->count);
+        auto body_serialized = serialize_stmt(builder, acquire_stmt->body);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_Acquire, Halide::Serialize::CreateAcquire(builder, semaphore_serialized.first, semaphore_serialized.second, count_serialized.first, count_serialized.second, body_serialized.first, body_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Fork: {
         auto fork_stmt = stmt.as<Halide::Internal::Fork>();
-        auto first = fork_stmt->first;
-        auto first_serialized = serialize_stmt(builder, first);
-        auto rest = fork_stmt->rest;
-        auto rest_serialized = serialize_stmt(builder, rest);
+        auto first_serialized = serialize_stmt(builder, fork_stmt->first);
+        auto rest_serialized = serialize_stmt(builder, fork_stmt->rest);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_Fork, Halide::Serialize::CreateFork(builder, first_serialized.first, first_serialized.second, rest_serialized.first, rest_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Atomic: {
         auto atomic_stmt = stmt.as<Halide::Internal::Atomic>();
-        auto producer_name = atomic_stmt->producer_name;
-        auto producer_name_serialized = serialize_string(builder, producer_name);
-        auto mutex_name = atomic_stmt->mutex_name;
-        auto mutex_name_serialized = serialize_string(builder, mutex_name);
-        auto body = atomic_stmt->body;
-        auto body_serialized = serialize_stmt(builder, body);
+        auto producer_name_serialized = serialize_string(builder, atomic_stmt->producer_name);
+        auto mutex_name_serialized = serialize_string(builder, atomic_stmt->mutex_name);
+        auto body_serialized = serialize_stmt(builder, atomic_stmt->body);
         return std::make_pair(Halide::Serialize::Stmt::Stmt_Atomic, Halide::Serialize::CreateAtomic(builder, producer_name_serialized, mutex_name_serialized, body_serialized.first, body_serialized.second).Union());
     }
     default:
@@ -352,91 +330,71 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
     switch (expr->node_type) {
     case Halide::Internal::IRNodeType::IntImm: {
         auto int_imm = expr.as<Halide::Internal::IntImm>();
-        int64_t value = int_imm->value;
-        return std::make_pair(Halide::Serialize::Expr::Expr_IntImm, Halide::Serialize::CreateIntImm(builder, value).Union());
+        return std::make_pair(Halide::Serialize::Expr::Expr_IntImm, Halide::Serialize::CreateIntImm(builder, int_imm->value).Union());
     }
     case Halide::Internal::IRNodeType::UIntImm: {
         auto uint_imm = expr.as<Halide::Internal::UIntImm>();
-        uint64_t value = uint_imm->value;
-        return std::make_pair(Halide::Serialize::Expr::Expr_UIntImm, Halide::Serialize::CreateUIntImm(builder, value).Union());
+        return std::make_pair(Halide::Serialize::Expr::Expr_UIntImm, Halide::Serialize::CreateUIntImm(builder, uint_imm->value).Union());
     }
     case Halide::Internal::IRNodeType::FloatImm: {
         auto float_imm = expr.as<Halide::Internal::FloatImm>();
-        double value = float_imm->value;
-        return std::make_pair(Halide::Serialize::Expr::Expr_FloatImm, Halide::Serialize::CreateFloatImm(builder, value).Union());
+        return std::make_pair(Halide::Serialize::Expr::Expr_FloatImm, Halide::Serialize::CreateFloatImm(builder, float_imm->value).Union());
     }
     case Halide::Internal::IRNodeType::StringImm: {
         auto string_imm = expr.as<Halide::Internal::StringImm>();
-        std::string value = string_imm->value;
-        auto value_serialized = serialize_string(builder, value);
+        auto value_serialized = serialize_string(builder, string_imm->value);
         return std::make_pair(Halide::Serialize::Expr::Expr_StringImm, Halide::Serialize::CreateStringImm(builder, value_serialized).Union());
     }
     case Halide::Internal::IRNodeType::Cast: {
         auto cast_expr = expr.as<Halide::Internal::Cast>();
-        auto value = cast_expr->value;
-        auto value_serialized = serialize_expr(builder, value);
+        auto value_serialized = serialize_expr(builder, cast_expr->value);
         return std::make_pair(Halide::Serialize::Expr::Expr_Cast, Halide::Serialize::CreateCast(builder, value_serialized.first, value_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Reinterpret: {
         auto reinterpret_expr = expr.as<Halide::Internal::Reinterpret>();
-        auto value = reinterpret_expr->value;
-        auto value_serialized = serialize_expr(builder, value);
+        auto value_serialized = serialize_expr(builder, reinterpret_expr->value);
         return std::make_pair(Halide::Serialize::Expr::Expr_Reinterpret, Halide::Serialize::CreateReinterpret(builder, value_serialized.first, value_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Add: {
         auto add_expr = expr.as<Halide::Internal::Add>();
-        auto a = add_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = add_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, add_expr->a);
+        auto b_serialized = serialize_expr(builder, add_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_Add, Halide::Serialize::CreateAdd(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Sub: {
         auto sub_expr = expr.as<Halide::Internal::Sub>();
-        auto a = sub_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = sub_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, sub_expr->a);
+        auto b_serialized = serialize_expr(builder, sub_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_Sub, Halide::Serialize::CreateSub(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Mul: {
         auto mul_expr = expr.as<Halide::Internal::Mul>();
-        auto a = mul_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = mul_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, mul_expr->a);
+        auto b_serialized = serialize_expr(builder, mul_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_Mul, Halide::Serialize::CreateMul(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Div: {
         auto div_expr = expr.as<Halide::Internal::Div>();
-        auto a = div_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = div_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, div_expr->a);
+        auto b_serialized = serialize_expr(builder, div_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_Div, Halide::Serialize::CreateDiv(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Mod: {
         auto mod_expr = expr.as<Halide::Internal::Mod>();
-        auto a = mod_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = mod_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, mod_expr->a);
+        auto b_serialized = serialize_expr(builder, mod_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_Mod, Halide::Serialize::CreateMod(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Min: {
         auto min_expr = expr.as<Halide::Internal::Min>();
-        auto a = min_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = min_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, min_expr->a);
+        auto b_serialized = serialize_expr(builder, min_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_Min, Halide::Serialize::CreateMin(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Max: {
         auto max_expr = expr.as<Halide::Internal::Max>();
-        auto a = max_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = max_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, max_expr->a);
+        auto b_serialized = serialize_expr(builder, max_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_Max, Halide::Serialize::CreateMax(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::EQ: {
@@ -457,108 +415,83 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
     }
     case Halide::Internal::IRNodeType::LT: {
         auto lt_expr = expr.as<Halide::Internal::LT>();
-        auto a = lt_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = lt_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, lt_expr->a);
+        auto b_serialized = serialize_expr(builder, lt_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_LT, Halide::Serialize::CreateLT(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::LE: {
         auto le_expr = expr.as<Halide::Internal::LE>();
-        auto a = le_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = le_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, le_expr->a);
+        auto b_serialized = serialize_expr(builder, le_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_LE, Halide::Serialize::CreateLE(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::GT: {
         auto gt_expr = expr.as<Halide::Internal::GT>();
-        auto a = gt_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = gt_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, gt_expr->a);
+        auto b_serialized = serialize_expr(builder, gt_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_GT, Halide::Serialize::CreateGT(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::GE: {
         auto ge_expr = expr.as<Halide::Internal::GE>();
-        auto a = ge_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = ge_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, ge_expr->a);
+        auto b_serialized = serialize_expr(builder, ge_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_GE, Halide::Serialize::CreateGE(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::And: {
         auto and_expr = expr.as<Halide::Internal::And>();
-        auto a = and_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = and_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, and_expr->a);
+        auto b_serialized = serialize_expr(builder, and_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_And, Halide::Serialize::CreateAnd(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Or: {
         auto or_expr = expr.as<Halide::Internal::Or>();
-        auto a = or_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
-        auto b = or_expr->b;
-        auto b_serialized = serialize_expr(builder, b);
+        auto a_serialized = serialize_expr(builder, or_expr->a);
+        auto b_serialized = serialize_expr(builder, or_expr->b);
         return std::make_pair(Halide::Serialize::Expr::Expr_Or, Halide::Serialize::CreateOr(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Not: {
         auto not_expr = expr.as<Halide::Internal::Not>();
-        auto a = not_expr->a;
-        auto a_serialized = serialize_expr(builder, a);
+        auto a_serialized = serialize_expr(builder, not_expr->a);
         return std::make_pair(Halide::Serialize::Expr::Expr_Not, Halide::Serialize::CreateNot(builder, a_serialized.first, a_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Select: {
         auto select_expr = expr.as<Halide::Internal::Select>();
-        auto condition = select_expr->condition;
-        auto condition_serialized = serialize_expr(builder, condition);
-        auto true_value = select_expr->true_value;
-        auto true_value_serialized = serialize_expr(builder, true_value);
-        auto false_value = select_expr->false_value;
-        auto false_value_serialized = serialize_expr(builder, false_value);
+        auto condition_serialized = serialize_expr(builder, select_expr->condition);
+        auto true_value_serialized = serialize_expr(builder, select_expr->true_value);
+        auto false_value_serialized = serialize_expr(builder, select_expr->false_value);
         return std::make_pair(Halide::Serialize::Expr::Expr_Select, Halide::Serialize::CreateSelect(builder, condition_serialized.first, condition_serialized.second, true_value_serialized.first, true_value_serialized.second, false_value_serialized.first, false_value_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Load: {
         auto load_expr = expr.as<Halide::Internal::Load>();
-        std::string name = load_expr->name;
-        auto name_serialized = serialize_string(builder, name);
-        auto predicate = load_expr->predicate;
-        auto predicate_serialized = serialize_expr(builder, predicate);
-        auto index = load_expr->index;
-        auto index_serialized = serialize_expr(builder, index);
-        return std::make_pair(Halide::Serialize::Expr::Expr_Load, Halide::Serialize::CreateLoad(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, index_serialized.first, index_serialized.second).Union());
+        auto name_serialized = serialize_string(builder, load_expr->name);
+        auto predicate_serialized = serialize_expr(builder, load_expr->predicate);
+        auto index_serialized = serialize_expr(builder, load_expr->index);
+        auto alignment_serialized = serialize_modulus_remainder(builder, load_expr->alignment);
+        return std::make_pair(Halide::Serialize::Expr::Expr_Load, Halide::Serialize::CreateLoad(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, index_serialized.first, index_serialized.second, alignment_serialized).Union());
     }
     case Halide::Internal::IRNodeType::Ramp: {
         auto ramp_expr = expr.as<Halide::Internal::Ramp>();
-        auto base = ramp_expr->base;
-        auto base_serialized = serialize_expr(builder, base);
-        auto stride = ramp_expr->stride;
-        auto stride_serialized = serialize_expr(builder, stride);
+        auto base_serialized = serialize_expr(builder, ramp_expr->base);
+        auto stride_serialized = serialize_expr(builder, ramp_expr->stride);
         auto lanes = ramp_expr->lanes;
         return std::make_pair(Halide::Serialize::Expr::Expr_Ramp, Halide::Serialize::CreateRamp(builder, base_serialized.first, base_serialized.second, stride_serialized.first, stride_serialized.second, lanes).Union());
     }
     case Halide::Internal::IRNodeType::Broadcast: {
         auto broadcast_expr = expr.as<Halide::Internal::Broadcast>();
-        auto value = broadcast_expr->value;
-        auto value_serialized = serialize_expr(builder, value);
+        auto value_serialized = serialize_expr(builder, broadcast_expr->value);
         auto lanes = broadcast_expr->lanes;
         return std::make_pair(Halide::Serialize::Expr::Expr_Broadcast, Halide::Serialize::CreateBroadcast(builder, value_serialized.first, value_serialized.second, lanes).Union());
     }
     case Halide::Internal::IRNodeType::Let: {
         auto let_expr = expr.as<Halide::Internal::Let>();
-        std::string name = let_expr->name;
-        auto name_serialized = serialize_string(builder, name);
-        auto value = let_expr->value;
-        auto value_serialized = serialize_expr(builder, value);
-        auto body = let_expr->body;
-        auto body_serialized = serialize_expr(builder, body);
+        auto name_serialized = serialize_string(builder, let_expr->name);
+        auto value_serialized = serialize_expr(builder, let_expr->value);
+        auto body_serialized = serialize_expr(builder, let_expr->body);
         return std::make_pair(Halide::Serialize::Expr::Expr_Let, Halide::Serialize::CreateLet(builder, name_serialized, value_serialized.first, value_serialized.second, body_serialized.first, body_serialized.second).Union());
     }
     case Halide::Internal::IRNodeType::Call: {
         auto call_expr = expr.as<Halide::Internal::Call>();
-        std::string name = call_expr->name;
-        auto name_serialized = serialize_string(builder, name);
+        auto name_serialized = serialize_string(builder, call_expr->name);
         auto args = call_expr->args;
         std::vector<uint8_t> args_types;
         args_types.reserve(args.size());
@@ -575,8 +508,7 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
     }
     case Halide::Internal::IRNodeType::Variable: {
         auto variable_expr = expr.as<Halide::Internal::Variable>();
-        std::string name = variable_expr->name;
-        auto name_serialized = serialize_string(builder, name);
+        auto name_serialized = serialize_string(builder, variable_expr->name);
         auto reduction_domain_serialized = serialize_reduction_domain(builder, variable_expr->reduction_domain);
         return std::make_pair(Halide::Serialize::Expr::Expr_Variable, Halide::Serialize::CreateVariable(builder, name_serialized, reduction_domain_serialized).Union());
     }
@@ -597,9 +529,9 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
     }
     case Halide::Internal::IRNodeType::VectorReduce: {
         auto vector_reduce_expr = expr.as<Halide::Internal::VectorReduce>();
-        auto value = vector_reduce_expr->value;
-        auto value_serialized = serialize_expr(builder, value);
-        return std::make_pair(Halide::Serialize::Expr::Expr_VectorReduce, Halide::Serialize::CreateVectorReduce(builder, value_serialized.first, value_serialized.second).Union());
+        auto value_serialized = serialize_expr(builder, vector_reduce_expr->value);
+        auto reduction_op_serialized = serialize_vector_reduce_op(vector_reduce_expr->op);
+        return std::make_pair(Halide::Serialize::Expr::Expr_VectorReduce, Halide::Serialize::CreateVectorReduce(builder, value_serialized.first, value_serialized.second, reduction_op_serialized).Union());
     }
     default:
         std::cerr << "Unsupported Expr type\n";
@@ -776,6 +708,10 @@ flatbuffers::Offset<Halide::Serialize::ReductionDomain> Serializer::serialize_re
     }
     auto predicate_serialized = serialize_expr(builder, reduction_domain.predicate());
     return Halide::Serialize::CreateReductionDomain(builder, builder.CreateVector(domain_serialized), predicate_serialized.first, predicate_serialized.second, reduction_domain.frozen());
+}
+
+flatbuffers::Offset<Halide::Serialize::ModulusRemainder> Serializer::serialize_modulus_remainder(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ModulusRemainder &modulus_remainder) {
+    return Halide::Serialize::CreateModulusRemainder(builder, modulus_remainder.modulus, modulus_remainder.remainder);
 }
 
 // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers) {

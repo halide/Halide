@@ -22,9 +22,11 @@ private:
 
     Halide::Internal::ForType deserialize_for_type(const Halide::Serialize::ForType for_type);
 
+    Halide::DeviceAPI deserialize_device_api(const Halide::Serialize::DeviceAPI device_api);
+
     Halide::Internal::Call::CallType deserialize_call_type(const Halide::Serialize::CallType call_type);
 
-    Halide::DeviceAPI deserialize_device_api(const Halide::Serialize::DeviceAPI device_api);
+    Halide::Internal::VectorReduce::Operator deserialize_vector_reduce_op(const Halide::Serialize::VectorReduceOp vector_reduce_op);
 
     std::string deserialize_string(const flatbuffers::String *str);
 
@@ -55,6 +57,8 @@ private:
     Halide::Internal::ReductionVariable deserialize_reduction_variable(const Halide::Serialize::ReductionVariable *reduction_variable);
 
     Halide::Internal::ReductionDomain deserialize_reduction_domain(const Halide::Serialize::ReductionDomain *reduction_domain);
+
+    Halide::Internal::ModulusRemainder deserialize_modulus_remainder(const Halide::Serialize::ModulusRemainder *modulus_remainder);
 
     // std::map<std::string, Halide::Internal::FunctionPtr> deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs);
 

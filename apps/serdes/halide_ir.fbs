@@ -132,13 +132,18 @@ table For {
     body: Stmt;
 }
 
+table ModulusRemainder {
+    modulus: int64;
+    remainder: int64;
+}
+
 table Store {
     name: string;
     predicate: Expr;
     value: Expr;
     index: Expr;
     // param: Parameter; TODO: no Parameter yet
-    // alignment: ModulusRemainder; TODO: no ModulusRemainder yet
+    alignment: ModulusRemainder;
 }
 
 table Provide {
@@ -332,7 +337,7 @@ table Load {
     index: Expr;
     // image: Buffer;  TODO: no Buffer yet
     // param: Parameter; TODO: no Parameter yet
-    // alignment: ModulusRemainder; TODO: no ModulusRemainder yet
+    alignment: ModulusRemainder;
 }
 
 table Ramp {
@@ -396,10 +401,20 @@ table Shuffle {
     indices: [int32];
 }
 
+enum VectorReduceOp: ubyte {
+    Add,
+    SaturatingAdd,
+    Mul,
+    Min,
+    Max,
+    And,
+    Or,
+}
+
 // TODO: lanes is not stored
 table VectorReduce {
     value: Expr;
-    // reduction_op: VectorReduceOp;
+    reduction_op: VectorReduceOp;
 }
 
 table UndefinedExpr {
