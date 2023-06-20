@@ -192,7 +192,7 @@ table Prefetch {
     name: string;
     types: [Type];
     bounds: [Range];
-    // prefetch: PrefetchDirective; TODO: no PrefetchDirective yet
+    // prefetch: PrefetchDirective;
     condition: Expr;
     body: Stmt;
 }
@@ -422,10 +422,10 @@ table LoopLevel {
     locked: bool;
 }
 
-table WrapperRef {
-    name: string;
-    func_address: uint64;
-}
+// table WrapperRef {
+//     name: string;
+//     func_idx: int32;
+// }
 
 table FuncSchedule {
     store_level: LoopLevel;
@@ -433,7 +433,7 @@ table FuncSchedule {
     storage_dims: [StorageDim];
     bounds: [Bound];
     estimates: [Bound];
-    wrappers: [WrapperRef];
+    // wrappers: [WrapperRef];
     memory_type: MemoryType = Auto;
     memoized: bool;
     async: bool;
@@ -485,7 +485,7 @@ table Pipeline {
     outputs: [Func];
     requirements: [Stmt];
     // trace_pipeline: bool;
-    func_mappings: [FuncMapping];
+    // func_mappings: [FuncMapping];
 }
 
 root_type Pipeline;

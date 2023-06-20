@@ -623,19 +623,30 @@ Halide::Internal::Definition Deserializer::deserialize_definition(const Halide::
 
 // TODO: will need to serialize a reverse table of map<address, func_name> to
 //       later reconstruct a map of <name, func_ptr> find out which function ptrs to use here
-std::map<std::string, Halide::Internal::FunctionPtr> Deserializer::deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs) {
-    return std::map<std::string, Halide::Internal::FunctionPtr>();
-}
+// std::map<std::string, Halide::Internal::FunctionPtr> Deserializer::deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs) {
+//     return std::map<std::string, Halide::Internal::FunctionPtr>();
+// }
 
-std::map<std::string, int32_t> Deserializer::deserialize_func_mappings(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> *func_mappings) {
-    std::map<std::string, int32_t> result;
-    for (const auto &func_mapping : *func_mappings) {
-        auto name = deserialize_string(func_mapping->name());
-        auto index = func_mapping->index();
-        result[name] = index;
-    }
-    return result;
-}
+// std::map<std::string, int32_t> Deserializer::deserialize_func_mappings(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> *func_mappings) {
+//     std::map<std::string, int32_t> result;
+//     for (const auto &func_mapping : *func_mappings) {
+//         auto name = deserialize_string(func_mapping->name());
+//         auto index = func_mapping->index();
+//         result[name] = index;
+//     }
+//     return result;
+// }
+
+// std::map<int32_t, Halide::Internal::FunctionPtr> Deserializer::reconstruct_func_ptr_mappings() {
+//     std::map<int32_t, Halide::Internal::FunctionPtr> result;
+//     for (const auto &mapping : this->func_mappings_str2idx) {
+//         auto name = mapping.first;
+//         auto index = mapping.second;
+//         auto func_ptr = this->func_mappings_idx2ptr[index];
+//         result[index] = func_ptr;
+//     }
+//     return result;
+// }
 
 Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     // unpack binary file
@@ -652,10 +663,9 @@ Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     in.read(data.data(), size);
     in.close();
 
-    this->func_mappings_str2idx = deserialize_func_mappings(Halide::Serialize::GetPipeline(data.data())->func_mappings());
-    this->func_mappings_idx2ptr = reconstruct_func_ptr_mappings();
-
     const auto *pipeline_obj = Halide::Serialize::GetPipeline(data.data());
+    // this->func_mappings_str2idx = deserialize_func_mappings(pipeline_obj->func_mappings());
+    // this->func_mappings_idx2ptr = reconstruct_func_ptr_mappings();
     const auto *func_objs = pipeline_obj->outputs();
     std::vector<Halide::Func> funcs;
     funcs.reserve(func_objs->size());
