@@ -591,6 +591,31 @@ enum NameMangling: ubyte {
     CPlusPlus,
 }
 
+table BufferConstraint {
+    min: Expr;
+    extent: Expr;
+    stride: Expr;
+    min_estimate: Expr;
+    extent_estimate: Expr;
+}
+
+table Parameter {
+    defined: bool;
+    is_buffer: bool;
+    type: Type;
+    dimensions: int32;
+    name: string;
+    // buffer: Buffer; TODO: impl buffer
+    host_alignment: int32;
+    buffer_constraints: [BufferConstraint];
+    memory_type: MemoryType;
+    data: uint64;
+    scalar_default: Expr;
+    scalar_min: Expr;
+    scalar_max: Expr;
+    scalar_estimate: Expr;
+}
+
 // Halide::internal::Function
 table Func {
     name: string;

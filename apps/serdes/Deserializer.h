@@ -84,6 +84,10 @@ private:
 
     Halide::Internal::StageSchedule deserialize_stage_schedule(const Halide::Serialize::StageSchedule *stage_schedule);
 
+    Halide::Internal::BufferConstraint deserialize_buffer_constraint(const Halide::Serialize::BufferConstraint *buffer_constraint);
+
+    Halide::Internal::Parameter deserialize_parameter(const Halide::Serialize::Parameter *parameter);
+
     // std::map<std::string, Halide::Internal::FunctionPtr> deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs);
 
     // std::map<std::string, int32_t> deserialize_func_mappings(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> *func_mappings);

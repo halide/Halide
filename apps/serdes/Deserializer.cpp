@@ -897,6 +897,49 @@ Halide::Internal::StageSchedule Deserializer::deserialize_stage_schedule(const H
     return Halide::Internal::StageSchedule(rvars, splits, dims, prefetches, fuse_level, fused_pairs, touched,
                                            allow_race_conditions, atomic, override_atomic_associativity_test);
 }
+
+Halide::Internal::BufferConstraint Deserializer::deserialize_buffer_constraint(const Halide::Serialize::BufferConstraint *buffer_constraint) {
+    auto min = deserialize_expr(buffer_constraint->min_type(), buffer_constraint->min());
+    auto extent = deserialize_expr(buffer_constraint->extent_type(), buffer_constraint->extent());
+    auto stride = deserialize_expr(buffer_constraint->stride_type(), buffer_constraint->stride());
+    auto min_estimate = deserialize_expr(buffer_constraint->min_estimate_type(), buffer_constraint->min_estimate());
+    auto extent_estimate = deserialize_expr(buffer_constraint->extent_estimate_type(), buffer_constraint->extent_estimate());
+    auto hl_buffer_constraint = Halide::Internal::BufferConstraint();
+    hl_buffer_constraint.min = min;
+    hl_buffer_constraint.extent = extent;
+    hl_buffer_constraint.stride = stride;
+    hl_buffer_constraint.min_estimate = min_estimate;
+    return hl_buffer_constraint;
+}
+
+Halide::Internal::Parameter Deserializer::deserialize_parameter(const Halide::Serialize::Parameter *parameter) {
+    bool defined = parameter->defined();
+    if (!defined) {
+        return Halide::Internal::Parameter();
+    }
+    bool is_buffer = parameter->is_buffer();
+    auto type = deserialize_type(parameter->type());
+    int dimensions = parameter->dimensions();
+    std::string name = deserialize_string(parameter->name());
+    if (is_buffer) {
+        int host_alignment = parameter->host_alignment();
+        std::vector<Halide::Internal::BufferConstraint> buffer_constraints;
+        buffer_constraints.reserve(parameter->buffer_constraints()->size());
+        for (const auto &buffer_constraint : *parameter->buffer_constraints()) {
+            buffer_constraints.push_back(deserialize_buffer_constraint(buffer_constraint));
+        }
+        auto memory_type = deserialize_memory_type(parameter->memory_type());
+        return Halide::Internal::Parameter(type, is_buffer, dimensions, name, host_alignment, buffer_constraints, memory_type);
+    } else {
+        uint64_t data = parameter->data();
+        auto scalar_default = deserialize_expr(parameter->scalar_default_type(), parameter->scalar_default());
+        auto scalar_min = deserialize_expr(parameter->scalar_min_type(), parameter->scalar_min());
+        auto scalar_max = deserialize_expr(parameter->scalar_max_type(), parameter->scalar_max());
+        auto scalar_estimate = deserialize_expr(parameter->scalar_estimate_type(), parameter->scalar_estimate());
+        return Halide::Internal::Parameter(type, is_buffer, dimensions, name, data, scalar_default, scalar_min, scalar_max, scalar_estimate);
+    }
+}
+
 // TODO: will need to serialize a reverse table of map<address, func_name> to
 //       later reconstruct a map of <name, func_ptr> find out which function ptrs to use here
 // std::map<std::string, Halide::Internal::FunctionPtr> Deserializer::deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs) {

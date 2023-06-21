@@ -908,6 +908,50 @@ flatbuffers::Offset<Halide::Serialize::StageSchedule> Serializer::serialize_stag
                                                   touched, allow_race_conditions, atomic, override_atomic_associativity_test);
 }
 
+flatbuffers::Offset<Halide::Serialize::BufferConstraint> Serializer::serialize_buffer_constraint(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::BufferConstraint &buffer_constraint) {
+    auto min_serialized = serialize_expr(builder, buffer_constraint.min);
+    auto extent_serialized = serialize_expr(builder, buffer_constraint.extent);
+    auto stride_serialized = serialize_expr(builder, buffer_constraint.stride);
+    auto min_estimate_serialized = serialize_expr(builder, buffer_constraint.min_estimate);
+    auto extent_estimate_serialized = serialize_expr(builder, buffer_constraint.extent_estimate);
+    return Halide::Serialize::CreateBufferConstraint(builder, min_serialized.first, min_serialized.second, extent_serialized.first, extent_serialized.second, stride_serialized.first, stride_serialized.second, min_estimate_serialized.first, min_estimate_serialized.second, extent_estimate_serialized.first, extent_estimate_serialized.second);
+}
+
+flatbuffers::Offset<Halide::Serialize::Parameter> Serializer::serialize_parameter(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Parameter &parameter) {
+    // TODO: check defined for every other class that has a defined
+    bool defined = parameter.defined();
+    if (!defined) {
+        return Halide::Serialize::CreateParameter(builder, defined);
+    }
+    auto type_serialized = serialize_type(builder, parameter.type());
+    int dimensions = parameter.dimensions();
+    auto name_serialized = serialize_string(builder, parameter.name());
+    bool is_buffer = parameter.is_buffer();
+    // because of check_is_buffer()/check_is_scalar(), we cannot serialize all fields at the same time
+    // based on if the parameter is a buffer, we serialize different fields, fill 0 or default values for the unavailable fields
+    if (is_buffer) {
+        int host_alignment = parameter.host_alignment();
+        std::vector<flatbuffers::Offset<Halide::Serialize::BufferConstraint>> buffer_constraints_serialized;
+        buffer_constraints_serialized.reserve(parameter.buffer_constraints().size());
+        for (const auto &buffer_constraint : parameter.buffer_constraints()) {
+            buffer_constraints_serialized.push_back(serialize_buffer_constraint(builder, buffer_constraint));
+        }
+        auto memory_type_serialized = serialize_memory_type(parameter.memory_type());
+        return Halide::Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, host_alignment,
+                                                  builder.CreateVector(buffer_constraints_serialized), memory_type_serialized);
+    } else {
+        uint64_t data = parameter.scalar_raw_value();
+        auto scalar_default_serialized = serialize_expr(builder, parameter.default_value());
+        auto scalar_min_serialized = serialize_expr(builder, parameter.min_value());
+        auto scalar_max_serialized = serialize_expr(builder, parameter.max_value());
+        auto scalar_estimate_serialized = serialize_expr(builder, parameter.estimate());
+        return Halide::Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, 0, 0, Halide::Serialize::MemoryType_Auto, data,
+                                                  scalar_default_serialized.first, scalar_default_serialized.second, scalar_min_serialized.first,
+                                                  scalar_min_serialized.second, scalar_max_serialized.first, scalar_max_serialized.second,
+                                                  scalar_estimate_serialized.first, scalar_estimate_serialized.second);
+    }
+}
+
 // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers) {
 //     // instead of storing the function pointer or raw function address,
 //     // we store a pre-computed function index as the serialized format for WrapperRef
