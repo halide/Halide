@@ -159,10 +159,12 @@ public:
         if (using_autoscheduler()) {
             // Nothing.
         } else if (get_target().has_gpu_feature()) {
+            // GPU schedule. 2.4ms on an RTX 2060
             Var xi, yi;
             output.gpu_tile(x, y, xi, yi, 32, 8);
             blended.update().unroll(r[0]).unroll(r[1]);
         } else {
+            // CPU schedule. 2ms on an i9-9960X at 3.1 GHz with 16 threads
             const int vec = natural_vector_size<uint8_t>();
             Var yo{"yo"}, yi{"yi"};
             output.split(y, yo, yi, 8)
