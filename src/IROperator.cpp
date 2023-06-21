@@ -1570,7 +1570,6 @@ Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max)
     Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
 
     // Min and max are allowed to be undefined with the meaning of no bound on that side.
-
     return Call::make(value.type(),
                       Call::unsafe_promise_clamped,
                       {value, n_min_val, n_max_val},
