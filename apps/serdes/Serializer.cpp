@@ -207,6 +207,22 @@ Halide::Serialize::DimType Serializer::serialize_dim_type(const Halide::Internal
     }
 }
 
+Halide::Serialize::LoopAlignStrategy Serializer::serialize_loop_align_strategy(const Halide::LoopAlignStrategy &loop_align_strategy) {
+    switch (loop_align_strategy) {
+    case Halide::LoopAlignStrategy::AlignStart:
+        return Halide::Serialize::LoopAlignStrategy::LoopAlignStrategy_AlignStart;
+    case Halide::LoopAlignStrategy::AlignEnd:
+        return Halide::Serialize::LoopAlignStrategy::LoopAlignStrategy_AlignEnd;
+    case Halide::LoopAlignStrategy::NoAlign:
+        return Halide::Serialize::LoopAlignStrategy::LoopAlignStrategy_NoAlign;
+    case Halide::LoopAlignStrategy::Auto:
+        return Halide::Serialize::LoopAlignStrategy::LoopAlignStrategy_Auto;
+    default:
+        std::cerr << "Unsupported loop align strategy\n";
+        exit(1);
+    }
+}
+
 flatbuffers::Offset<flatbuffers::String> Serializer::serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str) {
     return builder.CreateString(str);
 }
@@ -836,6 +852,60 @@ flatbuffers::Offset<Halide::Serialize::Dim> Serializer::serialize_dim(flatbuffer
     auto device_api_serialized = serialize_device_api(dim.device_api);
     auto dim_type_serialized = serialize_dim_type(dim.dim_type);
     return Halide::Serialize::CreateDim(builder, var_serialized, for_type_serialized, device_api_serialized, dim_type_serialized);
+}
+
+flatbuffers::Offset<Halide::Serialize::FuseLoopLevel> Serializer::serialize_fuse_loop_level(flatbuffers::FlatBufferBuilder &builder, const Halide::FuseLoopLevel &fuse_loop_level) {
+    auto fuse_level_serialized = serialize_loop_level(builder, fuse_loop_level.level);
+    std::vector<flatbuffers::Offset<flatbuffers::String>> align_dimension_names_serialized;
+    std::vector<uint8_t> align_strategies_serialized;
+    for (const auto &align : fuse_loop_level.align) {
+        align_dimension_names_serialized.push_back(serialize_string(builder, align.first));
+        align_strategies_serialized.push_back(serialize_loop_align_strategy(align.second));
+    }
+    return Halide::Serialize::CreateFuseLoopLevel(builder, fuse_level_serialized, builder.CreateVector(align_dimension_names_serialized), builder.CreateVector(align_strategies_serialized));
+}
+
+flatbuffers::Offset<Halide::Serialize::FusedPair> Serializer::serialize_fused_pair(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::FusedPair &fused_pair) {
+    auto func_1_serialized = serialize_string(builder, fused_pair.func_1);
+    auto func_2_serialized = serialize_string(builder, fused_pair.func_2);
+    auto var_name_serialized = serialize_string(builder, fused_pair.var_name);
+    return Halide::Serialize::CreateFusedPair(builder, func_1_serialized, func_2_serialized, fused_pair.stage_1, fused_pair.stage_2, var_name_serialized);
+}
+
+flatbuffers::Offset<Halide::Serialize::StageSchedule> Serializer::serialize_stage_schedule(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::StageSchedule &stage_schedule) {
+    std::vector<flatbuffers::Offset<Halide::Serialize::ReductionVariable>> rvars_serialized;
+    rvars_serialized.reserve(stage_schedule.rvars().size());
+    for (const auto &rvar : stage_schedule.rvars()) {
+        rvars_serialized.push_back(serialize_reduction_variable(builder, rvar));
+    }
+    std::vector<flatbuffers::Offset<Halide::Serialize::Split>> splits_serialized;
+    splits_serialized.reserve(stage_schedule.splits().size());
+    for (const auto &split : stage_schedule.splits()) {
+        splits_serialized.push_back(serialize_split(builder, split));
+    }
+    std::vector<flatbuffers::Offset<Halide::Serialize::Dim>> dims_serialized;
+    dims_serialized.reserve(stage_schedule.dims().size());
+    for (const auto &dim : stage_schedule.dims()) {
+        dims_serialized.push_back(serialize_dim(builder, dim));
+    }
+    std::vector<flatbuffers::Offset<Halide::Serialize::PrefetchDirective>> prefetches_serialized;
+    prefetches_serialized.reserve(stage_schedule.prefetches().size());
+    for (const auto &prefetch : stage_schedule.prefetches()) {
+        prefetches_serialized.push_back(serialize_prefetch_directive(builder, prefetch));
+    }
+    auto fuse_level_serialized = serialize_fuse_loop_level(builder, stage_schedule.fuse_level());
+    std::vector<flatbuffers::Offset<Halide::Serialize::FusedPair>> fused_pairs_serialized;
+    fused_pairs_serialized.reserve(stage_schedule.fused_pairs().size());
+    for (const auto &fused_pair : stage_schedule.fused_pairs()) {
+        fused_pairs_serialized.push_back(serialize_fused_pair(builder, fused_pair));
+    }
+    bool touched = stage_schedule.touched();
+    bool allow_race_conditions = stage_schedule.allow_race_conditions();
+    bool atomic = stage_schedule.atomic();
+    bool override_atomic_associativity_test = stage_schedule.override_atomic_associativity_test();
+    return Halide::Serialize::CreateStageSchedule(builder, builder.CreateVector(rvars_serialized), builder.CreateVector(splits_serialized), builder.CreateVector(dims_serialized),
+                                                  builder.CreateVector(prefetches_serialized), fuse_level_serialized, builder.CreateVector(fused_pairs_serialized),
+                                                  touched, allow_race_conditions, atomic, override_atomic_associativity_test);
 }
 
 // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers) {

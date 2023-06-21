@@ -39,6 +39,8 @@ private:
 
     Halide::Serialize::DimType serialize_dim_type(const Halide::Internal::DimType &dim_type);
 
+    Halide::Serialize::LoopAlignStrategy serialize_loop_align_strategy(const Halide::LoopAlignStrategy &loop_align_strategy);
+
     flatbuffers::Offset<flatbuffers::String> serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str);
 
     flatbuffers::Offset<Halide::Serialize::Type> serialize_type(flatbuffers::FlatBufferBuilder &builder, const Halide::Type &type);
@@ -76,6 +78,12 @@ private:
     flatbuffers::Offset<Halide::Serialize::Split> serialize_split(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Split &split);
 
     flatbuffers::Offset<Halide::Serialize::Dim> serialize_dim(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Dim &dim);
+
+    flatbuffers::Offset<Halide::Serialize::FuseLoopLevel> serialize_fuse_loop_level(flatbuffers::FlatBufferBuilder &builder, const Halide::FuseLoopLevel &fuse_loop_level);
+
+    flatbuffers::Offset<Halide::Serialize::FusedPair> serialize_fused_pair(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::FusedPair &fused_pair);
+
+    flatbuffers::Offset<Halide::Serialize::StageSchedule> serialize_stage_schedule(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::StageSchedule &stage_schedule);
 
     // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers);
 

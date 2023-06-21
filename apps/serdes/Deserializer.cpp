@@ -208,6 +208,22 @@ Halide::Internal::DimType Deserializer::deserialize_dim_type(const Halide::Seria
     }
 }
 
+Halide::LoopAlignStrategy Deserializer::deserialize_loop_align_strategy(const Halide::Serialize::LoopAlignStrategy loop_align_strategy) {
+    switch (loop_align_strategy) {
+    case Halide::Serialize::LoopAlignStrategy::LoopAlignStrategy_AlignStart:
+        return Halide::LoopAlignStrategy::AlignStart;
+    case Halide::Serialize::LoopAlignStrategy::LoopAlignStrategy_AlignEnd:
+        return Halide::LoopAlignStrategy::AlignEnd;
+    case Halide::Serialize::LoopAlignStrategy::LoopAlignStrategy_NoAlign:
+        return Halide::LoopAlignStrategy::NoAlign;
+    case Halide::Serialize::LoopAlignStrategy::LoopAlignStrategy_Auto:
+        return Halide::LoopAlignStrategy::Auto;
+    default:
+        std::cerr << "unknown loop align strategy " << loop_align_strategy << "\n";
+        exit(1);
+    }
+}
+
 Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type) {
     using Halide::Serialize::TypeCode;
     int bits = type->bits();
@@ -823,6 +839,64 @@ Halide::Internal::Dim Deserializer::deserialize_dim(const Halide::Serialize::Dim
     return hl_dim;
 }
 
+Halide::FuseLoopLevel Deserializer::deserialize_fuse_loop_level(const Halide::Serialize::FuseLoopLevel *fuse_loop_level) {
+    auto fuse_level = deserialize_loop_level(fuse_loop_level->fuse_level());
+    std::vector<std::string> align_dimension_names;
+    std::vector<Halide::LoopAlignStrategy> align_strategies;
+    std::map<std::string, Halide::LoopAlignStrategy> align;
+    for (const auto &align_dimension_name : *fuse_loop_level->align_dimension_names()) {
+        align_dimension_names.push_back(deserialize_string(align_dimension_name));
+    }
+    for (const auto &align_strategy : *fuse_loop_level->align_strategies()) {
+        align_strategies.push_back(deserialize_loop_align_strategy((Halide::Serialize::LoopAlignStrategy)align_strategy));
+    }
+    for (size_t i = 0; i < align_dimension_names.size(); ++i) {
+        align[align_dimension_names[i]] = align_strategies[i];
+    }
+    return Halide::FuseLoopLevel(fuse_level, align);
+}
+
+Halide::Internal::FusedPair Deserializer::deserialize_fused_pair(const Halide::Serialize::FusedPair *fused_pair) {
+    auto func_1 = deserialize_string(fused_pair->func_1());
+    auto func_2 = deserialize_string(fused_pair->func_2());
+    auto var_name = deserialize_string(fused_pair->var_name());
+    return Halide::Internal::FusedPair(func_1, fused_pair->stage_1(), func_2, fused_pair->stage_2(), var_name);
+}
+
+Halide::Internal::StageSchedule Deserializer::deserialize_stage_schedule(const Halide::Serialize::StageSchedule *stage_schedule) {
+    std::vector<Halide::Internal::ReductionVariable> rvars;
+    rvars.reserve(stage_schedule->rvars()->size());
+    for (const auto &rvar : *stage_schedule->rvars()) {
+        rvars.push_back(deserialize_reduction_variable(rvar));
+    }
+    std::vector<Halide::Internal::Split> splits;
+    splits.reserve(stage_schedule->splits()->size());
+    for (const auto &split : *stage_schedule->splits()) {
+        splits.push_back(deserialize_split(split));
+    }
+    std::vector<Halide::Internal::Dim> dims;
+    dims.reserve(stage_schedule->dims()->size());
+    for (const auto &dim : *stage_schedule->dims()) {
+        dims.push_back(deserialize_dim(dim));
+    }
+    std::vector<Halide::Internal::PrefetchDirective> prefetches;
+    prefetches.reserve(stage_schedule->prefetches()->size());
+    for (const auto &prefetch : *stage_schedule->prefetches()) {
+        prefetches.push_back(deserialize_prefetch_directive(prefetch));
+    }
+    Halide::FuseLoopLevel fuse_level = deserialize_fuse_loop_level(stage_schedule->fuse_level());
+    std::vector<Halide::Internal::FusedPair> fused_pairs;
+    fused_pairs.reserve(stage_schedule->fused_pairs()->size());
+    for (const auto &fused_pair : *stage_schedule->fused_pairs()) {
+        fused_pairs.push_back(deserialize_fused_pair(fused_pair));
+    }
+    bool touched = stage_schedule->touched();
+    bool allow_race_conditions = stage_schedule->allow_race_conditions();
+    bool atomic = stage_schedule->atomic();
+    bool override_atomic_associativity_test = stage_schedule->override_atomic_associativity_test();
+    return Halide::Internal::StageSchedule(rvars, splits, dims, prefetches, fuse_level, fused_pairs, touched,
+                                           allow_race_conditions, atomic, override_atomic_associativity_test);
+}
 // TODO: will need to serialize a reverse table of map<address, func_name> to
 //       later reconstruct a map of <name, func_ptr> find out which function ptrs to use here
 // std::map<std::string, Halide::Internal::FunctionPtr> Deserializer::deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs) {

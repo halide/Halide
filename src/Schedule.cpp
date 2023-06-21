@@ -509,6 +509,23 @@ StageSchedule::StageSchedule()
     : contents(new StageScheduleContents) {
 }
 
+StageSchedule::StageSchedule(const std::vector<ReductionVariable> &rvars, const std::vector<Split> &splits,
+                             const std::vector<Dim> &dims, const std::vector<PrefetchDirective> &prefetches,
+                             const FuseLoopLevel &fuse_level, const std::vector<FusedPair> &fused_pairs,
+                             bool touched, bool allow_race_conditions, bool atomic, bool override_atomic_associativity_test)
+    : contents(new StageScheduleContents) {
+    contents->rvars = rvars;
+    contents->splits = splits;
+    contents->dims = dims;
+    contents->prefetches = prefetches;
+    contents->fuse_level = fuse_level;
+    contents->fused_pairs = fused_pairs;
+    contents->touched = touched;
+    contents->allow_race_conditions = allow_race_conditions;
+    contents->atomic = atomic;
+    contents->override_atomic_associativity_test = override_atomic_associativity_test;
+}
+
 StageSchedule StageSchedule::get_copy() const {
     internal_assert(contents.defined()) << "Cannot copy undefined Schedule\n";
     StageSchedule copy;

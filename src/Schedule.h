@@ -669,6 +669,10 @@ public:
     }
     StageSchedule(const StageSchedule &other) = default;
     StageSchedule();
+    StageSchedule(const std::vector<ReductionVariable> &rvars, const std::vector<Split> &splits,
+                  const std::vector<Dim> &dims, const std::vector<PrefetchDirective> &prefetches,
+                  const FuseLoopLevel &fuse_level, const std::vector<FusedPair> &fused_pairs,
+                  bool touched, bool allow_race_conditions, bool atomic, bool override_atomic_associativity_test);
 
     /** Return a copy of this StageSchedule. */
     StageSchedule get_copy() const;

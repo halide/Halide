@@ -38,6 +38,8 @@ private:
 
     Halide::Internal::DimType deserialize_dim_type(const Halide::Serialize::DimType dim_type);
 
+    Halide::LoopAlignStrategy deserialize_loop_align_strategy(const Halide::Serialize::LoopAlignStrategy loop_align_strategy);
+
     std::string deserialize_string(const flatbuffers::String *str);
 
     Halide::Type deserialize_type(const Halide::Serialize::Type *type);
@@ -75,6 +77,12 @@ private:
     Halide::Internal::Split deserialize_split(const Halide::Serialize::Split *split);
 
     Halide::Internal::Dim deserialize_dim(const Halide::Serialize::Dim *dim);
+
+    Halide::FuseLoopLevel deserialize_fuse_loop_level(const Halide::Serialize::FuseLoopLevel *fuse_loop_level);
+
+    Halide::Internal::FusedPair deserialize_fused_pair(const Halide::Serialize::FusedPair *fused_pair);
+
+    Halide::Internal::StageSchedule deserialize_stage_schedule(const Halide::Serialize::StageSchedule *stage_schedule);
 
     // std::map<std::string, Halide::Internal::FunctionPtr> deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs);
 

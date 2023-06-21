@@ -536,39 +536,39 @@ table Dim {
     dim_type: DimType;
 }
 
-// enum LoopAlignStrategy: ubyte {
-//     AlignStart,
-//     AlignEnd,
-//     NoAlign,
-//     Auto,
-// }
+enum LoopAlignStrategy: ubyte {
+    AlignStart,
+    AlignEnd,
+    NoAlign,
+    Auto,
+}
 
-// table FuseLoopLevel {
-//     fuse_level: LoopLevel;
-//     align_dimension_names: [string];
-//     align_strategies: [LoopAlignStrategy];
-// }
+table FuseLoopLevel {
+    fuse_level: LoopLevel;
+    align_dimension_names: [string];
+    align_strategies: [LoopAlignStrategy];
+}
 
-// table FusedPair {
-//     func_1: string;
-//     func_2: string;
-//     stage_1: int32;
-//     stage_2: int32;
-//     var_name: string;
-// }
+table FusedPair {
+    func_1: string;
+    func_2: string;
+    stage_1: int32;
+    stage_2: int32;
+    var_name: string;
+}
 
-// table StageSchedule {
-//     rvars: [ReductionVariable];
-//     splits: [Split];
-//     dims: [Dim];
-//     prefetches: [PrefetchDirective];
-//     fuse_level: FuseLoopLevel;
-//     fused_pairs: [FusedPair];
-//     touched: bool = false;
-//     allow_race_conditions: bool = false;
-//     atomic: bool = false;
-//     override_atomic_associativity_test: bool = false;
-// }
+table StageSchedule {
+    rvars: [ReductionVariable];
+    splits: [Split];
+    dims: [Dim];
+    prefetches: [PrefetchDirective];
+    fuse_level: FuseLoopLevel;
+    fused_pairs: [FusedPair];
+    touched: bool = false;
+    allow_race_conditions: bool = false;
+    atomic: bool = false;
+    override_atomic_associativity_test: bool = false;
+}
 
 table Definition {
     is_init: bool;
