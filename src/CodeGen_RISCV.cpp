@@ -144,6 +144,9 @@ CodeGen_RISCV::CodeGen_RISCV(const Target &t)
     user_assert(native_vector_bits() > 0) << "No vector_bits was specified for RISCV codegen; "
                                           << "this is almost certainly a mistake. You should add -rvv-vector_bits_N "
                                           << "to your Target string, where N is the SIMD width in bits (e.g. 128).";
+#if LLVM_VERSION < 170
+    user_warning << "RISCV codegen is only tested with LLVM 17.0 or later; it is unlikely to work well with earlier versions of LLVM.\n";
+#endif
 }
 
 string CodeGen_RISCV::mcpu_target() const {
@@ -347,6 +350,12 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
     mangled_name += mangle_llvm_type(llvm_arg_types[1]);
     mangled_name += mangle_llvm_type(llvm_arg_types[2]);
 
+    bool round_down = intrin.flags & RoundDown;
+    bool round_up = intrin.flags & RoundUp;
+    if (round_down || round_up) {
+        llvm_arg_types.push_back(xlen_type);
+    }
+
     if (intrin.flags & AddVLArg) {
         mangled_name += (target.bits == 64) ? ".i64" : ".i32";
         llvm_arg_types.push_back(xlen_type);
@@ -355,29 +364,23 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
     llvm::Function *llvm_intrinsic =
         get_llvm_intrin(llvm_ret_type, mangled_name, llvm_arg_types);
 
-    // Set vector fixed-point rounding flag if needed for intrinsic.
-    bool round_down = intrin.flags & RoundDown;
-    bool round_up = intrin.flags & RoundUp;
-    if (round_down || round_up) {
-        internal_assert(!(round_down && round_up));
-        llvm::Value *rounding_mode = llvm::ConstantInt::get(xlen_type, round_down ? 2 : 0);
-        // See https://github.com/riscv/riscv-v-spec/releases/download/v1.0/riscv-v-spec-1.0.pdf page 15
-        // for discussion of fixed-point rounding mode.
-        // TODO: When LLVM finally fixes the instructions to take rounding modes,
-        // this will have to change to passing the rounding mode to the intrinsic.
-        // https://github.com/halide/Halide/issues/7123
-        llvm::FunctionType *csrw_llvm_type = llvm::FunctionType::get(void_t, {xlen_type}, false);
-        llvm::InlineAsm *inline_csrw = llvm::InlineAsm::get(csrw_llvm_type, "csrw vxrm,${0:z}", "rJ,~{memory}", true);
-        builder->CreateCall(inline_csrw, {rounding_mode});
-    }
-
     // TODO: Should handle intrinsics other than binary operators.
     // Call the LLVM intrinsic.
     int actual_lanes = op->type.lanes();
     llvm::Constant *actual_vlen = llvm::ConstantInt::get(xlen_type, actual_lanes);
 
-    value = builder->CreateCall(llvm_intrinsic, {llvm::UndefValue::get(llvm_ret_type),
-                                                 left_arg, right_arg, actual_vlen});
+    // Set vector fixed-point rounding flag if needed for intrinsic.
+    if (round_down || round_up) {
+        internal_assert(!(round_down && round_up));
+        llvm::Value *rounding_mode = llvm::ConstantInt::get(xlen_type, round_down ? 2 : 0);
+        // See https://github.com/riscv/riscv-v-spec/releases/download/v1.0/riscv-v-spec-1.0.pdf page 15
+        // for discussion of fixed-point rounding mode.
+        value = builder->CreateCall(llvm_intrinsic, {llvm::UndefValue::get(llvm_ret_type),
+                                                     left_arg, right_arg, rounding_mode, actual_vlen});
+    } else {
+        value = builder->CreateCall(llvm_intrinsic, {llvm::UndefValue::get(llvm_ret_type),
+                                                     left_arg, right_arg, actual_vlen});
+    }
 
     if (ret_type.lanes() != op->type.lanes()) {
         value = convert_fixed_or_scalable_vector_type(value,
