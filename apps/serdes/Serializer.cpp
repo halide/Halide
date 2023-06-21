@@ -827,12 +827,16 @@ flatbuffers::Offset<Halide::Serialize::ReductionVariable> Serializer::serialize_
 }
 
 flatbuffers::Offset<Halide::Serialize::ReductionDomain> Serializer::serialize_reduction_domain(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ReductionDomain &reduction_domain) {
+    bool defined = reduction_domain.defined();
+    if (!defined) {
+        return Halide::Serialize::CreateReductionDomain(builder, defined);
+    }
     std::vector<flatbuffers::Offset<Halide::Serialize::ReductionVariable>> domain_serialized;
     for (const auto &reduction_variable : reduction_domain.domain()) {
         domain_serialized.push_back(serialize_reduction_variable(builder, reduction_variable));
     }
     auto predicate_serialized = serialize_expr(builder, reduction_domain.predicate());
-    return Halide::Serialize::CreateReductionDomain(builder, builder.CreateVector(domain_serialized), predicate_serialized.first, predicate_serialized.second, reduction_domain.frozen());
+    return Halide::Serialize::CreateReductionDomain(builder, defined, builder.CreateVector(domain_serialized), predicate_serialized.first, predicate_serialized.second, reduction_domain.frozen());
 }
 
 flatbuffers::Offset<Halide::Serialize::ModulusRemainder> Serializer::serialize_modulus_remainder(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ModulusRemainder &modulus_remainder) {

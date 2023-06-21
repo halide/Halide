@@ -399,6 +399,7 @@ table ReductionVariable {
 }
 
 table ReductionDomain {
+    defined: bool;
     domain: [ReductionVariable];
     predicate: Expr;
     frozen: bool = false;

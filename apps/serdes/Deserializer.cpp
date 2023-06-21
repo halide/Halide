@@ -467,12 +467,12 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         const Halide::Serialize::IntImm *int_imm_expr = (const Halide::Serialize::IntImm *)expr;
         auto value = int_imm_expr->value();
         // TODO: fix this hard-coding
-        return Halide::Internal::IntImm::make(Halide::Int(64), value);
+        return Halide::Internal::IntImm::make(Halide::Int(32), value);
     }
     case Halide::Serialize::Expr::Expr_UIntImm: {
         const Halide::Serialize::UIntImm *uint_imm_expr = (const Halide::Serialize::UIntImm *)expr;
         auto value = uint_imm_expr->value();
-        return Halide::Internal::UIntImm::make(Halide::UInt(64), value);
+        return Halide::Internal::UIntImm::make(Halide::UInt(32), value);
     }
     case Halide::Serialize::Expr::Expr_FloatImm: {
         const Halide::Serialize::FloatImm *float_imm_expr = (const Halide::Serialize::FloatImm *)expr;
@@ -488,12 +488,12 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         const Halide::Serialize::Cast *cast_expr = (const Halide::Serialize::Cast *)expr;
         auto value = deserialize_expr(cast_expr->value_type(), cast_expr->value());
         // TODO: this is clearly wrong as well
-        return Halide::Internal::Cast::make(Halide::Int(64), value);
+        return Halide::Internal::Cast::make(Halide::Int(32), value);
     }
     case Halide::Serialize::Expr::Expr_Reinterpret: {
         const Halide::Serialize::Reinterpret *reinterpret_expr = (const Halide::Serialize::Reinterpret *)expr;
         auto value = deserialize_expr(reinterpret_expr->value_type(), reinterpret_expr->value());
-        return Halide::Internal::Reinterpret::make(Halide::Int(64), value);
+        return Halide::Internal::Reinterpret::make(Halide::Int(32), value);
     }
     case Halide::Serialize::Expr::Expr_Add: {
         const Halide::Serialize::Add *add_expr = (const Halide::Serialize::Add *)expr;
@@ -604,7 +604,7 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         auto index = deserialize_expr(load_expr->index_type(), load_expr->index());
         auto param = deserialize_parameter(load_expr->param());
         auto alignment = deserialize_modulus_remainder(load_expr->alignment());
-        return Halide::Internal::Load::make(Halide::Int(64), name, index, Halide::Buffer<float, 3>(), param, predicate, alignment);
+        return Halide::Internal::Load::make(Halide::Int(32), name, index, Halide::Buffer<float, 3>(), param, predicate, alignment);
     }
     case Halide::Serialize::Expr::Expr_Ramp: {
         const Halide::Serialize::Ramp *ramp_expr = (const Halide::Serialize::Ramp *)expr;
@@ -634,14 +634,14 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         auto call_type = deserialize_call_type(call_expr->call_type());
         auto param = deserialize_parameter(call_expr->param());
         // TODO: fix type and function ptr here once function DAG is fixed
-        return Halide::Internal::Call::make(Halide::Int(64), name, args, call_type, Halide::Internal::FunctionPtr(), value_index, Halide::Buffer<>(), param);
+        return Halide::Internal::Call::make(Halide::Int(32), name, args, call_type, Halide::Internal::FunctionPtr(), value_index, Halide::Buffer<>(), param);
     }
     case Halide::Serialize::Expr::Expr_Variable: {
         const Halide::Serialize::Variable *variable_expr = (const Halide::Serialize::Variable *)expr;
         auto name = deserialize_string(variable_expr->name());
         auto param = deserialize_parameter(variable_expr->param());
         auto reduction_domain = deserialize_reduction_domain(variable_expr->reduction_domain());
-        return Halide::Internal::Variable::make(Halide::Int(64), name, Halide::Buffer<>(), param, reduction_domain);
+        return Halide::Internal::Variable::make(Halide::Int(32), name, Halide::Buffer<>(), param, reduction_domain);
     }
     case Halide::Serialize::Expr::Expr_Shuffle: {
         const Halide::Serialize::Shuffle *shuffle_expr = (const Halide::Serialize::Shuffle *)expr;
@@ -805,6 +805,10 @@ Halide::Internal::ReductionVariable Deserializer::deserialize_reduction_variable
 
 Halide::Internal::ReductionDomain Deserializer::deserialize_reduction_domain(const Halide::Serialize::ReductionDomain *reduction_domain) {
     assert(reduction_domain != nullptr);
+    bool defined = reduction_domain->defined();
+    if (!defined) {
+        return Halide::Internal::ReductionDomain();
+    }
     std::vector<Halide::Internal::ReductionVariable> domain;
     for (const auto &reduction_variable : *reduction_domain->domain()) {
         domain.push_back(deserialize_reduction_variable(reduction_variable));
