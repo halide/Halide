@@ -276,8 +276,9 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         auto predicate_serialized = serialize_expr(builder, store_stmt->predicate);
         auto value_serialized = serialize_expr(builder, store_stmt->value);
         auto index_serialized = serialize_expr(builder, store_stmt->index);
+        auto param_serialized = serialize_parameter(builder, store_stmt->param);
         auto alignment_serialized = serialize_modulus_remainder(builder, store_stmt->alignment);
-        return std::make_pair(Halide::Serialize::Stmt::Stmt_Store, Halide::Serialize::CreateStore(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, value_serialized.first, value_serialized.second, index_serialized.first, index_serialized.second, alignment_serialized).Union());
+        return std::make_pair(Halide::Serialize::Stmt::Stmt_Store, Halide::Serialize::CreateStore(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, value_serialized.first, value_serialized.second, index_serialized.first, index_serialized.second, param_serialized, alignment_serialized).Union());
     }
     case Halide::Internal::IRNodeType::Provide: {
         auto provide_stmt = stmt.as<Halide::Internal::Provide>();
@@ -561,8 +562,9 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         auto name_serialized = serialize_string(builder, load_expr->name);
         auto predicate_serialized = serialize_expr(builder, load_expr->predicate);
         auto index_serialized = serialize_expr(builder, load_expr->index);
+        auto param_serialized = serialize_parameter(builder, load_expr->param);
         auto alignment_serialized = serialize_modulus_remainder(builder, load_expr->alignment);
-        return std::make_pair(Halide::Serialize::Expr::Expr_Load, Halide::Serialize::CreateLoad(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, index_serialized.first, index_serialized.second, alignment_serialized).Union());
+        return std::make_pair(Halide::Serialize::Expr::Expr_Load, Halide::Serialize::CreateLoad(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, index_serialized.first, index_serialized.second, param_serialized, alignment_serialized).Union());
     }
     case Halide::Internal::IRNodeType::Ramp: {
         auto ramp_expr = expr.as<Halide::Internal::Ramp>();
@@ -599,13 +601,15 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         }
         auto call_type = serialize_call_type(call_expr->call_type);
         auto value_index = call_expr->value_index;
-        return std::make_pair(Halide::Serialize::Expr::Expr_Call, Halide::Serialize::CreateCall(builder, name_serialized, builder.CreateVector(args_types), builder.CreateVector(args_serialized), call_type, value_index).Union());
+        auto param_serialized = serialize_parameter(builder, call_expr->param);
+        return std::make_pair(Halide::Serialize::Expr::Expr_Call, Halide::Serialize::CreateCall(builder, name_serialized, builder.CreateVector(args_types), builder.CreateVector(args_serialized), call_type, value_index, param_serialized).Union());
     }
     case Halide::Internal::IRNodeType::Variable: {
         auto variable_expr = expr.as<Halide::Internal::Variable>();
         auto name_serialized = serialize_string(builder, variable_expr->name);
+        auto param_serialized = serialize_parameter(builder, variable_expr->param);
         auto reduction_domain_serialized = serialize_reduction_domain(builder, variable_expr->reduction_domain);
-        return std::make_pair(Halide::Serialize::Expr::Expr_Variable, Halide::Serialize::CreateVariable(builder, name_serialized, reduction_domain_serialized).Union());
+        return std::make_pair(Halide::Serialize::Expr::Expr_Variable, Halide::Serialize::CreateVariable(builder, name_serialized, param_serialized, reduction_domain_serialized).Union());
     }
     case Halide::Internal::IRNodeType::Shuffle: {
         auto shuffle_expr = expr.as<Halide::Internal::Shuffle>();
@@ -671,8 +675,14 @@ flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_function(flat
     for (const auto &update : function.updates()) {
         updates_serialized.push_back(serialize_definition(builder, update));
     }
-
     auto debug_file_serialized = serialize_string(builder, function.debug_file());
+
+    std::vector<flatbuffers::Offset<Halide::Serialize::Parameter>> output_buffers_serialized;
+    output_buffers_serialized.reserve(function.output_buffers().size());
+    for (const auto &output_buffer : function.output_buffers()) {
+        output_buffers_serialized.push_back(serialize_parameter(builder, output_buffer));
+    }
+
     auto extern_function_name_serialized = serialize_string(builder, function.extern_function_name());
     auto extern_mangling_serialized = serialize_name_mangling(function.extern_definition_name_mangling());
     auto extern_function_device_api_serialized = serialize_device_api(function.extern_function_device_api());
@@ -687,7 +697,7 @@ flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_function(flat
     }
     bool frozen = function.frozen();
     auto func = Halide::Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim,
-                                              args_vector, func_schedule_serialized, init_def_serialized, builder.CreateVector(updates_serialized), debug_file_serialized,
+                                              args_vector, func_schedule_serialized, init_def_serialized, builder.CreateVector(updates_serialized), debug_file_serialized, builder.CreateVector(output_buffers_serialized),
                                               extern_function_name_serialized, extern_mangling_serialized, extern_function_device_api_serialized, extern_proxy_expr_serialized.first,
                                               extern_proxy_expr_serialized.second, trace_loads, trace_stores, trace_realizations, builder.CreateVector(trace_tags_serialized), frozen);
     return func;
@@ -833,7 +843,8 @@ flatbuffers::Offset<Halide::Serialize::PrefetchDirective> Serializer::serialize_
     auto from_serialized = serialize_string(builder, prefetch_directive.from);
     auto offset_serialized = serialize_expr(builder, prefetch_directive.offset);
     auto strategy_serialized = serialize_prefetch_bound_strategy(prefetch_directive.strategy);
-    return Halide::Serialize::CreatePrefetchDirective(builder, name_serialized, at_serialized, from_serialized, offset_serialized.first, offset_serialized.second, strategy_serialized);
+    auto param_serialized = serialize_parameter(builder, prefetch_directive.param);
+    return Halide::Serialize::CreatePrefetchDirective(builder, name_serialized, at_serialized, from_serialized, offset_serialized.first, offset_serialized.second, strategy_serialized, param_serialized);
 }
 
 flatbuffers::Offset<Halide::Serialize::Split> Serializer::serialize_split(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Split &split) {

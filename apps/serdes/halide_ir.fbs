@@ -142,7 +142,7 @@ table Store {
     predicate: Expr;
     value: Expr;
     index: Expr;
-    // param: Parameter; TODO: no Parameter yet
+    param: Parameter;
     alignment: ModulusRemainder;
 }
 
@@ -205,7 +205,7 @@ table PrefetchDirective {
     from: string;
     offset: Expr;
     strategy: PrefetchBoundStrategy;
-    // param: Parameter;
+    param: Parameter;
 }
 
 table Prefetch {
@@ -351,7 +351,7 @@ table Load {
     predicate: Expr;
     index: Expr;
     // image: Buffer;  TODO: no Buffer yet
-    // param: Parameter; TODO: no Parameter yet
+    param: Parameter;
     alignment: ModulusRemainder;
 }
 
@@ -389,7 +389,7 @@ table Call {
     // func: FunctionPtr; TODO: no FunctionPtr yet
     value_index: int32;
     // image: Buffer; TODO: no Buffer yet
-    // param: Parameter; TODO: no Parameter yet
+    param: Parameter;
 }
 
 table ReductionVariable {
@@ -406,7 +406,7 @@ table ReductionDomain {
 
 table Variable {
     name: string;
-    // param: Parameter; TODO: no Parameter yet
+    param: Parameter;
     // image: Buffer; TODO: no Buffer yet
     reduction_domain: ReductionDomain;
 }
@@ -628,7 +628,7 @@ table Func {
     init_def: Definition;
     updates: [Definition];
     debug_file: string;
-    // output_buffers: [Parameter];
+    output_buffers: [Parameter];
     // extern_arguments: [ExternFuncArgument];
     extern_function_name: string;
     extern_mangling: NameMangling;

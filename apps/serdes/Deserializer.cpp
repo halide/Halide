@@ -279,8 +279,13 @@ Halide::Internal::Function Deserializer::deserialize_function(const Halide::Seri
     for (const auto &update : *function->updates()) {
         updates.push_back(deserialize_definition(update));
     }
-
     std::string debug_file = deserialize_string(function->debug_file());
+    std::vector<Halide::Internal::Parameter> output_buffers;
+    output_buffers.reserve(function->output_buffers()->size());
+    for (const auto &output_buffer : *function->output_buffers()) {
+        output_buffers.push_back(deserialize_parameter(output_buffer));
+    }
+
     std::string extern_function_name = deserialize_string(function->extern_function_name());
     auto name_mangling = deserialize_name_mangling(function->extern_mangling());
     auto extern_function_device_api = deserialize_device_api(function->extern_function_device_api());
@@ -295,7 +300,7 @@ Halide::Internal::Function Deserializer::deserialize_function(const Halide::Seri
 
     return Halide::Internal::Function(name, origin_name, output_types, required_types,
                                       required_dim, args, func_schedule, init_def, updates,
-                                      debug_file, extern_function_name, name_mangling,
+                                      debug_file, output_buffers, extern_function_name, name_mangling,
                                       extern_function_device_api, extern_proxy_expr,
                                       trace_loads, trace_stores, trace_realizations, trace_tags, frozen);
 }
@@ -339,8 +344,9 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         auto predicate = deserialize_expr(store_stmt->predicate_type(), store_stmt->predicate());
         auto value = deserialize_expr(store_stmt->value_type(), store_stmt->value());
         auto index = deserialize_expr(store_stmt->index_type(), store_stmt->index());
+        auto param = deserialize_parameter(store_stmt->param());
         auto alignment = deserialize_modulus_remainder(store_stmt->alignment());
-        return Halide::Internal::Store::make(name, value, index, Halide::Internal::Parameter(), predicate, alignment);
+        return Halide::Internal::Store::make(name, value, index, param, predicate, alignment);
     }
     case Halide::Serialize::Stmt_Provide: {
         const Halide::Serialize::Provide *provide_stmt = (const Halide::Serialize::Provide *)stmt;
@@ -592,8 +598,9 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         auto name = deserialize_string(load_expr->name());
         auto predicate = deserialize_expr(load_expr->predicate_type(), load_expr->predicate());
         auto index = deserialize_expr(load_expr->index_type(), load_expr->index());
+        auto param = deserialize_parameter(load_expr->param());
         auto alignment = deserialize_modulus_remainder(load_expr->alignment());
-        return Halide::Internal::Load::make(Halide::Int(64), name, index, Halide::Buffer<float, 3>(), Halide::Internal::Parameter(), predicate, alignment);
+        return Halide::Internal::Load::make(Halide::Int(64), name, index, Halide::Buffer<float, 3>(), param, predicate, alignment);
     }
     case Halide::Serialize::Expr::Expr_Ramp: {
         const Halide::Serialize::Ramp *ramp_expr = (const Halide::Serialize::Ramp *)expr;
@@ -621,14 +628,16 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         std::vector<Halide::Expr> args = deserialize_expr_vector(call_expr->args_type(), call_expr->args());
         auto value_index = call_expr->value_index();
         auto call_type = deserialize_call_type(call_expr->call_type());
+        auto param = deserialize_parameter(call_expr->param());
         // TODO: fix type and function ptr here once function DAG is fixed
-        return Halide::Internal::Call::make(Halide::Int(64), name, args, call_type, Halide::Internal::FunctionPtr(), value_index);
+        return Halide::Internal::Call::make(Halide::Int(64), name, args, call_type, Halide::Internal::FunctionPtr(), value_index, Halide::Buffer<>(), param);
     }
     case Halide::Serialize::Expr::Expr_Variable: {
         const Halide::Serialize::Variable *variable_expr = (const Halide::Serialize::Variable *)expr;
         auto name = deserialize_string(variable_expr->name());
+        auto param = deserialize_parameter(variable_expr->param());
         auto reduction_domain = deserialize_reduction_domain(variable_expr->reduction_domain());
-        return Halide::Internal::Variable::make(Halide::Int(64), name, reduction_domain);
+        return Halide::Internal::Variable::make(Halide::Int(64), name, Halide::Buffer<>(), param, reduction_domain);
     }
     case Halide::Serialize::Expr::Expr_Shuffle: {
         const Halide::Serialize::Shuffle *shuffle_expr = (const Halide::Serialize::Shuffle *)expr;
@@ -800,12 +809,14 @@ Halide::Internal::PrefetchDirective Deserializer::deserialize_prefetch_directive
     auto from = deserialize_string(prefetch_directive->from());
     auto offset = deserialize_expr(prefetch_directive->offset_type(), prefetch_directive->offset());
     auto strategy = deserialize_prefetch_bound_strategy(prefetch_directive->strategy());
+    auto param = deserialize_parameter(prefetch_directive->param());
     auto hl_prefetch_directive = Halide::Internal::PrefetchDirective();
     hl_prefetch_directive.name = name;
     hl_prefetch_directive.at = at;
     hl_prefetch_directive.from = from;
     hl_prefetch_directive.offset = offset;
     hl_prefetch_directive.strategy = strategy;
+    hl_prefetch_directive.param = param;
     return hl_prefetch_directive;
 }
 
