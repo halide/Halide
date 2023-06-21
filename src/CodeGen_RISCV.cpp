@@ -141,6 +141,9 @@ private:
 CodeGen_RISCV::CodeGen_RISCV(const Target &t)
     : CodeGen_Posix(t) {
     use_llvm_vp_intrinsics = true;
+    user_assert(native_vector_bits() > 0) << "No vector_bits was specified for RISCV codegen; "
+                                          << "this is almost certainly a mistake. You should add -rvv-vector_bits_N "
+                                          << "to your Target string, where N is the SIMD width in bits (e.g. 128).";
 }
 
 string CodeGen_RISCV::mcpu_target() const {
