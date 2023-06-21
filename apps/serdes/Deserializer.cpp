@@ -225,6 +225,7 @@ Halide::LoopAlignStrategy Deserializer::deserialize_loop_align_strategy(const Ha
 }
 
 Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type) {
+    assert(type != nullptr);
     using Halide::Serialize::TypeCode;
     int bits = type->bits();
     int lanes = type->lanes();
@@ -252,6 +253,7 @@ Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type)
 }
 
 Halide::Internal::Function Deserializer::deserialize_function(const Halide::Serialize::Func *function) {
+    assert(function != nullptr);
     std::string name = deserialize_string(function->name());
     std::string origin_name = deserialize_string(function->origin_name());
     std::vector<Halide::Type> output_types;
@@ -306,6 +308,7 @@ Halide::Internal::Function Deserializer::deserialize_function(const Halide::Seri
 }
 
 Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const void *stmt) {
+    assert(stmt != nullptr);
     switch (type_code) {
     case Halide::Serialize::Stmt_LetStmt: {
         const Halide::Serialize::LetStmt *let_stmt = (const Halide::Serialize::LetStmt *)stmt;
@@ -458,6 +461,7 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
 }
 
 Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr) {
+    assert(expr != nullptr);
     switch (type_code) {
     case Halide::Serialize::Expr::Expr_IntImm: {
         const Halide::Serialize::IntImm *int_imm_expr = (const Halide::Serialize::IntImm *)expr;
@@ -668,6 +672,8 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
 }
 
 std::vector<Halide::Expr> Deserializer::deserialize_expr_vector(const flatbuffers::Vector<uint8_t> *exprs_types, const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized) {
+    assert(exprs_types != nullptr);
+    assert(exprs_serialized != nullptr);
     std::vector<Halide::Expr> result;
     result.reserve(exprs_serialized->size());
     for (size_t i = 0; i < exprs_serialized->size(); ++i) {
@@ -678,12 +684,14 @@ std::vector<Halide::Expr> Deserializer::deserialize_expr_vector(const flatbuffer
 }
 
 Halide::Range Deserializer::deserialize_range(const Halide::Serialize::Range *range) {
+    assert(range != nullptr);
     auto min = deserialize_expr(range->min_type(), range->min());
     auto extent = deserialize_expr(range->extent_type(), range->extent());
     return Halide::Range(min, extent);
 }
 
 Halide::Internal::Bound Deserializer::deserialize_bound(const Halide::Serialize::Bound *bound) {
+    assert(bound != nullptr);
     auto var = deserialize_string(bound->var());
     auto min = deserialize_expr(bound->min_type(), bound->min());
     auto extent = deserialize_expr(bound->extent_type(), bound->extent());
@@ -699,6 +707,7 @@ Halide::Internal::Bound Deserializer::deserialize_bound(const Halide::Serialize:
 }
 
 Halide::Internal::StorageDim Deserializer::deserialize_storage_dim(const Halide::Serialize::StorageDim *storage_dim) {
+    assert(storage_dim != nullptr);
     auto var = deserialize_string(storage_dim->var());
     auto alignment = deserialize_expr(storage_dim->alignment_type(), storage_dim->alignment());
     auto bound = deserialize_expr(storage_dim->bound_type(), storage_dim->bound());
@@ -714,6 +723,7 @@ Halide::Internal::StorageDim Deserializer::deserialize_storage_dim(const Halide:
 }
 
 Halide::LoopLevel Deserializer::deserialize_loop_level(const Halide::Serialize::LoopLevel *loop_level) {
+    assert(loop_level != nullptr);
     auto func_name = deserialize_string(loop_level->func_name());
     auto stage_index = loop_level->stage_index();
     auto var_name = deserialize_string(loop_level->var_name());
@@ -723,6 +733,7 @@ Halide::LoopLevel Deserializer::deserialize_loop_level(const Halide::Serialize::
 }
 
 Halide::Internal::FuncSchedule Deserializer::deserialize_func_schedule(const Halide::Serialize::FuncSchedule *func_schedule) {
+    assert(func_schedule != nullptr);
     auto store_level = deserialize_loop_level(func_schedule->store_level());
     auto compute_level = deserialize_loop_level(func_schedule->compute_level());
     std::vector<Halide::Internal::StorageDim> storage_dims;
@@ -754,6 +765,7 @@ Halide::Internal::FuncSchedule Deserializer::deserialize_func_schedule(const Hal
 }
 
 Halide::Internal::Specialization Deserializer::deserialize_specialization(const Halide::Serialize::Specialization *specialization) {
+    assert(specialization != nullptr);
     auto condition = deserialize_expr(specialization->condition_type(), specialization->condition());
     auto defintion = deserialize_definition(specialization->definition());
     auto failure_message = deserialize_string(specialization->failure_message());
@@ -765,20 +777,22 @@ Halide::Internal::Specialization Deserializer::deserialize_specialization(const 
 }
 
 Halide::Internal::Definition Deserializer::deserialize_definition(const Halide::Serialize::Definition *definition) {
+    assert(definition != nullptr);
     auto is_init = definition->is_init();
     auto predicate = deserialize_expr(definition->predicate_type(), definition->predicate());
     auto args = deserialize_expr_vector(definition->args_type(), definition->args());
     auto values = deserialize_expr_vector(definition->values_type(), definition->values());
-
+    auto stage_schedule = deserialize_stage_schedule(definition->stage_schedule());
     std::vector<Halide::Internal::Specialization> specializations;
     for (const auto &specialization : *definition->specializations()) {
         specializations.push_back(deserialize_specialization(specialization));
     }
     auto source_location = deserialize_string(definition->source_location());
-    return Halide::Internal::Definition(is_init, predicate, args, values, Halide::Internal::StageSchedule(), specializations, source_location);
+    return Halide::Internal::Definition(is_init, predicate, args, values, stage_schedule, specializations, source_location);
 }
 
 Halide::Internal::ReductionVariable Deserializer::deserialize_reduction_variable(const Halide::Serialize::ReductionVariable *reduction_variable) {
+    assert(reduction_variable != nullptr);
     auto var = deserialize_string(reduction_variable->var());
     auto min = deserialize_expr(reduction_variable->min_type(), reduction_variable->min());
     auto extent = deserialize_expr(reduction_variable->extent_type(), reduction_variable->extent());
@@ -790,6 +804,7 @@ Halide::Internal::ReductionVariable Deserializer::deserialize_reduction_variable
 }
 
 Halide::Internal::ReductionDomain Deserializer::deserialize_reduction_domain(const Halide::Serialize::ReductionDomain *reduction_domain) {
+    assert(reduction_domain != nullptr);
     std::vector<Halide::Internal::ReductionVariable> domain;
     for (const auto &reduction_variable : *reduction_domain->domain()) {
         domain.push_back(deserialize_reduction_variable(reduction_variable));
@@ -800,10 +815,12 @@ Halide::Internal::ReductionDomain Deserializer::deserialize_reduction_domain(con
 }
 
 Halide::Internal::ModulusRemainder Deserializer::deserialize_modulus_remainder(const Halide::Serialize::ModulusRemainder *modulus_remainder) {
+    assert(modulus_remainder != nullptr);
     return Halide::Internal::ModulusRemainder(modulus_remainder->modulus(), modulus_remainder->remainder());
 }
 
 Halide::Internal::PrefetchDirective Deserializer::deserialize_prefetch_directive(const Halide::Serialize::PrefetchDirective *prefetch_directive) {
+    assert(prefetch_directive != nullptr);
     auto name = deserialize_string(prefetch_directive->name());
     auto at = deserialize_string(prefetch_directive->at());
     auto from = deserialize_string(prefetch_directive->from());
@@ -821,6 +838,7 @@ Halide::Internal::PrefetchDirective Deserializer::deserialize_prefetch_directive
 }
 
 Halide::Internal::Split Deserializer::deserialize_split(const Halide::Serialize::Split *split) {
+    assert(split != nullptr);
     auto old_var = deserialize_string(split->old_var());
     auto outer = deserialize_string(split->outer());
     auto inner = deserialize_string(split->inner());
@@ -838,6 +856,7 @@ Halide::Internal::Split Deserializer::deserialize_split(const Halide::Serialize:
 }
 
 Halide::Internal::Dim Deserializer::deserialize_dim(const Halide::Serialize::Dim *dim) {
+    assert(dim != nullptr);
     auto var = deserialize_string(dim->var());
     auto for_type = deserialize_for_type(dim->for_type());
     auto device_api = deserialize_device_api(dim->device_api());
@@ -851,6 +870,7 @@ Halide::Internal::Dim Deserializer::deserialize_dim(const Halide::Serialize::Dim
 }
 
 Halide::FuseLoopLevel Deserializer::deserialize_fuse_loop_level(const Halide::Serialize::FuseLoopLevel *fuse_loop_level) {
+    assert(fuse_loop_level != nullptr);
     auto fuse_level = deserialize_loop_level(fuse_loop_level->fuse_level());
     std::vector<std::string> align_dimension_names;
     std::vector<Halide::LoopAlignStrategy> align_strategies;
@@ -868,6 +888,7 @@ Halide::FuseLoopLevel Deserializer::deserialize_fuse_loop_level(const Halide::Se
 }
 
 Halide::Internal::FusedPair Deserializer::deserialize_fused_pair(const Halide::Serialize::FusedPair *fused_pair) {
+    assert(fused_pair != nullptr);
     auto func_1 = deserialize_string(fused_pair->func_1());
     auto func_2 = deserialize_string(fused_pair->func_2());
     auto var_name = deserialize_string(fused_pair->var_name());
@@ -875,6 +896,7 @@ Halide::Internal::FusedPair Deserializer::deserialize_fused_pair(const Halide::S
 }
 
 Halide::Internal::StageSchedule Deserializer::deserialize_stage_schedule(const Halide::Serialize::StageSchedule *stage_schedule) {
+    assert(stage_schedule != nullptr);
     std::vector<Halide::Internal::ReductionVariable> rvars;
     rvars.reserve(stage_schedule->rvars()->size());
     for (const auto &rvar : *stage_schedule->rvars()) {
@@ -910,6 +932,7 @@ Halide::Internal::StageSchedule Deserializer::deserialize_stage_schedule(const H
 }
 
 Halide::Internal::BufferConstraint Deserializer::deserialize_buffer_constraint(const Halide::Serialize::BufferConstraint *buffer_constraint) {
+    assert(buffer_constraint != nullptr);
     auto min = deserialize_expr(buffer_constraint->min_type(), buffer_constraint->min());
     auto extent = deserialize_expr(buffer_constraint->extent_type(), buffer_constraint->extent());
     auto stride = deserialize_expr(buffer_constraint->stride_type(), buffer_constraint->stride());
@@ -924,6 +947,7 @@ Halide::Internal::BufferConstraint Deserializer::deserialize_buffer_constraint(c
 }
 
 Halide::Internal::Parameter Deserializer::deserialize_parameter(const Halide::Serialize::Parameter *parameter) {
+    assert(parameter != nullptr);
     bool defined = parameter->defined();
     if (!defined) {
         return Halide::Internal::Parameter();

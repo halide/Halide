@@ -808,13 +808,15 @@ flatbuffers::Offset<Halide::Serialize::Definition> Serializer::serialize_definit
         args_types.push_back(arg_serialized.first);
         args_serialized.push_back(arg_serialized.second);
     }
+    auto stage_schedule_serialized = serialize_stage_schedule(builder, definition.schedule());
     std::vector<flatbuffers::Offset<Halide::Serialize::Specialization>> specializations_serialized;
     for (const auto &specialization : definition.specializations()) {
         specializations_serialized.push_back(serialize_specialization(builder, specialization));
     }
     auto source_location_serialized = serialize_string(builder, definition.source_location());
     return Halide::Serialize::CreateDefinition(builder, is_init, predicate_serialized.first, predicate_serialized.second, builder.CreateVector(values_types),
-                                               builder.CreateVector(values_serialized), builder.CreateVector(args_types), builder.CreateVector(args_serialized), builder.CreateVector(specializations_serialized), source_location_serialized);
+                                               builder.CreateVector(values_serialized), builder.CreateVector(args_types), builder.CreateVector(args_serialized),
+                                               stage_schedule_serialized, builder.CreateVector(specializations_serialized), source_location_serialized);
 }
 
 flatbuffers::Offset<Halide::Serialize::ReductionVariable> Serializer::serialize_reduction_variable(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::ReductionVariable &reduction_variable) {

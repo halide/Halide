@@ -575,7 +575,7 @@ table Definition {
     predicate: Expr;
     values: [Expr];
     args: [Expr];
-    // stage_schedule: StageSchedule;
+    stage_schedule: StageSchedule;
     specializations: [Specialization];
     source_location: string;
 }
