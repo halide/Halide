@@ -27,15 +27,15 @@ int main(int argc, char **argv) {
 
     // Make a ring of colored blobs to composite over the input, each using a different blend mode
     Buffer<uint8_t, 3> blobs[5];
-    int op_codes[] = {4, 3, 2, 1, 0}; // These op codes specify the blend mode to use for each layer.
+    int op_codes[] = {4, 3, 2, 1, 0};  // These op codes specify the blend mode to use for each layer.
     Buffer<int, 1> ops(op_codes);
     for (int i = 0; i < 5; i++) {
         blobs[i] = Buffer<uint8_t, 3>::make_with_shape_of(input);
         blobs[i].fill(255);
         for (int y = 0; y < blobs[i].height(); y++) {
             for (int x = 0; x < blobs[i].width(); x++) {
-                int cx = cos(i * 2 * M_PI / 5) * 300 + input.width()/2;
-                int cy = sin(i * 2 * M_PI / 5) * 300 + input.height()/2;                                
+                int cx = cos(i * 2 * M_PI / 5) * 300 + input.width() / 2;
+                int cy = sin(i * 2 * M_PI / 5) * 300 + input.height() / 2;
                 int alpha = std::min(255, std::min(std::max(0, 500 - std::abs(x - cx)), std::max(0, 500 - std::abs(y - cy))));
                 blobs[i](x, y, 3) = alpha;
                 blobs[i](x, y, 0) = 255;
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
             }
         }
     }
-    
+
     compositing(input, blobs[0], blobs[1], blobs[2], blobs[3], blobs[4], ops, output);
 
     // Timing code
