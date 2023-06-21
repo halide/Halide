@@ -2,10 +2,15 @@
 
 namespace {
 
-constexpr int num_layers = 6;
-
+// This app does Porter-Duff compositing using a runtime-provided list of blend
+// modes and layers. It demonstrates how to write a mini-interpreter in Halide
+// that ingests some byte code to determine what to do. It also demonstrates
+// some fixed-point math patterns useful in compositing.
 class Compositing : public Halide::Generator<Compositing> {
     Var x{"x"}, y{"y"}, c{"c"};
+
+    static constexpr int num_layers = 6;
+    static constexpr int num_blend_modes = 5;
 
 public:
     Input<Buffer<uint8_t, 3>[num_layers]> layer_rgba { "layer_rgba" };
@@ -14,14 +19,14 @@ public:
 
     Tuple premultiply_alpha(Tuple in) {
         if (get_target().has_gpu_feature()) {
-            const float scale = 1/255.0f;
-            // Use floats on GPU
+            const float scale = 1 / 255.0f;
+            // Use floats on GPU for intermediates
             in[3] = in[3] * scale;
             for (int i = 0; i < 3; i++) {
                 in[i] = in[i] * (scale * in[3]);
             }
         } else {
-            // On CPU, use uint16s for color components, and uint8 for alpha.
+            // On CPU, use uint16s for color components with premultiplied alpha, and uint8 for alpha.
             for (int i = 0; i < 3; i++) {
                 in[i] = widening_mul(in[i], in[3]);
             }
@@ -38,13 +43,13 @@ public:
             }
         } else {
             for (int i = 0; i < 3; i++) {
-                in[i] = fast_integer_divide(in[i] + in[3]/2, in[3]);
+                in[i] = fast_integer_divide(in[i] + in[3] / 2, in[3]);
                 in[i] = saturating_cast(UInt(8), in[i]);
             }
         }
         return in;
     }
-    
+
     Expr scale(Expr a, Expr b) {
         if (a.type().is_float()) {
             return a * b;
@@ -65,7 +70,8 @@ public:
             return ~e;
         }
     }
-    
+
+    // Various Porter-Duff blend modes, in terms of the operators above.
     Tuple over(const Tuple &a, const Tuple &b) {
         std::vector<Expr> c(4);
         for (int i = 0; i < 3; i++) {
@@ -112,25 +118,34 @@ public:
     }
 
     void generate() {
+        // RGB and alpha potentially have different types, so we store them as a Tuple
         std::vector<Tuple> layer_vec;
         for (int i = 0; i < num_layers; i++) {
             layer_vec.push_back({layer_rgba[i](x, y, 0), layer_rgba[i](x, y, 1), layer_rgba[i](x, y, 2), layer_rgba[i](x, y, 3)});
         }
 
+        // Combine the separate layers into a single Func
         Func layer_muxed{"layer_muxed"};
         Var k{"k"};
         layer_muxed(x, y, k) = mux(k, layer_vec);
 
+        // Convert to premultiplied alpha in the working type (float on GPU, uint16 on CPU)
         Func blended{"blended"};
-        blended(x, y) = premultiply_alpha(layer_vec[0]);  
+        blended(x, y) = premultiply_alpha(layer_vec[0]);
 
-        RDom r(0, 5, 0, num_layers - 1);
+        // We will perform all blend modes on all layers, and then use an
+        // RDom::where clause to restrict it to the desired blend mode for each
+        // layer. If we then unroll over r[0], this compiles to a switch
+        // statement. It is a useful pattern for writing mini interpreters that
+        // ingest a bytecode and use it to switch between various ops.
+        RDom r(0, num_blend_modes, 0, num_layers - 1);
         r.where(r[0] == ops(r[1]));
         Tuple a = blended(x, y);
         Tuple b = premultiply_alpha(layer_muxed(x, y, r[1] + 1));
         std::vector<Tuple> blends = {over(a, b), atop(a, b), xor_(a, b), in(a, b), out(a, b)};
         blended(x, y) = mux(r[0], blends);
 
+        // Divide by alpha and convert back to uint8.
         output(x, y, c) = mux(c, normalize(blended(x, y)));
 
         /* ESTIMATES */
@@ -150,9 +165,29 @@ public:
         } else {
             const int vec = natural_vector_size<uint8_t>();
             Var yo{"yo"}, yi{"yi"};
-            output.split(y, yo, yi, 8).parallel(yo).vectorize(x, vec).reorder(c, x, yi, yo).bound(c, 0, 4).unroll(c);
+            output.split(y, yo, yi, 8)
+                .parallel(yo)
+                .vectorize(x, vec)
+                .reorder(c, x, yi, yo)
+                .bound(c, 0, 4)
+                .unroll(c);
 
-            blended.store_in(MemoryType::Stack).compute_at(output, yi).vectorize(x, vec).update().reorder(x, r[0], r[1]).unroll(r[0]).unroll(r[1]).vectorize(x, vec);
+            // Compute the intermediate state per row of the output, so that our
+            // switch over the op codes can be outside the loop over x.
+            blended.store_in(MemoryType::Stack)
+                .compute_at(output, yi)
+                .vectorize(x, vec)
+                .update()
+                .reorder(x, r[0], r[1])
+                // Unroll over the possible blend modes to get a switch statement.
+                .unroll(r[0])
+                // Unroll over layers to remove the mux in layer_muxed. Ideally
+                // this wouldn't be necessary because LLVM should really convert
+                // a select of loads of the same index into a select between the
+                // base pointers hoisted outside of the inner loop, but
+                // unfortunately it doesn't.
+                .unroll(r[1])
+                .vectorize(x, vec);
         }
     }
 };
