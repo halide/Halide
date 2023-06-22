@@ -47,9 +47,9 @@ private:
 
     void deserialize_function(const Halide::Serialize::Func *function, Halide::Internal::Function &hl_function);
 
-    Halide::Internal::Stmt deserialize_stmt(uint8_t type_code, const void *stmt);
+    Halide::Internal::Stmt deserialize_stmt(Halide::Serialize::Stmt type_code, const void *stmt);
 
-    Halide::Expr deserialize_expr(uint8_t type_code, const void *expr);
+    Halide::Expr deserialize_expr(Halide::Serialize::Expr type_code, const void *expr);
 
     std::vector<Halide::Expr> deserialize_expr_vector(const flatbuffers::Vector<uint8_t> *exprs_types, const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized);
 

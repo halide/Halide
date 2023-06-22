@@ -3,6 +3,7 @@
 #include <iostream>
 
 std::string Deserializer::deserialize_string(const flatbuffers::String *str) {
+    _halide_user_assert(str != nullptr) << "deserializing a null string\n";
     return str->str();
 }
 
@@ -243,7 +244,7 @@ Halide::ExternFuncArgument::ArgType Deserializer::deserialize_extern_func_argume
 }
 
 Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type) {
-    assert(type != nullptr);
+    _halide_user_assert(type != nullptr) << "deserializing a null Type\n";
     using Halide::Serialize::TypeCode;
     int bits = type->bits();
     int lanes = type->lanes();
@@ -271,7 +272,7 @@ Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type)
 }
 
 void Deserializer::deserialize_function(const Halide::Serialize::Func *function, Halide::Internal::Function &hl_function) {
-    assert(function != nullptr);
+    _halide_user_assert(function != nullptr) << "deserializing a null Function\n";
     std::string name = deserialize_string(function->name());
     std::string origin_name = deserialize_string(function->origin_name());
     std::vector<Halide::Type> output_types;
@@ -330,8 +331,8 @@ void Deserializer::deserialize_function(const Halide::Serialize::Func *function,
                                             trace_loads, trace_stores, trace_realizations, trace_tags, frozen);
 }
 
-Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const void *stmt) {
-    assert(stmt != nullptr);
+Halide::Internal::Stmt Deserializer::deserialize_stmt(Halide::Serialize::Stmt type_code, const void *stmt) {
+    _halide_user_assert(stmt != nullptr) << "deserializing a null Stmt\n";
     switch (type_code) {
     case Halide::Serialize::Stmt_LetStmt: {
         const Halide::Serialize::LetStmt *let_stmt = (const Halide::Serialize::LetStmt *)stmt;
@@ -483,7 +484,7 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
     }
 }
 
-Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr) {
+Halide::Expr Deserializer::deserialize_expr(Halide::Serialize::Expr type_code, const void *expr) {
     assert(expr != nullptr);
     switch (type_code) {
     case Halide::Serialize::Expr::Expr_IntImm: {
@@ -708,7 +709,7 @@ std::vector<Halide::Expr> Deserializer::deserialize_expr_vector(const flatbuffer
     std::vector<Halide::Expr> result;
     result.reserve(exprs_serialized->size());
     for (size_t i = 0; i < exprs_serialized->size(); ++i) {
-        auto expr = deserialize_expr(exprs_types->Get(i), exprs_serialized->Get(i));
+        auto expr = deserialize_expr(static_cast<Halide::Serialize::Expr>(exprs_types->Get(i)), exprs_serialized->Get(i));
         result.push_back(expr);
     }
     return result;
@@ -1111,7 +1112,7 @@ Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     std::vector<Halide::Internal::Stmt> requirements;
     requirements.reserve(requirements_objs->size());
     for (size_t i = 0; i < requirements_objs->size(); ++i) {
-        auto requirement_deserialized = deserialize_stmt(requirement_type_objs->Get(i), requirements_objs->Get(i));
+        auto requirement_deserialized = deserialize_stmt(static_cast<Halide::Serialize::Stmt>(requirement_type_objs->Get(i)), requirements_objs->Get(i));
         requirements.push_back(requirement_deserialized);
     }
     return Halide::Pipeline(output_funcs);
