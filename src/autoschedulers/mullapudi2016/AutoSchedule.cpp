@@ -510,7 +510,7 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
                         }
                     } get_all_exprs;
                     def.mutate(&get_all_exprs);
-                    
+
                     // Find the regions required for each value of the current function stage,
                     // update the region map, and add them to the queue.
                     for (const auto &val : get_all_exprs.exprs) {
