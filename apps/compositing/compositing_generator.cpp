@@ -13,8 +13,13 @@ class Compositing : public Halide::Generator<Compositing> {
     static constexpr int num_blend_modes = 5;
 
 public:
+    // A stack of RGBA layers to composite.
     Input<Buffer<uint8_t, 3>[num_layers]> layer_rgba { "layer_rgba" };
+
+    // The blend modes to use for each layer after the first.
     Input<Buffer<int, 1>> ops{"ops"};
+
+    // An RGBA output buffer.
     Output<Buffer<uint8_t, 3>> output{"output"};
 
     Tuple premultiply_alpha(Tuple in) {
