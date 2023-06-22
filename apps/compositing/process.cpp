@@ -13,6 +13,11 @@
 using namespace Halide::Runtime;
 using namespace Halide::Tools;
 
+// MSVC doesn't define this by default
+#ifndef M_PI
+#define M_PI 3.14159265358979310000
+#endif
+
 int main(int argc, char **argv) {
     if (argc < 4) {
         printf("Usage: ./process input.png timing_iterations output.png\n"
