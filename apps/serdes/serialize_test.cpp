@@ -10,9 +10,9 @@ int main(int argc, char **argv) {
     Halide::Var x, y;
     gradient(x, y) = x + y;
     Halide::Func blurx("blurx_func");
-    blurx(x, y) = (gradient(x-1, y) + gradient(x, y) + gradient(x+1, y)) / 3;
+    blurx(x, y) = (gradient(x - 1, y) + gradient(x, y) + gradient(x + 1, y)) / 3;
     Halide::Func blury("blury_func");
-    blury(x, y) = (blurx(x, y-1) + blurx(x, y) + blurx(x, y+1)) / 3;
+    blury(x, y) = (blurx(x, y - 1) + blurx(x, y) + blurx(x, y + 1)) / 3;
     Halide::Pipeline pipe(blury);
 
     // print before serialization

@@ -252,7 +252,7 @@ Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type)
     return Halide::Type(code, bits, lanes);
 }
 
-Halide::Internal::Function Deserializer::deserialize_function(const Halide::Serialize::Func *function) {
+void Deserializer::deserialize_function(const Halide::Serialize::Func *function, Halide::Internal::Function &hl_function) {
     assert(function != nullptr);
     std::string name = deserialize_string(function->name());
     std::string origin_name = deserialize_string(function->origin_name());
@@ -300,11 +300,11 @@ Halide::Internal::Function Deserializer::deserialize_function(const Halide::Seri
     }
     bool frozen = function->frozen();
 
-    return Halide::Internal::Function(name, origin_name, output_types, required_types,
-                                      required_dim, args, func_schedule, init_def, updates,
-                                      debug_file, output_buffers, extern_function_name, name_mangling,
-                                      extern_function_device_api, extern_proxy_expr,
-                                      trace_loads, trace_stores, trace_realizations, trace_tags, frozen);
+    hl_function.update_with_deserialization(name, origin_name, output_types, required_types,
+                                            required_dim, args, func_schedule, init_def, updates,
+                                            debug_file, output_buffers, extern_function_name, name_mangling,
+                                            extern_function_device_api, extern_proxy_expr,
+                                            trace_loads, trace_stores, trace_realizations, trace_tags, frozen);
 }
 
 Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const void *stmt) {
@@ -631,10 +631,15 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         auto name = deserialize_string(call_expr->name());
         std::vector<Halide::Expr> args = deserialize_expr_vector(call_expr->args_type(), call_expr->args());
         auto value_index = call_expr->value_index();
+        int func_index = call_expr->func_index();
+        Halide::Internal::FunctionPtr func_ptr;
+        if (func_index != -1) {
+            func_ptr = this->reverse_function_mappings[func_index];
+        }
         auto call_type = deserialize_call_type(call_expr->call_type());
         auto param = deserialize_parameter(call_expr->param());
         // TODO: fix type and function ptr here once function DAG is fixed
-        return Halide::Internal::Call::make(Halide::Int(32), name, args, call_type, Halide::Internal::FunctionPtr(), value_index, Halide::Buffer<>(), param);
+        return Halide::Internal::Call::make(Halide::Int(32), name, args, call_type, func_ptr, value_index, Halide::Buffer<>(), param);
     }
     case Halide::Serialize::Expr::Expr_Variable: {
         const Halide::Serialize::Variable *variable_expr = (const Halide::Serialize::Variable *)expr;
@@ -979,32 +984,12 @@ Halide::Internal::Parameter Deserializer::deserialize_parameter(const Halide::Se
     }
 }
 
-// TODO: will need to serialize a reverse table of map<address, func_name> to
-//       later reconstruct a map of <name, func_ptr> find out which function ptrs to use here
-// std::map<std::string, Halide::Internal::FunctionPtr> Deserializer::deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs) {
-//     return std::map<std::string, Halide::Internal::FunctionPtr>();
-// }
-
-// std::map<std::string, int32_t> Deserializer::deserialize_func_mappings(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> *func_mappings) {
-//     std::map<std::string, int32_t> result;
-//     for (const auto &func_mapping : *func_mappings) {
-//         auto name = deserialize_string(func_mapping->name());
-//         auto index = func_mapping->index();
-//         result[name] = index;
-//     }
-//     return result;
-// }
-
-// std::map<int32_t, Halide::Internal::FunctionPtr> Deserializer::reconstruct_func_ptr_mappings() {
-//     std::map<int32_t, Halide::Internal::FunctionPtr> result;
-//     for (const auto &mapping : this->func_mappings_str2idx) {
-//         auto name = mapping.first;
-//         auto index = mapping.second;
-//         auto func_ptr = this->func_mappings_idx2ptr[index];
-//         result[index] = func_ptr;
-//     }
-//     return result;
-// }
+void Deserializer::build_reverse_function_mappings(const std::vector<Halide::Internal::Function> &functions) {
+    int cnt = 0;
+    for (const auto &f : functions) {
+        this->reverse_function_mappings[cnt++] = f.get_contents();
+    }
+}
 
 Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     // unpack binary file
@@ -1024,13 +1009,27 @@ Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     const auto *pipeline_obj = Halide::Serialize::GetPipeline(data.data());
     // this->func_mappings_str2idx = deserialize_func_mappings(pipeline_obj->func_mappings());
     // this->func_mappings_idx2ptr = reconstruct_func_ptr_mappings();
-    const auto *func_objs = pipeline_obj->outputs();
+    std::vector<Halide::Internal::Function> functions(pipeline_obj->funcs()->size());
+    build_reverse_function_mappings(functions);
+
     std::vector<Halide::Func> funcs;
-    funcs.reserve(func_objs->size());
-    for (const auto &fo : *func_objs) {
-        auto function_deserialized = deserialize_function(fo);
-        Halide::Func func(function_deserialized);
-        funcs.push_back(func);
+    for (size_t i = 0; i < pipeline_obj->funcs()->size(); ++i) {
+        deserialize_function(pipeline_obj->funcs()->Get(i), functions[i]);
+        funcs.push_back(Halide::Func(functions[i]));
+    }
+
+    std::vector<std::string> output_names;
+    output_names.reserve(pipeline_obj->output_names()->size());
+    for (const auto &output_name : *pipeline_obj->output_names()) {
+        output_names.push_back(deserialize_string(output_name));
+    }
+    std::vector<Halide::Func> output_funcs;
+    for (const auto &f : funcs) {
+        for (const auto &output_name : output_names) {
+            if (f.name() == output_name) {
+                output_funcs.push_back(f);
+            }
+        }
     }
 
     const auto *requirements_objs = pipeline_obj->requirements();
@@ -1042,5 +1041,5 @@ Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
         auto requirement_deserialized = deserialize_stmt(requirement_type_objs->Get(i), requirements_objs->Get(i));
         requirements.push_back(requirement_deserialized);
     }
-    return Halide::Pipeline(funcs);
+    return Halide::Pipeline(output_funcs);
 }

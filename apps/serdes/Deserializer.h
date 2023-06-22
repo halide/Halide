@@ -14,8 +14,7 @@ public:
     Halide::Pipeline deserialize(const std::string &filename);
 
 private:
-    std::map<std::string, int32_t> func_mappings_str2idx;
-    std::map<int32_t, Halide::Internal::FunctionPtr> func_mappings_idx2ptr;
+    std::map<int32_t, Halide::Internal::FunctionPtr> reverse_function_mappings;
 
     // helper functions to deserialize each type of object
     Halide::MemoryType deserialize_memory_type(const Halide::Serialize::MemoryType memory_type);
@@ -44,7 +43,7 @@ private:
 
     Halide::Type deserialize_type(const Halide::Serialize::Type *type);
 
-    Halide::Internal::Function deserialize_function(const Halide::Serialize::Func *function);
+    void deserialize_function(const Halide::Serialize::Func *function, Halide::Internal::Function &hl_function);
 
     Halide::Internal::Stmt deserialize_stmt(uint8_t type_code, const void *stmt);
 
@@ -88,11 +87,7 @@ private:
 
     Halide::Internal::Parameter deserialize_parameter(const Halide::Serialize::Parameter *parameter);
 
-    // std::map<std::string, Halide::Internal::FunctionPtr> deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrapper_refs);
-
-    // std::map<std::string, int32_t> deserialize_func_mappings(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> *func_mappings);
-
-    // std::map<int32_t, Halide::Internal::FunctionPtr> reconstruct_func_ptr_mappings();
+    void build_reverse_function_mappings(const std::vector<Halide::Internal::Function> &functions);
 };
 
 #endif

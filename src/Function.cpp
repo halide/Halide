@@ -331,12 +331,12 @@ Function::Function(const std::vector<Type> &required_types, int required_dims, c
     contents->required_dims = required_dims;
 }
 
-Function::Function(const std::string &name, const std::string &origin_name, const std::vector<Halide::Type> &output_types,
-                   const std::vector<Halide::Type> &required_types, int required_dims, const std::vector<std::string> &args,
-                   const FuncSchedule &func_schedule, const Definition &init_def, const std::vector<Definition> &updates,
-                   const std::string &debug_file, const std::vector<Parameter> &output_buffers, const std::string &extern_function_name, NameMangling name_mangling,
-                   DeviceAPI device_api, const Expr &extern_proxy_expr, bool trace_loads, bool trace_stores, bool trace_realizations,
-                   const std::vector<std::string> &trace_tags, bool frozen) {
+void Function::update_with_deserialization(const std::string &name, const std::string &origin_name, const std::vector<Halide::Type> &output_types,
+                                           const std::vector<Halide::Type> &required_types, int required_dims, const std::vector<std::string> &args,
+                                           const FuncSchedule &func_schedule, const Definition &init_def, const std::vector<Definition> &updates,
+                                           const std::string &debug_file, const std::vector<Parameter> &output_buffers, const std::string &extern_function_name, NameMangling name_mangling,
+                                           DeviceAPI device_api, const Expr &extern_proxy_expr, bool trace_loads, bool trace_stores, bool trace_realizations,
+                                           const std::vector<std::string> &trace_tags, bool frozen) {
     contents.strong = new FunctionGroup;
     contents.strong->members.resize(1);
     contents->name = name;

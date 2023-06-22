@@ -386,7 +386,7 @@ table Call {
     name: string;
     args: [Expr];
     call_type: CallType;
-    // func: FunctionPtr; TODO: no FunctionPtr yet
+    func_index: int32;
     value_index: int32;
     // image: Buffer; TODO: no Buffer yet
     param: Parameter;
@@ -643,7 +643,8 @@ table Func {
 }
 
 table Pipeline {
-    outputs: [Func];
+    funcs: [Func];
+    output_names: [string];
     requirements: [Stmt];
     // trace_pipeline: bool;
     // func_mappings: [FuncMapping];

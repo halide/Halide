@@ -600,9 +600,14 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
             args_serialized.push_back(arg_serialized.second);
         }
         auto call_type = serialize_call_type(call_expr->call_type);
+        auto raw_func_ptr = call_expr->func.get();
+        int func_index = -1;
+        if (this->func_mappings.find(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(raw_func_ptr))) == this->func_mappings.end()) {
+            func_index = this->func_mappings[static_cast<uint64_t>(reinterpret_cast<uintptr_t>(raw_func_ptr))];
+        }
         auto value_index = call_expr->value_index;
         auto param_serialized = serialize_parameter(builder, call_expr->param);
-        return std::make_pair(Halide::Serialize::Expr::Expr_Call, Halide::Serialize::CreateCall(builder, name_serialized, builder.CreateVector(args_types), builder.CreateVector(args_serialized), call_type, value_index, param_serialized).Union());
+        return std::make_pair(Halide::Serialize::Expr::Expr_Call, Halide::Serialize::CreateCall(builder, name_serialized, builder.CreateVector(args_types), builder.CreateVector(args_serialized), call_type, func_index, value_index, param_serialized).Union());
     }
     case Halide::Internal::IRNodeType::Variable: {
         auto variable_expr = expr.as<Halide::Internal::Variable>();
@@ -969,42 +974,18 @@ flatbuffers::Offset<Halide::Serialize::Parameter> Serializer::serialize_paramete
     }
 }
 
-// std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers) {
-//     // instead of storing the function pointer or raw function address,
-//     // we store a pre-computed function index as the serialized format for WrapperRef
-//     std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> wrapper_refs_serialized;
-//     for (const auto& it : wrappers) {
-//         std::string name = it.first;
-//         const Halide::Internal::FunctionPtr& func_ptr = it.second;
-//         // TODO: is `name` and `Function(it.second).name()` the same thing?
-//         if (auto fm_it = this->func_mappings.find(Halide::Internal::Function(it.second).name()); it != this->func_mappings.end()) {
-//             int32_t func_idx = fm_it->second;
-//             auto name_serialized = serialize_string(builder, name);
-//             wrapper_refs_serialized.push_back(Halide::Serialize::CreateWrapperRef(builder, name_serialized, func_idx));
-//         } else {
-//             std::cerr << "func " << name << " not found in func_mappings\n";
-//             exit(1);
-//         }
-//     }
-//     return wrapper_refs_serialized;
-// }
-
-// std::vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> Serializer::serialize_func_mappings(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, int32_t> &func_mappings) {
-//     std::vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> func_mappings_serialized;
-//     for (const auto& it : func_mappings) {
-//         std::string name = it.first;
-//         int32_t index = it.second;
-//         auto name_serialized = serialize_string(builder, name);
-//         func_mappings_serialized.push_back(Halide::Serialize::CreateFuncMapping(builder, name_serialized, index));
-//     }
-//     return func_mappings_serialized;
-// }
+void Serializer::build_function_mappings(const std::map<std::string, Halide::Internal::Function> &env) {
+    int32_t cnt = 0;
+    for (const auto &it : env) {
+        Halide::Internal::FunctionPtr func_ptr = it.second.get_contents();
+        func_mappings[static_cast<uint64_t>(reinterpret_cast<uintptr_t>(func_ptr.get()))] = cnt++;
+    }
+}
 
 void Serializer::serialize(const Halide::Pipeline &pipeline, const std::string &filename) {
     std::cout << "Serializing a pipeline into " << filename << "\n";
     flatbuffers::FlatBufferBuilder builder(1024);
     std::map<std::string, Halide::Internal::Function> env;
-    std::map<std::string, int32_t> func_mappings;
 
     // extract the DAG, unwarp function from Funcs
     for (const Halide::Func &func : pipeline.outputs()) {
@@ -1013,33 +994,19 @@ void Serializer::serialize(const Halide::Pipeline &pipeline, const std::string &
         env.insert(more_funcs.begin(), more_funcs.end());
     }
 
-    // construct the internal func mapping that will be used
-    // through serialization/deserialization to reassamble the DAG
-    // {
-    //     int32_t i = 0;
-    //     for (const auto& it: env) {
-    //         func_mappings[it.first] = i++;
-    //     }
-    //     this->func_mappings = func_mappings;
-    // }
+    build_function_mappings(env);
 
-    // serialize each func
-    // TODO: this should be the correct way to serialize the whole DAG
-    //       a vector of all funcs + an extra map to map from name to index
-    //       but for now let me skip this
-    // std::vector<flatbuffers::Offset<Halide::Serialize::Func>> func_vector;
-    // for (auto it = env.begin(); it != env.end(); ++it) {
-    //     func_vector.push_back(this->serialize_func(builder, it->second));
-    // }
-    // auto funcs = builder.CreateVector(func_vector);
+    std::vector<flatbuffers::Offset<Halide::Serialize::Func>> funcs_serialized;
+    for (const auto &it : env) {
+        funcs_serialized.push_back(this->serialize_function(builder, it.second));
+    }
 
     auto outpus = pipeline.outputs();
-    std::vector<flatbuffers::Offset<Halide::Serialize::Func>> funcs_serialized;
-    for (const auto &func : outpus) {
-        funcs_serialized.push_back(this->serialize_function(builder, func.function()));
+    std::vector<flatbuffers::Offset<flatbuffers::String>> output_names_serialized;
+    output_names_serialized.reserve(outpus.size());
+    for (const auto &output : outpus) {
+        output_names_serialized.push_back(serialize_string(builder, output.name()));
     }
-    auto funcs = builder.CreateVector(funcs_serialized);
-
     // requirements
     auto requirements = pipeline.requirements();
     std::vector<flatbuffers::Offset<void>> requirements_serialized;
@@ -1056,7 +1023,8 @@ void Serializer::serialize(const Halide::Pipeline &pipeline, const std::string &
 
     // auto func_mappings_serialized = serialize_func_mappings(builder, func_mappings);
 
-    auto pipeline_obj = Halide::Serialize::CreatePipeline(builder, funcs, requirements_types_vector, requirements_vector);
+    auto pipeline_obj = Halide::Serialize::CreatePipeline(builder, builder.CreateVector(funcs_serialized), builder.CreateVector(output_names_serialized),
+                                                          requirements_types_vector, requirements_vector);
     builder.Finish(pipeline_obj);
 
     // write the binary file

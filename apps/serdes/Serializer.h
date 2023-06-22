@@ -16,7 +16,7 @@ public:
     void serialize(const Halide::Pipeline &pipeline, const std::string &filename);
 
 private:
-    // std::map<std::string, int32_t> func_mappings;
+    std::map<uint64_t, int32_t> func_mappings;
 
     // helper functions to serialize each type of object
     Halide::Serialize::MemoryType serialize_memory_type(const Halide::MemoryType &memory_type);
@@ -88,9 +88,8 @@ private:
     flatbuffers::Offset<Halide::Serialize::BufferConstraint> serialize_buffer_constraint(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::BufferConstraint &buffer_constraint);
 
     flatbuffers::Offset<Halide::Serialize::Parameter> serialize_parameter(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Parameter &parameter);
-    // std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers);
 
-    // std::vector<flatbuffers::Offset<Halide::Serialize::FuncMapping>> serialize_func_mappings(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, int32_t> &func_mappings);
+    void build_function_mappings(const std::map<std::string, Halide::Internal::Function> &env);
 };
 
 #endif
