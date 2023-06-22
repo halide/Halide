@@ -224,6 +224,24 @@ Halide::LoopAlignStrategy Deserializer::deserialize_loop_align_strategy(const Ha
     }
 }
 
+Halide::ExternFuncArgument::ArgType Deserializer::deserialize_extern_func_argument_type(const Halide::Serialize::ExternFuncArgumentType extern_func_argument_type) {
+    switch (extern_func_argument_type) {
+    case Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_UndefinedArg:
+        return Halide::ExternFuncArgument::ArgType::UndefinedArg;
+    case Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_FuncArg:
+        return Halide::ExternFuncArgument::ArgType::FuncArg;
+    case Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_BufferArg:
+        return Halide::ExternFuncArgument::ArgType::BufferArg;
+    case Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ExprArg:
+        return Halide::ExternFuncArgument::ArgType::ExprArg;
+    case Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ImageParamArg:
+        return Halide::ExternFuncArgument::ArgType::ImageParamArg;
+    default:
+        std::cerr << "unknown extern func argument type " << extern_func_argument_type << "\n";
+        exit(1);
+    }
+}
+
 Halide::Type Deserializer::deserialize_type(const Halide::Serialize::Type *type) {
     assert(type != nullptr);
     using Halide::Serialize::TypeCode;
@@ -287,6 +305,11 @@ void Deserializer::deserialize_function(const Halide::Serialize::Func *function,
     for (const auto &output_buffer : *function->output_buffers()) {
         output_buffers.push_back(deserialize_parameter(output_buffer));
     }
+    std::vector<Halide::ExternFuncArgument> extern_arguments;
+    extern_arguments.reserve(function->extern_arguments()->size());
+    for (const auto &extern_argument : *function->extern_arguments()) {
+        extern_arguments.push_back(deserialize_extern_func_argument(extern_argument));
+    }
 
     std::string extern_function_name = deserialize_string(function->extern_function_name());
     auto name_mangling = deserialize_name_mangling(function->extern_mangling());
@@ -302,8 +325,8 @@ void Deserializer::deserialize_function(const Halide::Serialize::Func *function,
 
     hl_function.update_with_deserialization(name, origin_name, output_types, required_types,
                                             required_dim, args, func_schedule, init_def, updates,
-                                            debug_file, output_buffers, extern_function_name, name_mangling,
-                                            extern_function_device_api, extern_proxy_expr,
+                                            debug_file, output_buffers, extern_arguments, extern_function_name,
+                                            name_mangling, extern_function_device_api, extern_proxy_expr,
                                             trace_loads, trace_stores, trace_realizations, trace_tags, frozen);
 }
 
@@ -633,8 +656,8 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         auto value_index = call_expr->value_index();
         int func_index = call_expr->func_index();
         Halide::Internal::FunctionPtr func_ptr;
-        if (func_index != -1) {
-            func_ptr = this->reverse_function_mappings[func_index];
+        if (auto it = this->reverse_function_mappings.find(func_index); it != this->reverse_function_mappings.end() && func_index != -1) {
+            func_ptr = it->second;
         }
         auto call_type = deserialize_call_type(call_expr->call_type());
         auto param = deserialize_parameter(call_expr->param());
@@ -984,6 +1007,30 @@ Halide::Internal::Parameter Deserializer::deserialize_parameter(const Halide::Se
     }
 }
 
+Halide::ExternFuncArgument Deserializer::deserialize_extern_func_argument(const Halide::Serialize::ExternFuncArgument *extern_func_argument) {
+    assert(extern_func_argument != nullptr);
+    auto arg_type = deserialize_extern_func_argument_type(extern_func_argument->arg_type());
+    if (arg_type == Halide::ExternFuncArgument::ArgType::UndefinedArg) {
+        return Halide::ExternFuncArgument();
+    } else if (arg_type == Halide::ExternFuncArgument::ArgType::FuncArg) {
+        int32_t func_index = extern_func_argument->func_index();
+        Halide::Internal::FunctionPtr func_ptr;
+        if (auto it = this->reverse_function_mappings.find(func_index); it != this->reverse_function_mappings.end() && func_index != -1) {
+            func_ptr = it->second;
+        }
+        return Halide::ExternFuncArgument(func_ptr);
+    } else if (arg_type == Halide::ExternFuncArgument::ArgType::BufferArg) {
+        // TODO: fix this
+        return Halide::ExternFuncArgument();
+    } else if (arg_type == Halide::ExternFuncArgument::ArgType::ExprArg) {
+        auto expr = deserialize_expr(extern_func_argument->expr_type(), extern_func_argument->expr());
+        return Halide::ExternFuncArgument(expr);
+    } else {
+        auto image_param = deserialize_parameter(extern_func_argument->image_param());
+        return Halide::ExternFuncArgument(image_param);
+    }
+}
+
 void Deserializer::build_reverse_function_mappings(const std::vector<Halide::Internal::Function> &functions) {
     int cnt = 0;
     for (const auto &f : functions) {
@@ -992,7 +1039,6 @@ void Deserializer::build_reverse_function_mappings(const std::vector<Halide::Int
 }
 
 Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
-    // unpack binary file
     std::ifstream in(filename, std::ios::binary | std::ios::in);
     if (!in) {
         std::cerr << "failed to open file " << filename << "\n";
@@ -1007,8 +1053,6 @@ Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     in.close();
 
     const auto *pipeline_obj = Halide::Serialize::GetPipeline(data.data());
-    // this->func_mappings_str2idx = deserialize_func_mappings(pipeline_obj->func_mappings());
-    // this->func_mappings_idx2ptr = reconstruct_func_ptr_mappings();
     std::vector<Halide::Internal::Function> functions(pipeline_obj->funcs()->size());
     build_reverse_function_mappings(functions);
 

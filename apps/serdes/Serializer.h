@@ -41,14 +41,15 @@ private:
 
     Halide::Serialize::LoopAlignStrategy serialize_loop_align_strategy(const Halide::LoopAlignStrategy &loop_align_strategy);
 
+    Halide::Serialize::ExternFuncArgumentType serialize_extern_func_argument_type(const Halide::ExternFuncArgument::ArgType &extern_func_argument_type);
+
     flatbuffers::Offset<flatbuffers::String> serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str);
 
     flatbuffers::Offset<Halide::Serialize::Type> serialize_type(flatbuffers::FlatBufferBuilder &builder, const Halide::Type &type);
 
-    // Stmt is special because it is a union type so we need to return both the type and serialized object
+    // Stmt and Expr are special because they are union types so need to return both the type and serialized object
     std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> serialize_stmt(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Stmt &stmt);
 
-    // similar to Stmt, Expr is a union type so we need to return both the type and serialized object
     std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> serialize_expr(flatbuffers::FlatBufferBuilder &builder, const Halide::Expr &expr);
 
     flatbuffers::Offset<Halide::Serialize::Func> serialize_function(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Function &function);
@@ -88,6 +89,8 @@ private:
     flatbuffers::Offset<Halide::Serialize::BufferConstraint> serialize_buffer_constraint(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::BufferConstraint &buffer_constraint);
 
     flatbuffers::Offset<Halide::Serialize::Parameter> serialize_parameter(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Parameter &parameter);
+
+    flatbuffers::Offset<Halide::Serialize::ExternFuncArgument> serialize_extern_func_argument(flatbuffers::FlatBufferBuilder &builder, const Halide::ExternFuncArgument &extern_func_argument);
 
     void build_function_mappings(const std::map<std::string, Halide::Internal::Function> &env);
 };

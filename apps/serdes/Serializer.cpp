@@ -223,6 +223,24 @@ Halide::Serialize::LoopAlignStrategy Serializer::serialize_loop_align_strategy(c
     }
 }
 
+Halide::Serialize::ExternFuncArgumentType Serializer::serialize_extern_func_argument_type(const Halide::ExternFuncArgument::ArgType &extern_func_argument_type) {
+    switch (extern_func_argument_type) {
+    case Halide::ExternFuncArgument::ArgType::UndefinedArg:
+        return Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_UndefinedArg;
+    case Halide::ExternFuncArgument::ArgType::FuncArg:
+        return Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_FuncArg;
+    case Halide::ExternFuncArgument::ArgType::BufferArg:
+        return Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_BufferArg;
+    case Halide::ExternFuncArgument::ArgType::ExprArg:
+        return Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ExprArg;
+    case Halide::ExternFuncArgument::ArgType::ImageParamArg:
+        return Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ImageParamArg;
+    default:
+        std::cerr << "Unsupported extern func argument type\n";
+        exit(1);
+    }
+}
+
 flatbuffers::Offset<flatbuffers::String> Serializer::serialize_string(flatbuffers::FlatBufferBuilder &builder, const std::string &str) {
     return builder.CreateString(str);
 }
@@ -687,6 +705,11 @@ flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_function(flat
     for (const auto &output_buffer : function.output_buffers()) {
         output_buffers_serialized.push_back(serialize_parameter(builder, output_buffer));
     }
+    std::vector<flatbuffers::Offset<Halide::Serialize::ExternFuncArgument>> extern_arguments_serialized;
+    extern_arguments_serialized.reserve(function.extern_arguments().size());
+    for (const auto &extern_argument : function.extern_arguments()) {
+        extern_arguments_serialized.push_back(serialize_extern_func_argument(builder, extern_argument));
+    }
 
     auto extern_function_name_serialized = serialize_string(builder, function.extern_function_name());
     auto extern_mangling_serialized = serialize_name_mangling(function.extern_definition_name_mangling());
@@ -703,7 +726,7 @@ flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_function(flat
     bool frozen = function.frozen();
     auto func = Halide::Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim,
                                               args_vector, func_schedule_serialized, init_def_serialized, builder.CreateVector(updates_serialized), debug_file_serialized, builder.CreateVector(output_buffers_serialized),
-                                              extern_function_name_serialized, extern_mangling_serialized, extern_function_device_api_serialized, extern_proxy_expr_serialized.first,
+                                              builder.CreateVector(extern_arguments_serialized), extern_function_name_serialized, extern_mangling_serialized, extern_function_device_api_serialized, extern_proxy_expr_serialized.first,
                                               extern_proxy_expr_serialized.second, trace_loads, trace_stores, trace_realizations, builder.CreateVector(trace_tags_serialized), frozen);
     return func;
 }
@@ -775,7 +798,6 @@ flatbuffers::Offset<Halide::Serialize::FuncSchedule> Serializer::serialize_func_
     for (const auto &estimate : func_schedule.estimates()) {
         estimates_serialized.push_back(serialize_bound(builder, estimate));
     }
-    // auto wrappers_serialized = serialize_wrapper_refs(builder, func_schedule.wrappers());
     Halide::Serialize::MemoryType memory_type = serialize_memory_type(func_schedule.memory_type());
     auto memoized = func_schedule.memoized();
     auto async = func_schedule.async();
@@ -974,6 +996,29 @@ flatbuffers::Offset<Halide::Serialize::Parameter> Serializer::serialize_paramete
     }
 }
 
+flatbuffers::Offset<Halide::Serialize::ExternFuncArgument> Serializer::serialize_extern_func_argument(flatbuffers::FlatBufferBuilder &builder, const Halide::ExternFuncArgument &extern_func_argument) {
+    auto arg_type_serialized = serialize_extern_func_argument_type(extern_func_argument.arg_type);
+    if (extern_func_argument.arg_type == Halide::ExternFuncArgument::ArgType::UndefinedArg) {
+        return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized);
+    } else if (extern_func_argument.arg_type == Halide::ExternFuncArgument::ArgType::FuncArg) {
+        int func_index = -1;
+        auto raw_func_ptr = extern_func_argument.func.get();
+        if (this->func_mappings.find(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(raw_func_ptr))) == this->func_mappings.end()) {
+            func_index = this->func_mappings[static_cast<uint64_t>(reinterpret_cast<uintptr_t>(raw_func_ptr))];
+        }
+        return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized, func_index);
+    } else if (extern_func_argument.arg_type == Halide::ExternFuncArgument::ArgType::BufferArg) {
+        // TODO: update this when buffer is ready
+        return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized);
+    } else if (extern_func_argument.arg_type == Halide::ExternFuncArgument::ArgType::ExprArg) {
+        auto expr_serialized = serialize_expr(builder, extern_func_argument.expr);
+        return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, expr_serialized.first, expr_serialized.second);
+    } else {
+        auto parameter_serialized = serialize_parameter(builder, extern_func_argument.image_param);
+        return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, Halide::Serialize::Expr_NONE, 0, parameter_serialized);
+    }
+}
+
 void Serializer::build_function_mappings(const std::map<std::string, Halide::Internal::Function> &env) {
     int32_t cnt = 0;
     for (const auto &it : env) {
@@ -1007,7 +1052,6 @@ void Serializer::serialize(const Halide::Pipeline &pipeline, const std::string &
     for (const auto &output : outpus) {
         output_names_serialized.push_back(serialize_string(builder, output.name()));
     }
-    // requirements
     auto requirements = pipeline.requirements();
     std::vector<flatbuffers::Offset<void>> requirements_serialized;
     requirements_serialized.reserve(requirements.size());
@@ -1021,13 +1065,10 @@ void Serializer::serialize(const Halide::Pipeline &pipeline, const std::string &
     auto requirements_vector = builder.CreateVector(requirements_serialized);
     auto requirements_types_vector = builder.CreateVector(requirements_types);
 
-    // auto func_mappings_serialized = serialize_func_mappings(builder, func_mappings);
-
     auto pipeline_obj = Halide::Serialize::CreatePipeline(builder, builder.CreateVector(funcs_serialized), builder.CreateVector(output_names_serialized),
                                                           requirements_types_vector, requirements_vector);
     builder.Finish(pipeline_obj);
 
-    // write the binary file
     uint8_t *buf = builder.GetBufferPointer();
     int size = builder.GetSize();
     std::ofstream out(filename, std::ios::out | std::ios::binary);

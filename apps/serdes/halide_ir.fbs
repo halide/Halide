@@ -475,11 +475,6 @@ table LoopLevel {
     locked: bool;
 }
 
-// table WrapperRef {
-//     name: string;
-//     func_idx: int32;
-// }
-
 table FuncSchedule {
     store_level: LoopLevel;
     compute_level: LoopLevel;
@@ -617,6 +612,22 @@ table Parameter {
     scalar_estimate: Expr;
 }
 
+enum ExternFuncArgumentType: ubyte {
+    UndefinedArg,
+    FuncArg,
+    BufferArg,
+    ExprArg,
+    ImageParamArg,
+}
+
+table ExternFuncArgument {
+    arg_type: ExternFuncArgumentType;
+    func_index: int32;
+    // buffer: Buffer;
+    expr: Expr;
+    image_param: Parameter;
+}
+
 // Halide::internal::Function
 table Func {
     name: string;
@@ -630,7 +641,7 @@ table Func {
     updates: [Definition];
     debug_file: string;
     output_buffers: [Parameter];
-    // extern_arguments: [ExternFuncArgument];
+    extern_arguments: [ExternFuncArgument];
     extern_function_name: string;
     extern_mangling: NameMangling;
     extern_function_device_api: DeviceAPI;

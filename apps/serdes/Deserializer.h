@@ -39,6 +39,8 @@ private:
 
     Halide::LoopAlignStrategy deserialize_loop_align_strategy(const Halide::Serialize::LoopAlignStrategy loop_align_strategy);
 
+    Halide::ExternFuncArgument::ArgType deserialize_extern_func_argument_type(const Halide::Serialize::ExternFuncArgumentType extern_func_argument_type);
+
     std::string deserialize_string(const flatbuffers::String *str);
 
     Halide::Type deserialize_type(const Halide::Serialize::Type *type);
@@ -86,6 +88,8 @@ private:
     Halide::Internal::BufferConstraint deserialize_buffer_constraint(const Halide::Serialize::BufferConstraint *buffer_constraint);
 
     Halide::Internal::Parameter deserialize_parameter(const Halide::Serialize::Parameter *parameter);
+
+    Halide::ExternFuncArgument deserialize_extern_func_argument(const Halide::Serialize::ExternFuncArgument *extern_func_argument);
 
     void build_reverse_function_mappings(const std::vector<Halide::Internal::Function> &functions);
 };
