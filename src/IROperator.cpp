@@ -7,6 +7,7 @@
 
 #include "CSE.h"
 #include "Debug.h"
+#include "Func.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -1545,6 +1546,14 @@ Expr mux(const Expr &id, const Tuple &tup) {
 
 Expr mux(const Expr &id, const std::initializer_list<Expr> &values) {
     return mux(id, std::vector<Expr>(values));
+}
+
+Expr mux(const Expr &id, const std::initializer_list<FuncRef> &values) {
+    std::vector<Expr> exprs(values.size());
+    for (size_t i = 0; i < values.size(); i++) {
+        exprs[i] = Expr(*(values.begin() + i));
+    }
+    return mux(id, exprs);
 }
 
 Tuple mux(const Expr &id, const std::initializer_list<Tuple> &values) {
