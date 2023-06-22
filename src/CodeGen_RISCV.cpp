@@ -144,6 +144,9 @@ CodeGen_RISCV::CodeGen_RISCV(const Target &t)
     user_assert(native_vector_bits() > 0) << "No vector_bits was specified for RISCV codegen; "
                                           << "this is almost certainly a mistake. You should add -rvv-vector_bits_N "
                                           << "to your Target string, where N is the SIMD width in bits (e.g. 128).";
+#if LLVM_VERSION < 170
+    user_warning << "RISCV codegen is only tested with LLVM 17.0 or later; it is unlikely to work well with earlier versions of LLVM.\n";
+#endif
 }
 
 string CodeGen_RISCV::mcpu_target() const {
@@ -272,9 +275,6 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
                                 vscale_lanes(effective_vscale, arg.type()));
     }
 
-    std::string mangled_name = "llvm.riscv.";
-    mangled_name += intrin.riscv_name;
-
     Type ret_type = op->type.with_lanes(op_max_lanes);
 
     llvm::Type *xlen_type = target.bits == 32 ? i32_t : i64_t;
@@ -298,8 +298,7 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
                       (intrin.flags & Commutes)))
         << "Cannot have both Commutes and ReverseBinOp set on an intrinsic.\n";
 
-    if (((intrin.flags & Commutes) &&
-         op->args[0].type().is_scalar()) ||
+    if (((intrin.flags & Commutes) && op->args[0].type().is_scalar()) ||
         (intrin.flags & ReverseBinOp)) {
         std::swap(left_arg, right_arg);
     }
@@ -334,50 +333,75 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
         }
     }
 
+    const bool round_down = (intrin.flags & RoundDown) != 0;
+    const bool round_up = (intrin.flags & RoundUp) != 0;
+    const bool round_any = round_down || round_up;
+    internal_assert(!(round_down && round_up));
+
     // This is the vector tail argument that provides values for uncomputed but
     // within the type length values in the result. This is always passed as
     // undef here.
-    std::vector<llvm::Type *> llvm_arg_types;
-    llvm_arg_types.push_back(llvm_ret_type);
-    llvm_arg_types.push_back(left_arg->getType());
-    llvm_arg_types.push_back(right_arg->getType());
+    std::vector<llvm::Type *> llvm_arg_types = {
+        llvm_ret_type,
+        left_arg->getType(),
+        right_arg->getType(),
+    };
+#if LLVM_VERSION >= 170
+    if (round_any) {
+        llvm_arg_types.push_back(xlen_type);
+    }
+#endif
+    if (intrin.flags & AddVLArg) {
+        llvm_arg_types.push_back(xlen_type);
+    }
+
+    // Build the mangled name for the intrinsic.
+    std::string mangled_name = "llvm.riscv.";
+    mangled_name += intrin.riscv_name;
     if (intrin.flags & MangleReturnType) {
         mangled_name += mangle_llvm_type(llvm_ret_type);
     }
     mangled_name += mangle_llvm_type(llvm_arg_types[1]);
     mangled_name += mangle_llvm_type(llvm_arg_types[2]);
-
     if (intrin.flags & AddVLArg) {
         mangled_name += (target.bits == 64) ? ".i64" : ".i32";
-        llvm_arg_types.push_back(xlen_type);
     }
 
-    llvm::Function *llvm_intrinsic =
-        get_llvm_intrin(llvm_ret_type, mangled_name, llvm_arg_types);
+    llvm::Function *llvm_intrinsic = get_llvm_intrin(llvm_ret_type, mangled_name, llvm_arg_types);
 
-    // Set vector fixed-point rounding flag if needed for intrinsic.
-    bool round_down = intrin.flags & RoundDown;
-    bool round_up = intrin.flags & RoundUp;
-    if (round_down || round_up) {
-        internal_assert(!(round_down && round_up));
-        llvm::Value *rounding_mode = llvm::ConstantInt::get(xlen_type, round_down ? 2 : 0);
-        // See https://github.com/riscv/riscv-v-spec/releases/download/v1.0/riscv-v-spec-1.0.pdf page 15
-        // for discussion of fixed-point rounding mode.
-        // TODO: When LLVM finally fixes the instructions to take rounding modes,
-        // this will have to change to passing the rounding mode to the intrinsic.
-        // https://github.com/halide/Halide/issues/7123
+    // TODO: Should handle intrinsics other than binary operators.
+    // Call the LLVM intrinsic.
+    const int actual_lanes = op->type.lanes();
+    llvm::Constant *actual_vlen = llvm::ConstantInt::get(xlen_type, actual_lanes);
+
+    // See https://github.com/riscv/riscv-v-spec/releases/download/v1.0/riscv-v-spec-1.0.pdf page 15
+    // for discussion of fixed-point rounding mode.
+    llvm::Value *rounding_mode = llvm::ConstantInt::get(xlen_type, round_down ? 2 : 0);
+
+    // Build the list of call args.
+    std::vector<llvm::Value *> call_args = {
+        llvm::UndefValue::get(llvm_ret_type),
+        left_arg,
+        right_arg,
+    };
+#if LLVM_VERSION >= 170
+    // LLVM 17+ has "intrinsics" that set csrw internally; the rounding_mode is before vlen.
+    if (round_any) {
+        call_args.push_back(rounding_mode);
+    }
+#else
+    // LLVM 16 requires explicitly setting csrw before calling the intrinsic
+    if (round_any) {
+        // Set vector fixed-point rounding flag for intrinsic.
         llvm::FunctionType *csrw_llvm_type = llvm::FunctionType::get(void_t, {xlen_type}, false);
         llvm::InlineAsm *inline_csrw = llvm::InlineAsm::get(csrw_llvm_type, "csrw vxrm,${0:z}", "rJ,~{memory}", true);
         builder->CreateCall(inline_csrw, {rounding_mode});
     }
+#endif
+    call_args.push_back(actual_vlen);
 
-    // TODO: Should handle intrinsics other than binary operators.
-    // Call the LLVM intrinsic.
-    int actual_lanes = op->type.lanes();
-    llvm::Constant *actual_vlen = llvm::ConstantInt::get(xlen_type, actual_lanes);
-
-    value = builder->CreateCall(llvm_intrinsic, {llvm::UndefValue::get(llvm_ret_type),
-                                                 left_arg, right_arg, actual_vlen});
+    // Finally, make the call.
+    value = builder->CreateCall(llvm_intrinsic, call_args);
 
     if (ret_type.lanes() != op->type.lanes()) {
         value = convert_fixed_or_scalable_vector_type(value,
