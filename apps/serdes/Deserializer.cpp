@@ -27,8 +27,8 @@ Halide::MemoryType Deserializer::deserialize_memory_type(const Halide::Serialize
     case Halide::Serialize::MemoryType::MemoryType_AMXTile:
         return Halide::MemoryType::AMXTile;
     default:
-        std::cerr << "unknown memory type " << memory_type << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown memory type " << memory_type << "\n";
+        return Halide::MemoryType::Auto;
     }
 }
 
@@ -51,8 +51,8 @@ Halide::Internal::ForType Deserializer::deserialize_for_type(const Halide::Seria
     case Halide::Serialize::ForType::ForType_GPULane:
         return Halide::Internal::ForType::GPULane;
     default:
-        std::cerr << "unknown for type " << for_type << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown for type " << for_type << "\n";
+        return Halide::Internal::ForType::Serial;
     }
 }
 
@@ -83,8 +83,8 @@ Halide::DeviceAPI Deserializer::deserialize_device_api(const Halide::Serialize::
     case Halide::Serialize::DeviceAPI::DeviceAPI_WebGPU:
         return Halide::DeviceAPI::WebGPU;
     default:
-        std::cerr << "unknown device api " << device_api << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown device api " << device_api << "\n";
+        return Halide::DeviceAPI::None;
     }
 }
 
@@ -103,8 +103,8 @@ Halide::Internal::Call::CallType Deserializer::deserialize_call_type(const Halid
     case Halide::Serialize::CallType::CallType_PureIntrinsic:
         return Halide::Internal::Call::CallType::PureIntrinsic;
     default:
-        std::cerr << "unknown call type " << call_type << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown call type " << call_type << "\n";
+        return Halide::Internal::Call::CallType::Image;
     }
 }
 
@@ -125,8 +125,8 @@ Halide::Internal::VectorReduce::Operator Deserializer::deserialize_vector_reduce
     case Halide::Serialize::VectorReduceOp::VectorReduceOp_Or:
         return Halide::Internal::VectorReduce::Operator::Or;
     default:
-        std::cerr << "unknown vector reduce op " << vector_reduce_op << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown vector reduce op " << vector_reduce_op << "\n";
+        return Halide::Internal::VectorReduce::Operator::Add;
     }
 }
 
@@ -139,8 +139,8 @@ Halide::PrefetchBoundStrategy Deserializer::deserialize_prefetch_bound_strategy(
     case Halide::Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_NonFaulting:
         return Halide::PrefetchBoundStrategy::NonFaulting;
     default:
-        std::cerr << "unknown prefetch bound strategy " << prefetch_bound_strategy << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown prefetch bound strategy " << prefetch_bound_strategy << "\n";
+        return Halide::PrefetchBoundStrategy::Clamp;
     }
 }
 
@@ -153,8 +153,8 @@ Halide::NameMangling Deserializer::deserialize_name_mangling(const Halide::Seria
     case Halide::Serialize::NameMangling::NameMangling_CPlusPlus:
         return Halide::NameMangling::CPlusPlus;
     default:
-        std::cerr << "unknown name mangling " << name_mangling << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown name mangling " << name_mangling << "\n";
+        return Halide::NameMangling::Default;
     }
 }
 
@@ -173,8 +173,8 @@ Halide::TailStrategy Deserializer::deserialize_tail_strategy(const Halide::Seria
     case Halide::Serialize::TailStrategy::TailStrategy_Auto:
         return Halide::TailStrategy::Auto;
     default:
-        std::cerr << "unknown tail strategy " << tail_strategy << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown tail strategy " << tail_strategy << "\n";
+        return Halide::TailStrategy::RoundUp;
     }
 }
 
@@ -189,8 +189,8 @@ Halide::Internal::Split::SplitType Deserializer::deserialize_split_type(const Ha
     case Halide::Serialize::SplitType::SplitType_PurifyRVar:
         return Halide::Internal::Split::SplitType::PurifyRVar;
     default:
-        std::cerr << "unknown split type " << split_type << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown split type " << split_type << "\n";
+        return Halide::Internal::Split::SplitType::SplitVar;
     }
 }
 
@@ -203,8 +203,8 @@ Halide::Internal::DimType Deserializer::deserialize_dim_type(const Halide::Seria
     case Halide::Serialize::DimType::DimType_ImpureRVar:
         return Halide::Internal::DimType::ImpureRVar;
     default:
-        std::cerr << "unknown dim type " << dim_type << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown dim type " << dim_type << "\n";
+        return Halide::Internal::DimType::PureVar;
     }
 }
 
@@ -219,8 +219,8 @@ Halide::LoopAlignStrategy Deserializer::deserialize_loop_align_strategy(const Ha
     case Halide::Serialize::LoopAlignStrategy::LoopAlignStrategy_Auto:
         return Halide::LoopAlignStrategy::Auto;
     default:
-        std::cerr << "unknown loop align strategy " << loop_align_strategy << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown loop align strategy " << loop_align_strategy << "\n";
+        return Halide::LoopAlignStrategy::AlignStart;
     }
 }
 
@@ -237,8 +237,8 @@ Halide::ExternFuncArgument::ArgType Deserializer::deserialize_extern_func_argume
     case Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ImageParamArg:
         return Halide::ExternFuncArgument::ArgType::ImageParamArg;
     default:
-        std::cerr << "unknown extern func argument type " << extern_func_argument_type << "\n";
-        exit(1);
+        _halide_user_assert(false) << "unknown extern func argument type " << extern_func_argument_type << "\n";
+        return Halide::ExternFuncArgument::ArgType::UndefinedArg;
     }
 }
 
@@ -478,7 +478,7 @@ Halide::Internal::Stmt Deserializer::deserialize_stmt(uint8_t type_code, const v
         return Halide::Internal::Stmt();
     }
     default:
-        std::cerr << "unknown type code " << type_code << "\n";
+        _halide_user_assert(false) << "unknown type code " << type_code << "\n";
         return Halide::Internal::Stmt();
     }
 }
@@ -693,7 +693,7 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         return Halide::Expr();
     }
     default: {
-        std::cerr << "unknown type code " << type_code << "\n";
+        _halide_user_assert(false) << "unknown type code " << type_code << "\n";
         return Halide::Expr();
     }
     }
@@ -1041,7 +1041,7 @@ void Deserializer::build_reverse_function_mappings(const std::vector<Halide::Int
 Halide::Pipeline Deserializer::deserialize(const std::string &filename) {
     std::ifstream in(filename, std::ios::binary | std::ios::in);
     if (!in) {
-        std::cerr << "failed to open file " << filename << "\n";
+        _halide_user_assert(false) << "failed to open file " << filename << "\n";
         return Halide::Pipeline();
     }
     std::cout << "Deserializing from file " << filename << "\n";
