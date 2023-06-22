@@ -625,9 +625,10 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
         auto name = deserialize_string(load_expr->name());
         auto predicate = deserialize_expr(load_expr->predicate_type(), load_expr->predicate());
         auto index = deserialize_expr(load_expr->index_type(), load_expr->index());
+        auto image = deserialize_buffer(load_expr->image());
         auto param = deserialize_parameter(load_expr->param());
         auto alignment = deserialize_modulus_remainder(load_expr->alignment());
-        return Halide::Internal::Load::make(Halide::Int(32), name, index, Halide::Buffer<float, 3>(), param, predicate, alignment);
+        return Halide::Internal::Load::make(Halide::Int(32), name, index, image, param, predicate, alignment);
     }
     case Halide::Serialize::Expr::Expr_Ramp: {
         const Halide::Serialize::Ramp *ramp_expr = (const Halide::Serialize::Ramp *)expr;
@@ -660,16 +661,18 @@ Halide::Expr Deserializer::deserialize_expr(uint8_t type_code, const void *expr)
             func_ptr = it->second;
         }
         auto call_type = deserialize_call_type(call_expr->call_type());
+        auto image = deserialize_buffer(call_expr->image());
         auto param = deserialize_parameter(call_expr->param());
         // TODO: fix type and function ptr here once function DAG is fixed
-        return Halide::Internal::Call::make(Halide::Int(32), name, args, call_type, func_ptr, value_index, Halide::Buffer<>(), param);
+        return Halide::Internal::Call::make(Halide::Int(32), name, args, call_type, func_ptr, value_index, image, param);
     }
     case Halide::Serialize::Expr::Expr_Variable: {
         const Halide::Serialize::Variable *variable_expr = (const Halide::Serialize::Variable *)expr;
         auto name = deserialize_string(variable_expr->name());
         auto param = deserialize_parameter(variable_expr->param());
+        auto image = deserialize_buffer(variable_expr->image());
         auto reduction_domain = deserialize_reduction_domain(variable_expr->reduction_domain());
-        return Halide::Internal::Variable::make(Halide::Int(32), name, Halide::Buffer<>(), param, reduction_domain);
+        return Halide::Internal::Variable::make(Halide::Int(32), name, image, param, reduction_domain);
     }
     case Halide::Serialize::Expr::Expr_Shuffle: {
         const Halide::Serialize::Shuffle *shuffle_expr = (const Halide::Serialize::Shuffle *)expr;
@@ -989,6 +992,7 @@ Halide::Internal::Parameter Deserializer::deserialize_parameter(const Halide::Se
     int dimensions = parameter->dimensions();
     std::string name = deserialize_string(parameter->name());
     if (is_buffer) {
+        auto buffer = deserialize_buffer(parameter->buffer());
         int host_alignment = parameter->host_alignment();
         std::vector<Halide::Internal::BufferConstraint> buffer_constraints;
         buffer_constraints.reserve(parameter->buffer_constraints()->size());
@@ -996,7 +1000,7 @@ Halide::Internal::Parameter Deserializer::deserialize_parameter(const Halide::Se
             buffer_constraints.push_back(deserialize_buffer_constraint(buffer_constraint));
         }
         auto memory_type = deserialize_memory_type(parameter->memory_type());
-        return Halide::Internal::Parameter(type, is_buffer, dimensions, name, host_alignment, buffer_constraints, memory_type);
+        return Halide::Internal::Parameter(type, is_buffer, dimensions, name, buffer, host_alignment, buffer_constraints, memory_type);
     } else {
         uint64_t data = parameter->data();
         auto scalar_default = deserialize_expr(parameter->scalar_default_type(), parameter->scalar_default());
@@ -1020,8 +1024,8 @@ Halide::ExternFuncArgument Deserializer::deserialize_extern_func_argument(const 
         }
         return Halide::ExternFuncArgument(func_ptr);
     } else if (arg_type == Halide::ExternFuncArgument::ArgType::BufferArg) {
-        // TODO: fix this
-        return Halide::ExternFuncArgument();
+        auto buffer = deserialize_buffer(extern_func_argument->buffer());
+        return Halide::ExternFuncArgument(buffer);
     } else if (arg_type == Halide::ExternFuncArgument::ArgType::ExprArg) {
         auto expr = deserialize_expr(extern_func_argument->expr_type(), extern_func_argument->expr());
         return Halide::ExternFuncArgument(expr);
@@ -1029,6 +1033,31 @@ Halide::ExternFuncArgument Deserializer::deserialize_extern_func_argument(const 
         auto image_param = deserialize_parameter(extern_func_argument->image_param());
         return Halide::ExternFuncArgument(image_param);
     }
+}
+
+Halide::Buffer<> Deserializer::deserialize_buffer(const Halide::Serialize::Buffer *buffer) {
+    assert(buffer != nullptr);
+    if (!buffer->defined()) {
+        return Halide::Buffer<>();
+    }
+    std::string name = deserialize_string(buffer->name());
+    auto type = deserialize_type(buffer->type());
+    int32_t dimensions = buffer->dimensions();
+    std::vector<halide_dimension_t> buffer_dimensions;
+    std::vector<int> sizes;
+    buffer_dimensions.reserve(dimensions);
+    for (int i = 0; i < dimensions; ++i) {
+        auto dim = buffer->dims()->Get(i);
+        halide_dimension_t hl_dim;
+        hl_dim.min = dim->min();
+        hl_dim.extent = dim->extent();
+        hl_dim.stride = dim->stride();
+        buffer_dimensions.push_back(hl_dim);
+        sizes.push_back(hl_dim.extent);
+    }
+    auto hl_buffer = Halide::Buffer<>(type, sizes, name);
+    memcpy(hl_buffer.data(), buffer->data()->data(), buffer->data()->size());
+    return hl_buffer;
 }
 
 void Deserializer::build_reverse_function_mappings(const std::vector<Halide::Internal::Function> &functions) {

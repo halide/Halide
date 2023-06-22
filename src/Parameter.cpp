@@ -80,9 +80,10 @@ Parameter::Parameter(const Type &t, bool is_buffer, int d, const std::string &na
 }
 
 Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
-                     int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
+                     const Buffer<void> &buffer, int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
                      MemoryType memory_type)
     : contents(new ParameterContents(t, is_buffer, dimensions, name)) {
+    contents->buffer = buffer;
     contents->host_alignment = host_alignment;
     contents->buffer_constraints = buffer_constraints;
     contents->memory_type = memory_type;

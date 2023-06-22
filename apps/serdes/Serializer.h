@@ -92,6 +92,8 @@ private:
 
     flatbuffers::Offset<Halide::Serialize::ExternFuncArgument> serialize_extern_func_argument(flatbuffers::FlatBufferBuilder &builder, const Halide::ExternFuncArgument &extern_func_argument);
 
+    flatbuffers::Offset<Halide::Serialize::Buffer> serialize_buffer(flatbuffers::FlatBufferBuilder &builder, const Halide::Buffer<> &buffer);
+
     void build_function_mappings(const std::map<std::string, Halide::Internal::Function> &env);
 };
 

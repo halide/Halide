@@ -91,6 +91,8 @@ private:
 
     Halide::ExternFuncArgument deserialize_extern_func_argument(const Halide::Serialize::ExternFuncArgument *extern_func_argument);
 
+    Halide::Buffer<> deserialize_buffer(const Halide::Serialize::Buffer *buffer);
+
     void build_reverse_function_mappings(const std::vector<Halide::Internal::Function> &functions);
 };
 

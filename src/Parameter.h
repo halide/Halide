@@ -62,8 +62,9 @@ public:
 
     /** Construct a new parameter via deserialing. */
     Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
-              int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
+              const Buffer<void> &buffer, int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
               MemoryType memory_type);
+
     Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
               uint64_t data, const Expr &scalar_default, const Expr &scalar_min,
               const Expr &scalar_max, const Expr &scalar_estimate);
