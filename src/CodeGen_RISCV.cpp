@@ -344,7 +344,8 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
     std::vector<llvm::Type *> llvm_arg_types = {
         llvm_ret_type,
         left_arg->getType(),
-        right_arg->getType()};
+        right_arg->getType(),
+    };
 #if LLVM_VERSION >= 170
     if (round_any) {
         llvm_arg_types.push_back(xlen_type);
@@ -381,7 +382,8 @@ bool CodeGen_RISCV::call_riscv_vector_intrinsic(const RISCVIntrinsic &intrin, co
     std::vector<llvm::Value *> call_args = {
         llvm::UndefValue::get(llvm_ret_type),
         left_arg,
-        right_arg};
+        right_arg,
+    };
 #if LLVM_VERSION >= 170
     // LLVM 17+ has "intrinsics" that set csrw internally; the rounding_mode is before vlen.
     if (round_any) {
