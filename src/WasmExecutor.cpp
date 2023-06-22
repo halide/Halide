@@ -339,7 +339,9 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
 
     std::string lld_arg_strs[] = {
         "HalideJITLinker",
+#if LLVM_VERSION >= 170
         "-flavor", "wasm",
+#endif
         // For debugging purposes:
         // "--verbose",
         // "-error-limit=0",
