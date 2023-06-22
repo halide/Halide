@@ -4,6 +4,7 @@
 #include <Halide.h>
 using namespace Halide;
 
+// a simple round trip test
 int main(int argc, char **argv) {
     // pipeline with single func
     Halide::Func gradient("gradient_func");
@@ -15,19 +16,11 @@ int main(int argc, char **argv) {
     blury(x, y) = (blurx(x, y - 1) + blurx(x, y) + blurx(x, y + 1)) / 3;
     Halide::Pipeline pipe(blury);
 
-    // print before serialization
-    std::cout << "before serialization\n";
-    Printer printer;
-    printer.print_pipeline(pipe);
-
     // serialize and deserialize
     Serializer serializer;
     serializer.serialize(pipe, "test.hlpipe");
     Deserializer deserializer;
     Pipeline p = deserializer.deserialize("test.hlpipe");
 
-    // print after deserialization
-    std::cout << "\nafter deserialization\n";
-    printer.print_pipeline(p);
     return 0;
 }
