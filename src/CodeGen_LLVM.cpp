@@ -2439,7 +2439,7 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
             }
             if (try_vector_predication_intrinsic("llvm.experimental.vp.strided.load", VPResultType(slice_type, 0),
                                                  slice_lanes, vp_slice_mask,
-                                                 {VPArg(vec_ptr, 1, align_bytes), VPArg(stride, 1)})) {
+                                                 {VPArg(vec_ptr, 1, align_bytes), VPArg(stride, 2)})) {
                 load_inst = dyn_cast<Instruction>(value);
             } else {
                 internal_error << "Vector predicated strided load should not be requested if not supported.\n";

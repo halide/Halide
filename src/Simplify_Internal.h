@@ -59,18 +59,24 @@ public:
                 min = max = alignment.remainder;
             } else if (alignment.modulus > 1) {
                 if (min_defined) {
-                    int64_t new_min = min - mod_imp(min, alignment.modulus) + alignment.remainder;
-                    if (new_min < min) {
-                        new_min += alignment.modulus;
+                    int64_t adjustment;
+                    bool no_overflow = sub_with_overflow(64, alignment.remainder, mod_imp(min, alignment.modulus), &adjustment);
+                    adjustment = mod_imp(adjustment, alignment.modulus);
+                    int64_t new_min;
+                    no_overflow &= add_with_overflow(64, min, adjustment, &new_min);
+                    if (no_overflow) {
+                        min = new_min;
                     }
-                    min = new_min;
                 }
                 if (max_defined) {
-                    int64_t new_max = max - mod_imp(max, alignment.modulus) + alignment.remainder;
-                    if (new_max > max) {
-                        new_max -= alignment.modulus;
+                    int64_t adjustment;
+                    bool no_overflow = sub_with_overflow(64, mod_imp(max, alignment.modulus), alignment.remainder, &adjustment);
+                    adjustment = mod_imp(adjustment, alignment.modulus);
+                    int64_t new_max;
+                    no_overflow &= sub_with_overflow(64, max, adjustment, &new_max);
+                    if (no_overflow) {
+                        max = new_max;
                     }
-                    max = new_max;
                 }
             }
 
