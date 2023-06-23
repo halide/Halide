@@ -244,16 +244,23 @@ function(add_halide_library TARGET)
         if (NOT TARGET Halide::Python)
             message(FATAL_ERROR "This version of Halide was built without support for Python bindings; rebuild using WITH_PYTHON_BINDINGS=ON to use this rule with Python Generators.")
         endif ()
+        
         if (NOT TARGET Python3::Interpreter)
             message(FATAL_ERROR "You must call find_package(Python3) in your CMake code in order to use this rule with Python Generators.")
         endif ()
-        set(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
-        if (Halide_SHARED_ASAN_RUNTIME_LIBRARY)
-            # ASAN's Leak detector will report that we leaked all the PyBind11
-            # Module-support code, so disable it here.
-            set(EXTRA_ENV_VARS ASAN_OPTIONS=detect_leaks=0 ${Halide_SANITIZER_ENV_VARS})
+
+        if (CMAKE_VERSION VERSION_LESS 3.24)
+            set(arg_sep "")
+        else ()
+            set(arg_sep "--")
         endif ()
-        set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${EXTRA_ENV_VARS} ${Python3_EXECUTABLE} $<SHELL_PATH:${py_src}>)
+
+        set(
+            GENERATOR_CMD
+            ${CMAKE_COMMAND} -E env "PYTHONPATH=$<TARGET_FILE_DIR:Halide::Python>/.." ${arg_sep}
+            ${Halide_PYTHON_LAUNCHER}
+            "$<TARGET_FILE:Python3::Interpreter>" $<SHELL_PATH:${py_src}>
+        )
         set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python ${py_src})
     else()
         set(GENERATOR_CMD "${ARG_FROM}")
@@ -790,4 +797,3 @@ function(_Halide_gengen_ensure)
         _Halide_place_dll(_Halide_gengen)
     endif ()
 endfunction()
-
