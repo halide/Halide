@@ -5,7 +5,8 @@
 Checks: >
     -*,
     bugprone-*,
-    -bugprone-assignment-in-if-condition,  # TODO: probably worth enabling and cleaning up code
+      # TODO: probably worth enabling and cleaning up code
+    -bugprone-assignment-in-if-condition,
     -bugprone-branch-clone,
     -bugprone-easily-swappable-parameters,
     -bugprone-exception-escape,
@@ -21,7 +22,8 @@ Checks: >
     -misc-non-private-member-variables-in-classes,
     -misc-unconventional-assign-operator,
     -misc-unused-parameters,
-    -misc-use-anonymous-namespace,    # TODO: probably worth enabling and cleaning up code
+    # TODO: probably worth enabling and cleaning up code
+    -misc-use-anonymous-namespace,
     modernize-deprecated-headers,
     modernize-loop-convert,
     modernize-make-shared,
