@@ -62,7 +62,7 @@ CLANG_TIDY_TARGETS=$(find \
      "${ROOT_DIR}/python_bindings" \
      "${ROOT_DIR}/tools" \
      "${ROOT_DIR}/util" \
-     \( -name *.cpp -o -name *.h -o -name *.c \) -and -not -wholename "*/.*" \
+     \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" \
      ! -name DefaultCostModel.cpp \
      ! -name GenGen.cpp \
      ! -name RunGenMain.cpp)
