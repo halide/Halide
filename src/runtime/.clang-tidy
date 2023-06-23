@@ -2,6 +2,7 @@
 InheritParentConfig: true
 
 Checks: >
+    -bugprone-assignment-in-if-condition,
     -bugprone-branch-clone,
     -bugprone-dynamic-static-initializers,
     -bugprone-sizeof-expression,
