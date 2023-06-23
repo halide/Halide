@@ -73,6 +73,7 @@ CLANG_TIDY_HEADER_FILTER=".*/src/.*|.*/python_bindings/.*|.*/tools/.*|.*/util/.*
 
 ${RUN_CLANG_TIDY} \
     ${FIX} \
+    -j $(nproc) \
     -header-filter="${CLANG_TIDY_HEADER_FILTER}" \
     -quiet \
     -p ${CLANG_TIDY_BUILD_DIR} \
