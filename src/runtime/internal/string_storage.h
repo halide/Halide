@@ -103,9 +103,9 @@ public:
 
     void reserve(void *user_context, size_t length);
     void assign(void *user_context, char ch);
-    void assign(void *user_context, const char *str, size_t length = 0);   // if length is zero, strlen is used
+    void assign(void *user_context, const char *str, size_t length = 0);  // if length is zero, strlen is used
     void append(void *user_context, char ch);
-    void append(void *user_context, const char *str, size_t length = 0);   // if length is zero, strlen is used
+    void append(void *user_context, const char *str, size_t length = 0);  // if length is zero, strlen is used
     void prepend(void *user_context, char ch);
     void prepend(void *user_context, const char *str, size_t length = 0);  // if length is zero, strlen is used
     void clear(void *user_context);

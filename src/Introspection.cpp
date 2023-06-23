@@ -710,7 +710,7 @@ public:
                  (type && regex_match(type->name, re)))) {
                 debug(5) << "Successful match to scalar var\n";
                 return var.name;
-            } else if (elem_type &&    // Check if it's an array element
+            } else if (elem_type &&  // Check if it's an array element
                        (type_name.empty() ||
                         (elem_type &&  // Check the type matches
                          regex_match(elem_type->name, re)))) {

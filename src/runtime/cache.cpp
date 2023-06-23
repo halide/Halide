@@ -33,7 +33,7 @@ WEAK void debug_print_key(void *user_context, const char *msg, const uint8_t *ca
     bool append_ellipses = false;
     if ((size_t)key_size > (sizeof(buf) / 2) - 1) {  // Each byte in key can take two bytes in output
         append_ellipses = true;
-        key_size = (sizeof(buf) / 2) - 4;            // room for NUL and "..."
+        key_size = (sizeof(buf) / 2) - 4;  // room for NUL and "..."
     }
     char *buf_ptr = buf;
     for (int i = 0; i < key_size; i++) {

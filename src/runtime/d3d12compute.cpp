@@ -1271,7 +1271,7 @@ WEAK d3d12_buffer new_buffer_resource(d3d12_device *device, size_t length, D3D12
     D3D12_RESOURCE_DESC desc = {};
     {
         desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        desc.Alignment = 0;                            // 0 defaults to 64KB alignment, which is mandatory for buffers
+        desc.Alignment = 0;  // 0 defaults to 64KB alignment, which is mandatory for buffers
         desc.Width = length;
         desc.Height = 1;                               // for buffers, this must always be 1
         desc.DepthOrArraySize = 1;                     // ditto, (1)
@@ -1872,7 +1872,7 @@ WEAK d3d12_function *d3d12_compile_shader(d3d12_device *device, d3d12_library *l
     const char *entryPoint = name;
     const char *target = "cs_5_1";  // all d3d12 hardware support SM 5.1
     UINT flags1 = 0;
-    UINT flags2 = 0;                // flags related to effects (.fx files)
+    UINT flags2 = 0;  // flags related to effects (.fx files)
     ID3DBlob *shaderBlob = nullptr;
     ID3DBlob *errorMsgs = nullptr;
 

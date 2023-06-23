@@ -334,7 +334,7 @@ int main(int argc, char **argv) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1;  // skip -
             if (p[0] == '-') {
-                p++;                      // allow -- as well, because why not
+                p++;  // allow -- as well, because why not
             }
             std::vector<std::string> v = split_string(p, "=");
             std::string flag_name = v[0];
@@ -408,7 +408,7 @@ int main(int argc, char **argv) {
         if (argv[i][0] == '-') {
             const char *p = argv[i] + 1;  // skip -
             if (p[0] == '-') {
-                p++;                      // allow -- as well, because why not
+                p++;  // allow -- as well, because why not
             }
             std::vector<std::string> v = split_string(p, "=");
             std::string flag_name = v[0];

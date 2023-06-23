@@ -432,15 +432,15 @@ void cse_test() {
 
     // Check a case with nested lets with shared subexpressions
     // between the lets, and repeated names.
-    Expr e1 = ssa_block({x * x,                                        // a = x*x
-                         t[0] + x,                                     // b = a + x
-                         t[1] * t[1] * t[0]});                         // c = b * b * a
-    Expr e2 = ssa_block({x * x,                                        // a again
-                         t[0] - x,                                     // d = a - x
-                         t[1] * t[1] * t[0]});                         // e = d * d * a
-    e = ssa_block({e1 + x * x,                                         // f = c + a
-                   e1 + e2,                                            // g = c + e
-                   t[0] + t[0] * t[1]});                               // h = f + f * g
+    Expr e1 = ssa_block({x * x,                 // a = x*x
+                         t[0] + x,              // b = a + x
+                         t[1] * t[1] * t[0]});  // c = b * b * a
+    Expr e2 = ssa_block({x * x,                 // a again
+                         t[0] - x,              // d = a - x
+                         t[1] * t[1] * t[0]});  // e = d * d * a
+    e = ssa_block({e1 + x * x,                  // f = c + a
+                   e1 + e2,                     // g = c + e
+                   t[0] + t[0] * t[1]});        // h = f + f * g
 
     correct = ssa_block({x * x,                                        // t0 = a = x*x
                          t[0] + x,                                     // t1 = b = a + x     = t0 + x

@@ -2461,7 +2461,7 @@ void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
         value = codegen_dense_vector_load(op, vpred);
     } else if (use_llvm_vp_intrinsics && stride) {  // Case only handled by vector predication, otherwise must scalarize.
         Value *vpred = codegen(op->predicate);
-        Value *llvm_stride = codegen(stride);       // Not 1 (dense) as that was caught above.
+        Value *llvm_stride = codegen(stride);  // Not 1 (dense) as that was caught above.
         value = codegen_vector_load(op->type, op->name, ramp->base, op->image, op->param,
                                     op->alignment, vpred, true, llvm_stride);
     } else if (ramp && stride && stride->value == -1) {

@@ -825,9 +825,9 @@ int vk_create_compute_pipeline(void *user_context,
                 pipeline_name,                                        // entry point name
                 specialization_info,                                  // pointer to VkSpecializationInfo struct
             },
-            pipeline_layout,                                          // pipeline layout
-            0,                                                        // base pipeline handle for derived pipeline
-            0                                                         // base pipeline index for derived pipeline
+            pipeline_layout,  // pipeline layout
+            0,                // base pipeline handle for derived pipeline
+            0                 // base pipeline index for derived pipeline
         };
 
     VkResult result = vkCreateComputePipelines(allocator->current_device(), 0, 1, &compute_pipeline_info, allocator->callbacks(), compute_pipeline);

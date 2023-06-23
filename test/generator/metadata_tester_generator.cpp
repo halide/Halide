@@ -9,7 +9,7 @@ enum class SomeEnum { Foo,
 
 class MetadataTester : public Halide::Generator<MetadataTester> {
 public:
-    Input<Func> input{"input"};                                             // must be overridden to {UInt(8), 3}
+    Input<Func> input{"input"};  // must be overridden to {UInt(8), 3}
     Input<Buffer<uint8_t, 3>> typed_input_buffer{"typed_input_buffer"};
     Input<Buffer<void, 3>> dim_only_input_buffer{"dim_only_input_buffer"};  // must be overridden to type=UInt(8)
     Input<Buffer<>> untyped_input_buffer{"untyped_input_buffer"};           // must be overridden to {UInt(8), 3}
@@ -26,18 +26,18 @@ public:
     Input<float> f32{"f32", 32.1234f, -3200.1234f, 3200.1234f};
     Input<double> f64{"f64", 64.25f, -6400.25f, 6400.25f};
     Input<void *> h{"h", nullptr};
-    Input<Func> input_not_nod{"input_not_nod"};             // must be overridden to type=uint8 dim=3
-    Input<Func> input_nod{"input_nod", UInt(8)};            // must be overridden to type=uint8 dim=3
-    Input<Func> input_not{"input_not", 3};                  // must be overridden to type=uint8
-    Input<Func[]> array_input{"array_input", UInt(8), 3};   // must be overridden to size=2
+    Input<Func> input_not_nod{"input_not_nod"};            // must be overridden to type=uint8 dim=3
+    Input<Func> input_nod{"input_nod", UInt(8)};           // must be overridden to type=uint8 dim=3
+    Input<Func> input_not{"input_not", 3};                 // must be overridden to type=uint8
+    Input<Func[]> array_input{"array_input", UInt(8), 3};  // must be overridden to size=2
     Input<Func[2]> array2_input{"array2_input", UInt(8), 3};
-    Input<int8_t[]> array_i8{"array_i8"};                   // must be overridden to size=2
+    Input<int8_t[]> array_i8{"array_i8"};  // must be overridden to size=2
     Input<int8_t[2]> array2_i8{"array2_i8"};
-    Input<int16_t[]> array_i16{"array_i16", 16};            // must be overridden to size=2
+    Input<int16_t[]> array_i16{"array_i16", 16};  // must be overridden to size=2
     Input<int16_t[2]> array2_i16{"array2_i16", 16};
     Input<int32_t[]> array_i32{"array_i32", 32, -32, 127};  // must be overridden to size=2
     Input<int32_t[2]> array2_i32{"array2_i32", 32, -32, 127};
-    Input<void *[]> array_h{"array_h", nullptr};            // must be overridden to size=2
+    Input<void *[]> array_h{"array_h", nullptr};  // must be overridden to size=2
 
     Input<Buffer<float, 3>[2]> buffer_array_input1 { "buffer_array_input1" };
     Input<Buffer<float>[2]> buffer_array_input2 { "buffer_array_input2" };    // buffer_array_input2.dim must be set
@@ -52,9 +52,9 @@ public:
     Input<Buffer<float16_t, 1>> buffer_f16_typed{"buffer_f16_typed"};
     Input<Buffer<void, 1>> buffer_f16_untyped{"buffer_f16_untyped"};
 
-    Input<Expr> untyped_scalar_input{"untyped_scalar_input"};                  // untyped_scalar_input.type must be set to uint8
+    Input<Expr> untyped_scalar_input{"untyped_scalar_input"};  // untyped_scalar_input.type must be set to uint8
 
-    Output<Func> output{"output"};                                             // must be overridden to {{Float(32), Float(32)}, 3}
+    Output<Func> output{"output"};  // must be overridden to {{Float(32), Float(32)}, 3}
     Output<Buffer<float, 3>> typed_output_buffer{"typed_output_buffer"};
     Output<Buffer<float>> type_only_output_buffer{"type_only_output_buffer"};  // untyped outputs can have type and/or dimensions inferred
     Output<Buffer<void, 3>> dim_only_output_buffer{"dim_only_output_buffer"};  // untyped outputs can have type and/or dimensions inferred

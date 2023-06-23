@@ -2913,7 +2913,7 @@ std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_Vulkan_Dev(const Target &target) {
 }  // namespace Internal
 }  // namespace Halide
 
-#else   // WITH_SPIRV
+#else  // WITH_SPIRV
 
 namespace Halide {
 namespace Internal {

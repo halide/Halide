@@ -394,14 +394,14 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
         }
         extended_features_ptr = (void *)(&device_features_ext);  // pass extended features (which also contains the standard features)
     } else {
-        standard_features_ptr = &device_features;                // pass v1.0 standard features
+        standard_features_ptr = &device_features;  // pass v1.0 standard features
     }
 
     VkDeviceCreateInfo device_create_info = {
         VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        extended_features_ptr,                                                           // Extended struct ptr (used here for requesting chain of extended features)
-        0,                                                                               // Flags
-        1,                                                                               // Count of queues to create
+        extended_features_ptr,  // Extended struct ptr (used here for requesting chain of extended features)
+        0,                      // Flags
+        1,                      // Count of queues to create
         &device_queue_create_info,
         (uint32_t)requested_layers.size(), requested_layers.data(),                      // Layers
         (uint32_t)required_device_extensions.size(), required_device_extensions.data(),  // Enabled extensions

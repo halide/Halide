@@ -1305,51 +1305,51 @@ extern int halide_error_device_crop_failed(void *user_context);
  * get_runtime_compatible_target in Target.cpp if you add a new feature.
  */
 typedef enum halide_target_feature_t {
-    halide_target_feature_jit = 0,                ///< Generate code that will run immediately inside the calling process.
-    halide_target_feature_debug,                  ///< Turn on debug info and output for runtime code.
-    halide_target_feature_no_asserts,             ///< Disable all runtime checks, for slightly tighter code.
-    halide_target_feature_no_bounds_query,        ///< Disable the bounds querying functionality.
+    halide_target_feature_jit = 0,          ///< Generate code that will run immediately inside the calling process.
+    halide_target_feature_debug,            ///< Turn on debug info and output for runtime code.
+    halide_target_feature_no_asserts,       ///< Disable all runtime checks, for slightly tighter code.
+    halide_target_feature_no_bounds_query,  ///< Disable the bounds querying functionality.
 
-    halide_target_feature_sse41,                  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
-    halide_target_feature_avx,                    ///< Use AVX 1 instructions. Only relevant on x86.
-    halide_target_feature_avx2,                   ///< Use AVX 2 instructions. Only relevant on x86.
-    halide_target_feature_fma,                    ///< Enable x86 FMA instruction
-    halide_target_feature_fma4,                   ///< Enable x86 (AMD) FMA4 instruction set
-    halide_target_feature_f16c,                   ///< Enable x86 16-bit float support
+    halide_target_feature_sse41,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
+    halide_target_feature_avx,    ///< Use AVX 1 instructions. Only relevant on x86.
+    halide_target_feature_avx2,   ///< Use AVX 2 instructions. Only relevant on x86.
+    halide_target_feature_fma,    ///< Enable x86 FMA instruction
+    halide_target_feature_fma4,   ///< Enable x86 (AMD) FMA4 instruction set
+    halide_target_feature_f16c,   ///< Enable x86 16-bit float support
 
-    halide_target_feature_armv7s,                 ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
-    halide_target_feature_no_neon,                ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
+    halide_target_feature_armv7s,   ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
+    halide_target_feature_no_neon,  ///< Avoid using NEON instructions. Only relevant for 32-bit ARM.
 
-    halide_target_feature_vsx,                    ///< Use VSX instructions. Only relevant on POWERPC.
-    halide_target_feature_power_arch_2_07,        ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
+    halide_target_feature_vsx,              ///< Use VSX instructions. Only relevant on POWERPC.
+    halide_target_feature_power_arch_2_07,  ///< Use POWER ISA 2.07 new instructions. Only relevant on POWERPC.
 
-    halide_target_feature_cuda,                   ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
-    halide_target_feature_cuda_capability30,      ///< Enable CUDA compute capability 3.0 (Kepler)
-    halide_target_feature_cuda_capability32,      ///< Enable CUDA compute capability 3.2 (Tegra K1)
-    halide_target_feature_cuda_capability35,      ///< Enable CUDA compute capability 3.5 (Kepler)
-    halide_target_feature_cuda_capability50,      ///< Enable CUDA compute capability 5.0 (Maxwell)
-    halide_target_feature_cuda_capability61,      ///< Enable CUDA compute capability 6.1 (Pascal)
-    halide_target_feature_cuda_capability70,      ///< Enable CUDA compute capability 7.0 (Volta)
-    halide_target_feature_cuda_capability75,      ///< Enable CUDA compute capability 7.5 (Turing)
-    halide_target_feature_cuda_capability80,      ///< Enable CUDA compute capability 8.0 (Ampere)
-    halide_target_feature_cuda_capability86,      ///< Enable CUDA compute capability 8.6 (Ampere)
+    halide_target_feature_cuda,               ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
+    halide_target_feature_cuda_capability30,  ///< Enable CUDA compute capability 3.0 (Kepler)
+    halide_target_feature_cuda_capability32,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
+    halide_target_feature_cuda_capability35,  ///< Enable CUDA compute capability 3.5 (Kepler)
+    halide_target_feature_cuda_capability50,  ///< Enable CUDA compute capability 5.0 (Maxwell)
+    halide_target_feature_cuda_capability61,  ///< Enable CUDA compute capability 6.1 (Pascal)
+    halide_target_feature_cuda_capability70,  ///< Enable CUDA compute capability 7.0 (Volta)
+    halide_target_feature_cuda_capability75,  ///< Enable CUDA compute capability 7.5 (Turing)
+    halide_target_feature_cuda_capability80,  ///< Enable CUDA compute capability 8.0 (Ampere)
+    halide_target_feature_cuda_capability86,  ///< Enable CUDA compute capability 8.6 (Ampere)
 
-    halide_target_feature_opencl,                 ///< Enable the OpenCL runtime.
-    halide_target_feature_cl_doubles,             ///< Enable double support on OpenCL targets
-    halide_target_feature_cl_atomic64,            ///< Enable 64-bit atomics operations on OpenCL targets
+    halide_target_feature_opencl,       ///< Enable the OpenCL runtime.
+    halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets
+    halide_target_feature_cl_atomic64,  ///< Enable 64-bit atomics operations on OpenCL targets
 
-    halide_target_feature_openglcompute,          ///< Enable OpenGL Compute runtime. NOTE: This feature is deprecated and will be removed in Halide 17.
+    halide_target_feature_openglcompute,  ///< Enable OpenGL Compute runtime. NOTE: This feature is deprecated and will be removed in Halide 17.
 
-    halide_target_feature_user_context,           ///< Generated code takes a user_context pointer as first argument
+    halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
 
-    halide_target_feature_profile,                ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
-    halide_target_feature_no_runtime,             ///< Do not include a copy of the Halide runtime in any generated object file or assembly
+    halide_target_feature_profile,     ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
+    halide_target_feature_no_runtime,  ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
-    halide_target_feature_metal,                  ///< Enable the (Apple) Metal runtime.
+    halide_target_feature_metal,  ///< Enable the (Apple) Metal runtime.
 
-    halide_target_feature_c_plus_plus_mangling,   ///< Generate C++ mangled names for result function, et al
+    halide_target_feature_c_plus_plus_mangling,  ///< Generate C++ mangled names for result function, et al
 
-    halide_target_feature_large_buffers,          ///< Enable 64-bit buffer indexing to support buffers > 2GB. Ignored if bits != 64.
+    halide_target_feature_large_buffers,  ///< Enable 64-bit buffer indexing to support buffers > 2GB. Ignored if bits != 64.
 
     halide_target_feature_hvx_128,                ///< Enable HVX 128 byte mode.
     halide_target_feature_hvx_v62,                ///< Enable Hexagon v62 architecture.

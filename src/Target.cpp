@@ -94,18 +94,18 @@ void detect_family_and_model(int info0, unsigned &family, unsigned &model) {
 
 Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_sse3) {
     switch (family) {
-    case 0xF:                                   // AMD Family 0Fh
+    case 0xF:  // AMD Family 0Fh
         if (have_sse3) {
             return Target::Processor::K8_SSE3;  // Hammer (modern, with SSE3)
         }
-        return Target::Processor::K8;           // Hammer (original, without SSE3)
-    case 0x10:                                  // AMD Family 10h
-        return Target::Processor::AMDFam10;     // Barcelona
-    case 0x14:                                  // AMD Family 14h
-        return Target::Processor::BtVer1;       // Bobcat
-    case 0x15:                                  // AMD Family 15h
+        return Target::Processor::K8;        // Hammer (original, without SSE3)
+    case 0x10:                               // AMD Family 10h
+        return Target::Processor::AMDFam10;  // Barcelona
+    case 0x14:                               // AMD Family 14h
+        return Target::Processor::BtVer1;    // Bobcat
+    case 0x15:                               // AMD Family 15h
         if (model >= 0x60 && model <= 0x7f) {
-            return Target::Processor::BdVer4;   // 60h-7Fh: Excavator
+            return Target::Processor::BdVer4;  // 60h-7Fh: Excavator
         }
         if (model >= 0x30 && model <= 0x3f) {
             return Target::Processor::BdVer3;  // 30h-3Fh: Steamroller
@@ -117,9 +117,9 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
             return Target::Processor::BdVer1;  // 00h-0Fh: Bulldozer
         }
         break;
-    case 0x16:                                 // AMD Family 16h
-        return Target::Processor::BtVer2;      // Jaguar
-    case 0x17:                                 // AMD Family 17h
+    case 0x16:                             // AMD Family 16h
+        return Target::Processor::BtVer2;  // Jaguar
+    case 0x17:                             // AMD Family 17h
         if ((model >= 0x30 && model <= 0x3f) || model == 0x71) {
             return Target::Processor::ZnVer2;  // 30h-3Fh, 71h: Zen2
         }
@@ -127,7 +127,7 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
             return Target::Processor::ZnVer1;  // 00h-0Fh: Zen1
         }
         break;
-    case 0x19:                                 // AMD Family 19h
+    case 0x19:  // AMD Family 19h
         if (model <= 0x0f || model == 0x21) {
             return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
         }

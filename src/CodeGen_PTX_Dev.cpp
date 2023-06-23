@@ -822,7 +822,7 @@ std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
     return std::make_unique<CodeGen_PTX_Dev>(target);
 }
 
-#else   // WITH_PTX
+#else  // WITH_PTX
 
 std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
     user_error << "PTX not enabled for this build of Halide.\n";

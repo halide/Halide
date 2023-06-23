@@ -2163,7 +2163,7 @@ void generator_test() {
     Var x, y;
     Func f, g;
     f(x, y) = x + y;
-    g(x, y) = f(gp, gp);                  // check Func::operator() overloads
+    g(x, y) = f(gp, gp);  // check Func::operator() overloads
     g(rdom.x, rdom.y) += f(rdom.x, rdom.y);
     g.update(0).reorder(rdom.y, rdom.x);  // check Func::reorder() overloads for RDom::operator RVar()
 

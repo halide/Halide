@@ -172,8 +172,8 @@ struct Pattern {
         SwapOps01 = 1 << 1,         // Swap operands 0 and 1 prior to substitution.
         SwapOps12 = 1 << 2,         // Swap operands 1 and 2 prior to substitution.
 
-        DeinterleaveOp0 = 1 << 5,   // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
-        DeinterleaveOp1 = 1 << 6,   // Same as above, but for operand 1.
+        DeinterleaveOp0 = 1 << 5,  // Prior to evaluating the pattern, deinterleave native vectors of operand 0.
+        DeinterleaveOp1 = 1 << 6,  // Same as above, but for operand 1.
         DeinterleaveOp2 = 1 << 7,
         DeinterleaveOps = DeinterleaveOp0 | DeinterleaveOp1 | DeinterleaveOp2,
 

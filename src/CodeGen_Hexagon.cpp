@@ -2282,7 +2282,7 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
     return std::make_unique<CodeGen_Hexagon>(target);
 }
 
-#else   // WITH_HEXAGON
+#else  // WITH_HEXAGON
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
     user_error << "hexagon not enabled for this build of Halide.\n";

@@ -746,7 +746,7 @@ ComplexFunc fft2d_r2c(Func r,
                                 -1,      // sign
                                 N0 / 2,  // extent of dim 0
                                 1.0f,
-                                false,   // We parallelize unzipped below instead.
+                                false,  // We parallelize unzipped below instead.
                                 prefix,
                                 target,
                                 &twiddle_cache);
