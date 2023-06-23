@@ -1063,7 +1063,6 @@ Halide::Buffer<> Deserializer::deserialize_buffer(const Halide::Serialize::Buffe
     return hl_buffer;
 }
 
-
 std::map<std::string, Halide::Internal::FunctionPtr> Deserializer::deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrappers) {
     assert(wrappers != nullptr);
     std::map<std::string, Halide::Internal::FunctionPtr> result;
@@ -1080,6 +1079,9 @@ std::map<std::string, Halide::Internal::FunctionPtr> Deserializer::deserialize_w
 }
 
 void Deserializer::build_reverse_function_mappings(const std::vector<Halide::Internal::Function> &functions) {
+    if (!this->reverse_function_mappings.empty()) {
+        this->reverse_function_mappings.clear();
+    }
     int cnt = 0;
     for (const auto &f : functions) {
         this->reverse_function_mappings[cnt++] = f.get_contents();

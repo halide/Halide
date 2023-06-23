@@ -2,6 +2,7 @@
 #define HALIDE_DESERIALIZER_H
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Halide.h"
@@ -14,7 +15,7 @@ public:
     Halide::Pipeline deserialize(const std::string &filename);
 
 private:
-    std::map<int32_t, Halide::Internal::FunctionPtr> reverse_function_mappings;
+    std::unordered_map<int32_t, Halide::Internal::FunctionPtr> reverse_function_mappings;
 
     // helper functions to deserialize each type of object
     Halide::MemoryType deserialize_memory_type(const Halide::Serialize::MemoryType memory_type);

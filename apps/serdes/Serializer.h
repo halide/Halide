@@ -3,6 +3,7 @@
 
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -16,7 +17,7 @@ public:
     void serialize(const Halide::Pipeline &pipeline, const std::string &filename);
 
 private:
-    std::map<uint64_t, int32_t> func_mappings;
+    std::unordered_map<uint64_t, int32_t> func_mappings;
 
     // helper functions to serialize each type of object
     Halide::Serialize::MemoryType serialize_memory_type(const Halide::MemoryType &memory_type);

@@ -1045,7 +1045,6 @@ flatbuffers::Offset<Halide::Serialize::Buffer> Serializer::serialize_buffer(flat
     return Halide::Serialize::CreateBuffer(builder, true, name_serialized, type_serialized, dimensions, builder.CreateVector(buffer_dimensions_serialized), builder.CreateVector(data));
 }
 
-
 std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers) {
     std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> wrapper_refs_serialized;
     wrapper_refs_serialized.reserve(wrappers.size());
@@ -1062,6 +1061,9 @@ std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::seri
 }
 
 void Serializer::build_function_mappings(const std::map<std::string, Halide::Internal::Function> &env) {
+    if (!this->func_mappings.empty()) {
+        this->func_mappings.clear();
+    }
     int32_t cnt = 0;
     for (const auto &it : env) {
         Halide::Internal::FunctionPtr func_ptr = it.second.get_contents();
