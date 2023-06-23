@@ -5,6 +5,7 @@
 Checks: >
     -*,
     bugprone-*,
+    -bugprone-assignment-in-if-condition,  # TODO: probably worth enabling and cleaning up code
     -bugprone-branch-clone,
     -bugprone-easily-swappable-parameters,
     -bugprone-exception-escape,
