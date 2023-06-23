@@ -62,22 +62,6 @@ endif ()
 # A helper for creating tests with correct PYTHONPATH and sanitizer preloading
 ##
 
-if (Halide_ASAN_ENABLED)
-    if (NOT DEFINED Halide_Python_ASAN_LIBRARY)
-        # TODO: this assumes clang-on-Linux, we could be smarter here and check
-        #   CMAKE_CXX_COMPILER_ID to behave differently on GNU, AppleClang, or
-        #   MSVC.
-        execute_process(
-            COMMAND ${CMAKE_CXX_COMPILER} "-print-file-name=libclang_rt.asan.so"
-            OUTPUT_VARIABLE Halide_Python_ASAN_LIBRARY
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-        )
-    endif ()
-
-    set(Halide_Python_ASAN_LIBRARY "${Halide_Python_ASAN_LIBRARY}"
-        CACHE FILEPATH "Library to preload when running Python tests.")
-endif ()
-
 function(add_python_test)
     cmake_parse_arguments(ARG "" "FILE;LABEL" "PYTHONPATH;ENVIRONMENT;TEST_ARGS" ${ARGN})
 
@@ -85,20 +69,13 @@ function(add_python_test)
     list(TRANSFORM ARG_PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
     list(PREPEND ARG_ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
-    if (Halide_Python_ASAN_LIBRARY)
-        if (APPLE)
-            list(PREPEND ARG_ENVIRONMENT "DYLD_INSERT_LIBRARIES=${Halide_Python_ASAN_LIBRARY}")
-        else ()
-            list(PREPEND ARG_ENVIRONMENT "LD_PRELOAD=${Halide_Python_ASAN_LIBRARY}")
-        endif ()
-    endif ()
 
     cmake_path(GET ARG_FILE STEM test_name)
     set(test_name "${ARG_LABEL}_${test_name}")
 
     add_test(
         NAME "${test_name}"
-        COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>" ${ARG_TEST_ARGS}
+        COMMAND ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python3::Interpreter>" "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>" ${ARG_TEST_ARGS}
     )
     set_tests_properties(
         "${test_name}"
@@ -128,4 +105,3 @@ endif ()
 if (WITH_TUTORIALS)
     add_subdirectory(tutorial)
 endif ()
-
