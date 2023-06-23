@@ -15,6 +15,16 @@ target_compile_options(regexp_replace PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd4996>
 # Interface target for enabling PNG/JPEG support in Halide
 ##
 
+# This changes how find_xxx() commands work; the default is to find frameworks before
+# standard libraries or headers, but this can be a problem on systems that have Mono
+# installed, as it has a framework with the libjpeg and libpng  headers present -- so
+# CMake finds the headers from Mono but the libraries from Homebrew, and hilarity ensues.
+# Setting this to "last" means we always try the standard libraries before the frameworks.
+set(CMAKE_FIND_FRAMEWORK LAST)
+
+find_package(JPEG)
+find_package(PNG)
+
 add_library(Halide_ImageIO INTERFACE)
 add_library(Halide::ImageIO ALIAS Halide_ImageIO)
 set_target_properties(Halide_ImageIO PROPERTIES EXPORT_NAME ImageIO)
