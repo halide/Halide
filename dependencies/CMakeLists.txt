@@ -1,13 +1,4 @@
 ##
-# Standard CMake find-module dependencies
-##
-
-find_package(OpenMP)
-if (TARGET OpenMP::OpenMP_CXX)
-    set_target_properties(OpenMP::OpenMP_CXX PROPERTIES IMPORTED_GLOBAL TRUE)
-endif ()
-
-##
 # Third-party dependencies in their own subdirectories
 ##
 
