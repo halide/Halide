@@ -1765,7 +1765,7 @@ struct halide_tiff_header {
 template<typename ElemType, int BUFFER_SIZE = 1024>
 struct ElemWriter {
     ElemWriter(FileOpener *f)
-        : f(f), next(&buf[0]), ok(true) {
+        : f(f), next(&buf[0]) {
     }
     ~ElemWriter() {
         flush();
@@ -1798,7 +1798,7 @@ struct ElemWriter {
     FileOpener *const f;
     ElemType buf[BUFFER_SIZE];
     ElemType *next;
-    bool ok;
+    bool ok = true;
 };
 
 // Note that this is a fairly simpleminded TIFF writer that doesn't
@@ -1881,9 +1881,9 @@ bool save_tiff(ImageType &im, const std::string &filename) {
     tag++->assign32(279, channels,                            // StripByteCounts
                     (channels == 1) ?
                         elements * bytes_per_element :
-                        sizeof(header) + channels * sizeof(int32_t));  // for channels > 1, this is an offset
+                        sizeof(header) + channels * sizeof(int32_t));      // for channels > 1, this is an offset
     tag++->assign32(282, 5, 1,
-                    offsetof(halide_tiff_header, width_resolution));  // XResolution
+                    offsetof(halide_tiff_header, width_resolution));       // XResolution
     tag++->assign32(283, 5, 1,
                     offsetof(halide_tiff_header, height_resolution));      // YResolution
     tag++->assign16(284, 1, channels == 1 ? 1 : 2);                        // PlanarConfiguration -- contig or planar

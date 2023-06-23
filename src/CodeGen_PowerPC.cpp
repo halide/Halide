@@ -199,7 +199,7 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_PowerPC(const Target &target) {
     return std::make_unique<CodeGen_PowerPC>(target);
 }
 
-#else  // WITH_POWERPC
+#else   // WITH_POWERPC
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_PowerPC(const Target &target) {
     user_error << "PowerPC not enabled for this build of Halide.\n";

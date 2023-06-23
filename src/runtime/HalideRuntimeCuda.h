@@ -71,9 +71,9 @@ typedef int (*halide_cuda_acquire_context_t)(void *,   // user_context
                                              void **,  // cuda context out parameter
                                              bool);    // should create a context if none exist
 typedef int (*halide_cuda_release_context_t)(void * /* user_context */);
-typedef int (*halide_cuda_get_stream_t)(void *,    // user_context
-                                        void *,    // context
-                                        void **);  // stream out parameter
+typedef int (*halide_cuda_get_stream_t)(void *,        // user_context
+                                        void *,        // context
+                                        void **);      // stream out parameter
 
 /** Set custom methods to acquire and release cuda contexts and streams */
 // @{

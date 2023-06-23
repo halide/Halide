@@ -39,7 +39,7 @@ WEAK void halide_set_default_thread_priority(int priority) {
     if (priority > 0xFF) {
         priority = 0xFF;  // Clamp to max priority
     } else if (priority <= 0) {
-        return;  // Ignore settings of zero and below
+        return;           // Ignore settings of zero and below
     }
     halide_qurt_default_thread_priority = priority;
 }

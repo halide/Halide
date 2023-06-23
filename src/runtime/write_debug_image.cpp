@@ -205,16 +205,16 @@ WEAK extern "C" int halide_debug_to_file(void *user_context, const char *filenam
                         (channels == 1) ?
                             elts * bytes_per_element :
                             sizeof(header) +
-                                channels * sizeof(int32_t));  // strip byte counts, bug if 32-bit truncation
+                                channels * sizeof(int32_t));                         // strip byte counts, bug if 32-bit truncation
         tag++->assign32(282, 5, 1,
-                        __builtin_offsetof(halide_tiff_header, width_resolution));  // Width resolution
+                        __builtin_offsetof(halide_tiff_header, width_resolution));   // Width resolution
         tag++->assign32(283, 5, 1,
                         __builtin_offsetof(halide_tiff_header, height_resolution));  // Height resolution
         tag++->assign16(284, 1, 2);                                                  // Planar configuration -- planar
         tag++->assign16(296, 1, 1);                                                  // Resolution Unit -- none
         tag++->assign16(339, 1,
-                        pixel_type_to_tiff_sample_type[type_code]);  // Sample type
-        tag++->assign32(32997, 1, depth);                            // Image depth
+                        pixel_type_to_tiff_sample_type[type_code]);                  // Sample type
+        tag++->assign32(32997, 1, depth);                                            // Image depth
 
         header.ifd0_end = 0;
         header.width_resolution[0] = 1;

@@ -839,7 +839,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
     ostringstream sl;
     sl << "(" << value_expr << ")"
        << " << "
-       << "(" << (32 - type.bits()) << ")";  // 1. shift-up to MSB
+       << "(" << (32 - type.bits()) << ")";        // 1. shift-up to MSB
     ostringstream rsr;
     rsr << print_reinterpret_cast(type, sl.str())  // 2. reinterpret bits
         << " >> " << (32 - type.bits());           // 3. shift-down to LSB
@@ -914,7 +914,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
                << " << "
                << "(" << (32 - target_type.bits()) << ")"  // 1. shift-up to MSB
                << ")"
-               << " >> " << (32 - target_type.bits());  // 2. shift-down to LSB
+               << " >> " << (32 - target_type.bits());     // 2. shift-down to LSB
         }
         return ss.str();
     }

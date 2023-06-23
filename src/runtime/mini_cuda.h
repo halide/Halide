@@ -224,9 +224,9 @@ typedef struct CUDA_MEMCPY3D_st {
     size_t dstPitch;            /**< Destination pitch (ignored when dst is array) */
     size_t dstHeight;           /**< Destination height (ignored when dst is array; may be 0 if Depth==1) */
 
-    size_t WidthInBytes; /**< Width of 3D memory copy in bytes */
-    size_t Height;       /**< Height of 3D memory copy */
-    size_t Depth;        /**< Depth of 3D memory copy */
+    size_t WidthInBytes;        /**< Width of 3D memory copy in bytes */
+    size_t Height;              /**< Height of 3D memory copy */
+    size_t Depth;               /**< Depth of 3D memory copy */
 } CUDA_MEMCPY3D;
 
 #define CU_POINTER_ATTRIBUTE_CONTEXT 1

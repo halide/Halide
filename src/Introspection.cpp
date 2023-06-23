@@ -62,7 +62,7 @@ typedef uint64_t llvm_offset_t;
 
 class DebugSections {
 
-    bool calibrated;
+    bool calibrated = false;
 
     struct FieldFormat {
         uint64_t name = 0, form = 0;
@@ -190,10 +190,9 @@ class DebugSections {
     vector<TypeInfo> types;
 
 public:
-    bool working;
+    bool working = false;
 
-    DebugSections(const std::string &binary)
-        : calibrated(false), working(false) {
+    DebugSections(const std::string &binary) {
         std::string binary_path = binary;
 #ifdef __APPLE__
         size_t last_slash = binary_path.rfind('/');
@@ -711,7 +710,7 @@ public:
                  (type && regex_match(type->name, re)))) {
                 debug(5) << "Successful match to scalar var\n";
                 return var.name;
-            } else if (elem_type &&  // Check if it's an array element
+            } else if (elem_type &&    // Check if it's an array element
                        (type_name.empty() ||
                         (elem_type &&  // Check the type matches
                          regex_match(elem_type->name, re)))) {

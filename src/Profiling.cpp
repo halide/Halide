@@ -68,7 +68,7 @@ class InjectProfiling : public IRMutator {
 public:
     map<string, int> indices;  // maps from func name -> index in buffer.
 
-    vector<int> stack;  // What produce nodes are we currently inside of.
+    vector<int> stack;         // What produce nodes are we currently inside of.
 
     string pipeline_name;
 

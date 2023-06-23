@@ -896,8 +896,8 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         GLint i;
         GLint count;
 
-        GLint size;   // size of the variable
-        GLenum type;  // type of the variable (float, vec3 or mat4, etc)
+        GLint size;                  // size of the variable
+        GLenum type;                 // type of the variable (float, vec3 or mat4, etc)
 
         const GLsizei bufSize = 64;  // maximum name length
         GLchar name[bufSize];        // variable name in GLSL
