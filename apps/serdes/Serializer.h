@@ -94,6 +94,8 @@ private:
 
     flatbuffers::Offset<Halide::Serialize::Buffer> serialize_buffer(flatbuffers::FlatBufferBuilder &builder, const Halide::Buffer<> &buffer);
 
+    std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers);
+
     void build_function_mappings(const std::map<std::string, Halide::Internal::Function> &env);
 };
 

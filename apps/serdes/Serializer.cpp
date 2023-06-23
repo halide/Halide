@@ -801,13 +801,14 @@ flatbuffers::Offset<Halide::Serialize::FuncSchedule> Serializer::serialize_func_
     for (const auto &estimate : func_schedule.estimates()) {
         estimates_serialized.push_back(serialize_bound(builder, estimate));
     }
+    std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> wrappers_serialized = serialize_wrapper_refs(builder, func_schedule.wrappers());
     Halide::Serialize::MemoryType memory_type = serialize_memory_type(func_schedule.memory_type());
     auto memoized = func_schedule.memoized();
     auto async = func_schedule.async();
     auto memoize_eviction_key = func_schedule.memoize_eviction_key();
     auto memoize_eviction_key_serialized = serialize_expr(builder, memoize_eviction_key);
     return Halide::Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized, builder.CreateVector(storage_dims_serialized), builder.CreateVector(bounds_serialized),
-                                                 builder.CreateVector(estimates_serialized), memory_type, memoized, async, memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
+                                                 builder.CreateVector(estimates_serialized), builder.CreateVector(wrappers_serialized), memory_type, memoized, async, memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
 }
 
 flatbuffers::Offset<Halide::Serialize::Specialization> Serializer::serialize_specialization(flatbuffers::FlatBufferBuilder &builder, const Halide::Internal::Specialization &specialization) {
@@ -1042,6 +1043,22 @@ flatbuffers::Offset<Halide::Serialize::Buffer> Serializer::serialize_buffer(flat
     data.resize(buffer.size_in_bytes());
     memcpy(data.data(), buffer.data(), buffer.size_in_bytes());
     return Halide::Serialize::CreateBuffer(builder, true, name_serialized, type_serialized, dimensions, builder.CreateVector(buffer_dimensions_serialized), builder.CreateVector(data));
+}
+
+
+std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, Halide::Internal::FunctionPtr> &wrappers) {
+    std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> wrapper_refs_serialized;
+    wrapper_refs_serialized.reserve(wrappers.size());
+    for (const auto &wrapper : wrappers) {
+        auto wrapper_name_serialized = serialize_string(builder, wrapper.first);
+        auto wrapper_raw_func_ptr = wrapper.second.get();
+        int func_index = -1;
+        if (this->func_mappings.find(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(wrapper_raw_func_ptr))) == this->func_mappings.end()) {
+            func_index = this->func_mappings[static_cast<uint64_t>(reinterpret_cast<uintptr_t>(wrapper_raw_func_ptr))];
+        }
+        wrapper_refs_serialized.push_back(Halide::Serialize::CreateWrapperRef(builder, wrapper_name_serialized, func_index));
+    }
+    return wrapper_refs_serialized;
 }
 
 void Serializer::build_function_mappings(const std::map<std::string, Halide::Internal::Function> &env) {

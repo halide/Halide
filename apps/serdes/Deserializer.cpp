@@ -780,6 +780,7 @@ Halide::Internal::FuncSchedule Deserializer::deserialize_func_schedule(const Hal
     for (const auto &estimate : *func_schedule->estimates()) {
         estimates.push_back(deserialize_bound(estimate));
     }
+    std::map<std::string, Halide::Internal::FunctionPtr> wrappers = deserialize_wrapper_refs(func_schedule->wrappers());
     auto memory_type = deserialize_memory_type(func_schedule->memory_type());
     auto memoized = func_schedule->memoized();
     auto async = func_schedule->async();
@@ -789,6 +790,7 @@ Halide::Internal::FuncSchedule Deserializer::deserialize_func_schedule(const Hal
     hl_func_schedule.compute_level() = compute_level;
     hl_func_schedule.bounds() = bounds;
     hl_func_schedule.estimates() = estimates;
+    hl_func_schedule.wrappers() = wrappers;
     hl_func_schedule.memory_type() = memory_type;
     hl_func_schedule.memoized() = memoized;
     hl_func_schedule.async() = async;
@@ -1059,6 +1061,22 @@ Halide::Buffer<> Deserializer::deserialize_buffer(const Halide::Serialize::Buffe
     auto hl_buffer = Halide::Buffer<>(type, sizes, name);
     memcpy(hl_buffer.data(), buffer->data()->data(), buffer->data()->size());
     return hl_buffer;
+}
+
+
+std::map<std::string, Halide::Internal::FunctionPtr> Deserializer::deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrappers) {
+    assert(wrappers != nullptr);
+    std::map<std::string, Halide::Internal::FunctionPtr> result;
+    for (const auto &wrapper : *wrappers) {
+        auto name = deserialize_string(wrapper->func_name());
+        int32_t func_index = wrapper->func_index();
+        Halide::Internal::FunctionPtr func_ptr;
+        if (auto it = this->reverse_function_mappings.find(func_index); it != this->reverse_function_mappings.end() && func_index != -1) {
+            func_ptr = it->second;
+        }
+        result[name] = func_ptr;
+    }
+    return result;
 }
 
 void Deserializer::build_reverse_function_mappings(const std::vector<Halide::Internal::Function> &functions) {

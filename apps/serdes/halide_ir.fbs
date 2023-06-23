@@ -475,13 +475,18 @@ table LoopLevel {
     locked: bool;
 }
 
+table WrapperRef {
+    func_name: string;
+    func_index: int32;
+}
+
 table FuncSchedule {
     store_level: LoopLevel;
     compute_level: LoopLevel;
     storage_dims: [StorageDim];
     bounds: [Bound];
     estimates: [Bound];
-    // wrappers: [WrapperRef];
+    wrappers: [WrapperRef];
     memory_type: MemoryType = Auto;
     memoized: bool;
     async: bool;

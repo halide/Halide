@@ -91,6 +91,8 @@ private:
 
     Halide::ExternFuncArgument deserialize_extern_func_argument(const Halide::Serialize::ExternFuncArgument *extern_func_argument);
 
+    std::map<std::string, Halide::Internal::FunctionPtr> deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> *wrappers);
+
     Halide::Buffer<> deserialize_buffer(const Halide::Serialize::Buffer *buffer);
 
     void build_reverse_function_mappings(const std::vector<Halide::Internal::Function> &functions);
