@@ -10,7 +10,7 @@
 #     the tests in test/generator/ this times only the halide build time.
 
 # Halide project version
-HALIDE_VERSION_MAJOR ?= 15
+HALIDE_VERSION_MAJOR ?= 16
 HALIDE_VERSION_MINOR ?= 0
 HALIDE_VERSION_PATCH ?= 0
 HALIDE_VERSION=$(HALIDE_VERSION_MAJOR).$(HALIDE_VERSION_MINOR).$(HALIDE_VERSION_PATCH)
@@ -119,7 +119,11 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
 WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
+ifeq ($(shell test $(LLVM_VERSION_TIMES_10) -ge 170; echo $$?),0)
 WITH_RISCV ?= $(findstring riscv, $(LLVM_COMPONENTS))
+else
+# leave WITH_RISCV undefined
+endif
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
 WITH_NVPTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))

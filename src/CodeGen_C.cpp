@@ -1835,10 +1835,11 @@ void CodeGen_C::visit(const Call *op) {
 
         const Variable *base = base_address.as<Variable>();
         internal_assert(base && base->type.is_handle());
-        // TODO: provide some way to customize the rw and locality?
-        rhs << "__builtin_prefetch("
+
+        // __builtin_prefetch() returns void, so use comma operator to satisfy assignment
+        rhs << "(__builtin_prefetch("
             << "((" << print_type(op->type) << " *)" << print_name(base->name)
-            << " + " << print_expr(base_offset) << "), /*rw*/0, /*locality*/0)";
+            << " + " << print_expr(base_offset) << "), /*rw*/0, /*locality*/0), 0)";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
     } else if (op->is_intrinsic(Call::strict_float)) {
