@@ -20,9 +20,13 @@ namespace {
 // TODO: most of these wrappers should do the remove_volatile for secondary arguments;
 // I've only put it in place for the locations necessary at this time.
 template<class T>
-struct remove_volatile { typedef T type; };
+struct remove_volatile {
+    typedef T type;
+};
 template<class T>
-struct remove_volatile<volatile T> { typedef T type; };
+struct remove_volatile<volatile T> {
+    typedef T type;
+};
 
 #ifdef BITS_32
 ALWAYS_INLINE uintptr_t atomic_and_fetch_release(uintptr_t *addr, uintptr_t val) {
