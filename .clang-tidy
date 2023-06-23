@@ -15,6 +15,7 @@ Checks: >
     -bugprone-signed-char-misuse,
     clang-diagnostic-shadow-field,
     misc-*,
+    -misc-const-correctness,
     -misc-no-recursion,
     -misc-non-private-member-variables-in-classes,
     -misc-unconventional-assign-operator,
