@@ -69,16 +69,13 @@ function(add_python_test)
     list(TRANSFORM ARG_PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
     list(PREPEND ARG_ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
-    if (Halide_SANITIZER_ENV_VARS)
-        list(PREPEND ARG_ENVIRONMENT ${Halide_SANITIZER_ENV_VARS})
-    endif ()
 
     cmake_path(GET ARG_FILE STEM test_name)
     set(test_name "${ARG_LABEL}_${test_name}")
 
     add_test(
         NAME "${test_name}"
-        COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>" ${ARG_TEST_ARGS}
+        COMMAND ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python3::Interpreter>" "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>" ${ARG_TEST_ARGS}
     )
     set_tests_properties(
         "${test_name}"
@@ -108,4 +105,3 @@ endif ()
 if (WITH_TUTORIALS)
     add_subdirectory(tutorial)
 endif ()
-

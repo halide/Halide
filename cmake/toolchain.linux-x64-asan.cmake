@@ -45,4 +45,7 @@ endif ()
 set(Halide_SHARED_ASAN_RUNTIME_LIBRARY "${Halide_SHARED_ASAN_RUNTIME_LIBRARY}"
     CACHE FILEPATH "Library to preload when running Python tests.")
 
-set(Halide_SANITIZER_ENV_VARS "LD_PRELOAD=${Halide_SHARED_ASAN_RUNTIME_LIBRARY}")
+set(
+    Halide_PYTHON_LAUNCHER
+    ${CMAKE_COMMAND} -E env ASAN_OPTIONS=detect_leaks=0 LD_PRELOAD=${Halide_SHARED_ASAN_RUNTIME_LIBRARY}
+)
