@@ -21,6 +21,7 @@ Checks: >
     -misc-non-private-member-variables-in-classes,
     -misc-unconventional-assign-operator,
     -misc-unused-parameters,
+    -misc-use-anonymous-namespace,    # TODO: probably worth enabling and cleaning up code
     modernize-deprecated-headers,
     modernize-loop-convert,
     modernize-make-shared,
