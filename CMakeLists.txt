@@ -91,6 +91,11 @@ endif()
 # Import dependencies
 ##
 
+## Threads
+option(THREADS_PREFER_PTHREAD_FLAG "When enabled, prefer to use the -pthread flag to explicit linking" ON)
+find_package(Threads REQUIRED)
+
+## Complex dependencies
 add_subdirectory(dependencies)
 
 ##
