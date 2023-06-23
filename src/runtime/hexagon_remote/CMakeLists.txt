@@ -14,7 +14,7 @@ set(ANDROID_NDK_ROOT ${HEXAGON_SDK_ROOT}/tools/android-ndk-r19c)
 
 message(STATUS "Using Hexagon SDK at ${HEXAGON_SDK_ROOT}")
 message(STATUS "Using Android NDK at ${ANDROID_NDK_ROOT}")
-message(STATUS "Using Hexagon LLVM TOols at ${HEXAGON_TOOLS_ROOT}")
+message(STATUS "Using Hexagon LLVM Tools at ${HEXAGON_TOOLS_ROOT}")
 
 set(FASTRPC_PATH ${HEXAGON_SDK_ROOT}/ipc/fastrpc)
 set(CC_HEXAGON  ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang)
