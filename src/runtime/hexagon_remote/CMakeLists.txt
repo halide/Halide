@@ -141,7 +141,7 @@ target_link_libraries(halide_hexagon_host PRIVATE wrapper)
 
 # ***********Building arm-64-android/libhalide_hexagon_host.so
 
-macro(build_libhalide_hexagon_host_so BITS PLATFORM) # OBJECT SRC DEPENDENCIES)
+macro(build_libhalide_hexagon_host_so BITS) # OBJECT SRC DEPENDENCIES)
   if (${BITS} EQUAL 32)
     set(CXX_CROSS_COMPILER ${CXX_ARM_32_ANDROID})
     set(CC_CROSS_COMPILER ${CC_ARM_32_ANDROID})
@@ -180,5 +180,5 @@ macro(build_libhalide_hexagon_host_so BITS PLATFORM) # OBJECT SRC DEPENDENCIES)
   add_custom_target(${TARGET_NAME} ALL DEPENDS ${BIN_DIR}/libhalide_hexagon_host.so)
 endmacro()
 
-build_libhalide_hexagon_host_so(32 "Android")
-build_libhalide_hexagon_host_so(64 "Android")
+build_libhalide_hexagon_host_so(32)
+build_libhalide_hexagon_host_so(64)
