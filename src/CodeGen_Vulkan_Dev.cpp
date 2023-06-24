@@ -1950,7 +1950,7 @@ CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
         then_case.accept(this);
         SpvId then_id = builder.current_id();
         builder.append(SpvFactory::branch(merge_block_id));
-        block_vars.push_back({then_id, then_block_id});
+        block_vars.emplace_back(then_id, then_block_id);
     }
     builder.leave_block();
 
@@ -1964,7 +1964,7 @@ CodeGen_Vulkan_Dev::SPIRV_Emitter::emit_if_then_else(const Expr &condition,
             else_case.accept(this);
             SpvId else_id = builder.current_id();
             builder.append(SpvFactory::branch(merge_block_id));
-            block_vars.push_back({else_id, else_block_id});
+            block_vars.emplace_back(else_id, else_block_id);
         }
         builder.leave_block();
     }

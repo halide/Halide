@@ -37,17 +37,17 @@ public:
     Input<int16_t[2]> array2_i16{"array2_i16", 16};
     Input<int32_t[]> array_i32{"array_i32", 32, -32, 127};  // must be overridden to size=2
     Input<int32_t[2]> array2_i32{"array2_i32", 32, -32, 127};
-    Input<void *[]> array_h { "array_h", nullptr };  // must be overridden to size=2
+    Input<void *[]> array_h{"array_h", nullptr};  // must be overridden to size=2
 
     Input<Buffer<float, 3>[2]> buffer_array_input1 { "buffer_array_input1" };
     Input<Buffer<float>[2]> buffer_array_input2 { "buffer_array_input2" };    // buffer_array_input2.dim must be set
     Input<Buffer<void, 3>[2]> buffer_array_input3 { "buffer_array_input3" };  // buffer_array_input2.type must be set
     Input<Buffer<>[2]> buffer_array_input4 { "buffer_array_input4" };         // dim and type must be set
     // .size must be specified for all of these
-    Input<Buffer<float, 3>[]> buffer_array_input5 { "buffer_array_input5" };
-    Input<Buffer<float>[]> buffer_array_input6 { "buffer_array_input6" };    // buffer_array_input2.dim must be set
-    Input<Buffer<void, 3>[]> buffer_array_input7 { "buffer_array_input7" };  // buffer_array_input2.type must be set
-    Input<Buffer<>[]> buffer_array_input8 { "buffer_array_input8" };         // dim and type must be set
+    Input<Buffer<float, 3>[]> buffer_array_input5{"buffer_array_input5"};
+    Input<Buffer<float>[]> buffer_array_input6{"buffer_array_input6"};    // buffer_array_input2.dim must be set
+    Input<Buffer<void, 3>[]> buffer_array_input7{"buffer_array_input7"};  // buffer_array_input2.type must be set
+    Input<Buffer<>[]> buffer_array_input8{"buffer_array_input8"};         // dim and type must be set
 
     Input<Buffer<float16_t, 1>> buffer_f16_typed{"buffer_f16_typed"};
     Input<Buffer<void, 1>> buffer_f16_untyped{"buffer_f16_untyped"};
@@ -70,9 +70,9 @@ public:
     Output<Buffer<>[2]> array_outputs6 { "array_outputs6" };       // dimensions and type will be inferred by usage
 
     // .size must be specified for all of these
-    Output<Buffer<float, 3>[]> array_outputs7 { "array_outputs7" };
-    Output<Buffer<float>[]> array_outputs8 { "array_outputs8" };
-    Output<Buffer<>[]> array_outputs9 { "array_outputs9" };
+    Output<Buffer<float, 3>[]> array_outputs7{"array_outputs7"};
+    Output<Buffer<float>[]> array_outputs8{"array_outputs8"};
+    Output<Buffer<>[]> array_outputs9{"array_outputs9"};
 
     // Output<void> untyped_scalar_output{"untyped_scalar_output"};  // untyped_scalar_output.type must be set
 
