@@ -91,5 +91,5 @@ Checks: >
     misc-unused-alias-decls,
     -misc-unused-parameters,
     misc-unused-using-decls,
-    -misc-use-anonymous-namespace,
+    misc-use-anonymous-namespace,
 ...
