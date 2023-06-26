@@ -118,8 +118,7 @@ Checks: >
     -modernize-unary-static-assert,
     -modernize-use-auto,
     modernize-use-bool-literals,
-    # TODO: revisit this
-    -modernize-use-default-member-init,
+    modernize-use-default-member-init,
     modernize-use-emplace,
     modernize-use-equals-default,
     modernize-use-equals-delete,
@@ -194,7 +193,7 @@ Checks: >
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*'
 FormatStyle: 'file'
-#CheckOptions:
-#    - key:   modernize-use-default-member-init.UseAssignment
-#      value: 1
+CheckOptions:
+    - key:   modernize-use-default-member-init.UseAssignment
+      value: 1
 ...

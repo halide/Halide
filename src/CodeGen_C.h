@@ -192,7 +192,7 @@ protected:
     bool have_user_context;
 
     /** Track current calling convention scope. */
-    bool extern_c_open;
+    bool extern_c_open = false;
 
     /** True if at least one gpu-based for loop is used. */
     bool uses_gpu_for_loops;
@@ -277,13 +277,13 @@ protected:
 
     /** Are we inside an atomic node that uses mutex locks?
         This is used for detecting deadlocks from nested atomics. */
-    bool inside_atomic_mutex_node;
+    bool inside_atomic_mutex_node = false;
 
     /** Emit atomic store instructions? */
-    bool emit_atomic_stores;
+    bool emit_atomic_stores = false;
 
     /** true if add_vector_typedefs() has been called. */
-    bool using_vector_typedefs;
+    bool using_vector_typedefs = false;
 
     /** Some architectures have private memory for the call stack; this
      * means a thread cannot hand pointers to stack memory to another

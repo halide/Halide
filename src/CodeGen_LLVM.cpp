@@ -168,22 +168,9 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
 }  // namespace
 
 CodeGen_LLVM::CodeGen_LLVM(const Target &t)
-    : function(nullptr), context(nullptr),
-      builder(nullptr),
-      value(nullptr),
-      very_likely_branch(nullptr),
-      default_fp_math_md(nullptr),
-      strict_fp_math_md(nullptr),
+    : builder(nullptr),
+
       target(t),
-      void_t(nullptr), i1_t(nullptr), i8_t(nullptr),
-      i16_t(nullptr), i32_t(nullptr), i64_t(nullptr),
-      f16_t(nullptr), f32_t(nullptr), f64_t(nullptr),
-      halide_buffer_t_type(nullptr),
-      metadata_t_type(nullptr),
-      argument_t_type(nullptr),
-      scalar_value_t_type(nullptr),
-      device_interface_t_type(nullptr),
-      pseudostack_slot_t_type(nullptr),
 
       wild_u1x_(Variable::make(UInt(1, 0), "*")),
       wild_i8x_(Variable::make(Int(8, 0), "*")),
@@ -209,14 +196,8 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
       wild_f32_(Variable::make(Float(32), "*")),
       wild_f64_(Variable::make(Float(64), "*")),
 
-      inside_atomic_mutex_node(false),
-      emit_atomic_stores(false),
-      use_llvm_vp_intrinsics(false),
-
-      destructor_block(nullptr),
       strict_float(t.has_feature(Target::StrictFloat)),
-      llvm_large_code_model(t.has_feature(Target::LLVMLargeCodeModel)),
-      effective_vscale(0) {
+      llvm_large_code_model(t.has_feature(Target::LLVMLargeCodeModel)) {
     initialize_llvm();
 }
 

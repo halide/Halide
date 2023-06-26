@@ -162,13 +162,13 @@ protected:
     virtual Type upgrade_type_for_argument_passing(const Type &) const;
 
     std::unique_ptr<llvm::Module> module;
-    llvm::Function *function;
-    llvm::LLVMContext *context;
+    llvm::Function *function = nullptr;
+    llvm::LLVMContext *context = nullptr;
     std::unique_ptr<llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>> builder;
-    llvm::Value *value;
-    llvm::MDNode *very_likely_branch;
-    llvm::MDNode *default_fp_math_md;
-    llvm::MDNode *strict_fp_math_md;
+    llvm::Value *value = nullptr;
+    llvm::MDNode *very_likely_branch = nullptr;
+    llvm::MDNode *default_fp_math_md = nullptr;
+    llvm::MDNode *strict_fp_math_md = nullptr;
     std::vector<LoweredArgument> current_function_args;
 
     /** The target we're generating code for */
@@ -207,16 +207,16 @@ protected:
 
     /** Some useful llvm types */
     // @{
-    llvm::Type *void_t, *i1_t, *i8_t, *i16_t, *i32_t, *i64_t, *f16_t, *f32_t, *f64_t;
-    llvm::StructType *halide_buffer_t_type,
-        *type_t_type,
-        *dimension_t_type,
-        *metadata_t_type,
-        *argument_t_type,
-        *scalar_value_t_type,
-        *device_interface_t_type,
-        *pseudostack_slot_t_type,
-        *semaphore_t_type;
+    llvm::Type *void_t = nullptr, *i1_t = nullptr, *i8_t = nullptr, *i16_t = nullptr, *i32_t = nullptr, *i64_t = nullptr, *f16_t = nullptr, *f32_t = nullptr, *f64_t = nullptr;
+    llvm::StructType *halide_buffer_t_type = nullptr,
+                     *type_t_type,
+                     *dimension_t_type,
+                     *metadata_t_type = nullptr,
+                     *argument_t_type = nullptr,
+                     *scalar_value_t_type = nullptr,
+                     *device_interface_t_type = nullptr,
+                     *pseudostack_slot_t_type = nullptr,
+                     *semaphore_t_type;
 
     // @}
 
@@ -529,10 +529,10 @@ protected:
 
     /** Are we inside an atomic node that uses mutex locks?
         This is used for detecting deadlocks from nested atomics & illegal vectorization. */
-    bool inside_atomic_mutex_node;
+    bool inside_atomic_mutex_node = false;
 
     /** Emit atomic store instructions? */
-    bool emit_atomic_stores;
+    bool emit_atomic_stores = false;
 
     /** Can we call this operation with float16 type?
         This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
@@ -640,7 +640,7 @@ protected:
 
     /** Controls use of vector predicated intrinsics for vector operations.
      * Will be set by certain backends (e.g. RISC V) to control codegen. */
-    bool use_llvm_vp_intrinsics;
+    bool use_llvm_vp_intrinsics = false;
     // @}
 
     /** Generate a basic dense vector load, with an optional predicate and
@@ -666,7 +666,7 @@ private:
     /** A basic block to branch to on error that triggers all
      * destructors. As destructors are registered, code gets added
      * to this block. */
-    llvm::BasicBlock *destructor_block;
+    llvm::BasicBlock *destructor_block = nullptr;
 
     /** Turn off all unsafe math flags in scopes while this is set. */
     bool strict_float;
@@ -677,7 +677,7 @@ private:
     /** Cache the result of target_vscale from architecture specific implementation
      * as this is used on every Halide to LLVM type conversion.
      */
-    int effective_vscale;
+    int effective_vscale = 0;
 
     /** Assign a unique ID to each producer-consumer and for-loop node. The IDs
      * are printed as comments in assembly and used to link visualizations with
