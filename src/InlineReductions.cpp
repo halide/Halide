@@ -157,7 +157,7 @@ Expr saturating_sum(const RDom &r, Expr e, const Func &f) {
     user_assert(v.rdom.defined()) << "Expression passed to saturating_sum must reference a reduction domain";
 
     f(v.free_vars) = cast(e.type(), 0);
-    f(v.free_vars) = Internal::saturating_add(f(v.free_vars), e);
+    f(v.free_vars) = saturating_add(f(v.free_vars), e);
     return f(v.call_args);
 }
 

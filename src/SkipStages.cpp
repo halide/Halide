@@ -45,17 +45,16 @@ public:
     PredicateFinder(const string &b, bool s)
         : predicate(const_false()),
           buffer(b),
-          varies(false),
-          treat_selects_as_guards(s),
-          in_produce(false) {
+
+          treat_selects_as_guards(s) {
     }
 
 private:
     using IRVisitor::visit;
     string buffer;
-    bool varies;
+    bool varies = false;
     bool treat_selects_as_guards;
-    bool in_produce;
+    bool in_produce = false;
     Scope<> varying;
     Scope<> in_pipeline;
     Scope<> local_buffers;
@@ -332,7 +331,7 @@ private:
 class StageSkipper : public IRMutator {
 public:
     StageSkipper(const string &f)
-        : func(f), in_vector_loop(false) {
+        : func(f) {
     }
 
 private:
@@ -340,7 +339,7 @@ private:
     using IRMutator::visit;
 
     Scope<> vector_vars;
-    bool in_vector_loop;
+    bool in_vector_loop = false;
 
     Stmt visit(const For *op) override {
         bool old_in_vector_loop = in_vector_loop;

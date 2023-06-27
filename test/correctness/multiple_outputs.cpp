@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
         for (int x = 0; x < g_im.width(); x++) {
             if (g_im(x) != x) {
                 printf("g(%d) = %d instead of %d\n", x, g_im(x), x);
-                return -1;
+                return 1;
             }
         }
     }
@@ -118,14 +118,14 @@ int main(int argc, char **argv) {
         for (int x = 0; x < g0_im.width(); x++) {
             if (g0_im(x) != x) {
                 printf("g0(%d) = %d instead of %d\n", x, (int)g0_im(x), x);
-                return -1;
+                return 1;
             }
         }
 
         for (int x = 0; x < g1_im.width(); x++) {
             if (g1_im(x) != x + 1) {
                 printf("g1(%d) = %d instead of %d\n", x, (int)g1_im(x), x + 1);
-                return -1;
+                return 1;
             }
         }
     }
@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
         for (int x = 0; x < 100; x++) {
             if (f_im(x) != x) {
                 printf("f(%d) = %d instead of %d\n", x, f_im(x), x);
-                return -1;
+                return 1;
             }
             if (x < 50) {
                 int c0 = f_im(x) + 17;
@@ -172,7 +172,7 @@ int main(int argc, char **argv) {
                 if (h_im0(x) != c0 || h_im1(x) != c1) {
                     printf("h(%d) = {%d, %d} instead of {%d, %d}\n",
                            x, h_im0(x), h_im1(x), c0, c1);
-                    return -1;
+                    return 1;
                 }
             }
             if (x < 20) {
@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
                     if (g_im0(x, y) != c0 || g_im1(x, y) != c1 || g_im2(x, y) != c2) {
                         printf("g(%d) = {%d, %d, %d} instead of {%d, %d, %d}\n",
                                x, g_im0(x, y), g_im1(x, y), g_im2(x, y), c0, c1, c2);
-                        return -1;
+                        return 1;
                     }
                 }
             }

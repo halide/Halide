@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
         if (result != correct) {
             printf("strlen(%s) -> %d instead of %d\n",
                    c_message, result, correct);
-            return -1;
+            return 1;
         }
     }
 
@@ -62,18 +62,18 @@ int main(int argc, char **argv) {
         // As another sanity check, the internal pointer to the string constant should be aligned.
         if (handle & 0x3) {
             printf("Got handle: %llx. A handle should be aligned to at least four bytes\n", (long long)handle);
-            return -1;
+            return 1;
         }
 
         for (int i = 0; i < im.width(); i++) {
             if (im(i) != im(0)) {
                 printf("im(%d) = %p instead of %p\n",
                        i, im(i), im(0));
-                return -1;
+                return 1;
             }
             if (std::string(im(i)) != msg) {
                 printf("Handle was %s instead of %s\n", im(i), msg.c_str());
-                return -1;
+                return 1;
             }
         }
     }

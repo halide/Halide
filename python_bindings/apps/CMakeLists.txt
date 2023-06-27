@@ -3,6 +3,11 @@ if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
     return()
 endif ()
 
+if (TARGET_VULKAN AND Halide_TARGET MATCHES "vulkan")
+    message(WARNING "Python apps are skipped under Vulkan.")
+    return()
+endif ()
+
 set(TEST_TMPDIR "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}>")
 set(TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../apps/images>")
 

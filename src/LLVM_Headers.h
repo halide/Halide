@@ -22,6 +22,9 @@
 
 #if WITH_WABT || WITH_V8
 #include <lld/Common/Driver.h>
+#if LLVM_VERSION >= 170
+#include <lld/Common/ErrorHandler.h>
+#endif
 #endif
 #include <llvm/ADT/APFloat.h>
 #include <llvm/ADT/ArrayRef.h>
@@ -89,7 +92,9 @@
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/AlwaysInliner.h>
 #include <llvm/Transforms/IPO/Inliner.h>
+#if LLVM_VERSION < 170
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#endif
 #include <llvm/Transforms/Instrumentation.h>
 #include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
 #include <llvm/Transforms/Instrumentation/SanitizerCoverage.h>

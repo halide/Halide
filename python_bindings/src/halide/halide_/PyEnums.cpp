@@ -23,6 +23,7 @@ void define_enums(py::module &m) {
         .value("Host", DeviceAPI::Host)
         .value("Default_GPU", DeviceAPI::Default_GPU)
         .value("CUDA", DeviceAPI::CUDA)
+        .value("Vulkan", DeviceAPI::Vulkan)
         .value("OpenCL", DeviceAPI::OpenCL)
         .value("OpenGLCompute", DeviceAPI::OpenGLCompute)
         .value("Metal", DeviceAPI::Metal)
@@ -178,6 +179,15 @@ void define_enums(py::module &m) {
         .value("SanitizerCoverage", Target::Feature::SanitizerCoverage)
         .value("ProfileByTimer", Target::Feature::ProfileByTimer)
         .value("SPIRV", Target::Feature::SPIRV)
+        .value("Vulkan", Target::Feature::Vulkan)
+        .value("VulkanInt8", Target::VulkanInt8)
+        .value("VulkanInt16", Target::VulkanInt16)
+        .value("VulkanInt64", Target::VulkanInt64)
+        .value("VulkanFloat16", Target::VulkanFloat16)
+        .value("VulkanFloat64", Target::VulkanFloat64)
+        .value("VulkanV10", Target::VulkanV10)
+        .value("VulkanV12", Target::VulkanV12)
+        .value("VulkanV13", Target::VulkanV13)
         .value("Semihosting", Target::Feature::Semihosting)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 

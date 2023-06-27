@@ -69,7 +69,7 @@ extern int strcmp(const char *, const char *);
 
 WEAK int halide_opengl_create_context(void *user_context) {
     if (eglGetCurrentContext() != EGL_NO_CONTEXT) {
-        return 0;
+        return halide_error_code_success;
     }
 
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -78,14 +78,14 @@ WEAK int halide_opengl_create_context(void *user_context) {
             reinterpret_cast<PFNEGLQUERYDEVICESEXTPROC>(
                 eglGetProcAddress("eglQueryDevicesEXT"));
         if (eglQueryDevicesEXT == nullptr) {
-            return 1;
+            return halide_error_code_generic_error;
         }
 
         PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT =
             reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
                 eglGetProcAddress("eglGetPlatformDisplayEXT"));
         if (eglGetPlatformDisplayEXT == nullptr) {
-            return 1;
+            return halide_error_code_generic_error;
         }
 
         const int kMaxDevices = 32;
@@ -94,7 +94,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
         EGLint egl_error = eglGetError();
         if (!eglQueryDevicesEXT(kMaxDevices, egl_devices, &num_devices) ||
             egl_error != EGL_SUCCESS) {
-            return 1;
+            return halide_error_code_generic_error;
         }
 
         EGLBoolean initialized = EGL_FALSE;
@@ -111,9 +111,8 @@ WEAK int halide_opengl_create_context(void *user_context) {
         }
 
         if (eglGetError() != EGL_SUCCESS || initialized != EGL_TRUE) {
-            error(user_context) << "Could not initialize EGL display: "
-                                << eglGetError();
-            return 1;
+            error(user_context) << "Could not initialize EGL display";
+            return halide_error_code_generic_error;
         }
     }
 
@@ -136,11 +135,12 @@ WEAK int halide_opengl_create_context(void *user_context) {
     int numconfig;
     EGLBoolean result = eglChooseConfig(display, attribs, &config, 1, &numconfig);
     if (result != EGL_TRUE || numconfig != 1) {
-        error(user_context) << "eglChooseConfig(): config not found: "
+        debug(user_context) << "eglChooseConfig(): config not found: "
                             << " result=" << (int)result
                             << " eglGetError=" << eglGetError()
                             << " numConfig=" << numconfig;
-        return -1;
+        error(user_context) << "eglChooseConfig(): config not found.";
+        return halide_error_code_generic_error;
     }
 
     EGLint context_attribs[] = {
@@ -149,8 +149,8 @@ WEAK int halide_opengl_create_context(void *user_context) {
     EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT,
                                           context_attribs);
     if (context == EGL_NO_CONTEXT) {
-        error(user_context) << "Error: eglCreateContext failed: " << eglGetError();
-        return -1;
+        error(user_context) << "eglCreateContext failed.";
+        return halide_error_code_generic_error;
     }
 
     EGLint surface_attribs[] = {
@@ -159,18 +159,19 @@ WEAK int halide_opengl_create_context(void *user_context) {
         EGL_NONE};
     EGLSurface surface = eglCreatePbufferSurface(display, config, surface_attribs);
     if (surface == EGL_NO_SURFACE) {
-        error(user_context) << "Error: Could not create EGL window surface: " << eglGetError();
-        return -1;
+        error(user_context) << "Error: Could not create EGL window surface.";
+        return halide_error_code_generic_error;
     }
 
     result = eglMakeCurrent(display, surface, surface, context);
     if (result != EGL_TRUE) {
-        error(user_context) << "eglMakeCurrent fails: "
+        debug(user_context) << "eglMakeCurrent fails: "
                             << " result=" << (int)result
                             << " eglGetError=" << eglGetError();
-        return -1;
+        error(user_context) << "eglMakeCurrent failed.";
+        return halide_error_code_generic_error;
     }
-    return 0;
+    return halide_error_code_success;
 }
 
 WEAK void *halide_opengl_get_proc_address(void *user_context, const char *name) {

@@ -76,8 +76,18 @@ foreach (comp IN LISTS known_components)
     string(TOUPPER "TARGET_${comp}" OPTION)
     string(TOUPPER "WITH_${comp}" DEFINE)
 
-    cmake_dependent_option(${OPTION} "Include ${comp} target" ON
-                           "${comp} IN_LIST LLVM_TARGETS_TO_BUILD" OFF)
+    if (comp STREQUAL "RISCV" AND LLVM_PACKAGE_VERSION VERSION_LESS 17.0)
+        # We default the RISCV target to OFF for LLVM versions prior to 17.0;
+        # it's not clear how robust and well-tested Halide's RISCV codegen
+        # is with LLVM16, and a great deal of effort is being put into
+        # improving it in LLVM17... so default to off so that people won't
+        # hurt themselves too badly.
+        cmake_dependent_option(${OPTION} "Include ${comp} target" OFF
+                               "${comp} IN_LIST LLVM_TARGETS_TO_BUILD" OFF)
+    else ()
+        cmake_dependent_option(${OPTION} "Include ${comp} target" ON
+                               "${comp} IN_LIST LLVM_TARGETS_TO_BUILD" OFF)
+    endif ()
     if (${OPTION} OR Halide_SHARED_LLVM)
         message(STATUS "Enabling ${comp} backend")
         list(APPEND Halide_LLVM_DEFS $<BUILD_INTERFACE:${DEFINE}>)

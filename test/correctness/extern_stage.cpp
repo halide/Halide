@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
         uint8_t correct = 4 * i * i;
         if (result(i) != correct) {
             printf("result(%d) = %d instead of %d\n", i, result(i), correct);
-            return -1;
+            return 1;
         }
     }
 

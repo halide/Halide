@@ -113,10 +113,7 @@ tests(GROUPS correctness
       fuse.cpp
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
-      fuzz_bounds.cpp
-      fuzz_cse.cpp
       fuzz_float_stores.cpp
-      fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
@@ -216,6 +213,7 @@ tests(GROUPS correctness
       multipass_constraints.cpp
       multiple_outputs.cpp
       mux.cpp
+      narrow_predicates.cpp
       nested_tail_strategies.cpp
       newtons_method.cpp
       non_nesting_extern_bounds_query.cpp

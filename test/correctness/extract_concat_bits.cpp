@@ -56,10 +56,10 @@ int main(int argc, char **argv) {
         if (vectorize) {
             if (counter.extracts > 0) {
                 printf("Saw an unwanted extract_bits call in lowered code\n");
-                return -1;
+                return 1;
             } else if (counter.reinterprets == 0) {
                 printf("Did not see a vector reinterpret in lowered code\n");
-                return -1;
+                return 1;
             }
         }
 
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
             uint8_t correct = (i / 4) >> (8 * (i % 4));
             if (out(i) != correct) {
                 printf("out(%d) = %d instead of %d\n", i, out(i), correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -95,10 +95,10 @@ int main(int argc, char **argv) {
 
         if (counter.concats > 0) {
             printf("Saw an unwanted concat_bits call in lowered code\n");
-            return -1;
+            return 1;
         } else if (counter.reinterprets == 0) {
             printf("Did not see a vector reinterpret in lowered code\n");
-            return -1;
+            return 1;
         }
 
         for (int i = 0; i < 64; i++) {
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
                 uint8_t result = (out(i) >> (b * 8)) & 0xff;
                 if (result != correct) {
                     printf("out(%d) byte %d = %d instead of %d\n", i, b, result, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
             for (int i = 0; i < out.width(); i++) {
                 if (out(i) == 0) {
                     std::cerr << "Mismatch between: " << a << " and " << b << " when x == " << i << "\n";
-                    exit(-1);
+                    exit(1);
                 }
             }
         };

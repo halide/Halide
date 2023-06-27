@@ -746,7 +746,8 @@ Realization Pipeline::realize(JITUserContext *context,
         if (needs_crop) {
             r[i].crop(crop);
         }
-        r[i].copy_to_host(context);
+        auto result = r[i].copy_to_host(context);
+        user_assert(result == halide_error_code_success) << "copy_to_host() failed with error: " << result;
     }
     return r;
 }
@@ -927,6 +928,10 @@ void Pipeline::realize(JITUserContext *context,
                        const ParamMap &param_map) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
+
+    if (t.has_feature(Target::OpenGLCompute)) {
+        user_warning << "WARNING: OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.\n";
+    }
 
     debug(2) << "Realizing Pipeline for " << target << "\n";
 

@@ -51,6 +51,13 @@ set_target_properties(
     LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>/halide"
     EXPORT_NAME Python
 )
+if (Halide_ASAN_ENABLED)
+    set_target_properties(
+        Halide_Python
+        PROPERTIES
+        CMAKE_SHARED_LINKER_FLAGS -shared-libasan
+    )
+endif ()
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
 # TODO: There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH

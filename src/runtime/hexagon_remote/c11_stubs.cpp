@@ -6,7 +6,7 @@ extern "C" {
 
 #include "HAP_farf.h"
 
-//#define FARF_LOW 1    // Enable debug output
+// #define FARF_LOW 1    // Enable debug output
 
 void __attribute__((weak)) __cxa_finalize() {
     FARF(LOW, "Finalizing\n");

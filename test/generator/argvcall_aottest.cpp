@@ -17,7 +17,7 @@ void verify(const Buffer<int32_t, 3> &img, float f1, float f2) {
                 int expected = (int32_t)(c * (i > j ? i : j) * f1 / f2);
                 if (img(i, j, c) != expected) {
                     printf("img[%d, %d, %d] = %d (expected %d)\n", i, j, c, img(i, j, c), expected);
-                    exit(-1);
+                    exit(1);
                 }
             }
         }
@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
     result = argvcall(1.2f, 3.4f, output);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);
-        exit(-1);
+        exit(1);
     }
     verify(output, 1.2f, 3.4f);
 
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     result = argvcall_argv(args);
     if (result != 0) {
         fprintf(stderr, "Result: %d\n", result);
-        exit(-1);
+        exit(1);
     }
     verify(output, arg0, arg1);
 

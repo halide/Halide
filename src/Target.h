@@ -108,7 +108,7 @@ struct Target {
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        OpenGLCompute = halide_target_feature_openglcompute,
+        OpenGLCompute = halide_target_feature_openglcompute,  // NOTE: This feature is deprecated and will be removed in Halide 17.
         EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
         Profile = halide_target_feature_profile,
@@ -146,6 +146,7 @@ struct Target {
         WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
         WasmThreads = halide_target_feature_wasm_threads,
         WasmBulkMemory = halide_target_feature_wasm_bulk_memory,
+        WebGPU = halide_target_feature_webgpu,
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
         ARMDotProd = halide_target_feature_arm_dot_prod,
@@ -156,6 +157,15 @@ struct Target {
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
         SPIRV = halide_target_feature_spirv,
+        Vulkan = halide_target_feature_vulkan,
+        VulkanInt8 = halide_target_feature_vulkan_int8,
+        VulkanInt16 = halide_target_feature_vulkan_int16,
+        VulkanInt64 = halide_target_feature_vulkan_int64,
+        VulkanFloat16 = halide_target_feature_vulkan_float16,
+        VulkanFloat64 = halide_target_feature_vulkan_float64,
+        VulkanV10 = halide_target_feature_vulkan_version10,
+        VulkanV12 = halide_target_feature_vulkan_version12,
+        VulkanV13 = halide_target_feature_vulkan_version13,
         Semihosting = halide_target_feature_semihosting,
         FeatureEnd = halide_target_feature_end
     };
@@ -318,6 +328,11 @@ struct Target {
      * 20 (our minimum supported cuda compute capability) if no cuda
      * features are set. */
     int get_cuda_capability_lower_bound() const;
+
+    /** Get the minimum Vulkan capability found as an integer. Returns
+     * 10 (our minimum supported Vulkan compute capability) if no Vulkan
+     * features are set. */
+    int get_vulkan_capability_lower_bound() const;
 
     /** Was libHalide compiled with support for this target? */
     bool supported() const;

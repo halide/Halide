@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

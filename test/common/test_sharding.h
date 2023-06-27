@@ -64,7 +64,7 @@ public:
         if (total_shards != 0) {
             if (total_shards < 0 || shard_index < 0 || shard_index >= total_shards) {
                 std::cerr << "Illegal values for sharding: total " << total_shards << " current " << shard_index << "\n";
-                exit(-1);
+                exit(1);
             }
         }
     }

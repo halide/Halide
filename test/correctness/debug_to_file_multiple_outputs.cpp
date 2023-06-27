@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
             int32_t val = f_data[y * (size_x + 1) + x];
             if (val != x + y) {
                 printf("f_data[%d, %d] = %d instead of %d\n", x, y, val, x + y);
-                return -1;
+                return 1;
             }
         }
     }
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
             float correct = (float)(f_data[y * (size_x + 1) + x] + f_data[y * (size_x + 1) + x + 1]);
             if (val != correct) {
                 printf("g_data[%d, %d] = %f instead of %f\n", x, y, val, correct);
-                return -1;
+                return 1;
             }
         }
     }
@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
             float correct = f_data[y * (size_x + 1) + x] + g_data[y * size_x + x];
             if (val != correct) {
                 printf("h_data[%d, %d] = %f instead of %f\n", x, y, val, correct);
-                return -1;
+                return 1;
             }
         }
     }

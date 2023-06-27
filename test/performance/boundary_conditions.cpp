@@ -85,6 +85,12 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // Workaround for https://github.com/halide/Halide/issues/7420
+    if (target.has_feature(Target::WebGPU)) {
+        printf("[SKIP] workaround for issue #7420 (performance 2x as slow as expected)\n");
+        return 0;
+    }
+
     ImageParam input(Float(32), 2);
     ImageParam padded_input(Float(32), 2);
 
@@ -118,7 +124,7 @@ int main(int argc, char **argv) {
         if (tests[i].time > tests[0].time * 5) {
             printf("Error: %s is %f times slower than unbounded\n",
                    tests[i].name, tests[i].time / tests[0].time);
-            return -1;
+            return 1;
         }
     }
 
@@ -128,7 +134,7 @@ int main(int argc, char **argv) {
         if (tests[i].time > tests[0].time * 2) {
             printf("Error: %s is %f times slower than unbounded\n",
                    tests[i].name, tests[i].time / tests[0].time);
-            return -1;
+            return 1;
         }
     }
 

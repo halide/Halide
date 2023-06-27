@@ -33,8 +33,9 @@ public:
     /** Single-element realizations are implicitly castable to Buffers. */
     template<typename T, int Dims>
     operator Buffer<T, Dims>() const {
-        // use our operator[] overload so that we get proper range-checking
-        return (*this)[0].as<T, Dims>();
+        user_assert(images.size() == 1) << "Cannot cast Realization with "
+                                        << images.size() << " elements to a Buffer";
+        return images[0];
     }
 
     /** Construct a Realization that acts as a reference to a single

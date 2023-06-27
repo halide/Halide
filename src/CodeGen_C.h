@@ -127,6 +127,9 @@ protected:
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
     virtual std::string print_name(const std::string &);
 
+    /** Add platform specific prologue */
+    virtual void add_platform_prologue();
+
     /** Add typedefs for vector types. Not needed for OpenCL, might
      * use different syntax for other C-like languages. */
     virtual void add_vector_typedefs(const std::set<Type> &vector_types);
@@ -189,7 +192,7 @@ protected:
     bool have_user_context;
 
     /** Track current calling convention scope. */
-    bool extern_c_open;
+    bool extern_c_open = false;
 
     /** True if at least one gpu-based for loop is used. */
     bool uses_gpu_for_loops;
@@ -274,13 +277,20 @@ protected:
 
     /** Are we inside an atomic node that uses mutex locks?
         This is used for detecting deadlocks from nested atomics. */
-    bool inside_atomic_mutex_node;
+    bool inside_atomic_mutex_node = false;
 
     /** Emit atomic store instructions? */
-    bool emit_atomic_stores;
+    bool emit_atomic_stores = false;
 
     /** true if add_vector_typedefs() has been called. */
-    bool using_vector_typedefs;
+    bool using_vector_typedefs = false;
+
+    /** Some architectures have private memory for the call stack; this
+     * means a thread cannot hand pointers to stack memory to another
+     * thread. Returning true here flag forces heap allocation of
+     * things that might be shared, such as closures and any buffer
+     * that may be used in a parallel context. */
+    virtual bool is_stack_private_to_thread() const;
 
     void emit_argv_wrapper(const std::string &function_name,
                            const std::vector<LoweredArgument> &args);

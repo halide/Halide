@@ -144,6 +144,10 @@ DECLARE_CPP_INITMOD(timer_profiler)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
+// TODO(https://github.com/halide/Halide/issues/7248)
+// DECLARE_CPP_INITMOD(webgpu)
+DECLARE_CPP_INITMOD(webgpu_dawn)
+DECLARE_CPP_INITMOD(webgpu_emscripten)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
@@ -230,6 +234,14 @@ DECLARE_CPP_INITMOD_LOOKUP(windows_d3d12compute_arm)
 #else
 DECLARE_NO_INITMOD(windows_d3d12compute_arm)
 #endif  // WITH_D3D12
+
+#ifdef WITH_VULKAN
+DECLARE_CPP_INITMOD(vulkan)
+DECLARE_CPP_INITMOD(windows_vulkan)
+#else
+DECLARE_NO_INITMOD(vulkan)
+DECLARE_NO_INITMOD(windows_vulkan)
+#endif  // WITH_VULKAN
 
 #ifdef WITH_X86
 DECLARE_LL_INITMOD(x86_amx)
@@ -332,9 +344,17 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         }
     } else if (target.arch == Target::POWERPC) {
         if (target.bits == 32) {
+#if LLVM_VERSION >= 170
+            return llvm::DataLayout("E-m:e-p:32:32-Fn32-i64:64-n32");
+#else
             return llvm::DataLayout("E-m:e-p:32:32-i64:64-n32");
+#endif
         } else {
+#if LLVM_VERSION >= 170
+            return llvm::DataLayout("e-m:e-Fn32-i64:64-n32:64-S128-v256:256:256-v512:512:512");
+#else
             return llvm::DataLayout("e-m:e-i64:64-n32:64-S128-v256:256:256-v512:512:512");
+#endif
         }
     } else if (target.arch == Target::Hexagon) {
         return llvm::DataLayout(
@@ -357,8 +377,8 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
 #endif
         }
     } else {
-        internal_error << "Bad target arch: " << target.arch << "\n";
-        return llvm::DataLayout("unreachable");
+        // Return empty data layout. Must be set later.
+        return llvm::DataLayout("");
     }
 }
 
@@ -487,13 +507,16 @@ llvm::Triple get_triple_for_target(const Target &target) {
 
         if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
+        } else if (target.os == Target::Android) {
+            triple.setOS(llvm::Triple::Linux);
+            triple.setEnvironment(llvm::Triple::Android);
         } else if (target.os == Target::NoOS) {
             // for baremetal environment
         } else {
             user_error << "No RISCV support for this OS\n";
         }
     } else {
-        internal_error << "Bad target arch: " << target.arch << "\n";
+        // Return default-constructed triple. Must be set later.
     }
 
     return triple;
@@ -853,7 +876,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 add_allocator();
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-                if (t.arch == Target::ARM) {
+                if (t.arch == Target::ARM || t.arch == Target::RISCV) {
                     modules.push_back(get_initmod_android_clock(c, bits_64, debug));
                 } else {
                     modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
@@ -1185,6 +1208,28 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_windows_d3d12compute_arm(c, bits_64, debug));
             } else {
                 user_error << "Direct3D 12 can only be used on ARM or X86 architectures.\n";
+            }
+        }
+        if (t.has_feature(Target::Vulkan)) {
+            if (t.os == Target::Windows) {
+                modules.push_back(get_initmod_windows_vulkan(c, bits_64, debug));
+            } else {
+                modules.push_back(get_initmod_vulkan(c, bits_64, debug));
+            }
+        }
+        if (t.has_feature(Target::WebGPU)) {
+            if (t.os == Target::Windows) {
+                // TOOD: Test on Windows and enable this.
+                // See https://github.com/halide/Halide/issues/7249
+                user_error << "WebGPU runtime not yet supported on Windows.\n";
+            } else {
+                // Select the right WebGPU runtime variant based on the Target's OS:
+                // if we are targeting wasm, use the Emscripten variant; in all other cases, use Dawn variant.
+                if (t.os == Target::WebAssemblyRuntime) {
+                    modules.push_back(get_initmod_webgpu_emscripten(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_webgpu_dawn(c, bits_64, debug));
+                }
             }
         }
         if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {

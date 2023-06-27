@@ -51,7 +51,7 @@ struct FuncInfo {
         int real_dims = p->dimensions / p->type.lanes;
         if (real_dims > 16) {
             fprintf(stderr, "Error: found trace packet with dimensionality > 16. Aborting.\n");
-            exit(-1);
+            exit(1);
         }
         for (int i = 0; i < real_dims; i++) {
             min_coords[i] = INT32_MAX;
@@ -71,11 +71,11 @@ struct FuncInfo {
 
         if (scalar_type != type) {
             fprintf(stderr, "Error: packet type doesn't match previous packets of same Func. Aborting.\n");
-            exit(-1);
+            exit(1);
         }
         if (real_dims != dimensions) {
             fprintf(stderr, "Error: packet dimensionality doesn't match previous packets of same Func. Aborting.\n");
-            exit(-1);
+            exit(1);
         }
 
         for (int lane = 0; lane < lanes; lane++) {
@@ -98,7 +98,7 @@ struct FuncInfo {
         values = Buffer<>(type, extents);
         if (values.data() == nullptr) {
             fprintf(stderr, "Memory allocation failure. Aborting.\n");
-            exit(-1);
+            exit(1);
         }
     }
 
@@ -129,7 +129,7 @@ struct FuncInfo {
             add_typed<bool>(p);
         } else {
             printf("Packet with unknown type\n");
-            exit(-1);
+            exit(1);
         }
     }
 
@@ -140,12 +140,12 @@ struct FuncInfo {
 
         if (!allocated()) {
             fprintf(stderr, "Packet storage not allocated. Aborting.\n");
-            exit(-1);
+            exit(1);
         }
 
         if (p->dimensions < 0) {
             fprintf(stderr, "Negative dimensionality found. Aborting.\n");
-            exit(-1);
+            exit(1);
         }
 
         for (int lane = 0; lane < lanes; lane++) {
@@ -222,7 +222,7 @@ void finish_dump(map<string, FuncInfo> &func_info, BufferOutputOpts output_opts)
             printf("float%d\n", info.type.bits);
         } else {
             fprintf(stderr, "Unsupported Func type. Aborting.\n");
-            exit(-1);
+            exit(1);
         }
 
         // Dimensions
@@ -359,7 +359,7 @@ int main(int argc, char *const *argv) {
     fseek(file_desc, 0, SEEK_SET);
     if (ferror(file_desc)) {
         fprintf(stderr, "Error: couldn't seek back to beginning of trace file. Aborting.\n");
-        exit(-1);
+        exit(1);
     }
 
     for (auto &pair : func_info) {
@@ -387,7 +387,7 @@ int main(int argc, char *const *argv) {
         if ((p.event == halide_trace_store) || (p.event == halide_trace_load)) {
             if (func_info.find(string(p.func())) == func_info.end()) {
                 fprintf(stderr, "Unable to find Func on 2nd pass. Aborting.\n");
-                exit(-1);
+                exit(1);
             }
             func_info[string(p.func())].add(&p);
         }

@@ -114,6 +114,12 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::D3D12Compute:
         out << "<D3D12Compute>";
         break;
+    case DeviceAPI::Vulkan:
+        out << "<Vulkan>";
+        break;
+    case DeviceAPI::WebGPU:
+        out << "<WebGPU>";
+        break;
     }
     return out;
 }

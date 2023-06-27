@@ -16,9 +16,9 @@ using std::sort;
 using std::string;
 using std::vector;
 
-static ostringstream nil;
-
 namespace {
+
+ostringstream nil;
 
 class CodeGen_Metal_Dev : public CodeGen_GPU_Dev {
 public:
@@ -46,6 +46,10 @@ public:
 
     std::string api_unique_name() override {
         return "metal";
+    }
+
+    bool kernel_run_takes_types() const override {
+        return true;
     }
 
 protected:
@@ -206,7 +210,7 @@ string simt_intrinsic(const string &name) {
 }  // namespace
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_extern_call(const Call *op) {
-    internal_assert(!function_takes_user_context(op->name));
+    internal_assert(!function_takes_user_context(op->name)) << op->name;
     vector<string> args(op->args.size());
     for (size_t i = 0; i < op->args.size(); i++) {
         args[i] = print_expr(op->args[i]);

@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
     }
 
     if (!success) {
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

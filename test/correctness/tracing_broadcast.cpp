@@ -11,7 +11,7 @@ int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
                 printf("All values stored should have been 1234567890\n"
                        "Instead they are: %d\n",
                        val);
-                exit(-1);
+                exit(1);
             }
         }
     }

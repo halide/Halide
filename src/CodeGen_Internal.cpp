@@ -67,6 +67,8 @@ bool function_takes_user_context(const std::string &name) {
         "halide_openglcompute_run",
         "halide_metal_run",
         "halide_d3d12compute_run",
+        "halide_vulkan_run",
+        "halide_webgpu_run",
         "halide_msan_annotate_buffer_is_initialized_as_destructor",
         "halide_msan_annotate_buffer_is_initialized",
         "halide_msan_annotate_memory_is_initialized",
@@ -91,6 +93,8 @@ bool function_takes_user_context(const std::string &name) {
         "halide_openglcompute_initialize_kernels",
         "halide_metal_initialize_kernels",
         "halide_d3d12compute_initialize_kernels",
+        "halide_vulkan_initialize_kernels",
+        "halide_webgpu_initialize_kernels",
         "halide_get_gpu_device",
         "_halide_buffer_crop",
         "_halide_buffer_retire_crop_after_extern_stage",
@@ -516,6 +520,9 @@ Expr lower_mux(const Call *mux) {
     internal_assert(mux->args.size() >= 2);
     Expr equiv = mux->args.back();
     Expr index = mux->args[0];
+    if (const Broadcast *b = index.as<Broadcast>()) {
+        index = b->value;
+    }
     int num_vals = (int)mux->args.size() - 1;
     for (int i = num_vals - 1; i >= 0; i--) {
         equiv = select(index == make_const(index.type(), i), mux->args[i + 1], equiv);

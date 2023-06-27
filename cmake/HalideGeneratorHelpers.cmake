@@ -244,11 +244,23 @@ function(add_halide_library TARGET)
         if (NOT TARGET Halide::Python)
             message(FATAL_ERROR "This version of Halide was built without support for Python bindings; rebuild using WITH_PYTHON_BINDINGS=ON to use this rule with Python Generators.")
         endif ()
+        
         if (NOT TARGET Python3::Interpreter)
             message(FATAL_ERROR "You must call find_package(Python3) in your CMake code in order to use this rule with Python Generators.")
         endif ()
-        set(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
-        set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${Python3_EXECUTABLE} $<SHELL_PATH:${py_src}>)
+
+        if (CMAKE_VERSION VERSION_LESS 3.24)
+            set(arg_sep "")
+        else ()
+            set(arg_sep "--")
+        endif ()
+
+        set(
+            GENERATOR_CMD
+            ${CMAKE_COMMAND} -E env "PYTHONPATH=$<TARGET_FILE_DIR:Halide::Python>/.." ${arg_sep}
+            ${Halide_PYTHON_LAUNCHER}
+            "$<TARGET_FILE:Python3::Interpreter>" $<SHELL_PATH:${py_src}>
+        )
         set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python ${py_src})
     else()
         set(GENERATOR_CMD "${ARG_FROM}")
@@ -414,6 +426,11 @@ function(add_halide_library TARGET)
         set_target_properties("${TARGET}" PROPERTIES
                               POSITION_INDEPENDENT_CODE ON
                               LINKER_LANGUAGE CXX)
+        if (NOT Halide_NO_DEFAULT_FLAGS)
+            # Silence many useless warnings in generated C++ code compilation
+            target_compile_options("${TARGET}" PRIVATE
+                $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-psabi>)
+        endif ()
         _Halide_fix_xcode("${TARGET}")
     endif ()
 
@@ -711,10 +728,20 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
         endif ()
     endif ()
 
+    if ("${ARGN}" MATCHES "vulkan")
+        find_package(Vulkan REQUIRED)
+        target_link_libraries(${TARGET} ${VISIBILITY} Vulkan::Vulkan)
+    endif ()
+
     if ("${ARGN}" MATCHES "metal")
         find_library(FOUNDATION_LIBRARY Foundation REQUIRED)
         find_library(METAL_LIBRARY Metal REQUIRED)
         target_link_libraries(${TARGET} ${VISIBILITY} "${FOUNDATION_LIBRARY}" "${METAL_LIBRARY}")
+    endif ()
+
+    if ("${ARGN}" MATCHES "webgpu")
+        find_package(Halide_WebGPU REQUIRED)
+        target_link_libraries(${TARGET} ${VISIBILITY} Halide::WebGPU)
     endif ()
 endfunction()
 
@@ -770,4 +797,3 @@ function(_Halide_gengen_ensure)
         _Halide_place_dll(_Halide_gengen)
     endif ()
 endfunction()
-

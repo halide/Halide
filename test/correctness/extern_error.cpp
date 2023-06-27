@@ -6,7 +6,7 @@ using namespace Halide;
 bool extern_error_called = false;
 extern "C" HALIDE_EXPORT_SYMBOL int extern_error(JITUserContext *user_context, halide_buffer_t *out) {
     extern_error_called = true;
-    return -1;
+    return halide_error_code_generic_error;
 }
 
 bool error_occurred = false;
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 
     if (!error_occurred || !extern_error_called) {
         printf("There was supposed to be an error\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

@@ -617,7 +617,11 @@ struct TickStackEntry {
     int line;
 };
 
-static vector<TickStackEntry> tick_stack;
+namespace {
+
+vector<TickStackEntry> tick_stack;
+
+}  // namespace
 
 void halide_tic_impl(const char *file, int line) {
     string f = file;

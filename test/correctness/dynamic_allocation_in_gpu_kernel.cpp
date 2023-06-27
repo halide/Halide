@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
                 if (correct != actual) {
                     printf("result[%d](%d, %d) = %f instead of %f\n",
                            i, x, y, actual, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

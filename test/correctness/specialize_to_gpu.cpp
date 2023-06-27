@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
         uint32_t err = evaluate<uint32_t>(sum(abs(out(r) - reference(r))));
         if (err) {
             printf("Incorrect results for test %d\n", i);
-            return -1;
+            return 1;
         }
     }
 

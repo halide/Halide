@@ -1,6 +1,8 @@
 #ifndef _HEXAGON_DMA_POOL_H_
 #define _HEXAGON_DMA_POOL_H_
 
+#include "HalideRuntime.h"
+
 #ifdef COMPILING_HALIDE_RUNTIME
 // Guard this with COMPILING_HALIDE_RUNTIME so that apps/hexagon_dma
 // can include this file without getting runtime_internal.h

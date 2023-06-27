@@ -129,8 +129,8 @@ class NormalizeDimensionality : public IRMutator {
     const ExtractBlockSize &block_size;
     const DeviceAPI device_api;
 
-    int depth;
-    int max_depth;
+    int depth = 0;
+    int max_depth = 0;
 
     Stmt wrap(Stmt s) {
         if (depth != 0) {
@@ -181,7 +181,7 @@ class NormalizeDimensionality : public IRMutator {
 
 public:
     NormalizeDimensionality(const ExtractBlockSize &e, DeviceAPI device_api)
-        : block_size(e), device_api(device_api), depth(0), max_depth(0) {
+        : block_size(e), device_api(device_api) {
     }
 };
 
@@ -293,9 +293,9 @@ public:
 private:
     map<string, SharedAllocation *> shared;
 
-    bool in_threads;
+    bool in_threads = false;
 
-    int barrier_stage;
+    int barrier_stage = 0;
 
     const DeviceAPI device_api;
 
@@ -759,7 +759,7 @@ public:
         // lifetimes, and then cluster the groups according to which
         // ones can share a single allocation. For cuda, opencl, and
         // similar we get one big combined allocation per memory
-        // type. For openglcompute and direct3d, we also separate by
+        // type. For vulkan, openglcompute and direct3d, we also separate by
         // element type.
         map<pair<MemoryType, Type>, vector<AllocGroup>> clustered_allocs;
 
@@ -1022,13 +1022,13 @@ public:
     }
 
     ExtractSharedAndHeapAllocations(DeviceAPI d)
-        : in_threads(false),
-          barrier_stage(0),
-          device_api(d),
+        : device_api(d),
           thread_id_var_name(unique_name('t')),
           num_threads_var_name(unique_name('t')),
           may_merge_allocs_of_different_type(device_api != DeviceAPI::OpenGLCompute &&
-                                             device_api != DeviceAPI::D3D12Compute) {
+                                             device_api != DeviceAPI::D3D12Compute &&
+                                             device_api != DeviceAPI::Vulkan &&
+                                             device_api != DeviceAPI::WebGPU) {
     }
 };  // namespace Internal
 
@@ -1201,7 +1201,7 @@ public:
 };
 
 class InjectThreadBarriers : public IRMutator {
-    bool in_threads, injected_barrier;
+    bool in_threads = false, injected_barrier;
 
     using IRMutator::visit;
 
@@ -1349,8 +1349,7 @@ class InjectThreadBarriers : public IRMutator {
 
 public:
     InjectThreadBarriers(ExtractSharedAndHeapAllocations &sha, ExtractRegisterAllocations &ra)
-        : in_threads(false),
-          block_allocs(sha),
+        : block_allocs(sha),
           register_allocs(ra) {
     }
 };
@@ -1489,7 +1488,8 @@ class ZeroGPULoopMins : public IRMutator {
         in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::None) ||
                           (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL) ||
                           (op->device_api == DeviceAPI::Metal) ||
-                          (op->device_api == DeviceAPI::D3D12Compute);
+                          (op->device_api == DeviceAPI::D3D12Compute) ||
+                          (op->device_api == DeviceAPI::Vulkan);
 
         Stmt stmt = IRMutator::visit(op);
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_const_zero(op->min)) {

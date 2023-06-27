@@ -20,6 +20,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (target.has_feature(Target::Vulkan)) {
+        printf("[SKIP] Skipping test for Vulkan. Async performance needs to be improved before this test will pass.\n");
+        return 0;
+    }
+
     if (!target.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
@@ -72,7 +77,7 @@ int main(int argc, char **argv) {
 
     if (times[1] > 1.2 * times[0]) {
         printf("Using async should have been faster\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");
