@@ -108,6 +108,7 @@ add_subdirectory(dependencies)
 set(CMAKE_FIND_FRAMEWORK LAST)
 
 # TODO: these really belong in tools/, but CMake has a weird bug with $<TARGET_NAME_IF_EXISTS:...>
+# https://gitlab.kitware.com/cmake/cmake/-/issues/25033
 find_package(JPEG)
 find_package(PNG)
 

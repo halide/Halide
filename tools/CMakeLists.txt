@@ -15,8 +15,8 @@ target_compile_options(regexp_replace PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd4996>
 # Interface target for enabling PNG/JPEG support in Halide
 ##
 
-# TODO: if/when CMake fixes the bugs with `$<TARGET_NAME_IF_EXISTS:...>`, move
-# find_package(PNG) and find_package(JPEG) here.
+# TODO: if/when CMake fixes https://gitlab.kitware.com/cmake/cmake/-/issues/25033
+# then move find_package(PNG/JPEG) here.
 
 add_library(Halide_ImageIO INTERFACE)
 add_library(Halide::ImageIO ALIAS Halide_ImageIO)
