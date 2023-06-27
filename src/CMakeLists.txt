@@ -52,7 +52,7 @@ set(HEADER_FILES
     Deinterleave.h
     Derivative.h
     DerivativeUtils.h
-    Deserializer.h
+    Deserialization.h
     DeviceAPI.h
     DeviceArgument.h
     DeviceInterface.h
@@ -143,7 +143,7 @@ set(HEADER_FILES
     ScheduleFunctions.h
     Scope.h
     SelectGPUAPI.h
-    Serializer.h
+    Serialization.h
     Simplify.h
     SimplifyCorrelatedDifferences.h
     SimplifySpecializations.h
@@ -225,7 +225,7 @@ set(SOURCE_FILES
     Deinterleave.cpp
     Derivative.cpp
     DerivativeUtils.cpp
-    Deserializer.cpp
+    Deserialization.cpp
     DeviceArgument.cpp
     DeviceInterface.cpp
     Dimension.cpp
@@ -306,7 +306,7 @@ set(SOURCE_FILES
     Schedule.cpp
     ScheduleFunctions.cpp
     SelectGPUAPI.cpp
-    Serializer.cpp
+    Serialization.cpp
     Simplify.cpp
     Simplify_Add.cpp
     Simplify_And.cpp

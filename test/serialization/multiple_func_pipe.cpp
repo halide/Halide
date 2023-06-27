@@ -14,10 +14,8 @@ int main(int argc, char **argv) {
     Halide::Pipeline pipe(blury);
 
     // serialize and deserialize
-    Serializer serializer;
-    serializer.serialize(pipe, "test.hlpipe");
-    Deserializer deserializer;
-    Pipeline p = deserializer.deserialize("test.hlpipe");
+    serialize_pipeline(pipe, "test.hlpipe");
+    Pipeline p = deserialize_pipeline("test.hlpipe");
 
     return 0;
 }

@@ -46,11 +46,7 @@ void dump_header(const std::string &header) {
             }
             // we cannot include flatbuffers.h in-place during generation of Halide.h
             // so we simply leave with an include here.
-            if (path + sub_header == "flatbuffers/flatbuffers.h") {
-                fputs("#include \"flatbuffers/flatbuffers.h\"", stdout);
-            } else {
-                dump_header(path + sub_header);
-            }
+            dump_header(path + sub_header);
         } else {
             fputs(line, stdout);
         }

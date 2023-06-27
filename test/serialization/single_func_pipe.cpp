@@ -10,10 +10,8 @@ int main(int argc, char **argv) {
     gradient(x, y) = x + y;
     Pipeline pipe(gradient);
 
-    Serializer serializer;
-    serializer.serialize(pipe, "single_func_pipe.hlpipe");
-    Deserializer deserializer;
-    Pipeline deserialized_pipe = deserializer.deserialize("single_func_pipe.hlpipe");
+    serialize_pipeline(pipe, "single_func_pipe.hlpipe");
+    Pipeline deserialized_pipe = deserialize_pipeline("single_func_pipe.hlpipe");
     bool result = equal(pipe, deserialized_pipe);
 
     assert(result == true);
