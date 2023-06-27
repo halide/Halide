@@ -2,9 +2,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <set>
 #include <string>
-#include <iostream>
 
 std::set<std::string> done;
 

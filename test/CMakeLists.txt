@@ -100,7 +100,7 @@ else ()
 endif ()
 
 
-if (WITH_SERIALIZATION)
+if (BUILD_SERIALIZATION)
     message(STATUS "Building serialization tests enabled")
 add_subdirectory(serialization)
 else ()

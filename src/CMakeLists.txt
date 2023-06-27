@@ -90,6 +90,7 @@ set(HEADER_FILES
     Introspection.h
     IntrusivePtr.h
     IR.h
+    IRComparator.h
     IREquality.h
     IRMatch.h
     IRMutator.h
@@ -256,6 +257,7 @@ set(SOURCE_FILES
     Interval.cpp
     Introspection.cpp
     IR.cpp
+    IRComparator.cpp
     IREquality.cpp
     IRMatch.cpp
     IRMutator.cpp
