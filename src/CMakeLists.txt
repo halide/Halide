@@ -441,7 +441,16 @@ add_library(Halide
 # add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../flatbuffers/
 #                 ${CMAKE_CURRENT_BINARY_DIR}/flatbuffers-build
 #                 EXCLUDE_FROM_ALL)
-target_link_libraries(Halide PRIVATE flatbuffers)
+if (BUILD_SERIALIZATION)
+    find_package(flatbuffers REQUIRED)
+    if(flatbuffers_FOUND)
+        message(STATUS "Found flatbuffers: ${flatbuffers_DIR}")
+        target_link_libraries(Halide PRIVATE flatbuffers)
+    else()
+        message(FATAL_ERROR "flatbuffers not found")
+    endif()
+endif ()
+
 add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)

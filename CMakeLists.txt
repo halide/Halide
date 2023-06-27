@@ -129,15 +129,6 @@ add_subdirectory(tools)
 ##
 # Add tests, tutorials, etc. if we're not being imported into another CMake project.
 ##
-if (BUILD_SERIALIZATION)
-    message(STATUS "Building serialization enabled")
-    find_package(flatbuffers REQUIRED)
-    if(flatbuffers_FOUND)
-        message(STATUS "Found flatbuffers: ${flatbuffers_DIR}")
-    else()
-        message(FATAL_ERROR "flatbuffers not found")
-    endif()
-endif ()
 
 if (WITH_TESTS)
     message(STATUS "Building tests enabled")
