@@ -41,8 +41,20 @@ set(HEXAGON_TOOLS_ROOT "${HEXAGON_SDK_ROOT}/tools/HEXAGON_Tools/${HEXAGON_TOOLS_
 ##
 # Set known paths
 
-set(HEXAGON_CMAKE_TOOLCHAIN "${HEXAGON_SDK_ROOT}/build/cmake/hexagon_toolchain.cmake")
+set(HEXAGON_CMAKE_TOOLCHAIN ${HEXAGON_SDK_ROOT}/build/cmake/hexagon_toolchain.cmake)
+set(FASTRPC_PATH ${HEXAGON_SDK_ROOT}/ipc/fastrpc)
+set(HEXAGON_QAIC ${HEXAGON_SDK_ROOT}/ipc/fastrpc/qaic/Ubuntu16/qaic)
+
+set(CC_HEXAGON  ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang)
+set(CXX_HEXAGON ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang++)
+set(AR_HEXAGON  ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-ar)
+set(LD_HEXAGON  ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-link)
+
 set(ANDROID_NDK_ROOT ${HEXAGON_SDK_ROOT}/tools/android-ndk-r19c)
+set(CC_ARM_64_ANDROID ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang)
+set(CXX_ARM_64_ANDROID ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++)
+set(CC_ARM_32_ANDROID ${CC_ARM_64_ANDROID})
+set(CXX_ARM_32_ANDROID ${CXX_ARM_64_ANDROID})
 
 ##
 # Find ISS wrapper library and headers

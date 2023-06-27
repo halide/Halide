@@ -1,24 +1,8 @@
 find_package(HexagonSDK REQUIRED)
 
-message(STATUS "Using Hexagon SDK at ${HEXAGON_SDK_ROOT}")
-message(STATUS "Using Android NDK at ${ANDROID_NDK_ROOT}")
-message(STATUS "Using Hexagon LLVM Tools at ${HEXAGON_TOOLS_ROOT}")
 
-set(FASTRPC_PATH ${HEXAGON_SDK_ROOT}/ipc/fastrpc)
-set(CC_HEXAGON  ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang)
-set(CXX_HEXAGON ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-clang++)
-set(AR_HEXAGON  ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-ar)
-set(HEXAGON_QAIC ${HEXAGON_SDK_ROOT}/ipc/fastrpc/qaic/Ubuntu16/qaic)
-set(LD_HEXAGON  ${HEXAGON_TOOLS_ROOT}/Tools/bin/hexagon-link)
-
-set(CC_ARM_64_ANDROID ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang)
-set(CXX_ARM_64_ANDROID ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++)
 set(CCFLAGS_ARM_64_ANDROID "-target" "aarch64-linux-android21")
-
-set(CC_ARM_32_ANDROID ${CC_ARM_64_ANDROID})
-set(CXX_ARM_32_ANDROID ${CXX_ARM_64_ANDROID})
 set(CCFLAGS_ARM_32_ANDROID "-target" "armv7a-linux-androideabi21")
-
 
 set(HEXAGON_ARCH 65)
 set(HVX_LENGTH 128)
