@@ -438,7 +438,7 @@ add_library(Halide
             # Including these as sources works around the need to "install" Halide_initmod
             $<TARGET_OBJECTS:Halide_initmod>
             $<TARGET_OBJECTS:Halide_c_templates>)
-add_subdirectory(${FLATBUFFERS_SRC_DIR}
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../flatbuffers/
                 ${CMAKE_CURRENT_BINARY_DIR}/flatbuffers-build
                 EXCLUDE_FROM_ALL)
 target_link_libraries(Halide PRIVATE flatbuffers)
