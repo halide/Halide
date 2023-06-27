@@ -21,6 +21,9 @@ include(HalideGeneratorHelpers)
 # Build Halide as a shared lib by default, but still honor command-line settings.
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
+# Build serialization, disabled by default 
+option(BUILD_SERIALIZATION "Build Halide serialization" ON)
+
 # Warn if the user did not set a build type and is using a single-configuration generator.
 get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if (NOT IS_MULTI_CONFIG AND NOT DEFINED CMAKE_BUILD_TYPE)
@@ -126,6 +129,15 @@ add_subdirectory(tools)
 ##
 # Add tests, tutorials, etc. if we're not being imported into another CMake project.
 ##
+if (BUILD_SERIALIZATION)
+    message(STATUS "Building serialization enabled")
+    find_package(flatbuffers REQUIRED)
+    if(flatbuffers_FOUND)
+        message(STATUS "Found flatbuffers: ${flatbuffers_DIR}")
+    else()
+        message(FATAL_ERROR "flatbuffers not found")
+    endif()
+endif ()
 
 if (WITH_TESTS)
     message(STATUS "Building tests enabled")

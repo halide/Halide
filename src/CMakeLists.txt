@@ -52,6 +52,7 @@ set(HEADER_FILES
     Deinterleave.h
     Derivative.h
     DerivativeUtils.h
+    # Deserializer.h
     DeviceAPI.h
     DeviceArgument.h
     DeviceInterface.h
@@ -141,6 +142,7 @@ set(HEADER_FILES
     ScheduleFunctions.h
     Scope.h
     SelectGPUAPI.h
+    # Serializer.h
     Simplify.h
     SimplifyCorrelatedDifferences.h
     SimplifySpecializations.h
@@ -222,6 +224,7 @@ set(SOURCE_FILES
     Deinterleave.cpp
     Derivative.cpp
     DerivativeUtils.cpp
+    Deserializer.cpp
     DeviceArgument.cpp
     DeviceInterface.cpp
     Dimension.cpp
@@ -301,6 +304,7 @@ set(SOURCE_FILES
     Schedule.cpp
     ScheduleFunctions.cpp
     SelectGPUAPI.cpp
+    Serializer.cpp
     Simplify.cpp
     Simplify_Add.cpp
     Simplify_And.cpp
@@ -363,6 +367,9 @@ set(HTML_TEMPLATE_FILES
     StmtToViz_stylesheet
     )
 
+set (SERIALIZATION_DEFINITION
+    halide_ir.fbs
+    )
 ##
 # Build and import the runtime.
 ##
@@ -397,6 +404,17 @@ foreach (f IN LISTS HTML_TEMPLATE_FILES)
 endforeach ()
 
 ##
+# Build the serialization header file.
+##
+add_library(Halide_serialization_headers OBJECT)
+add_custom_command(OUTPUT "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_ir_generated.h>"
+                   COMMAND flatc --cpp -o "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}>" "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs>"
+                   DEPENDS "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs>"
+                   VERBATIM)
+target_sources(Halide_serialization_headers PRIVATE "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_ir_generated.h>")
+message(STATUS "Build flatbuffers header")
+
+##
 # Build the Halide mono-header.
 ##
 
@@ -420,6 +438,10 @@ add_library(Halide
             # Including these as sources works around the need to "install" Halide_initmod
             $<TARGET_OBJECTS:Halide_initmod>
             $<TARGET_OBJECTS:Halide_c_templates>)
+add_subdirectory(${FLATBUFFERS_SRC_DIR}
+                ${CMAKE_CURRENT_BINARY_DIR}/flatbuffers-build
+                EXCLUDE_FROM_ALL)
+target_link_libraries(Halide PRIVATE flatbuffers)
 add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
