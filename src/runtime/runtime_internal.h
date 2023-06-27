@@ -209,11 +209,6 @@ void halide_thread_yield();
 }  // extern "C"
 
 template<typename T>
-ALWAYS_INLINE T align_up(T p, size_t alignment) {
-    return (p + alignment - 1) & ~(alignment - 1);
-}
-
-template<typename T>
 ALWAYS_INLINE T is_power_of_two(T value) {
     return (value != 0) && ((value & (value - 1)) == 0);
 }

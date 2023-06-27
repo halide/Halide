@@ -14,6 +14,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #ifdef __APPLE__
@@ -710,6 +711,27 @@ private:
                       "Can't convert from a Buffer with static dimensionality to a Buffer with different static dimensionality");
     }
 
+    template<typename SomeType>
+    inline SomeType align_up(SomeType value, size_t alignment) {
+        // Doing pointer -> integer -> pointer conversions can force
+        // the compiler to pessimize optimizations (see e.g.
+        // https://www.ralfj.de/blog/2020/12/14/provenance.html),
+        // so, if our compiler has builtins for this, use them;
+        // if not, fall back to casting as necessary.
+#if defined(__has_builtin) && __has_builtin(__builtin_align_up)
+        return __builtin_align_up(value, alignment);
+#else
+        if constexpr (std::is_pointer<SomeType>::value) {
+            uintptr_t uvalue = (uintptr_t)(value);
+            uvalue = (uvalue + alignment - 1) & ~(alignment - 1);
+            return (SomeType)uvalue;
+        } else {
+            static_assert(std::is_integral<SomeType>::value, "align_up only handles pointers and integral types");
+            return (value + alignment - 1) & ~(alignment - 1);
+        }
+#endif
+    };
+
 public:
     /** Determine if a Buffer<T, Dims, InClassDimStorage> can be constructed from some other Buffer type.
      * If this can be determined at compile time, fail with a static assert; otherwise
@@ -885,10 +907,6 @@ public:
         // is such that the logical size is an integral multiple of 128 bytes (or a bit more).
         constexpr size_t alignment = HALIDE_RUNTIME_BUFFER_ALLOCATION_ALIGNMENT;
 
-        const auto align_up = [=](size_t value) -> size_t {
-            return (value + alignment - 1) & ~(alignment - 1);
-        };
-
         size_t size = size_in_bytes();
 
 #if HALIDE_RUNTIME_BUFFER_USE_ALIGNED_ALLOC
@@ -899,10 +917,11 @@ public:
             // so that the user storage also starts at an aligned point. This is a bit
             // wasteful, but probably not a big deal.
             static_assert(sizeof(AllocationHeader) <= alignment);
-            void *alloc_storage = ::aligned_alloc(alignment, align_up(size) + alignment);
-            assert((uintptr_t)alloc_storage == align_up((uintptr_t)alloc_storage));
+            size_t aligned_size = align_up(size, alignment);
+            uint8_t *alloc_storage = (uint8_t *)::aligned_alloc(alignment, aligned_size + alignment);
+            assert(alloc_storage == align_up(alloc_storage, alignment));
             alloc = new (alloc_storage) AllocationHeader(free);
-            buf.host = (uint8_t *)((uintptr_t)alloc_storage + alignment);
+            buf.host = alloc_storage + alignment;
             return;
         }
         // else fall thru
@@ -921,12 +940,13 @@ public:
         static_assert(alignof(AllocationHeader) <= alignof(std::max_align_t));
 
         const size_t requested_size = align_up(size + alignment +
-                                               std::max(0, (int)sizeof(AllocationHeader) -
-                                                               (int)sizeof(std::max_align_t)));
-        void *alloc_storage = allocate_fn(requested_size);
+                                                   std::max(0, (int)sizeof(AllocationHeader) -
+                                                                   (int)sizeof(std::max_align_t)),
+                                               alignment);
+        uint8_t *alloc_storage = (uint8_t *)allocate_fn(requested_size);
         alloc = new (alloc_storage) AllocationHeader(deallocate_fn);
-        uint8_t *unaligned_ptr = ((uint8_t *)alloc) + sizeof(AllocationHeader);
-        buf.host = (uint8_t *)align_up((uintptr_t)unaligned_ptr);
+        uint8_t *unaligned_ptr = (uint8_t *)alloc + sizeof(AllocationHeader);
+        buf.host = align_up(unaligned_ptr, alignment);
     }
 
     /** Drop reference to any owned host or device memory, possibly

@@ -16,9 +16,9 @@ WEAK_INLINE void *halide_internal_aligned_alloc(size_t alignment, size_t size) {
     // Always round allocations up to alignment size,
     // so that all allocators follow the behavior of aligned_alloc() and
     // return aligned pointer *and* aligned length.
-    const size_t aligned_size = align_up(size + alignment, alignment);
+    const size_t aligned_size = __builtin_align_up(size + alignment, alignment);
 
-    void *orig = ::malloc(aligned_size);
+    uint8_t *orig = (uint8_t *)::malloc(aligned_size);
     if (orig == nullptr) {
         // Will result in a failed assertion and a call to halide_error
         return nullptr;
@@ -28,10 +28,10 @@ WEAK_INLINE void *halide_internal_aligned_alloc(size_t alignment, size_t size) {
     // alignof(std::max_align_t); we can't reasonably check that in
     // the runtime, but we can realistically assume it's at least
     // 8-aligned.
-    halide_debug_assert(nullptr, (((uintptr_t)orig) % 8) == 0);
+    halide_debug_assert(nullptr, __builtin_is_aligned(orig, 8));
 
     // We want to store the original pointer prior to the pointer we return.
-    void *ptr = (void *)align_up((uintptr_t)orig + sizeof(void *), alignment);
+    void *ptr = (void *)__builtin_align_up(orig + sizeof(void *), alignment);
     ((void **)ptr)[-1] = orig;
     return ptr;
 }
