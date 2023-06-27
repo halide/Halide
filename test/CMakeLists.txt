@@ -98,3 +98,11 @@ if (WITH_TEST_FUZZ)
 else ()
     message(STATUS "Building fuzz tests disabled")
 endif ()
+
+
+if (WITH_SERIALIZATION)
+    message(STATUS "Building serialization tests enabled")
+add_subdirectory(serialization)
+else ()
+    message(STATUS "Building serialization tests disabled")
+endif ()

@@ -4,6 +4,7 @@
 #include <cstring>
 #include <set>
 #include <string>
+#include <iostream>
 
 std::set<std::string> done;
 
@@ -43,7 +44,13 @@ void dump_header(const std::string &header) {
             if (slash_pos != std::string::npos) {
                 path = header.substr(0, slash_pos + 1);
             }
-            dump_header(path + sub_header);
+            // we cannot include flatbuffers.h in-place during generation of Halide.h
+            // so we simply leave with an include here.
+            if (path + sub_header == "flatbuffers/flatbuffers.h") {
+                fputs("#include \"flatbuffers/flatbuffers.h\"", stdout);
+            } else {
+                dump_header(path + sub_header);
+            }
         } else {
             fputs(line, stdout);
         }

@@ -52,7 +52,7 @@ set(HEADER_FILES
     Deinterleave.h
     Derivative.h
     DerivativeUtils.h
-    # Deserializer.h
+    Deserializer.h
     DeviceAPI.h
     DeviceArgument.h
     DeviceInterface.h
@@ -142,7 +142,7 @@ set(HEADER_FILES
     ScheduleFunctions.h
     Scope.h
     SelectGPUAPI.h
-    # Serializer.h
+    Serializer.h
     Simplify.h
     SimplifyCorrelatedDifferences.h
     SimplifySpecializations.h
@@ -444,8 +444,8 @@ add_library(Halide
 if (BUILD_SERIALIZATION)
     find_package(flatbuffers REQUIRED)
     if(flatbuffers_FOUND)
-        message(STATUS "Found flatbuffers: ${flatbuffers_DIR}")
         target_link_libraries(Halide PRIVATE flatbuffers)
+        message(STATUS "Build with flatbuffers")
     else()
         message(FATAL_ERROR "flatbuffers not found")
     endif()
