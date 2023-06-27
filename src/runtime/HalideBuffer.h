@@ -718,7 +718,10 @@ private:
         // https://www.ralfj.de/blog/2020/12/14/provenance.html),
         // so, if our compiler has builtins for this, use them;
         // if not, fall back to casting as necessary.
-#if defined(__has_builtin) && __has_builtin(__builtin_align_up)
+#if !defined(__has_builtin)
+#define __has_builtin(x) (0)
+#endif
+#if __has_builtin(__builtin_align_up)
         return __builtin_align_up(value, alignment);
 #else
         if constexpr (std::is_pointer<SomeType>::value) {
