@@ -4,7 +4,7 @@
 #include "Pipeline.h"
 
 namespace Halide {
-    Pipeline deserialize_pipeline(const std::string &filename);
+Pipeline deserialize_pipeline(const std::string &filename);
 }  // namespace Halide
 
 #endif

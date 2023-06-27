@@ -104,7 +104,6 @@ private:
     void build_reverse_function_mappings(const std::vector<Halide::Internal::Function> &functions);
 };
 
-
 std::string Deserializer::deserialize_string(const flatbuffers::String *str) {
     _halide_user_assert(str != nullptr) << "deserializing a null string\n";
     return str->str();

@@ -44,8 +44,6 @@ void dump_header(const std::string &header) {
             if (slash_pos != std::string::npos) {
                 path = header.substr(0, slash_pos + 1);
             }
-            // we cannot include flatbuffers.h in-place during generation of Halide.h
-            // so we simply leave with an include here.
             dump_header(path + sub_header);
         } else {
             fputs(line, stdout);
