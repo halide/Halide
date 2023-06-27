@@ -98,6 +98,19 @@ find_package(Threads REQUIRED)
 ## Complex dependencies
 add_subdirectory(dependencies)
 
+## Image formats
+
+# This changes how find_xxx() commands work; the default is to find frameworks before
+# standard libraries or headers, but this can be a problem on systems that have Mono
+# installed, as it has a framework with the libjpeg and libpng  headers present -- so
+# CMake finds the headers from Mono but the libraries from Homebrew, and hilarity ensues.
+# Setting this to "last" means we always try the standard libraries before the frameworks.
+set(CMAKE_FIND_FRAMEWORK LAST)
+
+# TODO: these really belong in tools/, but CMake has a weird bug with $<TARGET_NAME_IF_EXISTS:...>
+find_package(JPEG)
+find_package(PNG)
+
 ##
 # Declare options
 ##
@@ -118,7 +131,6 @@ cmake_dependent_option(
     WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
     "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
 )
-
 
 ##
 # Add source directories
