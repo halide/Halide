@@ -1,16 +1,4 @@
-#Set a number of variables dependent on the Hexagon SDK
-if (DEFINED ENV{HEXAGON_SDK_ROOT})
-  set(HEXAGON_SDK_ROOT $ENV{HEXAGON_SDK_ROOT})
-else ()
-  set(HEXAGON_SDK_ROOT $ENV{HOME}/Qualcomm/Hexagon_SDK/4.3.0.0)
-endif()
-if (DEFINED ENV{HEXAGON_TOOLS_VER})
-  set (HEXAGON_TOOLS_ROOT ${HEXAGON_SDK_ROOT}/tools/HEXAGON_Tools/$ENV{HEXAGON_TOOLS_VER})
-else ()
-  set (HEXAGON_TOOLS_ROOT ${HEXAGON_SDK_ROOT}/tools/HEXAGON_Tools/8.4.11)
-endif()
-
-set(ANDROID_NDK_ROOT ${HEXAGON_SDK_ROOT}/tools/android-ndk-r19c)
+find_package(HexagonSDK REQUIRED)
 
 message(STATUS "Using Hexagon SDK at ${HEXAGON_SDK_ROOT}")
 message(STATUS "Using Android NDK at ${ANDROID_NDK_ROOT}")
@@ -134,10 +122,9 @@ add_custom_target(remote_skel_so ALL DEPENDS libhalide_hexagon_remote_skel.so)
 
 # We do not need to use add_custom_command and add_custom_target because this libhalide_hexagon_host.so is built with the native compiler.
 add_library(halide_hexagon_host SHARED sim_host.cpp sim_protocol.h)
-target_compile_options(halide_hexagon_host PRIVATE -std=c++-17 -fPIC)
-target_include_directories(halide_hexagon_host PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/.. ${HEXAGON_TOOLS_ROOT}/Tools/include/iss)
-target_link_directories(halide_hexagon_host PRIVATE ${HEXAGON_TOOLS_ROOT}/Tools/lib/iss)
-target_link_libraries(halide_hexagon_host PRIVATE wrapper)
+target_compile_features(halide_hexagon_host PRIVATE cxx_std_17)
+target_include_directories(halide_hexagon_host PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(halide_hexagon_host PRIVATE HexagonSDK::wrapper)
 
 # ***********Building arm-64-android/libhalide_hexagon_host.so
 
