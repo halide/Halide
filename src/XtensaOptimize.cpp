@@ -2134,18 +2134,14 @@ class LiftAllocations : public IRMutator {
     };
 
     struct Loop {
-        std::string name;
+        const For *for_node;
         int loop_index;
-        Expr min;
-        Expr extent;
-        bool is_parallel = false;
-
         Scope<void> lets_in_for;
         std::map<std::string, Allocation> allocations_to_move;
         std::set<std::string> blocked_allocations;
 
-        Loop(bool is_parallel)
-            : is_parallel(is_parallel) {
+        Loop(const For *for_node, int loop_index)
+            : for_node(for_node), loop_index(loop_index) {
         }
     };
 
@@ -2169,11 +2165,7 @@ class LiftAllocations : public IRMutator {
 
     Stmt visit(const For *op) override {
         // Store current loop in the scope.
-        loops.emplace_back(op->for_type == ForType::Parallel);
-        loops.back().name = op->name;
-        loops.back().min = op->min;
-        loops.back().extent = op->extent;
-        loops.back().loop_index = loop_index++;
+        loops.emplace_back(op, loop_index++);
 
         // On the first pass we will compute a list of allocations which are not
         // allowed to be lifted to this loop level/
@@ -2188,7 +2180,7 @@ class LiftAllocations : public IRMutator {
         }
         if (!loops.back().allocations_to_move.empty()) {
             debug(3) << "Starting to move allocations "
-                     << loops.back().name << " "
+                     << loops.back().for_node->name << " "
                      << loops.back().allocations_to_move.size() << "\n";
             for (const auto &a : loops.back().allocations_to_move) {
                 const auto &alloc = a.second;
@@ -2211,6 +2203,9 @@ class LiftAllocations : public IRMutator {
     }
 
     Stmt visit(const Block *block) override {
+        // Remove Free nodes if corresponding Allocate node was lifted.
+        // Types of allocations we are lifting don't require explicit Free nodes,
+        // so it's safe to remove them.
         if (const Free *maybe_free = block->first.as<Free>()) {
             for (const auto &loop : loops) {
                 if (loop.allocations_to_move.count(maybe_free->name) > 0) {
@@ -2230,11 +2225,15 @@ class LiftAllocations : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
+        // Don't lift constant sized allocations which are smaller than given
+        // limit. Often small allocations can be promoted to registers, so it
+        // might be useful to keep them in the same loop. The limit value itself
+        // is a bit arbitrary (set to 2 vector widths).
+        const int max_const_size_to_keep = 256;
         if (!loops.empty() &&
             (op->memory_type == MemoryType::Stack || op->memory_type == MemoryType::VTCM) && !op->new_expr.defined() &&
             (op->constant_allocation_size() == 0 ||
-             // Don't lift small allocations, constant-sized allocations.
-             op->constant_allocation_size() > 512)) {
+             op->constant_allocation_size() > max_const_size_to_keep)) {
             debug(3) << ">>>> Found an allocation: " << op->name << " "
                      << static_cast<int>(op->memory_type) << " "
                      << op->constant_allocation_size() << " >>>>\n";
@@ -2242,11 +2241,12 @@ class LiftAllocations : public IRMutator {
             // Iterate loop nest in a reverse order and try to push allocation as far
             // as possible.
             for (int i = loops.size() - 1; i >= 0; i--) {
-                debug(3) << "Loop: " << i << " " << loops[i].name
-                         << " " << loops[i].loop_index << " " << loops[i].min
-                         << " " << loops[i].extent << " " << loops[i].is_parallel << "\n";
+                bool is_parallel = loops[i].for_node->is_parallel();
+                debug(3) << "Loop: " << i << " " << loops[i].for_node->name
+                         << " " << loops[i].loop_index << " " << loops[i].for_node->min
+                         << " " << loops[i].for_node->extent << " " << is_parallel << "\n";
                 // Don't lift outside of parallel loops.
-                if (loops[i].is_parallel) {
+                if (is_parallel) {
                     debug(3) << "Breaking because we reached a parallel loop"
                              << "\n";
                     break;
@@ -2295,13 +2295,16 @@ class LiftAllocations : public IRMutator {
                 // Update the lists of disallowed allocations.
                 for (int ix = 0; ix < loop_to_lift_to; ix++) {
                     debug(3) << "Blocking allocation " << op->name << " " << loop_index
-                             << " at " << loops[ix].name << "\n";
+                             << " at " << loops[ix].for_node->name << "\n";
                     blocked_allocations[loops[ix].loop_index].insert(op->name);
                 }
             } else {
                 if (loop_to_lift_to < loops.size()) {
                     // Combine extents, so we can take a maximum in case there are
-                    // multiple allocations.
+                    // multiple allocations. There is an assumption that the
+                    // allocation size fits into an int32. That should be true
+                    // for stack and VTCM allocations, but might be incorrect in
+                    // general when LargeBuffers is on.
                     Expr total_extent = 1;
                     for (const auto &e : op->extents) {
                         total_extent *= e;
