@@ -106,7 +106,7 @@ private:
 };
 
 std::string Deserializer::deserialize_string(const flatbuffers::String *str) {
-    _halide_user_assert(str != nullptr) << "deserializing a null string\n";
+    user_assert(str != nullptr) << "deserializing a null string\n";
     return str->str();
 }
 
@@ -131,7 +131,7 @@ MemoryType Deserializer::deserialize_memory_type(const Serialize::MemoryType mem
     case Serialize::MemoryType::MemoryType_AMXTile:
         return MemoryType::AMXTile;
     default:
-        _halide_user_assert(false) << "unknown memory type " << memory_type << "\n";
+        user_assert(false) << "unknown memory type " << memory_type << "\n";
         return MemoryType::Auto;
     }
 }
@@ -155,7 +155,7 @@ ForType Deserializer::deserialize_for_type(const Serialize::ForType for_type) {
     case Serialize::ForType::ForType_GPULane:
         return ForType::GPULane;
     default:
-        _halide_user_assert(false) << "unknown for type " << for_type << "\n";
+        user_assert(false) << "unknown for type " << for_type << "\n";
         return ForType::Serial;
     }
 }
@@ -187,7 +187,7 @@ DeviceAPI Deserializer::deserialize_device_api(const Serialize::DeviceAPI device
     case Serialize::DeviceAPI::DeviceAPI_WebGPU:
         return DeviceAPI::WebGPU;
     default:
-        _halide_user_assert(false) << "unknown device api " << device_api << "\n";
+        user_assert(false) << "unknown device api " << device_api << "\n";
         return DeviceAPI::None;
     }
 }
@@ -207,7 +207,7 @@ Call::CallType Deserializer::deserialize_call_type(const Serialize::CallType cal
     case Serialize::CallType::CallType_PureIntrinsic:
         return Call::CallType::PureIntrinsic;
     default:
-        _halide_user_assert(false) << "unknown call type " << call_type << "\n";
+        user_assert(false) << "unknown call type " << call_type << "\n";
         return Call::CallType::Image;
     }
 }
@@ -229,7 +229,7 @@ VectorReduce::Operator Deserializer::deserialize_vector_reduce_op(const Serializ
     case Serialize::VectorReduceOp::VectorReduceOp_Or:
         return VectorReduce::Operator::Or;
     default:
-        _halide_user_assert(false) << "unknown vector reduce op " << vector_reduce_op << "\n";
+        user_assert(false) << "unknown vector reduce op " << vector_reduce_op << "\n";
         return VectorReduce::Operator::Add;
     }
 }
@@ -243,7 +243,7 @@ PrefetchBoundStrategy Deserializer::deserialize_prefetch_bound_strategy(const Se
     case Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_NonFaulting:
         return PrefetchBoundStrategy::NonFaulting;
     default:
-        _halide_user_assert(false) << "unknown prefetch bound strategy " << prefetch_bound_strategy << "\n";
+        user_assert(false) << "unknown prefetch bound strategy " << prefetch_bound_strategy << "\n";
         return PrefetchBoundStrategy::Clamp;
     }
 }
@@ -257,7 +257,7 @@ NameMangling Deserializer::deserialize_name_mangling(const Serialize::NameMangli
     case Serialize::NameMangling::NameMangling_CPlusPlus:
         return NameMangling::CPlusPlus;
     default:
-        _halide_user_assert(false) << "unknown name mangling " << name_mangling << "\n";
+        user_assert(false) << "unknown name mangling " << name_mangling << "\n";
         return NameMangling::Default;
     }
 }
@@ -277,7 +277,7 @@ TailStrategy Deserializer::deserialize_tail_strategy(const Serialize::TailStrate
     case Serialize::TailStrategy::TailStrategy_Auto:
         return TailStrategy::Auto;
     default:
-        _halide_user_assert(false) << "unknown tail strategy " << tail_strategy << "\n";
+        user_assert(false) << "unknown tail strategy " << tail_strategy << "\n";
         return TailStrategy::RoundUp;
     }
 }
@@ -293,7 +293,7 @@ Split::SplitType Deserializer::deserialize_split_type(const Serialize::SplitType
     case Serialize::SplitType::SplitType_PurifyRVar:
         return Split::SplitType::PurifyRVar;
     default:
-        _halide_user_assert(false) << "unknown split type " << split_type << "\n";
+        user_assert(false) << "unknown split type " << split_type << "\n";
         return Split::SplitType::SplitVar;
     }
 }
@@ -307,7 +307,7 @@ DimType Deserializer::deserialize_dim_type(const Serialize::DimType dim_type) {
     case Serialize::DimType::DimType_ImpureRVar:
         return DimType::ImpureRVar;
     default:
-        _halide_user_assert(false) << "unknown dim type " << dim_type << "\n";
+        user_assert(false) << "unknown dim type " << dim_type << "\n";
         return DimType::PureVar;
     }
 }
@@ -323,7 +323,7 @@ LoopAlignStrategy Deserializer::deserialize_loop_align_strategy(const Serialize:
     case Serialize::LoopAlignStrategy::LoopAlignStrategy_Auto:
         return LoopAlignStrategy::Auto;
     default:
-        _halide_user_assert(false) << "unknown loop align strategy " << loop_align_strategy << "\n";
+        user_assert(false) << "unknown loop align strategy " << loop_align_strategy << "\n";
         return LoopAlignStrategy::AlignStart;
     }
 }
@@ -341,13 +341,13 @@ ExternFuncArgument::ArgType Deserializer::deserialize_extern_func_argument_type(
     case Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ImageParamArg:
         return ExternFuncArgument::ArgType::ImageParamArg;
     default:
-        _halide_user_assert(false) << "unknown extern func argument type " << extern_func_argument_type << "\n";
+        user_assert(false) << "unknown extern func argument type " << extern_func_argument_type << "\n";
         return ExternFuncArgument::ArgType::UndefinedArg;
     }
 }
 
 Type Deserializer::deserialize_type(const Serialize::Type *type) {
-    _halide_user_assert(type != nullptr) << "deserializing a null Type\n";
+    user_assert(type != nullptr) << "deserializing a null Type\n";
     using Serialize::TypeCode;
     int bits = type->bits();
     int lanes = type->lanes();
@@ -375,7 +375,7 @@ Type Deserializer::deserialize_type(const Serialize::Type *type) {
 }
 
 void Deserializer::deserialize_function(const Serialize::Func *function, Function &hl_function) {
-    _halide_user_assert(function != nullptr) << "deserializing a null Function\n";
+    user_assert(function != nullptr) << "deserializing a null Function\n";
     std::string name = deserialize_string(function->name());
     std::string origin_name = deserialize_string(function->origin_name());
     std::vector<Type> output_types;
@@ -435,7 +435,7 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
 }
 
 Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt) {
-    _halide_user_assert(stmt != nullptr) << "deserializing a null Stmt\n";
+    user_assert(stmt != nullptr) << "deserializing a null Stmt\n";
     switch (type_code) {
     case Serialize::Stmt_LetStmt: {
         const Serialize::LetStmt *let_stmt = (const Serialize::LetStmt *)stmt;
@@ -582,7 +582,7 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         return Stmt();
     }
     default:
-        _halide_user_assert(false) << "unknown type code " << type_code << "\n";
+        user_assert(false) << "unknown type code " << type_code << "\n";
         return Stmt();
     }
 }
@@ -800,7 +800,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         return Expr();
     }
     default: {
-        _halide_user_assert(false) << "unknown type code " << type_code << "\n";
+        user_assert(false) << "unknown type code " << type_code << "\n";
         return Expr();
     }
     }
@@ -1069,7 +1069,7 @@ StageSchedule Deserializer::deserialize_stage_schedule(const Serialize::StageSch
     bool atomic = stage_schedule->atomic();
     bool override_atomic_associativity_test = stage_schedule->override_atomic_associativity_test();
     return StageSchedule(rvars, splits, dims, prefetches, fuse_level, fused_pairs, touched,
-                                           allow_race_conditions, atomic, override_atomic_associativity_test);
+                         allow_race_conditions, atomic, override_atomic_associativity_test);
 }
 
 BufferConstraint Deserializer::deserialize_buffer_constraint(const Serialize::BufferConstraint *buffer_constraint) {
@@ -1194,7 +1194,7 @@ void Deserializer::build_reverse_function_mappings(const std::vector<Function> &
 Pipeline Deserializer::deserialize(const std::string &filename) {
     std::ifstream in(filename, std::ios::binary | std::ios::in);
     if (!in) {
-        _halide_user_assert(false) << "failed to open file " << filename << "\n";
+        user_assert(false) << "failed to open file " << filename << "\n";
         return Pipeline();
     }
     std::cout << "Deserializing from file " << filename << "\n";
