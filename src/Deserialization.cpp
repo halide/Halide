@@ -891,6 +891,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     auto hl_func_schedule = FuncSchedule();
     hl_func_schedule.store_level() = store_level;
     hl_func_schedule.compute_level() = compute_level;
+    hl_func_schedule.storage_dims() = storage_dims;
     hl_func_schedule.bounds() = bounds;
     hl_func_schedule.estimates() = estimates;
     hl_func_schedule.wrappers() = wrappers;
