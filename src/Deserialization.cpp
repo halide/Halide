@@ -593,18 +593,20 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
     case Serialize::Expr::Expr_IntImm: {
         const Serialize::IntImm *int_imm_expr = (const Serialize::IntImm *)expr;
         auto value = int_imm_expr->value();
-        // TODO: fix this hard-coding
-        return IntImm::make(Int(32), value);
+        auto type = deserialize_type(int_imm_expr->type());
+        return IntImm::make(type, value);
     }
     case Serialize::Expr::Expr_UIntImm: {
         const Serialize::UIntImm *uint_imm_expr = (const Serialize::UIntImm *)expr;
         auto value = uint_imm_expr->value();
-        return UIntImm::make(UInt(32), value);
+        auto type = deserialize_type(uint_imm_expr->type());
+        return UIntImm::make(type, value);
     }
     case Serialize::Expr::Expr_FloatImm: {
         const Serialize::FloatImm *float_imm_expr = (const Serialize::FloatImm *)expr;
         auto value = float_imm_expr->value();
-        return FloatImm::make(Float(64), value);
+        auto type = deserialize_type(float_imm_expr->type());
+        return FloatImm::make(type, value);
     }
     case Serialize::Expr::Expr_StringImm: {
         const Serialize::StringImm *string_imm_expr = (const Serialize::StringImm *)expr;
@@ -614,13 +616,14 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
     case Serialize::Expr::Expr_Cast: {
         const Serialize::Cast *cast_expr = (const Serialize::Cast *)expr;
         auto value = deserialize_expr(cast_expr->value_type(), cast_expr->value());
-        // TODO: this is clearly wrong as well
-        return Cast::make(Int(32), value);
+        auto type = deserialize_type(cast_expr->type());
+        return Cast::make(type, value);
     }
     case Serialize::Expr::Expr_Reinterpret: {
         const Serialize::Reinterpret *reinterpret_expr = (const Serialize::Reinterpret *)expr;
         auto value = deserialize_expr(reinterpret_expr->value_type(), reinterpret_expr->value());
-        return Reinterpret::make(Int(32), value);
+        auto type = deserialize_type(reinterpret_expr->type());
+        return Reinterpret::make(type, value);
     }
     case Serialize::Expr::Expr_Add: {
         const Serialize::Add *add_expr = (const Serialize::Add *)expr;
@@ -732,7 +735,8 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         auto image = deserialize_buffer(load_expr->image());
         auto param = deserialize_parameter(load_expr->param());
         auto alignment = deserialize_modulus_remainder(load_expr->alignment());
-        return Load::make(Int(32), name, index, image, param, predicate, alignment);
+        auto type = deserialize_type(load_expr->type());
+        return Load::make(type, name, index, image, param, predicate, alignment);
     }
     case Serialize::Expr::Expr_Ramp: {
         const Serialize::Ramp *ramp_expr = (const Serialize::Ramp *)expr;
@@ -767,8 +771,8 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         auto call_type = deserialize_call_type(call_expr->call_type());
         auto image = deserialize_buffer(call_expr->image());
         auto param = deserialize_parameter(call_expr->param());
-        // TODO: fix type and function ptr here once function DAG is fixed
-        return Call::make(Int(32), name, args, call_type, func_ptr, value_index, image, param);
+        auto type = deserialize_type(call_expr->type());
+        return Call::make(type, name, args, call_type, func_ptr, value_index, image, param);
     }
     case Serialize::Expr::Expr_Variable: {
         const Serialize::Variable *variable_expr = (const Serialize::Variable *)expr;
@@ -793,8 +797,8 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         const Serialize::VectorReduce *vector_reduce_expr = (const Serialize::VectorReduce *)expr;
         auto value = deserialize_expr(vector_reduce_expr->value_type(), vector_reduce_expr->value());
         auto reduction_op = deserialize_vector_reduce_op(vector_reduce_expr->reduction_op());
-        // TODO: store lanes during serialization
-        return VectorReduce::make(reduction_op, value, 16);
+        int32_t lanes = vector_reduce_expr->lanes();
+        return VectorReduce::make(reduction_op, value, lanes);
     }
     case Serialize::Expr::Expr_UndefinedExpr: {
         return Expr();

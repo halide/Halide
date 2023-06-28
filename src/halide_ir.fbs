@@ -239,14 +239,17 @@ table UndefinedStmt {
 
 table IntImm {
     value: int64;
+    type: Type;
 }
 
 table UIntImm {
     value: uint64;
+    type: Type;
 }
 
 table FloatImm {
     value: float64;
+    type: Type;
 }
 
 table StringImm {
@@ -255,10 +258,12 @@ table StringImm {
 
 table Cast {
     value: Expr;
+    type: Type;
 }
 
 table Reinterpret {
     value: Expr;
+    type: Type;
 }
 
 table Add {
@@ -353,6 +358,7 @@ table Load {
     image: Buffer;
     param: Parameter;
     alignment: ModulusRemainder;
+    type: Type;
 }
 
 table Ramp {
@@ -390,6 +396,7 @@ table Call {
     value_index: int32;
     image: Buffer;
     param: Parameter;
+    type: Type;
 }
 
 table ReductionVariable {
@@ -431,6 +438,7 @@ enum VectorReduceOp: ubyte {
 table VectorReduce {
     value: Expr;
     reduction_op: VectorReduceOp;
+    lanes: int32;
 }
 
 table UndefinedExpr {
