@@ -2344,6 +2344,14 @@ public:
     LiftAllocations() = default;
 };
 
+Stmt lift_stack_allocations(const Stmt &s) {
+    LiftAllocations lift_allocations;
+    Stmt stmt = lift_allocations.mutate(s);
+    lift_allocations.switch_to_second_pass();
+    stmt = lift_allocations.mutate(s);
+    return stmt;
+}
+
 Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     const int alignment = target.natural_vector_size<uint8_t>();
     const int lut_size_in_bytes = 2 * target.natural_vector_size<uint8_t>();
@@ -2382,7 +2390,7 @@ Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     }
 
     s = common_subexpression_elimination(s);
-    // debug(0) << s << "\n";
+    s = lift_stack_allocations(s);
     return s;
 }
 
