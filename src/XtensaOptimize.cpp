@@ -2382,15 +2382,9 @@ Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
 
     s = DualQuadMulMutator().mutate(s);
 
-    {
-        LiftAllocations lift_stack_allocations;
-        s = lift_stack_allocations.mutate(s);
-        lift_stack_allocations.switch_to_second_pass();
-        s = lift_stack_allocations.mutate(s);
-    }
-
-    s = common_subexpression_elimination(s);
     s = lift_stack_allocations(s);
+    s = common_subexpression_elimination(s);
+
     return s;
 }
 
