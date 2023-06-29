@@ -2299,7 +2299,7 @@ class LiftAllocations : public IRMutator {
                     blocked_allocations[loops[ix].loop_index].insert(op->name);
                 }
             } else {
-                if (loop_to_lift_to < loops.size()) {
+                if (loop_to_lift_to < (int)loops.size()) {
                     // Combine extents, so we can take a maximum in case there are
                     // multiple allocations. There is an assumption that the
                     // allocation size fits into an int32. That should be true
