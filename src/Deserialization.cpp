@@ -766,7 +766,9 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         int func_index = call_expr->func_index();
         FunctionPtr func_ptr;
         if (auto it = this->reverse_function_mappings.find(func_index); it != this->reverse_function_mappings.end() && func_index != -1) {
-            func_ptr = it->second;
+            FunctionPtr called_func_ptr = it->second;
+            func_ptr.weak = called_func_ptr.group();
+            func_ptr.idx = called_func_ptr.idx;
         }
         auto call_type = deserialize_call_type(call_expr->call_type());
         auto image = deserialize_buffer(call_expr->image());
@@ -1211,7 +1213,20 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
     in.close();
 
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
-    std::vector<Function> functions(pipeline_obj->funcs()->size());
+    std::vector<std::string> func_names_in_order; 
+    for (const auto &func_name : *pipeline_obj->func_names_in_order()) {
+        func_names_in_order.push_back(deserialize_string(func_name));
+    }
+
+    // We use the first realized function to build the group and all other functions below to this same group
+    std::vector<Function> functions;
+    functions.reserve(func_names_in_order.size());
+    if (!func_names_in_order.empty()) {
+        functions.push_back(Function(func_names_in_order[0]));
+        for (size_t i = 1; i < func_names_in_order.size(); ++i) {
+            functions.push_back(functions[0].new_function_in_same_group(func_names_in_order[i]));
+        }
+    }
     build_reverse_function_mappings(functions);
 
     std::vector<Func> funcs;

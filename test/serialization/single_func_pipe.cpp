@@ -8,6 +8,7 @@ int main(int argc, char **argv) {
     Func gradient("gradient_func");
     Var x, y;
     gradient(x, y) = x + y;
+    gradient.compute_root();
     Pipeline pipe(gradient);
 
     serialize_pipeline(pipe, "single_func_pipe.hlpipe");

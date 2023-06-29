@@ -685,6 +685,7 @@ table Pipeline {
     funcs: [Func];
     output_names: [string];
     requirements: [Stmt];
+    func_names_in_order: [string];
     // trace_pipeline: bool;
 }
 

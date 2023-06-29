@@ -1,5 +1,6 @@
 #include "Halide.h"
 using namespace Halide;
+using namespace Halide::Internal;
 
 // a simple round trip test
 int main(int argc, char **argv) {
@@ -13,9 +14,12 @@ int main(int argc, char **argv) {
     blury(x, y) = (blurx(x, y - 1) + blurx(x, y) + blurx(x, y + 1)) / 3;
     Halide::Pipeline pipe(blury);
 
-    // serialize and deserialize
-    serialize_pipeline(pipe, "test.hlpipe");
-    Pipeline p = deserialize_pipeline("test.hlpipe");
+    serialize_pipeline(pipe, "multi_func_pipe.hlpipe");
+    Pipeline deserialized_pipe = deserialize_pipeline("multi_func_pipe.hlpipe");
+    bool result = equal(pipe, deserialized_pipe);
+
+    assert(result == true);
+    printf("Success!\n");
 
     return 0;
 }

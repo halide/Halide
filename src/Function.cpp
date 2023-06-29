@@ -337,8 +337,6 @@ void Function::update_with_deserialization(const std::string &name, const std::s
                                            const std::string &debug_file, const std::vector<Parameter> &output_buffers, const std::vector<ExternFuncArgument> &extern_arguments,
                                            const std::string &extern_function_name, NameMangling name_mangling, DeviceAPI device_api, const Expr &extern_proxy_expr,
                                            bool trace_loads, bool trace_stores, bool trace_realizations, const std::vector<std::string> &trace_tags, bool frozen) {
-    contents.strong = new FunctionGroup;
-    contents.strong->members.resize(1);
     contents->name = name;
     contents->origin_name = origin_name;
     contents->output_types = output_types;
