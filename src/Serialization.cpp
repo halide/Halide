@@ -731,7 +731,7 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         auto call_type = serialize_call_type(call_expr->call_type);
         auto raw_func_ptr = call_expr->func.get();
         int func_index = -1;
-        if (this->func_mappings.find(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(raw_func_ptr))) == this->func_mappings.end()) {
+        if (this->func_mappings.find(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(raw_func_ptr))) != this->func_mappings.end()) {
             func_index = this->func_mappings[static_cast<uint64_t>(reinterpret_cast<uintptr_t>(raw_func_ptr))];
         }
         auto value_index = call_expr->value_index;
@@ -1120,12 +1120,11 @@ flatbuffers::Offset<Halide::Serialize::ExternFuncArgument> Serializer::serialize
     } else if (extern_func_argument.arg_type == ExternFuncArgument::ArgType::FuncArg) {
         int func_index = -1;
         auto raw_func_ptr = extern_func_argument.func.get();
-        if (this->func_mappings.find(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(raw_func_ptr))) == this->func_mappings.end()) {
+        if (this->func_mappings.find(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(raw_func_ptr))) != this->func_mappings.end()) {
             func_index = this->func_mappings[static_cast<uint64_t>(reinterpret_cast<uintptr_t>(raw_func_ptr))];
         }
         return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized, func_index);
     } else if (extern_func_argument.arg_type == ExternFuncArgument::ArgType::BufferArg) {
-        // TODO: update this when buffer is ready
         auto buffer_serialized = serialize_buffer(builder, extern_func_argument.buffer);
         return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, buffer_serialized);
     } else if (extern_func_argument.arg_type == ExternFuncArgument::ArgType::ExprArg) {
@@ -1164,7 +1163,7 @@ std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::seri
         auto wrapper_name_serialized = serialize_string(builder, wrapper.first);
         auto wrapper_raw_func_ptr = wrapper.second.get();
         int func_index = -1;
-        if (this->func_mappings.find(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(wrapper_raw_func_ptr))) == this->func_mappings.end()) {
+        if (this->func_mappings.find(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(wrapper_raw_func_ptr))) != this->func_mappings.end()) {
             func_index = this->func_mappings[static_cast<uint64_t>(reinterpret_cast<uintptr_t>(wrapper_raw_func_ptr))];
         }
         wrapper_refs_serialized.push_back(Halide::Serialize::CreateWrapperRef(builder, wrapper_name_serialized, func_index));
