@@ -66,6 +66,15 @@ if (Halide_CCACHE_BUILD)
     set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
 
+    # Per https://ccache.dev/manual/latest.html#_precompiled_headers,
+    # we must set -fno-pch-timestamp when using Clang + CCache + PCH
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+        string(APPEND CMAKE_C_FLAGS " -Xclang -fno-pch-timestamp")
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        string(APPEND CMAKE_CXX_FLAGS " -Xclang -fno-pch-timestamp")
+    endif()
+
     message(STATUS "Enabling ccache usage for building.")
 endif ()
 
