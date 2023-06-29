@@ -8,10 +8,10 @@
 #include <vector>
 
 #include "FindCalls.h"
-#include "RealizationOrder.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
+#include "RealizationOrder.h"
 #include <fstream>
 #include <iostream>
 #include <map>

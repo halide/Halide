@@ -1213,7 +1213,7 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
     in.close();
 
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
-    std::vector<std::string> func_names_in_order; 
+    std::vector<std::string> func_names_in_order;
     for (const auto &func_name : *pipeline_obj->func_names_in_order()) {
         func_names_in_order.push_back(deserialize_string(func_name));
     }

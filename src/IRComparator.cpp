@@ -14,17 +14,16 @@ namespace Internal {
 class IRComparator {
 public:
     IRComparator() {
-
     }
 
     bool compare_pipeline(const Pipeline &p1, const Pipeline &p2);
 
 private:
-  struct FunctionContentsEq {
-      bool operator () ( FunctionContents const * lhs, FunctionContents const * rhs ) const {
-          return lhs == rhs;
-      }
-  };
+    struct FunctionContentsEq {
+        bool operator()(FunctionContents const *lhs, FunctionContents const *rhs) const {
+            return lhs == rhs;
+        }
+    };
 
     // std::unordered_set<std::pair<FunctionContents *, FunctionContents *>, FunctionContentsEq> func_visited;
 
@@ -40,7 +39,7 @@ private:
 
     bool compare_bound(const Bound &b1, const Bound &b2);
 
-    bool compare_definition(const Definition& d1, const Definition &d2);
+    bool compare_definition(const Definition &d1, const Definition &d2);
 
     bool compare_stage_schedule(const StageSchedule &ss1, const StageSchedule &ss2);
 
@@ -259,22 +258,22 @@ bool IRComparator::compare_func_schedule(const FuncSchedule &fs1, const FuncSche
 }
 
 bool IRComparator::compare_loop_level(const LoopLevel &l1, const LoopLevel &l2) {
-  if (l1.func_name() != l2.func_name()) {
-    return false;
-  }
-  if (l1.get_stage_index() != l2.get_stage_index()) {
-    return false;
-  }
-  if (l1.var_name() != l2.var_name()) {
-    return false;
-  }
-  if (l1.is_rvar() != l2.is_rvar()) {
-    return false;
-  }
-  if (l1.locked() != l2.locked()) {
-    return false;
-  }
-  return true;
+    if (l1.func_name() != l2.func_name()) {
+        return false;
+    }
+    if (l1.get_stage_index() != l2.get_stage_index()) {
+        return false;
+    }
+    if (l1.var_name() != l2.var_name()) {
+        return false;
+    }
+    if (l1.is_rvar() != l2.is_rvar()) {
+        return false;
+    }
+    if (l1.locked() != l2.locked()) {
+        return false;
+    }
+    return true;
 }
 
 bool IRComparator::compare_storage_dim(const StorageDim &sd1, const StorageDim &sd2) {
@@ -315,7 +314,7 @@ bool IRComparator::compare_bound(const Bound &b1, const Bound &b2) {
     return true;
 }
 
-bool IRComparator::compare_definition(const Definition& d1, const Definition &d2) {
+bool IRComparator::compare_definition(const Definition &d1, const Definition &d2) {
     if (d1.is_init() != d2.is_init()) {
         debug(0) << "is_init not equal\n";
         return false;
@@ -364,8 +363,7 @@ bool IRComparator::compare_definition(const Definition& d1, const Definition &d2
     return true;
 }
 
-
-bool IRComparator::compare_stage_schedule(const StageSchedule& ss1, const StageSchedule &ss2) {
+bool IRComparator::compare_stage_schedule(const StageSchedule &ss1, const StageSchedule &ss2) {
     if (ss1.rvars().size() != ss2.rvars().size()) {
         return false;
     }
@@ -521,7 +519,7 @@ bool IRComparator::compare_fuse_loop_level(const FuseLoopLevel &fl1, const FuseL
         if (fl2.align.find(it->first) == fl2.align.end()) {
             return false;
         }
-        if (it->second != fl2.align.at(it->first) ) {
+        if (it->second != fl2.align.at(it->first)) {
             return false;
         }
     }
