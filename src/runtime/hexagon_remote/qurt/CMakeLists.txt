@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 # The Hexagon toolchain is broken
 set(ENV{HEXAGON_SDK_ROOT} "${HEXAGON_SDK_ROOT}")
+set(ENV{HEXAGON_TOOLS_ROOT} "${HEXAGON_TOOLS_ROOT}")
 
 project(halide-hexagon_remote-qurt)
 
