@@ -98,6 +98,7 @@ set(RUNTIME_CPP
     windows_yield
     write_debug_image
     x86_cpu_features
+    xrt
     )
 
 set(RUNTIME_LL
@@ -139,6 +140,7 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeQurt.h
     HalideRuntimeVulkan.h
     HalideRuntimeWebGPU.h
+    HalideRuntimeXRT.h
     )
 
 # Need to create an object library for this because CMake

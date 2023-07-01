@@ -122,6 +122,7 @@ ssize_t write(int fd, const void *buf, size_t bytes);
 int remove(const char *pathname);
 int ioctl(int fd, unsigned long request, ...);
 char *strncpy(char *dst, const char *src, size_t n);
+int snprintf(char *s, size_t n, const char *format, ...);
 void abort();
 
 // Below are prototypes for various functions called by generated code
