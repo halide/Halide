@@ -40,3 +40,8 @@ target_include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/../..
   ${HALIDE_HEXAGON_REMOTE_IDL}
 )
+
+install(
+  TARGETS sim_qurt hexagon_sim_remote halide_hexagon_remote_skel
+  DESTINATION bin
+)

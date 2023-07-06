@@ -30,3 +30,8 @@ target_include_directories(
   ${HEXAGON_SDK_ROOT}/incs/stddef
 )
 target_link_libraries(halide_hexagon_host PRIVATE fastrpc::cdsprpc log)
+
+install(
+  TARGETS halide_hexagon_host
+  DESTINATION bin
+)

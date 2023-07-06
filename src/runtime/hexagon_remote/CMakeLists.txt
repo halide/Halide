@@ -24,6 +24,7 @@ set(common_cache_args
   "-DHALIDE_HEXAGON_REMOTE_IDL:PATH=${CMAKE_CURRENT_BINARY_DIR}"
   "-DHEXAGON_SDK_ROOT:PATH=${HEXAGON_SDK_ROOT}"
   "-DHEXAGON_TOOLS_ROOT:PATH=${HEXAGON_TOOLS_ROOT}"
+  "-DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>"
 )
 
 if (CMAKE_BUILD_TYPE)
@@ -36,12 +37,14 @@ ExternalProject_Add(
   CMAKE_CACHE_ARGS
     "-DCMAKE_TOOLCHAIN_FILE:FILEPATH=${HEXAGON_TOOLCHAIN}"
     ${common_cache_args}
-  INSTALL_COMMAND ""
+  PREFIX hexagon
   DEPENDS halide_hexagon_remote_idl
   CONFIGURE_HANDLED_BY_BUILD ON
 )
 
-foreach (abi IN ITEMS armeabi-v7a arm64-v8a)
+set(arm_abis armeabi-v7a arm64-v8a)
+set(arm_bits 32 64)
+foreach (abi bits IN ZIP_LISTS arm_abis arm_bits)
   ExternalProject_Add(
     halide_hexagon_host-${abi}
     SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
@@ -50,7 +53,7 @@ foreach (abi IN ITEMS armeabi-v7a arm64-v8a)
       "-DANDROID_ABI:STRING=${abi}"
       "-DANDROID_PLATFORM:STRING=21"
       ${common_cache_args}
-    INSTALL_COMMAND ""
+    PREFIX arm-${bits}-android
     DEPENDS halide_hexagon_remote_idl
     CONFIGURE_HANDLED_BY_BUILD ON
   )
