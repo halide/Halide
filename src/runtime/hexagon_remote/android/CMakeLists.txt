@@ -25,6 +25,10 @@ target_include_directories(
   halide_hexagon_host
   PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../..
+)
+target_include_directories(
+  halide_hexagon_host
+  SYSTEM PRIVATE
   ${HALIDE_HEXAGON_REMOTE_IDL}
   ${HEXAGON_SDK_ROOT}/incs
   ${HEXAGON_SDK_ROOT}/incs/stddef
