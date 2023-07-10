@@ -826,7 +826,13 @@ inline Tuple select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple
  * return an Expr. A runtime error is produced if this is applied to
  * tuple-valued Funcs. In that case you should explicitly cast the second and
  * third args to Tuple to remove the ambiguity. */
+// @{
 Expr select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value);
+template<typename... Args>
+inline Expr select(const Expr &c0, const FuncRef &v0, const Expr &c1, const FuncRef &v1, Args &&...args) {
+    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
+}
+// @}
 
 /** Oftentimes we want to pack a list of expressions with the same type
  * into a channel dimension, e.g.,
