@@ -72,7 +72,7 @@ $(BIN)/%/onnx_converter_generator_test: onnx_converter_generator_test.cc $(BIN)/
 
 build: $(BIN)/$(HL_TARGET)/onnx_converter_test $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
-test: build
+test: build model_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
