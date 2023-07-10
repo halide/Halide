@@ -61,7 +61,7 @@ WEAK mtl_command_buffer *new_command_buffer(mtl_command_queue *queue, const char
 }
 
 WEAK void add_command_buffer_completed_handler(mtl_command_buffer *command_buffer, struct command_buffer_completed_handler_block_literal *handler) {
-    typedef void (*add_completed_handler_method)(objc_id command_buffer, objc_sel sel, struct command_buffer_completed_handler_block_literal * handler);
+    typedef void (*add_completed_handler_method)(objc_id command_buffer, objc_sel sel, struct command_buffer_completed_handler_block_literal *handler);
     add_completed_handler_method method = (add_completed_handler_method)&objc_msgSend;
     (*method)(command_buffer, sel_getUid("addCompletedHandler:"), handler);
 }
@@ -87,7 +87,7 @@ WEAK mtl_blit_command_encoder *new_blit_command_encoder(mtl_command_buffer *buff
 WEAK mtl_compute_pipeline_state *new_compute_pipeline_state_with_function(mtl_device *device, mtl_function *function) {
     objc_id error_return;
     typedef mtl_compute_pipeline_state *(*new_compute_pipeline_state_method)(objc_id device, objc_sel sel,
-                                                                             objc_id function, objc_id * error_return);
+                                                                             objc_id function, objc_id *error_return);
     new_compute_pipeline_state_method method = (new_compute_pipeline_state_method)&objc_msgSend;
     mtl_compute_pipeline_state *result = (*method)(device, sel_getUid("newComputePipelineStateWithFunction:error:"),
                                                    function, &error_return);
@@ -128,7 +128,7 @@ WEAK void did_modify_range(mtl_buffer *buffer, NSRange range) {
 }
 
 WEAK void synchronize_resource(mtl_blit_command_encoder *encoder, mtl_buffer *buffer) {
-    typedef void (*synchronize_resource_method)(objc_id obj, objc_sel sel, mtl_buffer * buffer);
+    typedef void (*synchronize_resource_method)(objc_id obj, objc_sel sel, mtl_buffer *buffer);
     synchronize_resource_method method = (synchronize_resource_method)&objc_msgSend;
     (*method)(encoder, sel_getUid("synchronizeResource:"), buffer);
 }
@@ -183,7 +183,7 @@ WEAK mtl_library *new_library_with_source(mtl_device *device, const char *source
     set_fast_math_method method1 = (set_fast_math_method)&objc_msgSend;
     (*method1)(options, sel_getUid("setFastMathEnabled:"), false);
 
-    typedef mtl_library *(*new_library_with_source_method)(objc_id device, objc_sel sel, objc_id source, objc_id options, objc_id * error_return);
+    typedef mtl_library *(*new_library_with_source_method)(objc_id device, objc_sel sel, objc_id source, objc_id options, objc_id *error_return);
     new_library_with_source_method method2 = (new_library_with_source_method)&objc_msgSend;
     mtl_library *result = (*method2)(device, sel_getUid("newLibraryWithSource:options:error:"),
                                      source_str, options, &error_return);
@@ -209,7 +209,7 @@ WEAK mtl_function *new_function_with_name(mtl_library *library, const char *name
 
 WEAK void set_input_buffer(mtl_compute_command_encoder *encoder, mtl_buffer *input_buffer, uint64_t offset, uint32_t index) {
     typedef void (*set_buffer_method)(objc_id encoder, objc_sel sel,
-                                      mtl_buffer * input_buffer, size_t offset, size_t index);
+                                      mtl_buffer *input_buffer, size_t offset, size_t index);
     set_buffer_method method = (set_buffer_method)&objc_msgSend;
     (*method)(encoder, sel_getUid("setBuffer:offset:atIndex:"),
               input_buffer, (size_t)offset, index);

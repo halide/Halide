@@ -844,6 +844,9 @@ Expr select(const Expr &condition, const FuncRef &true_value, const FuncRef &fal
 Expr mux(const Expr &id, const std::initializer_list<Expr> &values);
 Expr mux(const Expr &id, const std::vector<Expr> &values);
 Expr mux(const Expr &id, const Tuple &values);
+Expr mux(const Expr &id, const std::initializer_list<FuncRef> &values);
+Tuple mux(const Expr &id, const std::initializer_list<Tuple> &values);
+Tuple mux(const Expr &id, const std::vector<Tuple> &values);
 // @}
 
 /** Return the sine of a floating-point expression. If the argument is

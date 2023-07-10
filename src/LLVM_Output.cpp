@@ -389,13 +389,13 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     // in Codegen_LLVM.cpp, but since this seems to be have added in error,
     // we're just going to elide it for LLVM >= 17.0
     pass_manager.add(llvm::createStripDeadDebugInfoPass());
-#endif
 
     // Enable symbol rewriting. This allows code outside libHalide to
     // use symbol rewriting when compiling Halide code (for example, by
     // using cl::ParseCommandLineOption and then passing the appropriate
     // rewrite options via -mllvm flags).
     pass_manager.add(llvm::createRewriteSymbolsPass());
+#endif
 
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;

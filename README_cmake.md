@@ -11,11 +11,24 @@ The following sections cover each in detail.
 
 ## Table of Contents
 
+- [Halide and CMake](#halide-and-cmake)
+  - [Table of Contents](#table-of-contents)
 - [Getting started](#getting-started)
   - [Installing CMake](#installing-cmake)
+    - [Cross-platform](#cross-platform)
+    - [Windows](#windows)
+    - [macOS](#macos)
+    - [Ubuntu Linux](#ubuntu-linux)
   - [Installing dependencies](#installing-dependencies)
+    - [Windows](#windows-1)
+    - [macOS](#macos-1)
+    - [Ubuntu](#ubuntu)
 - [Building Halide with CMake](#building-halide-with-cmake)
   - [Basic build](#basic-build)
+    - [Windows](#windows-2)
+    - [macOS and Linux](#macos-and-linux)
+    - [CMake Presets](#cmake-presets)
+  - [Installing](#installing)
   - [Build options](#build-options)
     - [Find module options](#find-module-options)
 - [Using Halide from your CMake build](#using-halide-from-your-cmake-build)
@@ -33,6 +46,12 @@ The following sections cover each in detail.
       - [`add_halide_generator`](#add_halide_generator)
       - [`add_halide_python_extension_library`](#add_halide_python_extension_library)
       - [`add_halide_runtime`](#add_halide_runtime)
+  - [Cross compiling](#cross-compiling)
+    - [Use `add_halide_generator`](#use-add_halide_generator)
+    - [Use a super-build](#use-a-super-build)
+    - [Use `ExternalProject` directly](#use-externalproject-directly)
+    - [Use an emulator or run on device](#use-an-emulator-or-run-on-device)
+    - [Bypass CMake](#bypass-cmake)
 - [Contributing CMake code to Halide](#contributing-cmake-code-to-halide)
   - [General guidelines and best practices](#general-guidelines-and-best-practices)
     - [Prohibited commands list](#prohibited-commands-list)
@@ -750,8 +769,8 @@ Variables that control package loading:
 | Variable             | Description                                                                                                                                                                   |
 |----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Halide_SHARED_LIBS` | override `BUILD_SHARED_LIBS` when loading the Halide package via `find_package`. Has no effect when using Halide via `add_subdirectory` as a Git or `FetchContent` submodule. |
-| `Halide_RUNTIME_NO_THREADS` | skip linking of Threads libraray to runtime. Should be set if your toolchain does not support it (e.g. baremetal). |
-| `Halide_RUNTIME_NO_DL_LIBS` | skip linking of DL libraray to runtime. Should be set if your toolchain does not support it (e.g. baremetal). |
+| `Halide_RUNTIME_NO_THREADS` | skip linking of Threads library to runtime. Should be set if your toolchain does not support it (e.g. baremetal). |
+| `Halide_RUNTIME_NO_DL_LIBS` | skip linking of DL library to runtime. Should be set if your toolchain does not support it (e.g. baremetal). |
 
 Variables set by the package:
 
@@ -766,6 +785,14 @@ Variables set by the package:
 | `Halide_CMAKE_TARGET`      | The Halide target triple corresponding to the active CMake target. |
 | `Halide_ENABLE_EXCEPTIONS` | Whether Halide was compiled with exception support                 |
 | `Halide_ENABLE_RTTI`       | Whether Halide was compiled with RTTI                              |
+
+Variables that control package behavior:
+
+| Variable                   | Description |
+|----------------------------|-------------|
+| `Halide_PYTHON_LAUNCHER`   | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators. |
+| `Halide_NO_DEFAULT_FLAGS`  | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator` |
+
 
 ### Imported targets
 
@@ -866,10 +893,11 @@ author warning will be issued.
 
 To use an autoscheduler, set the `AUTOSCHEDULER` argument to a target
 named like `Namespace::Scheduler`, for example `Halide::Adams19`. This will set
-the `autoscheduler` GeneratorParam on the generator command line to `Scheduler` and add the target to
-the list of plugins. Additional plugins can be loaded by setting the `PLUGINS`
-argument. If the argument to `AUTOSCHEDULER` does not contain `::` or it does
-not name a target, it will be passed to the `-s` flag verbatim.
+the `autoscheduler` GeneratorParam on the generator command line to `Scheduler`
+and add the target to the list of plugins. Additional plugins can be loaded by
+setting the `PLUGINS` argument. If the argument to `AUTOSCHEDULER` does not
+contain `::` or it does not name a target, it will be passed to the `-s` flag
+verbatim.
 
 If `GRADIENT_DESCENT` is set, then the module will be built suitably for
 gradient descent calculation in TensorFlow or PyTorch. See
@@ -954,8 +982,9 @@ and [apps/hannk](https://github.com/halide/Halide/tree/main/apps/hannk) for a co
 If `PYSTUB` is specified, then a Python Extension will be built that
 wraps the Generator with CPython glue to allow use of the Generator
 Python 3.x. The result will be a a shared library of the form
-`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.) See
-`README_python.md` for examples of use.
+`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python
+version and platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.).
+See `README_python.md` for examples of use.
 
 #### `add_halide_python_extension_library`
 

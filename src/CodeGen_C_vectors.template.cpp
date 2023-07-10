@@ -523,34 +523,54 @@ struct NativeVectorComparisonType {
 };
 
 template<>
-struct NativeVectorComparisonType<int8_t> { using type = char; };
+struct NativeVectorComparisonType<int8_t> {
+    using type = char;
+};
 
 template<>
-struct NativeVectorComparisonType<int16_t> { using type = int16_t; };
+struct NativeVectorComparisonType<int16_t> {
+    using type = int16_t;
+};
 
 template<>
-struct NativeVectorComparisonType<int32_t> { using type = int32_t; };
+struct NativeVectorComparisonType<int32_t> {
+    using type = int32_t;
+};
 
 template<>
-struct NativeVectorComparisonType<int64_t> { using type = int64_t; };
+struct NativeVectorComparisonType<int64_t> {
+    using type = int64_t;
+};
 
 template<>
-struct NativeVectorComparisonType<uint8_t> { using type = char; };
+struct NativeVectorComparisonType<uint8_t> {
+    using type = char;
+};
 
 template<>
-struct NativeVectorComparisonType<uint16_t> { using type = int16_t; };
+struct NativeVectorComparisonType<uint16_t> {
+    using type = int16_t;
+};
 
 template<>
-struct NativeVectorComparisonType<uint32_t> { using type = int32_t; };
+struct NativeVectorComparisonType<uint32_t> {
+    using type = int32_t;
+};
 
 template<>
-struct NativeVectorComparisonType<uint64_t> { using type = int64_t; };
+struct NativeVectorComparisonType<uint64_t> {
+    using type = int64_t;
+};
 
 template<>
-struct NativeVectorComparisonType<float> { using type = int32_t; };
+struct NativeVectorComparisonType<float> {
+    using type = int32_t;
+};
 
 template<>
-struct NativeVectorComparisonType<double> { using type = int64_t; };
+struct NativeVectorComparisonType<double> {
+    using type = int64_t;
+};
 
 template<typename ElementType_, size_t Lanes_>
 class NativeVectorOps {

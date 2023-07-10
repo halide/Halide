@@ -499,9 +499,21 @@ DependenceAnalysis::regions_required(const Function &f, int stage_num,
                         curr_scope.push(dims[d].var, simple_bounds);
                     }
 
+                    // Extract all exprs associated with the definition
+                    class GetAllExprs : public IRMutator {
+                    public:
+                        std::vector<Expr> exprs;
+                        using IRMutator::mutate;
+                        Expr mutate(const Expr &e) override {
+                            exprs.push_back(e);
+                            return e;
+                        }
+                    } get_all_exprs;
+                    def.mutate(&get_all_exprs);
+
                     // Find the regions required for each value of the current function stage,
                     // update the region map, and add them to the queue.
-                    for (const auto &val : def.values()) {
+                    for (const auto &val : get_all_exprs.exprs) {
                         // Substitute the parameter estimates into the expression and get
                         // the regions required for the expression.
                         Expr subs_val = substitute_var_estimates(val);
@@ -2997,6 +3009,7 @@ Partitioner::analyze_spatial_locality(const FStage &stg,
             if (iter != allocation_bounds.end()) {
                 call_alloc_reg = iter->second;
             } else {
+                internal_assert(pipeline_bounds.count(call.first)) << "Pipeline_bounds is missing " << call.first << "\n";
                 call_alloc_reg = get_element(pipeline_bounds, call.first);
             }
             Expr current_stride = find_max_access_stride(dep_vars.vars, call.first,

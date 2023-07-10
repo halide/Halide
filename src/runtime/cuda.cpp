@@ -266,16 +266,14 @@ namespace Cuda {
 // Helper object to acquire and release the cuda context.
 class Context {
     void *const user_context;
-    int status;  // must always be a valid halide_error_code_t value
+    int status = halide_error_code_success;  // must always be a valid halide_error_code_t value
 
 public:
-    CUcontext context;
+    CUcontext context = nullptr;
 
     // Constructor sets 'status' if any error occurs.
     ALWAYS_INLINE Context(void *user_context)
-        : user_context(user_context),
-          status(halide_error_code_success),
-          context(nullptr) {
+        : user_context(user_context) {
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif

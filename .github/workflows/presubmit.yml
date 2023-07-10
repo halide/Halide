@@ -18,11 +18,11 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
-      - uses: DoozyX/clang-format-lint-action@v0.14
+      - uses: DoozyX/clang-format-lint-action@v0.16.2
         with:
           source: '.'
           extensions: 'h,c,cpp'
-          clangFormatVersion: 14
+          clangFormatVersion: 16
   check_clang_tidy:
     name: Check clang-tidy
     runs-on: ubuntu-20.04
@@ -33,14 +33,14 @@ jobs:
           # from apt.llvm.org
           # wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
           sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
-          sudo apt-add-repository "deb https://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-14 main"
+          sudo apt-add-repository "deb https://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-16 main"
           sudo apt-get update
-          sudo apt-get install llvm-14 clang-14 liblld-14-dev libclang-14-dev clang-tidy-14 ninja-build
+          sudo apt-get install llvm-16 clang-16 liblld-16-dev libclang-16-dev clang-tidy-16 ninja-build
       - name: Run clang-tidy
         run: |
-          export CC=clang-14
-          export CXX=clang++-14
-          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-14
+          export CC=clang-16
+          export CXX=clang++-16
+          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-16
           ./run-clang-tidy.sh
   check_cmake_file_lists:
     name: Check CMake file lists

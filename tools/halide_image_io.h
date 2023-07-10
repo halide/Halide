@@ -1765,7 +1765,7 @@ struct halide_tiff_header {
 template<typename ElemType, int BUFFER_SIZE = 1024>
 struct ElemWriter {
     ElemWriter(FileOpener *f)
-        : f(f), next(&buf[0]), ok(true) {
+        : f(f), next(&buf[0]) {
     }
     ~ElemWriter() {
         flush();
@@ -1798,7 +1798,7 @@ struct ElemWriter {
     FileOpener *const f;
     ElemType buf[BUFFER_SIZE];
     ElemType *next;
-    bool ok;
+    bool ok = true;
 };
 
 // Note that this is a fairly simpleminded TIFF writer that doesn't
