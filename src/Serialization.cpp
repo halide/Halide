@@ -731,7 +731,7 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         }
         auto call_type = serialize_call_type(call_expr->call_type);
         int func_index = -1;
-        if (this->func_mappings.find(Function(call_expr->func).name()) != this->func_mappings.end()) {
+        if (call_expr->func.defined() && this->func_mappings.find(Function(call_expr->func).name()) != this->func_mappings.end()) {
             func_index = this->func_mappings[Function(call_expr->func).name()];
         }
         auto value_index = call_expr->value_index;
