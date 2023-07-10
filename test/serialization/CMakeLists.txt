@@ -1,4 +1,4 @@
-tests(GROUPS roundtrip
+tests(GROUPS serialization
       SOURCES
       single_func_pipe.cpp
       multiple_func_pipe.cpp

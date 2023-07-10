@@ -1204,7 +1204,6 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
         user_assert(false) << "failed to open file " << filename << "\n";
         return Pipeline();
     }
-    std::cout << "Deserializing from file " << filename << "\n";
     in.seekg(0, std::ios::end);
     int size = in.tellg();
     in.seekg(0, std::ios::beg);

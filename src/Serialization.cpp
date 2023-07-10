@@ -1181,7 +1181,6 @@ void Serializer::build_function_mappings(const std::map<std::string, Function> &
 }
 
 void Serializer::serialize(const Pipeline &pipeline, const std::string &filename) {
-    std::cout << "Serializing a pipeline into " << filename << "\n";
     flatbuffers::FlatBufferBuilder builder(1024);
     std::map<std::string, Function> env;
 
