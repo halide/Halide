@@ -204,6 +204,8 @@ Call::CallType Deserializer::deserialize_call_type(const Serialize::CallType cal
         return Call::CallType::PureExtern;
     case Serialize::CallType::CallType_Halide:
         return Call::CallType::Halide;
+    case Serialize::CallType::CallType_Intrinsic:
+        return Call::CallType::Intrinsic;
     case Serialize::CallType::CallType_PureIntrinsic:
         return Call::CallType::PureIntrinsic;
     default:
