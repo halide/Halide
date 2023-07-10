@@ -7,6 +7,7 @@
 
 #include "CSE.h"
 #include "Debug.h"
+#include "Func.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -1511,6 +1512,10 @@ Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple 
     return result;
 }
 
+Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
+    return tuple_select(condition, true_value, false_value);
+}
+
 Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
     user_assert(true_value.size() == false_value.size())
         << "tuple_select() requires all Tuples to have identical sizes.";
@@ -1519,6 +1524,14 @@ Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &
         result[i] = select(condition, true_value[i], false_value[i]);
     }
     return result;
+}
+
+Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
+    return tuple_select(condition, true_value, false_value);
+}
+
+Expr select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value) {
+    return select(condition, (Expr)true_value, (Expr)false_value);
 }
 
 Expr mux(const Expr &id, const std::vector<Expr> &values) {

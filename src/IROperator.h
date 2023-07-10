@@ -797,6 +797,8 @@ inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
 // @{
 Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
 Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
+Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
+Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
 // @}
 
 /** Equivalent of multiway select(), but taking/returning tuples. If the condition is
@@ -806,12 +808,25 @@ template<typename... Args>
 inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&...args) {
     return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
 }
-
 template<typename... Args>
 inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&...args) {
     return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
 }
+template<typename... Args>
+inline Tuple select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&...args) {
+    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
+}
+template<typename... Args>
+inline Tuple select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&...args) {
+    return select(c0, v0, select(c1, v1, std::forward<Args>(args)...));
+}
 // @}
+
+/** select applied to FuncRefs (e.g. select(x < 100, f(x), g(x))) is assumed to
+ * return an Expr. A runtime error is produced if this is applied to
+ * tuple-valued Funcs. In that case you should explicitly cast the second and
+ * third args to Tuple to remove the ambiguity. */
+Expr select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value);
 
 /** Oftentimes we want to pack a list of expressions with the same type
  * into a channel dimension, e.g.,
