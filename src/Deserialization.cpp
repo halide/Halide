@@ -274,6 +274,8 @@ TailStrategy Deserializer::deserialize_tail_strategy(const Serialize::TailStrate
         return TailStrategy::RoundUp;
     case Serialize::TailStrategy::TailStrategy_GuardWithIf:
         return TailStrategy::GuardWithIf;
+    case Serialize::TailStrategy::TailStrategy_Predicate:
+        return TailStrategy::Predicate;
     case Serialize::TailStrategy::TailStrategy_PredicateLoads:
         return TailStrategy::PredicateLoads;
     case Serialize::TailStrategy::TailStrategy_PredicateStores:

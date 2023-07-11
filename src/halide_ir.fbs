@@ -511,6 +511,7 @@ table Specialization {
 enum TailStrategy: ubyte {
     RoundUp,
     GuardWithIf,
+    Predicate,
     PredicateLoads,
     PredicateStores,
     ShiftInwards,

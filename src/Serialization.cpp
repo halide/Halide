@@ -272,6 +272,8 @@ Halide::Serialize::TailStrategy Serializer::serialize_tail_strategy(const TailSt
         return Halide::Serialize::TailStrategy::TailStrategy_RoundUp;
     case TailStrategy::GuardWithIf:
         return Halide::Serialize::TailStrategy::TailStrategy_GuardWithIf;
+    case TailStrategy::Predicate:
+        return Halide::Serialize::TailStrategy::TailStrategy_Predicate;
     case TailStrategy::PredicateLoads:
         return Halide::Serialize::TailStrategy::TailStrategy_PredicateLoads;
     case TailStrategy::PredicateStores:
