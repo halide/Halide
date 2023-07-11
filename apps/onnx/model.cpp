@@ -65,7 +65,8 @@ HalideModel convert_onnx_model(
 std::string auto_schedule(const HalideModel &pipeline) {
     // Generate a schedule for the pipeline.
     Halide::Target tgt = Halide::get_host_target();
-    auto schedule = pipeline.rep->auto_schedule(tgt);
+    Halide::AutoschedulerParams autoscheduler_params = Halide::AutoschedulerParams("Adams2019");
+    auto schedule = pipeline.rep->apply_autoscheduler(tgt, autoscheduler_params);
     return schedule.schedule_source;
 }
 
@@ -528,7 +529,8 @@ void print_loop_nest(const HalideModel &pipeline) {
 }
 
 void print_lowered_statement(const HalideModel &pipeline) {
-    std::string tmp_file = std::tmpnam(nullptr);
+    Halide::Internal::TemporaryFile f("model", ".stmt");
+    std::string tmp_file = f.pathname();
     pipeline.rep->compile_to_lowered_stmt(
         tmp_file, pipeline.rep->infer_arguments());
     std::ifstream is(tmp_file);
@@ -536,7 +538,6 @@ void print_lowered_statement(const HalideModel &pipeline) {
     while (std::getline(is, line)) {
         std::cout << line << "\n";
     }
-    std::remove(tmp_file.c_str());
 }
 
 }  // namespace
