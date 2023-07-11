@@ -810,6 +810,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
     case Serialize::Expr::Expr_Variable: {
         const Serialize::Variable *variable_expr = (const Serialize::Variable *)expr;
         auto name = deserialize_string(variable_expr->name());
+        auto type = deserialize_type(variable_expr->type());
         auto param_name = deserialize_string(variable_expr->param_name());
         Parameter param;
         if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
@@ -821,7 +822,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
             image = it->second;
         }
         auto reduction_domain = deserialize_reduction_domain(variable_expr->reduction_domain());
-        return Variable::make(Int(32), name, image, param, reduction_domain);
+        return Variable::make(type, name, image, param, reduction_domain);
     }
     case Serialize::Expr::Expr_Shuffle: {
         const Serialize::Shuffle *shuffle_expr = (const Serialize::Shuffle *)expr;

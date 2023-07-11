@@ -767,6 +767,7 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
     case IRNodeType::Variable: {
         auto variable_expr = expr.as<Variable>();
         auto name_serialized = serialize_string(builder, variable_expr->name);
+        auto type_serialized = serialize_type(builder, variable_expr->type);
         std::string param_name = variable_expr->param.defined() ? variable_expr->param.name() : "";
         if (variable_expr->param.defined() && parameters_in_pipeline.find(param_name) == parameters_in_pipeline.end()) {
             parameters_in_pipeline[param_name] = variable_expr->param;
@@ -778,7 +779,7 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         }
         auto image_name_serialized = serialize_string(builder, image_name);
         auto reduction_domain_serialized = serialize_reduction_domain(builder, variable_expr->reduction_domain);
-        return std::make_pair(Halide::Serialize::Expr::Expr_Variable, Halide::Serialize::CreateVariable(builder, name_serialized, param_name_serialized, image_name_serialized, reduction_domain_serialized).Union());
+        return std::make_pair(Halide::Serialize::Expr::Expr_Variable, Halide::Serialize::CreateVariable(builder, name_serialized, type_serialized, param_name_serialized, image_name_serialized, reduction_domain_serialized).Union());
     }
     case IRNodeType::Shuffle: {
         auto shuffle_expr = expr.as<Shuffle>();

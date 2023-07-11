@@ -414,6 +414,7 @@ table ReductionDomain {
 
 table Variable {
     name: string;
+    type: Type;
     param_name: string;
     image_name: string;
     reduction_domain: ReductionDomain;
