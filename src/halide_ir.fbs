@@ -355,7 +355,7 @@ table Load {
     name: string;
     predicate: Expr;
     index: Expr;
-    image: Buffer;
+    image_name: string;
     param_name: string;
     alignment: ModulusRemainder;
     type: Type;
@@ -394,7 +394,7 @@ table Call {
     call_type: CallType;
     func_index: int32;
     value_index: int32;
-    image: Buffer;
+    image_name: string;
     param_name: string;
     type: Type;
 }
@@ -415,7 +415,7 @@ table ReductionDomain {
 table Variable {
     name: string;
     param_name: string;
-    image: Buffer;
+    image_name: string;
     reduction_domain: ReductionDomain;
 }
 
@@ -614,7 +614,7 @@ table Parameter {
     type: Type;
     dimensions: int32;
     name: string;
-    buffer: Buffer;
+    buffer_name: string;
     host_alignment: int32;
     buffer_constraints: [BufferConstraint];
     memory_type: MemoryType;
@@ -636,7 +636,7 @@ enum ExternFuncArgumentType: ubyte {
 table ExternFuncArgument {
     arg_type: ExternFuncArgumentType;
     func_index: int32;
-    buffer: Buffer;
+    buffer_name: string;
     expr: Expr;
     image_param_name: string;
 }
@@ -687,6 +687,7 @@ table Pipeline {
     requirements: [Stmt];
     func_names_in_order: [string];
     parameters: [Parameter];
+    buffers: [Buffer];
     // trace_pipeline: bool;
 }
 
