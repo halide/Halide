@@ -1,5 +1,11 @@
 include ../support/Makefile.inc
 
+ifneq (,$(findstring -m32,$(CXX) $(CC) $(CCFLAGS) $(CXXFLAGS)))
+build:
+	@echo "Not testing this app in a 32-bit build (-m32 found in flags)"
+test: build
+else
+
 PROTOC := $(shell which protoc)
 
 ifdef PROTOC
@@ -103,4 +109,5 @@ build:
 	@echo "No protoc in $(PATH), you need to install protocol buffers"
 test: build
 
+endif
 endif
