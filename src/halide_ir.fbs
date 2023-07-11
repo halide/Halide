@@ -142,7 +142,7 @@ table Store {
     predicate: Expr;
     value: Expr;
     index: Expr;
-    param: Parameter;
+    param_name: string;
     alignment: ModulusRemainder;
 }
 
@@ -205,7 +205,7 @@ table PrefetchDirective {
     from: string;
     offset: Expr;
     strategy: PrefetchBoundStrategy;
-    param: Parameter;
+    param_name: string;
 }
 
 table Prefetch {
@@ -356,7 +356,7 @@ table Load {
     predicate: Expr;
     index: Expr;
     image: Buffer;
-    param: Parameter;
+    param_name: string;
     alignment: ModulusRemainder;
     type: Type;
 }
@@ -395,7 +395,7 @@ table Call {
     func_index: int32;
     value_index: int32;
     image: Buffer;
-    param: Parameter;
+    param_name: string;
     type: Type;
 }
 
@@ -414,7 +414,7 @@ table ReductionDomain {
 
 table Variable {
     name: string;
-    param: Parameter;
+    param_name: string;
     image: Buffer;
     reduction_domain: ReductionDomain;
 }
@@ -638,7 +638,7 @@ table ExternFuncArgument {
     func_index: int32;
     buffer: Buffer;
     expr: Expr;
-    image_param: Parameter;
+    image_param_name: string;
 }
 
 table BufferDimension {
@@ -668,7 +668,7 @@ table Func {
     init_def: Definition;
     updates: [Definition];
     debug_file: string;
-    output_buffers: [Parameter];
+    output_buffers_names: [string];
     extern_arguments: [ExternFuncArgument];
     extern_function_name: string;
     extern_mangling: NameMangling;
@@ -686,6 +686,7 @@ table Pipeline {
     output_names: [string];
     requirements: [Stmt];
     func_names_in_order: [string];
+    parameters: [Parameter];
     // trace_pipeline: bool;
 }
 

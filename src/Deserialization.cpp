@@ -23,6 +23,8 @@ public:
 private:
     std::unordered_map<int32_t, FunctionPtr> reverse_function_mappings;
 
+    std::unordered_map<std::string, Parameter> parameters_in_pipeline;
+
     // helper functions to deserialize each type of object
     MemoryType deserialize_memory_type(const Serialize::MemoryType memory_type);
 
@@ -407,9 +409,14 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
     }
     std::string debug_file = deserialize_string(function->debug_file());
     std::vector<Parameter> output_buffers;
-    output_buffers.reserve(function->output_buffers()->size());
-    for (const auto &output_buffer : *function->output_buffers()) {
-        output_buffers.push_back(deserialize_parameter(output_buffer));
+    output_buffers.reserve(function->output_buffers_names()->size());
+    for (const auto &output_buffer_name_serialized : *function->output_buffers_names()) {
+        auto output_buffer_name = deserialize_string(output_buffer_name_serialized);
+        Parameter output_buffer;
+        if (auto it = parameters_in_pipeline.find(output_buffer_name); it != parameters_in_pipeline.end()) {
+            output_buffer = it->second;
+        }
+        output_buffers.push_back(output_buffer);
     }
     std::vector<ExternFuncArgument> extern_arguments;
     extern_arguments.reserve(function->extern_arguments()->size());
@@ -476,7 +483,11 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         auto predicate = deserialize_expr(store_stmt->predicate_type(), store_stmt->predicate());
         auto value = deserialize_expr(store_stmt->value_type(), store_stmt->value());
         auto index = deserialize_expr(store_stmt->index_type(), store_stmt->index());
-        auto param = deserialize_parameter(store_stmt->param());
+        auto param_name = deserialize_string(store_stmt->param_name());
+        Parameter param;
+        if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+            param = it->second;
+        }
         auto alignment = deserialize_modulus_remainder(store_stmt->alignment());
         return Store::make(name, value, index, param, predicate, alignment);
     }
@@ -735,7 +746,11 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         auto predicate = deserialize_expr(load_expr->predicate_type(), load_expr->predicate());
         auto index = deserialize_expr(load_expr->index_type(), load_expr->index());
         auto image = deserialize_buffer(load_expr->image());
-        auto param = deserialize_parameter(load_expr->param());
+        auto param_name = deserialize_string(load_expr->param_name());
+        Parameter param;
+        if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+            param = it->second;
+        }
         auto alignment = deserialize_modulus_remainder(load_expr->alignment());
         auto type = deserialize_type(load_expr->type());
         return Load::make(type, name, index, image, param, predicate, alignment);
@@ -774,14 +789,22 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         }
         auto call_type = deserialize_call_type(call_expr->call_type());
         auto image = deserialize_buffer(call_expr->image());
-        auto param = deserialize_parameter(call_expr->param());
+        auto param_name = deserialize_string(call_expr->param_name());
+        Parameter param;
+        if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+            param = it->second;
+        }
         auto type = deserialize_type(call_expr->type());
         return Call::make(type, name, args, call_type, func_ptr, value_index, image, param);
     }
     case Serialize::Expr::Expr_Variable: {
         const Serialize::Variable *variable_expr = (const Serialize::Variable *)expr;
         auto name = deserialize_string(variable_expr->name());
-        auto param = deserialize_parameter(variable_expr->param());
+        auto param_name = deserialize_string(variable_expr->param_name());
+        Parameter param;
+        if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+            param = it->second;
+        }
         auto image = deserialize_buffer(variable_expr->image());
         auto reduction_domain = deserialize_reduction_domain(variable_expr->reduction_domain());
         return Variable::make(Int(32), name, image, param, reduction_domain);
@@ -976,7 +999,11 @@ PrefetchDirective Deserializer::deserialize_prefetch_directive(const Serialize::
     auto from = deserialize_string(prefetch_directive->from());
     auto offset = deserialize_expr(prefetch_directive->offset_type(), prefetch_directive->offset());
     auto strategy = deserialize_prefetch_bound_strategy(prefetch_directive->strategy());
-    auto param = deserialize_parameter(prefetch_directive->param());
+    auto param_name = deserialize_string(prefetch_directive->param_name());
+    Parameter param;
+    if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+        param = it->second;
+    }
     auto hl_prefetch_directive = PrefetchDirective();
     hl_prefetch_directive.name = name;
     hl_prefetch_directive.at = at;
@@ -1145,7 +1172,11 @@ ExternFuncArgument Deserializer::deserialize_extern_func_argument(const Serializ
         auto expr = deserialize_expr(extern_func_argument->expr_type(), extern_func_argument->expr());
         return ExternFuncArgument(expr);
     } else {
-        auto image_param = deserialize_parameter(extern_func_argument->image_param());
+        auto image_param_name = deserialize_string(extern_func_argument->image_param_name());
+        Parameter image_param;
+        if (auto it = parameters_in_pipeline.find(image_param_name); it != parameters_in_pipeline.end()) {
+            image_param = it->second;
+        }
         return ExternFuncArgument(image_param);
     }
 }
@@ -1230,6 +1261,18 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
     }
     build_reverse_function_mappings(functions);
 
+    std::vector<Parameter> parameters;
+    parameters.reserve(pipeline_obj->parameters()->size());
+    for (const auto &parameter : *pipeline_obj->parameters()) {
+        parameters.push_back(deserialize_parameter(parameter));
+    }
+    for (const auto &param : parameters) {
+        if (parameters_in_pipeline.find(param.name()) == parameters_in_pipeline.end()) {
+            parameters_in_pipeline[param.name()] = param;
+        } else {
+            user_assert(false) << "duplicate parameter " << param.name() << " in pipeline\n";
+        }
+    }
     std::vector<Func> funcs;
     for (size_t i = 0; i < pipeline_obj->funcs()->size(); ++i) {
         deserialize_function(pipeline_obj->funcs()->Get(i), functions[i]);

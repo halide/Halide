@@ -27,6 +27,8 @@ public:
 private:
     std::unordered_map<std::string, int32_t> func_mappings;
 
+    std::unordered_map<std::string, Internal::Parameter> parameters_in_pipeline;
+
     // helper functions to serialize each type of object
     Halide::Serialize::MemoryType serialize_memory_type(const MemoryType &memory_type);
 
@@ -399,9 +401,13 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         auto predicate_serialized = serialize_expr(builder, store_stmt->predicate);
         auto value_serialized = serialize_expr(builder, store_stmt->value);
         auto index_serialized = serialize_expr(builder, store_stmt->index);
-        auto param_serialized = serialize_parameter(builder, store_stmt->param);
+        std::string param_name = store_stmt->param.defined() ? store_stmt->param.name() : "";
+        if (store_stmt->param.defined() && parameters_in_pipeline.find(param_name) == parameters_in_pipeline.end()) {
+            parameters_in_pipeline[param_name] = store_stmt->param;
+        }
+        auto param_name_serialized = serialize_string(builder, param_name);
         auto alignment_serialized = serialize_modulus_remainder(builder, store_stmt->alignment);
-        return std::make_pair(Halide::Serialize::Stmt::Stmt_Store, Halide::Serialize::CreateStore(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, value_serialized.first, value_serialized.second, index_serialized.first, index_serialized.second, param_serialized, alignment_serialized).Union());
+        return std::make_pair(Halide::Serialize::Stmt::Stmt_Store, Halide::Serialize::CreateStore(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, value_serialized.first, value_serialized.second, index_serialized.first, index_serialized.second, param_name_serialized, alignment_serialized).Union());
     }
     case IRNodeType::Provide: {
         auto provide_stmt = stmt.as<Provide>();
@@ -691,10 +697,14 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         auto predicate_serialized = serialize_expr(builder, load_expr->predicate);
         auto index_serialized = serialize_expr(builder, load_expr->index);
         auto image_serialized = serialize_buffer(builder, load_expr->image);
-        auto param_serialized = serialize_parameter(builder, load_expr->param);
+        std::string param_name = load_expr->param.defined() ? load_expr->param.name() : "";
+        if (load_expr->param.defined() && parameters_in_pipeline.find(param_name) == parameters_in_pipeline.end()) {
+            parameters_in_pipeline[param_name] = load_expr->param;
+        }
+        auto param_name_serialized = serialize_string(builder, param_name);
         auto alignment_serialized = serialize_modulus_remainder(builder, load_expr->alignment);
         auto type_serialized = serialize_type(builder, load_expr->type);
-        return std::make_pair(Halide::Serialize::Expr::Expr_Load, Halide::Serialize::CreateLoad(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, index_serialized.first, index_serialized.second, image_serialized, param_serialized, alignment_serialized, type_serialized).Union());
+        return std::make_pair(Halide::Serialize::Expr::Expr_Load, Halide::Serialize::CreateLoad(builder, name_serialized, predicate_serialized.first, predicate_serialized.second, index_serialized.first, index_serialized.second, image_serialized, param_name_serialized, alignment_serialized, type_serialized).Union());
     }
     case IRNodeType::Ramp: {
         auto ramp_expr = expr.as<Ramp>();
@@ -736,17 +746,25 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         }
         auto value_index = call_expr->value_index;
         auto image_serialized = serialize_buffer(builder, call_expr->image);
-        auto param_serialized = serialize_parameter(builder, call_expr->param);
+        std::string param_name = call_expr->param.defined() ? call_expr->param.name() : "";
+        if (call_expr->param.defined() && parameters_in_pipeline.find(param_name) == parameters_in_pipeline.end()) {
+            parameters_in_pipeline[param_name] = call_expr->param;
+        }
+        auto param_name_serialized = serialize_string(builder, param_name);
         auto type_serialized = serialize_type(builder, call_expr->type);
-        return std::make_pair(Halide::Serialize::Expr::Expr_Call, Halide::Serialize::CreateCall(builder, name_serialized, builder.CreateVector(args_types), builder.CreateVector(args_serialized), call_type, func_index, value_index, image_serialized, param_serialized, type_serialized).Union());
+        return std::make_pair(Halide::Serialize::Expr::Expr_Call, Halide::Serialize::CreateCall(builder, name_serialized, builder.CreateVector(args_types), builder.CreateVector(args_serialized), call_type, func_index, value_index, image_serialized, param_name_serialized, type_serialized).Union());
     }
     case IRNodeType::Variable: {
         auto variable_expr = expr.as<Variable>();
         auto name_serialized = serialize_string(builder, variable_expr->name);
-        auto param_serialized = serialize_parameter(builder, variable_expr->param);
+        std::string param_name = variable_expr->param.defined() ? variable_expr->param.name() : "";
+        if (variable_expr->param.defined() && parameters_in_pipeline.find(param_name) == parameters_in_pipeline.end()) {
+            parameters_in_pipeline[param_name] = variable_expr->param;
+        }
+        auto param_name_serialized = serialize_string(builder, param_name);
         auto image_serialized = serialize_buffer(builder, variable_expr->image);
         auto reduction_domain_serialized = serialize_reduction_domain(builder, variable_expr->reduction_domain);
-        return std::make_pair(Halide::Serialize::Expr::Expr_Variable, Halide::Serialize::CreateVariable(builder, name_serialized, param_serialized, image_serialized, reduction_domain_serialized).Union());
+        return std::make_pair(Halide::Serialize::Expr::Expr_Variable, Halide::Serialize::CreateVariable(builder, name_serialized, param_name_serialized, image_serialized, reduction_domain_serialized).Union());
     }
     case IRNodeType::Shuffle: {
         auto shuffle_expr = expr.as<Shuffle>();
@@ -815,10 +833,14 @@ flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_function(flat
     }
     auto debug_file_serialized = serialize_string(builder, function.debug_file());
 
-    std::vector<flatbuffers::Offset<Halide::Serialize::Parameter>> output_buffers_serialized;
-    output_buffers_serialized.reserve(function.output_buffers().size());
+    std::vector<flatbuffers::Offset<flatbuffers::String>> output_buffers_names_serialized;
+    output_buffers_names_serialized.reserve(function.output_buffers().size());
     for (const auto &output_buffer : function.output_buffers()) {
-        output_buffers_serialized.push_back(serialize_parameter(builder, output_buffer));
+        std::string output_buffer_name = output_buffer.defined() ? output_buffer.name() : "";
+        if (output_buffer.defined() && parameters_in_pipeline.find(output_buffer_name) == parameters_in_pipeline.end()) {
+            parameters_in_pipeline[output_buffer_name] = output_buffer;
+        }
+        output_buffers_names_serialized.push_back(serialize_string(builder, output_buffer_name));
     }
     std::vector<flatbuffers::Offset<Halide::Serialize::ExternFuncArgument>> extern_arguments_serialized;
     extern_arguments_serialized.reserve(function.extern_arguments().size());
@@ -840,7 +862,7 @@ flatbuffers::Offset<Halide::Serialize::Func> Serializer::serialize_function(flat
     }
     bool frozen = function.frozen();
     auto func = Halide::Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, required_types_vector, required_dim,
-                                              args_vector, func_schedule_serialized, init_def_serialized, builder.CreateVector(updates_serialized), debug_file_serialized, builder.CreateVector(output_buffers_serialized),
+                                              args_vector, func_schedule_serialized, init_def_serialized, builder.CreateVector(updates_serialized), debug_file_serialized, builder.CreateVector(output_buffers_names_serialized),
                                               builder.CreateVector(extern_arguments_serialized), extern_function_name_serialized, extern_mangling_serialized, extern_function_device_api_serialized, extern_proxy_expr_serialized.first,
                                               extern_proxy_expr_serialized.second, trace_loads, trace_stores, trace_realizations, builder.CreateVector(trace_tags_serialized), frozen);
     return func;
@@ -992,8 +1014,12 @@ flatbuffers::Offset<Halide::Serialize::PrefetchDirective> Serializer::serialize_
     auto from_serialized = serialize_string(builder, prefetch_directive.from);
     auto offset_serialized = serialize_expr(builder, prefetch_directive.offset);
     auto strategy_serialized = serialize_prefetch_bound_strategy(prefetch_directive.strategy);
-    auto param_serialized = serialize_parameter(builder, prefetch_directive.param);
-    return Halide::Serialize::CreatePrefetchDirective(builder, name_serialized, at_serialized, from_serialized, offset_serialized.first, offset_serialized.second, strategy_serialized, param_serialized);
+    std::string param_name = prefetch_directive.param.defined() ? prefetch_directive.param.name() : "";
+    if (prefetch_directive.param.defined() && parameters_in_pipeline.find(param_name) == parameters_in_pipeline.end()) {
+        parameters_in_pipeline[param_name] = prefetch_directive.param;
+    }
+    auto param_name_serialized = serialize_string(builder, param_name);
+    return Halide::Serialize::CreatePrefetchDirective(builder, name_serialized, at_serialized, from_serialized, offset_serialized.first, offset_serialized.second, strategy_serialized, param_name_serialized);
 }
 
 flatbuffers::Offset<Halide::Serialize::Split> Serializer::serialize_split(flatbuffers::FlatBufferBuilder &builder, const Split &split) {
@@ -1086,6 +1112,7 @@ flatbuffers::Offset<Halide::Serialize::Parameter> Serializer::serialize_paramete
     auto type_serialized = serialize_type(builder, parameter.type());
     int dimensions = parameter.dimensions();
     auto name_serialized = serialize_string(builder, parameter.name());
+    debug(0) << "serialize parameter's name " << parameter.name() << " ptr " << parameter.get_content_ptr() << "\n";
     bool is_buffer = parameter.is_buffer();
     // because of check_is_buffer()/check_is_scalar(), we cannot serialize all fields at the same time
     // based on if the parameter is a buffer, we serialize different fields, fill 0 or default values for the unavailable fields
@@ -1130,8 +1157,12 @@ flatbuffers::Offset<Halide::Serialize::ExternFuncArgument> Serializer::serialize
         auto expr_serialized = serialize_expr(builder, extern_func_argument.expr);
         return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, 0, expr_serialized.first, expr_serialized.second);
     } else {
-        auto parameter_serialized = serialize_parameter(builder, extern_func_argument.image_param);
-        return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, 0, Halide::Serialize::Expr_NONE, 0, parameter_serialized);
+        std::string image_param_name = extern_func_argument.image_param.defined() ? extern_func_argument.image_param.name() : "";
+        if (extern_func_argument.image_param.defined() && parameters_in_pipeline.find(image_param_name) == parameters_in_pipeline.end()) {
+            parameters_in_pipeline[image_param_name] = extern_func_argument.image_param;
+        }
+        auto image_param_name_serialized = serialize_string(builder, image_param_name);
+        return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, 0, Halide::Serialize::Expr_NONE, 0, image_param_name_serialized);
     }
 }
 
@@ -1223,8 +1254,17 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
     auto requirements_vector = builder.CreateVector(requirements_serialized);
     auto requirements_types_vector = builder.CreateVector(requirements_types);
 
+    // For Parameters, to prevent we serialize the same object multiple times, we use a map to store the unique parameters seen in the whole pipeline
+    // and only serialize their names (strings) at the use sites, here we do the actual serialization of the parameters
+    std::vector<flatbuffers::Offset<Halide::Serialize::Parameter>> parameters_serialized;
+    parameters_serialized.reserve(parameters_in_pipeline.size());
+    for (const auto &param : parameters_in_pipeline) {
+        parameters_serialized.push_back(serialize_parameter(builder, param.second));
+    }
+
     auto pipeline_obj = Halide::Serialize::CreatePipeline(builder, builder.CreateVector(funcs_serialized), builder.CreateVector(output_names_serialized),
-                                                          requirements_types_vector, requirements_vector, builder.CreateVector(func_names_in_order_serialized));
+                                                          requirements_types_vector, requirements_vector, builder.CreateVector(func_names_in_order_serialized),
+                                                          builder.CreateVector(parameters_serialized));
     builder.Finish(pipeline_obj);
 
     uint8_t *buf = builder.GetBufferPointer();
