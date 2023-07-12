@@ -109,7 +109,7 @@ private:
 
     std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> serialize_wrapper_refs(flatbuffers::FlatBufferBuilder &builder, const std::map<std::string, FunctionPtr> &wrappers);
 
-    void build_function_mappings(const std::map<std::string, Function> &env, const std::vector<std::string> &order);
+    void build_function_mappings(const std::map<std::string, Function> &env);
 };
 
 Halide::Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType &memory_type) {
@@ -1224,39 +1224,33 @@ std::vector<flatbuffers::Offset<Halide::Serialize::WrapperRef>> Serializer::seri
     return wrapper_refs_serialized;
 }
 
-void Serializer::build_function_mappings(const std::map<std::string, Function> &env, const std::vector<std::string> &order) {
+void Serializer::build_function_mappings(const std::map<std::string, Function> &env) {
     if (!this->func_mappings.empty()) {
         this->func_mappings.clear();
     }
     int32_t cnt = 0;
-    for (const auto &name : order) {
-        user_assert(env.find(name) != env.end()) << "function " << name << " not found in the environment\n";
-        this->func_mappings[name] = cnt++;
+    for (const auto &entry : env) {
+        user_assert(env.find(entry.first) != env.end()) << "function " << entry.first << " not found in the environment\n";
+        this->func_mappings[entry.first] = cnt++;
     }
 }
 
 void Serializer::serialize(const Pipeline &pipeline, const std::string &filename) {
     flatbuffers::FlatBufferBuilder builder(1024);
-    std::map<std::string, Function> env;
 
     // extract the DAG, unwarp function from Funcs
     std::vector<Function> outputs_functions;
     for (const Func &func : pipeline.outputs()) {
-        std::map<std::string, Function> more_funcs = find_transitive_calls(func.function());
-        env.insert(more_funcs.begin(), more_funcs.end());
         outputs_functions.push_back(func.function());
     }
-    std::vector<std::string> order = topological_order(outputs_functions, env);
+    std::map<std::string, Function> env = build_environment(outputs_functions);
+    build_function_mappings(env);
+
     std::vector<flatbuffers::Offset<flatbuffers::String>> func_names_in_order_serialized;
-    for (const auto &name : order) {
-        func_names_in_order_serialized.push_back(serialize_string(builder, name));
-    }
-
-    build_function_mappings(env, order);
-
     std::vector<flatbuffers::Offset<Halide::Serialize::Func>> funcs_serialized;
-    for (const auto &name : order) {
-        funcs_serialized.push_back(this->serialize_function(builder, env[name]));
+    for (const auto &entry : env) {
+        func_names_in_order_serialized.push_back(serialize_string(builder, entry.first));
+        funcs_serialized.push_back(this->serialize_function(builder, entry.second));
     }
 
     auto outpus = pipeline.outputs();
