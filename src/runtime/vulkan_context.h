@@ -427,6 +427,8 @@ int vk_create_context(void *user_context, VulkanMemoryAllocator **allocator,
 
     StringTable requested_layers;
     uint32_t requested_layer_count = vk_get_requested_layers(user_context, requested_layers);
+    requested_layers.append(user_context, "VK_LAYER_KHRONOS_validation"); // FIXME: REMOVE AFTER DIAGNOSING FAILURES
+    requested_layer_count++;
     debug(user_context) << "  requested " << requested_layer_count << " layers for instance!\n";
     for (int n = 0; n < (int)requested_layer_count; ++n) {
         debug(user_context) << "   layer: " << requested_layers[n] << "\n";
