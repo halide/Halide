@@ -224,7 +224,6 @@ tests(GROUPS correctness
       output_larger_than_two_gigs.cpp
       parallel_gpu_nested.cpp
       param.cpp
-      param_map.cpp
       parameter_constraints.cpp
       partial_application.cpp
       partial_realization.cpp

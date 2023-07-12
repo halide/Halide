@@ -730,7 +730,7 @@ private:
         option_without_value(const std::string &name,
                              char short_name,
                              const std::string &desc)
-            : nam(name), snam(short_name), desc(desc), has(false) {
+            : nam(name), snam(short_name), desc(desc) {
         }
         ~option_without_value() override = default;
 
@@ -779,7 +779,7 @@ private:
         std::string nam;
         char snam;
         std::string desc;
-        bool has;
+        bool has = false;
     };
 
     template<class T>
@@ -790,7 +790,7 @@ private:
                           bool need,
                           const T &def,
                           const std::string &desc)
-            : nam(name), snam(short_name), need(need), has(false), def(def), actual(def) {
+            : nam(name), snam(short_name), need(need), def(def), actual(def) {
             this->desc = full_description(desc);
         }
         ~option_with_value() override = default;
@@ -868,7 +868,7 @@ private:
         bool need;
         std::string desc;
 
-        bool has;
+        bool has = false;
         T def;
         T actual;
     };

@@ -109,14 +109,14 @@ issue.
 
 ### TL;DR
 
-Have llvm-14.0 (or greater) installed and run `make` in the root directory of
+Have llvm-15.0 (or greater) installed and run `make` in the root directory of
 the repository (where this README is).
 
 ### Acquiring LLVM
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, and trunk. At the time of writing,
-this means versions 16, 15, and 14 are supported, but 13 is not. The commands
+this means versions 17, 16, and 15 are supported, but 14 is not. The commands
 `llvm-config` and `clang` must be somewhere in the path.
 
 If your OS does not have packages for LLVM, you can find binaries for it at
@@ -127,10 +127,10 @@ works well on OS X and Ubuntu.)
 If you want to build it yourself, first check it out from GitHub:
 
 ```
-% git clone --depth 1 --branch llvmorg-14.0.0 https://github.com/llvm/llvm-project.git
+% git clone --depth 1 --branch llvmorg-16.0.0 https://github.com/llvm/llvm-project.git
 ```
 
-(If you want to build LLVM 14.x, use branch `release/14.x`; for current trunk,
+(If you want to build LLVM 16.x, use branch `release/16.x`; for current trunk,
 use `main`)
 
 Then build it like so:
@@ -287,10 +287,10 @@ Subsets of the tests can be selected with `-L` and include `correctness`,
 #### Building LLVM (optional)
 
 Follow these steps if you want to build LLVM yourself. First, download LLVM's
-sources (these instructions use the latest 14.0 release)
+sources (these instructions use the latest 16.0 release)
 
 ```
-D:\> git clone --depth 1 --branch llvmorg-14.0.0 https://github.com/llvm/llvm-project.git
+D:\> git clone --depth 1 --branch llvmorg-16.0.0 https://github.com/llvm/llvm-project.git
 ```
 
 For a 64-bit build, run:

@@ -136,13 +136,6 @@ with some differences where the C++ idiom is either inappropriate or impossible:
 
 -   `Func::async` becomes `Func.async_` because `async` is a Python keyword.
 
--   `ParamMap` isn't supported as an argument to any `Func` or `Pipeline`
-    method, and never will be: it exists as a way to support thread-safe
-    arguments to JIT-compiled functions, which can now be supported more simply
-    and elegantly via `compile_to_callable()`. (It is likely that `ParamMap`
-    will be removed from the C++ bindings in a future version of Halide as
-    well.)
-
 -   The `not` keyword cannot be used to negate boolean Halide expressions.
     Instead, the `logical_not` function can be used and is equivalent to using
     `operator!` in C++.

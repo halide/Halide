@@ -2817,10 +2817,9 @@ Func::operator Stage() const {
 namespace {
 class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
-    int count;
+    int count = 0;
 
-    CountImplicitVars(const vector<Expr> &exprs)
-        : count(0) {
+    CountImplicitVars(const vector<Expr> &exprs) {
         for (const auto &e : exprs) {
             e.accept(this);
         }
@@ -3181,30 +3180,26 @@ FuncTupleElementRef::operator Expr() const {
     return Internal::Call::make(func_ref.function(), args, idx);
 }
 
-Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
-                          const ParamMap &param_map) {
+Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
-    return pipeline().realize(std::move(sizes), target, param_map);
+    return pipeline().realize(std::move(sizes), target);
 }
 
 Realization Func::realize(JITUserContext *context,
                           std::vector<int32_t> sizes,
-                          const Target &target,
-                          const ParamMap &param_map) {
+                          const Target &target) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
-    return pipeline().realize(context, std::move(sizes), target, param_map);
+    return pipeline().realize(context, std::move(sizes), target);
 }
 
 void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
-                              const Target &target,
-                              const ParamMap &param_map) {
-    infer_input_bounds(nullptr, sizes, target, param_map);
+                              const Target &target) {
+    infer_input_bounds(nullptr, sizes, target);
 }
 
 void Func::infer_input_bounds(JITUserContext *context,
                               const std::vector<int32_t> &sizes,
-                              const Target &target,
-                              const ParamMap &param_map) {
+                              const Target &target) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
@@ -3212,7 +3207,7 @@ void Func::infer_input_bounds(JITUserContext *context,
         outputs[i] = std::move(im);
     }
     Realization r(std::move(outputs));
-    infer_input_bounds(context, r, target, param_map);
+    infer_input_bounds(context, r, target);
 }
 
 OutputImageParam Func::output_buffer() const {
@@ -3379,29 +3374,25 @@ JITHandlers &Func::jit_handlers() {
 }
 
 void Func::realize(Pipeline::RealizationArg outputs,
-                   const Target &target,
-                   const ParamMap &param_map) {
-    pipeline().realize(std::move(outputs), target, param_map);
+                   const Target &target) {
+    pipeline().realize(std::move(outputs), target);
 }
 
 void Func::realize(JITUserContext *context,
                    Pipeline::RealizationArg outputs,
-                   const Target &target,
-                   const ParamMap &param_map) {
-    pipeline().realize(context, std::move(outputs), target, param_map);
+                   const Target &target) {
+    pipeline().realize(context, std::move(outputs), target);
 }
 
 void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
-                              const Target &target,
-                              const ParamMap &param_map) {
-    pipeline().infer_input_bounds(std::move(outputs), target, param_map);
+                              const Target &target) {
+    pipeline().infer_input_bounds(std::move(outputs), target);
 }
 
 void Func::infer_input_bounds(JITUserContext *context,
                               Pipeline::RealizationArg outputs,
-                              const Target &target,
-                              const ParamMap &param_map) {
-    pipeline().infer_input_bounds(context, std::move(outputs), target, param_map);
+                              const Target &target) {
+    pipeline().infer_input_bounds(context, std::move(outputs), target);
 }
 
 void Func::compile_jit(const Target &target) {

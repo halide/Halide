@@ -129,8 +129,8 @@ class NormalizeDimensionality : public IRMutator {
     const ExtractBlockSize &block_size;
     const DeviceAPI device_api;
 
-    int depth;
-    int max_depth;
+    int depth = 0;
+    int max_depth = 0;
 
     Stmt wrap(Stmt s) {
         if (depth != 0) {
@@ -181,7 +181,7 @@ class NormalizeDimensionality : public IRMutator {
 
 public:
     NormalizeDimensionality(const ExtractBlockSize &e, DeviceAPI device_api)
-        : block_size(e), device_api(device_api), depth(0), max_depth(0) {
+        : block_size(e), device_api(device_api) {
     }
 };
 
@@ -293,9 +293,9 @@ public:
 private:
     map<string, SharedAllocation *> shared;
 
-    bool in_threads;
+    bool in_threads = false;
 
-    int barrier_stage;
+    int barrier_stage = 0;
 
     const DeviceAPI device_api;
 
@@ -1022,9 +1022,7 @@ public:
     }
 
     ExtractSharedAndHeapAllocations(DeviceAPI d)
-        : in_threads(false),
-          barrier_stage(0),
-          device_api(d),
+        : device_api(d),
           thread_id_var_name(unique_name('t')),
           num_threads_var_name(unique_name('t')),
           may_merge_allocs_of_different_type(device_api != DeviceAPI::OpenGLCompute &&
@@ -1203,7 +1201,7 @@ public:
 };
 
 class InjectThreadBarriers : public IRMutator {
-    bool in_threads, injected_barrier;
+    bool in_threads = false, injected_barrier;
 
     using IRMutator::visit;
 
@@ -1351,8 +1349,7 @@ class InjectThreadBarriers : public IRMutator {
 
 public:
     InjectThreadBarriers(ExtractSharedAndHeapAllocations &sha, ExtractRegisterAllocations &ra)
-        : in_threads(false),
-          block_allocs(sha),
+        : block_allocs(sha),
           register_allocs(ra) {
     }
 };
