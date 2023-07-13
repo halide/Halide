@@ -1503,8 +1503,12 @@ Expr select(Expr condition, Expr true_value, Expr false_value) {
 }
 
 Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
+    return select(condition, true_value, false_value);
+}
+
+Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
     user_assert(condition.size() == true_value.size() && true_value.size() == false_value.size())
-        << "tuple_select() requires all Tuples to have identical sizes.";
+        << "select() on Tuples requires all Tuples to have identical sizes.";
     Tuple result(std::vector<Expr>(condition.size()));
     for (size_t i = 0; i < result.size(); i++) {
         result[i] = select(condition[i], true_value[i], false_value[i]);
@@ -1512,22 +1516,18 @@ Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple 
     return result;
 }
 
-Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
-    return tuple_select(condition, true_value, false_value);
+Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
+    return select(condition, true_value, false_value);
 }
 
-Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
+Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
     user_assert(true_value.size() == false_value.size())
-        << "tuple_select() requires all Tuples to have identical sizes.";
+        << "select() on Tuples requires all Tuples to have identical sizes.";
     Tuple result(std::vector<Expr>(true_value.size()));
     for (size_t i = 0; i < result.size(); i++) {
         result[i] = select(condition, true_value[i], false_value[i]);
     }
     return result;
-}
-
-Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
-    return tuple_select(condition, true_value, false_value);
 }
 
 Expr select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value) {

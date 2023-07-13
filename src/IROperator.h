@@ -795,7 +795,9 @@ inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
 /** Equivalent of ternary select(), but taking/returning tuples. If the condition is
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
+HALIDE_ATTRIBUTE_DEPRECATED("tuple_select has been deprecated. Use select instead (which now works for Tuples)")
 Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
+HALIDE_ATTRIBUTE_DEPRECATED("tuple_select has been deprecated. Use select instead (which now works for Tuples)")
 Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
 Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
 Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
@@ -805,10 +807,12 @@ Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
 template<typename... Args>
+HALIDE_ATTRIBUTE_DEPRECATED("tuple_select has been deprecated. Use select instead (which now works for Tuples)")
 inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&...args) {
     return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
 }
 template<typename... Args>
+HALIDE_ATTRIBUTE_DEPRECATED("tuple_select has been deprecated. Use select instead (which now works for Tuples)")
 inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&...args) {
     return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
 }
