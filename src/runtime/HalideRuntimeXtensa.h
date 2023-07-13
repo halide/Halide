@@ -1,0 +1,7 @@
+#ifndef HALIDE_HALIDERUNTIMEXTENSA_H
+#define HALIDE_HALIDERUNTIMEXTENSA_H
+
+#include "tcm_bump_allocator.h"
+
+
+#endif  // HALIDE_HALIDERUNTIMEXTENSA_H

@@ -958,6 +958,8 @@ Stmt CodeGen_C::preprocess_function_body(const Stmt &stmt) {
     return stmt;
 }
 
+void CodeGen_C::print_in_the_end() {}
+
 void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_name_map) {
     // Don't put non-external function declarations in headers.
     if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
@@ -1046,6 +1048,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
                 // Emit the body
                 Stmt body_to_print = preprocess_function_body(f.body);
                 print(body_to_print);
+                print_in_the_end();
 
                 // Return success.
                 stream << get_indent() << "return 0;\n";

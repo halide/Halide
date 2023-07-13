@@ -82,6 +82,15 @@ protected:
      */
     virtual Stmt preprocess_function_body(const Stmt &stmt);
 
+    /** This is a hook that subclasses can print to function body
+     * just after it is emitted -- e.g., to free the custom memory allocator
+     * defined in preprocess_function_body.
+     *
+     * This hook will always be called before the function
+     * closing brace is emitted.
+     */
+    virtual void print_in_the_end();
+
     /** An ID for the most recently generated ssa variable */
     std::string id;
 

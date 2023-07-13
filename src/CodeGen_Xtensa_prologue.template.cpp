@@ -10,6 +10,8 @@ extern "C" {
 
 extern void *halide_tcm_malloc(void *user_context, size_t x) __attribute__((malloc));
 extern void halide_tcm_free(void *user_context, void *ptr);
+extern void *halide_tcm_bump_malloc(void *user_context, size_t x) __attribute__((malloc));
+extern void halide_tcm_bump_free(void *user_context, void *ptr);
 extern void **halide_init_dma(int32_t channel_count);
 extern int32_t halide_xtensa_copy_1d(int32_t channel, void *dst, int32_t dst_base, void *src, int32_t src_base, int32_t extent, int32_t item_size);
 extern int32_t halide_xtensa_copy_2d(int32_t channel, void *dst, int32_t dst_base, int32_t dst_stride, void *src, int32_t src_base, int32_t src_stride, int32_t extent0, int32_t extent1, int32_t item_size);

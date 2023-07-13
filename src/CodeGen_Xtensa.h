@@ -25,6 +25,7 @@ public:
 
 protected:
     Stmt preprocess_function_body(const Stmt &stmt) override;
+    void print_in_the_end() override;
 
     using CodeGen_C::visit;
 

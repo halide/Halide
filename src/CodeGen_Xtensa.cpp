@@ -148,6 +148,8 @@ CodeGen_Xtensa::CodeGen_Xtensa(ostream &s, const Target &t, OutputKind k, const 
 }
 
 void CodeGen_Xtensa::add_platform_prologue() {
+    stream << "#include <third_party/halide/HalideRuntimeXtensa.h>\n";
+
     stream << halide_c_template_CodeGen_Xtensa_prologue;
 }
 
@@ -164,7 +166,25 @@ Stmt CodeGen_Xtensa::preprocess_function_body(const Stmt &stmt) {
         stream << get_indent() << "}\n";
     }
 
+    stream << get_indent() << "TcmBumpAllocator* tcm_ptr;";
+    stream << get_indent() << "TcmBumpAllocator* tcm;";
+    stream << get_indent() << "bool allocator_created = false;";
+    stream << get_indent() << "if (XT_RUR_THREADPTR() == 0) {\n";
+    stream << get_indent() << "  allocator_created = true;";
+    stream << get_indent()
+           << "  tcm_ptr = (TcmBumpAllocator*)halide_tcm_malloc(_ucon, "
+              "sizeof(TcmBumpAllocator));\n";
+    stream << get_indent() << "  tcm = new(tcm_ptr) TcmBumpAllocator();\n";
+    stream << get_indent() << "}\n";
+
     return new_body;
+}
+
+void CodeGen_Xtensa::print_in_the_end() {
+    stream << get_indent() << "if (allocator_created) {\n";
+    stream << get_indent() << "  tcm->~TcmBumpAllocator();\n";
+    stream << get_indent() << "  halide_tcm_free(_ucon, tcm_ptr);\n";
+    stream << get_indent() << "}\n";
 }
 
 halide_type_t CodeGen_Xtensa::get_native_xtensa_vector(const halide_type_t &t) const {
@@ -1523,7 +1543,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
                    << "[" << size_id << "];\n";
         } else {
             const char *const alloc_fn = (op->memory_type == MemoryType::VTCM) ?
-                                             "halide_tcm_malloc" :
+                                             "halide_tcm_bump_malloc" :
                                              "halide_malloc";
             stream << "*"
                    << "__attribute__((aligned(XCHAL_VISION_SIMD8))) "
@@ -1558,7 +1578,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         create_assertion(check.str(), Call::make(Int(32), "halide_error_out_of_memory", {}, Call::Extern));
 
         string free_function = op->free_function.empty() ?
-                                   (op->memory_type != MemoryType::VTCM ? "halide_free" : "halide_tcm_free") :
+                                   (op->memory_type != MemoryType::VTCM ? "halide_free" : "halide_tcm_bump_free") :
                                    op->free_function;
 
         emit_halide_free_helper(op_name, free_function);

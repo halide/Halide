@@ -1,5 +1,6 @@
 #include "HalideRuntime.h"
 #include "runtime_internal.h"
+#include "tcm_bump_allocator.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,6 +22,24 @@ void *halide_tcm_malloc(void *user_context, unsigned int x) {
 
 void halide_tcm_free(void *user_context, void *ptr) {
     tcm_free(ptr);
+}
+
+void *halide_tcm_bump_malloc(void *user_context, unsigned int x) {
+  const size_t alignment = ::halide_internal_malloc_alignment();
+
+  // The second bank has more space as some allocations already happen on the
+  // first bank. Thus trying the second bank first reduces the number of total
+  // calls.
+  void *ptr = TcmBumpAllocator::Allocate(x, 1, alignment);
+  // Try to allocate on the first bank.
+  if (!ptr) {
+    ptr = TcmBumpAllocator::Allocate(x, 0, alignment);
+  }
+  return ptr;
+}
+
+void halide_tcm_bump_free(void *user_context, void *ptr) {
+  TcmBumpAllocator::Deallocate(ptr);
 }
 
 struct idma_buffer_t;
