@@ -8,7 +8,7 @@
 // Just insert a weak definition here as a workaround.
 extern "C" {
 __attribute__((weak)) float __extendhfsf2(uint16_t a) {
-  return __extendXfYf2__(a);
+    return __extendXfYf2__(a);
 }
 #endif
 
