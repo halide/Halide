@@ -55,9 +55,8 @@ int main(int argc, char **argv) {
         auto buf = Buffer<int32_t>::make_scalar();
         Realization r(buf);
         Target target;
-        ParamMap pm;
-        double t = benchmark([&]() { p.realize(r, target, pm); });
-        std::cout << "No argument Pipeline realize reusing Realization/Target/ParamMap time " << t * 1e6 << "us.\n";
+        double t = benchmark([&]() { p.realize(r, target); });
+        std::cout << "No argument Pipeline realize reusing Realization/Target time " << t * 1e6 << "us.\n";
     }
 
     {
@@ -69,9 +68,8 @@ int main(int argc, char **argv) {
 
         auto buf = Buffer<int32_t>::make_scalar();
         Target target;
-        ParamMap pm;
-        double t = benchmark([&]() { p.realize(buf, target, pm); });
-        std::cout << "No argument Pipeline realize reusing Buffer/Target/ParamMap time " << t * 1e6 << "us.\n";
+        double t = benchmark([&]() { p.realize(buf, target); });
+        std::cout << "No argument Pipeline realize reusing Buffer/Target time " << t * 1e6 << "us.\n";
     }
 
     {
@@ -97,9 +95,8 @@ int main(int argc, char **argv) {
         auto buf = Buffer<int32_t>::make_scalar();
         Realization r(buf);
         Target target("host-no_asserts-no_bounds_query");
-        ParamMap pm;
-        double t = benchmark([&]() { p.realize(r, target, pm); });
-        std::cout << "No argument Pipeline realize reusing Realization/Target/ParamMap with no_asserts and no_bounds_query time " << t * 1e6 << "us.\n";
+        double t = benchmark([&]() { p.realize(r, target); });
+        std::cout << "No argument Pipeline realize reusing Realization/Target with no_asserts and no_bounds_query time " << t * 1e6 << "us.\n";
     }
 
     {
@@ -130,9 +127,8 @@ int main(int argc, char **argv) {
         auto buf = Buffer<int32_t>::make_scalar();
         Realization r(buf);
         Target target;
-        ParamMap pm;
-        double t = benchmark([&]() { p.realize(r, target, pm); });
-        std::cout << "One argument Pipeline realize reusing Realization/Target/ParamMap time " << t * 1e6 << "us.\n";
+        double t = benchmark([&]() { p.realize(r, target); });
+        std::cout << "One argument Pipeline realize reusing Realization/Target time " << t * 1e6 << "us.\n";
     }
 
     for (int i = 10; i < 100; i += 10) {

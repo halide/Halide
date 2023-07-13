@@ -22,9 +22,9 @@ using std::sort;
 using std::string;
 using std::vector;
 
-static ostringstream nil;
-
 namespace {
+
+ostringstream nil;
 
 class CodeGen_D3D12Compute_Dev : public CodeGen_GPU_Dev {
 public:

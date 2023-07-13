@@ -16,7 +16,6 @@
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
-#include "ParamMap.h"
 #include "Realization.h"
 #include "Target.h"
 #include "Tuple.h"
@@ -151,7 +150,7 @@ private:
     Internal::IntrusivePtr<PipelineContents> contents;
 
     // For the three method below, precisely one of the first two args should be non-null
-    void prepare_jit_call_arguments(RealizationArg &output, const Target &target, const ParamMap &param_map,
+    void prepare_jit_call_arguments(RealizationArg &output, const Target &target,
                                     JITUserContext **user_context, bool is_bounds_inference, Internal::JITCallArgs &args_result);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
@@ -391,8 +390,7 @@ public:
     const std::vector<CustomLoweringPass> &custom_lowering_passes();
 
     /** See Func::realize */
-    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target());
 
     /** Same as above, but takes a custom user-provided context to be
      * passed to runtime functions. A nullptr context is legal, and is
@@ -400,8 +398,7 @@ public:
      * a context. */
     Realization realize(JITUserContext *context,
                         std::vector<int32_t> sizes = {},
-                        const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+                        const Target &target = Target());
 
     /** Evaluate this Pipeline into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
@@ -412,9 +409,7 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
-    void realize(RealizationArg output,
-                 const Target &target = Target(),
-                 const ParamMap &param_map = ParamMap::empty_map());
+    void realize(RealizationArg output, const Target &target = Target());
 
     /** Same as above, but takes a custom user-provided context to be
      * passed to runtime functions. A nullptr context is legal, and
@@ -422,8 +417,7 @@ public:
      * take a context. */
     void realize(JITUserContext *context,
                  RealizationArg output,
-                 const Target &target = Target(),
-                 const ParamMap &param_map = ParamMap::empty_map());
+                 const Target &target = Target());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -432,23 +426,19 @@ public:
      * ImageParams. */
     // @{
     void infer_input_bounds(const std::vector<int32_t> &sizes,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     void infer_input_bounds(RealizationArg output,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     // @}
 
     /** Variants of infer_inputs_bounds that take a custom user context */
     // @{
     void infer_input_bounds(JITUserContext *context,
                             const std::vector<int32_t> &sizes,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     void infer_input_bounds(JITUserContext *context,
                             RealizationArg output,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:

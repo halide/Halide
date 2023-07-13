@@ -10,7 +10,7 @@
 #     the tests in test/generator/ this times only the halide build time.
 
 # Halide project version
-HALIDE_VERSION_MAJOR ?= 16
+HALIDE_VERSION_MAJOR ?= 17
 HALIDE_VERSION_MINOR ?= 0
 HALIDE_VERSION_PATCH ?= 0
 HALIDE_VERSION=$(HALIDE_VERSION_MAJOR).$(HALIDE_VERSION_MINOR).$(HALIDE_VERSION_PATCH)
@@ -556,7 +556,6 @@ SOURCE_FILES = \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
   Parameter.cpp \
-  ParamMap.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
   Prefetch.cpp \
@@ -754,7 +753,6 @@ HEADER_FILES = \
   ParallelRVar.h \
   Param.h \
   Parameter.h \
-  ParamMap.h \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \

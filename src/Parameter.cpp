@@ -19,7 +19,7 @@ struct ParameterContents {
     const int dimensions;
     const std::string name;
     Buffer<> buffer;
-    uint64_t data;
+    uint64_t data = 0;
     int host_alignment;
     std::vector<BufferConstraint> buffer_constraints;
     Expr scalar_default, scalar_min, scalar_max, scalar_estimate;
@@ -27,7 +27,7 @@ struct ParameterContents {
     MemoryType memory_type = MemoryType::Auto;
 
     ParameterContents(Type t, bool b, int d, const std::string &n)
-        : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
+        : type(t), dimensions(d), name(n), buffer(Buffer<>()),
           host_alignment(t.bytes()), buffer_constraints(std::max(0, dimensions)), is_buffer(b) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a

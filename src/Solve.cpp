@@ -35,7 +35,7 @@ bool no_overflow_int(Type t) {
 class SolveExpression : public IRMutator {
 public:
     SolveExpression(const string &v, const Scope<Expr> &es)
-        : failed(false), var(v), uses_var(false), external_scope(es) {
+        : var(v), external_scope(es) {
     }
 
     using IRMutator::mutate;
@@ -62,14 +62,14 @@ public:
     }
 
     // Has the solve failed.
-    bool failed;
+    bool failed = false;
 
 private:
     // The variable we're solving for.
     string var;
 
     // Whether or not the just-mutated expression uses the variable.
-    bool uses_var;
+    bool uses_var = false;
 
     // A cache of mutated results. Fortunately the mutator is
     // stateless, so we can cache everything.

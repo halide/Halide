@@ -40,9 +40,8 @@ class IRVisualizer;
 class IRCostModel : public IRVisitor {
 public:
     IRCostModel()
-        : max_compute_cost(-1), max_data_cost(-1), max_compute_cost_inclusive(-1),
-          max_data_cost_inclusive(-1) {
-    }
+
+        = default;
 
     // Pre-compute all costs to avoid repeated work
     void compute_all_costs(const Module &m) {
@@ -130,11 +129,11 @@ private:
 
     // We also track the max costs to determine the cost color
     // intensity for a given line of code
-    int max_compute_cost;
-    int max_data_cost;
+    int max_compute_cost = -1;
+    int max_data_cost = -1;
 
-    int max_compute_cost_inclusive;
-    int max_data_cost_inclusive;
+    int max_compute_cost_inclusive = -1;
+    int max_data_cost_inclusive = -1;
 
     /* Utility functions to store node costs in the cost database */
     void set_compute_costs(const IRNode *node, int node_cost, const std::vector<const IRNode *> &child_nodes) {
@@ -520,9 +519,7 @@ private:
  */
 class AssemblyInfo : public IRVisitor {
 public:
-    AssemblyInfo()
-        : loop_id(0), prodcons_id(0) {
-    }
+    AssemblyInfo() = default;
 
     void generate(const std::string &code, const Module &m) {
         // Traverse the module to populate the list of
@@ -567,7 +564,7 @@ public:
 
 private:
     // Generate asm markers for Halide loops
-    int loop_id;
+    int loop_id = 0;
     int gen_loop_id() {
         return ++loop_id;
     }
@@ -580,7 +577,7 @@ private:
     }
 
     // Generate asm markers for Halide producer/consumer ndoes
-    int prodcons_id;
+    int prodcons_id = 0;
     int gen_prodcons_id() {
         return ++prodcons_id;
     }
@@ -623,7 +620,7 @@ template<typename T>
 class HTMLCodePrinter : public IRVisitor {
 public:
     HTMLCodePrinter(T &os, std::map<const IRNode *, int> &nids)
-        : stream(os), id(0), node_ids(nids), context_stack(1, 0) {
+        : stream(os), node_ids(nids), context_stack(1, 0) {
     }
 
     // Make class non-copyable and non-moveable
@@ -697,7 +694,7 @@ private:
     T &stream;
 
     // Used to generate unique ids
-    int id;
+    int id = 0;
     std::map<const IRNode *, int> &node_ids;
 
     // Used to track scope during IR traversal
@@ -2149,7 +2146,7 @@ private:
 class HTMLVisualizationPrinter : public IRVisitor {
 public:
     HTMLVisualizationPrinter(std::ofstream &os, std::map<const IRNode *, int> &nids)
-        : stream(os), id(0), node_ids(nids) {
+        : stream(os), node_ids(nids) {
     }
 
     // Make class non-copyable and non-moveable
@@ -2181,7 +2178,7 @@ private:
     IRCostModel cost_model;
 
     // Generate unique ids
-    int id;
+    int id = 0;
     std::map<const IRNode *, int> &node_ids;
 
     int gen_unique_id() {
