@@ -1215,7 +1215,6 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
     auto type = deserialize_type(buffer->type());
     int32_t dimensions = buffer->dimensions();
     std::vector<halide_dimension_t> buffer_dimensions;
-    std::vector<int> sizes;
     buffer_dimensions.reserve(dimensions);
     for (int i = 0; i < dimensions; ++i) {
         auto dim = buffer->dims()->Get(i);
@@ -1224,9 +1223,9 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
         hl_dim.extent = dim->extent();
         hl_dim.stride = dim->stride();
         buffer_dimensions.push_back(hl_dim);
-        sizes.push_back(hl_dim.extent);
     }
-    auto hl_buffer = Buffer<>(type, sizes, name);
+    auto fake_buffer = Buffer<>(type, nullptr, dimensions, buffer_dimensions.data(), name + "_fake");
+    auto hl_buffer = Buffer<>::make_with_shape_of(fake_buffer, nullptr, nullptr, name);
     memcpy(hl_buffer.data(), buffer->data()->data(), buffer->data()->size());
     return hl_buffer;
 }
