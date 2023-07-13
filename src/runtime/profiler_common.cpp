@@ -333,7 +333,7 @@ WEAK void halide_profiler_memory_free(void *user_context,
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
     StringStreamPrinter<1024> sstr(user_context);
 
-    int64_t (*compare_fs_fn)(halide_profiler_func_stats * a, halide_profiler_func_stats * b) = nullptr;
+    int64_t (*compare_fs_fn)(halide_profiler_func_stats *a, halide_profiler_func_stats *b) = nullptr;
 
     const char *sort_str = getenv("HL_PROFILER_SORT");
     if (sort_str) {
