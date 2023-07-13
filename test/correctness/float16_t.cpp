@@ -2,6 +2,16 @@
 
 #include <limits>
 
+#if defined(__GNUC__)
+// If LLVM was built with an older GCC but Halide is built with Clang,
+// we may be missing this symbol needed for float16 conversion.
+// Just insert a weak definition here as a workaround.
+extern "C" {
+__attribute__((weak)) float __extendhfsf2(uint16_t a) {
+  return __extendXfYf2__(a);
+}
+#endif
+
 namespace {
 
 using namespace Halide;
