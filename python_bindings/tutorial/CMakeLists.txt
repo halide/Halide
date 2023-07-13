@@ -1,3 +1,8 @@
+if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "webgpu")
+    message(WARNING "Python tutorials are not supported with WebGPU.")
+    return()
+endif ()
+
 set(tests
     lesson_01_basics.py
     lesson_02_input_image.py
@@ -24,6 +29,11 @@ foreach (test IN LISTS tests)
         continue()
     endif ()
 
+    if (TARGET_VULKAN AND Halide_TARGET MATCHES "vulkan" AND test MATCHES "lesson_10")
+        message(WARNING "Not all tutorials build under Vulkan.")
+        continue()
+    endif ()
+
     cmake_path(GET test STEM test_name)
     add_python_test(
         FILE "${test}"
@@ -34,6 +44,8 @@ endforeach ()
 
 if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
     message(WARNING "Not all tutorials build under WASM.")
+elseif (TARGET_VULKAN AND Halide_TARGET MATCHES "vulkan")
+    message(WARNING "Not all tutorials build under Vulkan.")
 else ()
     ## Add some hacks for getting CMake to delay compiling lesson_10_halide until after the test has run. The "better" way
     ## of doing this might be to treat lesson 10 like an app and give it its own CMakeLists.txt, but since this is a one-off
@@ -57,6 +69,11 @@ else ()
                         lesson_10_halide.o)
 
     target_link_libraries(lesson_10_halide PRIVATE Halide::Runtime)
+
+    # Undocumented function in HalideGeneratorHelpers. Do not call in external code.
+    # Users of the AOT functions (as opposed to Generators) should link to the relevant
+    # GPU libraries manually.
+    _Halide_target_link_gpu_libs(lesson_10_halide PRIVATE ${Halide_TARGET})
 
     # The fixture "py_lesson_10" orchestrates running the generator part of the lesson first, then the build for the
     # library, and finally runs python_tutorial_lesson_10_aot_compilation_run. The ..._compile test invokes CMake on

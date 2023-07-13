@@ -391,7 +391,7 @@ Stmt Simplify::visit(const Allocate *op) {
         // else case must not use it.
         Stmt stmt = Allocate::make(op->name, op->type, op->memory_type,
                                    new_extents, condition, body_if->then_case,
-                                   new_expr, op->free_function);
+                                   new_expr, op->free_function, op->padding);
         return IfThenElse::make(body_if->condition, stmt, body_if->else_case);
     } else if (all_extents_unmodified &&
                body.same_as(op->body) &&
@@ -401,7 +401,7 @@ Stmt Simplify::visit(const Allocate *op) {
     } else {
         return Allocate::make(op->name, op->type, op->memory_type,
                               new_extents, condition, body,
-                              new_expr, op->free_function);
+                              new_expr, op->free_function, op->padding);
     }
 }
 

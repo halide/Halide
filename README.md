@@ -4,10 +4,10 @@ Halide is a programming language designed to make it easier to write
 high-performance image and array processing code on modern machines. Halide
 currently targets:
 
-- CPU architectures: X86, ARM, MIPS, Hexagon, PowerPC, RISC-V
+- CPU architectures: X86, ARM, Hexagon, PowerPC, RISC-V
 - Operating systems: Linux, Windows, macOS, Android, iOS, Qualcomm QuRT
 - GPU Compute APIs: CUDA, OpenCL, OpenGL Compute Shaders, Apple Metal, Microsoft
-  Direct X 12
+  Direct X 12, Vulkan
 
 Rather than being a standalone programming language, Halide is embedded in C++.
 This means you write C++ code that builds an in-memory representation of a
@@ -83,11 +83,11 @@ and running the Halide compiler library.
 
 | Compiler   | Version      | OS                     | Architectures   |
 |------------|--------------|------------------------|-----------------|
-| GCC        | 7.5          | Ubuntu Linux 20.04 LTS | x86, x64, ARM32 |
-| GCC        | 7.5          | Ubuntu Linux 18.04 LTS | ARM32, ARM64    |
+| GCC        | 9.4          | Ubuntu Linux 20.04 LTS | x86, x64, ARM32 |
+| GCC        | 9.4          | Ubuntu Linux 18.04 LTS | ARM32, ARM64    |
 | MSVC       | 2019 (19.28) | Windows 10 (20H2)      | x86, x64        |
-| AppleClang | 12.0.0       | macOS 10.15            | x86_64          |
-| AppleClang | 12.0.0       | macOS 11.1             | ARM64           |
+| AppleClang | 14.0.3       | macOS 13.4             | x86_64          |
+| AppleClang | 14.0.3       | macOS 13.4             | ARM64           |
 
 Some users have successfully built Halide for Linux using Clang 9.0.0+, for
 Windows using ClangCL 11.0.0+, and for Windows ARM64 by cross-compiling with
@@ -109,14 +109,14 @@ issue.
 
 ### TL;DR
 
-Have llvm-13.0 (or greater) installed and run `make` in the root directory of
+Have llvm-15.0 (or greater) installed and run `make` in the root directory of
 the repository (where this README is).
 
 ### Acquiring LLVM
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, and trunk. At the time of writing,
-this means versions 14.0 and 13.0 are supported, but 12.0 is not. The commands
+this means versions 17, 16, and 15 are supported, but 14 is not. The commands
 `llvm-config` and `clang` must be somewhere in the path.
 
 If your OS does not have packages for LLVM, you can find binaries for it at
@@ -127,10 +127,10 @@ works well on OS X and Ubuntu.)
 If you want to build it yourself, first check it out from GitHub:
 
 ```
-% git clone --depth 1 --branch llvmorg-13.0.0 https://github.com/llvm/llvm-project.git
+% git clone --depth 1 --branch llvmorg-16.0.0 https://github.com/llvm/llvm-project.git
 ```
 
-(If you want to build LLVM 13.x, use branch `release/13.x`; for current trunk,
+(If you want to build LLVM 16.x, use branch `release/16.x`; for current trunk,
 use `main`)
 
 Then build it like so:
@@ -138,9 +138,10 @@ Then build it like so:
 ```
 % cmake -DCMAKE_BUILD_TYPE=Release \
         -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
-        -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly" \
+        -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly" \
         -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_ASSERTIONS=ON \
         -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_BUILD_32_BITS=OFF \
+        -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
         -S llvm-project/llvm -B llvm-build
 % cmake --build llvm-build
 % cmake --install llvm-build --prefix llvm-install
@@ -157,11 +158,12 @@ Then, point Halide to it:
 ```
 
 Note that you _must_ add `clang` to `LLVM_ENABLE_PROJECTS`; adding `lld` to
-`LLVM_ENABLE_PROJECTS` is only required when using WebAssembly, and adding
-`clang-tools-extra` is only necessary if you plan to contribute code to Halide
-(so that you can run `clang-tidy` on your pull requests). We recommend enabling
-both in all cases to simplify builds. You can disable exception handling (EH)
-and RTTI if you don't want the Python bindings.
+`LLVM_ENABLE_PROJECTS` is only required when using WebAssembly,
+`LLVM_ENABLE_RUNTIMES="compiler-rt"` is only required if building the fuzz
+tests, and adding `clang-tools-extra` is only necessary if you plan to
+contribute code to Halide (so that you can run `clang-tidy` on your pull
+requests). We recommend enabling both in all cases to simplify builds. You can
+disable exception handling (EH) and RTTI if you don't want the Python bindings.
 
 ### Building Halide with make
 
@@ -285,10 +287,10 @@ Subsets of the tests can be selected with `-L` and include `correctness`,
 #### Building LLVM (optional)
 
 Follow these steps if you want to build LLVM yourself. First, download LLVM's
-sources (these instructions use the latest 13.0 release)
+sources (these instructions use the latest 16.0 release)
 
 ```
-D:\> git clone --depth 1 --branch llvmorg-13.0.0 https://github.com/llvm/llvm-project.git
+D:\> git clone --depth 1 --branch llvmorg-16.0.0 https://github.com/llvm/llvm-project.git
 ```
 
 For a 64-bit build, run:
@@ -298,7 +300,7 @@ D:\> cmake -G Ninja ^
            -DCMAKE_BUILD_TYPE=Release ^
            -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
            -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon ^
+           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon ^
            -DLLVM_ENABLE_ASSERTIONS=ON ^
            -DLLVM_ENABLE_EH=ON ^
            -DLLVM_ENABLE_RTTI=ON ^
@@ -313,7 +315,7 @@ D:\> cmake -G Ninja ^
            -DCMAKE_BUILD_TYPE=Release ^
            -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
            -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Mips;Hexagon ^
+           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon ^
            -DLLVM_ENABLE_ASSERTIONS=ON ^
            -DLLVM_ENABLE_EH=ON ^
            -DLLVM_ENABLE_RTTI=ON ^

@@ -9,6 +9,12 @@
 #     For correctness and performance tests this include halide build time and run time. For
 #     the tests in test/generator/ this times only the halide build time.
 
+# Halide project version
+HALIDE_VERSION_MAJOR ?= 17
+HALIDE_VERSION_MINOR ?= 0
+HALIDE_VERSION_PATCH ?= 0
+HALIDE_VERSION=$(HALIDE_VERSION_MAJOR).$(HALIDE_VERSION_MINOR).$(HALIDE_VERSION_PATCH)
+
 # Disable built-in makefile rules for all apps to avoid pointless file-system
 # scanning and general weirdness resulting from implicit rules.
 MAKEFLAGS += --no-builtin-rules
@@ -64,11 +70,11 @@ LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
 # Apparently there is no llvm_config flag to get canonical paths to tools,
 # so we'll just construct one relative to --src-root and hope that is stable everywhere.
-LLVM_GIT_LLD_INCLUDE_DIR = $(shell $(LLVM_CONFIG) --src-root | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')/../lld/include
 LLVM_SYSTEM_LIBS=$(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g' | sed 's/-llibxml2.tbd/-lxml2/')
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
-LLVM_CXX_FLAGS = -std=c++17  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/;s/c++14/c++17/g')) -I$(LLVM_GIT_LLD_INCLUDE_DIR)
+# Note, removing -D_GLIBCXX_ASSERTIONS is a workaround for https://reviews.llvm.org/D142279
+LLVM_CXX_FLAGS = -std=c++17  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/ -D_GLIBCXX_ASSERTIONS / /g' -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/;s/c++14/c++17/g'))
 OPTIMIZE ?= -O3
 OPTIMIZE_FOR_BUILD_TIME ?= -O0
 
@@ -113,8 +119,11 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
 WITH_HEXAGON ?= $(findstring hexagon, $(LLVM_COMPONENTS))
-WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
+ifeq ($(shell test $(LLVM_VERSION_TIMES_10) -ge 170; echo $$?),0)
 WITH_RISCV ?= $(findstring riscv, $(LLVM_COMPONENTS))
+else
+# leave WITH_RISCV undefined
+endif
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_POWERPC ?= $(findstring powerpc, $(LLVM_COMPONENTS))
 WITH_NVPTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
@@ -125,6 +134,9 @@ WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGLCOMPUTE ?= not-empty
 WITH_D3D12 ?= not-empty
+WITH_VULKAN ?= not-empty
+WITH_SPIRV ?= not-empty
+WITH_WEBGPU ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
@@ -134,14 +146,17 @@ WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 HL_TARGET ?= host
 HL_JIT_TARGET ?= host
 
+HL_VERSION_FLAGS = \
+	-DHALIDE_VERSION="$(HALIDE_VERSION)" \
+	-DHALIDE_VERSION_MAJOR=$(HALIDE_VERSION_MAJOR) \
+	-DHALIDE_VERSION_MINOR=$(HALIDE_VERSION_MINOR) \
+	-DHALIDE_VERSION_PATCH=$(HALIDE_VERSION_PATCH)
+
 X86_CXX_FLAGS=$(if $(WITH_X86), -DWITH_X86, )
 X86_LLVM_CONFIG_LIB=$(if $(WITH_X86), x86, )
 
 ARM_CXX_FLAGS=$(if $(WITH_ARM), -DWITH_ARM, )
 ARM_LLVM_CONFIG_LIB=$(if $(WITH_ARM), arm, )
-
-MIPS_CXX_FLAGS=$(if $(WITH_MIPS), -DWITH_MIPS, )
-MIPS_LLVM_CONFIG_LIB=$(if $(WITH_MIPS), mips, )
 
 POWERPC_CXX_FLAGS=$(if $(WITH_POWERPC), -DWITH_POWERPC, )
 POWERPC_LLVM_CONFIG_LIB=$(if $(WITH_POWERPC), powerpc, )
@@ -165,6 +180,8 @@ OPENGLCOMPUTE_CXX_FLAGS=$(if $(WITH_OPENGLCOMPUTE), -DWITH_OPENGLCOMPUTE, )
 D3D12_CXX_FLAGS=$(if $(WITH_D3D12), -DWITH_D3D12, )
 D3D12_LLVM_CONFIG_LIB=$(if $(WITH_D3D12), , )
 
+WEBGPU_CXX_FLAGS=$(if $(WITH_WEBGPU), -DWITH_WEBGPU, )
+
 AARCH64_CXX_FLAGS=$(if $(WITH_AARCH64), -DWITH_AARCH64, )
 AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 
@@ -176,6 +193,12 @@ EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DHALIDE_WITH_EXCEPTIONS -fexcepti
 
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON, )
 HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
+
+SPIRV_CXX_FLAGS=$(if $(WITH_SPIRV), -DWITH_SPIRV -isystem $(ROOT_DIR)/dependencies/spirv/include, )
+SPIRV_LLVM_CONFIG_LIB=$(if $(WITH_SPIRV), , )
+
+VULKAN_CXX_FLAGS=$(if $(WITH_VULKAN), -DWITH_VULKAN, )
+VULKAN_LLVM_CONFIG_LIB=$(if $(WITH_VULKAN), , )
 
 WEBASSEMBLY_CXX_FLAGS=$(if $(WITH_WEBASSEMBLY), -DWITH_WEBASSEMBLY, )
 WEBASSEMBLY_LLVM_CONFIG_LIB=$(if $(WITH_WEBASSEMBLY), webassembly, )
@@ -199,7 +222,7 @@ LLVM_CXX_FLAGS_LIBCPP := $(findstring -stdlib=libc++, $(LLVM_CXX_FLAGS))
 endif
 
 CXX_FLAGS = $(CXXFLAGS) $(CXX_WARNING_FLAGS) $(RTTI_CXX_FLAGS) -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE
-
+CXX_FLAGS += $(HL_VERSION_FLAGS)
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
 CXX_FLAGS += $(ARM_CXX_FLAGS)
@@ -210,12 +233,14 @@ CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
 CXX_FLAGS += $(OPENGLCOMPUTE_CXX_FLAGS)
 CXX_FLAGS += $(D3D12_CXX_FLAGS)
-CXX_FLAGS += $(MIPS_CXX_FLAGS)
+CXX_FLAGS += $(WEBGPU_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 CXX_FLAGS += $(AMDGPU_CXX_FLAGS)
 CXX_FLAGS += $(RISCV_CXX_FLAGS)
+CXX_FLAGS += $(SPIRV_CXX_FLAGS)
+CXX_FLAGS += $(VULKAN_CXX_FLAGS)
 CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
@@ -232,17 +257,18 @@ LLVM_STATIC_LIBFILES = \
 	linker \
 	ipo \
 	passes \
-	mcjit \
+	orcjit \
 	$(X86_LLVM_CONFIG_LIB) \
 	$(ARM_LLVM_CONFIG_LIB) \
 	$(OPENCL_LLVM_CONFIG_LIB) \
 	$(METAL_LLVM_CONFIG_LIB) \
 	$(PTX_LLVM_CONFIG_LIB) \
 	$(AARCH64_LLVM_CONFIG_LIB) \
-	$(MIPS_LLVM_CONFIG_LIB) \
 	$(POWERPC_LLVM_CONFIG_LIB) \
 	$(HEXAGON_LLVM_CONFIG_LIB) \
 	$(AMDGPU_LLVM_CONFIG_LIB) \
+	$(SPIRV_LLVM_CONFIG_LIB) \
+	$(VULKAN_LLVM_CONFIG_LIB) \
 	$(WEBASSEMBLY_LLVM_CONFIG_LIB) \
 	$(RISCV_LLVM_CONFIG_LIB)
 
@@ -267,6 +293,7 @@ TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
 # In the tests, some of our expectations change depending on the llvm version
 TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
+TEST_CXX_FLAGS += $(HL_VERSION_FLAGS)
 
 # In the tests, default to exporting no symbols that aren't explicitly exported
 TEST_CXX_FLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
@@ -307,12 +334,21 @@ TEST_METAL = 1
 endif
 endif
 
+ifneq ($(WITH_VULKAN), )
+ifneq (,$(findstring vulkan,$(HL_TARGET)))
+TEST_VULKAN = 1
+endif
+endif
+
 ifeq ($(UNAME), Linux)
 ifneq ($(TEST_CUDA), )
 CUDA_LD_FLAGS ?= -L/usr/lib/nvidia-current -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -lOpenCL
+endif
+ifneq ($(TEST_VULKAN), )
+VULKAN_LD_FLAGS ?= -lvulkan
 endif
 OPENGL_LD_FLAGS ?= -lGL
 HOST_OS=linux
@@ -326,6 +362,10 @@ endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -framework OpenCL
 endif
+ifneq ($(TEST_VULKAN), )
+# The Vulkan loader is distributed as a dylib on OSX (not a framework)
+VULKAN_LD_FLAGS ?= -lvulkan
+endif
 ifneq ($(TEST_METAL), )
 METAL_LD_FLAGS ?= -framework Metal -framework Foundation
 endif
@@ -335,6 +375,10 @@ endif
 
 ifneq ($(TEST_OPENCL), )
 TEST_CXX_FLAGS += -DTEST_OPENCL
+endif
+
+ifneq ($(TEST_VULKAN), )
+TEST_CXX_FLAGS += -DTEST_VULKAN
 endif
 
 ifneq ($(TEST_METAL), )
@@ -434,8 +478,8 @@ SOURCE_FILES = \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_Metal_Dev.cpp \
-  CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
+  CodeGen_Vulkan_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
@@ -443,6 +487,7 @@ SOURCE_FILES = \
   CodeGen_PyTorch.cpp \
   CodeGen_RISCV.cpp \
   CodeGen_WebAssembly.cpp \
+  CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
   CompilerLogger.cpp \
   CPlusPlusMangle.cpp \
@@ -507,10 +552,10 @@ SOURCE_FILES = \
   Monotonic.cpp \
   ObjectInstanceRegistry.cpp \
   OffloadGPULoops.cpp \
+  OptimizeShuffles.cpp \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
   Parameter.cpp \
-  ParamMap.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
   Prefetch.cpp \
@@ -560,7 +605,8 @@ SOURCE_FILES = \
   Solve.cpp \
   SpirvIR.cpp \
   SplitTuples.cpp \
-  StmtToHtml.cpp \
+  StageStridedLoads.cpp \
+  StmtToViz.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
   StrictifyFloat.cpp \
@@ -580,6 +626,15 @@ SOURCE_FILES = \
   VectorizeLoops.cpp \
   WasmExecutor.cpp \
   WrapCalls.cpp
+
+ C_TEMPLATE_FILES = \
+   CodeGen_C_prologue \
+   CodeGen_C_vectors
+
+HTML_TEMPLATE_FILES = \
+   StmtToViz_dependencies \
+   StmtToViz_javascript \
+   StmtToViz_stylesheet
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
@@ -614,11 +669,13 @@ HEADER_FILES = \
   CodeGen_LLVM.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenCL_Dev.h \
+  CodeGen_Vulkan_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
   CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
+  CodeGen_WebGPU_Dev.h \
   CompilerLogger.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
@@ -691,11 +748,11 @@ HEADER_FILES = \
   Monotonic.h \
   ObjectInstanceRegistry.h \
   OffloadGPULoops.h \
+  OptimizeShuffles.h \
   OutputImageParam.h \
   ParallelRVar.h \
   Param.h \
   Parameter.h \
-  ParamMap.h \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
@@ -726,13 +783,13 @@ HEADER_FILES = \
   SlidingWindow.h \
   Solve.h \
   SplitTuples.h \
-  StmtToHtml.h \
+  StageStridedLoads.h \
+  StmtToViz.h \
   StorageFlattening.h \
   StorageFolding.h \
   StrictifyFloat.h \
   Substitute.h \
   Target.h \
-  ThreadPool.h \
   Tracing.h \
   TrimNoOps.h \
   Tuple.h \
@@ -754,8 +811,8 @@ RUNTIME_CPP_COMPONENTS = \
   aarch64_cpu_features \
   alignment_128 \
   alignment_32 \
-  allocation_cache \
   alignment_64 \
+  allocation_cache \
   android_clock \
   android_host_cpu_count \
   android_io \
@@ -769,6 +826,8 @@ RUNTIME_CPP_COMPONENTS = \
   fake_get_symbol \
   fake_thread_pool \
   float16_t \
+  fopen \
+  fopen_lfs \
   force_include_types \
   fuchsia_clock \
   fuchsia_host_cpu_count \
@@ -777,8 +836,8 @@ RUNTIME_CPP_COMPONENTS = \
   halide_buffer_t \
   hexagon_cache_allocator \
   hexagon_cpu_features \
-  hexagon_dma_pool \
   hexagon_dma \
+  hexagon_dma_pool \
   hexagon_host \
   ios_io \
   linux_clock \
@@ -787,20 +846,20 @@ RUNTIME_CPP_COMPONENTS = \
   metal \
   metal_objc_arm \
   metal_objc_x86 \
-  mips_cpu_features \
   module_aot_ref_count \
   module_jit_ref_count \
   msan \
   msan_stubs \
   opencl \
-  openglcompute \
   opengl_egl_context \
   opengl_glx_context \
+  openglcompute \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
   osx_opengl_context \
   osx_yield \
+  posix_aligned_alloc \
   posix_allocator \
   posix_clock \
   posix_error_handler \
@@ -828,6 +887,8 @@ RUNTIME_CPP_COMPONENTS = \
   trace_helper \
   tracing \
   wasm_cpu_features \
+  webgpu_dawn \
+  webgpu_emscripten \
   windows_clock \
   windows_cuda \
   windows_d3d12compute_arm \
@@ -838,8 +899,10 @@ RUNTIME_CPP_COMPONENTS = \
   windows_profiler \
   windows_threads \
   windows_threads_tsan \
+  windows_vulkan \
   windows_yield \
   write_debug_image \
+  vulkan \
   x86_cpu_features \
 
 RUNTIME_LL_COMPONENTS = \
@@ -847,7 +910,6 @@ RUNTIME_LL_COMPONENTS = \
   arm \
   arm_no_neon \
   hvx_128 \
-  mips \
   posix_math \
   powerpc \
   ptx_dev \
@@ -869,6 +931,8 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
+                            $(INCLUDE_DIR)/HalideRuntimeVulkan.h \
+                            $(INCLUDE_DIR)/HalideRuntimeWebGPU.h \
                             $(INCLUDE_DIR)/HalideBuffer.h \
                             $(INCLUDE_DIR)/HalidePyTorchHelpers.h \
                             $(INCLUDE_DIR)/HalidePyTorchCudaHelpers.h
@@ -878,6 +942,8 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32_debug.o) \
                   $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64_debug.o) \
                   $(RUNTIME_EXPORTED_INCLUDES:$(INCLUDE_DIR)/%.h=$(BUILD_DIR)/initmod.%_h.o) \
+                  $(C_TEMPLATE_FILES:%=$(BUILD_DIR)/c_template.%.o) \
+                  $(HTML_TEMPLATE_FILES:%=$(BUILD_DIR)/html_template.%.o) \
                   $(BUILD_DIR)/initmod.inlined_c.o \
                   $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) \
                   $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
@@ -1032,6 +1098,7 @@ RUNTIME_CXX_FLAGS = \
     -Wno-unused-function \
     -Wvla \
     -Wsign-compare
+RUNTIME_CXX_FLAGS += $(HL_VERSION_FLAGS)
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
@@ -1097,25 +1164,9 @@ $(BUILD_DIR)/initmod.%_32_debug.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 $(RUNTIME_CXX_FLAGS) -fpic -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32_debug.d
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 130))
-# For LLVM14+, we must add elementtype() annotations to some of our LLVM IR;
-# earlier versions either don't understand that keyword at all, or don't support
-# the uses we have for it. Rather than forking these sources, for now we'll just
-# edit the files at build time to remove the offending uses. Note that while we could use `sed`
-# here, that isn't an option for CMake builds (since they must support Windows environments without
-# such tooling); to ensure consistent transformations in all builds, we'll use the tool here, too.
-#
-# (This may well need attention in the future, depending on how the LLVM opaque-pointers work proceeeds;
-# see https://llvm.org/docs/OpaquePointers.html)
-$(BUILD_DIR)/initmod.%_ll.ll: $(SRC_DIR)/runtime/%.ll $(BIN_DIR)/regexp_replace
-	@mkdir -p $(@D)
-	$(BIN_DIR)/regexp_replace 'elementtype\(i[0-9]+\)' '' < $(SRC_DIR)/runtime/$*.ll > $(BUILD_DIR)/initmod.$*_ll.ll
-else
 $(BUILD_DIR)/initmod.%_ll.ll: $(SRC_DIR)/runtime/%.ll
 	@mkdir -p $(@D)
 	cp $(SRC_DIR)/runtime/$*.ll $(BUILD_DIR)/initmod.$*_ll.ll
-endif
-
 
 $(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll $(BUILD_DIR)/llvm_ok
 	$(LLVM_AS) $(BUILD_DIR)/initmod.$*.ll -o $(BUILD_DIR)/initmod.$*.bc
@@ -1133,6 +1184,12 @@ $(BUILD_DIR)/initmod.inlined_c.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/hal
 $(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
 	./$(BIN_DIR)/binary2cpp halide_internal_initmod_ptx_$(basename $*)_ll < $(SRC_DIR)/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@
 
+$(BUILD_DIR)/c_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/%.template.cpp
+	./$(BIN_DIR)/binary2cpp halide_c_template_$* < $(SRC_DIR)/$*.template.cpp > $@
+
+$(BUILD_DIR)/html_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/irvisualizer/%.template.html
+	./$(BIN_DIR)/binary2cpp halide_html_template_$* < $(SRC_DIR)/irvisualizer/$*.template.html > $@
+
 $(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	@mkdir -p $(@D)
 	$(CXX) $< -o $@
@@ -1145,6 +1202,12 @@ $(BUILD_DIR)/initmod_ptx.%_ll.o: $(BUILD_DIR)/initmod_ptx.%_ll.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
 $(BUILD_DIR)/initmod.%.o: $(BUILD_DIR)/initmod.%.cpp
+	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
+
+$(BUILD_DIR)/c_template.%.o: $(BUILD_DIR)/c_template.%.cpp
+	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
+
+$(BUILD_DIR)/html_template.%.o: $(BUILD_DIR)/html_template.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(BUILD_DIR)/llvm_ok
@@ -1208,37 +1271,23 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_multitarget,$(GENERATOR_
 # remove AOT-CPP tests that don't (yet) work for C++ backend
 # (each tagged with the *known* blocking issue(s))
 
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_texture,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_acquire_release,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_define_extern_opencl,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_object_lifetime,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_only,$(GENERATOR_AOTCPP_TESTS))
+# sanitizercoverage relies on LLVM-specific hooks, so it will never work with the C backend
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_sanitizercoverage,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled))
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
+#GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_buffer_copy,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2075
+# https://github.com/halide/Halide/issues/7273
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2075
+# https://github.com/halide/Halide/issues/7272
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_memory_profiler_mandelbrot,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/4916
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
 
+# Build requirements are finicky, testing non-C++ backend is good enough here
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_multi_context_threaded,$(GENERATOR_AOTCPP_TESTS))
 
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
@@ -1365,12 +1414,30 @@ $(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(BIN_DIR)/libHalide.$(SHARED_E
 	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) -I$(ROOT_DIR)/test/common $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
 
 # Runtime tests that test internals
 RUNTIME_TESTS_CXXFLAGS = -fno-rtti -fno-exceptions -fno-threadsafe-statics -Wno-builtin-declaration-mismatch -DCOMPILING_HALIDE_RUNTIME -DCOMPILING_HALIDE_RUNTIME_TESTS
-$(BIN_DIR)/runtime_%: $(ROOT_DIR)/test/runtime/%.cpp $(ROOT_DIR)/test/runtime/common.h
-	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) $< $(COMMON_LD_FLAGS) -o $@
+
+$(BIN_DIR)/runtime_internal_common.o: $(ROOT_DIR)/test/runtime/common.cpp $(ROOT_DIR)/test/runtime/common.h
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
+
+$(BIN_DIR)/runtime_internal_msan_stubs.o: $(ROOT_DIR)/src/runtime/msan_stubs.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
+
+$(BIN_DIR)/runtime_internal_to_string.o: $(ROOT_DIR)/src/runtime/to_string.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
+
+$(BIN_DIR)/runtime_common:
+	@mkdir -p $(@D)
+	touch $@
+
+$(BIN_DIR)/runtime_%: $(ROOT_DIR)/test/runtime/%.cpp $(BIN_DIR)/runtime_internal_common.o $(BIN_DIR)/runtime_internal_msan_stubs.o $(BIN_DIR)/runtime_internal_to_string.o
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) $^ $(COMMON_LD_FLAGS) -o $@
 
 # Auto schedule tests that link against libHalide
 $(BIN_DIR)/mullapudi2016_%: $(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
@@ -1393,28 +1460,6 @@ $(BUILD_DIR)/%_generator.o: $(ROOT_DIR)/test/generator/%_generator.cpp $(INCLUDE
 	$(CXX) $(TEST_CXX_FLAGS) -I$(INCLUDE_DIR) -I$(CURDIR)/$(FILTERS_DIR) -c $< -o $@
 
 $(BIN_DIR)/%.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BUILD_DIR)/%_generator.o
-	@mkdir -p $(@D)
-	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
-
-# It is not always possible to cross compile between 32-bit and 64-bit via the clang build as part of llvm
-# These next two rules can fail the compilationa nd produce zero length bitcode blobs.
-# If the zero length blob is actually used, the test will fail anyway, but usually only the bitness
-# of the target is used.
-$(BUILD_DIR)/external_code_extern_bitcode_32.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp $(BIN_DIR)/binary2cpp
-	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m32 -target $(RUNTIME_TRIPLE_32) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_32.bc || echo -n > $(BUILD_DIR)/external_code_extern_32.bc
-	./$(BIN_DIR)/binary2cpp external_code_extern_bitcode_32 < $(BUILD_DIR)/external_code_extern_32.bc > $@
-
-$(BUILD_DIR)/external_code_extern_bitcode_64.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp $(BIN_DIR)/binary2cpp
-	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -O3 -c -m64 -target $(RUNTIME_TRIPLE_64) -emit-llvm $< -o $(BUILD_DIR)/external_code_extern_64.bc || echo -n > $(BUILD_DIR)/external_code_extern_64.bc
-	./$(BIN_DIR)/binary2cpp external_code_extern_bitcode_64 < $(BUILD_DIR)/external_code_extern_64.bc > $@
-
-$(BUILD_DIR)/external_code_extern_cpp_source.cpp : $(ROOT_DIR)/test/generator/external_code_extern.cpp $(BIN_DIR)/binary2cpp
-	@mkdir -p $(@D)
-	./$(BIN_DIR)/binary2cpp external_code_extern_cpp_source < $(ROOT_DIR)/test/generator/external_code_extern.cpp > $@
-
-$(BIN_DIR)/external_code.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT) $(BUILD_DIR)/external_code_generator.o $(BUILD_DIR)/external_code_extern_bitcode_32.cpp $(BUILD_DIR)/external_code_extern_bitcode_64.cpp $(BUILD_DIR)/external_code_extern_cpp_source.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(filter %.cpp %.o %.a,$^) $(TEST_LD_FLAGS) -o $@
 
@@ -1449,7 +1494,7 @@ $(FILTERS_DIR)/cxx_mangling_externs.o: $(ROOT_DIR)/test/generator/cxx_mangling_e
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
 $(FILTERS_DIR)/cxx_mangling.a: $(BIN_DIR)/cxx_mangling.generator $(FILTERS_DIR)/cxx_mangling_externs.o
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g cxx_mangling $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::AnotherNamespace::cxx_mangling"
+	$(CURDIR)/$< -g cxx_mangling $(GEN_AOT_OUTPUTS),function_info_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::AnotherNamespace::cxx_mangling"
 	$(ROOT_DIR)/tools/makelib.sh $@ $@ $(FILTERS_DIR)/cxx_mangling_externs.o
 
 ifneq ($(TEST_CUDA), )
@@ -1533,14 +1578,21 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	array_outputs8.size=2 \
 	array_outputs9.size=2
 
-# metadata_tester is built with and without user-context
+# metadata_tester is built with and without user-context.
+# Also note that metadata_tester (but not metadata_tester_ucon) is built as "multitarget" to verify that
+# the metadata names are correctly emitted.
 $(FILTERS_DIR)/metadata_tester.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g metadata_tester -f metadata_tester $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
+	$(CURDIR)/$< -g metadata_tester -f metadata_tester -e static_library,c_header,registration,function_info_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime,$(TARGET)-no_runtime-no_bounds_query $(METADATA_TESTER_GENERATOR_ARGS)
+
+# c_source output doesn't work properly with multitarget output
+$(FILTERS_DIR)/metadata_tester.halide_generated.cpp: $(BIN_DIR)/metadata_tester.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g metadata_tester -f metadata_tester -e c_source -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
 
 $(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g metadata_tester -f metadata_tester_ucon $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-user_context-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
+	$(CURDIR)/$< -g metadata_tester -f metadata_tester_ucon $(GEN_AOT_OUTPUTS),function_info_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-user_context-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
 
 $(BIN_DIR)/$(TARGET)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
 
@@ -1617,14 +1669,6 @@ $(FILTERS_DIR)/stubuser_auto.a: $(BIN_DIR)/stubuser.generator $(BIN_MULLAPUDI201
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g stubuser $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f stubuser_auto target=$(TARGET)-no_runtime autoscheduler=Mullapudi2016 -p $(BIN_MULLAPUDI2016)
 
-$(FILTERS_DIR)/external_code.a: $(BIN_DIR)/external_code.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -g external_code -e static_library,c_header,registration -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=true
-
-$(FILTERS_DIR)/external_code.halide_generated.cpp: $(BIN_DIR)/external_code.generator
-	@mkdir -p $(@D)
-	$(CURDIR)/$< -g external_code -e c_source -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=false
-
 $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(BIN_MULLAPUDI2016)
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime autoscheduler=Mullapudi2016 -d 1 -p $(BIN_MULLAPUDI2016)
@@ -1637,7 +1681,7 @@ $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(BIN_MULLAPUDI201
 # all have the form nested_externs_*).
 $(FILTERS_DIR)/nested_externs_%.a: $(BIN_DIR)/nested_externs.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g nested_externs_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
+	$(CURDIR)/$< -g nested_externs_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context-c_plus_plus_name_mangling
 
 # Similarly, gpu_multi needs two different kernels to test compilation caching.
 # Also requies user-context.
@@ -1674,6 +1718,11 @@ $(BIN_DIR)/$(TARGET)/generator_aot_sanitizercoverage: $(ROOT_DIR)/test/generator
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter-out %.h,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
+# SanitizerCoverage test will never work with C++ backend
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_sanitizercoverage: $(ROOT_DIR)/test/generator/sanitizercoverage_aottest.cpp
+	@mkdir -p $(@D)
+	echo "SanitizerCoverage test will never work with C++ backend"
+	exit 1
 
 # alias has additional deps to link in
 $(BIN_DIR)/$(TARGET)/generator_aot_alias: $(ROOT_DIR)/test/generator/alias_aottest.cpp $(FILTERS_DIR)/alias.a $(FILTERS_DIR)/alias_with_offset_42.a $(FILTERS_DIR)/alias_Adams2019.a $(FILTERS_DIR)/alias_Li2018.a $(FILTERS_DIR)/alias_Mullapudi2016.a  $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
@@ -1972,13 +2021,16 @@ performance_%: $(BIN_DIR)/performance_%
 
 error_%: $(BIN_DIR)/error_%
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|^terminate called|^Error|Assertion.*failed"
+	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "terminating with uncaught exception|terminating due to uncaught exception|^terminate called|^Error|Assertion.*failed"
 	@-echo
 
 warning_%: $(BIN_DIR)/warning_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "^Warning"
 	@-echo
+
+runtime_common:
+	# nothing
 
 runtime_%: $(BIN_DIR)/runtime_%
 	@-mkdir -p $(TMP_DIR)
@@ -2202,6 +2254,10 @@ ifneq (,$(findstring clang version 16.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 17.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2222,7 +2278,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 130 140 150 160))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 140 150 160 170))
 LLVM_OK=yes
 endif
 
@@ -2279,6 +2335,7 @@ install: $(LIB_DIR)/libHalide.a $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(PREFIX)/share/halide/tools
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(PREFIX)/share/halide/tools
+	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(PREFIX)/share/halide/tools
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(PREFIX)/lib/libHalide.$(SHARED_EXT) $(PREFIX)/lib/libHalide.$(SHARED_EXT)
 endif
@@ -2357,6 +2414,7 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
 	cp $(ROOT_DIR)/tools/halide_image_io.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_image_info.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_malloc_trace.h $(DISTRIB_DIR)/tools
+	cp $(ROOT_DIR)/tools/halide_thread_pool.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/tools/halide_trace_config.h $(DISTRIB_DIR)/tools
 	cp $(ROOT_DIR)/README*.md $(DISTRIB_DIR)
 	cp $(BUILD_DIR)/halide_config.* $(DISTRIB_DIR)
@@ -2378,15 +2436,23 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
 
+# Build some common tools
+$(DISTRIB_DIR)/bin/featurization_to_sample $(DISTRIB_DIR)/bin/get_host_target: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+	@mkdir -p $(@D)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/common/Makefile $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+	for TOOL in featurization_to_sample get_host_target; do \
+    		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+	done
+
 # Adams2019 also includes autotuning tools
 $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_adams2019.$(PLUGIN_EXT)
 	@mkdir -p $(@D)
-	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/retrain_cost_model $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/adams2019_retrain_cost_model $(BIN_DIR)/adams2019_weightsdir_to_weightsfile HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	cp $< $(DISTRIB_DIR)/lib/
-	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
-		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+	for TOOL in adams2019_retrain_cost_model adams2019_weightsdir_to_weightsfile; do \
+    		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
 	done
-	cp $(SRC_DIR)/autoschedulers/adams2019/autotune_loop.sh $(DISTRIB_DIR)/tools/
+	cp $(SRC_DIR)/autoschedulers/adams2019/adams2019_autotune_loop.sh $(DISTRIB_DIR)/tools/
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
@@ -2394,7 +2460,9 @@ endif
 autoschedulers: \
 $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(PLUGIN_EXT) \
 $(DISTRIB_DIR)/lib/libautoschedule_li2018.$(PLUGIN_EXT) \
-$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT) \
+$(DISTRIB_DIR)/bin/featurization_to_sample \
+$(DISTRIB_DIR)/bin/get_host_target
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT) autoschedulers

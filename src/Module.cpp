@@ -18,7 +18,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
-#include "StmtToHtml.h"
+#include "StmtToViz.h"
 
 namespace Halide {
 namespace Internal {
@@ -39,6 +39,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::compiler_log, {"compiler_log", ".halide_compiler_log", IsSingle}},
         {OutputFileType::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
         {OutputFileType::featurization, {"featurization", ".featurization", IsMulti}},
+        {OutputFileType::function_info_header, {"function_info_header", ".function_info.h", IsSingle}},
         {OutputFileType::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
         {OutputFileType::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
         {OutputFileType::python_extension, {"python_extension", ".py.cpp", IsSingle}},
@@ -54,12 +55,12 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
 
 namespace {
 
-class TemporaryObjectFileDir final {
+class TemporaryFileDir final {
 public:
-    TemporaryObjectFileDir()
+    TemporaryFileDir()
         : dir_path(dir_make_temp()) {
     }
-    ~TemporaryObjectFileDir() {
+    ~TemporaryFileDir() {
         for (const auto &f : dir_files) {
             debug(1) << "file_unlink: " << f << "\n";
             file_unlink(f);
@@ -111,10 +112,10 @@ private:
     std::vector<std::string> dir_files;
 
 public:
-    TemporaryObjectFileDir(const TemporaryObjectFileDir &) = delete;
-    TemporaryObjectFileDir &operator=(const TemporaryObjectFileDir &) = delete;
-    TemporaryObjectFileDir(TemporaryObjectFileDir &&) = delete;
-    TemporaryObjectFileDir &operator=(TemporaryObjectFileDir &&) = delete;
+    TemporaryFileDir(const TemporaryFileDir &) = delete;
+    TemporaryFileDir &operator=(const TemporaryFileDir &) = delete;
+    TemporaryFileDir(TemporaryFileDir &&) = delete;
+    TemporaryFileDir &operator=(TemporaryFileDir &&) = delete;
 };
 
 // Given a pathname of the form /path/to/name.ext, append suffix before ext to produce /path/to/namesuffix.ext
@@ -243,11 +244,7 @@ std::string indent_string(const std::string &src, const std::string &indent) {
 void emit_schedule_file(const std::string &name,
                         const std::vector<Target> &targets,
                         const std::string &scheduler_name,
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-                        const std::string &machine_params_string,
-#else
                         const std::string &autoscheduler_params_string,
-#endif
                         const std::string &body,
                         std::ostream &stream) {
     std::string s = R"INLINE_CODE(#ifndef $CLEANNAME$_SCHEDULE_H
@@ -310,13 +307,8 @@ $NAMESPACECLOSE$
     s = replace_all(s, "$NAMESPACECLOSE$", nsclose);
     s = replace_all(s, "$TARGET$", target_string);
     s = replace_all(s, "$BODY$", body_text);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    s = replace_all(s, "$MPNAME$", "machine_params");
-    s = replace_all(s, "$MACHINEPARAMS$", machine_params_string);
-#else
     s = replace_all(s, "$MPNAME$", "autoscheduler_params");
     s = replace_all(s, "$MACHINEPARAMS$", autoscheduler_params_string);
-#endif
     stream << s;
 }
 
@@ -329,9 +321,6 @@ struct ModuleContents {
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
     std::vector<Module> submodules;
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    std::vector<ExternalCode> external_code;
-#endif
     MetadataNameMap metadata_name_map;
     bool any_strict_float{false};
     std::unique_ptr<AutoSchedulerResults> auto_scheduler_results;
@@ -370,10 +359,11 @@ LoweredFunc::LoweredFunc(const std::string &name,
 
 using namespace Halide::Internal;
 
-Module::Module(const std::string &name, const Target &target)
+Module::Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map)
     : contents(new Internal::ModuleContents) {
     contents->name = name;
     contents->target = target;
+    contents->metadata_name_map = metadata_name_map;
 }
 
 void Module::set_auto_scheduler_results(const AutoSchedulerResults &auto_scheduler_results) {
@@ -417,12 +407,6 @@ const std::vector<Module> &Module::submodules() const {
     return contents->submodules;
 }
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-const std::vector<ExternalCode> &Module::external_code() const {
-    return contents->external_code;
-}
-#endif
-
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
     for (const auto &f : functions()) {
         if (f.name == name) {
@@ -444,12 +428,6 @@ void Module::append(const Internal::LoweredFunc &function) {
 void Module::append(const Module &module) {
     contents->submodules.push_back(module);
 }
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-void Module::append(const ExternalCode &external_code) {
-    contents->external_code.push_back(external_code);
-}
-#endif
 
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {
     Module output(name, modules.front().target());
@@ -517,30 +495,8 @@ Module Module::resolve_submodules() const {
     for (const auto &buf : buffers()) {
         lowered_module.append(buf);
     }
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    for (const auto &ec : external_code()) {
-        lowered_module.append(ec);
-    }
-#endif
     for (const auto &m : submodules()) {
         Module copy(m.resolve_submodules());
-
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-        // Propagate external code blocks.
-        for (const auto &ec : external_code()) {
-            // TODO(zalman): Is this the right thing to do?
-            bool already_in_list = false;
-            for (const auto &ec_sub : copy.external_code()) {
-                if (ec_sub.name() == ec.name()) {
-                    already_in_list = true;
-                    break;
-                }
-            }
-            if (!already_in_list) {
-                copy.append(ec);
-            }
-        }
-#endif
 
         auto buf = copy.compile_to_buffer();
         lowered_module.append(buf);
@@ -565,34 +521,50 @@ MetadataNameMap Module::get_metadata_name_map() const {
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
 
-    // output stmt and html prior to resolving submodules. We need to
-    // clear the output after writing it, otherwise the output will
-    // be overwritten by recursive calls after submodules are resolved.
-    if (contains(output_files, OutputFileType::stmt)) {
-        debug(1) << "Module.compile(): stmt " << output_files.at(OutputFileType::stmt) << "\n";
-        std::ofstream file(output_files.at(OutputFileType::stmt));
-        file << *this;
+    if (target().has_feature(Target::OpenGLCompute)) {
+        user_warning << "WARNING: OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.\n";
     }
-    if (contains(output_files, OutputFileType::stmt_html)) {
-        debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
-        Internal::print_to_html(output_files.at(OutputFileType::stmt_html), *this);
-    }
+
+    // Minor but worthwhile optimization: if all of the output files are of types that won't
+    // ever rely on submodules (e.g.: toplevel declarations in C/C++), don't bother resolving
+    // the submodules, which can call compile_to_buffer().
+    const auto should_ignore_submodules = [](const std::map<OutputFileType, std::string> &output_files) {
+        const size_t uninteresting_count = output_files.count(OutputFileType::c_header) +
+                                           output_files.count(OutputFileType::function_info_header) +
+                                           output_files.count(OutputFileType::registration);
+        return output_files.size() == uninteresting_count;
+    };
 
     // If there are submodules, recursively lower submodules to
     // buffers on a copy of the module being compiled, then compile
     // the copied module.
-    if (!submodules().empty()) {
-        std::map<OutputFileType, std::string> output_files_copy = output_files;
-        output_files_copy.erase(OutputFileType::stmt);
-        output_files_copy.erase(OutputFileType::stmt_html);
-        resolve_submodules().compile(output_files_copy);
+    if (!submodules().empty() && !should_ignore_submodules(output_files)) {
+        debug(1) << "Module.compile(): begin submodules\n";
+        resolve_submodules().compile(output_files);
+        debug(1) << "Module.compile(): end submodules\n";
         return;
+    }
+
+    TemporaryFileDir temp_assembly_dir;
+
+    std::string assembly_path;
+    if (contains(output_files, OutputFileType::assembly)) {
+        assembly_path = output_files.at(OutputFileType::assembly);
+    } else if (contains(output_files, OutputFileType::stmt_html)) {
+        // We need assembly in order to generate stmt_html, but the user doesn't
+        // want it on its own, so we will generate it to a temp directory, since some
+        // build systems (e.g. Bazel) are strict about what you can generate to the 'expected'
+        // build-products directory (but grant exemptions for /tmp).
+        assembly_path = temp_assembly_dir.add_temp_file(output_files.at(OutputFileType::stmt_html),
+                                                        get_output_info(target()).at(OutputFileType::assembly).extension,
+                                                        target());
+        debug(1) << "Module.compile(): creating temp file for assembly output at " << assembly_path << "\n";
     }
 
     auto *logger = get_compiler_logger();
     if (contains(output_files, OutputFileType::object) || contains(output_files, OutputFileType::assembly) ||
         contains(output_files, OutputFileType::bitcode) || contains(output_files, OutputFileType::llvm_assembly) ||
-        contains(output_files, OutputFileType::static_library)) {
+        contains(output_files, OutputFileType::static_library) || !assembly_path.empty()) {
         llvm::LLVMContext context;
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
@@ -607,14 +579,17 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             }
         }
         if (contains(output_files, OutputFileType::static_library)) {
-            // To simplify the code, we always create a temporary object output
-            // here, even if output_files.at(OutputFileType::object) was also set: in practice,
-            // no real-world code ever sets both object and static_library
+            // To simplify the code, we always emit to a temporary file
+            // here, even if output_files.at(OutputFileType::object) was also set:
+            // in practice, no real-world code ever sets both object and static_library
             // at the same time, so there is no meaningful performance advantage
             // to be had.
-            TemporaryObjectFileDir temp_dir;
+            //
+            // (Use a separate TemporaryFileDir here so we don't try to embed assembly files from
+            // `temp_assembly_dir` into a static library...)
+            TemporaryFileDir temp_object_dir;
             {
-                std::string object = temp_dir.add_temp_object_file(output_files.at(OutputFileType::static_library), "", target());
+                std::string object = temp_object_dir.add_temp_object_file(output_files.at(OutputFileType::static_library), "", target());
                 debug(1) << "Module.compile(): temporary object " << object << "\n";
                 auto out = make_raw_fd_ostream(object);
                 compile_llvm_module_to_object(*llvm_module, *out);
@@ -626,11 +601,12 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             }
             debug(1) << "Module.compile(): static_library " << output_files.at(OutputFileType::static_library) << "\n";
             Target base_target(target().os, target().arch, target().bits, target().processor_tune);
-            create_static_library(temp_dir.files(), base_target, output_files.at(OutputFileType::static_library));
+            create_static_library(temp_object_dir.files(), base_target, output_files.at(OutputFileType::static_library));
         }
-        if (contains(output_files, OutputFileType::assembly)) {
-            debug(1) << "Module.compile(): assembly " << output_files.at(OutputFileType::assembly) << "\n";
-            auto out = make_raw_fd_ostream(output_files.at(OutputFileType::assembly));
+        // Don't use contains() here, we might need assembly output for stmt_html
+        if (!assembly_path.empty()) {
+            debug(1) << "Module.compile(): assembly " << assembly_path << "\n";
+            auto out = make_raw_fd_ostream(assembly_path);
             compile_llvm_module_to_assembly(*llvm_module, *out);
         }
         if (contains(output_files, OutputFileType::bitcode)) {
@@ -643,6 +619,26 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             auto out = make_raw_fd_ostream(output_files.at(OutputFileType::llvm_assembly));
             compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
         }
+    }
+
+    if (contains(output_files, OutputFileType::stmt)) {
+        debug(1) << "Module.compile(): stmt " << output_files.at(OutputFileType::stmt) << "\n";
+        std::ofstream file(output_files.at(OutputFileType::stmt));
+        file << *this;
+    }
+    if (contains(output_files, OutputFileType::stmt_html)) {
+        internal_assert(!assembly_path.empty());
+        debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
+        Internal::print_to_viz(output_files.at(OutputFileType::stmt_html), *this, assembly_path);
+    }
+    if (contains(output_files, OutputFileType::function_info_header)) {
+        debug(1) << "Module.compile(): function_info_header " << output_files.at(OutputFileType::function_info_header) << "\n";
+        std::ofstream file(output_files.at(OutputFileType::function_info_header));
+        Internal::CodeGen_C cg(file,
+                               target(),
+                               Internal::CodeGen_C::CPlusPlusFunctionInfoHeader,
+                               output_files.at(OutputFileType::function_info_header));
+        cg.compile(*this);
     }
     if (contains(output_files, OutputFileType::c_header)) {
         debug(1) << "Module.compile(): c_header " << output_files.at(OutputFileType::c_header) << "\n";
@@ -672,15 +668,9 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::ofstream file(output_files.at(OutputFileType::schedule));
         auto *r = contents->auto_scheduler_results.get();
         std::string body = r && !r->schedule_source.empty() ? r->schedule_source : "// No autoscheduler has been run for this Generator.\n";
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        std::string scheduler = r ? r->scheduler_name : "(None)";
-        std::string machine_params = r ? r->machine_params_string : "(None)";
-        emit_schedule_file(name(), {target()}, scheduler, machine_params, body, file);
-#else
         std::string scheduler = r ? r->autoscheduler_params.name : "(None)";
         std::string autoscheduler_params_string = r ? r->autoscheduler_params.to_string() : "(None)";
         emit_schedule_file(name(), {target()}, scheduler, autoscheduler_params_string, body, file);
-#endif
     }
     if (contains(output_files, OutputFileType::featurization)) {
         debug(1) << "Module.compile(): featurization " << output_files.at(OutputFileType::featurization) << "\n";
@@ -846,10 +836,11 @@ void compile_multitarget(const std::string &fn_name,
     constexpr int kFeaturesWordCount = (Target::FeatureEnd + 63) / (sizeof(uint64_t) * 8);
     uint64_t runtime_features[kFeaturesWordCount] = {(uint64_t)-1LL};
 
-    TemporaryObjectFileDir temp_obj_dir, temp_compiler_log_dir;
+    TemporaryFileDir temp_obj_dir, temp_compiler_log_dir;
     std::vector<Expr> wrapper_args;
     std::vector<LoweredArgument> base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
+    MetadataNameMap metadata_name_map;
 
     for (size_t i = 0; i < targets.size(); ++i) {
         const Target &target = targets[i];
@@ -901,6 +892,7 @@ void compile_multitarget(const std::string &fn_name,
             sub_out.erase(OutputFileType::registration);
             sub_out.erase(OutputFileType::schedule);
             sub_out.erase(OutputFileType::c_header);
+            sub_out.erase(OutputFileType::function_info_header);
             if (contains(sub_out, OutputFileType::compiler_log)) {
                 sub_out[OutputFileType::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(OutputFileType::compiler_log), suffix, target);
             }
@@ -908,6 +900,9 @@ void compile_multitarget(const std::string &fn_name,
             sub_module.compile(sub_out);
             const auto *r = sub_module.get_auto_scheduler_results();
             auto_scheduler_results.push_back(r ? *r : AutoSchedulerResults());
+            if (target == base_target) {
+                metadata_name_map = sub_module.get_metadata_name_map();
+            }
         }
 
         uint64_t cur_target_features[kFeaturesWordCount] = {0};
@@ -982,7 +977,7 @@ void compile_multitarget(const std::string &fn_name,
                                     .with_feature(Target::NoBoundsQuery)
                                     .without_feature(Target::NoAsserts);
 
-        Module wrapper_module(fn_name, wrapper_target);
+        Module wrapper_module(fn_name, wrapper_target, metadata_name_map);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
         std::string wrapper_path = contains(output_files, OutputFileType::static_library) ?
@@ -1002,6 +997,14 @@ void compile_multitarget(const std::string &fn_name,
         header_module.compile(header_out);
     }
 
+    if (contains(output_files, OutputFileType::function_info_header)) {
+        Module header_module(fn_name, base_target);
+        header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
+        std::map<OutputFileType, std::string> header_out = {{OutputFileType::function_info_header, output_files.at(OutputFileType::function_info_header)}};
+        debug(1) << "compile_multitarget: function_info_header " << header_out.at(OutputFileType::function_info_header) << "\n";
+        header_module.compile(header_out);
+    }
+
     if (contains(output_files, OutputFileType::registration)) {
         debug(1) << "compile_multitarget: registration " << output_files.at(OutputFileType::registration) << "\n";
         Module registration_module(fn_name, base_target);
@@ -1013,20 +1016,20 @@ void compile_multitarget(const std::string &fn_name,
 
     if (contains(output_files, OutputFileType::schedule)) {
         debug(1) << "compile_multitarget: schedule " << output_files.at(OutputFileType::schedule) << "\n";
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        std::string scheduler = auto_scheduler_results.front().scheduler_name;
-        if (scheduler.empty()) {
-            scheduler = "(None)";
-        }
-        std::string machine_params = auto_scheduler_results.front().machine_params_string;
-        if (machine_params.empty()) {
-            machine_params = "(None)";
-        }
-#else
         const auto &autoscheduler_params = auto_scheduler_results.front().autoscheduler_params;
         std::string scheduler = autoscheduler_params.name.empty() ? "(None)" : autoscheduler_params.name;
         std::string autoscheduler_params_string = autoscheduler_params.name.empty() ? "(None)" : autoscheduler_params.to_string();
-#endif
+
+        // TODO(https://github.com/halide/Halide/issues/7539): this is a horrible hack;
+        // the Anderson2021 autoscheduler is GPU-only, and emits the same schedule for each subtarget.
+        // Avoid confusing noise in the output by just lopping off all results aftet the first one.
+        // This isn't a good fix; aside from the hack here, we also are wasting time recomputing the
+        // same schedule multiple times above.
+        if (scheduler == "Anderson2021") {
+            while (auto_scheduler_results.size() > 1) {
+                auto_scheduler_results.pop_back();
+            }
+        }
 
         // Find the features that are unique to each stage (vs the baseline case).
         const auto &baseline_target = auto_scheduler_results.back().target;
@@ -1068,11 +1071,7 @@ void compile_multitarget(const std::string &fn_name,
         }
 
         std::ofstream file(output_files.at(OutputFileType::schedule));
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        emit_schedule_file(fn_name, targets, scheduler, machine_params, body.str(), file);
-#else
         emit_schedule_file(fn_name, targets, scheduler, autoscheduler_params_string, body.str(), file);
-#endif
     }
 
     if (contains(output_files, OutputFileType::static_library)) {

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22...3.23)
 project(Halide
-        VERSION 15.0.0
+        VERSION 17.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
@@ -56,16 +56,24 @@ mark_as_advanced(Halide_CCACHE_BUILD)
 if (Halide_CCACHE_BUILD)
     find_program(CCACHE_PROGRAM ccache REQUIRED)
 
-    # TODO: ccache recommends setting CCACHE_SLOPPINESS=pch_defines,time_macros to
-    # enable precompiled header caching. Our timing found it slightly faster with
-    # just CCACHE_SLOPPINESS=pch_defines, so that's what we're using. Maybe revisit
-    # if issues occur (but we don't use any of the time macros so should be irrelevant).
-    set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines
+    set(Halide_CCACHE_PARAMS
+        CCACHE_CPP2=yes
+        CCACHE_HASHDIR=yes
+        CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime
         CACHE STRING "Parameters to pass through to ccache")
     mark_as_advanced(Halide_CCACHE_PARAMS)
 
     set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+
+    # Per https://ccache.dev/manual/latest.html#_precompiled_headers,
+    # we must set -fno-pch-timestamp when using Clang + CCache + PCH
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+        string(APPEND CMAKE_C_FLAGS " -Xclang -fno-pch-timestamp")
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        string(APPEND CMAKE_CXX_FLAGS " -Xclang -fno-pch-timestamp")
+    endif()
 
     message(STATUS "Enabling ccache usage for building.")
 endif ()
@@ -83,12 +91,56 @@ endif ()
 
 # Enable the SPIR-V target if requested (must declare before processing dependencies)
 option(TARGET_SPIRV "Include SPIR-V target" OFF)
+option(TARGET_VULKAN "Include Vulkan target" ON)
+if (TARGET_VULKAN)
+    set(TARGET_SPIRV ON) # required
+endif()
 
 ##
 # Import dependencies
 ##
 
+## Threads
+option(THREADS_PREFER_PTHREAD_FLAG "When enabled, prefer to use the -pthread flag to explicit linking" ON)
+find_package(Threads REQUIRED)
+
+## Complex dependencies
 add_subdirectory(dependencies)
+
+## Image formats
+
+# This changes how find_xxx() commands work; the default is to find frameworks before
+# standard libraries or headers, but this can be a problem on systems that have Mono
+# installed, as it has a framework with the libjpeg and libpng  headers present -- so
+# CMake finds the headers from Mono but the libraries from Homebrew, and hilarity ensues.
+# Setting this to "last" means we always try the standard libraries before the frameworks.
+set(CMAKE_FIND_FRAMEWORK LAST)
+
+# TODO: these really belong in tools/, but CMake has a weird bug with $<TARGET_NAME_IF_EXISTS:...>
+# https://gitlab.kitware.com/cmake/cmake/-/issues/25033
+find_package(JPEG)
+find_package(PNG)
+
+##
+# Declare options
+##
+
+# Declare these options after we include dependencies (since it declares Halide_ENABLE_RTTI etc)
+# but before we add any subdirectories, since any option you test before it is defined is
+# implicitly false the *first* time that the build file is processed, and there are some
+# out-of-order dependencies here (e.g, code in src/ eventually checks WITH_UTILS).
+# This is especially subtle since it means that some options can end up with different
+# values if you build a target as part of the initial CMake run, so (e.g.) a `make install`
+# from as totally clean build might neglect to install some pieces.
+
+option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_DOCS "Build documentation" OFF)
+option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
+cmake_dependent_option(
+    WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
+    "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
+)
 
 ##
 # Add source directories
@@ -101,7 +153,6 @@ add_subdirectory(tools)
 # Add tests, tutorials, etc. if we're not being imported into another CMake project.
 ##
 
-option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
 if (WITH_TESTS)
     message(STATUS "Building tests enabled")
     add_subdirectory(test)
@@ -109,10 +160,6 @@ else ()
     message(STATUS "Building tests disabled")
 endif ()
 
-cmake_dependent_option(
-    WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
-    "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
-)
 if (WITH_PYTHON_BINDINGS)
     message(STATUS "Building Python bindings enabled")
     add_subdirectory(python_bindings)
@@ -120,7 +167,6 @@ else ()
     message(STATUS "Building Python bindings disabled")
 endif ()
 
-option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
 if (WITH_TUTORIALS)
     message(STATUS "Building tutorials enabled")
     add_subdirectory(tutorial)
@@ -128,7 +174,6 @@ else ()
     message(STATUS "Building tutorials disabled")
 endif ()
 
-option(WITH_DOCS "Build documentation" OFF)
 if (WITH_DOCS)
     message(STATUS "Building docs enabled")
     add_subdirectory(doc)
@@ -136,7 +181,6 @@ else ()
     message(STATUS "Building docs disabled")
 endif ()
 
-option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
 if (WITH_UTILS)
     message(STATUS "Building utils enabled")
     add_subdirectory(util)

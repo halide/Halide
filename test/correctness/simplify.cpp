@@ -145,6 +145,9 @@ void check_casts() {
     check(cast(UInt(8), x + 1) - cast(UInt(8), x),
           cast(UInt(8), x + 1) - cast(UInt(8), x));
 
+    // Overflow is well-defined for ints < 32 bits
+    check(cast(Int(8), make_const(UInt(8), 128)), make_const(Int(8), -128));
+
     // Check that chains of widening casts don't lose the distinction
     // between zero-extending and sign-extending.
     check(cast(UInt(64), cast(UInt(32), cast(Int(8), -1))),
@@ -709,6 +712,23 @@ void check_vectors() {
         }
 
         check(concat_vectors(loads), Load::make(Float(32, lanes * vectors), "buf", ramp(0, 1, lanes * vectors), Buffer<>(), Parameter(), const_true(vectors * lanes), ModulusRemainder(0, 0)));
+    }
+
+    {
+        Expr vx = Variable::make(Int(32, 32), "x");
+        Expr vy = Variable::make(Int(32, 32), "y");
+        Expr vz = Variable::make(Int(32, 8), "z");
+        Expr vw = Variable::make(Int(32, 16), "w");
+        // Check that vector slices are hoisted.
+        check(slice(vx, 0, 2, 8) + slice(vy, 0, 2, 8), slice(vx + vy, 0, 2, 8));
+        check(slice(vx, 0, 2, 8) + (slice(vy, 0, 2, 8) + vz), slice(vx + vy, 0, 2, 8) + vz);
+        check(slice(vx, 0, 2, 8) + (vz + slice(vy, 0, 2, 8)), slice(vx + vy, 0, 2, 8) + vz);
+        // Check that degenerate vector slices are not hoisted.
+        check(slice(vx, 0, 2, 1) + slice(vy, 0, 2, 1), slice(vx, 0, 2, 1) + slice(vy, 0, 2, 1));
+        check(slice(vx, 0, 2, 1) + (slice(vy, 0, 2, 1) + z), slice(vx, 0, 2, 1) + (slice(vy, 0, 2, 1) + z));
+        // Check slices are only hoisted when the lanes of the sliced vectors match.
+        check(slice(vx, 0, 2, 8) + slice(vw, 0, 2, 8), slice(vx, 0, 2, 8) + slice(vw, 0, 2, 8));
+        check(slice(vx, 0, 2, 8) + (slice(vw, 0, 2, 8) + vz), slice(vx, 0, 2, 8) + (slice(vw, 0, 2, 8) + vz));
     }
 
     {

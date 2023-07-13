@@ -251,7 +251,7 @@ void CodeGen_PTX_Dev::init_module() {
 
     for (auto &&i : ptx_intrins) {
         auto *fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
-        fn->addFnAttr(llvm::Attribute::ReadNone);
+        function_does_not_access_memory(fn);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
@@ -665,14 +665,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         }
     }
 
-    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-    if (get_target().has_feature(Target::DisableLLVMLoopOpt)) {
-        user_warning << "halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15 "
-                        "(and will be removed in Halide 16). Halide 15 now defaults to disabling "
-                        "LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.\n";
-    }
     const bool do_loop_opt = get_target().has_feature(Target::EnableLLVMLoopOpt);
 
     // Define and run optimization pipeline with new pass manager
@@ -700,12 +692,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     pb.crossRegisterProxies(lam, fam, cgam, mam);
     ModulePassManager mpm;
 
-#if LLVM_VERSION >= 140
     using OptimizationLevel = llvm::OptimizationLevel;
-#else
-    using OptimizationLevel = PassBuilder::OptimizationLevel;
-#endif
-
     OptimizationLevel level = OptimizationLevel::O3;
 
     target_machine->registerPassBuilderCallbacks(pb);

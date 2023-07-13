@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
             int actual = output(x);
             if (expected != actual) {
                 printf("at x = %d expected %d got %d\n", x, expected, actual);
-                return -1;
+                return 1;
             }
         }
     }

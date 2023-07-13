@@ -13,7 +13,7 @@ int single_toggle_trace(JITUserContext *user_context, const halide_trace_event_t
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
             printf("set_toggle1 is false; %s's producer should never have had been executed.\n",
                    buffer_name.c_str());
-            exit(-1);
+            exit(1);
         }
     }
     return 0;
@@ -25,14 +25,14 @@ int double_toggle_trace(JITUserContext *user_context, const halide_trace_event_t
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
             printf("set_toggle1 is false; %s's producer should never have had been executed.\n",
                    buffer_name.c_str());
-            exit(-1);
+            exit(1);
         }
     } else if (!set_toggle2) {
         std::string buffer_name = "f2_" + std::to_string(buffer_index);
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
             printf("set_toggle2 is false; %s's producer should never have had been executed.\n",
                    buffer_name.c_str());
-            exit(-1);
+            exit(1);
         }
     }
     return 0;
@@ -47,7 +47,7 @@ int check_correctness_single(const Buffer<int> &out, bool toggle) {
         if (out(x) != correct) {
             printf("out(%d) = %d instead of %d\n",
                    x, out(x), correct);
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -68,7 +68,7 @@ int check_correctness_double(const Buffer<int> &out, bool toggle1, bool toggle2)
         if (out(x) != correct) {
             printf("out(%d) = %d instead of %d\n",
                    x, out(x), correct);
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -96,7 +96,7 @@ int single_memoize_test(int index) {
         toggle.set(set_toggle1);
         Buffer<int> out = f2.realize({10});
         if (check_correctness_single(out, set_toggle1) != 0) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -128,10 +128,10 @@ int tuple_memoize_test(int index) {
         Buffer<int> out1 = out[1];
 
         if (check_correctness_single(out0, set_toggle1) != 0) {
-            return -1;
+            return 1;
         }
         if (check_correctness_single(out1, set_toggle1) != 0) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -165,7 +165,7 @@ int non_trivial_allocate_predicate_test(int index) {
         toggle.set(set_toggle1);
         Buffer<int> out = f3.realize({10});
         if (check_correctness_single(out, set_toggle1) != 0) {
-            return -1;
+            return 1;
         }
     }
     return 0;
@@ -200,7 +200,7 @@ int double_memoize_test(int index) {
             toggle2.set(toggle_val2);
             Buffer<int> out = f3.realize({10});
             if (check_correctness_double(out, set_toggle1, set_toggle2) != 0) {
-                return -1;
+                return 1;
             }
         }
     }
@@ -210,22 +210,22 @@ int double_memoize_test(int index) {
 int main(int argc, char **argv) {
     printf("Running single_memoize_test\n");
     if (single_memoize_test(0) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running tuple_memoize_test\n");
     if (tuple_memoize_test(1) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running non_trivial_allocate_predicate_test\n");
     if (non_trivial_allocate_predicate_test(2) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Running double_memoize_test\n");
     if (double_memoize_test(3) != 0) {
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

@@ -45,6 +45,12 @@
 #endif  // WITH_V8
 // clang-format on
 
+#if WITH_WABT || WITH_V8
+#if LLVM_VERSION >= 170
+LLD_HAS_DRIVER(wasm)
+#endif
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -335,6 +341,10 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
 
     std::string lld_arg_strs[] = {
         "HalideJITLinker",
+#if LLVM_VERSION >= 170
+        "-flavor",
+        "wasm",
+#endif
         // For debugging purposes:
         // "--verbose",
         // "-error-limit=0",
@@ -345,7 +355,8 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         obj_file.pathname(),
         "--entry=" + fn_name,
         "-o",
-        wasm_output.pathname()};
+        wasm_output.pathname()
+    };
 
     constexpr int c = sizeof(lld_arg_strs) / sizeof(lld_arg_strs[0]);
     const char *lld_args[c];
@@ -353,6 +364,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         lld_args[i] = lld_arg_strs[i].c_str();
     }
 
+#if LLVM_VERSION >= 170
     // lld will temporarily hijack the signal handlers to ensure that temp files get cleaned up,
     // but rather than preserving custom handlers in place, it restores the default handlers.
     // This conflicts with some of our testing infrastructure, which relies on a SIGABRT handler
@@ -360,19 +372,37 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     // Note that we must restore it before using internal_error (and also on the non-error path).
     auto old_abort_handler = std::signal(SIGABRT, SIG_DFL);
 
-#if LLVM_VERSION >= 140
+    llvm::ArrayRef<const char *> args(lld_args, lld_args + c);
+    auto r = lld::lldMain(args, llvm::outs(), llvm::errs(), {{lld::Wasm, &lld::wasm::link}});
+    // TODO: https://reviews.llvm.org/D119049 suggests that you should call exitLld()
+    // if canRunAgain is false, but doing do fails with SIGABRT rather than exit(1), which
+    // breaks our error tests. For now, just following the old practice.
+    //
+    // if (!r.canRunAgain) {
+    //     std::cerr << "lld::wasm::link failed catastrophically, exiting with: " << r.retCode << "\n";
+    //     lld::exitLld(r.retCode);  // Exit now, can't re-execute again.
+    // }
+    if (r.retCode != 0) {
+        std::signal(SIGABRT, old_abort_handler);
+        internal_error << "lld::wasm::link failed with: " << r.retCode << "\n";
+    }
+
+    std::signal(SIGABRT, old_abort_handler);
+#else
+    // lld will temporarily hijack the signal handlers to ensure that temp files get cleaned up,
+    // but rather than preserving custom handlers in place, it restores the default handlers.
+    // This conflicts with some of our testing infrastructure, which relies on a SIGABRT handler
+    // set at global-ctor time to stay set. Therefore we'll save and restore this ourselves.
+    // Note that we must restore it before using internal_error (and also on the non-error path).
+    auto old_abort_handler = std::signal(SIGABRT, SIG_DFL);
+
     if (!lld::wasm::link(lld_args, llvm::outs(), llvm::errs(), /*canExitEarly*/ false, /*disableOutput*/ false)) {
         std::signal(SIGABRT, old_abort_handler);
         internal_error << "lld::wasm::link failed\n";
     }
-#else
-    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
-        std::signal(SIGABRT, old_abort_handler);
-        internal_error << "lld::wasm::link failed\n";
-    }
-#endif
 
     std::signal(SIGABRT, old_abort_handler);
+#endif
 
 #if WASM_DEBUG_LEVEL
     wasm_output.detach();
@@ -1719,21 +1749,6 @@ void copy_hostbuf_to_existing_wasmbuf(const Local<Context> &context, const halid
     dump_wasmbuf(context, dst_ptr, "dst_post");
 }
 
-JITUserContext *check_jit_user_context(JITUserContext *jit_user_context) {
-    user_assert(!jit_user_context->handlers.custom_malloc &&
-                !jit_user_context->handlers.custom_free)
-        << "The WebAssembly JIT cannot support set_custom_allocator()";
-    user_assert(!jit_user_context->handlers.custom_do_task)
-        << "The WebAssembly JIT cannot support set_custom_do_task()";
-    user_assert(!jit_user_context->handlers.custom_do_par_for)
-        << "The WebAssembly JIT cannot support set_custom_do_par_for()";
-    user_assert(!jit_user_context->handlers.custom_get_symbol &&
-                !jit_user_context->handlers.custom_load_library &&
-                !jit_user_context->handlers.custom_get_library_symbol)
-        << "The WebAssembly JIT cannot support custom_get_symbol, custom_load_library, or custom_get_library_symbol.";
-    return jit_user_context;
-}
-
 // Some internal code can call halide_error(null, ...), so this needs to be resilient to that.
 // Callers must expect null and not crash.
 JITUserContext *get_jit_user_context(const Local<Context> &context, const Local<Value> &arg) {
@@ -2313,6 +2328,7 @@ WasmModuleContents::WasmModuleContents(
 
 #if WITH_WABT
     user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
+    user_assert(!target.has_feature(Target::WebGPU)) << "wasm_webgpu requires Emscripten (or a similar compiler); it will never be supported under JIT.";
 
     // Compile halide into wasm bytecode.
     std::vector<char> final_wasm = compile_to_wasm(halide_module, fn_name);
@@ -2646,7 +2662,7 @@ int WasmModuleContents::run(const void *const *args) {
         } else {
             if (arg.name == "__user_context") {
                 js_args.push_back(load_scalar(context, kMagicJitUserContextValue));
-                JITUserContext *jit_user_context = check_jit_user_context(*(JITUserContext **)const_cast<void *>(arg_ptr));
+                JITUserContext *jit_user_context = *(JITUserContext **)const_cast<void *>(arg_ptr);
                 context->SetAlignedPointerInEmbedderData(kJitUserContext, jit_user_context);
             } else {
                 js_args.push_back(load_scalar(context, arg.type, arg_ptr));

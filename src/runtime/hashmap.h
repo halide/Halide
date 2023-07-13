@@ -142,7 +142,7 @@ struct HashMap {
     void prune();
     void set_size(int64_t size);
     int lookup(void *user_context, const uint8_t *cache_key, int32_t size, uint8_t *cache_value, size_t cache_value_size);
-    int store(void *user_context, const uint8_t *cache_key, int32_t size, const uint8_t *cache_value, size_t cache_value_size);
+    void store(void *user_context, const uint8_t *cache_key, int32_t size, const uint8_t *cache_value, size_t cache_value_size);
     void release(void *user_context, void *host);
     void cleanup();
 };
@@ -296,9 +296,9 @@ inline int HashMap::lookup(void *user_context,
     return 1;
 }
 
-inline int HashMap::store(void *user_context,
-                          const uint8_t *cache_key, int32_t size,
-                          const uint8_t *cache_value, size_t cache_value_size) {
+inline void HashMap::store(void *user_context,
+                           const uint8_t *cache_key, int32_t size,
+                           const uint8_t *cache_value, size_t cache_value_size) {
     debug(user_context) << "halide_memoization_cache_store\n";
 
     uint32_t h = djb_hash(cache_key, size);
@@ -328,7 +328,7 @@ inline int HashMap::store(void *user_context,
             halide_debug_assert(user_context, (cache_value_size == entry->value_size));
             destroy_value(entry->value, entry->value_size);
             copy_value(entry->value, cache_value, entry->value_size);
-            return (0);
+            return;
         }
     }
 
@@ -359,8 +359,6 @@ inline int HashMap::store(void *user_context,
     validate_cache();
 #endif
     debug(user_context) << "Exiting halide_memoization_cache_store\n";
-
-    return 0;
 }
 
 inline void HashMap::release(void *user_context, void *host) {
@@ -417,8 +415,8 @@ struct THashMap : public HashMap {
         return HashMap::lookup(user_context, cache_key, key_size, (uint8_t *)cache_value, sizeof(ValueType));
     }
 
-    int store(void *user_context, const uint8_t *cache_key, int32_t key_size, const ValueType *cache_value) {
-        return HashMap::store(user_context, cache_key, key_size, (const uint8_t *)cache_value, sizeof(ValueType));
+    void store(void *user_context, const uint8_t *cache_key, int32_t key_size, const ValueType *cache_value) {
+        HashMap::store(user_context, cache_key, key_size, (const uint8_t *)cache_value, sizeof(ValueType));
     }
 };
 

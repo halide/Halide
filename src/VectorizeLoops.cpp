@@ -336,26 +336,6 @@ public:
     }
 };
 
-class UsesGPUVars : public IRVisitor {
-private:
-    using IRVisitor::visit;
-    void visit(const Variable *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            debug(3) << "Found gpu loop var: " << op->name << "\n";
-            uses_gpu = true;
-        }
-    }
-
-public:
-    bool uses_gpu = false;
-};
-
-bool uses_gpu_vars(const Expr &s) {
-    UsesGPUVars uses;
-    s.accept(&uses);
-    return uses.uses_gpu;
-}
-
 class SerializeLoops : public IRMutator {
     using IRMutator::visit;
 
@@ -374,8 +354,8 @@ class PredicateLoadStore : public IRMutator {
     string var;
     Expr vector_predicate;
     int lanes;
-    bool valid;
-    bool vectorized;
+    bool valid = true;
+    bool vectorized = false;
 
     using IRMutator::visit;
 
@@ -461,7 +441,7 @@ class PredicateLoadStore : public IRMutator {
 
 public:
     PredicateLoadStore(string v, const Expr &vpred)
-        : var(std::move(v)), vector_predicate(vpred), lanes(vpred.type().lanes()), valid(true), vectorized(false) {
+        : var(std::move(v)), vector_predicate(vpred), lanes(vpred.type().lanes()) {
         internal_assert(lanes > 1);
     }
 
@@ -1062,6 +1042,12 @@ class VectorSubs : public IRMutator {
             body = substitute(vv.name + ".from_zero", Variable::make(Int(32), vv.name), body);
         }
 
+        // Difficult to tell how the padding should grow when vectorizing an
+        // allocation. It's not currently an issue, because vectorization
+        // happens before the only source of padding (lowering strided
+        // loads). Add an assert to enforce it.
+        internal_assert(op->padding == 0) << "Vectorization of padded allocations not yet implemented";
+
         return Allocate::make(op->name, op->type, op->memory_type, new_extents, op->condition, body, new_expr, op->free_function);
     }
 
@@ -1073,12 +1059,27 @@ class VectorSubs : public IRMutator {
                 break;
             }
 
-            // f[x] = f[x] <op> y
             const Store *store = op->body.as<Store>();
             if (!store) {
                 break;
             }
 
+            // f[x] = y
+            if (!expr_uses_var(store->value, store->name) &&
+                !expr_uses_var(store->predicate, store->name)) {
+                // This can be naively vectorized just fine. If there are
+                // repeated values in the vectorized store index, the ordering
+                // of writes may be undetermined and backend-dependent, but
+                // they'll be atomic.
+                Stmt s = mutate(store);
+
+                // We may still need the atomic node, if there was more
+                // parallelism than just the vectorization.
+                s = Atomic::make(op->producer_name, op->mutex_name, s);
+                return s;
+            }
+
+            // f[x] = f[x] <op> y
             VectorReduce::Operator reduce_op = VectorReduce::Add;
             Expr a, b;
             if (const Add *add = store->value.as<Add>()) {

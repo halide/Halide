@@ -50,7 +50,7 @@ function(add_halide_generator TARGET)
 
     if (NOT ARG_EXPORT_FILE)
         file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/cmake")
-        set(ARG_EXPORT_FILE "${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}-config.cmake")
+        set(ARG_EXPORT_FILE "${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}Config.cmake")
     endif ()
 
     if (NOT ARG_SOURCES)
@@ -188,6 +188,7 @@ function(add_halide_library TARGET)
         BITCODE
         COMPILER_LOG
         FEATURIZATION
+        FUNCTION_INFO_HEADER
         LLVM_ASSEMBLY
         PYTHON_EXTENSION
         PYTORCH_WRAPPER
@@ -201,6 +202,7 @@ function(add_halide_library TARGET)
     set(BITCODE_extension ".bc")
     set(COMPILER_LOG_extension ".halide_compiler_log")
     set(FEATURIZATION_extension ".featurization")
+    set(FUNCTION_INFO_HEADER_extension ".function_info.h")
     set(LLVM_ASSEMBLY_extension ".ll")
     set(PYTHON_EXTENSION_extension ".py.cpp")
     set(PYTORCH_WRAPPER_extension ".pytorch.h")
@@ -214,7 +216,7 @@ function(add_halide_library TARGET)
     ##
 
     set(options C_BACKEND GRADIENT_DESCENT)
-    set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER HEADER ${extra_output_names})
+    set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER HEADER ${extra_output_names} NO_THREADS NO_DL_LIBS)
     set(multiValueArgs TARGETS FEATURES PARAMS PLUGINS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -226,28 +228,41 @@ function(add_halide_library TARGET)
         message(FATAL_ERROR "Missing FROM argument specifying a Halide generator target")
     endif ()
 
+    if (NOT TARGET ${ARG_FROM})
+        # FROM is usually an unqualified name; if we are crosscompiling, we might need a
+        # fully-qualified name, so add the default package name and retry
+        set(FQ_ARG_FROM "${PROJECT_NAME}::halide_generators::${ARG_FROM}")
+        if (NOT TARGET ${FQ_ARG_FROM})
+            message(FATAL_ERROR "Unable to locate FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
+        endif ()
+        set(ARG_FROM "${FQ_ARG_FROM}")
+    endif()
+
     get_property(py_src TARGET ${ARG_FROM} PROPERTY Halide_PYTHON_GENERATOR_SOURCE)
     if (py_src)
         # TODO: Python Generators need work to support crosscompiling (https://github.com/halide/Halide/issues/7014)
         if (NOT TARGET Halide::Python)
             message(FATAL_ERROR "This version of Halide was built without support for Python bindings; rebuild using WITH_PYTHON_BINDINGS=ON to use this rule with Python Generators.")
         endif ()
+        
         if (NOT TARGET Python3::Interpreter)
             message(FATAL_ERROR "You must call find_package(Python3) in your CMake code in order to use this rule with Python Generators.")
         endif ()
-        set(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
-        set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${Python3_EXECUTABLE} $<SHELL_PATH:${py_src}>)
+
+        if (CMAKE_VERSION VERSION_LESS 3.24)
+            set(arg_sep "")
+        else ()
+            set(arg_sep "--")
+        endif ()
+
+        set(
+            GENERATOR_CMD
+            ${CMAKE_COMMAND} -E env "PYTHONPATH=$<TARGET_FILE_DIR:Halide::Python>/.." ${arg_sep}
+            ${Halide_PYTHON_LAUNCHER}
+            "$<TARGET_FILE:Python3::Interpreter>" $<SHELL_PATH:${py_src}>
+        )
         set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python ${py_src})
     else()
-        if (NOT TARGET ${ARG_FROM})
-            # FROM is usually an unqualified name; if we are crosscompiling, we might need a
-            # fully-qualified name, so add the default package name and retry
-            set(FQ_ARG_FROM "${PROJECT_NAME}::halide_generators::${ARG_FROM}")
-            if (NOT TARGET ${FQ_ARG_FROM})
-                message(FATAL_ERROR "Unable to locate FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
-            endif ()
-            set(ARG_FROM "${FQ_ARG_FROM}")
-        endif()
         set(GENERATOR_CMD "${ARG_FROM}")
         set(GENERATOR_CMD_DEPS ${ARG_FROM})
         _Halide_place_dll(${ARG_FROM})
@@ -311,7 +326,16 @@ function(add_halide_library TARGET)
         set(ARG_USE_RUNTIME Halide::Runtime)
     elseif (NOT ARG_USE_RUNTIME)
         # If we're not using an existing runtime, create one.
-        add_halide_runtime("${TARGET}.runtime" TARGETS ${ARG_TARGETS})
+
+        # To forward NO_THREADS/NO_DL_LIBS args to add_halide_runtime()
+        if (DEFINED ARG_NO_THREADS)
+            set(CALL_ARG_NO_THREADS NO_THREADS ${ARG_NO_THREADS})
+        endif ()
+        if (DEFINED ARG_NO_DL_LIBS)
+            set(CALL_ARG_NO_DL_LIBS NO_DL_LIBS ${ARG_NO_DL_LIBS})
+        endif ()
+
+        add_halide_runtime("${TARGET}.runtime" TARGETS ${ARG_TARGETS} FROM ${ARG_FROM} ${CALL_ARG_NO_THREADS} ${CALL_ARG_NO_DL_LIBS})
         set(ARG_USE_RUNTIME "${TARGET}.runtime")
     elseif (NOT TARGET ${ARG_USE_RUNTIME})
         message(FATAL_ERROR "Invalid runtime target ${ARG_USE_RUNTIME}")
@@ -402,6 +426,11 @@ function(add_halide_library TARGET)
         set_target_properties("${TARGET}" PROPERTIES
                               POSITION_INDEPENDENT_CODE ON
                               LINKER_LANGUAGE CXX)
+        if (NOT Halide_NO_DEFAULT_FLAGS)
+            # Silence many useless warnings in generated C++ code compilation
+            target_compile_options("${TARGET}" PRIVATE
+                $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-psabi>)
+        endif ()
         _Halide_fix_xcode("${TARGET}")
     endif ()
 
@@ -553,7 +582,7 @@ endfunction()
 
 function(add_halide_runtime RT)
     set(options "")
-    set(oneValueArgs "")
+    set(oneValueArgs FROM NO_THREADS NO_DL_LIBS)
     set(multiValueArgs TARGETS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -566,6 +595,26 @@ function(add_halide_runtime RT)
     # Ensure all targets are tagged with "no_runtime",
     # so that GCD calculation doesn't get confused.
     list(TRANSFORM ARG_TARGETS APPEND "-no_runtime")
+
+    if (ARG_FROM)
+        # Try to use generator which is available. This is essential for cross-compilation
+        # where we cannot use host compiler to build generator only for runtime.
+
+        # Need to check if the ones for python extension, which is not actually an executable
+        get_target_property(target_type ${ARG_FROM} TYPE)
+        get_target_property(aliased ${ARG_FROM} ALIASED_TARGET)
+        if (target_type STREQUAL "EXECUTABLE" AND NOT aliased)
+            add_executable(_Halide_gengen ALIAS ${ARG_FROM})
+        endif()
+    endif()
+
+    # The default of NO_THREADS/NO_DL_LIBS is OFF unless Halide_RUNTIME_NO_THREADS/NO_DL_LIBS is defined globally
+    if (NOT DEFINED ARG_NO_THREADS)
+        set(ARG_NO_THREADS ${Halide_RUNTIME_NO_THREADS})
+    endif ()
+    if (NOT DEFINED ARG_NO_DL_LIBS)
+        set(ARG_NO_DL_LIBS ${Halide_RUNTIME_NO_DL_LIBS})
+    endif ()
 
     # Ensure _Halide_gengen is defined
     _Halide_gengen_ensure()
@@ -606,7 +655,14 @@ function(add_halide_runtime RT)
         _Halide_fix_xcode("${RT}")
     endif ()
 
-    target_link_libraries("${RT}" INTERFACE Halide::Runtime Threads::Threads ${CMAKE_DL_LIBS})
+    # Take care of the runtime/toolchain which doesn't have Threads or DL libs
+    if (NOT ARG_NO_THREADS AND NOT TARGET Threads::Threads)
+        find_package(Threads REQUIRED)
+    endif ()
+    target_link_libraries("${RT}" INTERFACE
+                          Halide::Runtime
+                          $<$<NOT:$<BOOL:${ARG_NO_THREADS}>>:Threads::Threads>
+                          $<$<NOT:$<BOOL:${ARG_NO_DL_LIBS}>>:${CMAKE_DL_LIBS}>)
     _Halide_add_targets_to_runtime("${RT}" TARGETS ${ARG_TARGETS})
 endfunction()
 
@@ -672,10 +728,20 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
         endif ()
     endif ()
 
+    if ("${ARGN}" MATCHES "vulkan")
+        find_package(Vulkan REQUIRED)
+        target_link_libraries(${TARGET} ${VISIBILITY} Vulkan::Vulkan)
+    endif ()
+
     if ("${ARGN}" MATCHES "metal")
         find_library(FOUNDATION_LIBRARY Foundation REQUIRED)
         find_library(METAL_LIBRARY Metal REQUIRED)
         target_link_libraries(${TARGET} ${VISIBILITY} "${FOUNDATION_LIBRARY}" "${METAL_LIBRARY}")
+    endif ()
+
+    if ("${ARGN}" MATCHES "webgpu")
+        find_package(Halide_WebGPU REQUIRED)
+        target_link_libraries(${TARGET} ${VISIBILITY} Halide::WebGPU)
     endif ()
 endfunction()
 
@@ -731,4 +797,3 @@ function(_Halide_gengen_ensure)
         _Halide_place_dll(_Halide_gengen)
     endif ()
 endfunction()
-

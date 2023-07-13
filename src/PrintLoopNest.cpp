@@ -32,13 +32,13 @@ namespace {
 class PrintLoopNest : public IRVisitor {
 public:
     PrintLoopNest(std::ostream &output, const map<string, Function> &e)
-        : out(output), env(e), indent(0) {
+        : out(output), env(e) {
     }
 
 private:
     std::ostream &out;
     const map<string, Function> &env;
-    int indent;
+    int indent = 0;
 
     Scope<Expr> constants;
 

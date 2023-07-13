@@ -1,15 +1,18 @@
-import addconstantcpp, addconstantpy
-import addconstantcpp_with_offset_42, addconstantpy_with_offset_42
-import addconstantcpp_with_negative_offset, addconstantpy_with_negative_offset
+from addconstantcpp import addconstantcpp
+from addconstantpy import addconstantpy
+from addconstantcpp_with_offset_42 import addconstantcpp_with_offset_42
+from addconstantpy_with_offset_42 import addconstantpy_with_offset_42
+from addconstantcpp_with_negative_offset import addconstantcpp_with_negative_offset
+from addconstantpy_with_negative_offset import addconstantpy_with_negative_offset
 import numpy
 
 TESTS_AND_OFFSETS = [
-    (addconstantcpp.addconstantcpp, 0),
-    (addconstantpy.addconstantpy, 0),
-    (addconstantcpp_with_offset_42.addconstantcpp_with_offset_42, 42),
-    (addconstantpy_with_offset_42.addconstantpy_with_offset_42, 42),
-    (addconstantcpp_with_negative_offset.addconstantcpp_with_negative_offset, -1),
-    (addconstantpy_with_negative_offset.addconstantpy_with_negative_offset, -1),
+    (addconstantcpp, 0),
+    (addconstantpy, 0),
+    (addconstantcpp_with_offset_42, 42),
+    (addconstantpy_with_offset_42, 42),
+    (addconstantcpp_with_negative_offset, -1),
+    (addconstantpy_with_negative_offset, -1),
 ]
 
 ERROR_THRESHOLD = 0.0001
@@ -39,7 +42,7 @@ def test(addconstant_impl_func, offset):
     input_float = numpy.array([3.14, 2.718, 1.618], dtype=numpy.float32)
     input_double = numpy.array([3.14, 2.718, 1.618], dtype=numpy.float64)
     input_half = numpy.array([3.14, 2.718, 1.618], dtype=numpy.float16)
-    input_2d = numpy.array([[1, 2, 3], [4, 5, 6]], dtype=numpy.int8, order='F')
+    input_2d = numpy.array([[1, 2, 3], [4, 5, 6]], dtype=numpy.int8, order="F")
     input_3d = numpy.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]], dtype=numpy.int8)
 
     output_u8 = numpy.zeros((3,), dtype=numpy.uint8)
@@ -53,20 +56,47 @@ def test(addconstant_impl_func, offset):
     output_float = numpy.zeros((3,), dtype=numpy.float32)
     output_double = numpy.zeros((3,), dtype=numpy.float64)
     output_half = numpy.zeros((3,), dtype=numpy.float16)
-    output_2d = numpy.zeros((2, 3), dtype=numpy.int8, order='F')
+    output_2d = numpy.zeros((2, 3), dtype=numpy.int8, order="F")
     output_3d = numpy.zeros((2, 2, 2), dtype=numpy.int8)
 
     addconstant_impl_func(
         scalar_u1,
-        scalar_u8, scalar_u16, scalar_u32, scalar_u64,
-        scalar_i8, scalar_i16, scalar_i32, scalar_i64,
-        scalar_float, scalar_double,
-        input_u8, input_u16, input_u32, input_u64,
-        input_i8, input_i16, input_i32, input_i64,
-        input_float, input_double, input_half, input_2d, input_3d,
-        output_u8, output_u16, output_u32, output_u64,
-        output_i8, output_i16, output_i32, output_i64,
-        output_float, output_double, output_half, output_2d, output_3d,
+        scalar_u8,
+        scalar_u16,
+        scalar_u32,
+        scalar_u64,
+        scalar_i8,
+        scalar_i16,
+        scalar_i32,
+        scalar_i64,
+        scalar_float,
+        scalar_double,
+        input_u8,
+        input_u16,
+        input_u32,
+        input_u64,
+        input_i8,
+        input_i16,
+        input_i32,
+        input_i64,
+        input_float,
+        input_double,
+        input_half,
+        input_2d,
+        input_3d,
+        output_u8,
+        output_u16,
+        output_u32,
+        output_u64,
+        output_i8,
+        output_i16,
+        output_i32,
+        output_i64,
+        output_float,
+        output_double,
+        output_half,
+        output_2d,
+        output_3d,
     )
 
     combinations = [
@@ -102,20 +132,47 @@ def test(addconstant_impl_func, offset):
         scalar_i32 = 0
         addconstant_impl_func(
             scalar_u1,
-            scalar_u8, scalar_u16, scalar_u32, scalar_u64,
-            scalar_i8, scalar_i16, scalar_i32, scalar_i64,
-            scalar_float, scalar_double,
-            input_u8, input_u16, input_u32, input_u64,
-            input_i8, input_i16, input_i32, input_i64,
-            input_float, input_double, input_half, input_2d, input_3d,
-            output_u8, output_u16, output_u32, output_u64,
-            output_i8, output_i16, output_i32, output_i64,
-            output_float, output_double, output_half, output_2d, output_3d,
+            scalar_u8,
+            scalar_u16,
+            scalar_u32,
+            scalar_u64,
+            scalar_i8,
+            scalar_i16,
+            scalar_i32,
+            scalar_i64,
+            scalar_float,
+            scalar_double,
+            input_u8,
+            input_u16,
+            input_u32,
+            input_u64,
+            input_i8,
+            input_i16,
+            input_i32,
+            input_i64,
+            input_float,
+            input_double,
+            input_half,
+            input_2d,
+            input_3d,
+            output_u8,
+            output_u16,
+            output_u32,
+            output_u64,
+            output_i8,
+            output_i16,
+            output_i32,
+            output_i64,
+            output_float,
+            output_double,
+            output_half,
+            output_2d,
+            output_3d,
         )
     except RuntimeError as e:
         assert str(e) == "Halide Runtime Error: -27", e
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
     try:
         # Expected requirement failure #2 -- note that for AOT-compiled
@@ -124,20 +181,47 @@ def test(addconstant_impl_func, offset):
         scalar_i32 = -1
         addconstant_impl_func(
             scalar_u1,
-            scalar_u8, scalar_u16, scalar_u32, scalar_u64,
-            scalar_i8, scalar_i16, scalar_i32, scalar_i64,
-            scalar_float, scalar_double,
-            input_u8, input_u16, input_u32, input_u64,
-            input_i8, input_i16, input_i32, input_i64,
-            input_float, input_double, input_half, input_2d, input_3d,
-            output_u8, output_u16, output_u32, output_u64,
-            output_i8, output_i16, output_i32, output_i64,
-            output_float, output_double, output_half, output_2d, output_3d,
+            scalar_u8,
+            scalar_u16,
+            scalar_u32,
+            scalar_u64,
+            scalar_i8,
+            scalar_i16,
+            scalar_i32,
+            scalar_i64,
+            scalar_float,
+            scalar_double,
+            input_u8,
+            input_u16,
+            input_u32,
+            input_u64,
+            input_i8,
+            input_i16,
+            input_i32,
+            input_i64,
+            input_float,
+            input_double,
+            input_half,
+            input_2d,
+            input_3d,
+            output_u8,
+            output_u16,
+            output_u32,
+            output_u64,
+            output_i8,
+            output_i16,
+            output_i32,
+            output_i64,
+            output_float,
+            output_double,
+            output_half,
+            output_2d,
+            output_3d,
         )
     except RuntimeError as e:
         assert str(e) == "Halide Runtime Error: -27", e
     else:
-        assert False, 'Did not see expected exception!'
+        assert False, "Did not see expected exception!"
 
 
 if __name__ == "__main__":

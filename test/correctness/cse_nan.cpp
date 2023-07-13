@@ -33,6 +33,6 @@ int main() {
     } else {
         fprintf(stderr, "ERROR: T = %f ; TR = %f ; F = %f ; FR = %f\n",
                 true_buf(0, 0, 0), true_result(0, 0), false_buf(0, 0, 0), false_result(0, 0));
-        return -1;
+        return 1;
     }
 }

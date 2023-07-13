@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 0 : input(x, y);
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
                 uint8_t correct = cond ? 255 : 0;
                 if (correct != output(x, y)) {
                     fprintf(stderr, "output(%d, %d) = %d instead of %d\n", x, y, output(x, y), correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
                     if (cpu_output(x, y) != gpu_output(x, y)) {
                         fprintf(stderr, "gpu_output(%d, %d) = %d instead of %d for uint%d -> uint%d\n",
                                 x, y, gpu_output(x, y), cpu_output(x, y), n, w);
-                        return -1;
+                        return 1;
                     }
                 }
             }

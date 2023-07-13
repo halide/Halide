@@ -36,13 +36,13 @@
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
     },
     {
-      "name": "vs2019",
+      "name": "vs2022",
       "hidden": true,
       "inherits": [
         "vcpkg",
         "windows-only"
       ],
-      "generator": "Visual Studio 16 2019",
+      "generator": "Visual Studio 17 2022",
       "toolset": "host=x64"
     },
     {
@@ -84,7 +84,7 @@
     {
       "name": "win32",
       "inherits": [
-        "vs2019",
+        "vs2022",
         "base"
       ],
       "displayName": "Win32 (Visual Studio)",
@@ -94,7 +94,7 @@
     {
       "name": "win64",
       "inherits": [
-        "vs2019",
+        "vs2022",
         "base"
       ],
       "displayName": "Win64 (Visual Studio)",
@@ -112,7 +112,7 @@
         "WITH_TESTS": "NO",
         "WITH_TUTORIALS": "NO",
         "WITH_DOCS": "YES",
-        "WITH_UTILS": "NO",
+        "WITH_UTILS": "YES",
         "WITH_PYTHON_BINDINGS": "NO",
         "CMAKE_INSTALL_DATADIR": "share/Halide"
       }
@@ -121,7 +121,7 @@
       "name": "package-windows",
       "inherits": [
         "package",
-        "vs2019"
+        "vs2022"
       ],
       "displayName": "Package ZIP for Windows",
       "description": "Build for packaging Windows shared libraries.",
@@ -163,6 +163,29 @@
       "cacheVariables": {
         "LLVM_ROOT": "$penv{LLVM_ROOT}"
       }
+    },
+    {
+      "name": "linux-x64-fuzzer",
+      "inherits": "ci",
+      "displayName": "Fuzzer (Linux x64)",
+      "description": "Build everything with fuzzing enabled",
+      "cacheVariables": {
+        "LLVM_ROOT": "$penv{LLVM_ROOT}",
+        "TARGET_WEBASSEMBLY": "NO",
+        "WITH_TUTORIALS": "NO",
+        "WITH_UTILS": "NO",
+        "WITH_PYTHON_BINDINGS": "NO",
+        "WITH_TESTS": "YES",
+        "WITH_TEST_AUTO_SCHEDULE": "NO",
+        "WITH_TEST_CORRECTNESS": "NO",
+        "WITH_TEST_ERROR": "NO",
+        "WITH_TEST_WARNING": "NO",
+        "WITH_TEST_PERFORMANCE": "NO",
+        "WITH_TEST_RUNTIME": "NO",
+        "WITH_TEST_GENERATOR": "NO",
+        "WITH_TEST_FUZZ": "YES",
+        "BUILD_SHARED_LIBS": "NO"
+      }
     }
   ],
   "buildPresets": [
@@ -183,6 +206,12 @@
       "configurePreset": "linux-x64-asan",
       "displayName": "ASAN (Linux x64)",
       "description": "Build everything with ASAN enabled"
+    },
+    {
+      "name": "linux-x64-fuzzer",
+      "configurePreset": "linux-x64-fuzzer",
+      "displayName": "Fuzzing (Linux x64)",
+      "description": "Build everything with fuzzing enabled"
     }
   ],
   "testPresets": [
@@ -212,6 +241,15 @@
       "environment": {
         "ASAN_OPTIONS": "detect_leaks=0:detect_container_overflow=0"
       },
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-x64-fuzzer",
+      "configurePreset": "linux-x64-fuzzer",
+      "displayName": "Fuzzing (Linux x64)",
+      "description": "Test everything with fuzzing enabled",
       "output": {
         "outputOnFailure": true
       }

@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
                     // The min coord gets lost on debug_to_file, so f should be shifted up by one.
                     if (val != x + y + z - 1) {
                         printf("f(%d, %d, %d) = %d instead of %d\n", x, y, z, val, x + y);
-                        return -1;
+                        return 1;
                     }
                 }
             }
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
                 float correct = (float)(f(x, y, 1) + f(x + 1, y, 2));
                 if (val != correct) {
                     printf("g(%d, %d) = %f instead of %f\n", x, y, val, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
                 int32_t correct = f(x, y, 0) + g(x, y);
                 if (val != correct) {
                     printf("h(%d, %d) = %d instead of %d\n", x, y, val, correct);
-                    return -1;
+                    return 1;
                 }
             }
         }

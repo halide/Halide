@@ -16,9 +16,9 @@ using std::sort;
 using std::string;
 using std::vector;
 
-static ostringstream nil;
-
 namespace {
+
+ostringstream nil;
 
 class CodeGen_Metal_Dev : public CodeGen_GPU_Dev {
 public:
@@ -46,6 +46,10 @@ public:
 
     std::string api_unique_name() override {
         return "metal";
+    }
+
+    bool kernel_run_takes_types() const override {
+        return true;
     }
 
 protected:
@@ -91,6 +95,7 @@ protected:
         void visit(const Allocate *op) override;
         void visit(const Free *op) override;
         void visit(const Cast *op) override;
+        void visit(const VectorReduce *op) override;
         void visit(const Atomic *op) override;
     };
 
@@ -205,7 +210,7 @@ string simt_intrinsic(const string &name) {
 }  // namespace
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_extern_call(const Call *op) {
-    internal_assert(!function_takes_user_context(op->name));
+    internal_assert(!function_takes_user_context(op->name)) << op->name;
     vector<string> args(op->args.size());
     for (size_t i = 0; i < op->args.size(); i++) {
         args[i] = print_expr(op->args[i]);
@@ -221,6 +226,20 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Max *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Min *op) {
     print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+}
+
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const VectorReduce *op) {
+    if (op->op == VectorReduce::Add && op->type.is_float() && (op->type.lanes() == 1)) {
+        if (const Mul *maybe_mul = op->value.as<Mul>()) {
+            string a = print_expr(maybe_mul->a);
+            string b = print_expr(maybe_mul->b);
+            ostringstream rhs;
+            rhs << "dot(" << a << ", " << b << ")";
+            print_assignment(op->type, rhs.str());
+            return;
+        }
+    }
+    CodeGen_GPU_C::visit(op);
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {

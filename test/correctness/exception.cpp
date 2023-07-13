@@ -6,19 +6,19 @@ using namespace Halide;
 void check_pure(Func f) {
     if (f.has_update_definition()) {
         std::cout << "f's reduction definition was supposed to fail!\n";
-        exit(-1);
+        exit(1);
     }
 }
 
 void check_error(bool error) {
     if (!error) {
         std::cout << "There was supposed to be an error!\n";
-        exit(-1);
+        exit(1);
     }
 }
 
 int main(int argc, char **argv) {
-
+#if HALIDE_WITH_EXCEPTIONS
     if (!Halide::exceptions_enabled()) {
         std::cout << "[SKIP] Halide was compiled without exceptions.\n";
         return 0;
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
             std::cout << "result(" << i
                       << ") = " << result(i)
                       << " instead of " << correct << "\n";
-            return -1;
+            return 1;
         }
     }
 
@@ -151,4 +151,8 @@ int main(int argc, char **argv) {
 
     std::cout << "Success!\n";
     return 0;
+#else
+    std::cout << "[SKIP] Halide was compiled without exceptions.\n";
+    return 0;
+#endif
 }

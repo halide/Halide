@@ -15,6 +15,7 @@ option(CMAKE_CXX_EXTENSIONS "Enable C++ vendor extensions (e.g. GNU)" OFF)
 # Duplicated options from parent project
 option(WITH_TESTS "Build tests" ON)
 option(WITH_TUTORIALS "Build tutorials" ON)
+option(WITH_PYTHON_STUBS "Build Python stubs" ON)
 
 # Enable/disable testing
 cmake_dependent_option(
@@ -24,7 +25,7 @@ cmake_dependent_option(
 
 # Set the expected (downloaded) version of pybind11
 option(PYBIND11_USE_FETCHCONTENT "Enable to download pybind11 via FetchContent" ON)
-set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
+set(PYBIND11_VER 2.10.4 CACHE STRING "The pybind11 version to use (or download)")
 
 ##
 # Dependencies
@@ -35,6 +36,10 @@ set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
 # part, so only requesting Module avoids failures when Embed is not
 # available, as is the case in the manylinux Docker images.
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
+if (Python3_VERSION VERSION_LESS "3.8")
+    message(FATAL_ERROR "Halide requires Python v3.8 or later, but found ${Python3_VERSION}.")
+endif ()
+message(STATUS "Found Python ${Python3_VERSION} at ${Python3_EXECUTABLE}")
 
 if (PYBIND11_USE_FETCHCONTENT)
     include(FetchContent)
@@ -57,22 +62,6 @@ endif ()
 # A helper for creating tests with correct PYTHONPATH and sanitizer preloading
 ##
 
-if (Halide_ASAN_ENABLED)
-    if (NOT DEFINED Halide_Python_ASAN_LIBRARY)
-        # TODO: this assumes clang-on-Linux, we could be smarter here and check
-        #   CMAKE_CXX_COMPILER_ID to behave differently on GNU, AppleClang, or
-        #   MSVC.
-        execute_process(
-            COMMAND ${CMAKE_CXX_COMPILER} "-print-file-name=libclang_rt.asan.so"
-            OUTPUT_VARIABLE Halide_Python_ASAN_LIBRARY
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-        )
-    endif ()
-
-    set(Halide_Python_ASAN_LIBRARY "${Halide_Python_ASAN_LIBRARY}"
-        CACHE FILEPATH "Library to preload when running Python tests.")
-endif ()
-
 function(add_python_test)
     cmake_parse_arguments(ARG "" "FILE;LABEL" "PYTHONPATH;ENVIRONMENT;TEST_ARGS" ${ARGN})
 
@@ -80,20 +69,13 @@ function(add_python_test)
     list(TRANSFORM ARG_PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
     list(PREPEND ARG_ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
-    if (Halide_Python_ASAN_LIBRARY)
-        if (APPLE)
-            list(PREPEND ARG_ENVIRONMENT "DYLD_INSERT_LIBRARIES=${Halide_Python_ASAN_LIBRARY}")
-        else ()
-            list(PREPEND ARG_ENVIRONMENT "LD_PRELOAD=${Halide_Python_ASAN_LIBRARY}")
-        endif ()
-    endif ()
 
     cmake_path(GET ARG_FILE STEM test_name)
     set(test_name "${ARG_LABEL}_${test_name}")
 
     add_test(
         NAME "${test_name}"
-        COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>" ${ARG_TEST_ARGS}
+        COMMAND ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python3::Interpreter>" "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>" ${ARG_TEST_ARGS}
     )
     set_tests_properties(
         "${test_name}"
@@ -110,9 +92,13 @@ endfunction()
 ##
 
 add_subdirectory(src)
-add_subdirectory(stub)
+
+if (WITH_PYTHON_STUBS)
+    add_subdirectory(stub)
+endif ()
 
 if (WITH_TEST_PYTHON)
+    add_subdirectory(apps)
     add_subdirectory(test)
 endif ()
 

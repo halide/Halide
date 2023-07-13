@@ -1,7 +1,8 @@
 #include "HalideRuntime.h"
+#include "runtime_atomics.h"
+#include "runtime_internal.h"
 
 extern "C" {
-
 extern void *malloc(size_t);
 extern void free(void *);
 }
@@ -10,26 +11,13 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-WEAK void *aligned_malloc(size_t alignment, size_t size) {
-    // We also need to align the size of the buffer.
-    size = (size + alignment - 1) & ~(alignment - 1);
-
-    // Allocate enough space for aligning the pointer we return.
-    void *orig = malloc(size + alignment);
-    if (orig == nullptr) {
-        // Will result in a failed assertion and a call to halide_error
-        return nullptr;
-    }
-    // We want to store the original pointer prior to the pointer we return.
-    void *ptr = (void *)(((size_t)orig + alignment + sizeof(void *) - 1) & ~(alignment - 1));
-    ((void **)ptr)[-1] = orig;
+ALWAYS_INLINE void *aligned_malloc(size_t alignment, size_t size) {
+    void *ptr = ::halide_internal_aligned_alloc(alignment, size);
     return ptr;
 }
 
-WEAK void aligned_free(void *ptr) {
-    if (ptr) {
-        free(((void **)ptr)[-1]);
-    }
+ALWAYS_INLINE void aligned_free(void *ptr) {
+    ::halide_internal_aligned_free(ptr);
 }
 
 // We keep a small pool of small pre-allocated buffers for use by Halide
@@ -37,7 +25,7 @@ WEAK void aligned_free(void *ptr) {
 // which can cause a noticable performance impact on some workloads.
 // 'num_buffers' is the number of pre-allocated buffers and 'buffer_size' is
 // the size of each buffer. The pre-allocated buffers are shared among threads
-// and we use __sync_val_compare_and_swap primitive to synchronize the buffer
+// and we use compare-and-swap primitives to synchronize the buffer
 // allocation.
 // TODO(psuriana): make num_buffers configurable by user
 static const int num_buffers = 10;
@@ -59,12 +47,15 @@ WEAK __attribute__((destructor)) void halide_allocator_cleanup() {
 }  // namespace Halide
 
 WEAK void *halide_default_malloc(void *user_context, size_t x) {
-    // Hexagon needs up to 128 byte alignment.
-    const size_t alignment = 128;
+    using namespace Halide::Runtime::Internal::Synchronization;
+
+    const size_t alignment = ::halide_internal_malloc_alignment();
 
     if (x <= buffer_size) {
         for (int i = 0; i < num_buffers; ++i) {
-            if (__sync_val_compare_and_swap(buf_is_used + i, 0, 1) == 0) {
+            int expected = 0;
+            int desired = 1;
+            if (atomic_cas_strong_sequentially_consistent(&buf_is_used[i], &expected, &desired)) {
                 if (mem_buf[i] == nullptr) {
                     mem_buf[i] = aligned_malloc(alignment, buffer_size);
                 }

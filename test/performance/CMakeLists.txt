@@ -39,7 +39,7 @@ tests(GROUPS performance multithreaded
       rfactor.cpp
       sort.cpp
       stack_vs_heap.cpp
-      thread_safe_jit.cpp
+      thread_safe_jit_callable.cpp
       )
 
 # Make sure that performance tests do not run in parallel with other tests,

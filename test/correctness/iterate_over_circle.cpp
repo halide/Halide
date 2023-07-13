@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
                "within the circle x*x + y*y < 10*10. It was loaded %d "
                "times, but there are %d points within that circle\n",
                count, c);
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

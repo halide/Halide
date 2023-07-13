@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
         unsigned int error = evaluate_may_gpu<unsigned int>(sum(abs(output(r.x, r.y))));
         if (error != 0) {
             printf("Something went wrong\n");
-            return -1;
+            return 1;
         }
     }
 
@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
         unsigned int error_multi = evaluate<unsigned int>(sum(abs(output_multi(r.x, r.y))));
         if (error_multi != 0) {
             printf("Something went wrong in multi case\n");
-            return -1;
+            return 1;
         }
     }
 

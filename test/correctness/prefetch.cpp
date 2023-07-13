@@ -88,7 +88,7 @@ int test1(const Target &t) {
 
     vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -112,7 +112,7 @@ int test2(const Target &t) {
 
     vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -136,7 +136,7 @@ int test3(const Target &t) {
 
     vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -161,7 +161,7 @@ int test4(const Target &t) {
     // within the loop nest of 'g'
     vector<vector<Expr>> expected = {};
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -182,7 +182,7 @@ int test5(const Target &t) {
 
     vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -206,7 +206,7 @@ int test6(const Target &t) {
 
     vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -230,7 +230,7 @@ int test7(const Target &t) {
 
     vector<vector<Expr>> expected = {{Variable::make(Handle(), f.name()), 0, 1, get_stride(t, 4)}};
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -255,7 +255,7 @@ int test8(const Target &t) {
     // within the loop nest of 'g'
     vector<vector<Expr>> expected = {};
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -298,7 +298,7 @@ int test9(const Target &t) {
         }
     }
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -348,7 +348,7 @@ int test10(const Target &t) {
         }
     }
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -398,7 +398,7 @@ int test11(const Target &t) {
         }
     }
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }
@@ -464,7 +464,7 @@ int test12(const Target &t) {
         }
     }
     if (!check(expected, collect.prefetches)) {
-        return -1;
+        return 1;
     }
     return 0;
 }

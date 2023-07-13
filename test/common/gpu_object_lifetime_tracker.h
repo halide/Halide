@@ -22,7 +22,7 @@ class GpuObjectLifetimeTracker {
         }
     };
 
-    std::array<ObjectType, 11> object_types = {{
+    std::array<ObjectType, 22> object_types = {{
         {"Caching compiled kernel:", "Releasing cached compilation:"},
 
         // OpenCL objects
@@ -44,6 +44,21 @@ class GpuObjectLifetimeTracker {
         // Hexagon objects
         {"halide_remote_load_library", "halide_remote_release_library"},
         {"ion_alloc", "ion_free"},
+
+        // Vulkan objects
+        {"vk_create_context", "vk_destroy_context", true},
+        {"vk_create_command_pool", "vk_destroy_command_pool"},
+        {"vk_create_command_buffer", "vk_destroy_command_buffer"},
+        {"vk_create_pipeline_layout", "vk_destroy_pipeline_layout"},
+        {"vk_create_compute_pipeline", "vk_destroy_compute_pipeline"},
+        {"vk_create_descriptor_pool", "vk_destroy_descriptor_pool"},
+        {"Vulkan: Allocated memory for device region", "Vulkan: Deallocated memory for device region"},
+        {"Vulkan: Created buffer", "Vulkan: Destroyed buffer"},
+
+        // WebGPU objects
+        {"wgpuCreateInstance", "wgpuInstanceRelease", true},
+        {"wgpuDeviceCreateBuffer", "wgpuBufferRelease"},
+        {"wgpuDeviceCreateComputePipeline", "wgpuComputePipelineRelease"},
     }};
 
 public:
@@ -67,12 +82,12 @@ public:
                 !(allow_globals && o.is_global)) {
                 printf("Error! %d objects created by %s still live\n",
                        o.live_count, o.created);
-                return -1;
+                return 1;
             }
             if (o.is_global && o.total_created > max_globals) {
                 printf("Error! %d global objects created by %s, max is %d\n",
                        o.total_created, o.created, max_globals);
-                return -1;
+                return 1;
             }
 
             total += o.total_created;
@@ -80,7 +95,7 @@ public:
         if (!allow_none && total == 0) {
             printf("Error! No objects created. Ensure gpu_debug is set, ");
             printf("and record_gpu_debug is called from halide_print.\n");
-            return -1;
+            return 1;
         }
         return 0;
     }

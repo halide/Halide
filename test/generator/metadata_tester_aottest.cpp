@@ -6,8 +6,12 @@
 #include <map>
 #include <string>
 
+#include "metadata_tester.function_info.h"
 #include "metadata_tester.h"
+#include "metadata_tester_ucon.function_info.h"
 #include "metadata_tester_ucon.h"
+
+namespace {
 
 using namespace Halide::Runtime;
 
@@ -38,7 +42,7 @@ struct typed_scalar {
     bool operator==(const typed_scalar &that) const {
         if (this->type != that.type) {
             std::cerr << "Mismatched types\n";
-            exit(-1);
+            exit(1);
         }
         switch (type.element_of().as_u32()) {
         case halide_type_t(halide_type_float, 32).as_u32():
@@ -67,7 +71,7 @@ struct typed_scalar {
             return value.u.handle == that.value.u.handle;
         default:
             std::cerr << "Unsupported type\n";
-            exit(-1);
+            exit(1);
             break;
         }
     }
@@ -116,7 +120,7 @@ struct typed_scalar {
             break;
         default:
             std::cerr << "Unsupported type\n";
-            exit(-1);
+            exit(1);
             break;
         }
         return o;
@@ -127,7 +131,7 @@ struct typed_scalar {
     do {                                                                                               \
         if ((exp) != (act)) {                                                                          \
             std::cerr << #exp << " == " << #act << ": Expected " << exp << ", Actual " << act << "\n"; \
-            exit(-1);                                                                                  \
+            exit(1);                                                                                   \
         }                                                                                              \
     } while (0);
 
@@ -145,7 +149,7 @@ struct typed_scalar {
             EXPECT_EQ(etype, atype);                                             \
         } else {                                                                 \
             std::cerr << "One null, one non-null\n";                             \
-            exit(-1);                                                            \
+            exit(1);                                                             \
         }                                                                        \
     } while (0);
 
@@ -213,11 +217,11 @@ void verify(const Buffer<uint8_t, 3> &input,
             const Buffer<int32_t, 3> &tupled_output_buffer1) {
     if (output_scalar.dimensions() != 0) {
         std::cerr << "output_scalar should be zero-dimensional\n";
-        exit(-1);
+        exit(1);
     }
     if (output_scalar() != 1234.25f) {
         std::cerr << "output_scalar value is wrong (" << output_scalar() << "\n";
-        exit(-1);
+        exit(1);
     }
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
@@ -228,27 +232,27 @@ void verify(const Buffer<uint8_t, 3> &input,
                 const float actual1 = output1(x, y, c);
                 if (expected0 != actual0) {
                     std::cerr << "img0[" << x << "," << y << "," << c << "] = " << actual0 << ", expected " << expected0 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (expected1 != actual1) {
                     std::cerr << "img1[" << x << "," << y << "," << c << "] = " << actual1 << ", expected " << expected1 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (output_array0(x, y, c) != 1.5f) {
                     std::cerr << "output_array0[" << x << "," << y << "," << c << "] = " << output_array0(x, y, c) << ", expected " << 1.5f << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (output_array1(x, y, c) != 3.0f) {
                     std::cerr << "output_array1[" << x << "," << y << "," << c << "] = " << output_array1(x, y, c) << ", expected " << 2.0f << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (untyped_output_buffer(x, y, c) != expected1) {
                     std::cerr << "untyped_output_buffer[" << x << "," << y << "," << c << "] = " << untyped_output_buffer(x, y, c) << ", expected " << expected1 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
                 if (tupled_output_buffer0(x, y, c) != expected1) {
                     std::cerr << "tupled_output_buffer0[" << x << "," << y << "," << c << "] = " << tupled_output_buffer0(x, y, c) << ", expected " << expected1 << "\n";
-                    exit(-1);
+                    exit(1);
                 }
             }
         }
@@ -363,7 +367,7 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
         !strstr(md.target, "wasm") &&
         !strstr(md.target, "arm")) {
         std::cerr << "Expected x86 or arm, Actual " << md.target << "\n";
-        exit(-1);
+        exit(1);
     }
 
     // Not static, since we free make_scalar() results each time
@@ -1349,6 +1353,67 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
     }
 }
 
+template<size_t arg_count>
+constexpr size_t count_buffers(const std::array<::HalideFunctionInfo::ArgumentInfo, arg_count> args) {
+    size_t buffer_count = 0;
+    for (const auto a : args) {
+        if (a.kind == HalideFunctionInfo::InputBuffer || a.kind == HalideFunctionInfo::OutputBuffer) {
+            buffer_count++;
+        }
+    }
+    return buffer_count;
+}
+
+// clang-format off
+constexpr char arginfo_to_sigchar(::HalideFunctionInfo::ArgumentInfo arg) {
+    if (arg.kind == HalideFunctionInfo::InputBuffer) {
+        return '@';
+    } else if (arg.kind == HalideFunctionInfo::OutputBuffer) {
+        return '#';
+    } else {
+
+        #define HANDLE_CASE(CODE, BITS, CHAR)        \
+            case halide_type_t(CODE, BITS).as_u32(): \
+                return (CHAR);
+
+        switch (arg.type.as_u32()) {
+            HANDLE_CASE(halide_type_bfloat, 16, '!')
+            HANDLE_CASE(halide_type_float, 16, 'e')
+            HANDLE_CASE(halide_type_float, 32, 'f')
+            HANDLE_CASE(halide_type_float, 64, 'd')
+            HANDLE_CASE(halide_type_int, 8, 'b')
+            HANDLE_CASE(halide_type_int, 16, 'h')
+            HANDLE_CASE(halide_type_int, 32, 'i')
+            HANDLE_CASE(halide_type_int, 64, 'q')
+            HANDLE_CASE(halide_type_uint, 1, '?')
+            HANDLE_CASE(halide_type_uint, 8, 'B')
+            HANDLE_CASE(halide_type_uint, 16, 'H')
+            HANDLE_CASE(halide_type_uint, 32, 'I')
+            HANDLE_CASE(halide_type_uint, 64, 'Q')
+            HANDLE_CASE(halide_type_handle, 64, 'P')
+        }
+
+        #undef HANDLE_CASE
+    }
+
+    // Shouldn't ever get here, but if we do, we'll fail at *compile* time
+    abort();
+}
+// clang-format on
+
+template<size_t arg_count, size_t... Indices>
+constexpr std::array<char, arg_count + 1> compute_signature_impl(const std::array<::HalideFunctionInfo::ArgumentInfo, arg_count> args,
+                                                                 std::index_sequence<Indices...>) {
+    return {arginfo_to_sigchar(args[Indices])..., 0};
+}
+
+template<size_t arg_count>
+constexpr auto compute_signature(const std::array<::HalideFunctionInfo::ArgumentInfo, arg_count> args) {
+    return compute_signature_impl(args, std::make_index_sequence<arg_count>{});
+}
+
+}  // namespace
+
 int main(int argc, char **argv) {
     void *user_context = nullptr;
 
@@ -1505,16 +1570,36 @@ int main(int argc, char **argv) {
     verify(input, output0, output1, output_scalar, output_array[0], output_array[1], untyped_output_buffer, tupled_output_buffer0, tupled_output_buffer1);
 
     check_metadata(*metadata_tester_metadata(), false);
-    if (!strcmp(metadata_tester_metadata()->name, "metadata_tester_metadata")) {
-        std::cerr << "Expected name metadata_tester_metadata\n";
-        exit(-1);
+    if (strcmp(metadata_tester_metadata()->name, "metadata_tester")) {
+        std::cerr << "Expected name metadata_tester, got " << metadata_tester_metadata()->name << "\n";
+        exit(1);
     }
 
     check_metadata(*metadata_tester_ucon_metadata(), true);
-    if (!strcmp(metadata_tester_ucon_metadata()->name, "metadata_tester_ucon_metadata")) {
-        std::cerr << "Expected name metadata_tester_ucon_metadata\n";
-        exit(-1);
+    if (strcmp(metadata_tester_ucon_metadata()->name, "metadata_tester_ucon")) {
+        std::cerr << "Expected name metadata_tester_ucon, got " << metadata_tester_ucon_metadata()->name << "\n";
+        exit(1);
     }
+
+    constexpr auto sig = compute_signature(metadata_tester_argument_info());
+    if (strcmp(&sig[0], "@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+        // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
+        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &sig[0] << "\n";
+        exit(1);
+    }
+
+    constexpr auto usig = compute_signature(metadata_tester_ucon_argument_info());
+    if (strcmp(&usig[0], "P@@@@i?bhiqBHIQfdP@@@@@@@bbbbhhhhiiiiPP@@@@@@@@@@@@@@@@@@B#############################")) {
+        // NOLINTNEXTLINE(clang-diagnostic-unreachable-code)
+        std::cerr << "Incorrect signature for metadata_tester_ucon_argument_info(): " << &usig[0] << "\n";
+        exit(1);
+    }
+
+    constexpr size_t count = count_buffers(metadata_tester_argument_info());
+    static_assert(count == 58, "Incorrect buffer count for metadata_tester_argument_info");
+
+    constexpr size_t ucount = count_buffers(metadata_tester_ucon_argument_info());
+    static_assert(ucount == 58, "Incorrect buffer count for metadata_tester_ucon_argument_info");
 
     std::cout << "Success!\n";
     return 0;

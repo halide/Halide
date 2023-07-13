@@ -51,8 +51,14 @@ struct MultiDevicePipeline {
 
     void run(Buffer<float> &result) {
         stage[current_stage - 1].realize(result);
-        result.copy_to_host();
-        result.device_free();
+        if (result.copy_to_host() != halide_error_code_success) {
+            fprintf(stderr, "copy_to_host failed\n");
+            exit(1);
+        }
+        if (result.device_free() != halide_error_code_success) {
+            fprintf(stderr, "device_free failed\n");
+            exit(1);
+        }
         result.set_host_dirty();
     }
 
@@ -88,7 +94,7 @@ int main(int argc, char **argv) {
         pipe1.run(output1);
 
         if (!pipe1.verify(output1, pipe1.current_stage - 1, "const input")) {
-            return -1;
+            return 1;
         }
     }
 
@@ -105,7 +111,7 @@ int main(int argc, char **argv) {
         pipe2.run(output2);
 
         if (!pipe2.verify(output2, pipe2.current_stage - 1, "chained buffers intermediate")) {
-            return -1;
+            return 1;
         }
 
         Buffer<float> output3(100, 100, 3);
@@ -113,7 +119,7 @@ int main(int argc, char **argv) {
         pipe3.run(output3);
 
         if (!pipe3.verify(output3, pipe2.current_stage + pipe3.current_stage - 2, "chained buffers")) {
-            return -1;
+            return 1;
         }
     }
 

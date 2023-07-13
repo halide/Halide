@@ -11,11 +11,24 @@ The following sections cover each in detail.
 
 ## Table of Contents
 
+- [Halide and CMake](#halide-and-cmake)
+  - [Table of Contents](#table-of-contents)
 - [Getting started](#getting-started)
   - [Installing CMake](#installing-cmake)
+    - [Cross-platform](#cross-platform)
+    - [Windows](#windows)
+    - [macOS](#macos)
+    - [Ubuntu Linux](#ubuntu-linux)
   - [Installing dependencies](#installing-dependencies)
+    - [Windows](#windows-1)
+    - [macOS](#macos-1)
+    - [Ubuntu](#ubuntu)
 - [Building Halide with CMake](#building-halide-with-cmake)
   - [Basic build](#basic-build)
+    - [Windows](#windows-2)
+    - [macOS and Linux](#macos-and-linux)
+    - [CMake Presets](#cmake-presets)
+  - [Installing](#installing)
   - [Build options](#build-options)
     - [Find module options](#find-module-options)
 - [Using Halide from your CMake build](#using-halide-from-your-cmake-build)
@@ -33,6 +46,12 @@ The following sections cover each in detail.
       - [`add_halide_generator`](#add_halide_generator)
       - [`add_halide_python_extension_library`](#add_halide_python_extension_library)
       - [`add_halide_runtime`](#add_halide_runtime)
+  - [Cross compiling](#cross-compiling)
+    - [Use `add_halide_generator`](#use-add_halide_generator)
+    - [Use a super-build](#use-a-super-build)
+    - [Use `ExternalProject` directly](#use-externalproject-directly)
+    - [Use an emulator or run on device](#use-an-emulator-or-run-on-device)
+    - [Bypass CMake](#bypass-cmake)
 - [Contributing CMake code to Halide](#contributing-cmake-code-to-halide)
   - [General guidelines and best practices](#general-guidelines-and-best-practices)
     - [Prohibited commands list](#prohibited-commands-list)
@@ -409,7 +428,6 @@ LLVM component names):
 | `TARGET_AMDGPU`      | `ON`, _if available_ | Enable the AMD GPU backend          |
 | `TARGET_ARM`         | `ON`, _if available_ | Enable the ARM backend              |
 | `TARGET_HEXAGON`     | `ON`, _if available_ | Enable the Hexagon backend          |
-| `TARGET_MIPS`        | `ON`, _if available_ | Enable the MIPS backend             |
 | `TARGET_NVPTX`       | `ON`, _if available_ | Enable the NVidia PTX backend       |
 | `TARGET_POWERPC`     | `ON`, _if available_ | Enable the PowerPC backend          |
 | `TARGET_RISCV`       | `ON`, _if available_ | Enable the RISC V backend           |
@@ -751,6 +769,8 @@ Variables that control package loading:
 | Variable             | Description                                                                                                                                                                   |
 |----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Halide_SHARED_LIBS` | override `BUILD_SHARED_LIBS` when loading the Halide package via `find_package`. Has no effect when using Halide via `add_subdirectory` as a Git or `FetchContent` submodule. |
+| `Halide_RUNTIME_NO_THREADS` | skip linking of Threads library to runtime. Should be set if your toolchain does not support it (e.g. baremetal). |
+| `Halide_RUNTIME_NO_DL_LIBS` | skip linking of DL library to runtime. Should be set if your toolchain does not support it (e.g. baremetal). |
 
 Variables set by the package:
 
@@ -766,18 +786,27 @@ Variables set by the package:
 | `Halide_ENABLE_EXCEPTIONS` | Whether Halide was compiled with exception support                 |
 | `Halide_ENABLE_RTTI`       | Whether Halide was compiled with RTTI                              |
 
+Variables that control package behavior:
+
+| Variable                   | Description |
+|----------------------------|-------------|
+| `Halide_PYTHON_LAUNCHER`   | Semicolon separated list containing a command to launch the Python interpreter. Can be used to set environment variables for Python generators. |
+| `Halide_NO_DEFAULT_FLAGS`  | Off by default. When enabled, suppresses recommended compiler flags that would be added by `add_halide_generator` |
+
+
 ### Imported targets
 
 Halide defines the following targets that are available to users:
 
-| Imported target      | Description                                                                                                                          |
-|----------------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| `Halide::Halide`     | this is the JIT-mode library to use when using Halide from C++.                                                                      |
-| `Halide::Generator`  | this is the target to use when defining a generator executable. It supplies a `main()` function.                                     |
-| `Halide::Runtime`    | adds include paths to the Halide runtime headers                                                                                     |
-| `Halide::Tools`      | adds include paths to the Halide tools, including the benchmarking utility.                                                          |
-| `Halide::ImageIO`    | adds include paths to the Halide image IO utility and sets up dependencies to PNG / JPEG if they are available.                      |
-| `Halide::RunGenMain` | used with the `REGISTRATION` parameter of `add_halide_library` to create simple runners and benchmarking tools for Halide libraries. |
+| Imported target      | Description                                                                                                                                                                                    |
+|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Halide::Halide`     | this is the JIT-mode library to use when using Halide from C++.                                                                                                                                |
+| `Halide::Generator`  | this is the target to use when defining a generator executable. It supplies a `main()` function.                                                                                               |
+| `Halide::Runtime`    | adds include paths to the Halide runtime headers                                                                                                                                               |
+| `Halide::Tools`      | adds include paths to the Halide tools, including the benchmarking utility.                                                                                                                    |
+| `Halide::ImageIO`    | adds include paths to the Halide image IO utility. Depends on `PNG::PNG` and `JPEG::JPEG` if they exist or were loaded through the corresponding package components.                           |
+| `Halide::ThreadPool` | adds include paths to the Halide _simple_ thread pool utility library. This is not the same as the runtime's thread pool and is intended only for use by tests. Depends on `Threads::Threads`. |
+| `Halide::RunGenMain` | used with the `REGISTRATION` parameter of `add_halide_library` to create simple runners and benchmarking tools for Halide libraries.                                                           |
 
 The following targets are not guaranteed to be available:
 
@@ -812,10 +841,11 @@ add_halide_library(<target> FROM <generator-target>
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
                    [HEADER OUTVAR]
+                   [FUNCTION_INFO_HEADER OUTVAR]
                    [<extra-output> OUTVAR])
 
-extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | CPP_STUB
-             | FEATURIZATION | LLVM_ASSEMBLY | PYTHON_EXTENSION
+extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | FEATURIZATION
+             | LLVM_ASSEMBLY | PYTHON_EXTENSION
              | PYTORCH_WRAPPER | SCHEDULE | STMT | STMT_HTML
 ```
 
@@ -863,10 +893,11 @@ author warning will be issued.
 
 To use an autoscheduler, set the `AUTOSCHEDULER` argument to a target
 named like `Namespace::Scheduler`, for example `Halide::Adams19`. This will set
-the `autoscheduler` GeneratorParam on the generator command line to `Scheduler` and add the target to
-the list of plugins. Additional plugins can be loaded by setting the `PLUGINS`
-argument. If the argument to `AUTOSCHEDULER` does not contain `::` or it does
-not name a target, it will be passed to the `-s` flag verbatim.
+the `autoscheduler` GeneratorParam on the generator command line to `Scheduler`
+and add the target to the list of plugins. Additional plugins can be loaded by
+setting the `PLUGINS` argument. If the argument to `AUTOSCHEDULER` does not
+contain `::` or it does not name a target, it will be passed to the `-s` flag
+verbatim.
 
 If `GRADIENT_DESCENT` is set, then the module will be built suitably for
 gradient descent calculation in TensorFlow or PyTorch. See
@@ -888,6 +919,16 @@ If `HEADER` is set, the path (relative to `CMAKE_CURRENT_BINARY_DIR`) to the
 generated `.h` header file will be set in `OUTVAR`. This can be used with
 `install(FILES)` to conveniently deploy the generated header along with your
 library.
+
+If `FUNCTION_INFO_HEADER` is set, the path (relative to
+`CMAKE_CURRENT_BINARY_DIR`) to the generated `.function_info.h` header file
+will be set in `OUTVAR`. This produces a file that contains `constexpr`
+descriptions of information about the generated functions (e.g., argument
+type and information). It is generated separately from the normal `HEADER`
+file because `HEADER` is intended to work with basic `extern "C"` linkage,
+while `FUNCTION_INFO_HEADER` requires C++17 or later to use effectively.
+(This can be quite useful for advanced usages, such as producing automatic
+call wrappers, etc.) Examples of usage can be found in the generated file.
 
 Lastly, each of the `extra-output` arguments directly correspond to an extra
 output (via `-e`) from the generator. The value `OUTVAR` names a variable into
@@ -935,14 +976,15 @@ generators were imported (and hence won't be built). Otherwise, it will be set
 to false. This variable may be used to conditionally set properties on
 `<target>`.
 
-Please see [test/integration/xc](https://github.com/halide/Halide/tree/master/test/integration/xc) for a simple example
-and [apps/hannk](https://github.com/halide/Halide/tree/master/apps/hannk) for a complete app that uses it extensively.
+Please see [test/integration/xc](https://github.com/halide/Halide/tree/main/test/integration/xc) for a simple example
+and [apps/hannk](https://github.com/halide/Halide/tree/main/apps/hannk) for a complete app that uses it extensively.
 
 If `PYSTUB` is specified, then a Python Extension will be built that
 wraps the Generator with CPython glue to allow use of the Generator
 Python 3.x. The result will be a a shared library of the form
-`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.) See
-`README_python.md` for examples of use.
+`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python
+version and platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.).
+See `README_python.md` for examples of use.
 
 #### `add_halide_python_extension_library`
 
@@ -1190,7 +1232,7 @@ without broader approval. Confine dependencies to the `dependencies/` subtree.
 Any variables that are specific to languages that are not enabled should, of
 course, be avoided. But of greater concern are variables that are easy to misuse
 or should not be overridden for our end-users. The following (non-exhaustive)
-list of variables shall not be used in code merged into master.
+list of variables shall not be used in code merged into main.
 
 | Variable                        | Reason                                        | Alternative                                                                                             |
 |---------------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------|

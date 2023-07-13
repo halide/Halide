@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 
     if (checker.if_in_loop) {
         printf("Found an if statement inside a loop. This was not supposed to happen\n");
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

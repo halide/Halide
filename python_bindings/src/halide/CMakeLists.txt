@@ -18,7 +18,6 @@ set(native_sources
     PyIROperator.cpp
     PyLambda.cpp
     PyLoopLevel.cpp
-    PyMachineParams.cpp
     PyModule.cpp
     PyParam.cpp
     PyPipeline.cpp
@@ -35,6 +34,7 @@ list(TRANSFORM native_sources PREPEND "halide_/")
 set(python_sources
     __init__.py
     _generator_helpers.py
+    imageio.py
     )
 
 # It is technically still possible for a user to override the LIBRARY_OUTPUT_DIRECTORY by setting
@@ -51,6 +51,13 @@ set_target_properties(
     LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>/halide"
     EXPORT_NAME Python
 )
+if (Halide_ASAN_ENABLED)
+    set_target_properties(
+        Halide_Python
+        PROPERTIES
+        CMAKE_SHARED_LINKER_FLAGS -shared-libasan
+    )
+endif ()
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
 # TODO: There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH

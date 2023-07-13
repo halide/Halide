@@ -29,14 +29,13 @@ namespace Halide {
 namespace Internal {
 
 inline int64_t saturating_mul(int64_t a, int64_t b) {
-    if (mul_would_overflow(64, a, b)) {
-        if ((a > 0) == (b > 0)) {
-            return INT64_MAX;
-        } else {
-            return INT64_MIN;
-        }
+    int64_t result;
+    if (mul_with_overflow(64, a, b, &result)) {
+        return result;
+    } else if ((a > 0) == (b > 0)) {
+        return INT64_MAX;
     } else {
-        return a * b;
+        return INT64_MIN;
     }
 }
 
@@ -60,18 +59,24 @@ public:
                 min = max = alignment.remainder;
             } else if (alignment.modulus > 1) {
                 if (min_defined) {
-                    int64_t new_min = min - mod_imp(min, alignment.modulus) + alignment.remainder;
-                    if (new_min < min) {
-                        new_min += alignment.modulus;
+                    int64_t adjustment;
+                    bool no_overflow = sub_with_overflow(64, alignment.remainder, mod_imp(min, alignment.modulus), &adjustment);
+                    adjustment = mod_imp(adjustment, alignment.modulus);
+                    int64_t new_min;
+                    no_overflow &= add_with_overflow(64, min, adjustment, &new_min);
+                    if (no_overflow) {
+                        min = new_min;
                     }
-                    min = new_min;
                 }
                 if (max_defined) {
-                    int64_t new_max = max - mod_imp(max, alignment.modulus) + alignment.remainder;
-                    if (new_max > max) {
-                        new_max -= alignment.modulus;
+                    int64_t adjustment;
+                    bool no_overflow = sub_with_overflow(64, mod_imp(max, alignment.modulus), alignment.remainder, &adjustment);
+                    adjustment = mod_imp(adjustment, alignment.modulus);
+                    int64_t new_max;
+                    no_overflow &= sub_with_overflow(64, max, adjustment, &new_max);
+                    if (no_overflow) {
+                        max = new_max;
                     }
-                    max = new_max;
                 }
             }
 
@@ -110,7 +115,7 @@ public:
         }
     }
 
-#if (LOG_EXPR_MUTATORIONS || LOG_STMT_MUTATIONS)
+#if (LOG_EXPR_MUTATIONS || LOG_STMT_MUTATIONS)
     static int debug_indent;
 #endif
 
@@ -159,7 +164,7 @@ public:
 #endif
 
     bool remove_dead_code;
-    bool no_float_simplify;
+    bool no_float_simplify = false;
 
     HALIDE_ALWAYS_INLINE
     bool may_simplify(const Type &t) const {
@@ -289,9 +294,6 @@ public:
         f.learn_false(fact);
         return f;
     }
-
-    template<typename T>
-    Expr hoist_slice_vector(Expr e);
 
     Stmt mutate_let_body(const Stmt &s, ExprInfo *) {
         return mutate(s);

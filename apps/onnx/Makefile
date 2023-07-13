@@ -1,5 +1,11 @@
 include ../support/Makefile.inc
 
+ifneq (,$(findstring -m32,$(CXX) $(CC) $(CCFLAGS) $(CXXFLAGS)))
+build:
+	@echo "Not testing this app in a 32-bit build (-m32 found in flags)"
+test: build
+else
+
 PROTOC := $(shell which protoc)
 
 ifdef PROTOC
@@ -72,7 +78,7 @@ $(BIN)/%/onnx_converter_generator_test: onnx_converter_generator_test.cc $(BIN)/
 
 build: $(BIN)/$(HL_TARGET)/onnx_converter_test $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
-test: build
+test: build model_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
@@ -88,7 +94,7 @@ PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) -Wno-deprecated-register
 
 # Python extension for HalideModel
 $(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a
-	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $^ $(LIBHALIDE_LDFLAGS) -o $@ $(LDFLAGS)
+	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $^ $(LIBHALIDE_LDFLAGS) -Wl,--no-as-needed -lautoschedule_adams2019 -Wl,--as-needed -o $@ $(LDFLAGS)
 
 
 model_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)
@@ -103,4 +109,5 @@ build:
 	@echo "No protoc in $(PATH), you need to install protocol buffers"
 test: build
 
+endif
 endif

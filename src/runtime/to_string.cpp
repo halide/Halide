@@ -265,6 +265,9 @@ WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *t) {
     case halide_type_handle:
         code_name = "handle";
         break;
+    case halide_type_bfloat:
+        code_name = "bfloat";
+        break;
     default:
         code_name = "bad_type_code";
         break;
@@ -282,7 +285,8 @@ WEAK char *halide_buffer_to_string(char *dst, char *end, const halide_buffer_t *
     if (buf == nullptr) {
         return halide_string_to_string(dst, end, "nullptr");
     }
-    dst = halide_string_to_string(dst, end, "buffer(");
+    dst = halide_pointer_to_string(dst, end, buf);
+    dst = halide_string_to_string(dst, end, " -> buffer(");
     dst = halide_uint64_to_string(dst, end, buf->device, 1);
     dst = halide_string_to_string(dst, end, ", ");
     dst = halide_pointer_to_string(dst, end, buf->device_interface);

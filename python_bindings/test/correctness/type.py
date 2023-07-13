@@ -1,5 +1,6 @@
 import halide as hl
 
+
 def test_type():
     t1 = hl.Type()
     assert t1.code() == hl.TypeCode.Handle
@@ -78,6 +79,7 @@ def test_type():
     assert repr(i32) == "<halide.Type int32>"
     assert str(vi32x8) == "int32x8"
     assert repr(vi32x8) == "<halide.Type int32x8>"
+
 
 if __name__ == "__main__":
     test_type()

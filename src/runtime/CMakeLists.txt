@@ -18,6 +18,8 @@ set(RUNTIME_CPP
     fake_get_symbol
     fake_thread_pool
     float16_t
+    fopen
+    fopen_lfs
     force_include_types
     fuchsia_clock
     fuchsia_host_cpu_count
@@ -36,7 +38,6 @@ set(RUNTIME_CPP
     metal
     metal_objc_arm
     metal_objc_x86
-    mips_cpu_features
     module_aot_ref_count
     module_jit_ref_count
     msan
@@ -50,6 +51,7 @@ set(RUNTIME_CPP
     osx_host_cpu_count
     osx_opengl_context
     osx_yield
+    posix_aligned_alloc
     posix_allocator
     posix_clock
     posix_error_handler
@@ -76,17 +78,23 @@ set(RUNTIME_CPP
     to_string
     trace_helper
     tracing
+    vulkan
     wasm_cpu_features
+    # TODO(https://github.com/halide/Halide/issues/7248)
+    # webgpu
+    webgpu_dawn
+    webgpu_emscripten
     windows_clock
     windows_cuda
-    windows_d3d12compute_x86
     windows_d3d12compute_arm
+    windows_d3d12compute_x86
     windows_get_symbol
     windows_io
     windows_opencl
     windows_profiler
     windows_threads
     windows_threads_tsan
+    windows_vulkan
     windows_yield
     write_debug_image
     x86_cpu_features
@@ -97,7 +105,6 @@ set(RUNTIME_LL
     arm
     arm_no_neon
     hvx_128
-    mips
     posix_math
     powerpc
     ptx_dev
@@ -130,6 +137,8 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeOpenCL.h
     HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
+    HalideRuntimeVulkan.h
+    HalideRuntimeWebGPU.h
     )
 
 # Need to create an object library for this because CMake
@@ -153,6 +162,7 @@ set(RUNTIME_CXX_FLAGS
     # Necessary for using virtual functions in the runtime code.
     -fno-rtti
     -Wall
+    -Wc++20-designator
     -Wcast-qual
     -Werror
     -Wignored-qualifiers
@@ -222,7 +232,12 @@ foreach (i IN LISTS RUNTIME_CPP)
 
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
 
-        set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DBITS_${j})
+        set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DBITS_${j}
+                            -DHALIDE_VERSION=${Halide_VERSION} 
+                            -DHALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
+                            -DHALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
+                            -DHALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
+
         set(RUNTIME_DEFINES_debug -g -DDEBUG_RUNTIME ${RUNTIME_DEFINES})
 
         foreach (SUFFIX IN ITEMS "" "_debug")
@@ -243,14 +258,14 @@ foreach (i IN LISTS RUNTIME_CPP)
                 target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
             else()
                 add_custom_command(OUTPUT "${LL}"
-                                   COMMAND ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
+                                   COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
                                    DEPENDS "${SOURCE}"
                                    DEPFILE "${basename}.d"
                                    VERBATIM)
             endif()
 
             add_custom_command(OUTPUT "${BC}"
-                               COMMAND llvm-as "${LL}" -o "${BC}"
+                               COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL}" -o "${BC}"
                                DEPENDS "${LL}"
                                VERBATIM)
 
@@ -270,31 +285,14 @@ foreach (i IN LISTS RUNTIME_LL)
     set(BC "initmod.${i}.bc")
     set(INITMOD "_initmod_${i}.cpp")
 
-    # For LLVM14+, we must add elementtype() annotations to some of our LLVM IR;
-    # earlier versions either don't understand that keyword at all, or don't support
-    # the uses we have for it. Rather than forking these sources, for now we'll just
-    # edit the files at build time to remove the offending uses. Note that `sed` and friends aren't
-    # an option for CMake builds (since they must support Windows environments without
-    # such tooling).
-    #
-    # (This may well need attention in the future, depending on how the LLVM opaque-pointers work proceeeds;
-    # see https://llvm.org/docs/OpaquePointers.html)
-
     set(LL_TRANSFORMED "${LL}.transformed.ll")
-    if (LLVM_PACKAGE_VERSION VERSION_LESS 14.0.0)
-        add_custom_command(OUTPUT "${LL_TRANSFORMED}"
-                           COMMAND regexp_replace "elementtype\\(i[0-9]+\\)" "" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" > "${LL_TRANSFORMED}"
-                           DEPENDS "${LL}" regexp_replace
-                           VERBATIM)
-    else ()
-        add_custom_command(OUTPUT "${LL_TRANSFORMED}"
-                           COMMAND ${CMAKE_COMMAND} -E copy "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" "${LL_TRANSFORMED}"
-                           DEPENDS "${LL}"
-                           VERBATIM)
-    endif ()
+    add_custom_command(OUTPUT "${LL_TRANSFORMED}"
+                       COMMAND ${CMAKE_COMMAND} -E copy "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" "${LL_TRANSFORMED}"
+                       DEPENDS "${LL}"
+                       VERBATIM)
 
     add_custom_command(OUTPUT "${BC}"
-                       COMMAND llvm-as "${LL_TRANSFORMED}" -o "${BC}"
+                       COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:llvm-as> "${LL_TRANSFORMED}" -o "${BC}"
                        DEPENDS "${LL_TRANSFORMED}"
                        VERBATIM)
     add_custom_command(OUTPUT "${INITMOD}"

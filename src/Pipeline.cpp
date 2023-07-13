@@ -12,7 +12,6 @@
 #include "LLVM_Output.h"
 #include "Lower.h"
 #include "Module.h"
-#include "ParamMap.h"
 #include "Pipeline.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
@@ -220,17 +219,6 @@ std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
     return autoschedulers;
 }
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-/* static */
-std::string &Pipeline::get_default_autoscheduler_name() {
-    static std::string autoscheduler_name = "";
-    if (autoscheduler_name.empty() && !get_autoscheduler_map().empty()) {
-        autoscheduler_name = get_autoscheduler_map().begin()->first;
-    }
-    return autoscheduler_name;
-}
-#endif
-
 /* static */
 AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_name) {
     const auto &m = get_autoscheduler_map();
@@ -246,25 +234,6 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
     return it->second;
 }
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) const {
-    auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
-    user_assert(autoscheduler_fn)
-        << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
-        << "Did you remember to load the plugin?";
-
-    AutoSchedulerResults results;
-    results.target = target;
-    results.machine_params_string = arch_params.to_string();
-
-    autoscheduler_fn(*this, target, arch_params, &results);
-    return results;
-}
-
-AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) const {
-    return auto_schedule(get_default_autoscheduler_name(), target, arch_params);
-}
-#else
 AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const AutoschedulerParams &autoscheduler_params) const {
     user_assert(!autoscheduler_params.name.empty()) << "apply_autoscheduler was called with no Autoscheduler specified.";
 
@@ -280,7 +249,6 @@ AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const A
     autoscheduler_fn(*this, target, autoscheduler_params, &results);
     return results;
 }
-#endif
 
 /* static */
 void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler) {
@@ -288,14 +256,6 @@ void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const Au
     user_assert(m.find(autoscheduler_name) == m.end()) << "'" << autoscheduler_name << "' is already registered as an autoscheduler.\n";
     m[autoscheduler_name] = autoscheduler;
 }
-
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-/* static */
-void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_name) {
-    (void)find_autoscheduler(autoscheduler_name);  // ensure it's valid
-    get_default_autoscheduler_name() = autoscheduler_name;
-}
-#endif
 
 Func Pipeline::get_func(size_t index) {
     // Compute an environment
@@ -738,15 +698,13 @@ JITHandlers &Pipeline::jit_handlers() {
     return contents->jit_handlers;
 }
 
-Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
-                              const ParamMap &param_map) {
-    return realize(nullptr, std::move(sizes), target, param_map);
+Realization Pipeline::realize(vector<int32_t> sizes, const Target &target) {
+    return realize(nullptr, std::move(sizes), target);
 }
 
 Realization Pipeline::realize(JITUserContext *context,
                               vector<int32_t> sizes,
-                              const Target &target,
-                              const ParamMap &param_map) {
+                              const Target &target) {
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
     for (auto &out : contents->outputs) {
@@ -761,13 +719,13 @@ Realization Pipeline::realize(JITUserContext *context,
     // Do an output bounds query if we can. Otherwise just assume the
     // output size is good.
     if (!target.has_feature(Target::NoBoundsQuery)) {
-        realize(context, r, target, param_map);
+        realize(context, r, target);
     }
     for (size_t i = 0; i < r.size(); i++) {
         r[i].allocate();
     }
     // Do the actual computation
-    realize(context, r, target, param_map);
+    realize(context, r, target);
 
     // Crop back to the requested size if necessary
     bool needs_crop = false;
@@ -785,7 +743,8 @@ Realization Pipeline::realize(JITUserContext *context,
         if (needs_crop) {
             r[i].crop(crop);
         }
-        r[i].copy_to_host(context);
+        auto result = r[i].copy_to_host(context);
+        user_assert(result == halide_error_code_success) << "copy_to_host() failed with error: " << result;
     }
     return r;
 }
@@ -832,7 +791,7 @@ void Pipeline::trace_pipeline() {
 // currently bound value for all of the params and image
 // params.
 void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target &target,
-                                          const ParamMap &param_map, JITUserContext **user_context,
+                                          JITUserContext **user_context,
                                           bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
@@ -848,8 +807,6 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
     internal_assert(compiled_module.argv_function() ||
                     contents->jit_cache.wasm_module.contents.defined());
 
-    const bool no_param_map = &param_map == &ParamMap::empty_map();
-
     // Come up with the void * arguments to pass to the argv function
     size_t arg_index = 0;
     for (const InferredArgument &arg : contents->inferred_args) {
@@ -858,7 +815,7 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
                 args_result.store[arg_index++] = user_context;
             } else {
                 Buffer<> *buf_out_param = nullptr;
-                const Parameter &p = no_param_map ? arg.param : param_map.map(arg.param, buf_out_param);
+                const Parameter &p = arg.param;
                 user_assert(is_bounds_inference || !buf_out_param)
                     << "Cannot pass Buffer<> pointers in parameters map to a compute call.\n";
 
@@ -954,18 +911,19 @@ int Pipeline::call_jit_code(const Target &target, const JITCallArgs &args) {
     return contents->jit_cache.call_jit_code(target, args.store);
 }
 
-void Pipeline::realize(RealizationArg outputs,
-                       const Target &t,
-                       const ParamMap &param_map) {
-    realize(nullptr, std::move(outputs), t, param_map);
+void Pipeline::realize(RealizationArg outputs, const Target &t) {
+    realize(nullptr, std::move(outputs), t);
 }
 
 void Pipeline::realize(JITUserContext *context,
                        RealizationArg outputs,
-                       const Target &t,
-                       const ParamMap &param_map) {
+                       const Target &t) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
+
+    if (t.has_feature(Target::OpenGLCompute)) {
+        user_warning << "WARNING: OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.\n";
+    }
 
     debug(2) << "Realizing Pipeline for " << target << "\n";
 
@@ -1011,8 +969,7 @@ void Pipeline::realize(JITUserContext *context,
     JITFuncCallContext jit_call_context(context, jit_handlers());
 
     JITCallArgs args(contents->inferred_args.size() + outputs.size());
-    prepare_jit_call_arguments(outputs, target, param_map,
-                               &context, false, args);
+    prepare_jit_call_arguments(outputs, target, &context, false, args);
 
     // The handlers in the jit_context default to the default handlers
     // in the runtime of the shared module (e.g. halide_print_impl,
@@ -1061,14 +1018,13 @@ void Pipeline::realize(JITUserContext *context,
     jit_call_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, const ParamMap &param_map) {
-    infer_input_bounds(nullptr, std::move(outputs), target, param_map);
+void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target) {
+    infer_input_bounds(nullptr, std::move(outputs), target);
 }
 
 void Pipeline::infer_input_bounds(JITUserContext *context,
                                   RealizationArg outputs,
-                                  const Target &target,
-                                  const ParamMap &param_map) {
+                                  const Target &target) {
     user_assert(!target.has_feature(Target::NoBoundsQuery)) << "You may not call infer_input_bounds() with Target::NoBoundsQuery set.";
     compile_jit(target);
 
@@ -1081,7 +1037,7 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
 
     size_t args_size = contents->inferred_args.size() + outputs.size();
     JITCallArgs args(args_size);
-    prepare_jit_call_arguments(outputs, contents->jit_cache.jit_target, param_map,
+    prepare_jit_call_arguments(outputs, contents->jit_cache.jit_target,
                                &context, true, args);
 
     struct TrackedBuffer {
@@ -1156,7 +1112,7 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
     for (size_t i : query_indices) {
         InferredArgument ia = contents->inferred_args[i];
         Buffer<> *buf_out_param = nullptr;
-        Parameter &p = param_map.map(ia.param, buf_out_param);
+        Parameter &p = ia.param;
 
         if (&p != &ia.param) {
             user_assert(buf_out_param != nullptr) << "Output Buffer<> arguments to infer_input_bounds in parameters map must be passed as pointers.\n";
@@ -1176,23 +1132,20 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
     }
 }
 
-void Pipeline::infer_input_bounds(const std::vector<int32_t> &sizes,
-                                  const Target &target,
-                                  const ParamMap &param_map) {
-    infer_input_bounds(nullptr, sizes, target, param_map);
+void Pipeline::infer_input_bounds(const std::vector<int32_t> &sizes, const Target &target) {
+    infer_input_bounds(nullptr, sizes, target);
 }
 
 void Pipeline::infer_input_bounds(JITUserContext *context,
                                   const std::vector<int32_t> &sizes,
-                                  const Target &target,
-                                  const ParamMap &param_map) {
+                                  const Target &target) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
     vector<Buffer<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
         bufs.emplace_back(t, sizes);
     }
     Realization r(std::move(bufs));
-    infer_input_bounds(context, r, target, param_map);
+    infer_input_bounds(context, r, target);
 }
 
 void Pipeline::invalidate_cache() {
@@ -1213,30 +1166,6 @@ JITExtern::JITExtern(const ExternCFunction &extern_c_function)
     : extern_c_function_(extern_c_function) {
 }
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-MachineParams MachineParams::generic() {
-    std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
-    if (params.empty()) {
-        return MachineParams(16, 16 * 1024 * 1024, 40);
-    } else {
-        return MachineParams(params);
-    }
-}
-
-std::string MachineParams::to_string() const {
-    std::ostringstream o;
-    o << parallelism << "," << last_level_cache_size << "," << balance;
-    return o.str();
-}
-
-MachineParams::MachineParams(const std::string &s) {
-    std::vector<std::string> v = Internal::split_string(s, ",");
-    user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
-    parallelism = std::atoi(v[0].c_str());
-    last_level_cache_size = std::atoll(v[1].c_str());
-    balance = std::atof(v[2].c_str());
-}
-#else
 std::string AutoschedulerParams::to_string() const {
     std::ostringstream os;
     if (!name.empty()) {
@@ -1247,6 +1176,5 @@ std::string AutoschedulerParams::to_string() const {
     }
     return os.str();
 }
-#endif
 
 }  // namespace Halide

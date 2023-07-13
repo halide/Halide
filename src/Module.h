@@ -13,9 +13,6 @@
 
 #include "Argument.h"
 #include "Expr.h"
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-#include "ExternalCode.h"
-#endif
 #include "Function.h"  // for NameMangling
 #include "ModulusRemainder.h"
 
@@ -34,6 +31,7 @@ enum class OutputFileType {
     compiler_log,
     cpp_stub,
     featurization,
+    function_info_header,
     llvm_assembly,
     object,
     python_extension,
@@ -141,7 +139,7 @@ class Module {
     Internal::IntrusivePtr<Internal::ModuleContents> contents;
 
 public:
-    Module(const std::string &name, const Target &target);
+    Module(const std::string &name, const Target &target, const MetadataNameMap &metadata_name_map = {});
 
     /** Get the target this module has been lowered for. */
     const Target &target() const;
@@ -163,9 +161,6 @@ public:
     const std::vector<Internal::LoweredFunc> &functions() const;
     std::vector<Internal::LoweredFunc> &functions();
     const std::vector<Module> &submodules() const;
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    const std::vector<ExternalCode> &external_code() const;
-#endif
     // @}
 
     /** Return the function with the given name. If no such function
@@ -177,9 +172,6 @@ public:
     void append(const Buffer<void> &buffer);
     void append(const Internal::LoweredFunc &function);
     void append(const Module &module);
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    void append(const ExternalCode &external_code);
-#endif
     // @}
 
     /** Compile a halide Module to variety of outputs, depending on

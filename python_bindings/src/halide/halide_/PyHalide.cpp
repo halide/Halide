@@ -16,9 +16,6 @@
 #include "PyImageParam.h"
 #include "PyInlineReductions.h"
 #include "PyLambda.h"
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-#include "PyMachineParams.h"
-#endif
 #include "PyModule.h"
 #include "PyParam.h"
 #include "PyPipeline.h"
@@ -56,9 +53,6 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_extern_func_argument(m);
     define_var(m);
     define_rdom(m);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    define_machine_params(m);
-#endif
     define_module(m);
     define_callable(m);
     define_func(m);
@@ -104,17 +98,31 @@ Expr double_to_expr_check(double v) {
 std::vector<Expr> collect_print_args(const py::args &args) {
     std::vector<Expr> v;
     v.reserve(args.size());
-    for (size_t i = 0; i < args.size(); ++i) {
+    for (const auto &arg : args) {
         // No way to see if a cast will work: just have to try
         // and fail. Normally we don't want string to be convertible
         // to Expr, but in this unusual case we do.
         try {
-            v.emplace_back(args[i].cast<std::string>());
+            v.emplace_back(arg.cast<std::string>());
         } catch (...) {
-            v.push_back(args[i].cast<Expr>());
+            v.push_back(arg.cast<Expr>());
         }
     }
     return v;
+}
+
+Target to_jit_target(const Target &target) {
+    if (target != Target()) {
+        return target;
+    }
+    return get_jit_target_from_environment();
+}
+
+Target to_aot_target(const Target &target) {
+    if (target != Target()) {
+        return target;
+    }
+    return get_target_from_environment();
 }
 
 }  // namespace PythonBindings

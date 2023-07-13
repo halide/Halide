@@ -41,24 +41,12 @@ static void cpuid(int info[4], int infoType, int extra) {
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
-#ifdef _LP64
 void cpuid(int info[4], int infoType, int extra) {
     __asm__ __volatile__(
         "cpuid                 \n\t"
         : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
         : "0"(infoType), "2"(extra));
 }
-#else
-static void cpuid(int info[4], int infoType, int extra) {
-    // We save %ebx in case it's the PIC register
-    __asm__ __volatile__(
-        "mov{l}\t{%%}ebx, %1  \n\t"
-        "cpuid                 \n\t"
-        "xchg{l}\t{%%}ebx, %1  \n\t"
-        : "=a"(info[0]), "=r"(info[1]), "=c"(info[2]), "=d"(info[3])
-        : "0"(infoType), "2"(extra));
-}
-#endif
 #endif
 #endif
 
@@ -173,9 +161,6 @@ Target calculate_host_target() {
 
 #if __riscv
     Target::Arch arch = Target::RISCV;
-#else
-#if __mips__ || __mips || __MIPS__
-    Target::Arch arch = Target::MIPS;
 #else
 #if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
@@ -295,7 +280,6 @@ Target calculate_host_target() {
 #endif
 #endif
 #endif
-#endif
 
     return {os, arch, bits, processor, initial_features, vector_bits};
 }
@@ -306,7 +290,6 @@ bool is_using_hexagon(const Target &t) {
             t.has_feature(Target::HVX_v65) ||
             t.has_feature(Target::HVX_v66) ||
             t.has_feature(Target::HexagonDma) ||
-            t.has_feature(Target::HVX_shared_object) ||
             t.arch == Target::Hexagon);
 }
 
@@ -374,6 +357,29 @@ Target::Feature get_host_cuda_capability(Target t) {
     return cap;
 }
 
+Target::Feature calculate_host_vulkan_capability(Target t) {
+    const auto *interface = get_device_interface_for_device_api(DeviceAPI::Vulkan, t);
+    internal_assert(interface->compute_capability);
+    int major, minor;
+    int err = interface->compute_capability(nullptr, &major, &minor);
+    internal_assert(err == 0) << "Failed to query vulkan compute capability\n";
+    int ver = major * 10 + minor;
+    if (ver < 10) {
+        return Target::FeatureEnd;
+    } else if (ver < 12) {
+        return Target::VulkanV10;
+    } else if (ver < 13) {
+        return Target::VulkanV12;
+    } else {
+        return Target::VulkanV13;
+    }
+}
+
+Target::Feature get_host_vulkan_capability(Target t) {
+    static Target::Feature cap = calculate_host_vulkan_capability(t);
+    return cap;
+}
+
 const std::map<std::string, Target::OS> os_name_map = {
     {"os_unknown", Target::OSUnknown},
     {"linux", Target::Linux},
@@ -399,7 +405,6 @@ const std::map<std::string, Target::Arch> arch_name_map = {
     {"arch_unknown", Target::ArchUnknown},
     {"x86", Target::X86},
     {"arm", Target::ARM},
-    {"mips", Target::MIPS},
     {"powerpc", Target::POWERPC},
     {"hexagon", Target::Hexagon},
     {"wasm", Target::WebAssembly},
@@ -489,7 +494,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"hvx_v62", Target::HVX_v62},
     {"hvx_v65", Target::HVX_v65},
     {"hvx_v66", Target::HVX_v66},
-    {"hvx_shared_object", Target::HVX_shared_object},
     {"fuzz_float_stores", Target::FuzzFloatStores},
     {"soft_float_abi", Target::SoftFloatABI},
     {"msan", Target::MSAN},
@@ -509,16 +513,13 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"check_unsafe_promises", Target::CheckUnsafePromises},
     {"hexagon_dma", Target::HexagonDma},
     {"embed_bitcode", Target::EmbedBitcode},
-    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-    {"disable_llvm_loop_opt", Target::DisableLLVMLoopOpt},
     {"enable_llvm_loop_opt", Target::EnableLLVMLoopOpt},
     {"wasm_simd128", Target::WasmSimd128},
     {"wasm_signext", Target::WasmSignExt},
     {"wasm_sat_float_to_int", Target::WasmSatFloatToInt},
     {"wasm_threads", Target::WasmThreads},
     {"wasm_bulk_memory", Target::WasmBulkMemory},
+    {"webgpu", Target::WebGPU},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
@@ -529,6 +530,16 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
     {"spirv", Target::SPIRV},
+    {"vulkan", Target::Vulkan},
+    {"vk_int8", Target::VulkanInt8},
+    {"vk_int16", Target::VulkanInt16},
+    {"vk_int64", Target::VulkanInt64},
+    {"vk_float16", Target::VulkanFloat16},
+    {"vk_float64", Target::VulkanFloat64},
+    {"vk_v10", Target::VulkanV10},
+    {"vk_v12", Target::VulkanV12},
+    {"vk_v13", Target::VulkanV13},
+    {"semihosting", Target::Semihosting},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -676,6 +687,15 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::CUDACapability86)) {
         // Detect host cuda capability
         t.set_feature(get_host_cuda_capability(t));
+    }
+
+    if (is_host &&
+        t.has_feature(Target::Vulkan) &&
+        !t.has_feature(Target::VulkanV10) &&
+        !t.has_feature(Target::VulkanV12) &&
+        !t.has_feature(Target::VulkanV13)) {
+        // Detect host vulkan capability
+        t.set_feature(get_host_vulkan_capability(t));
     }
 
     if (arch_specified && !bits_specified) {
@@ -842,9 +862,6 @@ bool Target::supported() const {
 #if !defined(WITH_X86)
     bad |= arch == Target::X86;
 #endif
-#if !defined(WITH_MIPS)
-    bad |= arch == Target::MIPS;
-#endif
 #if !defined(WITH_POWERPC)
     bad |= arch == Target::POWERPC;
 #endif
@@ -871,6 +888,12 @@ bool Target::supported() const {
 #endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
+#endif
+#if !defined(WITH_VULKAN)
+    bad |= has_feature(Target::Vulkan);
+#endif
+#if !defined(WITH_WEBGPU)
+    bad |= has_feature(Target::WebGPU);
 #endif
     return !bad;
 }
@@ -936,7 +959,9 @@ bool Target::has_gpu_feature() const {
             has_feature(OpenCL) ||
             has_feature(Metal) ||
             has_feature(D3D12Compute) ||
-            has_feature(OpenGLCompute));
+            has_feature(OpenGLCompute) ||
+            has_feature(Vulkan) ||
+            has_feature(WebGPU));
 }
 
 int Target::get_cuda_capability_lower_bound() const {
@@ -973,17 +998,37 @@ int Target::get_cuda_capability_lower_bound() const {
     return 20;
 }
 
+int Target::get_vulkan_capability_lower_bound() const {
+    if (!has_feature(Target::Vulkan)) {
+        return -1;
+    }
+    if (has_feature(Target::VulkanV10)) {
+        return 10;
+    }
+    if (has_feature(Target::VulkanV12)) {
+        return 12;
+    }
+    if (has_feature(Target::VulkanV13)) {
+        return 13;
+    }
+    return 10;
+}
+
 bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
-            return !has_feature(Metal) &&
-                   !has_feature(OpenGLCompute) &&
-                   !has_feature(D3D12Compute) &&
-                   (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
+            return (!has_feature(Metal) &&
+                    !has_feature(OpenGLCompute) &&
+                    !has_feature(D3D12Compute) &&
+                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles)) &&
+                    (!has_feature(Vulkan) || has_feature(Target::VulkanFloat64)) &&
+                    !has_feature(WebGPU));
         } else {
             return (!has_feature(Metal) &&
                     !has_feature(OpenGLCompute) &&
-                    !has_feature(D3D12Compute));
+                    !has_feature(D3D12Compute) &&
+                    (!has_feature(Vulkan) || has_feature(Target::VulkanInt64)) &&
+                    !has_feature(WebGPU));
         }
     }
     return true;
@@ -1013,6 +1058,20 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
         // types are not supported.
         return t.bits() < 64;
     } else if (device == DeviceAPI::OpenGLCompute) {
+        return t.bits() < 64;
+    } else if (device == DeviceAPI::Vulkan) {
+        if (t.is_float() && t.bits() == 64) {
+            return has_feature(Target::VulkanFloat64);
+        } else if (t.is_float() && t.bits() == 16) {
+            return has_feature(Target::VulkanFloat16);
+        } else if (t.is_int_or_uint() && t.bits() == 64) {
+            return has_feature(Target::VulkanInt64);
+        } else if (t.is_int_or_uint() && t.bits() == 16) {
+            return has_feature(Target::VulkanInt16);
+        } else if (t.is_int_or_uint() && t.bits() == 8) {
+            return has_feature(Target::VulkanInt8);
+        }
+    } else if (device == DeviceAPI::WebGPU) {
         return t.bits() < 64;
     }
 
@@ -1058,6 +1117,12 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     }
+    if (has_feature(Target::Vulkan)) {
+        return DeviceAPI::Vulkan;
+    }
+    if (has_feature(Target::WebGPU)) {
+        return DeviceAPI::WebGPU;
+    }
     return DeviceAPI::None;
 }
 
@@ -1075,6 +1140,10 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::HVX;
     case DeviceAPI::D3D12Compute:
         return Target::D3D12Compute;
+    case DeviceAPI::Vulkan:
+        return Target::Vulkan;
+    case DeviceAPI::WebGPU:
+        return Target::WebGPU;
     default:
         return Target::FeatureEnd;
     }
@@ -1157,7 +1226,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
     // clang-format off
-    const std::array<Feature, 18> union_features = {{
+    const std::array<Feature, 23> union_features = {{
         // These are true union features.
         CUDA,
         D3D12Compute,
@@ -1165,6 +1234,8 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         NoNEON,
         OpenCL,
         OpenGLCompute,
+        Vulkan,
+        WebGPU,
 
         // These features are actually intersection-y, but because targets only record the _highest_,
         // we have to put their union in the result and then take a lower bound.
@@ -1180,6 +1251,9 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         HVX_v62,
         HVX_v65,
         HVX_v66,
+        VulkanV10,
+        VulkanV12,
+        VulkanV13,
     }};
     // clang-format on
 
@@ -1208,7 +1282,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         Debug,
         HexagonDma,
         HVX,
-        HVX_shared_object,
         MSAN,
         SoftFloatABI,
         TSAN,
@@ -1242,7 +1315,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, HVX_shared_object, SanitizerCoverage\n"
+        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, SanitizerCoverage\n"
                            << "  this:  " << *this << "\n"
                            << "  other: " << other << "\n";
         return false;
@@ -1290,6 +1363,22 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         output.features.reset(CUDACapability86);
     }
 
+    // Pick tight lower bound for Vulkan capability. Use fall-through to clear redundant features
+    int vulkan_a = get_vulkan_capability_lower_bound();
+    int vulkan_b = other.get_vulkan_capability_lower_bound();
+
+    // Same trick as above for CUDA
+    int vulkan_capability = std::min((unsigned)vulkan_a, (unsigned)vulkan_b);
+    if (vulkan_capability < 10) {
+        output.features.reset(VulkanV10);
+    }
+    if (vulkan_capability < 12) {
+        output.features.reset(VulkanV12);
+    }
+    if (vulkan_capability < 13) {
+        output.features.reset(VulkanV13);
+    }
+
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
     int hvx_b = get_hvx_lower_bound(other);
@@ -1330,6 +1419,9 @@ void target_test() {
         {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
+        {{"x86-64-linux-vulkan", "x86-64-linux", "x86-64-linux-vulkan"}},
+        {{"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan", "x86-64-linux-vulkan"}},
+        {{"x86-64-linux-vulkan-vk_v13", "x86-64-linux-vulkan-vk_v10", "x86-64-linux-vulkan-vk_v10"}},
         {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
         {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
         {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},

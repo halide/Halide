@@ -113,10 +113,7 @@ tests(GROUPS correctness
       fuse.cpp
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
-      fuzz_bounds.cpp
-      fuzz_cse.cpp
       fuzz_float_stores.cpp
-      fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
@@ -128,6 +125,8 @@ tests(GROUPS correctness
       gpu_data_flows.cpp
       gpu_different_blocks_threads_dimensions.cpp
       gpu_dynamic_shared.cpp
+      gpu_error_1.cpp
+      gpu_error_2.cpp
       gpu_free_sync.cpp
       gpu_give_input_buffers_device_allocations.cpp
       gpu_jit_explicit_copy_to_device.cpp
@@ -214,6 +213,7 @@ tests(GROUPS correctness
       multipass_constraints.cpp
       multiple_outputs.cpp
       mux.cpp
+      narrow_predicates.cpp
       nested_tail_strategies.cpp
       newtons_method.cpp
       non_nesting_extern_bounds_query.cpp
@@ -224,7 +224,6 @@ tests(GROUPS correctness
       output_larger_than_two_gigs.cpp
       parallel_gpu_nested.cpp
       param.cpp
-      param_map.cpp
       parameter_constraints.cpp
       partial_application.cpp
       partial_realization.cpp
@@ -245,6 +244,7 @@ tests(GROUPS correctness
       realize_condition_depends_on_tuple.cpp
       realize_larger_than_two_gigs.cpp
       realize_over_shifted_domain.cpp
+      recursive_box_filters.cpp
       reduction_chain.cpp
       reduction_predicate_racing.cpp
       reduction_non_rectangular.cpp
@@ -263,8 +263,12 @@ tests(GROUPS correctness
       shift_by_unsigned_negated.cpp
       shifted_image.cpp
       side_effects.cpp
-      simd_op_check.cpp
+      simd_op_check_arm.cpp
       simd_op_check_hvx.cpp
+      simd_op_check_powerpc.cpp
+      simd_op_check_riscv.cpp
+      simd_op_check_wasm.cpp
+      simd_op_check_x86.cpp
       simplified_away_embedded_image.cpp
       simplify.cpp
       skip_stages.cpp
@@ -282,6 +286,7 @@ tests(GROUPS correctness
       split_reuse_inner_name_bug.cpp
       split_store_compute.cpp
       stack_allocations.cpp
+      stage_strided_loads.cpp
       stencil_chain_in_update_definitions.cpp
       stmt_to_html.cpp
       storage_folding.cpp
@@ -375,8 +380,11 @@ tests(GROUPS correctness multithreaded
       unroll_huge_mux.cpp
       )
 
-# Make sure the test that needs image_io has it
+# Make sure the test that needs Halide::ImageIO has it
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
+
+# Make sure the test that needs Halide::ThreadPool has it
+target_link_libraries(correctness_gpu_allocation_cache PRIVATE Halide::ThreadPool)
 
 # Tests which use external funcs need to enable exports.
 set_target_properties(correctness_async

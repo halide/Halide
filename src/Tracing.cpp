@@ -351,7 +351,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
             string d = std::to_string(i);
             Expr min = Variable::make(Int(32), output_buf.name() + ".min." + d);
             Expr extent = Variable::make(Int(32), output_buf.name() + ".extent." + d);
-            output_region.push_back(Range(min, extent));
+            output_region.emplace_back(min, extent);
         }
         s = Realize::make(output.name(), output.output_types(), MemoryType::Auto, output_region, const_true(), s);
     }

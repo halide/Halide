@@ -39,6 +39,8 @@ set(HEADER_FILES
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
+    CodeGen_Vulkan_Dev.h
+    CodeGen_WebGPU_Dev.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -110,11 +112,11 @@ set(HEADER_FILES
     Monotonic.h
     ObjectInstanceRegistry.h
     OffloadGPULoops.h
+    OptimizeShuffles.h
     OutputImageParam.h
     ParallelRVar.h
     Param.h
     Parameter.h
-    ParamMap.h
     PartitionLoops.h
     Pipeline.h
     Prefetch.h
@@ -145,13 +147,13 @@ set(HEADER_FILES
     SlidingWindow.h
     Solve.h
     SplitTuples.h
-    StmtToHtml.h
+    StageStridedLoads.h
+    StmtToViz.h
     StorageFlattening.h
     StorageFolding.h
     StrictifyFloat.h
     Substitute.h
     Target.h
-    ThreadPool.h
     Tracing.h
     TrimNoOps.h
     Tuple.h
@@ -198,7 +200,6 @@ set(SOURCE_FILES
     CodeGen_Internal.cpp
     CodeGen_LLVM.cpp
     CodeGen_Metal_Dev.cpp
-    CodeGen_MIPS.cpp
     CodeGen_OpenCL_Dev.cpp
     CodeGen_OpenGLCompute_Dev.cpp
     CodeGen_Posix.cpp
@@ -206,7 +207,9 @@ set(SOURCE_FILES
     CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
     CodeGen_RISCV.cpp
+    CodeGen_Vulkan_Dev.cpp
     CodeGen_WebAssembly.cpp
+    CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
@@ -271,10 +274,10 @@ set(SOURCE_FILES
     Monotonic.cpp
     ObjectInstanceRegistry.cpp
     OffloadGPULoops.cpp
+    OptimizeShuffles.cpp
     OutputImageParam.cpp
     ParallelRVar.cpp
     Parameter.cpp
-    ParamMap.cpp
     PartitionLoops.cpp
     Pipeline.cpp
     Prefetch.cpp
@@ -324,7 +327,8 @@ set(SOURCE_FILES
     Solve.cpp
     SpirvIR.cpp
     SplitTuples.cpp
-    StmtToHtml.cpp
+    StageStridedLoads.cpp
+    StmtToViz.cpp
     StorageFlattening.cpp
     StorageFolding.cpp
     StrictifyFloat.cpp
@@ -346,11 +350,49 @@ set(SOURCE_FILES
     WrapCalls.cpp
     )
 
+set(C_TEMPLATE_FILES
+    CodeGen_C_prologue
+    CodeGen_C_vectors
+    )
+
+set(HTML_TEMPLATE_FILES
+    StmtToViz_dependencies
+    StmtToViz_javascript
+    StmtToViz_stylesheet
+    )
+
 ##
 # Build and import the runtime.
 ##
 
 add_subdirectory(runtime)
+
+##
+# Build the template files via binary2cpp.
+##
+
+add_library(Halide_c_templates OBJECT)
+foreach (f IN LISTS C_TEMPLATE_FILES)
+    set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${f}.template.cpp>")
+    set(DST "c_template.${f}.template.cpp")
+
+    add_custom_command(OUTPUT "${DST}"
+                       COMMAND binary2cpp "halide_c_template_${f}" < "${SRC}" > "${DST}"
+                       DEPENDS "${SRC}" binary2cpp
+                       VERBATIM)
+    target_sources(Halide_c_templates PRIVATE ${DST})
+endforeach ()
+
+foreach (f IN LISTS HTML_TEMPLATE_FILES)
+    set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/irvisualizer/${f}.template.html>")
+    set(DST "html_template.${f}.template.cpp")
+
+    add_custom_command(OUTPUT "${DST}"
+                       COMMAND binary2cpp "halide_html_template_${f}" < "${SRC}" > "${DST}"
+                       DEPENDS "${SRC}" binary2cpp
+                       VERBATIM)
+    target_sources(Halide_c_templates PRIVATE ${DST})
+endforeach ()
 
 ##
 # Build the Halide mono-header.
@@ -374,10 +416,10 @@ add_library(Halide
             ${SOURCE_FILES}
             ${HEADER_FILES}
             # Including these as sources works around the need to "install" Halide_initmod
-            $<TARGET_OBJECTS:Halide_initmod>)
+            $<TARGET_OBJECTS:Halide_initmod>
+            $<TARGET_OBJECTS:Halide_c_templates>)
 add_library(Halide::Halide ALIAS Halide)
 
-target_link_libraries(Halide PUBLIC Threads::Threads)
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
 target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
@@ -398,6 +440,13 @@ set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
                       VERSION ${Halide_VERSION}
                       SOVERSION ${Halide_SOVERSION_OVERRIDE})
+
+target_compile_definitions(Halide PUBLIC 
+                           HALIDE_VERSION=${Halide_VERSION} 
+                           HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
+                           HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
+                           HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
+
 
 target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 add_dependencies(Halide HalideIncludes)
@@ -528,12 +577,23 @@ if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
 
+if (TARGET_VULKAN)
+    message(STATUS "Enabling Vulkan target")
+    target_compile_definitions(Halide PRIVATE WITH_VULKAN)
+endif()
+
 if (TARGET_SPIRV)
     # Our vendored SPIRV headers are only used internally; users do not need
     # them installed.
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
     target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:Halide::SPIRV>")
 endif ()
+
+option(TARGET_WEBGPU "Include WebGPU target" ON)
+if (TARGET_WEBGPU)
+    target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
+endif()
+
 
 ##
 # Add autoschedulers to the build.

@@ -40,7 +40,6 @@ struct Target {
         ArchUnknown = 0,
         X86,
         ARM,
-        MIPS,
         Hexagon,
         POWERPC,
         WebAssembly,
@@ -109,7 +108,7 @@ struct Target {
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        OpenGLCompute = halide_target_feature_openglcompute,
+        OpenGLCompute = halide_target_feature_openglcompute,  // NOTE: This feature is deprecated and will be removed in Halide 17.
         EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
         Profile = halide_target_feature_profile,
@@ -123,7 +122,6 @@ struct Target {
         HVX_v62 = halide_target_feature_hvx_v62,
         HVX_v65 = halide_target_feature_hvx_v65,
         HVX_v66 = halide_target_feature_hvx_v66,
-        HVX_shared_object = halide_target_feature_hvx_use_shared_object,
         FuzzFloatStores = halide_target_feature_fuzz_float_stores,
         SoftFloatABI = halide_target_feature_soft_float_abi,
         MSAN = halide_target_feature_msan,
@@ -143,15 +141,12 @@ struct Target {
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
         EmbedBitcode = halide_target_feature_embed_bitcode,
         EnableLLVMLoopOpt = halide_target_feature_enable_llvm_loop_opt,
-        // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
-        // (and will be removed in Halide 16). Halide 15 now defaults to disabling
-        // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
-        DisableLLVMLoopOpt = halide_target_feature_disable_llvm_loop_opt,
         WasmSimd128 = halide_target_feature_wasm_simd128,
         WasmSignExt = halide_target_feature_wasm_signext,
         WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
         WasmThreads = halide_target_feature_wasm_threads,
         WasmBulkMemory = halide_target_feature_wasm_bulk_memory,
+        WebGPU = halide_target_feature_webgpu,
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
         ARMDotProd = halide_target_feature_arm_dot_prod,
@@ -162,6 +157,16 @@ struct Target {
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
         SPIRV = halide_target_feature_spirv,
+        Vulkan = halide_target_feature_vulkan,
+        VulkanInt8 = halide_target_feature_vulkan_int8,
+        VulkanInt16 = halide_target_feature_vulkan_int16,
+        VulkanInt64 = halide_target_feature_vulkan_int64,
+        VulkanFloat16 = halide_target_feature_vulkan_float16,
+        VulkanFloat64 = halide_target_feature_vulkan_float64,
+        VulkanV10 = halide_target_feature_vulkan_version10,
+        VulkanV12 = halide_target_feature_vulkan_version12,
+        VulkanV13 = halide_target_feature_vulkan_version13,
+        Semihosting = halide_target_feature_semihosting,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
@@ -323,6 +328,11 @@ struct Target {
      * 20 (our minimum supported cuda compute capability) if no cuda
      * features are set. */
     int get_cuda_capability_lower_bound() const;
+
+    /** Get the minimum Vulkan capability found as an integer. Returns
+     * 10 (our minimum supported Vulkan compute capability) if no Vulkan
+     * features are set. */
+    int get_vulkan_capability_lower_bound() const;
 
     /** Was libHalide compiled with support for this target? */
     bool supported() const;

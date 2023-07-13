@@ -1,5 +1,19 @@
 #ifndef HALIDE_RUNTIME_PRINTER_H
 #define HALIDE_RUNTIME_PRINTER_H
+
+#include "HalideRuntime.h"
+
+// This is useful for debugging threading issues in the Halide runtime:
+// prefix all `debug()` statements with the thread id that did the logging.
+// Left here (but disabled) for future reference.
+#ifndef HALIDE_RUNTIME_PRINTER_LOG_THREADID
+#define HALIDE_RUNTIME_PRINTER_LOG_THREADID 0
+#endif
+
+#if HALIDE_RUNTIME_PRINTER_LOG_THREADID
+extern "C" int pthread_threadid_np(long thread, uint64_t *thread_id);
+#endif
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {
@@ -51,6 +65,12 @@ public:
             // Pointers equal ensures no writes to buffer via formatting code
             end = dst;
         }
+
+#if HALIDE_RUNTIME_PRINTER_LOG_THREADID
+        uint64_t tid;
+        pthread_threadid_np(0, &tid);
+        *this << "(TID:" << tid << ")";
+#endif
     }
 
     // Not movable, not copyable
@@ -113,6 +133,17 @@ public:
     Printer &operator<<(const halide_buffer_t &buf) {
         dst = halide_buffer_to_string(dst, end, &buf);
         return *this;
+    }
+
+    template<typename T>
+    void append(const T &value) {
+        *this << value;
+    }
+
+    template<typename First, typename Second, typename... Rest>
+    void append(const First &first, const Second &second, const Rest &...rest) {
+        append<First>(first);
+        append<Second, Rest...>(second, rest...);
     }
 
     // Use it like a stringstream.
@@ -187,11 +218,11 @@ public:
 // does nothing and should compile to a no-op.
 class SinkPrinter {
 public:
-    explicit SinkPrinter(void *user_context) {
+    ALWAYS_INLINE explicit SinkPrinter(void *user_context) {
     }
 };
 template<typename T>
-SinkPrinter operator<<(const SinkPrinter &s, T) {
+ALWAYS_INLINE SinkPrinter operator<<(const SinkPrinter &s, T) {
     return s;
 }
 

@@ -273,7 +273,6 @@ private:
         }
     };
 
-    Callable();
     Callable(const std::string &name,
              const JITHandlers &jit_handlers,
              const std::map<std::string, JITExtern> &jit_externs,
@@ -281,7 +280,6 @@ private:
 
     // Note that the first entry in argv must always be a JITUserContext*.
     int call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_cci) const;
-    int call_argv_fast(size_t argc, const void *const *argv) const;
 
     using FailureFn = std::function<int(JITUserContext *)>;
 
@@ -304,6 +302,13 @@ private:
     const std::vector<Argument> &arguments() const;
 
 public:
+    /** Construct a default Callable. This is not usable (trying to call it will fail).
+     * The defined() method will return false. */
+    Callable();
+
+    /** Return true if the Callable is well-defined and usable, false if it is a default-constructed empty Callable. */
+    bool defined() const;
+
     template<typename... Args>
     HALIDE_FUNCTION_ATTRS int
     operator()(JITUserContext *context, Args &&...args) const {
@@ -380,6 +385,24 @@ public:
             };
         }
     }
+
+    /** Unsafe low-overhead way of invoking the Callable.
+     *
+     * This function relies on the same calling convention as the argv-based
+     * functions generated for ahead-of-time compiled Halide pilelines.
+     *
+     * Very rough specifications of the calling convention (but check the source
+     * code to be sure):
+     *
+     *   * Arguments are passed in the same order as they appear in the C
+     *     function argument list.
+     *   * The first entry in argv must always be a JITUserContext*. Please,
+     *     note that this means that argv[0] actually contains JITUserContext**.
+     *   * All scalar arguments are passed by pointer, not by value, regardless of size.
+     *   * All buffer arguments (input or output) are passed as halide_buffer_t*.
+     *
+     */
+    int call_argv_fast(size_t argc, const void *const *argv) const;
 };
 
 }  // namespace Halide

@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
     if (!is_const(checker.result, 512)) {
         std::cerr << m.functions()[0].body << "\n\n"
                   << "Allocation size was supposed to be 512 in dimension 0 in the stmt above\n";
-        return -1;
+        return 1;
     }
 
     printf("Success!\n");

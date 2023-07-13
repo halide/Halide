@@ -12,14 +12,10 @@
 #include <memory>
 #include <vector>
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-#include "ExternalCode.h"
-#endif
 #include "IROperator.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
-#include "ParamMap.h"
 #include "Realization.h"
 #include "Target.h"
 #include "Tuple.h"
@@ -31,32 +27,6 @@ class Callable;
 class Func;
 struct PipelineContents;
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-/** A struct representing the machine parameters to generate the auto-scheduled
- * code for. */
-struct MachineParams {
-    /** Maximum level of parallelism avalaible. */
-    int parallelism;
-    /** Size of the last-level cache (in bytes). */
-    uint64_t last_level_cache_size;
-    /** Indicates how much more expensive is the cost of a load compared to
-     * the cost of an arithmetic operation at last level cache. */
-    float balance;
-
-    explicit MachineParams(int parallelism, uint64_t llc, float balance)
-        : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {
-    }
-
-    /** Default machine parameters for generic CPU architecture. */
-    static MachineParams generic();
-
-    /** Convert the MachineParams into canonical string form. */
-    std::string to_string() const;
-
-    /** Reconstruct a MachineParams from canonical string form. */
-    explicit MachineParams(const std::string &s);
-};
-#else
 /** Special the Autoscheduler to be used (if any), along with arbitrary
  * additional arguments specific to the given Autoscheduler.
  *
@@ -89,7 +59,6 @@ struct AutoschedulerParams {
 
     std::string to_string() const;
 };
-#endif
 
 namespace Internal {
 class IRMutator;
@@ -123,25 +92,15 @@ struct CustomLoweringPass {
 struct JITExtern;
 
 struct AutoSchedulerResults {
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    std::string scheduler_name;         // name of the autoscheduler used
-    Target target;                      // Target specified to the autoscheduler
-    std::string machine_params_string;  // MachineParams specified to the autoscheduler (in string form)
-#else
     Target target;                             // Target specified to the autoscheduler
     AutoschedulerParams autoscheduler_params;  // The autoscheduler used, along with its params
-#endif
-    std::string schedule_source;         // The C++ source code of the generated schedule
-    std::vector<uint8_t> featurization;  // The featurization of the pipeline (if any)
+    std::string schedule_source;               // The C++ source code of the generated schedule
+    std::vector<uint8_t> featurization;        // The featurization of the pipeline (if any)
 };
 
 class Pipeline;
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const MachineParams &, AutoSchedulerResults *outputs)>;
-#else
 using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const AutoschedulerParams &, AutoSchedulerResults *outputs)>;
-#endif
 
 /** A class representing a Halide pipeline. Constructed from the Func
  * or Funcs that it outputs. */
@@ -191,17 +150,13 @@ private:
     Internal::IntrusivePtr<PipelineContents> contents;
 
     // For the three method below, precisely one of the first two args should be non-null
-    void prepare_jit_call_arguments(RealizationArg &output, const Target &target, const ParamMap &param_map,
+    void prepare_jit_call_arguments(RealizationArg &output, const Target &target,
                                     JITUserContext **user_context, bool is_bounds_inference, Internal::JITCallArgs &args_result);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
     static std::map<std::string, AutoSchedulerFn> &get_autoscheduler_map();
-
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    static std::string &get_default_autoscheduler_name();
-#endif
 
     static AutoSchedulerFn find_autoscheduler(const std::string &autoscheduler_name);
 
@@ -234,40 +189,13 @@ public:
     /** Get the Funcs this pipeline outputs. */
     std::vector<Func> outputs() const;
 
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    /** Generate a schedule for the pipeline using the currently-default autoscheduler. */
-    AutoSchedulerResults auto_schedule(const Target &target,
-                                       const MachineParams &arch_params = MachineParams::generic()) const;
-
-    /** Generate a schedule for the pipeline using the specified autoscheduler. */
-    AutoSchedulerResults auto_schedule(const std::string &autoscheduler_name,
-                                       const Target &target,
-                                       const MachineParams &arch_params = MachineParams::generic()) const;
-#else
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults apply_autoscheduler(const Target &target,
                                              const AutoschedulerParams &autoscheduler_params) const;
-#endif
 
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */
     static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler);
-
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    /** Globally set the default autoscheduler method to use whenever
-     * autoscheduling any Pipeline when no name is specified. If the autoscheduler_name isn't in the
-     * current table of known autoschedulers, assert-fail.
-     *
-     * At this time, well-known autoschedulers include:
-     *  "Mullapudi2016" -- heuristics-based; the first working autoscheduler; currently built in to libHalide
-     *                     see http://graphics.cs.cmu.edu/projects/halidesched/
-     *  "Adams2019"     -- aka "the ML autoscheduler"; currently located in apps/autoscheduler
-     *                     see https://halide-lang.org/papers/autoscheduler2019.html
-     *  "Li2018"        -- aka "the gradient autoscheduler"; currently located in apps/gradient_autoscheduler.
-     *                     see https://people.csail.mit.edu/tzumao/gradient_halide
-     */
-    static void set_default_autoscheduler_name(const std::string &autoscheduler_name);
-#endif
 
     /** Return handle to the index-th Func within the pipeline based on the
      * topological order. */
@@ -462,8 +390,7 @@ public:
     const std::vector<CustomLoweringPass> &custom_lowering_passes();
 
     /** See Func::realize */
-    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target());
 
     /** Same as above, but takes a custom user-provided context to be
      * passed to runtime functions. A nullptr context is legal, and is
@@ -471,8 +398,7 @@ public:
      * a context. */
     Realization realize(JITUserContext *context,
                         std::vector<int32_t> sizes = {},
-                        const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+                        const Target &target = Target());
 
     /** Evaluate this Pipeline into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
@@ -483,9 +409,7 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
-    void realize(RealizationArg output,
-                 const Target &target = Target(),
-                 const ParamMap &param_map = ParamMap::empty_map());
+    void realize(RealizationArg output, const Target &target = Target());
 
     /** Same as above, but takes a custom user-provided context to be
      * passed to runtime functions. A nullptr context is legal, and
@@ -493,8 +417,7 @@ public:
      * take a context. */
     void realize(JITUserContext *context,
                  RealizationArg output,
-                 const Target &target = Target(),
-                 const ParamMap &param_map = ParamMap::empty_map());
+                 const Target &target = Target());
 
     /** For a given size of output, or a given set of output buffers,
      * determine the bounds required of all unbound ImageParams
@@ -503,23 +426,19 @@ public:
      * ImageParams. */
     // @{
     void infer_input_bounds(const std::vector<int32_t> &sizes,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     void infer_input_bounds(RealizationArg output,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     // @}
 
     /** Variants of infer_inputs_bounds that take a custom user context */
     // @{
     void infer_input_bounds(JITUserContext *context,
                             const std::vector<int32_t> &sizes,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     void infer_input_bounds(JITUserContext *context,
                             RealizationArg output,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
+                            const Target &target = get_jit_target_from_environment());
     // @}
 
     /** Infer the arguments to the Pipeline, sorted into a canonical order:

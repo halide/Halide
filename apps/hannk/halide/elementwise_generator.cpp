@@ -122,7 +122,7 @@ public:
     GeneratorParam<Type> output3_type_{"output3_type", Int(0)};
 
     // An array of inputs.
-    Input<Buffer<void, 2>[]> inputs_ { "inputs" };
+    Input<Buffer<void, 2>[]> inputs_{"inputs"};
     // The program to run. See elementwise_program.h for a description of
     // this buffer.
     Input<Buffer<int16_t, 2>> program_{"program"};
@@ -214,6 +214,7 @@ public:
             scratch.update(i).specialize(inputs_[i].dim(0).stride() == 0);
             scratch.update(i).specialize_fail("Input dimension 0 must have stride 0 or 1.");
         }
+        scratch.update(input_count).unscheduled();  // constant zero
 
         const int slots = input_count * max_instructions_per_input;
         scratch
