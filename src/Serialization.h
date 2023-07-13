@@ -3,9 +3,11 @@
 
 #include "Pipeline.h"
 #include <string>
+#include <unordered_map>
+
 namespace Halide {
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename);
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::unordered_map<std::string, Internal::Parameter> &params);
 
 }  // namespace Halide
 

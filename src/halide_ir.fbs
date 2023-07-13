@@ -616,10 +616,6 @@ table Parameter {
     type: Type;
     dimensions: int32;
     name: string;
-    buffer_name: string;
-    host_alignment: int32;
-    buffer_constraints: [BufferConstraint];
-    memory_type: MemoryType;
     data: uint64;
     scalar_default: Expr;
     scalar_min: Expr;

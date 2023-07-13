@@ -18,6 +18,10 @@ class Deserializer {
 public:
     Deserializer() = default;
 
+    Deserializer(const std::unordered_map<std::string, Parameter> &params)
+        : non_serialized_parameters(params) {
+    }
+
     Pipeline deserialize(const std::string &filename);
 
 private:
@@ -26,6 +30,8 @@ private:
     std::unordered_map<std::string, Parameter> parameters_in_pipeline;
 
     std::unordered_map<std::string, Buffer<>> buffers_in_pipeline;
+
+    std::unordered_map<std::string, Parameter> non_serialized_parameters;
 
     // helper functions to deserialize each type of object
     MemoryType deserialize_memory_type(const Serialize::MemoryType memory_type);
@@ -417,7 +423,9 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
     for (const auto &output_buffer_name_serialized : *function->output_buffers_names()) {
         auto output_buffer_name = deserialize_string(output_buffer_name_serialized);
         Parameter output_buffer;
-        if (auto it = parameters_in_pipeline.find(output_buffer_name); it != parameters_in_pipeline.end()) {
+        if (auto it = non_serialized_parameters.find(output_buffer_name); it != non_serialized_parameters.end()) {
+            output_buffer = it->second;
+        } else if (auto it = parameters_in_pipeline.find(output_buffer_name); it != parameters_in_pipeline.end()) {
             output_buffer = it->second;
         }
         output_buffers.push_back(output_buffer);
@@ -489,7 +497,9 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         auto index = deserialize_expr(store_stmt->index_type(), store_stmt->index());
         auto param_name = deserialize_string(store_stmt->param_name());
         Parameter param;
-        if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+        if (auto it = non_serialized_parameters.find(param_name); it != non_serialized_parameters.end()) {
+            param = it->second;
+        } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
         }
         auto alignment = deserialize_modulus_remainder(store_stmt->alignment());
@@ -756,7 +766,9 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         }
         auto param_name = deserialize_string(load_expr->param_name());
         Parameter param;
-        if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+        if (auto it = non_serialized_parameters.find(param_name); it != non_serialized_parameters.end()) {
+            param = it->second;
+        } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
         }
         auto alignment = deserialize_modulus_remainder(load_expr->alignment());
@@ -803,7 +815,9 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         }
         auto param_name = deserialize_string(call_expr->param_name());
         Parameter param;
-        if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+        if (auto it = non_serialized_parameters.find(param_name); it != non_serialized_parameters.end()) {
+            param = it->second;
+        } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
         }
         auto type = deserialize_type(call_expr->type());
@@ -815,7 +829,9 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         auto type = deserialize_type(variable_expr->type());
         auto param_name = deserialize_string(variable_expr->param_name());
         Parameter param;
-        if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
+        if (auto it = non_serialized_parameters.find(param_name); it != non_serialized_parameters.end()) {
+            param = it->second;
+        } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
         }
         Buffer<> image;
@@ -1151,19 +1167,7 @@ Parameter Deserializer::deserialize_parameter(const Serialize::Parameter *parame
     int dimensions = parameter->dimensions();
     std::string name = deserialize_string(parameter->name());
     if (is_buffer) {
-        Buffer<> buffer;
-        auto buffer_name = deserialize_string(parameter->buffer_name());
-        if (auto it = buffers_in_pipeline.find(buffer_name); it != buffers_in_pipeline.end()) {
-            buffer = it->second;
-        }
-        int host_alignment = parameter->host_alignment();
-        std::vector<BufferConstraint> buffer_constraints;
-        buffer_constraints.reserve(parameter->buffer_constraints()->size());
-        for (const auto &buffer_constraint : *parameter->buffer_constraints()) {
-            buffer_constraints.push_back(deserialize_buffer_constraint(buffer_constraint));
-        }
-        auto memory_type = deserialize_memory_type(parameter->memory_type());
-        return Parameter(type, is_buffer, dimensions, name, buffer, host_alignment, buffer_constraints, memory_type);
+        return Parameter(type, is_buffer, dimensions, name);
     } else {
         uint64_t data = parameter->data();
         auto scalar_default = deserialize_expr(parameter->scalar_default_type(), parameter->scalar_default());
@@ -1199,7 +1203,9 @@ ExternFuncArgument Deserializer::deserialize_extern_func_argument(const Serializ
     } else {
         auto image_param_name = deserialize_string(extern_func_argument->image_param_name());
         Parameter image_param;
-        if (auto it = parameters_in_pipeline.find(image_param_name); it != parameters_in_pipeline.end()) {
+        if (auto it = non_serialized_parameters.find(image_param_name); it != non_serialized_parameters.end()) {
+            image_param = it->second;
+        } else if (auto it = parameters_in_pipeline.find(image_param_name); it != parameters_in_pipeline.end()) {
             image_param = it->second;
         }
         return ExternFuncArgument(image_param);
@@ -1344,8 +1350,8 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
 }
 }  // namespace Internal
 
-Pipeline deserialize_pipeline(const std::string &filename) {
-    Internal::Deserializer deserializer;
+Pipeline deserialize_pipeline(const std::string &filename, const std::unordered_map<std::string, Internal::Parameter> &params) {
+    Internal::Deserializer deserializer(params);
     return deserializer.deserialize(filename);
 }
 

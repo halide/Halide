@@ -3,7 +3,6 @@
 #include "halide_ir_generated.h"
 
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -24,12 +23,18 @@ public:
 
     void serialize(const Pipeline &pipeline, const std::string &filename);
 
+    const std::unordered_map<std::string, Parameter> &get_external_parameters() const {
+        return external_parameters;
+    }
+
 private:
     std::unordered_map<std::string, int32_t> func_mappings;
 
     std::unordered_map<std::string, Internal::Parameter> parameters_in_pipeline;
 
     std::unordered_map<std::string, Buffer<>> buffers_in_pipeline;
+
+    std::unordered_map<std::string, Parameter> external_parameters;
 
     // helper functions to serialize each type of object
     Halide::Serialize::MemoryType serialize_memory_type(const MemoryType &memory_type);
@@ -759,8 +764,8 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         }
         auto image_name_serialized = serialize_string(builder, image_name);
         std::string param_name = call_expr->param.defined() ? call_expr->param.name() : "";
-        if (call_expr->param.defined() && parameters_in_pipeline.find(param_name) == parameters_in_pipeline.end()) {
-            parameters_in_pipeline[param_name] = call_expr->param;
+        if (call_expr->param.defined() && external_parameters.find(param_name) == external_parameters.end()) {
+            external_parameters[param_name] = call_expr->param;
         }
         auto param_name_serialized = serialize_string(builder, param_name);
         auto type_serialized = serialize_type(builder, call_expr->type);
@@ -771,8 +776,8 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         auto name_serialized = serialize_string(builder, variable_expr->name);
         auto type_serialized = serialize_type(builder, variable_expr->type);
         std::string param_name = variable_expr->param.defined() ? variable_expr->param.name() : "";
-        if (variable_expr->param.defined() && parameters_in_pipeline.find(param_name) == parameters_in_pipeline.end()) {
-            parameters_in_pipeline[param_name] = variable_expr->param;
+        if (variable_expr->param.defined() && external_parameters.find(param_name) == external_parameters.end()) {
+            external_parameters[param_name] = variable_expr->param;
         }
         auto param_name_serialized = serialize_string(builder, param_name);
         std::string image_name = variable_expr->image.defined() ? variable_expr->image.name() : "";
@@ -1126,6 +1131,7 @@ flatbuffers::Offset<Halide::Serialize::Parameter> Serializer::serialize_paramete
     if (!defined) {
         return Halide::Serialize::CreateParameter(builder, defined);
     }
+    debug(0) << "serialize parameter: " << parameter.name() << " is_buffer " << parameter.is_buffer() << "\n";
     auto type_serialized = serialize_type(builder, parameter.type());
     int dimensions = parameter.dimensions();
     auto name_serialized = serialize_string(builder, parameter.name());
@@ -1133,27 +1139,14 @@ flatbuffers::Offset<Halide::Serialize::Parameter> Serializer::serialize_paramete
     // because of check_is_buffer()/check_is_scalar(), we cannot serialize all fields at the same time
     // based on if the parameter is a buffer, we serialize different fields, fill 0 or default values for the unavailable fields
     if (is_buffer) {
-        std::string buffer_name = parameter.buffer().defined() ? parameter.buffer().name() : "";
-        if (parameter.buffer().defined() && buffers_in_pipeline.find(buffer_name) == buffers_in_pipeline.end()) {
-            buffers_in_pipeline[buffer_name] = parameter.buffer();
-        }
-        auto buffer_name_serialized = serialize_string(builder, buffer_name);
-        int host_alignment = parameter.host_alignment();
-        std::vector<flatbuffers::Offset<Halide::Serialize::BufferConstraint>> buffer_constraints_serialized;
-        buffer_constraints_serialized.reserve(parameter.buffer_constraints().size());
-        for (const auto &buffer_constraint : parameter.buffer_constraints()) {
-            buffer_constraints_serialized.push_back(serialize_buffer_constraint(builder, buffer_constraint));
-        }
-        auto memory_type_serialized = serialize_memory_type(parameter.memory_type());
-        return Halide::Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, buffer_name_serialized, host_alignment,
-                                                  builder.CreateVector(buffer_constraints_serialized), memory_type_serialized);
+        return Halide::Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized);
     } else {
         uint64_t data = parameter.scalar_raw_value();
         auto scalar_default_serialized = serialize_expr(builder, parameter.default_value());
         auto scalar_min_serialized = serialize_expr(builder, parameter.min_value());
         auto scalar_max_serialized = serialize_expr(builder, parameter.max_value());
         auto scalar_estimate_serialized = serialize_expr(builder, parameter.estimate());
-        return Halide::Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, 0, 0, 0, Halide::Serialize::MemoryType_Auto, data,
+        return Halide::Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, data,
                                                   scalar_default_serialized.first, scalar_default_serialized.second, scalar_min_serialized.first,
                                                   scalar_min_serialized.second, scalar_max_serialized.first, scalar_max_serialized.second,
                                                   scalar_estimate_serialized.first, scalar_estimate_serialized.second);
@@ -1182,8 +1175,8 @@ flatbuffers::Offset<Halide::Serialize::ExternFuncArgument> Serializer::serialize
         return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, 0, expr_serialized.first, expr_serialized.second);
     } else {
         std::string image_param_name = extern_func_argument.image_param.defined() ? extern_func_argument.image_param.name() : "";
-        if (extern_func_argument.image_param.defined() && parameters_in_pipeline.find(image_param_name) == parameters_in_pipeline.end()) {
-            parameters_in_pipeline[image_param_name] = extern_func_argument.image_param;
+        if (extern_func_argument.defined() && external_parameters.find(image_param_name) == external_parameters.end()) {
+            external_parameters[image_param_name] = extern_func_argument.image_param;
         }
         auto image_param_name_serialized = serialize_string(builder, image_param_name);
         return Halide::Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, 0, Halide::Serialize::Expr_NONE, 0, image_param_name_serialized);
@@ -1194,6 +1187,7 @@ flatbuffers::Offset<Halide::Serialize::Buffer> Serializer::serialize_buffer(flat
     if (!buffer.defined()) {
         return Halide::Serialize::CreateBuffer(builder, false);
     }
+    debug(0) << "serialize buffer: " << buffer.name() << "\n";
     auto name_serialized = serialize_string(builder, buffer.name());
     auto type_serialized = serialize_type(builder, buffer.type());
     int32_t dimensions = buffer.dimensions();
@@ -1278,7 +1272,10 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
     std::vector<flatbuffers::Offset<Halide::Serialize::Parameter>> parameters_serialized;
     parameters_serialized.reserve(parameters_in_pipeline.size());
     for (const auto &param : parameters_in_pipeline) {
-        parameters_serialized.push_back(serialize_parameter(builder, param.second));
+        // we only serialize internal parameters with the pipeline
+        if (external_parameters.find(param.first) == external_parameters.end()) {
+            parameters_serialized.push_back(serialize_parameter(builder, param.second));
+        }
     }
 
     std::vector<flatbuffers::Offset<Halide::Serialize::Buffer>> buffers_serialized;
@@ -1305,9 +1302,10 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
 
 }  // namespace Internal
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename) {
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::unordered_map<std::string, Internal::Parameter> &params) {
     Internal::Serializer serializer;
     serializer.serialize(pipeline, filename);
+    params = serializer.get_external_parameters();
 }
 
 }  // namespace Halide
