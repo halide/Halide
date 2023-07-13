@@ -6,9 +6,9 @@ def test_tuple_select():
     x = hl.Var("x")
     y = hl.Var("y")
 
-    # ternary tuple_select with Expr condition
+    # ternary select with Expr condition
     f = hl.Func("f")
-    f[x, y] = hl.tuple_select(x + y < 30, (x, y), (x - 1, y - 2))
+    f[x, y] = hl.select(x + y < 30, (x, y), (x - 1, y - 2))
 
     a, b = f.realize([200, 200])
     for xx in range(a.height()):
@@ -18,9 +18,9 @@ def test_tuple_select():
             assert a[xx, yy] == correct_a
             assert b[xx, yy] == correct_b
 
-    # ternary tuple_select with Tuple condition
+    # ternary select with Tuple condition
     f = hl.Func("f")
-    f[x, y] = hl.tuple_select((x < 30, y < 30), (x, y), (x - 1, y - 2))
+    f[x, y] = hl.select((x < 30, y < 30), (x, y), (x - 1, y - 2))
 
     a, b = f.realize([200, 200])
     for xx in range(a.height()):
@@ -30,12 +30,12 @@ def test_tuple_select():
             assert a[xx, yy] == correct_a
             assert b[xx, yy] == correct_b
 
-    # multiway tuple_select with Expr condition
+    # multiway select with Expr condition
     f = hl.Func("f")
     # fmt: off
-    f[x, y] = hl.tuple_select(x + y < 30,  (x, y),
-                              x + y < 100, (x-1, y-2),
-                                           (x-100, y-200))
+    f[x, y] = hl.select(x + y < 30,  (x, y),
+                        x + y < 100, (x-1, y-2),
+                                     (x-100, y-200))
     # fmt: on
 
     a, b = f.realize([200, 200])
@@ -46,12 +46,12 @@ def test_tuple_select():
             assert a[xx, yy] == correct_a
             assert b[xx, yy] == correct_b
 
-    # multiway tuple_select with Tuple condition
+    # multiway select with Tuple condition
     f = hl.Func("f")
     # fmt: off
-    f[x, y] = hl.tuple_select((x < 30, y < 30),   (x, y),
-                              (x < 100, y < 100), (x-1, y-2),
-                                                  (x-100, y-200))
+    f[x, y] = hl.select((x < 30, y < 30),   (x, y),
+                        (x < 100, y < 100), (x-1, y-2),
+                                            (x-100, y-200))
     # fmt: on
 
     a, b = f.realize([200, 200])
@@ -66,13 +66,13 @@ def test_tuple_select():
     try:
         f = hl.Func("f")
         # fmt: off
-        f[x, y] = hl.tuple_select((x < 30, y < 30), (x, y),
-                                   x + y < 100,     (x-1, y-2),
-                                                    (x-100, y-200))
+        f[x, y] = hl.select((x < 30, y < 30), (x, y),
+                             x + y < 100,     (x-1, y-2),
+                                              (x-100, y-200))
         # fmt: on
     except hl.HalideError as e:
         assert (
-            "tuple_select() may not mix Expr and Tuple for the condition elements."
+            "select() may not mix Expr and Tuple for the condition elements."
             in str(e)
         )
     else:
@@ -81,9 +81,9 @@ def test_tuple_select():
     # Failure case: Tuples of mixed sizes
     try:
         f = hl.Func("f")
-        f[x, y] = hl.tuple_select((x < 30, y < 30), (x, y, 0), (1, 2, 3, 4))
+        f[x, y] = hl.select((x < 30, y < 30), (x, y, 0), (1, 2, 3, 4))
     except hl.HalideError as e:
-        assert "tuple_select() requires all Tuples to have identical sizes" in str(e)
+        assert "select() on Tuples requires all Tuples to have identical sizes." in str(e)
     else:
         assert False, "Did not see expected exception!"
 
