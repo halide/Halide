@@ -10,6 +10,7 @@ extern "C" {
 __attribute__((weak)) float __extendhfsf2(uint16_t a) {
     return (float)Halide::float16_t::make_from_bits(a);
 }
+}  // extern "C"
 #endif
 
 namespace {
