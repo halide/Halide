@@ -571,10 +571,15 @@ void Pipeline::compile_jit(const Target &target_arg) {
     if (!debug_serialization.empty()) {
         std::string filename = generate_function_name() + ".hlpipe";
         debug(0) << "intercept compile_jit, file: " << filename << "\n";
-        serialize_pipeline(*this, filename);
+        std::unordered_map<std::string, Internal::Parameter> call_params;
+        serialize_pipeline(*this, filename, call_params);
         debug(0) << "intercept compile_jit, serialization completed\n";
-        deserialized_pipe = deserialize_pipeline(filename);
+        deserialized_pipe = deserialize_pipeline(filename, call_params);
         debug(0) << "intercept compile_jit, deserialization completed\n";
+        // deserialized_pipe.jit_handlers() = this->jit_handlers();
+        // for (const auto & clp: this->custom_lowering_passes()) {
+        //     deserialized_pipe.add_custom_lowering_pass(clp.pass, clp.deleter); 
+        // }
     }
     user_assert(defined()) << "Pipeline is undefined\n";
 
@@ -592,6 +597,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
     // Infer an arguments vector
     if (!debug_serialization.empty()) {
         deserialized_pipe.infer_arguments();
+        // infer_arguments();
     } else {
         infer_arguments();
     }

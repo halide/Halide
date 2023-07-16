@@ -1131,7 +1131,6 @@ flatbuffers::Offset<Halide::Serialize::Parameter> Serializer::serialize_paramete
     if (!defined) {
         return Halide::Serialize::CreateParameter(builder, defined);
     }
-    debug(0) << "serialize parameter: " << parameter.name() << " is_buffer " << parameter.is_buffer() << "\n";
     auto type_serialized = serialize_type(builder, parameter.type());
     int dimensions = parameter.dimensions();
     auto name_serialized = serialize_string(builder, parameter.name());
