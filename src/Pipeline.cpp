@@ -548,11 +548,6 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     return contents->module;
 }
 
-const std::vector<Internal::InferredArgument> &Pipeline::get_inferred_args() const {
-    user_assert(defined()) << "Pipeline is undefined\n";
-    return contents->inferred_args;
-}
-
 std::string Pipeline::generate_function_name() const {
     user_assert(defined()) << "Pipeline is undefined\n";
     return sanitize_function_name(contents->outputs[0].name());
@@ -595,6 +590,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
 
     // Infer an arguments vector
     infer_arguments();
+
     // Don't actually use the return value - it embeds all constant
     // images and we don't want to do that when jitting. Instead
     // use the vector of parameters found to make a more complete
@@ -603,6 +599,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
     for (const InferredArgument &arg : contents->inferred_args) {
         args.push_back(arg.arg);
     }
+
     Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
     contents->jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, contents->jit_externs, target);

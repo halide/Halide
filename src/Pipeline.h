@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "IROperator.h"
-#include "InferArguments.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
@@ -494,8 +493,6 @@ public:
 
     /** Generate begin_pipeline and end_pipeline tracing calls for this pipeline. */
     void trace_pipeline();
-
-    const std::vector<Internal::InferredArgument> &get_inferred_args() const;
 
 private:
     std::string generate_function_name() const;
