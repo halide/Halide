@@ -1246,10 +1246,10 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
         funcs_serialized.push_back(this->serialize_function(builder, entry.second));
     }
 
-    auto outpus = pipeline.outputs();
+    auto outputs = pipeline.outputs();
     std::vector<flatbuffers::Offset<flatbuffers::String>> output_names_serialized;
-    output_names_serialized.reserve(outpus.size());
-    for (const auto &output : outpus) {
+    output_names_serialized.reserve(outputs.size());
+    for (const auto &output : outputs) {
         output_names_serialized.push_back(serialize_string(builder, output.name()));
     }
     auto requirements = pipeline.requirements();

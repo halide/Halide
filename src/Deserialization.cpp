@@ -1329,8 +1329,8 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
         output_names.push_back(deserialize_string(output_name));
     }
     std::vector<Func> output_funcs;
-    for (const auto &f : funcs) {
-        for (const auto &output_name : output_names) {
+    for (const auto &output_name : output_names) {
+        for (const auto &f : funcs) {
             if (f.name() == output_name) {
                 output_funcs.push_back(f);
             }
