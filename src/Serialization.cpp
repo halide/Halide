@@ -1186,7 +1186,6 @@ flatbuffers::Offset<Halide::Serialize::Buffer> Serializer::serialize_buffer(flat
     if (!buffer.defined()) {
         return Halide::Serialize::CreateBuffer(builder, false);
     }
-    debug(0) << "serialize buffer: " << buffer.name() << "\n";
     auto name_serialized = serialize_string(builder, buffer.name());
     auto type_serialized = serialize_type(builder, buffer.type());
     int32_t dimensions = buffer.dimensions();

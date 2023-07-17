@@ -578,7 +578,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
         debug(0) << "intercept compile_jit, deserialization completed\n";
         // deserialized_pipe.jit_handlers() = this->jit_handlers();
         // for (const auto & clp: this->custom_lowering_passes()) {
-        //     deserialized_pipe.add_custom_lowering_pass(clp.pass, clp.deleter); 
+        //     deserialized_pipe.add_custom_lowering_pass(clp.pass, clp.deleter);
         // }
     }
     user_assert(defined()) << "Pipeline is undefined\n";
@@ -626,17 +626,19 @@ void Pipeline::compile_jit(const Target &target_arg) {
             args.push_back(arg.arg);
         }
     }
-    Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
-    std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
     if (!debug_serialization.empty()) {
+        Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
+        std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
         std::vector<Function> outputs;
         for (const Func &f : deserialized_pipe.outputs()) {
             outputs.push_back(f.function());
         }
-        contents->jit_cache = deserialized_pipe.compile_jit_cache(module, std::move(args), outputs, deserialized_pipe.get_jit_externs(), target);
-        // deserialized_pipe.compile_jit_cache()  = contents->jit_cache;
+        // note we reuse the jit externs from the original pipeline here since we cant really deserialize it
+        contents->jit_cache = deserialized_pipe.compile_jit_cache(module, std::move(args), outputs, contents->jit_externs, target);
         debug(0) << "intercept completed\n";
     } else {
+        Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
+        std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
         contents->jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, contents->jit_externs, target);
     }
 }
