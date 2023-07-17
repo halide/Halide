@@ -174,6 +174,30 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         return s;
     }
 
+    // Add the names of any free variables in an expr to the provided set
+    void track_free_vars(const Expr &e, std::set<std::string> *vars) {
+        class TrackFreeVars : public IRVisitor {
+            using IRVisitor::visit;
+            void visit(const Variable *op) override {
+                if (!scope.contains(op->name)) {
+                    vars->insert(op->name);
+                }
+            }
+            void visit(const Let *op) override {
+                ScopedBinding<> bind(scope, op->name);
+                IRVisitor::visit(op);
+            }
+
+        public:
+            std::set<std::string> *vars;
+            Scope<> scope;
+            TrackFreeVars(std::set<std::string> *vars)
+                : vars(vars) {
+            }
+        } tracker(vars);
+        e.accept(&tracker);
+    }
+
     Expr cancel_correlated_subexpression(Expr e, const Expr &a, const Expr &b, bool correlated) {
         auto ma = is_monotonic(a, loop_var, monotonic);
         auto mb = is_monotonic(b, loop_var, monotonic);
@@ -183,17 +207,19 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             (ma == Monotonic::Increasing && mb == Monotonic::Decreasing && !correlated) ||
             (ma == Monotonic::Decreasing && mb == Monotonic::Increasing && !correlated)) {
 
+            std::set<std::string> vars;
+            track_free_vars(e, &vars);
+
             for (auto it = lets.rbegin(); it != lets.rend(); it++) {
-                if (expr_uses_var(e, it->name)) {
-                    if (!it->may_substitute) {
-                        // We have to stop here. Can't continue
-                        // because there might be an outer let with
-                        // the same name that we *can* substitute in,
-                        // and then inner uses will get the wrong
-                        // value.
-                        break;
-                    }
+                if (!it->may_substitute && vars.count(it->name)) {
+                    // We have to stop here. Can't continue
+                    // because there might be an outer let with
+                    // the same name that we *can* substitute in,
+                    // and then inner uses will get the wrong
+                    // value.
+                    break;
                 }
+                track_free_vars(it->value, &vars);
                 e = Let::make(it->name, it->value, e);
             }
             e = common_subexpression_elimination(e);
