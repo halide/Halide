@@ -566,21 +566,6 @@ Target Pipeline::get_compiled_jit_target() const {
 }
 
 void Pipeline::compile_jit(const Target &target_arg) {
-    std::string debug_serialization = get_env_variable("HL_DEBUG_SERIALIZATION");
-    Pipeline deserialized_pipe;
-    if (!debug_serialization.empty()) {
-        std::string filename = generate_function_name() + ".hlpipe";
-        debug(0) << "intercept compile_jit, file: " << filename << "\n";
-        std::unordered_map<std::string, Internal::Parameter> call_params;
-        serialize_pipeline(*this, filename, call_params);
-        debug(0) << "intercept compile_jit, serialization completed\n";
-        deserialized_pipe = deserialize_pipeline(filename, call_params);
-        debug(0) << "intercept compile_jit, deserialization completed\n";
-        // deserialized_pipe.jit_handlers() = this->jit_handlers();
-        // for (const auto & clp: this->custom_lowering_passes()) {
-        //     deserialized_pipe.add_custom_lowering_pass(clp.pass, clp.deleter);
-        // }
-    }
     user_assert(defined()) << "Pipeline is undefined\n";
 
     Target target = target_arg.with_feature(Target::JIT).with_feature(Target::UserContext);
@@ -593,55 +578,34 @@ void Pipeline::compile_jit(const Target &target_arg) {
     }
     // Clear all cached info in case there is an error.
     contents->invalidate_cache();
+    std::string debug_serialization = get_env_variable("HL_DEBUG_SERIALIZATION");
+    Pipeline deserialized_pipe;
+    if (!debug_serialization.empty()) {
+        std::string filename = generate_function_name() + ".hlpipe";
+        std::unordered_map<std::string, Internal::Parameter> call_params;
+        serialize_pipeline(*this, filename, call_params);
+        deserialized_pipe = deserialize_pipeline(filename, call_params);
+        std::vector<Function> outputs;
+        for (const Func &f : deserialized_pipe.outputs()) {
+            outputs.push_back(f.function());
+        }
+        contents->outputs = outputs;
+        contents->requirements = deserialized_pipe.requirements();
+    }
 
     // Infer an arguments vector
-    if (!debug_serialization.empty()) {
-        deserialized_pipe.infer_arguments();
-        // infer_arguments();
-    } else {
-        infer_arguments();
-    }
+    infer_arguments();
     // Don't actually use the return value - it embeds all constant
     // images and we don't want to do that when jitting. Instead
     // use the vector of parameters found to make a more complete
     // arguments list.
     vector<Argument> args;
-    if (!debug_serialization.empty()) {
-        for (const InferredArgument &arg : deserialized_pipe.get_inferred_args()) {
-            args.push_back(arg.arg);
-        }
-        contents->inferred_args = deserialized_pipe.get_inferred_args();
-        // if (this->jit_handlers().custom_error != nullptr) {
-        //     debug(0) << "original jit handler custom error not null\n";
-        // }
-        // if (deserialized_pipe.jit_handlers().custom_error != nullptr) {
-        //     debug(0) << "deserialized jit handler custom print not null\n";
-        // }
-        // deserialized_pipe.jit_handlers() = this->jit_handlers();
-        // if (deserialized_pipe.jit_handlers().custom_error != nullptr) {
-        //     debug(0) << "after assigning it deserialized jit handler custom error not null\n";
-        // }
-    } else {
-        for (const InferredArgument &arg : contents->inferred_args) {
-            args.push_back(arg.arg);
-        }
+    for (const InferredArgument &arg : contents->inferred_args) {
+        args.push_back(arg.arg);
     }
-    if (!debug_serialization.empty()) {
-        std::vector<Function> outputs;
-        for (const Func &f : deserialized_pipe.outputs()) {
-            outputs.push_back(f.function());
-        }
-        Module module = deserialized_pipe.compile_to_module(args, generate_function_name(), target).resolve_submodules();
-        contents->module = module;
-        std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
-        // note we reuse the jit externs from the original pipeline here since we cant really deserialize it
-        contents->jit_cache = deserialized_pipe.compile_jit_cache(module, std::move(args), outputs, contents->jit_externs, target);
-        debug(0) << "intercept completed\n";
-    } else {
-        Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
-        std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
-        contents->jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, contents->jit_externs, target);
-    }
+    Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
+    std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
+    contents->jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, contents->jit_externs, target);
 }
 
 Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, const Target &target_arg) {
