@@ -530,6 +530,7 @@ table Split {
     outer: string;
     inner: string;
     factor: Expr;
+    exact: bool;
     tail: TailStrategy;
     split_type: SplitType;
 }
@@ -616,6 +617,9 @@ table Parameter {
     type: Type;
     dimensions: int32;
     name: string;
+    host_alignment: int32;
+    buffer_constraints: [BufferConstraint];
+    memory_type: MemoryType;
     data: uint64;
     scalar_default: Expr;
     scalar_min: Expr;

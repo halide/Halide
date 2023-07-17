@@ -1053,13 +1053,18 @@ Split Deserializer::deserialize_split(const Serialize::Split *split) {
     auto outer = deserialize_string(split->outer());
     auto inner = deserialize_string(split->inner());
     auto factor = deserialize_expr(split->factor_type(), split->factor());
+    auto exact = split->exact();
     auto tail = deserialize_tail_strategy(split->tail());
     auto split_type = deserialize_split_type(split->split_type());
+    // if (split_type == Split::SplitType::FuseVars) {
+    //     debug(0) << "deserializing split of fuse vars old var " << old_var << " outer " << outer << " inner " << inner << " factor " << factor << " tail " << static_cast<int>(tail) << "\n";
+    // }
     auto hl_split = Split();
     hl_split.old_var = old_var;
     hl_split.outer = outer;
     hl_split.inner = inner;
     hl_split.factor = factor;
+    hl_split.exact = exact;
     hl_split.tail = tail;
     hl_split.split_type = split_type;
     return hl_split;
@@ -1167,7 +1172,14 @@ Parameter Deserializer::deserialize_parameter(const Serialize::Parameter *parame
     int dimensions = parameter->dimensions();
     std::string name = deserialize_string(parameter->name());
     if (is_buffer) {
-        return Parameter(type, is_buffer, dimensions, name);
+        int host_alignment = parameter->host_alignment();
+        std::vector<BufferConstraint> buffer_constraints;
+        buffer_constraints.reserve(parameter->buffer_constraints()->size());
+        for (const auto &buffer_constraint : *parameter->buffer_constraints()) {
+            buffer_constraints.push_back(deserialize_buffer_constraint(buffer_constraint));
+        }
+        auto memory_type = deserialize_memory_type(parameter->memory_type());
+        return Parameter(type, is_buffer, dimensions, name, Buffer<>(), host_alignment, buffer_constraints, memory_type);
     } else {
         uint64_t data = parameter->data();
         auto scalar_default = deserialize_expr(parameter->scalar_default_type(), parameter->scalar_default());

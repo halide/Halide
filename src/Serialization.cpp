@@ -397,11 +397,15 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
     case IRNodeType::For: {
         auto for_stmt = stmt.as<For>();
         auto name_serialized = serialize_string(builder, for_stmt->name);
+        // debug(0) << "serialize for stmt name " << for_stmt->name << " of for_type " << static_cast<int>(for_stmt->for_type) << "\n";
         auto min_serialized = serialize_expr(builder, for_stmt->min);
         auto extent_serialized = serialize_expr(builder, for_stmt->extent);
         Halide::Serialize::ForType for_type = serialize_for_type(for_stmt->for_type);
         Halide::Serialize::DeviceAPI device_api = serialize_device_api(for_stmt->device_api);
         auto body_serialized = serialize_stmt(builder, for_stmt->body);
+        // if (for_stmt->for_type == ForType::Vectorized) {
+        //     debug(0) << "serialize vectorized for stmt name: " << for_stmt->name << "min " << for_stmt->min << " extent " << for_stmt->extent << "\n";
+        // }
         return std::make_pair(Halide::Serialize::Stmt::Stmt_For, Halide::Serialize::CreateFor(builder, name_serialized, min_serialized.first, min_serialized.second, extent_serialized.first, extent_serialized.second, for_type, device_api, body_serialized.first, body_serialized.second).Union());
     }
     case IRNodeType::Store: {
@@ -1049,9 +1053,13 @@ flatbuffers::Offset<Halide::Serialize::Split> Serializer::serialize_split(flatbu
     auto outer_serialized = serialize_string(builder, split.outer);
     auto inner_serialized = serialize_string(builder, split.inner);
     auto factor_serialized = serialize_expr(builder, split.factor);
+    auto exact = split.exact;
     auto tail_serialized = serialize_tail_strategy(split.tail);
-    auto inner_to_outer_serialized = serialize_split_type(split.split_type);
-    return Halide::Serialize::CreateSplit(builder, old_var_serialized, outer_serialized, inner_serialized, factor_serialized.first, factor_serialized.second, tail_serialized, inner_to_outer_serialized);
+    auto split_type_serialized = serialize_split_type(split.split_type);
+    // if (split.split_type == Split::SplitType::FuseVars) {
+    //     debug(0) << "serializing split of fuse vars old var " <<  split.old_var << " outer " << split.outer << " inner " << split.inner << " factor " << split.factor << " tail " << static_cast<int>(split.tail) << "\n";
+    // }
+    return Halide::Serialize::CreateSplit(builder, old_var_serialized, outer_serialized, inner_serialized, factor_serialized.first, factor_serialized.second, exact, tail_serialized, split_type_serialized);
 }
 
 flatbuffers::Offset<Halide::Serialize::Dim> Serializer::serialize_dim(flatbuffers::FlatBufferBuilder &builder, const Dim &dim) {
@@ -1138,14 +1146,22 @@ flatbuffers::Offset<Halide::Serialize::Parameter> Serializer::serialize_paramete
     // because of check_is_buffer()/check_is_scalar(), we cannot serialize all fields at the same time
     // based on if the parameter is a buffer, we serialize different fields, fill 0 or default values for the unavailable fields
     if (is_buffer) {
-        return Halide::Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized);
+        int host_alignment = parameter.host_alignment();
+        std::vector<flatbuffers::Offset<Halide::Serialize::BufferConstraint>> buffer_constraints_serialized;
+        buffer_constraints_serialized.reserve(parameter.buffer_constraints().size());
+        for (const auto &buffer_constraint : parameter.buffer_constraints()) {
+            buffer_constraints_serialized.push_back(serialize_buffer_constraint(builder, buffer_constraint));
+        }
+        auto memory_type_serialized = serialize_memory_type(parameter.memory_type());
+        return Halide::Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, host_alignment,
+                                                  builder.CreateVector(buffer_constraints_serialized), memory_type_serialized);
     } else {
         uint64_t data = parameter.scalar_raw_value();
         auto scalar_default_serialized = serialize_expr(builder, parameter.default_value());
         auto scalar_min_serialized = serialize_expr(builder, parameter.min_value());
         auto scalar_max_serialized = serialize_expr(builder, parameter.max_value());
         auto scalar_estimate_serialized = serialize_expr(builder, parameter.estimate());
-        return Halide::Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, data,
+        return Halide::Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, 0, 0, Halide::Serialize::MemoryType_Auto, data,
                                                   scalar_default_serialized.first, scalar_default_serialized.second, scalar_min_serialized.first,
                                                   scalar_min_serialized.second, scalar_max_serialized.first, scalar_max_serialized.second,
                                                   scalar_estimate_serialized.first, scalar_estimate_serialized.second);
