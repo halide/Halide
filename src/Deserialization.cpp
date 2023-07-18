@@ -18,20 +18,20 @@ class Deserializer {
 public:
     Deserializer() = default;
 
-    explicit Deserializer(const std::unordered_map<std::string, Parameter> &params)
+    explicit Deserializer(const std::map<std::string, Parameter> &params)
         : non_serialized_parameters(params) {
     }
 
     Pipeline deserialize(const std::string &filename);
 
 private:
-    std::unordered_map<int32_t, FunctionPtr> reverse_function_mappings;
+    std::map<int32_t, FunctionPtr> reverse_function_mappings;
 
-    std::unordered_map<std::string, Parameter> parameters_in_pipeline;
+    std::map<std::string, Parameter> parameters_in_pipeline;
 
-    std::unordered_map<std::string, Buffer<>> buffers_in_pipeline;
+    std::map<std::string, Buffer<>> buffers_in_pipeline;
 
-    std::unordered_map<std::string, Parameter> non_serialized_parameters;
+    std::map<std::string, Parameter> non_serialized_parameters;
 
     // helper functions to deserialize each type of object
     MemoryType deserialize_memory_type(const Serialize::MemoryType memory_type);
@@ -1359,7 +1359,7 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
 }
 }  // namespace Internal
 
-Pipeline deserialize_pipeline(const std::string &filename, const std::unordered_map<std::string, Internal::Parameter> &params) {
+Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Internal::Parameter> &params) {
     Internal::Deserializer deserializer(params);
     return deserializer.deserialize(filename);
 }

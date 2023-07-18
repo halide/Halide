@@ -588,9 +588,9 @@ void Pipeline::compile_jit(const Target &target_arg) {
     std::vector<Internal::Stmt> origin_requirements;
     if (!debug_serialization.empty()) {
         std::string filename = generate_function_name() + ".hlpipe";
-        std::unordered_map<std::string, Internal::Parameter> call_params;
-        serialize_pipeline(*this, filename, call_params);
-        deserialized_pipe = deserialize_pipeline(filename, call_params);
+        std::map<std::string, Internal::Parameter> external_params;
+        serialize_pipeline(*this, filename, external_params);
+        deserialized_pipe = deserialize_pipeline(filename, external_params);
         std::vector<Function> outputs;
         for (const Func &f : deserialized_pipe.outputs()) {
             outputs.push_back(f.function());

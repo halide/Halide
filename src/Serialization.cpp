@@ -23,18 +23,18 @@ public:
 
     void serialize(const Pipeline &pipeline, const std::string &filename);
 
-    const std::unordered_map<std::string, Parameter> &get_external_parameters() const {
+    const std::map<std::string, Parameter> &get_external_parameters() const {
         return external_parameters;
     }
 
 private:
-    std::unordered_map<std::string, int32_t> func_mappings;
+    std::map<std::string, int32_t> func_mappings;
 
-    std::unordered_map<std::string, Internal::Parameter> parameters_in_pipeline;
+    std::map<std::string, Internal::Parameter> parameters_in_pipeline;
 
-    std::unordered_map<std::string, Buffer<>> buffers_in_pipeline;
+    std::map<std::string, Buffer<>> buffers_in_pipeline;
 
-    std::unordered_map<std::string, Parameter> external_parameters;
+    std::map<std::string, Parameter> external_parameters;
 
     // helper functions to serialize each type of object
     Halide::Serialize::MemoryType serialize_memory_type(const MemoryType &memory_type);
@@ -1316,7 +1316,7 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
 
 }  // namespace Internal
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::unordered_map<std::string, Internal::Parameter> &params) {
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Internal::Parameter> &params) {
     Internal::Serializer serializer;
     serializer.serialize(pipeline, filename);
     params = serializer.get_external_parameters();
