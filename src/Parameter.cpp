@@ -88,6 +88,7 @@ Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::s
     contents->buffer_constraints = buffer_constraints;
     contents->memory_type = memory_type;
 }
+
 Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
                      uint64_t data, const Expr &scalar_default, const Expr &scalar_min,
                      const Expr &scalar_max, const Expr &scalar_estimate)

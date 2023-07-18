@@ -438,17 +438,14 @@ add_library(Halide
             # Including these as sources works around the need to "install" Halide_initmod
             $<TARGET_OBJECTS:Halide_initmod>
             $<TARGET_OBJECTS:Halide_c_templates>)
-# add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../flatbuffers/
-#                 ${CMAKE_CURRENT_BINARY_DIR}/flatbuffers-build
-#                 EXCLUDE_FROM_ALL)
 if (BUILD_SERIALIZATION)
     find_package(flatbuffers REQUIRED)
-    if(flatbuffers_FOUND)
+    if (flatbuffers_FOUND)
         target_link_libraries(Halide PRIVATE flatbuffers)
         message(STATUS "Build with flatbuffers")
-    else()
+    else ()
         message(FATAL_ERROR "flatbuffers not found")
-    endif()
+    endif ()
 endif ()
 
 add_library(Halide::Halide ALIAS Halide)

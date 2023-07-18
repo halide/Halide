@@ -18,7 +18,7 @@ class Deserializer {
 public:
     Deserializer() = default;
 
-    Deserializer(const std::unordered_map<std::string, Parameter> &params)
+    explicit Deserializer(const std::unordered_map<std::string, Parameter> &params)
         : non_serialized_parameters(params) {
     }
 
@@ -141,7 +141,7 @@ MemoryType Deserializer::deserialize_memory_type(const Serialize::MemoryType mem
     case Serialize::MemoryType::MemoryType_AMXTile:
         return MemoryType::AMXTile;
     default:
-        user_assert(false) << "unknown memory type " << memory_type << "\n";
+        user_error << "unknown memory type " << memory_type << "\n";
         return MemoryType::Auto;
     }
 }
@@ -165,7 +165,7 @@ ForType Deserializer::deserialize_for_type(const Serialize::ForType for_type) {
     case Serialize::ForType::ForType_GPULane:
         return ForType::GPULane;
     default:
-        user_assert(false) << "unknown for type " << for_type << "\n";
+        user_error << "unknown for type " << for_type << "\n";
         return ForType::Serial;
     }
 }
@@ -197,7 +197,7 @@ DeviceAPI Deserializer::deserialize_device_api(const Serialize::DeviceAPI device
     case Serialize::DeviceAPI::DeviceAPI_WebGPU:
         return DeviceAPI::WebGPU;
     default:
-        user_assert(false) << "unknown device api " << device_api << "\n";
+        user_error << "unknown device api " << device_api << "\n";
         return DeviceAPI::None;
     }
 }
@@ -219,7 +219,7 @@ Call::CallType Deserializer::deserialize_call_type(const Serialize::CallType cal
     case Serialize::CallType::CallType_PureIntrinsic:
         return Call::CallType::PureIntrinsic;
     default:
-        user_assert(false) << "unknown call type " << call_type << "\n";
+        user_error << "unknown call type " << call_type << "\n";
         return Call::CallType::Image;
     }
 }
@@ -241,7 +241,7 @@ VectorReduce::Operator Deserializer::deserialize_vector_reduce_op(const Serializ
     case Serialize::VectorReduceOp::VectorReduceOp_Or:
         return VectorReduce::Operator::Or;
     default:
-        user_assert(false) << "unknown vector reduce op " << vector_reduce_op << "\n";
+        user_error << "unknown vector reduce op " << vector_reduce_op << "\n";
         return VectorReduce::Operator::Add;
     }
 }
@@ -255,7 +255,7 @@ PrefetchBoundStrategy Deserializer::deserialize_prefetch_bound_strategy(const Se
     case Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_NonFaulting:
         return PrefetchBoundStrategy::NonFaulting;
     default:
-        user_assert(false) << "unknown prefetch bound strategy " << prefetch_bound_strategy << "\n";
+        user_error << "unknown prefetch bound strategy " << prefetch_bound_strategy << "\n";
         return PrefetchBoundStrategy::Clamp;
     }
 }
@@ -269,7 +269,7 @@ NameMangling Deserializer::deserialize_name_mangling(const Serialize::NameMangli
     case Serialize::NameMangling::NameMangling_CPlusPlus:
         return NameMangling::CPlusPlus;
     default:
-        user_assert(false) << "unknown name mangling " << name_mangling << "\n";
+        user_error << "unknown name mangling " << name_mangling << "\n";
         return NameMangling::Default;
     }
 }
@@ -291,7 +291,7 @@ TailStrategy Deserializer::deserialize_tail_strategy(const Serialize::TailStrate
     case Serialize::TailStrategy::TailStrategy_Auto:
         return TailStrategy::Auto;
     default:
-        user_assert(false) << "unknown tail strategy " << tail_strategy << "\n";
+        user_error << "unknown tail strategy " << tail_strategy << "\n";
         return TailStrategy::RoundUp;
     }
 }
@@ -307,7 +307,7 @@ Split::SplitType Deserializer::deserialize_split_type(const Serialize::SplitType
     case Serialize::SplitType::SplitType_PurifyRVar:
         return Split::SplitType::PurifyRVar;
     default:
-        user_assert(false) << "unknown split type " << split_type << "\n";
+        user_error << "unknown split type " << split_type << "\n";
         return Split::SplitType::SplitVar;
     }
 }
@@ -321,7 +321,7 @@ DimType Deserializer::deserialize_dim_type(const Serialize::DimType dim_type) {
     case Serialize::DimType::DimType_ImpureRVar:
         return DimType::ImpureRVar;
     default:
-        user_assert(false) << "unknown dim type " << dim_type << "\n";
+        user_error << "unknown dim type " << dim_type << "\n";
         return DimType::PureVar;
     }
 }
@@ -337,7 +337,7 @@ LoopAlignStrategy Deserializer::deserialize_loop_align_strategy(const Serialize:
     case Serialize::LoopAlignStrategy::LoopAlignStrategy_Auto:
         return LoopAlignStrategy::Auto;
     default:
-        user_assert(false) << "unknown loop align strategy " << loop_align_strategy << "\n";
+        user_error << "unknown loop align strategy " << loop_align_strategy << "\n";
         return LoopAlignStrategy::AlignStart;
     }
 }
@@ -355,7 +355,7 @@ ExternFuncArgument::ArgType Deserializer::deserialize_extern_func_argument_type(
     case Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ImageParamArg:
         return ExternFuncArgument::ArgType::ImageParamArg;
     default:
-        user_assert(false) << "unknown extern func argument type " << extern_func_argument_type << "\n";
+        user_error << "unknown extern func argument type " << extern_func_argument_type << "\n";
         return ExternFuncArgument::ArgType::UndefinedArg;
     }
 }
@@ -383,6 +383,8 @@ Type Deserializer::deserialize_type(const Serialize::Type *type) {
     case TypeCode::TypeCode_BFloat:
         code = halide_type_bfloat;
         break;
+    default:
+        user_error << "unknown type code " << code_deserialized << "\n";
     }
 
     return Type(code, bits, lanes);
@@ -408,11 +410,8 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
     for (const auto &arg : *function->args()) {
         args.push_back(deserialize_string(arg));
     }
-
     auto func_schedule = deserialize_func_schedule(function->func_schedule());
-
     auto init_def = deserialize_definition(function->init_def());
-
     std::vector<Definition> updates;
     for (const auto &update : *function->updates()) {
         updates.push_back(deserialize_definition(update));
@@ -435,7 +434,6 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
     for (const auto &extern_argument : *function->extern_arguments()) {
         extern_arguments.push_back(deserialize_extern_func_argument(extern_argument));
     }
-
     std::string extern_function_name = deserialize_string(function->extern_function_name());
     auto name_mangling = deserialize_name_mangling(function->extern_mangling());
     auto extern_function_device_api = deserialize_device_api(function->extern_function_device_api());
@@ -447,7 +445,6 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
         trace_tags.push_back(deserialize_string(tag));
     }
     bool frozen = function->frozen();
-
     hl_function.update_with_deserialization(name, origin_name, output_types, required_types,
                                             required_dim, args, func_schedule, init_def, updates,
                                             debug_file, output_buffers, extern_arguments, extern_function_name,
@@ -484,7 +481,6 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         auto min = deserialize_expr(for_stmt->min_type(), for_stmt->min());
         auto extent = deserialize_expr(for_stmt->extent_type(), for_stmt->extent());
         ForType for_type = deserialize_for_type(for_stmt->for_type());
-
         DeviceAPI device_api = deserialize_device_api(for_stmt->device_api());
         auto body = deserialize_stmt(for_stmt->body_type(), for_stmt->body());
         return For::make(name, min, extent, for_type, device_api, body);
@@ -609,99 +605,99 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         return Stmt();
     }
     default:
-        user_assert(false) << "unknown type code " << type_code << "\n";
+        user_error << "unknown type code " << type_code << "\n";
         return Stmt();
     }
 }
 
 Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr) {
-    assert(expr != nullptr);
+    user_assert(expr != nullptr);
     switch (type_code) {
     case Serialize::Expr::Expr_IntImm: {
-        const Serialize::IntImm *int_imm_expr = (const Serialize::IntImm *)expr;
+        const auto *int_imm_expr = (const Serialize::IntImm *)expr;
         auto value = int_imm_expr->value();
         auto type = deserialize_type(int_imm_expr->type());
         return IntImm::make(type, value);
     }
     case Serialize::Expr::Expr_UIntImm: {
-        const Serialize::UIntImm *uint_imm_expr = (const Serialize::UIntImm *)expr;
+        const auto *uint_imm_expr = (const Serialize::UIntImm *)expr;
         auto value = uint_imm_expr->value();
         auto type = deserialize_type(uint_imm_expr->type());
         return UIntImm::make(type, value);
     }
     case Serialize::Expr::Expr_FloatImm: {
-        const Serialize::FloatImm *float_imm_expr = (const Serialize::FloatImm *)expr;
+        const auto *float_imm_expr = (const Serialize::FloatImm *)expr;
         auto value = float_imm_expr->value();
         auto type = deserialize_type(float_imm_expr->type());
         return FloatImm::make(type, value);
     }
     case Serialize::Expr::Expr_StringImm: {
-        const Serialize::StringImm *string_imm_expr = (const Serialize::StringImm *)expr;
+        const auto *string_imm_expr = (const Serialize::StringImm *)expr;
         auto value = deserialize_string(string_imm_expr->value());
         return StringImm::make(value);
     }
     case Serialize::Expr::Expr_Cast: {
-        const Serialize::Cast *cast_expr = (const Serialize::Cast *)expr;
+        const auto *cast_expr = (const Serialize::Cast *)expr;
         auto value = deserialize_expr(cast_expr->value_type(), cast_expr->value());
         auto type = deserialize_type(cast_expr->type());
         return Cast::make(type, value);
     }
     case Serialize::Expr::Expr_Reinterpret: {
-        const Serialize::Reinterpret *reinterpret_expr = (const Serialize::Reinterpret *)expr;
+        const auto *reinterpret_expr = (const Serialize::Reinterpret *)expr;
         auto value = deserialize_expr(reinterpret_expr->value_type(), reinterpret_expr->value());
         auto type = deserialize_type(reinterpret_expr->type());
         return Reinterpret::make(type, value);
     }
     case Serialize::Expr::Expr_Add: {
-        const Serialize::Add *add_expr = (const Serialize::Add *)expr;
+        const auto *add_expr = (const Serialize::Add *)expr;
         auto a = deserialize_expr(add_expr->a_type(), add_expr->a());
         auto b = deserialize_expr(add_expr->b_type(), add_expr->b());
         return Add::make(a, b);
     }
     case Serialize::Expr::Expr_Sub: {
-        const Serialize::Sub *sub_expr = (const Serialize::Sub *)expr;
+        const auto *sub_expr = (const Serialize::Sub *)expr;
         auto a = deserialize_expr(sub_expr->a_type(), sub_expr->a());
         auto b = deserialize_expr(sub_expr->b_type(), sub_expr->b());
         return Sub::make(a, b);
     }
     case Serialize::Expr::Expr_Mul: {
-        const Serialize::Mul *mul_expr = (const Serialize::Mul *)expr;
+        const auto *mul_expr = (const Serialize::Mul *)expr;
         auto a = deserialize_expr(mul_expr->a_type(), mul_expr->a());
         auto b = deserialize_expr(mul_expr->b_type(), mul_expr->b());
         return Mul::make(a, b);
     }
     case Serialize::Expr::Expr_Div: {
-        const Serialize::Div *div_expr = (const Serialize::Div *)expr;
+        const auto *div_expr = (const Serialize::Div *)expr;
         auto a = deserialize_expr(div_expr->a_type(), div_expr->a());
         auto b = deserialize_expr(div_expr->b_type(), div_expr->b());
         return Div::make(a, b);
     }
     case Serialize::Expr::Expr_Mod: {
-        const Serialize::Mod *mod_expr = (const Serialize::Mod *)expr;
+        const auto *mod_expr = (const Serialize::Mod *)expr;
         auto a = deserialize_expr(mod_expr->a_type(), mod_expr->a());
         auto b = deserialize_expr(mod_expr->b_type(), mod_expr->b());
         return Mod::make(a, b);
     }
     case Serialize::Expr::Expr_Min: {
-        const Serialize::Min *min_expr = (const Serialize::Min *)expr;
+        const auto *min_expr = (const Serialize::Min *)expr;
         auto a = deserialize_expr(min_expr->a_type(), min_expr->a());
         auto b = deserialize_expr(min_expr->b_type(), min_expr->b());
         return Min::make(a, b);
     }
     case Serialize::Expr::Expr_Max: {
-        const Serialize::Max *max_expr = (const Serialize::Max *)expr;
+        const auto *max_expr = (const Serialize::Max *)expr;
         auto a = deserialize_expr(max_expr->a_type(), max_expr->a());
         auto b = deserialize_expr(max_expr->b_type(), max_expr->b());
         return Max::make(a, b);
     }
     case Serialize::Expr::Expr_EQ: {
-        const Serialize::EQ *eq_expr = (const Serialize::EQ *)expr;
+        const auto *eq_expr = (const Serialize::EQ *)expr;
         auto a = deserialize_expr(eq_expr->a_type(), eq_expr->a());
         auto b = deserialize_expr(eq_expr->b_type(), eq_expr->b());
         return EQ::make(a, b);
     }
     case Serialize::Expr::Expr_NE: {
-        const Serialize::NE *ne_expr = (const Serialize::NE *)expr;
+        const auto *ne_expr = (const Serialize::NE *)expr;
         auto a = deserialize_expr(ne_expr->a_type(), ne_expr->a());
         auto b = deserialize_expr(ne_expr->b_type(), ne_expr->b());
         return NE::make(a, b);
@@ -713,49 +709,49 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         return LT::make(a, b);
     }
     case Serialize::Expr::Expr_LE: {
-        const Serialize::LE *le_expr = (const Serialize::LE *)expr;
+        const auto *le_expr = (const Serialize::LE *)expr;
         auto a = deserialize_expr(le_expr->a_type(), le_expr->a());
         auto b = deserialize_expr(le_expr->b_type(), le_expr->b());
         return LE::make(a, b);
     }
     case Serialize::Expr::Expr_GT: {
-        const Serialize::GT *gt_expr = (const Serialize::GT *)expr;
+        const auto *gt_expr = (const Serialize::GT *)expr;
         auto a = deserialize_expr(gt_expr->a_type(), gt_expr->a());
         auto b = deserialize_expr(gt_expr->b_type(), gt_expr->b());
         return GT::make(a, b);
     }
     case Serialize::Expr::Expr_GE: {
-        const Serialize::GE *ge_expr = (const Serialize::GE *)expr;
+        const auto *ge_expr = (const Serialize::GE *)expr;
         auto a = deserialize_expr(ge_expr->a_type(), ge_expr->a());
         auto b = deserialize_expr(ge_expr->b_type(), ge_expr->b());
         return GE::make(a, b);
     }
     case Serialize::Expr::Expr_And: {
-        const Serialize::And *and_expr = (const Serialize::And *)expr;
+        const auto *and_expr = (const Serialize::And *)expr;
         auto a = deserialize_expr(and_expr->a_type(), and_expr->a());
         auto b = deserialize_expr(and_expr->b_type(), and_expr->b());
         return And::make(a, b);
     }
     case Serialize::Expr::Expr_Or: {
-        const Serialize::Or *or_expr = (const Serialize::Or *)expr;
+        const auto *or_expr = (const Serialize::Or *)expr;
         auto a = deserialize_expr(or_expr->a_type(), or_expr->a());
         auto b = deserialize_expr(or_expr->b_type(), or_expr->b());
         return Or::make(a, b);
     }
     case Serialize::Expr::Expr_Not: {
-        const Serialize::Not *not_expr = (const Serialize::Not *)expr;
+        const auto *not_expr = (const Serialize::Not *)expr;
         auto a = deserialize_expr(not_expr->a_type(), not_expr->a());
         return Not::make(a);
     }
     case Serialize::Expr::Expr_Select: {
-        const Serialize::Select *select_expr = (const Serialize::Select *)expr;
+        const auto *select_expr = (const Serialize::Select *)expr;
         auto condition = deserialize_expr(select_expr->condition_type(), select_expr->condition());
         auto true_value = deserialize_expr(select_expr->true_value_type(), select_expr->true_value());
         auto false_value = deserialize_expr(select_expr->false_value_type(), select_expr->false_value());
         return Select::make(condition, true_value, false_value);
     }
     case Serialize::Expr::Expr_Load: {
-        const Serialize::Load *load_expr = (const Serialize::Load *)expr;
+        const auto *load_expr = (const Serialize::Load *)expr;
         auto name = deserialize_string(load_expr->name());
         auto predicate = deserialize_expr(load_expr->predicate_type(), load_expr->predicate());
         auto index = deserialize_expr(load_expr->index_type(), load_expr->index());
@@ -776,27 +772,27 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         return Load::make(type, name, index, image, param, predicate, alignment);
     }
     case Serialize::Expr::Expr_Ramp: {
-        const Serialize::Ramp *ramp_expr = (const Serialize::Ramp *)expr;
+        const auto *ramp_expr = (const Serialize::Ramp *)expr;
         auto base = deserialize_expr(ramp_expr->base_type(), ramp_expr->base());
         auto stride = deserialize_expr(ramp_expr->stride_type(), ramp_expr->stride());
         auto lanes = ramp_expr->lanes();
         return Ramp::make(base, stride, lanes);
     }
     case Serialize::Expr::Expr_Broadcast: {
-        const Serialize::Broadcast *broadcast_expr = (const Serialize::Broadcast *)expr;
+        const auto *broadcast_expr = (const Serialize::Broadcast *)expr;
         auto value = deserialize_expr(broadcast_expr->value_type(), broadcast_expr->value());
         auto lanes = broadcast_expr->lanes();
         return Broadcast::make(value, lanes);
     }
     case Serialize::Expr::Expr_Let: {
-        const Serialize::Let *let_expr = (const Serialize::Let *)expr;
+        const auto *let_expr = (const Serialize::Let *)expr;
         auto name = deserialize_string(let_expr->name());
         auto value = deserialize_expr(let_expr->value_type(), let_expr->value());
         auto body = deserialize_expr(let_expr->body_type(), let_expr->body());
         return Let::make(name, value, body);
     }
     case Serialize::Expr::Expr_Call: {
-        const Serialize::Call *call_expr = (const Serialize::Call *)expr;
+        const auto *call_expr = (const Serialize::Call *)expr;
         auto name = deserialize_string(call_expr->name());
         std::vector<Expr> args = deserialize_expr_vector(call_expr->args_type(), call_expr->args());
         auto value_index = call_expr->value_index();
@@ -824,7 +820,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         return Call::make(type, name, args, call_type, func_ptr, value_index, image, param);
     }
     case Serialize::Expr::Expr_Variable: {
-        const Serialize::Variable *variable_expr = (const Serialize::Variable *)expr;
+        const auto *variable_expr = (const Serialize::Variable *)expr;
         auto name = deserialize_string(variable_expr->name());
         auto type = deserialize_type(variable_expr->type());
         auto param_name = deserialize_string(variable_expr->param_name());
@@ -843,7 +839,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         return Variable::make(type, name, image, param, reduction_domain);
     }
     case Serialize::Expr::Expr_Shuffle: {
-        const Serialize::Shuffle *shuffle_expr = (const Serialize::Shuffle *)expr;
+        const auto *shuffle_expr = (const Serialize::Shuffle *)expr;
         std::vector<Expr> vectors = deserialize_expr_vector(shuffle_expr->vectors_type(), shuffle_expr->vectors());
         auto indices_serialized = shuffle_expr->indices();
         std::vector<int32_t> indices;
@@ -854,7 +850,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         return Shuffle::make(vectors, indices);
     }
     case Serialize::Expr::Expr_VectorReduce: {
-        const Serialize::VectorReduce *vector_reduce_expr = (const Serialize::VectorReduce *)expr;
+        const auto *vector_reduce_expr = (const Serialize::VectorReduce *)expr;
         auto value = deserialize_expr(vector_reduce_expr->value_type(), vector_reduce_expr->value());
         auto reduction_op = deserialize_vector_reduce_op(vector_reduce_expr->reduction_op());
         int32_t lanes = vector_reduce_expr->lanes();
@@ -864,15 +860,16 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         return Expr();
     }
     default: {
-        user_assert(false) << "unknown type code " << type_code << "\n";
+        user_error << "unknown type code " << type_code << "\n";
         return Expr();
     }
     }
 }
 
-std::vector<Expr> Deserializer::deserialize_expr_vector(const flatbuffers::Vector<uint8_t> *exprs_types, const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized) {
-    assert(exprs_types != nullptr);
-    assert(exprs_serialized != nullptr);
+std::vector<Expr> Deserializer::deserialize_expr_vector(const flatbuffers::Vector<uint8_t> *exprs_types,
+                                                        const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized) {
+    user_assert(exprs_types != nullptr);
+    user_assert(exprs_serialized != nullptr);
     std::vector<Expr> result;
     result.reserve(exprs_serialized->size());
     for (size_t i = 0; i < exprs_serialized->size(); ++i) {
@@ -883,14 +880,14 @@ std::vector<Expr> Deserializer::deserialize_expr_vector(const flatbuffers::Vecto
 }
 
 Range Deserializer::deserialize_range(const Serialize::Range *range) {
-    assert(range != nullptr);
+    user_assert(range != nullptr);
     auto min = deserialize_expr(range->min_type(), range->min());
     auto extent = deserialize_expr(range->extent_type(), range->extent());
     return Range(min, extent);
 }
 
 Bound Deserializer::deserialize_bound(const Serialize::Bound *bound) {
-    assert(bound != nullptr);
+    user_assert(bound != nullptr);
     auto var = deserialize_string(bound->var());
     auto min = deserialize_expr(bound->min_type(), bound->min());
     auto extent = deserialize_expr(bound->extent_type(), bound->extent());
@@ -906,7 +903,7 @@ Bound Deserializer::deserialize_bound(const Serialize::Bound *bound) {
 }
 
 StorageDim Deserializer::deserialize_storage_dim(const Serialize::StorageDim *storage_dim) {
-    assert(storage_dim != nullptr);
+    user_assert(storage_dim != nullptr);
     auto var = deserialize_string(storage_dim->var());
     auto alignment = deserialize_expr(storage_dim->alignment_type(), storage_dim->alignment());
     auto bound = deserialize_expr(storage_dim->bound_type(), storage_dim->bound());
@@ -922,7 +919,7 @@ StorageDim Deserializer::deserialize_storage_dim(const Serialize::StorageDim *st
 }
 
 LoopLevel Deserializer::deserialize_loop_level(const Serialize::LoopLevel *loop_level) {
-    assert(loop_level != nullptr);
+    user_assert(loop_level != nullptr);
     auto func_name = deserialize_string(loop_level->func_name());
     auto stage_index = loop_level->stage_index();
     auto var_name = deserialize_string(loop_level->var_name());
@@ -932,7 +929,7 @@ LoopLevel Deserializer::deserialize_loop_level(const Serialize::LoopLevel *loop_
 }
 
 FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedule *func_schedule) {
-    assert(func_schedule != nullptr);
+    user_assert(func_schedule != nullptr);
     auto store_level = deserialize_loop_level(func_schedule->store_level());
     auto compute_level = deserialize_loop_level(func_schedule->compute_level());
     std::vector<StorageDim> storage_dims;
@@ -967,7 +964,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
 }
 
 Specialization Deserializer::deserialize_specialization(const Serialize::Specialization *specialization) {
-    assert(specialization != nullptr);
+    user_assert(specialization != nullptr);
     auto condition = deserialize_expr(specialization->condition_type(), specialization->condition());
     auto defintion = deserialize_definition(specialization->definition());
     auto failure_message = deserialize_string(specialization->failure_message());
@@ -979,7 +976,7 @@ Specialization Deserializer::deserialize_specialization(const Serialize::Special
 }
 
 Definition Deserializer::deserialize_definition(const Serialize::Definition *definition) {
-    assert(definition != nullptr);
+    user_assert(definition != nullptr);
     auto is_init = definition->is_init();
     auto predicate = deserialize_expr(definition->predicate_type(), definition->predicate());
     auto args = deserialize_expr_vector(definition->args_type(), definition->args());
@@ -994,7 +991,7 @@ Definition Deserializer::deserialize_definition(const Serialize::Definition *def
 }
 
 ReductionVariable Deserializer::deserialize_reduction_variable(const Serialize::ReductionVariable *reduction_variable) {
-    assert(reduction_variable != nullptr);
+    user_assert(reduction_variable != nullptr);
     auto var = deserialize_string(reduction_variable->var());
     auto min = deserialize_expr(reduction_variable->min_type(), reduction_variable->min());
     auto extent = deserialize_expr(reduction_variable->extent_type(), reduction_variable->extent());
@@ -1006,7 +1003,7 @@ ReductionVariable Deserializer::deserialize_reduction_variable(const Serialize::
 }
 
 ReductionDomain Deserializer::deserialize_reduction_domain(const Serialize::ReductionDomain *reduction_domain) {
-    assert(reduction_domain != nullptr);
+    user_assert(reduction_domain != nullptr);
     bool defined = reduction_domain->defined();
     if (!defined) {
         return ReductionDomain();
@@ -1021,12 +1018,12 @@ ReductionDomain Deserializer::deserialize_reduction_domain(const Serialize::Redu
 }
 
 ModulusRemainder Deserializer::deserialize_modulus_remainder(const Serialize::ModulusRemainder *modulus_remainder) {
-    assert(modulus_remainder != nullptr);
+    user_assert(modulus_remainder != nullptr);
     return ModulusRemainder(modulus_remainder->modulus(), modulus_remainder->remainder());
 }
 
 PrefetchDirective Deserializer::deserialize_prefetch_directive(const Serialize::PrefetchDirective *prefetch_directive) {
-    assert(prefetch_directive != nullptr);
+    user_assert(prefetch_directive != nullptr);
     auto name = deserialize_string(prefetch_directive->name());
     auto at = deserialize_string(prefetch_directive->at());
     auto from = deserialize_string(prefetch_directive->from());
@@ -1048,7 +1045,7 @@ PrefetchDirective Deserializer::deserialize_prefetch_directive(const Serialize::
 }
 
 Split Deserializer::deserialize_split(const Serialize::Split *split) {
-    assert(split != nullptr);
+    user_assert(split != nullptr);
     auto old_var = deserialize_string(split->old_var());
     auto outer = deserialize_string(split->outer());
     auto inner = deserialize_string(split->inner());
@@ -1071,7 +1068,7 @@ Split Deserializer::deserialize_split(const Serialize::Split *split) {
 }
 
 Dim Deserializer::deserialize_dim(const Serialize::Dim *dim) {
-    assert(dim != nullptr);
+    user_assert(dim != nullptr);
     auto var = deserialize_string(dim->var());
     auto for_type = deserialize_for_type(dim->for_type());
     auto device_api = deserialize_device_api(dim->device_api());
@@ -1085,7 +1082,7 @@ Dim Deserializer::deserialize_dim(const Serialize::Dim *dim) {
 }
 
 FuseLoopLevel Deserializer::deserialize_fuse_loop_level(const Serialize::FuseLoopLevel *fuse_loop_level) {
-    assert(fuse_loop_level != nullptr);
+    user_assert(fuse_loop_level != nullptr);
     auto fuse_level = deserialize_loop_level(fuse_loop_level->fuse_level());
     std::vector<std::string> align_dimension_names;
     std::vector<LoopAlignStrategy> align_strategies;
@@ -1103,7 +1100,7 @@ FuseLoopLevel Deserializer::deserialize_fuse_loop_level(const Serialize::FuseLoo
 }
 
 FusedPair Deserializer::deserialize_fused_pair(const Serialize::FusedPair *fused_pair) {
-    assert(fused_pair != nullptr);
+    user_assert(fused_pair != nullptr);
     auto func_1 = deserialize_string(fused_pair->func_1());
     auto func_2 = deserialize_string(fused_pair->func_2());
     auto var_name = deserialize_string(fused_pair->var_name());
@@ -1111,7 +1108,7 @@ FusedPair Deserializer::deserialize_fused_pair(const Serialize::FusedPair *fused
 }
 
 StageSchedule Deserializer::deserialize_stage_schedule(const Serialize::StageSchedule *stage_schedule) {
-    assert(stage_schedule != nullptr);
+    user_assert(stage_schedule != nullptr);
     std::vector<ReductionVariable> rvars;
     rvars.reserve(stage_schedule->rvars()->size());
     for (const auto &rvar : *stage_schedule->rvars()) {
@@ -1147,7 +1144,7 @@ StageSchedule Deserializer::deserialize_stage_schedule(const Serialize::StageSch
 }
 
 BufferConstraint Deserializer::deserialize_buffer_constraint(const Serialize::BufferConstraint *buffer_constraint) {
-    assert(buffer_constraint != nullptr);
+    user_assert(buffer_constraint != nullptr);
     auto min = deserialize_expr(buffer_constraint->min_type(), buffer_constraint->min());
     auto extent = deserialize_expr(buffer_constraint->extent_type(), buffer_constraint->extent());
     auto stride = deserialize_expr(buffer_constraint->stride_type(), buffer_constraint->stride());
@@ -1162,7 +1159,7 @@ BufferConstraint Deserializer::deserialize_buffer_constraint(const Serialize::Bu
 }
 
 Parameter Deserializer::deserialize_parameter(const Serialize::Parameter *parameter) {
-    assert(parameter != nullptr);
+    user_assert(parameter != nullptr);
     bool defined = parameter->defined();
     if (!defined) {
         return Parameter();
@@ -1191,7 +1188,7 @@ Parameter Deserializer::deserialize_parameter(const Serialize::Parameter *parame
 }
 
 ExternFuncArgument Deserializer::deserialize_extern_func_argument(const Serialize::ExternFuncArgument *extern_func_argument) {
-    assert(extern_func_argument != nullptr);
+    user_assert(extern_func_argument != nullptr);
     auto arg_type = deserialize_extern_func_argument_type(extern_func_argument->arg_type());
     if (arg_type == ExternFuncArgument::ArgType::UndefinedArg) {
         return ExternFuncArgument();
@@ -1225,7 +1222,7 @@ ExternFuncArgument Deserializer::deserialize_extern_func_argument(const Serializ
 }
 
 Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
-    assert(buffer != nullptr);
+    user_assert(buffer != nullptr);
     if (!buffer->defined()) {
         return Buffer<>();
     }
@@ -1249,7 +1246,7 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
 }
 
 std::map<std::string, FunctionPtr> Deserializer::deserialize_wrapper_refs(const flatbuffers::Vector<flatbuffers::Offset<Serialize::WrapperRef>> *wrappers) {
-    assert(wrappers != nullptr);
+    user_assert(wrappers != nullptr);
     std::map<std::string, FunctionPtr> result;
     for (const auto &wrapper : *wrappers) {
         auto name = deserialize_string(wrapper->func_name());
@@ -1267,16 +1264,16 @@ void Deserializer::build_reverse_function_mappings(const std::vector<Function> &
     if (!this->reverse_function_mappings.empty()) {
         this->reverse_function_mappings.clear();
     }
-    int cnt = 0;
+    int count = 0;
     for (const auto &f : functions) {
-        this->reverse_function_mappings[cnt++] = f.get_contents();
+        this->reverse_function_mappings[count++] = f.get_contents();
     }
 }
 
 Pipeline Deserializer::deserialize(const std::string &filename) {
     std::ifstream in(filename, std::ios::binary | std::ios::in);
     if (!in) {
-        user_assert(false) << "failed to open file " << filename << "\n";
+        user_error << "failed to open file " << filename << "\n";
         return Pipeline();
     }
     in.seekg(0, std::ios::end);
@@ -1313,7 +1310,7 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
         if (buffers_in_pipeline.find(buffer.name()) == buffers_in_pipeline.end()) {
             buffers_in_pipeline[buffer.name()] = buffer;
         } else {
-            user_assert(false) << "duplicate buffer " << buffer.name() << " in pipeline\n";
+            user_error << "duplicate buffer " << buffer.name() << " in pipeline\n";
         }
     }
     std::vector<Parameter> parameters;
@@ -1325,7 +1322,7 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
         if (parameters_in_pipeline.find(param.name()) == parameters_in_pipeline.end()) {
             parameters_in_pipeline[param.name()] = param;
         } else {
-            user_assert(false) << "duplicate parameter " << param.name() << " in pipeline\n";
+            user_error << "duplicate parameter " << param.name() << " in pipeline\n";
         }
     }
 

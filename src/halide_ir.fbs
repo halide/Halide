@@ -27,7 +27,6 @@ union Stmt {
     UndefinedStmt,
 }
 
-// TODO: handle type?
 union Expr {
     IntImm,
     UIntImm,
@@ -435,7 +434,6 @@ enum VectorReduceOp: ubyte {
     Or,
 }
 
-// TODO: lanes is not stored
 table VectorReduce {
     value: Expr;
     reduction_op: VectorReduceOp;
@@ -658,7 +656,6 @@ table Buffer {
     data: [uint8];
 }
 
-// Halide::internal::Function
 table Func {
     name: string;
     origin_name: string;
@@ -690,7 +687,6 @@ table Pipeline {
     func_names_in_order: [string];
     parameters: [Parameter];
     buffers: [Buffer];
-    // trace_pipeline: bool;
 }
 
 root_type Pipeline;

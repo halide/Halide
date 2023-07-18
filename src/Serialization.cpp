@@ -138,7 +138,7 @@ Halide::Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType
     case MemoryType::AMXTile:
         return Halide::Serialize::MemoryType::MemoryType_AMXTile;
     default:
-        user_assert(false) << "Unsupported memory type\n";
+        user_error << "Unsupported memory type\n";
         return Halide::Serialize::MemoryType_Auto;
     }
 }
@@ -162,7 +162,7 @@ Halide::Serialize::ForType Serializer::serialize_for_type(const ForType &for_typ
     case ForType::GPULane:
         return Halide::Serialize::ForType::ForType_GPULane;
     default:
-        user_assert(false) << "Unsupported for type\n";
+        user_error << "Unsupported for type\n";
         return Halide::Serialize::ForType_Serial;
     }
 }
@@ -194,7 +194,7 @@ Halide::Serialize::DeviceAPI Serializer::serialize_device_api(const DeviceAPI &d
     case DeviceAPI::WebGPU:
         return Halide::Serialize::DeviceAPI::DeviceAPI_WebGPU;
     default:
-        user_assert(false) << "Unsupported device API\n";
+        user_error << "Unsupported device API\n";
         return Halide::Serialize::DeviceAPI_None;
     }
 }
@@ -216,7 +216,7 @@ Halide::Serialize::CallType Serializer::serialize_call_type(const Call::CallType
     case Call::CallType::PureIntrinsic:
         return Halide::Serialize::CallType::CallType_PureIntrinsic;
     default:
-        user_assert(false) << "Unsupported call type\n";
+        user_error << "Unsupported call type\n";
         return Halide::Serialize::CallType::CallType_Image;
     }
 }
@@ -238,7 +238,7 @@ Halide::Serialize::VectorReduceOp Serializer::serialize_vector_reduce_op(const V
     case VectorReduce::Operator::Or:
         return Halide::Serialize::VectorReduceOp::VectorReduceOp_Or;
     default:
-        user_assert(false) << "Unsupported vector reduce op\n";
+        user_error << "Unsupported vector reduce op\n";
         return Halide::Serialize::VectorReduceOp::VectorReduceOp_Add;
     }
 }
@@ -252,7 +252,7 @@ Halide::Serialize::PrefetchBoundStrategy Serializer::serialize_prefetch_bound_st
     case PrefetchBoundStrategy::NonFaulting:
         return Halide::Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_NonFaulting;
     default:
-        user_assert(false) << "Unsupported prefetch bound strategy\n";
+        user_error << "Unsupported prefetch bound strategy\n";
         return Halide::Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_Clamp;
     }
 }
@@ -266,7 +266,7 @@ Halide::Serialize::NameMangling Serializer::serialize_name_mangling(const NameMa
     case NameMangling::CPlusPlus:
         return Halide::Serialize::NameMangling::NameMangling_CPlusPlus;
     default:
-        user_assert(false) << "Unsupported name mangling\n";
+        user_error << "Unsupported name mangling\n";
         return Halide::Serialize::NameMangling::NameMangling_Default;
     }
 }
@@ -288,7 +288,7 @@ Halide::Serialize::TailStrategy Serializer::serialize_tail_strategy(const TailSt
     case TailStrategy::Auto:
         return Halide::Serialize::TailStrategy::TailStrategy_Auto;
     default:
-        user_assert(false) << "Unsupported tail strategy\n";
+        user_error << "Unsupported tail strategy\n";
         return Halide::Serialize::TailStrategy::TailStrategy_RoundUp;
     }
 }
@@ -304,7 +304,7 @@ Halide::Serialize::SplitType Serializer::serialize_split_type(const Split::Split
     case Split::SplitType::PurifyRVar:
         return Halide::Serialize::SplitType::SplitType_PurifyRVar;
     default:
-        user_assert(false) << "Unsupported split type\n";
+        user_error << "Unsupported split type\n";
         return Halide::Serialize::SplitType::SplitType_SplitVar;
     }
 }
@@ -318,7 +318,7 @@ Halide::Serialize::DimType Serializer::serialize_dim_type(const DimType &dim_typ
     case DimType::ImpureRVar:
         return Halide::Serialize::DimType::DimType_ImpureRVar;
     default:
-        user_assert(false) << "Unsupported dim type\n";
+        user_error << "Unsupported dim type\n";
         return Halide::Serialize::DimType::DimType_PureVar;
     }
 }
@@ -334,7 +334,7 @@ Halide::Serialize::LoopAlignStrategy Serializer::serialize_loop_align_strategy(c
     case LoopAlignStrategy::Auto:
         return Halide::Serialize::LoopAlignStrategy::LoopAlignStrategy_Auto;
     default:
-        user_assert(false) << "Unsupported loop align strategy\n";
+        user_error << "Unsupported loop align strategy\n";
         return Halide::Serialize::LoopAlignStrategy::LoopAlignStrategy_AlignStart;
     }
 }
@@ -352,7 +352,7 @@ Halide::Serialize::ExternFuncArgumentType Serializer::serialize_extern_func_argu
     case ExternFuncArgument::ArgType::ImageParamArg:
         return Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ImageParamArg;
     default:
-        user_assert(false) << "Unsupported extern func argument type\n";
+        user_error << "Unsupported extern func argument type\n";
         return Halide::Serialize::ExternFuncArgumentType::ExternFuncArgumentType_UndefinedArg;
     }
 }
@@ -556,7 +556,7 @@ std::pair<Halide::Serialize::Stmt, flatbuffers::Offset<void>> Serializer::serial
         return std::make_pair(Halide::Serialize::Stmt::Stmt_Atomic, Halide::Serialize::CreateAtomic(builder, producer_name_serialized, mutex_name_serialized, body_serialized.first, body_serialized.second).Union());
     }
     default:
-        user_assert(false) << "Unsupported stmt type\n";
+        user_error << "Unsupported stmt type\n";
         return std::make_pair(Halide::Serialize::Stmt::Stmt_UndefinedStmt, Halide::Serialize::CreateUndefinedStmt(builder).Union());
     }
 }
@@ -815,7 +815,7 @@ std::pair<Halide::Serialize::Expr, flatbuffers::Offset<void>> Serializer::serial
         return std::make_pair(Halide::Serialize::Expr::Expr_VectorReduce, Halide::Serialize::CreateVectorReduce(builder, value_serialized.first, value_serialized.second, reduction_op_serialized, lanes).Union());
     }
     default:
-        user_assert(false) << "Unsupported Expr type\n";
+        user_error << "Unsupported Expr type\n";
         return std::make_pair(Halide::Serialize::Expr::Expr_UndefinedExpr, Halide::Serialize::CreateUndefinedExpr(builder).Union());
     }
 }
@@ -1246,7 +1246,7 @@ void Serializer::build_function_mappings(const std::map<std::string, Function> &
 void Serializer::serialize(const Pipeline &pipeline, const std::string &filename) {
     flatbuffers::FlatBufferBuilder builder(1024);
 
-    // extract the DAG, unwarp function from Funcs
+    // extract the DAG, unwrap function from Funcs
     std::vector<Function> outputs_functions;
     for (const Func &func : pipeline.outputs()) {
         outputs_functions.push_back(func.function());
@@ -1307,7 +1307,7 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
     int size = builder.GetSize();
     std::ofstream out(filename, std::ios::out | std::ios::binary);
     if (!out) {
-        user_assert(false) << "failed to open file " << filename << "\n";
+        user_error << "failed to open file " << filename << "\n";
         exit(1);
     }
     out.write((char *)(buf), size);
