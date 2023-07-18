@@ -21,7 +21,7 @@ __attribute__((weak)) float __extendhfsf2(float actually_a_float16) {
 #else
 
 // We haven't tested this variant, so emit a warning if we ever compile for it.
-#pragma message "Support for Generator build() methods has been removed in Halide version 15."
+#pragma message "This variant of __extendhfsf2 has not been tested."
 __attribute__((weak)) float __extendhfsf2(uint16_t data) {
     return Halide::float16_t::make_from_bits(data);
 }
