@@ -185,6 +185,9 @@ public:
      * outputs. Schedules the Funcs compute_root(). */
     Pipeline(const std::vector<Func> &outputs);
 
+    /** Make a pipeline from deserialization. */
+    Pipeline(const std::vector<Func> &outputs, const std::vector<Internal::Stmt> &requirements);
+
     std::vector<Argument> infer_arguments(const Internal::Stmt &body);
 
     /** Get the Funcs this pipeline outputs. */

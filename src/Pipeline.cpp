@@ -208,6 +208,15 @@ Pipeline::Pipeline(const vector<Func> &outputs)
     }
 }
 
+Pipeline::Pipeline(const std::vector<Func> &outputs, const std::vector<Internal::Stmt> &requirements)
+    : contents(new PipelineContents) {
+    for (const Func &f : outputs) {
+        f.function().freeze();
+        contents->outputs.push_back(f.function());
+        contents->requirements = requirements;
+    }
+}
+
 vector<Func> Pipeline::outputs() const {
     vector<Func> funcs;
     for (const Function &f : contents->outputs) {

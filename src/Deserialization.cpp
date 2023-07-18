@@ -1358,7 +1358,7 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
         auto requirement_deserialized = deserialize_stmt(static_cast<Serialize::Stmt>(requirement_type_objs->Get(i)), requirements_objs->Get(i));
         requirements.push_back(requirement_deserialized);
     }
-    return Pipeline(output_funcs);
+    return Pipeline(output_funcs, requirements);
 }
 }  // namespace Internal
 
