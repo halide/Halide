@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22...3.23)
 project(Halide
-        VERSION 16.0.0
+        VERSION 17.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
@@ -59,16 +59,24 @@ mark_as_advanced(Halide_CCACHE_BUILD)
 if (Halide_CCACHE_BUILD)
     find_program(CCACHE_PROGRAM ccache REQUIRED)
 
-    # TODO: ccache recommends setting CCACHE_SLOPPINESS=pch_defines,time_macros to
-    # enable precompiled header caching. Our timing found it slightly faster with
-    # just CCACHE_SLOPPINESS=pch_defines, so that's what we're using. Maybe revisit
-    # if issues occur (but we don't use any of the time macros so should be irrelevant).
-    set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines
+    set(Halide_CCACHE_PARAMS
+        CCACHE_CPP2=yes
+        CCACHE_HASHDIR=yes
+        CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime
         CACHE STRING "Parameters to pass through to ccache")
     mark_as_advanced(Halide_CCACHE_PARAMS)
 
     set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+
+    # Per https://ccache.dev/manual/latest.html#_precompiled_headers,
+    # we must set -fno-pch-timestamp when using Clang + CCache + PCH
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+        string(APPEND CMAKE_C_FLAGS " -Xclang -fno-pch-timestamp")
+    endif()
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        string(APPEND CMAKE_CXX_FLAGS " -Xclang -fno-pch-timestamp")
+    endif()
 
     message(STATUS "Enabling ccache usage for building.")
 endif ()
@@ -95,7 +103,26 @@ endif()
 # Import dependencies
 ##
 
+## Threads
+option(THREADS_PREFER_PTHREAD_FLAG "When enabled, prefer to use the -pthread flag to explicit linking" ON)
+find_package(Threads REQUIRED)
+
+## Complex dependencies
 add_subdirectory(dependencies)
+
+## Image formats
+
+# This changes how find_xxx() commands work; the default is to find frameworks before
+# standard libraries or headers, but this can be a problem on systems that have Mono
+# installed, as it has a framework with the libjpeg and libpng  headers present -- so
+# CMake finds the headers from Mono but the libraries from Homebrew, and hilarity ensues.
+# Setting this to "last" means we always try the standard libraries before the frameworks.
+set(CMAKE_FIND_FRAMEWORK LAST)
+
+# TODO: these really belong in tools/, but CMake has a weird bug with $<TARGET_NAME_IF_EXISTS:...>
+# https://gitlab.kitware.com/cmake/cmake/-/issues/25033
+find_package(JPEG)
+find_package(PNG)
 
 ##
 # Declare options
@@ -117,7 +144,6 @@ cmake_dependent_option(
     WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
     "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
 )
-
 
 ##
 # Add source directories

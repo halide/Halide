@@ -1973,7 +1973,9 @@ void CodeGen_Hexagon::visit(const Call *op) {
         llvm::Type *ptr_type = prefetch_fn->getFunctionType()->params()[0];
         args[0] = builder->CreateBitCast(args[0], ptr_type);
 
-        value = builder->CreateCall(prefetch_fn, args);
+        builder->CreateCall(prefetch_fn, args);
+
+        value = codegen(cast(op->type, 0));
         return;
     }
 

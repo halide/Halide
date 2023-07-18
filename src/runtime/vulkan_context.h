@@ -39,25 +39,17 @@ class VulkanContext {
     void *user_context;
 
 public:
-    VulkanMemoryAllocator *allocator;
-    VkInstance instance;
-    VkDevice device;
-    VkCommandPool command_pool;
-    VkPhysicalDevice physical_device;
-    VkQueue queue;
-    uint32_t queue_family_index;  // used for operations requiring queue family
-    halide_error_code_t error;
+    VulkanMemoryAllocator *allocator = nullptr;
+    VkInstance instance = nullptr;
+    VkDevice device = nullptr;
+    VkCommandPool command_pool = 0;
+    VkPhysicalDevice physical_device = nullptr;
+    VkQueue queue = nullptr;
+    uint32_t queue_family_index = 0;  // used for operations requiring queue family
+    halide_error_code_t error = halide_error_code_success;
 
     HALIDE_ALWAYS_INLINE VulkanContext(void *user_context)
-        : user_context(user_context),
-          allocator(nullptr),
-          instance(nullptr),
-          device(nullptr),
-          command_pool(0),
-          physical_device(nullptr),
-          queue(nullptr),
-          queue_family_index(0),
-          error(halide_error_code_success) {
+        : user_context(user_context) {
 
         int result = halide_vulkan_acquire_context(user_context,
                                                    reinterpret_cast<halide_vulkan_memory_allocator **>(&allocator),

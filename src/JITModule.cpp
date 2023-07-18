@@ -520,7 +520,9 @@ JITModule::Symbol JITModule::argv_entrypoint_symbol() const {
     return jit_module->argv_entrypoint;
 }
 
-static bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set<const JITModuleContents *> &already_seen) {
+namespace {
+
+bool module_already_in_graph(const JITModuleContents *start, const JITModuleContents *target, std::set<const JITModuleContents *> &already_seen) {
     if (start == target) {
         return true;
     }
@@ -536,6 +538,8 @@ static bool module_already_in_graph(const JITModuleContents *start, const JITMod
     }
     return false;
 }
+
+}  // namespace
 
 void JITModule::add_dependency(JITModule &dep) {
     std::set<const JITModuleContents *> already_seen;
@@ -762,7 +766,7 @@ enum RuntimeKind {
     OpenCL,
     Metal,
     CUDA,
-    OpenGLCompute,
+    OpenGLCompute,  // NOTE: this feature is deprecated and will be removed in Halide 17
     Hexagon,
     D3D12Compute,
     Vulkan,
@@ -770,7 +774,7 @@ enum RuntimeKind {
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
-    OpenGLComputeDebug,
+    OpenGLComputeDebug,  // NOTE: this feature is deprecated and will be removed in Halide 17
     HexagonDebug,
     D3D12ComputeDebug,
     VulkanDebug,

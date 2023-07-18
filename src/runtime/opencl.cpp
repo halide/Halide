@@ -263,18 +263,15 @@ namespace OpenCL {
 // Helper object to acquire and release the OpenCL context.
 class ClContext {
     void *const user_context;
-    int status;  // must always be a valid halide_error_code_t value
+    int status = halide_error_code_success;  // must always be a valid halide_error_code_t value
 
 public:
-    cl_context context;
-    cl_command_queue cmd_queue;
+    cl_context context = nullptr;
+    cl_command_queue cmd_queue = nullptr;
 
     // Constructor sets 'status' if any occurs.
     ALWAYS_INLINE ClContext(void *user_context)
-        : user_context(user_context),
-          status(halide_error_code_success),
-          context(nullptr),
-          cmd_queue(nullptr) {
+        : user_context(user_context) {
         if (clCreateContext == nullptr) {
             status = load_libopencl(user_context);
             if (status) {
