@@ -347,6 +347,19 @@ $ cmake --list-presets    # Get full list of presets.
 The Windows presets assume that the environment variable `VCPKG_ROOT` is set and
 points to the root of the vcpkg installation.
 
+There are also presets to use some Clang sanitizers with the CMake build;
+at present, only Fuzzer and ASAN (Address Sanitizer) are supported, and
+only on linux-x86-64. To use these, you must build LLVM with additional options:
+
+```
+    -D LLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra"
+    -D LLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind"
+```
+
+To build / test with ASAN, use `--preset linux-x64-asan`.
+
+To build / test with the Fuzzer, use `--preset linux-x64-fuzzer`.
+
 ## Installing
 
 Once built, Halide will need to be installed somewhere before using it in a
