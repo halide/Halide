@@ -428,7 +428,7 @@ add_library(Halide
 # Build the serialization header file.
 ##
 if (BUILD_SERIALIZATION)
-    find_package(flatbuffers REQUIRED)
+    find_package(Flatbuffers REQUIRED)
 
     set(fb_dir "${Halide_BINARY_DIR}/flatc/include")
 
