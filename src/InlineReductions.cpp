@@ -275,7 +275,7 @@ Tuple argmax(const RDom &r, Expr e, const Func &f) {
 
     f(v.free_vars) = initial_tup;
     Expr better = e > f(v.free_vars)[value_index];
-    Tuple update = tuple_select(better, update_tup, f(v.free_vars));
+    Tuple update = select(better, update_tup, f(v.free_vars));
     f(v.free_vars) = update;
     return f(v.call_args);
 }
@@ -314,7 +314,7 @@ Tuple argmin(const RDom &r, Expr e, const Func &f) {
 
     f(v.free_vars) = initial_tup;
     Expr better = e < f(v.free_vars)[value_index];
-    f(v.free_vars) = tuple_select(better, update_tup, f(v.free_vars));
+    f(v.free_vars) = select(better, update_tup, f(v.free_vars));
     return f(v.call_args);
 }
 
