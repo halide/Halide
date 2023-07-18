@@ -581,11 +581,11 @@ void Pipeline::compile_jit(const Target &target_arg) {
     }
     // Clear all cached info in case there is an error.
     contents->invalidate_cache();
-    std::string debug_serialization = get_env_variable("HL_DEBUG_SERIALIZATION");
+    std::string test_serialization = get_env_variable("HL_TEST_SERIALIZATION");
     Pipeline deserialized_pipe;
     std::vector<Function> origin_outputs;
     std::vector<Internal::Stmt> origin_requirements;
-    if (!debug_serialization.empty()) {
+    if (!test_serialization.empty()) {
         std::string filename = generate_function_name() + ".hlpipe";
         std::map<std::string, Internal::Parameter> external_params;
         serialize_pipeline(*this, filename, external_params);
@@ -618,7 +618,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
     Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
     contents->jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, contents->jit_externs, target);
-    if (!debug_serialization.empty()) {
+    if (!test_serialization.empty()) {
         contents->outputs = origin_outputs;
         contents->requirements = origin_requirements;
     }
