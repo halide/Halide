@@ -6,14 +6,15 @@
 
 namespace Halide {
 
-std::ostream &operator<<(std::ostream &stream, const Halide::Tuple &t) {
-    stream << "Tup{";
-    for (size_t i = 0; i < t.size(); i++) {
-        stream << t[i] << ",";
-    }
-    stream << "}";
-    return stream;
-}
+// Only necessary for debugging
+// std::ostream &operator<<(std::ostream &stream, const Halide::Tuple &t) {
+//     stream << "Tup{";
+//     for (size_t i = 0; i < t.size(); i++) {
+//         stream << t[i] << ",";
+//     }
+//     stream << "}";
+//     return stream;
+// }
 
 namespace PythonBindings {
 
