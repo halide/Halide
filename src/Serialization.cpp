@@ -1212,9 +1212,10 @@ flatbuffers::Offset<Halide::Serialize::Buffer> Serializer::serialize_buffer(flat
         int32_t stride = buffer.dim(i).stride();
         buffer_dimensions_serialized.push_back(Halide::Serialize::CreateBufferDimension(builder, min, extent, stride));
     }
+    auto copy = buffer.copy();  // compact in memory
     std::vector<uint8_t> data;
-    data.resize(buffer.size_in_bytes());
-    memcpy(data.data(), buffer.data(), buffer.size_in_bytes());
+    data.resize(copy.size_in_bytes());
+    memcpy(data.data(), copy.data(), copy.size_in_bytes());
     return Halide::Serialize::CreateBuffer(builder, true, name_serialized, type_serialized, dimensions, builder.CreateVector(buffer_dimensions_serialized), builder.CreateVector(data));
 }
 

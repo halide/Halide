@@ -1229,19 +1229,37 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
     std::string name = deserialize_string(buffer->name());
     auto type = deserialize_type(buffer->type());
     int32_t dimensions = buffer->dimensions();
-    std::vector<halide_dimension_t> buffer_dimensions;
-    buffer_dimensions.reserve(dimensions);
+    std::vector<halide_dimension_t> hl_buffer_dimensions;
+    std::vector<halide_dimension_t> dense_buffer_dimensions;
+    hl_buffer_dimensions.reserve(dimensions);
+    dense_buffer_dimensions.reserve(dimensions);
+    int32_t stride = -1;
     for (int i = 0; i < dimensions; ++i) {
         auto dim = buffer->dims()->Get(i);
-        halide_dimension_t hl_dim;
+        halide_dimension_t hl_dim, dense_dim;
         hl_dim.min = dim->min();
         hl_dim.extent = dim->extent();
         hl_dim.stride = dim->stride();
-        buffer_dimensions.push_back(hl_dim);
+        hl_buffer_dimensions.push_back(hl_dim);
+        dense_dim.min = hl_dim.min;
+        dense_dim.extent = hl_dim.extent;
+        if (i == 0) {
+            dense_dim.stride = hl_dim.stride;
+            stride = hl_dim.stride * hl_dim.extent;
+        } else {
+            dense_dim.stride = stride;
+            stride *= hl_dim.extent;
+        }
+        dense_buffer_dimensions.push_back(dense_dim);
     }
-    auto fake_buffer = Buffer<>(type, nullptr, dimensions, buffer_dimensions.data(), name + "_fake");
+    // To handle cropped buffer, we create a dense buffer and serialize into it,
+    // then create a (potential sparse) buffer with orignal dimension infos and copy from the dense buffer
+    auto fake_dense_buffer = Buffer<>(type, nullptr, dimensions, dense_buffer_dimensions.data(), name + "_dense_fake");
+    auto dense_buffer = Buffer<>::make_with_shape_of(fake_dense_buffer, nullptr, nullptr, name + "_dense_tmp");
+    memcpy(dense_buffer.data(), buffer->data()->data(), buffer->data()->size());
+    auto fake_buffer = Buffer<>(type, nullptr, dimensions, hl_buffer_dimensions.data(), name + "_fake");
     auto hl_buffer = Buffer<>::make_with_shape_of(fake_buffer, nullptr, nullptr, name);
-    memcpy(hl_buffer.data(), buffer->data()->data(), buffer->data()->size());
+    hl_buffer.copy_from(dense_buffer);
     return hl_buffer;
 }
 
