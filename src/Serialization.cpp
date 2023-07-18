@@ -18,8 +18,8 @@
 namespace Halide {
 namespace Internal {
 
-using flatbuffers::Offset;
 using flatbuffers::FlatBufferBuilder;
+using flatbuffers::Offset;
 using flatbuffers::String;
 
 class Serializer {
@@ -385,28 +385,31 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         auto name_serialized = serialize_string(builder, let_stmt->name);
         auto value_serialized = serialize_expr(builder, let_stmt->value);
         auto body_serialized = serialize_stmt(builder, let_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_LetStmt, 
-                              Serialize::CreateLetStmt(builder, name_serialized, 
-                                                       value_serialized.first, value_serialized.second, 
-                                                       body_serialized.first, body_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_LetStmt,
+                              Serialize::CreateLetStmt(builder, name_serialized,
+                                                       value_serialized.first, value_serialized.second,
+                                                       body_serialized.first, body_serialized.second)
+                                  .Union());
     }
     case IRNodeType::AssertStmt: {
         auto assert_stmt = stmt.as<AssertStmt>();
         auto condition_serialized = serialize_expr(builder, assert_stmt->condition);
         auto message_serialized = serialize_expr(builder, assert_stmt->message);
-        return std::make_pair(Serialize::Stmt::Stmt_AssertStmt, 
-                              Serialize::CreateAssertStmt(builder, 
-                                                          condition_serialized.first, condition_serialized.second, 
-                                                          message_serialized.first, message_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_AssertStmt,
+                              Serialize::CreateAssertStmt(builder,
+                                                          condition_serialized.first, condition_serialized.second,
+                                                          message_serialized.first, message_serialized.second)
+                                  .Union());
     }
     case IRNodeType::ProducerConsumer: {
         auto producer_consumer = stmt.as<ProducerConsumer>();
         auto name_serialized = serialize_string(builder, producer_consumer->name);
         auto body_serialized = serialize_stmt(builder, producer_consumer->body);
-        return std::make_pair(Serialize::Stmt::Stmt_ProducerConsumer, 
-                              Serialize::CreateProducerConsumer(builder, name_serialized, 
-                                                                producer_consumer->is_producer, 
-                                                                body_serialized.first, body_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_ProducerConsumer,
+                              Serialize::CreateProducerConsumer(builder, name_serialized,
+                                                                producer_consumer->is_producer,
+                                                                body_serialized.first, body_serialized.second)
+                                  .Union());
     }
     case IRNodeType::For: {
         auto for_stmt = stmt.as<For>();
@@ -417,11 +420,12 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         Serialize::DeviceAPI device_api = serialize_device_api(for_stmt->device_api);
         auto body_serialized = serialize_stmt(builder, for_stmt->body);
         return std::make_pair(Serialize::Stmt::Stmt_For,
-                              Serialize::CreateFor(builder, name_serialized, 
-                                                   min_serialized.first, min_serialized.second, 
-                                                   extent_serialized.first, extent_serialized.second, 
-                                                   for_type, device_api, 
-                                                   body_serialized.first, body_serialized.second).Union());
+                              Serialize::CreateFor(builder, name_serialized,
+                                                   min_serialized.first, min_serialized.second,
+                                                   extent_serialized.first, extent_serialized.second,
+                                                   for_type, device_api,
+                                                   body_serialized.first, body_serialized.second)
+                                  .Union());
     }
     case IRNodeType::Store: {
         auto store_stmt = stmt.as<Store>();
@@ -435,12 +439,13 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         }
         auto param_name_serialized = serialize_string(builder, param_name);
         auto alignment_serialized = serialize_modulus_remainder(builder, store_stmt->alignment);
-        return std::make_pair(Serialize::Stmt::Stmt_Store, 
-                              Serialize::CreateStore(builder, name_serialized, 
-                                                     predicate_serialized.first, predicate_serialized.second, 
-                                                     value_serialized.first, value_serialized.second, 
-                                                     index_serialized.first, index_serialized.second, 
-                                                     param_name_serialized, alignment_serialized).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_Store,
+                              Serialize::CreateStore(builder, name_serialized,
+                                                     predicate_serialized.first, predicate_serialized.second,
+                                                     value_serialized.first, value_serialized.second,
+                                                     index_serialized.first, index_serialized.second,
+                                                     param_name_serialized, alignment_serialized)
+                                  .Union());
     }
     case IRNodeType::Provide: {
         auto provide_stmt = stmt.as<Provide>();
@@ -466,13 +471,14 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
             args_serialized.push_back(arg_serialized.second);
         }
         auto predicate_serialized = serialize_expr(builder, provide_stmt->predicate);
-        return std::make_pair(Serialize::Stmt::Stmt_Provide, 
-                              Serialize::CreateProvide(builder, name_serialized, 
-                                                       builder.CreateVector(values_types), 
-                                                       builder.CreateVector(values_serialized), 
-                                                       builder.CreateVector(args_types), 
-                                                       builder.CreateVector(args_serialized), 
-                                                       predicate_serialized.first, predicate_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_Provide,
+                              Serialize::CreateProvide(builder, name_serialized,
+                                                       builder.CreateVector(values_types),
+                                                       builder.CreateVector(values_serialized),
+                                                       builder.CreateVector(args_types),
+                                                       builder.CreateVector(args_serialized),
+                                                       predicate_serialized.first, predicate_serialized.second)
+                                  .Union());
     }
     case IRNodeType::Allocate: {
         auto allocate_stmt = stmt.as<Allocate>();
@@ -494,15 +500,16 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         auto free_function_serialized = serialize_string(builder, allocate_stmt->free_function);
         auto padding = allocate_stmt->padding;
         auto body_serialized = serialize_stmt(builder, allocate_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_Allocate, 
-                              Serialize::CreateAllocate(builder, name_serialized, 
-                                                        type_serialized, memory_type, 
-                                                        builder.CreateVector(extents_types), 
-                                                        builder.CreateVector(extents_serialized), 
-                                                        condition_serialized.first, condition_serialized.second, 
-                                                        new_expr_serialized.first, new_expr_serialized.second, 
-                                                        free_function_serialized, padding, 
-                                                        body_serialized.first, body_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_Allocate,
+                              Serialize::CreateAllocate(builder, name_serialized,
+                                                        type_serialized, memory_type,
+                                                        builder.CreateVector(extents_types),
+                                                        builder.CreateVector(extents_serialized),
+                                                        condition_serialized.first, condition_serialized.second,
+                                                        new_expr_serialized.first, new_expr_serialized.second,
+                                                        free_function_serialized, padding,
+                                                        body_serialized.first, body_serialized.second)
+                                  .Union());
     }
     case IRNodeType::Free: {
         auto free_stmt = stmt.as<Free>();
@@ -528,37 +535,40 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         auto types_vector = builder.CreateVector(types_serialized);
         auto condition_serialized = serialize_expr(builder, realize_stmt->condition);
         auto body_serialized = serialize_stmt(builder, realize_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_Realize, 
-                              Serialize::CreateRealize(builder, name_serialized, 
-                                                       types_vector, memory_type, 
-                                                       builder.CreateVector(bounds_serialized), 
-                                                       condition_serialized.first, condition_serialized.second, 
-                                                       body_serialized.first, body_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_Realize,
+                              Serialize::CreateRealize(builder, name_serialized,
+                                                       types_vector, memory_type,
+                                                       builder.CreateVector(bounds_serialized),
+                                                       condition_serialized.first, condition_serialized.second,
+                                                       body_serialized.first, body_serialized.second)
+                                  .Union());
     }
     case IRNodeType::Block: {
         auto block_stmt = stmt.as<Block>();
         auto first_serialized = serialize_stmt(builder, block_stmt->first);
         auto rest_serialized = serialize_stmt(builder, block_stmt->rest);
-        return std::make_pair(Serialize::Stmt::Stmt_Block, 
-                              Serialize::CreateBlock(builder, 
-                                                     first_serialized.first, first_serialized.second, 
-                                                     rest_serialized.first, rest_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_Block,
+                              Serialize::CreateBlock(builder,
+                                                     first_serialized.first, first_serialized.second,
+                                                     rest_serialized.first, rest_serialized.second)
+                                  .Union());
     }
     case IRNodeType::IfThenElse: {
         auto if_then_else_stmt = stmt.as<IfThenElse>();
         auto condition_serialized = serialize_expr(builder, if_then_else_stmt->condition);
         auto then_case_serialized = serialize_stmt(builder, if_then_else_stmt->then_case);
         auto else_case_serialized = serialize_stmt(builder, if_then_else_stmt->else_case);
-        return std::make_pair(Serialize::Stmt::Stmt_IfThenElse, 
-                              Serialize::CreateIfThenElse(builder, 
-                                                          condition_serialized.first, condition_serialized.second, 
-                                                          then_case_serialized.first, then_case_serialized.second, 
-                                                          else_case_serialized.first, else_case_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_IfThenElse,
+                              Serialize::CreateIfThenElse(builder,
+                                                          condition_serialized.first, condition_serialized.second,
+                                                          then_case_serialized.first, then_case_serialized.second,
+                                                          else_case_serialized.first, else_case_serialized.second)
+                                  .Union());
     }
     case IRNodeType::Evaluate: {
         auto evaluate_stmt = stmt.as<Evaluate>();
         auto value_serialized = serialize_expr(builder, evaluate_stmt->value);
-        return std::make_pair(Serialize::Stmt::Stmt_Evaluate, 
+        return std::make_pair(Serialize::Stmt::Stmt_Evaluate,
                               Serialize::CreateEvaluate(builder, value_serialized.first, value_serialized.second).Union());
     }
     case IRNodeType::Prefetch: {
@@ -580,41 +590,45 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         auto prefetch_serialized = serialize_prefetch_directive(builder, prefetch_stmt->prefetch);
         auto condition_serialized = serialize_expr(builder, prefetch_stmt->condition);
         auto body_serialized = serialize_stmt(builder, prefetch_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_Prefetch, 
-                              Serialize::CreatePrefetch(builder, name_serialized, types_vector, 
-                                                        builder.CreateVector(bounds_serialized), 
-                                                        prefetch_serialized, 
-                                                        condition_serialized.first, condition_serialized.second, 
-                                                        body_serialized.first, body_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_Prefetch,
+                              Serialize::CreatePrefetch(builder, name_serialized, types_vector,
+                                                        builder.CreateVector(bounds_serialized),
+                                                        prefetch_serialized,
+                                                        condition_serialized.first, condition_serialized.second,
+                                                        body_serialized.first, body_serialized.second)
+                                  .Union());
     }
     case IRNodeType::Acquire: {
         auto acquire_stmt = stmt.as<Acquire>();
         auto semaphore_serialized = serialize_expr(builder, acquire_stmt->semaphore);
         auto count_serialized = serialize_expr(builder, acquire_stmt->count);
         auto body_serialized = serialize_stmt(builder, acquire_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_Acquire, 
-                              Serialize::CreateAcquire(builder, 
-                                                       semaphore_serialized.first, semaphore_serialized.second, 
-                                                       count_serialized.first, count_serialized.second, 
-                                                       body_serialized.first, body_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_Acquire,
+                              Serialize::CreateAcquire(builder,
+                                                       semaphore_serialized.first, semaphore_serialized.second,
+                                                       count_serialized.first, count_serialized.second,
+                                                       body_serialized.first, body_serialized.second)
+                                  .Union());
     }
     case IRNodeType::Fork: {
         auto fork_stmt = stmt.as<Fork>();
         auto first_serialized = serialize_stmt(builder, fork_stmt->first);
         auto rest_serialized = serialize_stmt(builder, fork_stmt->rest);
-        return std::make_pair(Serialize::Stmt::Stmt_Fork, 
-                              Serialize::CreateFork(builder, 
-                                                    first_serialized.first, first_serialized.second, 
-                                                    rest_serialized.first, rest_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_Fork,
+                              Serialize::CreateFork(builder,
+                                                    first_serialized.first, first_serialized.second,
+                                                    rest_serialized.first, rest_serialized.second)
+                                  .Union());
     }
     case IRNodeType::Atomic: {
         auto atomic_stmt = stmt.as<Atomic>();
         auto producer_name_serialized = serialize_string(builder, atomic_stmt->producer_name);
         auto mutex_name_serialized = serialize_string(builder, atomic_stmt->mutex_name);
         auto body_serialized = serialize_stmt(builder, atomic_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_Atomic, 
-                              Serialize::CreateAtomic(builder, producer_name_serialized, mutex_name_serialized, 
-                                                      body_serialized.first, body_serialized.second).Union());
+        return std::make_pair(Serialize::Stmt::Stmt_Atomic,
+                              Serialize::CreateAtomic(builder, producer_name_serialized, mutex_name_serialized,
+                                                      body_serialized.first, body_serialized.second)
+                                  .Union());
     }
     default:
         user_error << "Unsupported stmt type\n";
@@ -763,11 +777,12 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         auto condition_serialized = serialize_expr(builder, select_expr->condition);
         auto true_value_serialized = serialize_expr(builder, select_expr->true_value);
         auto false_value_serialized = serialize_expr(builder, select_expr->false_value);
-        return std::make_pair(Serialize::Expr::Expr_Select, 
-                              Serialize::CreateSelect(builder, 
-                                                      condition_serialized.first, condition_serialized.second, 
-                                                      true_value_serialized.first, true_value_serialized.second, 
-                                                      false_value_serialized.first, false_value_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::Expr_Select,
+                              Serialize::CreateSelect(builder,
+                                                      condition_serialized.first, condition_serialized.second,
+                                                      true_value_serialized.first, true_value_serialized.second,
+                                                      false_value_serialized.first, false_value_serialized.second)
+                                  .Union());
     }
     case IRNodeType::Load: {
         auto load_expr = expr.as<Load>();
@@ -786,22 +801,24 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         auto param_name_serialized = serialize_string(builder, param_name);
         auto alignment_serialized = serialize_modulus_remainder(builder, load_expr->alignment);
         auto type_serialized = serialize_type(builder, load_expr->type);
-        return std::make_pair(Serialize::Expr::Expr_Load, 
-                              Serialize::CreateLoad(builder, name_serialized, 
-                                                    predicate_serialized.first, predicate_serialized.second, 
-                                                    index_serialized.first, index_serialized.second, 
-                                                    image_name_serialized, param_name_serialized, 
-                                                    alignment_serialized, type_serialized).Union());
+        return std::make_pair(Serialize::Expr::Expr_Load,
+                              Serialize::CreateLoad(builder, name_serialized,
+                                                    predicate_serialized.first, predicate_serialized.second,
+                                                    index_serialized.first, index_serialized.second,
+                                                    image_name_serialized, param_name_serialized,
+                                                    alignment_serialized, type_serialized)
+                                  .Union());
     }
     case IRNodeType::Ramp: {
         auto ramp_expr = expr.as<Ramp>();
         auto base_serialized = serialize_expr(builder, ramp_expr->base);
         auto stride_serialized = serialize_expr(builder, ramp_expr->stride);
         auto lanes = ramp_expr->lanes;
-        return std::make_pair(Serialize::Expr::Expr_Ramp, 
-                              Serialize::CreateRamp(builder, 
-                                                    base_serialized.first, base_serialized.second, 
-                                                    stride_serialized.first, stride_serialized.second, lanes).Union());
+        return std::make_pair(Serialize::Expr::Expr_Ramp,
+                              Serialize::CreateRamp(builder,
+                                                    base_serialized.first, base_serialized.second,
+                                                    stride_serialized.first, stride_serialized.second, lanes)
+                                  .Union());
     }
     case IRNodeType::Broadcast: {
         auto broadcast_expr = expr.as<Broadcast>();
@@ -814,10 +831,11 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         auto name_serialized = serialize_string(builder, let_expr->name);
         auto value_serialized = serialize_expr(builder, let_expr->value);
         auto body_serialized = serialize_expr(builder, let_expr->body);
-        return std::make_pair(Serialize::Expr::Expr_Let, 
-                              Serialize::CreateLet(builder, name_serialized, 
-                                                   value_serialized.first, value_serialized.second, 
-                                                   body_serialized.first, body_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::Expr_Let,
+                              Serialize::CreateLet(builder, name_serialized,
+                                                   value_serialized.first, value_serialized.second,
+                                                   body_serialized.first, body_serialized.second)
+                                  .Union());
     }
     case IRNodeType::Call: {
         auto call_expr = expr.as<Call>();
@@ -849,12 +867,13 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         }
         auto param_name_serialized = serialize_string(builder, param_name);
         auto type_serialized = serialize_type(builder, call_expr->type);
-        return std::make_pair(Serialize::Expr::Expr_Call, 
-                              Serialize::CreateCall(builder, name_serialized, 
-                                                    builder.CreateVector(args_types), 
-                                                    builder.CreateVector(args_serialized), 
-                                                    call_type, func_index, value_index, 
-                                                    image_name_serialized, param_name_serialized, type_serialized).Union());
+        return std::make_pair(Serialize::Expr::Expr_Call,
+                              Serialize::CreateCall(builder, name_serialized,
+                                                    builder.CreateVector(args_types),
+                                                    builder.CreateVector(args_serialized),
+                                                    call_type, func_index, value_index,
+                                                    image_name_serialized, param_name_serialized, type_serialized)
+                                  .Union());
     }
     case IRNodeType::Variable: {
         auto variable_expr = expr.as<Variable>();
@@ -871,9 +890,10 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         }
         auto image_name_serialized = serialize_string(builder, image_name);
         auto reduction_domain_serialized = serialize_reduction_domain(builder, variable_expr->reduction_domain);
-        return std::make_pair(Serialize::Expr::Expr_Variable, 
-                              Serialize::CreateVariable(builder, name_serialized, type_serialized, 
-                                                        param_name_serialized, image_name_serialized, reduction_domain_serialized).Union());
+        return std::make_pair(Serialize::Expr::Expr_Variable,
+                              Serialize::CreateVariable(builder, name_serialized, type_serialized,
+                                                        param_name_serialized, image_name_serialized, reduction_domain_serialized)
+                                  .Union());
     }
     case IRNodeType::Shuffle: {
         auto shuffle_expr = expr.as<Shuffle>();
@@ -888,21 +908,23 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
             vectors_serialized.push_back(vector_serialized.second);
         }
         auto indices = shuffle_expr->indices;
-        return std::make_pair(Serialize::Expr::Expr_Shuffle, 
-                              Serialize::CreateShuffle(builder, 
-                                                       builder.CreateVector(vectors_types), 
-                                                       builder.CreateVector(vectors_serialized), 
-                                                       builder.CreateVector(indices)).Union());
+        return std::make_pair(Serialize::Expr::Expr_Shuffle,
+                              Serialize::CreateShuffle(builder,
+                                                       builder.CreateVector(vectors_types),
+                                                       builder.CreateVector(vectors_serialized),
+                                                       builder.CreateVector(indices))
+                                  .Union());
     }
     case IRNodeType::VectorReduce: {
         auto vector_reduce_expr = expr.as<VectorReduce>();
         auto value_serialized = serialize_expr(builder, vector_reduce_expr->value);
         auto reduction_op_serialized = serialize_vector_reduce_op(vector_reduce_expr->op);
         int lanes = vector_reduce_expr->type.lanes();
-        return std::make_pair(Serialize::Expr::Expr_VectorReduce, 
-                              Serialize::CreateVectorReduce(builder, 
-                                                            value_serialized.first, value_serialized.second, 
-                                                            reduction_op_serialized, lanes).Union());
+        return std::make_pair(Serialize::Expr::Expr_VectorReduce,
+                              Serialize::CreateVectorReduce(builder,
+                                                            value_serialized.first, value_serialized.second,
+                                                            reduction_op_serialized, lanes)
+                                  .Union());
     }
     default:
         user_error << "Unsupported Expr type\n";
@@ -977,15 +999,15 @@ Offset<Serialize::Func> Serializer::serialize_function(FlatBufferBuilder &builde
         trace_tags_serialized.push_back(serialize_string(builder, tag));
     }
     bool frozen = function.frozen();
-    auto func = Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector, 
-                                      required_types_vector, required_dim, args_vector, func_schedule_serialized, 
-                                      init_def_serialized, builder.CreateVector(updates_serialized), debug_file_serialized, 
+    auto func = Serialize::CreateFunc(builder, name_serialized, origin_name_serialized, output_types_vector,
+                                      required_types_vector, required_dim, args_vector, func_schedule_serialized,
+                                      init_def_serialized, builder.CreateVector(updates_serialized), debug_file_serialized,
                                       builder.CreateVector(output_buffers_names_serialized),
-                                      builder.CreateVector(extern_arguments_serialized), 
-                                      extern_function_name_serialized, extern_mangling_serialized, 
-                                      extern_function_device_api_serialized, 
-                                      extern_proxy_expr_serialized.first, extern_proxy_expr_serialized.second, 
-                                      trace_loads, trace_stores, trace_realizations, 
+                                      builder.CreateVector(extern_arguments_serialized),
+                                      extern_function_name_serialized, extern_mangling_serialized,
+                                      extern_function_device_api_serialized,
+                                      extern_proxy_expr_serialized.first, extern_proxy_expr_serialized.second,
+                                      trace_loads, trace_stores, trace_realizations,
                                       builder.CreateVector(trace_tags_serialized), frozen);
     return func;
 }
@@ -1010,10 +1032,10 @@ Offset<Serialize::Bound> Serializer::serialize_bound(FlatBufferBuilder &builder,
     auto modulus_serialized = serialize_expr(builder, modulus);
     auto remainder = bound.remainder;
     auto remainder_serialized = serialize_expr(builder, remainder);
-    auto bound_obj = Serialize::CreateBound(builder, var_serialized, 
-                                            min_serialized.first, min_serialized.second, 
-                                            extent_serialized.first, extent_serialized.second, 
-                                            modulus_serialized.first, modulus_serialized.second, 
+    auto bound_obj = Serialize::CreateBound(builder, var_serialized,
+                                            min_serialized.first, min_serialized.second,
+                                            extent_serialized.first, extent_serialized.second,
+                                            modulus_serialized.first, modulus_serialized.second,
                                             remainder_serialized.first, remainder_serialized.second);
     return bound_obj;
 }
@@ -1028,9 +1050,9 @@ Offset<Serialize::StorageDim> Serializer::serialize_storage_dim(FlatBufferBuilde
     auto fold_factor = storage_dim.fold_factor;
     auto fold_factor_serialized = serialize_expr(builder, fold_factor);
     auto fold_forward = storage_dim.fold_forward;
-    auto storage_dim_obj = Serialize::CreateStorageDim(builder, var_serialized, 
+    auto storage_dim_obj = Serialize::CreateStorageDim(builder, var_serialized,
                                                        alignment_serialized.first, alignment_serialized.second,
-                                                       bound_serialized.first, bound_serialized.second, 
+                                                       bound_serialized.first, bound_serialized.second,
                                                        fold_factor_serialized.first, fold_factor_serialized.second, fold_forward);
     return storage_dim_obj;
 }
@@ -1070,12 +1092,12 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
     auto async = func_schedule.async();
     auto memoize_eviction_key = func_schedule.memoize_eviction_key();
     auto memoize_eviction_key_serialized = serialize_expr(builder, memoize_eviction_key);
-    return Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized, 
-                                         builder.CreateVector(storage_dims_serialized), 
+    return Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized,
+                                         builder.CreateVector(storage_dims_serialized),
                                          builder.CreateVector(bounds_serialized),
-                                         builder.CreateVector(estimates_serialized), 
-                                         builder.CreateVector(wrappers_serialized), 
-                                         memory_type, memoized, async, 
+                                         builder.CreateVector(estimates_serialized),
+                                         builder.CreateVector(wrappers_serialized),
+                                         memory_type, memoized, async,
                                          memoize_eviction_key_serialized.first, memoize_eviction_key_serialized.second);
 }
 
@@ -1113,11 +1135,11 @@ Offset<Serialize::Definition> Serializer::serialize_definition(FlatBufferBuilder
         specializations_serialized.push_back(serialize_specialization(builder, specialization));
     }
     auto source_location_serialized = serialize_string(builder, definition.source_location());
-    return Serialize::CreateDefinition(builder, is_init, 
-                                       predicate_serialized.first, predicate_serialized.second, 
-                                       builder.CreateVector(values_types), builder.CreateVector(values_serialized), 
+    return Serialize::CreateDefinition(builder, is_init,
+                                       predicate_serialized.first, predicate_serialized.second,
+                                       builder.CreateVector(values_types), builder.CreateVector(values_serialized),
                                        builder.CreateVector(args_types), builder.CreateVector(args_serialized),
-                                       stage_schedule_serialized, builder.CreateVector(specializations_serialized), 
+                                       stage_schedule_serialized, builder.CreateVector(specializations_serialized),
                                        source_location_serialized);
 }
 
@@ -1138,9 +1160,9 @@ Offset<Serialize::ReductionDomain> Serializer::serialize_reduction_domain(FlatBu
         domain_serialized.push_back(serialize_reduction_variable(builder, reduction_variable));
     }
     auto predicate_serialized = serialize_expr(builder, reduction_domain.predicate());
-    return Serialize::CreateReductionDomain(builder, defined, 
-                                            builder.CreateVector(domain_serialized), 
-                                            predicate_serialized.first, predicate_serialized.second, 
+    return Serialize::CreateReductionDomain(builder, defined,
+                                            builder.CreateVector(domain_serialized),
+                                            predicate_serialized.first, predicate_serialized.second,
                                             reduction_domain.frozen());
 }
 
@@ -1159,9 +1181,9 @@ Offset<Serialize::PrefetchDirective> Serializer::serialize_prefetch_directive(Fl
         parameters_in_pipeline[param_name] = prefetch_directive.param;
     }
     auto param_name_serialized = serialize_string(builder, param_name);
-    return Serialize::CreatePrefetchDirective(builder, name_serialized, 
-                                              at_serialized, from_serialized, 
-                                              offset_serialized.first, offset_serialized.second, 
+    return Serialize::CreatePrefetchDirective(builder, name_serialized,
+                                              at_serialized, from_serialized,
+                                              offset_serialized.first, offset_serialized.second,
                                               strategy_serialized, param_name_serialized);
 }
 
@@ -1173,9 +1195,9 @@ Offset<Serialize::Split> Serializer::serialize_split(FlatBufferBuilder &builder,
     auto exact = split.exact;
     auto tail_serialized = serialize_tail_strategy(split.tail);
     auto split_type_serialized = serialize_split_type(split.split_type);
-    return Serialize::CreateSplit(builder, old_var_serialized, 
-                                  outer_serialized, inner_serialized, 
-                                  factor_serialized.first, factor_serialized.second, 
+    return Serialize::CreateSplit(builder, old_var_serialized,
+                                  outer_serialized, inner_serialized,
+                                  factor_serialized.first, factor_serialized.second,
                                   exact, tail_serialized, split_type_serialized);
 }
 
@@ -1195,8 +1217,8 @@ Offset<Serialize::FuseLoopLevel> Serializer::serialize_fuse_loop_level(FlatBuffe
         align_dimension_names_serialized.push_back(serialize_string(builder, align.first));
         align_strategies_serialized.push_back(serialize_loop_align_strategy(align.second));
     }
-    return Serialize::CreateFuseLoopLevel(builder, fuse_level_serialized, 
-                                          builder.CreateVector(align_dimension_names_serialized), 
+    return Serialize::CreateFuseLoopLevel(builder, fuse_level_serialized,
+                                          builder.CreateVector(align_dimension_names_serialized),
                                           builder.CreateVector(align_strategies_serialized));
 }
 
@@ -1204,7 +1226,7 @@ Offset<Serialize::FusedPair> Serializer::serialize_fused_pair(FlatBufferBuilder 
     auto func_1_serialized = serialize_string(builder, fused_pair.func_1);
     auto func_2_serialized = serialize_string(builder, fused_pair.func_2);
     auto var_name_serialized = serialize_string(builder, fused_pair.var_name);
-    return Serialize::CreateFusedPair(builder, func_1_serialized, func_2_serialized, 
+    return Serialize::CreateFusedPair(builder, func_1_serialized, func_2_serialized,
                                       fused_pair.stage_1, fused_pair.stage_2, var_name_serialized);
 }
 
@@ -1239,14 +1261,14 @@ Offset<Serialize::StageSchedule> Serializer::serialize_stage_schedule(FlatBuffer
     bool allow_race_conditions = stage_schedule.allow_race_conditions();
     bool atomic = stage_schedule.atomic();
     bool override_atomic_associativity_test = stage_schedule.override_atomic_associativity_test();
-    return Serialize::CreateStageSchedule(builder, 
-                                          builder.CreateVector(rvars_serialized), 
-                                          builder.CreateVector(splits_serialized), 
+    return Serialize::CreateStageSchedule(builder,
+                                          builder.CreateVector(rvars_serialized),
+                                          builder.CreateVector(splits_serialized),
                                           builder.CreateVector(dims_serialized),
-                                          builder.CreateVector(prefetches_serialized), 
-                                          fuse_level_serialized, 
+                                          builder.CreateVector(prefetches_serialized),
+                                          fuse_level_serialized,
                                           builder.CreateVector(fused_pairs_serialized),
-                                          touched, allow_race_conditions, atomic, 
+                                          touched, allow_race_conditions, atomic,
                                           override_atomic_associativity_test);
 }
 
@@ -1256,11 +1278,11 @@ Offset<Serialize::BufferConstraint> Serializer::serialize_buffer_constraint(Flat
     auto stride_serialized = serialize_expr(builder, buffer_constraint.stride);
     auto min_estimate_serialized = serialize_expr(builder, buffer_constraint.min_estimate);
     auto extent_estimate_serialized = serialize_expr(builder, buffer_constraint.extent_estimate);
-    return Serialize::CreateBufferConstraint(builder, 
+    return Serialize::CreateBufferConstraint(builder,
                                              min_serialized.first, min_serialized.second,
-                                             extent_serialized.first, extent_serialized.second, 
-                                             stride_serialized.first, stride_serialized.second, 
-                                             min_estimate_serialized.first, min_estimate_serialized.second, 
+                                             extent_serialized.first, extent_serialized.second,
+                                             stride_serialized.first, stride_serialized.second,
+                                             min_estimate_serialized.first, min_estimate_serialized.second,
                                              extent_estimate_serialized.first, extent_estimate_serialized.second);
 }
 
@@ -1274,7 +1296,7 @@ Offset<Serialize::Parameter> Serializer::serialize_parameter(FlatBufferBuilder &
     auto name_serialized = serialize_string(builder, parameter.name());
     bool is_buffer = parameter.is_buffer();
     // Because of check_is_buffer()/check_is_scalar(), we cannot serialize all fields at the same time.
-    // Depending on whether the parameter is a buffer, we serialize different fields, 
+    // Depending on whether the parameter is a buffer, we serialize different fields,
     // or fill 0 or default values for the unavailable fields.
     if (is_buffer) {
         int host_alignment = parameter.host_alignment();
@@ -1285,17 +1307,17 @@ Offset<Serialize::Parameter> Serializer::serialize_parameter(FlatBufferBuilder &
         }
         auto memory_type_serialized = serialize_memory_type(parameter.memory_type());
         return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, host_alignment,
-                                                  builder.CreateVector(buffer_constraints_serialized), memory_type_serialized);
+                                          builder.CreateVector(buffer_constraints_serialized), memory_type_serialized);
     } else {
         uint64_t data = parameter.scalar_raw_value();
         auto scalar_default_serialized = serialize_expr(builder, parameter.default_value());
         auto scalar_min_serialized = serialize_expr(builder, parameter.min_value());
         auto scalar_max_serialized = serialize_expr(builder, parameter.max_value());
         auto scalar_estimate_serialized = serialize_expr(builder, parameter.estimate());
-        return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, 
+        return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized,
                                           dimensions, name_serialized, 0, 0, Serialize::MemoryType_Auto, data,
-                                          scalar_default_serialized.first, scalar_default_serialized.second, 
-                                          scalar_min_serialized.first, scalar_min_serialized.second, 
+                                          scalar_default_serialized.first, scalar_default_serialized.second,
+                                          scalar_min_serialized.first, scalar_min_serialized.second,
                                           scalar_max_serialized.first, scalar_max_serialized.second,
                                           scalar_estimate_serialized.first, scalar_estimate_serialized.second);
     }
@@ -1430,13 +1452,13 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
         buffers_serialized.push_back(serialize_buffer(builder, buffer.second));
     }
 
-    auto pipeline_obj = Serialize::CreatePipeline(builder, 
-                                                  builder.CreateVector(funcs_serialized), 
+    auto pipeline_obj = Serialize::CreatePipeline(builder,
+                                                  builder.CreateVector(funcs_serialized),
                                                   builder.CreateVector(output_names_serialized),
                                                   builder.CreateVector(requirements_types),
-                                                  builder.CreateVector(requirements_serialized), 
+                                                  builder.CreateVector(requirements_serialized),
                                                   builder.CreateVector(func_names_in_order_serialized),
-                                                  builder.CreateVector(parameters_serialized), 
+                                                  builder.CreateVector(parameters_serialized),
                                                   builder.CreateVector(buffers_serialized));
     builder.Finish(pipeline_obj);
 
