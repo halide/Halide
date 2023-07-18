@@ -3,7 +3,7 @@ imageio
 ninja; platform_system!='Windows'
 numpy
 pillow
-pybind11==2.6.2
+pybind11==2.10.4
 scikit-build
 scipy
 setuptools>=43

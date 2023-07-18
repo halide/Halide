@@ -7,6 +7,7 @@
 
 #include "CSE.h"
 #include "Debug.h"
+#include "Func.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -1502,8 +1503,12 @@ Expr select(Expr condition, Expr true_value, Expr false_value) {
 }
 
 Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
+    return select(condition, true_value, false_value);
+}
+
+Tuple select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value) {
     user_assert(condition.size() == true_value.size() && true_value.size() == false_value.size())
-        << "tuple_select() requires all Tuples to have identical sizes.";
+        << "select() on Tuples requires all Tuples to have identical sizes.";
     Tuple result(std::vector<Expr>(condition.size()));
     for (size_t i = 0; i < result.size(); i++) {
         result[i] = select(condition[i], true_value[i], false_value[i]);
@@ -1512,13 +1517,21 @@ Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple 
 }
 
 Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
+    return select(condition, true_value, false_value);
+}
+
+Tuple select(const Expr &condition, const Tuple &true_value, const Tuple &false_value) {
     user_assert(true_value.size() == false_value.size())
-        << "tuple_select() requires all Tuples to have identical sizes.";
+        << "select() on Tuples requires all Tuples to have identical sizes.";
     Tuple result(std::vector<Expr>(true_value.size()));
     for (size_t i = 0; i < result.size(); i++) {
         result[i] = select(condition, true_value[i], false_value[i]);
     }
     return result;
+}
+
+Expr select(const Expr &condition, const FuncRef &true_value, const FuncRef &false_value) {
+    return select(condition, (Expr)true_value, (Expr)false_value);
 }
 
 Expr mux(const Expr &id, const std::vector<Expr> &values) {
@@ -1547,13 +1560,37 @@ Expr mux(const Expr &id, const std::initializer_list<Expr> &values) {
     return mux(id, std::vector<Expr>(values));
 }
 
+Expr mux(const Expr &id, const std::initializer_list<FuncRef> &values) {
+    std::vector<Expr> exprs(values.size());
+    for (size_t i = 0; i < values.size(); i++) {
+        exprs[i] = Expr(*(values.begin() + i));
+    }
+    return mux(id, exprs);
+}
+
+Tuple mux(const Expr &id, const std::initializer_list<Tuple> &values) {
+    return mux(id, std::vector<Tuple>(values));
+}
+
+Tuple mux(const Expr &id, const std::vector<Tuple> &values) {
+    user_assert(!values.empty()) << "mux() requires a non-empty vector of values";
+    std::vector<Expr> result(values[0].size());
+    for (size_t i = 0; i < result.size(); i++) {
+        std::vector<Expr> elems(values.size());
+        for (size_t j = 0; j < values.size(); j++) {
+            elems[j] = values[j][i];
+        }
+        result[i] = mux(id, elems);
+    }
+    return Tuple{result};
+}
+
 Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
     user_assert(value.defined()) << "unsafe_promise_clamped with undefined value.\n";
     Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
     Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
 
     // Min and max are allowed to be undefined with the meaning of no bound on that side.
-
     return Call::make(value.type(),
                       Call::unsafe_promise_clamped,
                       {value, n_min_val, n_max_val},

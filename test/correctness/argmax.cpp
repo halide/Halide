@@ -34,9 +34,9 @@ int main(int argc, char **argv) {
     g.compute_root();
 
     arg_max_g() = Tuple(0, 0, g(0, 0));
-    arg_max_g() = tuple_select(g(r.x, r.y) > arg_max_g()[2],
-                               Tuple(r.x, r.y, g(r.x, r.y)),
-                               arg_max_g());
+    arg_max_g() = select(g(r.x, r.y) > arg_max_g()[2],
+                         Tuple(r.x, r.y, g(r.x, r.y)),
+                         arg_max_g());
 
     int best_x, best_y, best_val;
     evaluate_may_gpu(arg_max_g(), &best_x, &best_y, &best_val);
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
         Func h;
         r = RDom(0, 100);
         h(x) = Tuple(x * (100 - x), x);
-        h(init) = tuple_select(h(init)[0] >= h(r)[0], Tuple(h(init)), Tuple(h(r)));
+        h(init) = select(h(init)[0] >= h(r)[0], Tuple(h(init)), Tuple(h(r)));
 
         Func arg_max_h;
         arg_max_h() = h(init);

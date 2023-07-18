@@ -13,13 +13,9 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
-#define internal_assert _halide_user_assert
-
 typedef Expr (*make_bin_op_fn)(Expr, Expr);
 
-const int fuzz_var_count = 5;
-
-std::mt19937 rng(0);
+constexpr int fuzz_var_count = 5;
 
 Type fuzz_types[] = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
 
@@ -158,11 +154,16 @@ Expr random_expr(FuzzedDataProvider &fdp, Type t, int depth, bool overflow_undef
             return random_expr(fdp, t, depth, overflow_undef);
         },
         [&]() {
-            Type subT;
+            // Get a random type that isn't t or int32 (int32 can overflow and we don't care about that).
+            // Note also that the FuzzedDataProvider doesn't actually promise to return a random distribution --
+            // it can (e.g.) decide to just return 0 for all data, forever -- so this loop has no guarantee
+            // of eventually finding a different type. To remedy this, we'll just put a limit on the retries.
+            int count = 0;
+            Type subtype;
             do {
-                subT = random_type(fdp, t.lanes());
-            } while (subT == t || (subT.is_int() && subT.bits() == 32));
-            auto e1 = random_expr(fdp, subT, depth, overflow_undef);
+                subtype = random_type(fdp, t.lanes());
+            } while (++count < 10 && (subtype == t || (subtype.is_int() && subtype.bits() == 32)));
+            auto e1 = random_expr(fdp, subtype, depth, overflow_undef);
             return Cast::make(t, e1);
         },
         [&]() {
@@ -332,7 +333,8 @@ Interval random_interval(FuzzedDataProvider &fdp, Type t) {
         std::cerr << min_value << " > " << max_value << "\n";
         std::cerr << interval.min << " > " << interval.max << "\n";
         std::cerr << interval << "\n";
-        internal_assert(false) << "random_interval failed\n";
+        std::cerr << "random_interval failed\n";
+        exit(1);
     }
 
     return interval;
@@ -349,7 +351,8 @@ int sample_interval(FuzzedDataProvider &fdp, const Interval &interval) {
         } else if (auto ptr = as_const_uint(interval.min)) {
             min_value = *ptr;
         } else {
-            internal_assert(false) << "sample_interval (min) failed: " << interval.min << "\n";
+            std::cerr << "sample_interval (min) failed: " << interval.min << "\n";
+            exit(1);
         }
     }
 
@@ -359,7 +362,8 @@ int sample_interval(FuzzedDataProvider &fdp, const Interval &interval) {
         } else if (auto ptr = as_const_uint(interval.max)) {
             max_value = *ptr;
         } else {
-            internal_assert(false) << "sample_interval (max) failed: " << interval.max << "\n";
+            std::cerr << "sample_interval (max) failed: " << interval.max << "\n";
+            exit(1);
         }
     }
 
@@ -416,7 +420,6 @@ bool test_bounds(Expr test, const Interval &interval, Type t, const map<string, 
 }
 
 bool test_expression_bounds(FuzzedDataProvider &fdp, Expr test, int trials, int samples_per_trial) {
-
     map<string, Expr> vars;
     for (int i = 0; i < fuzz_var_count; i++) {
         vars[fuzz_var(i)] = Expr();
@@ -460,13 +463,11 @@ bool test_expression_bounds(FuzzedDataProvider &fdp, Expr test, int trials, int 
             }
 
             if (!test_bounds(test, interval, test.type(), vars)) {
-                std::cerr << "scope {"
-                          << "\n";
+                std::cerr << "scope {\n";
                 for (auto v = vars.begin(); v != vars.end(); v++) {
                     std::cerr << "\t" << v->first << " : " << scope.get(v->first) << "\n";
                 }
-                std::cerr << "}"
-                          << "\n";
+                std::cerr << "}\n";
                 return false;
             }
         }
@@ -490,7 +491,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
     std::array<int, 6> vector_widths = {1, 2, 3, 4, 6, 8};
     for (int n = 0; n < count; n++) {
-        // int width = 1;
         int width = fdp.PickValueInArray(vector_widths);
         // This is the type that will be the innermost (leaf) value type.
         Type expr_type = random_type(fdp, width);

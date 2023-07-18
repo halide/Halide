@@ -25,6 +25,7 @@ tests(GROUPS li2018 autoschedulers auto_schedule
       SOURCES
       test.cpp
       ARGS $<TARGET_FILE:Halide::Li2018>)
+add_dependencies(li2018_test Halide::Li2018)
 
 if (WITH_PYTHON_BINDINGS)
     if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "webgpu")
@@ -32,13 +33,16 @@ if (WITH_PYTHON_BINDINGS)
     else()
         find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 
-        add_test(NAME li2018_gradient_autoscheduler_test_py
-                 COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/test.py" $<TARGET_FILE:Halide::Li2018>)
+        add_test(
+            NAME li2018_gradient_autoscheduler_test_py
+            COMMAND ${Halide_PYTHON_LAUNCHER} "$<TARGET_FILE:Python3::Interpreter>" "${CMAKE_CURRENT_SOURCE_DIR}/test.py" $<TARGET_FILE:Halide::Li2018>
+        )
 
         set(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
         list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
         set_tests_properties(li2018_gradient_autoscheduler_test_py PROPERTIES
+                             DEPENDS li2018_test
                              LABELS "li2018;autoschedulers;auto_schedule"
                              ENVIRONMENT_MODIFICATION "${PYTHONPATH}")
     endif()

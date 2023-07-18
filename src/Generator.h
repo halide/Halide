@@ -3977,19 +3977,21 @@ namespace halide_register_generator {
 struct halide_global_ns;
 };
 
-#define _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME)                               \
-    namespace halide_register_generator {                                                                                           \
-    struct halide_global_ns;                                                                                                        \
-    namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
-        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);                      \
-        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                     \
-            using GenType = std::remove_pointer<decltype(new GEN_CLASS_NAME)>::type; /* NOLINT(bugprone-macro-parentheses) */       \
-            return GenType::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                        \
-        }                                                                                                                           \
-    }                                                                                                                               \
-    static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator(#GEN_REGISTRY_NAME, GEN_REGISTRY_NAME##_ns::factory); \
-    }                                                                                                                               \
-    static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value,  \
+#define _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME)                              \
+    namespace halide_register_generator {                                                                                          \
+    struct halide_global_ns;                                                                                                       \
+    namespace GEN_REGISTRY_NAME##_ns {                                                                                             \
+        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);                     \
+        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                    \
+            using GenType = std::remove_pointer<decltype(new GEN_CLASS_NAME)>::type; /* NOLINT(bugprone-macro-parentheses) */      \
+            return GenType::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                       \
+        }                                                                                                                          \
+    }                                                                                                                              \
+    namespace {                                                                                                                    \
+    auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator(#GEN_REGISTRY_NAME, GEN_REGISTRY_NAME##_ns::factory);       \
+    }                                                                                                                              \
+    }                                                                                                                              \
+    static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value, \
                   "HALIDE_REGISTER_GENERATOR must be used at global scope");
 
 #define _HALIDE_REGISTER_GENERATOR2(GEN_CLASS_NAME, GEN_REGISTRY_NAME) \
@@ -4039,23 +4041,25 @@ struct halide_global_ns;
 // It is specified as a variadic template argument to allow for the fact that the embedded commas
 // would otherwise confuse the preprocessor; since (in this case) all we're going to do is
 // pass it thru as-is, this is fine (and even MSVC's 'broken' __VA_ARGS__ should be OK here).
-#define HALIDE_REGISTER_GENERATOR_ALIAS(GEN_REGISTRY_NAME, ORIGINAL_REGISTRY_NAME, ...)                                             \
-    namespace halide_register_generator {                                                                                           \
-    struct halide_global_ns;                                                                                                        \
-    namespace ORIGINAL_REGISTRY_NAME##_ns {                                                                                         \
-        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);                      \
-    }                                                                                                                               \
-    namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
-        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                     \
-            auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context);                                                                 \
-            const Halide::GeneratorParamsMap m = __VA_ARGS__;                                                                       \
-            g->set_generatorparam_values(m);                                                                                        \
-            return g;                                                                                                               \
-        }                                                                                                                           \
-    }                                                                                                                               \
-    static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator(#GEN_REGISTRY_NAME, GEN_REGISTRY_NAME##_ns::factory); \
-    }                                                                                                                               \
-    static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value,  \
+#define HALIDE_REGISTER_GENERATOR_ALIAS(GEN_REGISTRY_NAME, ORIGINAL_REGISTRY_NAME, ...)                                            \
+    namespace halide_register_generator {                                                                                          \
+    struct halide_global_ns;                                                                                                       \
+    namespace ORIGINAL_REGISTRY_NAME##_ns {                                                                                        \
+        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);                     \
+    }                                                                                                                              \
+    namespace GEN_REGISTRY_NAME##_ns {                                                                                             \
+        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                    \
+            auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context);                                                                \
+            const Halide::GeneratorParamsMap m = __VA_ARGS__;                                                                      \
+            g->set_generatorparam_values(m);                                                                                       \
+            return g;                                                                                                              \
+        }                                                                                                                          \
+    }                                                                                                                              \
+    namespace {                                                                                                                    \
+    auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator(#GEN_REGISTRY_NAME, GEN_REGISTRY_NAME##_ns::factory);       \
+    }                                                                                                                              \
+    }                                                                                                                              \
+    static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value, \
                   "HALIDE_REGISTER_GENERATOR_ALIAS must be used at global scope");
 
 // The HALIDE_GENERATOR_PYSTUB macro is used to produce "PyStubs" -- i.e., CPython wrappers to let a C++ Generator

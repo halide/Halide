@@ -7,6 +7,13 @@ add_executable(_test_internal internal.cpp)
 target_link_libraries(_test_internal PRIVATE Halide::Test)
 target_include_directories(_test_internal PRIVATE "${Halide_SOURCE_DIR}/src")
 target_precompile_headers(_test_internal PRIVATE <Halide.h>)
+if (Halide_CCACHE_BUILD)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(_test_internal PRIVATE
+            "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>"
+        )
+    endif()
+endif()
 
 add_halide_test(_test_internal GROUPS internal)
 

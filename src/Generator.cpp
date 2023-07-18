@@ -2104,11 +2104,11 @@ void generator_test() {
         public:
             Input<int[]> expr_array_input{"expr_array_input"};
             Input<Func[]> func_array_input{"input_func_array"};
-            Input<Buffer<>[]> buffer_array_input { "buffer_array_input" };
+            Input<Buffer<>[]> buffer_array_input{"buffer_array_input"};
 
             Input<int[]> expr_array_output{"expr_array_output"};
             Output<Func[]> func_array_output{"func_array_output"};
-            Output<Buffer<>[]> buffer_array_output { "buffer_array_output" };
+            Output<Buffer<>[]> buffer_array_output{"buffer_array_output"};
 
             void generate() {
             }

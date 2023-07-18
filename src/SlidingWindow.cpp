@@ -50,11 +50,11 @@ class ExprDependsOnVar : public IRVisitor {
     }
 
 public:
-    bool result;
+    bool result = false;
     string var;
 
     ExprDependsOnVar(string v)
-        : result(false), var(std::move(v)) {
+        : var(std::move(v)) {
     }
 };
 
