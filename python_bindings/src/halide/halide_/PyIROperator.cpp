@@ -5,6 +5,17 @@
 #include "PyTuple.h"
 
 namespace Halide {
+
+// Only necessary for debugging
+// std::ostream &operator<<(std::ostream &stream, const Halide::Tuple &t) {
+//     stream << "Tup{";
+//     for (size_t i = 0; i < t.size(); i++) {
+//         stream << t[i] << ",";
+//     }
+//     stream << "}";
+//     return stream;
+// }
+
 namespace PythonBindings {
 
 void define_operators(py::module &m) {
@@ -36,24 +47,92 @@ void define_operators(py::module &m) {
     m.def("abs", &abs);
     m.def("absd", &absd);
 
-    m.def("select", [](const py::args &args) -> Expr {
+    m.def("select", [](const py::args &args) -> py::object {
         if (args.size() < 3) {
             throw py::value_error("select() must have at least 3 arguments");
         }
         if ((args.size() % 2) == 0) {
             throw py::value_error("select() must have an odd number of arguments");
         }
-        int pos = (int)args.size() - 1;
-        Expr false_value = args[pos--].cast<Expr>();
-        while (pos > 0) {
-            Expr true_value = args[pos--].cast<Expr>();
-            Expr condition = args[pos--].cast<Expr>();
-            false_value = select(condition, true_value, false_value);
+
+        // Tricky set of options here:
+        //
+        // - (Expr, Expr, Expr, [Expr, Expr...]) -> Expr
+        // - (Expr, Tuple, Tuple, [Tuple, Tuple...]) -> Tuple   [Tuples must be same arity]
+        // - (Tuple, Tuple, Tuple, [Tuple, Tuple...]) -> Tuple  [Tuples must be same arity]
+        //
+        // It's made trickier by the fact that it's hard to do a reliable "is-a" check for Tuple here,
+        // so we'll do the slow-but-reliable approach of just trying to cast to Tuple and catching
+        // exceptions.
+
+        std::string tuple_error_msg;
+        try {
+            int pos = (int)args.size() - 1;
+            Tuple false_value = args[pos--].cast<Tuple>();
+            bool has_tuple_cond = false;
+            bool has_expr_cond = false;
+            while (pos > 0) {
+                Tuple true_value = args[pos--].cast<Tuple>();
+                // Note that 'condition' can be either Expr or Tuple, but must be consistent across all
+                py::object py_cond = args[pos--];
+                Expr expr_cond;
+                Tuple tuple_cond(expr_cond);
+                try {
+                    tuple_cond = py_cond.cast<Tuple>();
+                    has_tuple_cond = true;
+                } catch (...) {
+                    expr_cond = py_cond.cast<Expr>();
+                    has_expr_cond = true;
+                }
+
+                if (has_tuple_cond && has_expr_cond) {
+                    // We don't want to throw an error here, since the catch(...) would catch it,
+                    // and it would be hard to distinguish from other errors. Just set the string here
+                    // and jump to the error reporter outside the catch.
+                    tuple_error_msg = "tuple_select() may not mix Expr and Tuple for the condition elements.";
+                    goto handle_tuple_error;
+                }
+
+                if (expr_cond.defined()) {
+                    false_value = select(expr_cond, true_value, false_value);
+                } else {
+                    if (tuple_cond.size() != true_value.size() || true_value.size() != false_value.size()) {
+                        // We don't want to throw an error here, since the catch(...) would catch it,
+                        // and it would be hard to distinguish from other errors. Just set the string here
+                        // and jump to the error reporter outside the catch.
+                        tuple_error_msg = "select() on Tuples requires all Tuples to have identical sizes.";
+                        goto handle_tuple_error;
+                    }
+                    false_value = select(tuple_cond, true_value, false_value);
+                }
+            }
+            return to_python_tuple(false_value);
+
+        } catch (...) {
+            // fall thru and try the Expr case
         }
-        return false_value;
+
+    handle_tuple_error:
+        if (!tuple_error_msg.empty()) {
+            _halide_user_assert(false) << tuple_error_msg;
+        }
+
+        int pos = (int)args.size() - 1;
+        Expr false_expr_value = args[pos--].cast<Expr>();
+        while (pos > 0) {
+            Expr true_expr_value = args[pos--].cast<Expr>();
+            Expr condition_expr = args[pos--].cast<Expr>();
+            false_expr_value = select(condition_expr, true_expr_value, false_expr_value);
+        }
+        return py::cast(false_expr_value);
     });
 
     m.def("tuple_select", [](const py::args &args) -> py::tuple {
+        // HALIDE_ATTRIBUTE_DEPRECATED("tuple_select has been deprecated. Use select instead (which now works for Tuples)")
+        PyErr_WarnEx(PyExc_DeprecationWarning,
+                     "tuple_select has been deprecated. Use select instead (which now works for Tuples)",
+                     1);
+
         _halide_user_assert(args.size() >= 3)
             << "tuple_select() must have at least 3 arguments";
         _halide_user_assert((args.size() % 2) != 0)
@@ -64,7 +143,6 @@ void define_operators(py::module &m) {
         bool has_tuple_cond = false, has_expr_cond = false;
         while (pos > 0) {
             Tuple true_value = args[pos--].cast<Tuple>();
-            ;
             // Note that 'condition' can be either Expr or Tuple, but must be consistent across all
             py::object py_cond = args[pos--];
             Expr expr_cond;
@@ -78,9 +156,9 @@ void define_operators(py::module &m) {
             }
 
             if (expr_cond.defined()) {
-                false_value = tuple_select(expr_cond, true_value, false_value);
+                false_value = select(expr_cond, true_value, false_value);
             } else {
-                false_value = tuple_select(tuple_cond, true_value, false_value);
+                false_value = select(tuple_cond, true_value, false_value);
             }
         }
         _halide_user_assert(!(has_tuple_cond && has_expr_cond))

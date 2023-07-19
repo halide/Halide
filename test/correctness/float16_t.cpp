@@ -2,14 +2,32 @@
 
 #include <limits>
 
-#ifdef __linux__
+#if defined(__linux__) && defined(__clang__)
 // If LLVM was built with an older GCC but Halide is built with Clang,
 // we may be missing this symbol needed for float16 conversion.
 // Just insert a weak definition here as a workaround.
 extern "C" {
-__attribute__((weak)) float __extendhfsf2(uint16_t a) {
-    return (float)Halide::float16_t::make_from_bits(a);
+
+#if __clang_major__ >= 15 && defined(__x86_64__)
+
+// In Clang 15 and later, this function is passed a uint16... but in the xmm0 register on x86-64.
+// So we'll declare it as a float and just grab the upper 16 bits.
+__attribute__((weak)) float __extendhfsf2(float actually_a_float16) {
+    uint16_t data;
+    memcpy(&data, &actually_a_float16, sizeof(data));
+    return (float)Halide::float16_t::make_from_bits(data);
 }
+
+#else
+
+// We haven't tested this variant, so emit a warning if we ever compile for it.
+#pragma message "This variant of __extendhfsf2 has not been tested."
+__attribute__((weak)) float __extendhfsf2(uint16_t data) {
+    return Halide::float16_t::make_from_bits(data);
+}
+
+#endif
+
 }  // extern "C"
 #endif
 
