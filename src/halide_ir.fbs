@@ -1,7 +1,7 @@
 namespace Halide.Serialize;
 
 // This corresponds to the version.
-file_identifier "HLD0";
+file_identifier "HL17";
 
 // File extension of any written files. "hlpipe" stands for Halide Pipeline.
 file_extension "hlpipe";
