@@ -18,22 +18,27 @@ class Deserializer {
 public:
     Deserializer() = default;
 
-    explicit Deserializer(const std::map<std::string, Parameter> &params)
-        : non_serialized_parameters(params) {
+    explicit Deserializer(const std::map<std::string, Parameter> &external_params)
+        : external_params(external_params) {
     }
 
     Pipeline deserialize(const std::string &filename);
 
 private:
+    // A lookup table for translating function ids to actual FunctionPtrs
     std::map<int32_t, FunctionPtr> reverse_function_mappings;
 
+    // A lookup table for finding parameters object via their names,
+    // used for preventing the same parameter being deserialized multiple times 
     std::map<std::string, Parameter> parameters_in_pipeline;
 
+    // A lookup table for finding buffer object via their names,
+    // used for preventing the same buffer being deserialized multiple times
     std::map<std::string, Buffer<>> buffers_in_pipeline;
 
-    std::map<std::string, Parameter> non_serialized_parameters;
+    // External parameters that are not deserialized but will be used in the pipeline
+    std::map<std::string, Parameter> external_params;
 
-    // helper functions to deserialize each type of object
     MemoryType deserialize_memory_type(const Serialize::MemoryType memory_type);
 
     ForType deserialize_for_type(const Serialize::ForType for_type);
@@ -422,7 +427,7 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
     for (const auto &output_buffer_name_serialized : *function->output_buffers_names()) {
         auto output_buffer_name = deserialize_string(output_buffer_name_serialized);
         Parameter output_buffer;
-        if (auto it = non_serialized_parameters.find(output_buffer_name); it != non_serialized_parameters.end()) {
+        if (auto it = external_params.find(output_buffer_name); it != external_params.end()) {
             output_buffer = it->second;
         } else if (auto it = parameters_in_pipeline.find(output_buffer_name); it != parameters_in_pipeline.end()) {
             output_buffer = it->second;
@@ -456,27 +461,27 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
     user_assert(stmt != nullptr) << "deserializing a null Stmt\n";
     switch (type_code) {
     case Serialize::Stmt_LetStmt: {
-        const Serialize::LetStmt *let_stmt = (const Serialize::LetStmt *)stmt;
+        const auto *let_stmt = (const Serialize::LetStmt *)stmt;
         auto name = deserialize_string(let_stmt->name());
         auto value = deserialize_expr(let_stmt->value_type(), let_stmt->value());
         auto body = deserialize_stmt(let_stmt->body_type(), let_stmt->body());
         return LetStmt::make(name, value, body);
     }
     case Serialize::Stmt_AssertStmt: {
-        const Serialize::AssertStmt *assert_stmt = (const Serialize::AssertStmt *)stmt;
+        const auto *assert_stmt = (const Serialize::AssertStmt *)stmt;
         auto condition = deserialize_expr(assert_stmt->condition_type(), assert_stmt->condition());
         auto message = deserialize_expr(assert_stmt->message_type(), assert_stmt->message());
         return AssertStmt::make(condition, message);
     }
     case Serialize::Stmt_ProducerConsumer: {
-        const Serialize::ProducerConsumer *producer_consumer = (const Serialize::ProducerConsumer *)stmt;
+        const auto *producer_consumer = (const Serialize::ProducerConsumer *)stmt;
         auto name = deserialize_string(producer_consumer->name());
         auto is_producer = producer_consumer->is_producer();
         auto body = deserialize_stmt(producer_consumer->body_type(), producer_consumer->body());
         return ProducerConsumer::make(name, is_producer, body);
     }
     case Serialize::Stmt_For: {
-        const Serialize::For *for_stmt = (const Serialize::For *)stmt;
+        const auto *for_stmt = (const Serialize::For *)stmt;
         auto name = deserialize_string(for_stmt->name());
         auto min = deserialize_expr(for_stmt->min_type(), for_stmt->min());
         auto extent = deserialize_expr(for_stmt->extent_type(), for_stmt->extent());
@@ -486,14 +491,14 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         return For::make(name, min, extent, for_type, device_api, body);
     }
     case Serialize::Stmt_Store: {
-        const Serialize::Store *store_stmt = (const Serialize::Store *)stmt;
+        const auto *store_stmt = (const Serialize::Store *)stmt;
         auto name = deserialize_string(store_stmt->name());
         auto predicate = deserialize_expr(store_stmt->predicate_type(), store_stmt->predicate());
         auto value = deserialize_expr(store_stmt->value_type(), store_stmt->value());
         auto index = deserialize_expr(store_stmt->index_type(), store_stmt->index());
         auto param_name = deserialize_string(store_stmt->param_name());
         Parameter param;
-        if (auto it = non_serialized_parameters.find(param_name); it != non_serialized_parameters.end()) {
+        if (auto it = external_params.find(param_name); it != external_params.end()) {
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
@@ -502,7 +507,7 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         return Store::make(name, value, index, param, predicate, alignment);
     }
     case Serialize::Stmt_Provide: {
-        const Serialize::Provide *provide_stmt = (const Serialize::Provide *)stmt;
+        const auto *provide_stmt = (const Serialize::Provide *)stmt;
         auto name = deserialize_string(provide_stmt->name());
         std::vector<Expr> values = deserialize_expr_vector(provide_stmt->values_type(), provide_stmt->values());
         std::vector<Expr> args = deserialize_expr_vector(provide_stmt->args_type(), provide_stmt->args());
@@ -510,7 +515,7 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         return Provide::make(name, values, args, predicate);
     }
     case Serialize::Stmt_Allocate: {
-        const Serialize::Allocate *allocate_stmt = (const Serialize::Allocate *)stmt;
+        const auto *allocate_stmt = (const Serialize::Allocate *)stmt;
         auto name = deserialize_string(allocate_stmt->name());
         auto type = deserialize_type(allocate_stmt->type());
         MemoryType memory_type = deserialize_memory_type(allocate_stmt->memory_type());
@@ -523,12 +528,12 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         return Allocate::make(name, type, memory_type, extents, condition, body, new_expr, free_function, padding);
     }
     case Serialize::Stmt_Free: {
-        const Serialize::Free *free_stmt = (const Serialize::Free *)stmt;
+        const auto *free_stmt = (const Serialize::Free *)stmt;
         auto name = deserialize_string(free_stmt->name());
         return Free::make(name);
     }
     case Serialize::Stmt_Realize: {
-        const Serialize::Realize *realize_stmt = (const Serialize::Realize *)stmt;
+        const auto *realize_stmt = (const Serialize::Realize *)stmt;
         auto name = deserialize_string(realize_stmt->name());
         std::vector<Type> types;
         types.reserve(realize_stmt->types()->size());
@@ -546,25 +551,25 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         return Realize::make(name, types, memory_type, bounds, condition, body);
     }
     case Serialize::Stmt_Block: {
-        const Serialize::Block *block_stmt = (const Serialize::Block *)stmt;
+        const auto *block_stmt = (const Serialize::Block *)stmt;
         auto first = deserialize_stmt(block_stmt->first_type(), block_stmt->first());
         auto rest = deserialize_stmt(block_stmt->rest_type(), block_stmt->rest());
         return Block::make(first, rest);
     }
     case Serialize::Stmt_IfThenElse: {
-        const Serialize::IfThenElse *if_then_else_stmt = (const Serialize::IfThenElse *)stmt;
+        const auto *if_then_else_stmt = (const Serialize::IfThenElse *)stmt;
         auto condition = deserialize_expr(if_then_else_stmt->condition_type(), if_then_else_stmt->condition());
         auto then_case = deserialize_stmt(if_then_else_stmt->then_case_type(), if_then_else_stmt->then_case());
         auto else_case = deserialize_stmt(if_then_else_stmt->else_case_type(), if_then_else_stmt->else_case());
         return IfThenElse::make(condition, then_case, else_case);
     }
     case Serialize::Stmt_Evaluate: {
-        const Serialize::Evaluate *evaluate_stmt = (const Serialize::Evaluate *)stmt;
+        const auto *evaluate_stmt = (const Serialize::Evaluate *)stmt;
         auto value = deserialize_expr(evaluate_stmt->value_type(), evaluate_stmt->value());
         return Evaluate::make(value);
     }
     case Serialize::Stmt_Prefetch: {
-        const Serialize::Prefetch *prefetch_stmt = (const Serialize::Prefetch *)stmt;
+        const auto *prefetch_stmt = (const Serialize::Prefetch *)stmt;
         auto name = deserialize_string(prefetch_stmt->name());
         std::vector<Type> types;
         types.reserve(prefetch_stmt->types()->size());
@@ -582,20 +587,20 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         return Prefetch::make(name, types, bounds, prefetch, condition, body);
     }
     case Serialize::Stmt_Acquire: {
-        const Serialize::Acquire *acquire_stmt = (const Serialize::Acquire *)stmt;
+        const auto *acquire_stmt = (const Serialize::Acquire *)stmt;
         auto semaphore = deserialize_expr(acquire_stmt->semaphore_type(), acquire_stmt->semaphore());
         auto count = deserialize_expr(acquire_stmt->count_type(), acquire_stmt->count());
         auto body = deserialize_stmt(acquire_stmt->body_type(), acquire_stmt->body());
         return Acquire::make(semaphore, count, body);
     }
     case Serialize::Stmt_Fork: {
-        const Serialize::Fork *fork_stmt = (const Serialize::Fork *)stmt;
+        const auto *fork_stmt = (const Serialize::Fork *)stmt;
         auto first = deserialize_stmt(fork_stmt->first_type(), fork_stmt->first());
         auto rest = deserialize_stmt(fork_stmt->rest_type(), fork_stmt->rest());
         return Fork::make(first, rest);
     }
     case Serialize::Stmt_Atomic: {
-        const Serialize::Atomic *atomic_stmt = (const Serialize::Atomic *)stmt;
+        const auto *atomic_stmt = (const Serialize::Atomic *)stmt;
         auto producer_name = deserialize_string(atomic_stmt->producer_name());
         auto mutex_name = deserialize_string(atomic_stmt->mutex_name());
         auto body = deserialize_stmt(atomic_stmt->body_type(), atomic_stmt->body());
@@ -762,7 +767,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         }
         auto param_name = deserialize_string(load_expr->param_name());
         Parameter param;
-        if (auto it = non_serialized_parameters.find(param_name); it != non_serialized_parameters.end()) {
+        if (auto it = external_params.find(param_name); it != external_params.end()) {
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
@@ -811,7 +816,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         }
         auto param_name = deserialize_string(call_expr->param_name());
         Parameter param;
-        if (auto it = non_serialized_parameters.find(param_name); it != non_serialized_parameters.end()) {
+        if (auto it = external_params.find(param_name); it != external_params.end()) {
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
@@ -825,7 +830,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         auto type = deserialize_type(variable_expr->type());
         auto param_name = deserialize_string(variable_expr->param_name());
         Parameter param;
-        if (auto it = non_serialized_parameters.find(param_name); it != non_serialized_parameters.end()) {
+        if (auto it = external_params.find(param_name); it != external_params.end()) {
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
@@ -1212,7 +1217,7 @@ ExternFuncArgument Deserializer::deserialize_extern_func_argument(const Serializ
     } else {
         auto image_param_name = deserialize_string(extern_func_argument->image_param_name());
         Parameter image_param;
-        if (auto it = non_serialized_parameters.find(image_param_name); it != non_serialized_parameters.end()) {
+        if (auto it = external_params.find(image_param_name); it != external_params.end()) {
             image_param = it->second;
         } else if (auto it = parameters_in_pipeline.find(image_param_name); it != parameters_in_pipeline.end()) {
             image_param = it->second;
@@ -1377,8 +1382,8 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
 }
 }  // namespace Internal
 
-Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Internal::Parameter> &params) {
-    Internal::Deserializer deserializer(params);
+Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Internal::Parameter> &external_params) {
+    Internal::Deserializer deserializer(external_params);
     return deserializer.deserialize(filename);
 }
 

@@ -33,15 +33,21 @@ public:
     }
 
 private:
+    // Mapping function names to a unique integer function id
     std::map<std::string, int32_t> func_mappings;
 
+    // A lookup table for finding parameters via their names,
+    // used for preventing the same parameter being serialized multiple times 
     std::map<std::string, Internal::Parameter> parameters_in_pipeline;
 
+    // A lookup table for finding buffers via their names,
+    // used for preventing the same buffer being serialized multiple times 
     std::map<std::string, Buffer<>> buffers_in_pipeline;
 
+    // A lookup table for parameters that are potentially external to the pipeline,
+    // so it can later be used during deserialization to have the correct bindings.
     std::map<std::string, Parameter> external_parameters;
 
-    // helper functions to serialize each type of object
     Serialize::MemoryType serialize_memory_type(const MemoryType &memory_type);
 
     Serialize::ForType serialize_for_type(const ForType &for_type);
