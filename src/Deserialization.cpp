@@ -29,7 +29,7 @@ private:
     std::map<int32_t, FunctionPtr> reverse_function_mappings;
 
     // A lookup table for finding parameters object via their names,
-    // used for preventing the same parameter being deserialized multiple times 
+    // used for preventing the same parameter being deserialized multiple times
     std::map<std::string, Parameter> parameters_in_pipeline;
 
     // A lookup table for finding buffer object via their names,

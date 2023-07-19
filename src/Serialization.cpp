@@ -37,11 +37,11 @@ private:
     std::map<std::string, int32_t> func_mappings;
 
     // A lookup table for finding parameters via their names,
-    // used for preventing the same parameter being serialized multiple times 
+    // used for preventing the same parameter being serialized multiple times
     std::map<std::string, Internal::Parameter> parameters_in_pipeline;
 
     // A lookup table for finding buffers via their names,
-    // used for preventing the same buffer being serialized multiple times 
+    // used for preventing the same buffer being serialized multiple times
     std::map<std::string, Buffer<>> buffers_in_pipeline;
 
     // A lookup table for parameters that are potentially external to the pipeline,
