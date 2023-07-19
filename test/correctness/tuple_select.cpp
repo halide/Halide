@@ -5,12 +5,12 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 int main(int argc, char **argv) {
-    // ternary tuple_select with Expr condition
+    // ternary select with Expr condition
     {
         Var x("x"), y("y");
         Func f("f");
 
-        f(x, y) = tuple_select(x + y < 30, Tuple(x, y), Tuple(x - 1, y - 2));
+        f(x, y) = select(x + y < 30, Tuple(x, y), Tuple(x - 1, y - 2));
 
         Realization result = f.realize({200, 200});
         Buffer<int> a = result[0], b = result[1];
@@ -27,12 +27,12 @@ int main(int argc, char **argv) {
         }
     }
 
-    // ternary tuple_select with Expr condition
+    // ternary select with Expr condition
     {
         Var x("x"), y("y");
         Func f("f");
 
-        f(x, y) = tuple_select(Tuple(x < 30, y < 30), Tuple(x, y), Tuple(x - 1, y - 2));
+        f(x, y) = select(Tuple(x < 30, y < 30), Tuple(x, y), Tuple(x - 1, y - 2));
 
         Realization result = f.realize({200, 200});
         Buffer<int> a = result[0], b = result[1];
@@ -49,14 +49,14 @@ int main(int argc, char **argv) {
         }
     }
 
-    // multiway tuple_select with Expr condition
+    // multiway select with Expr condition
     {
         Var x("x"), y("y");
         Func f("f");
 
-        f(x, y) = tuple_select(x + y < 30, Tuple(x, y),
-                               x + y < 100, Tuple(x - 1, y - 2),
-                               Tuple(x - 100, y - 200));
+        f(x, y) = select(x + y < 30, Tuple(x, y),
+                         x + y < 100, Tuple(x - 1, y - 2),
+                         Tuple(x - 100, y - 200));
 
         Realization result = f.realize({200, 200});
         Buffer<int> a = result[0], b = result[1];
@@ -73,14 +73,14 @@ int main(int argc, char **argv) {
         }
     }
 
-    // multiway tuple_select with Tuple condition
+    // multiway select with Tuple condition
     {
         Var x("x"), y("y");
         Func f("f");
 
-        f(x, y) = tuple_select(Tuple(x < 30, y < 30), Tuple(x, y),
-                               Tuple(x < 100, y < 100), Tuple(x - 1, y - 2),
-                               Tuple(x - 100, y - 200));
+        f(x, y) = select(Tuple(x < 30, y < 30), Tuple(x, y),
+                         Tuple(x < 100, y < 100), Tuple(x - 1, y - 2),
+                         Tuple(x - 100, y - 200));
 
         Realization result = f.realize({200, 200});
         Buffer<int> a = result[0], b = result[1];

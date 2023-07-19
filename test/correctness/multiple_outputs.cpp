@@ -38,9 +38,9 @@ int main(int argc, char **argv) {
 
         Expr best_x = g()[0], best_y = g()[1], best_so_far = g()[2];
         Expr next_value = f(r.x, r.y);
-        g() = tuple_select(next_value > best_so_far,
-                           {r.x, r.y, next_value},
-                           {best_x, best_y, best_so_far});
+        g() = select(next_value > best_so_far,
+                     {r.x, r.y, next_value},
+                     {best_x, best_y, best_so_far});
 
         if (use_gpu) {
             g.gpu_single_thread();
