@@ -1076,10 +1076,8 @@ Offset<Serialize::LoopLevel> Serializer::serialize_loop_level(FlatBufferBuilder 
 }
 
 Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBuilder &builder, const FuncSchedule &func_schedule) {
-    auto store_level = func_schedule.store_level();
-    auto store_level_serialized = serialize_loop_level(builder, store_level);
-    auto compute_level = func_schedule.compute_level();
-    auto compute_level_serialized = serialize_loop_level(builder, compute_level);
+    auto store_level_serialized = serialize_loop_level(builder, func_schedule.store_level());
+    auto compute_level_serialized = serialize_loop_level(builder, func_schedule.compute_level());
     std::vector<Offset<Serialize::StorageDim>> storage_dims_serialized;
     for (const auto &storage_dim : func_schedule.storage_dims()) {
         storage_dims_serialized.push_back(serialize_storage_dim(builder, storage_dim));
