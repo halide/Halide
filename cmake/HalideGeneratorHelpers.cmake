@@ -92,9 +92,15 @@ function(add_halide_generator TARGET)
 
             # TODO: what do we need to do for PACKAGE_NAME PACKAGE_NAMESPACE EXPORT_FILE in this case?
         else ()
-            add_executable(${TARGET} ${ARG_SOURCES})
+            # Make a library of the Generator that can be used for (e.g.) cpp_stub.
+            add_library("${TARGET}_lib" OBJECT ${ARG_SOURCES})
+            target_link_libraries("${TARGET}_lib" PRIVATE Halide::Halide ${ARG_LINK_LIBRARIES})
+            target_include_directories("${TARGET}_lib" INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>")
+
+            add_executable(${TARGET} "$<TARGET_OBJECTS:${TARGET}_lib>")
+            target_link_libraries("${TARGET}" PRIVATE Halide::Generator)
+
             add_executable(${gen} ALIAS ${TARGET})
-            target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
 
             if (NOT ARG_NO_DEFAULT_FLAGS AND NOT Halide_NO_DEFAULT_FLAGS)
                 # For crosscompiling builds, the Halide headers will be included using -isystem,
@@ -182,11 +188,11 @@ function(add_halide_library TARGET)
     # - `c_source` is selected by C_BACKEND
     # - `object` is selected for CMake-target-compile
     # - `static_library` is selected for cross-compile
-    # - `cpp_stub` is not available
     set(extra_output_names
         ASSEMBLY
         BITCODE
         COMPILER_LOG
+        CPP_STUB
         FEATURIZATION
         FUNCTION_INFO_HEADER
         LLVM_ASSEMBLY
@@ -201,6 +207,7 @@ function(add_halide_library TARGET)
     set(ASSEMBLY_extension ".s")
     set(BITCODE_extension ".bc")
     set(COMPILER_LOG_extension ".halide_compiler_log")
+    set(CPP_STUB_extension ".stub.h")
     set(FEATURIZATION_extension ".featurization")
     set(FUNCTION_INFO_HEADER_extension ".function_info.h")
     set(LLVM_ASSEMBLY_extension ".ll")

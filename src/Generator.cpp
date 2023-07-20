@@ -1582,6 +1582,7 @@ bool GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     GeneratorParamInfo &pi = param_info();
     std::ofstream file(stub_file_path);
     StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params(), pi.inputs(), pi.outputs());
+    debug(1) << "GeneratorBase::emit_cpp_stub(): generating cpp_stub at " << stub_file_path << "\n";
     emit.emit();
     return true;
 }

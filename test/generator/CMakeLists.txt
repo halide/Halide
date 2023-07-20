@@ -64,6 +64,7 @@ function(_add_halide_libraries TARGET)
                        FEATURES "${args_FEATURES}"
                        PARAMS "${args_PARAMS}"
                        PLUGINS "${args_PLUGINS}"
+                       CPP_STUB cpp_stub_out
                        FUNCTION_INFO_HEADER function_info_header_out)
     if (args_EXTERNS)
         target_link_libraries(${TARGET} INTERFACE ${args_EXTERNS})
@@ -224,12 +225,6 @@ endif ()
 # acquire_release_generator.cpp
 _add_halide_libraries(acquire_release)
 _add_halide_aot_tests(acquire_release)
-
-# TODO: what are these?
-# configure_jittest.cpp
-# example_jittest.cpp
-# registration_test.cpp
-# rungen_test.cpp
 
 # alias_aottest.cpp
 # alias_generator.cpp
@@ -606,3 +601,34 @@ _add_halide_aot_tests(variable_num_threads
                       # Requires threading support, not yet available for wasm tests
                       ENABLE_IF NOT ${_USING_WASM}
                       GROUPS multithreaded)
+
+
+##
+# Create targets for the JIT tests
+##
+
+function(_add_halide_jit_test NAME)
+    set(options "")
+    set(oneValueArgs "")
+    set(multiValueArgs GROUPS)
+    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    set(TARGET "generator_jit_${NAME}")
+    set(SRCS "${NAME}_jittest.cpp")
+
+    add_executable("${TARGET}" "${SRCS}")
+    target_link_libraries("${TARGET}" PRIVATE "${NAME}.generator_lib" Halide::Test Halide::TerminateHandler)
+
+    # Some of the jit tests require the cpp_stub file from the Generator, so ensure it's built first:
+    add_dependencies("${TARGET}" "${NAME}")
+
+    add_halide_test(${TARGET} GROUPS generator ${args_GROUPS})
+
+endfunction()
+
+_add_halide_jit_test(configure)
+_add_halide_jit_test(example GROUPS multithreaded)
+
+# TODO:
+# registration_test.cpp
+# rungen_test.cpp
