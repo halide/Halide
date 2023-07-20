@@ -626,7 +626,12 @@ function(_add_halide_jit_test NAME)
 
 endfunction()
 
+# configure_jittest.cpp
+# configure_generator.cpp
 _add_halide_jit_test(configure)
+
+# example_jittest.cpp
+# example_generator.cpp
 _add_halide_jit_test(example GROUPS multithreaded)
 
 # TODO:
