@@ -69,7 +69,7 @@ public:
         };
     }
 
-    bool allow_out_of_order_inputs_and_outputs() const {
+    bool allow_out_of_order_inputs_and_outputs() const override {
         return false;
     }
 
