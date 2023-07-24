@@ -118,6 +118,11 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
 
 template<bool training>
 class CostModel : public Generator<CostModel<training>> {
+protected:
+    bool allow_out_of_order_inputs_and_outputs() const override {
+        return true;
+    }
+
 public:
     template<typename T>
     using Input = GeneratorInput<T>;

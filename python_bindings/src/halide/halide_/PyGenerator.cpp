@@ -59,6 +59,10 @@ public:
         return args_to_vector<ArgInfo>(generator_.attr("_get_arginfos")());
     }
 
+    bool allow_out_of_order_inputs_and_outputs() const override {
+        return generator_.attr("allow_out_of_order_inputs_and_outputs")().cast<bool>();
+    }
+
     void set_generatorparam_value(const std::string &name, const std::string &value) override {
         generator_.attr("_set_generatorparam_value")(name, value);
     }
