@@ -84,7 +84,7 @@ public:
     bool result = true;
     const std::string &buffer;
 
-    IsBufferConstant(const std::string &b)
+    explicit IsBufferConstant(const std::string &b)
         : buffer(b) {
     }
 };

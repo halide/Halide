@@ -84,7 +84,7 @@ private:
 
 public:
     Symbol() = default;
-    Symbol(const std::string &name)
+    explicit Symbol(const std::string &name)
         : name(name) {
     }
 

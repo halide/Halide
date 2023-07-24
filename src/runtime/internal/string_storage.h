@@ -83,7 +83,7 @@ struct StringUtils {
 //
 class StringStorage {
 public:
-    StringStorage(void *user_context = nullptr, uint32_t capacity = 0, const SystemMemoryAllocatorFns &sma = default_allocator());
+    explicit StringStorage(void *user_context = nullptr, uint32_t capacity = 0, const SystemMemoryAllocatorFns &sma = default_allocator());
     StringStorage(const StringStorage &other) = default;
     ~StringStorage();
 

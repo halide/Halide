@@ -53,7 +53,7 @@ public:
     bool result = false;
     string var;
 
-    ExprDependsOnVar(string v)
+    explicit ExprDependsOnVar(string v)
         : var(std::move(v)) {
     }
 };
@@ -79,7 +79,7 @@ class ExpandExpr : public IRMutator {
     }
 
 public:
-    ExpandExpr(const Scope<Expr> &s)
+    explicit ExpandExpr(const Scope<Expr> &s)
         : scope(s) {
     }
 };
@@ -108,7 +108,7 @@ class FindProduce : public IRVisitor {
 public:
     bool found = false;
 
-    FindProduce(const string &func)
+    explicit FindProduce(const string &func)
         : func(func) {
     }
 };
@@ -665,7 +665,7 @@ class Dependencies : public IRVisitor {
 public:
     set<string> dependencies;
 
-    Dependencies(const string &producer)
+    explicit Dependencies(const string &producer)
         : producer(producer) {
     }
 };
@@ -882,7 +882,7 @@ class SlidingWindow : public IRMutator {
     }
 
 public:
-    SlidingWindow(const map<string, Function> &e)
+    explicit SlidingWindow(const map<string, Function> &e)
         : env(e) {
     }
 };

@@ -1062,7 +1062,7 @@ class SubstituteInWideningLets : public IRMutator {
             }
 
         public:
-            AllInputsNarrowerThan(Type t)
+            explicit AllInputsNarrowerThan(Type t)
                 : bits(t.bits()) {
             }
             bool result = true;
@@ -1125,7 +1125,7 @@ class SubstituteInWideningLets : public IRMutator {
                 std::vector<Frame> &frames;
 
             public:
-                LeaveBehindSubexpressions(std::vector<Frame> &frames)
+                explicit LeaveBehindSubexpressions(std::vector<Frame> &frames)
                     : frames(frames) {
                 }
             } extractor(frames);

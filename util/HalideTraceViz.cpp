@@ -968,7 +968,7 @@ struct Surface {
     }
 
 public:
-    Surface(const Point &fs)
+    explicit Surface(const Point &fs)
         : frame_size(fs),
           image(frame_elems()),
           anim(frame_elems()),

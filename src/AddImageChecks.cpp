@@ -149,7 +149,7 @@ class TrimStmtToPartsThatAccessBuffers : public IRMutator {
     }
 
 public:
-    TrimStmtToPartsThatAccessBuffers(const map<string, FindBuffers::Result> &bufs)
+    explicit TrimStmtToPartsThatAccessBuffers(const map<string, FindBuffers::Result> &bufs)
         : buffers(bufs) {
     }
 };

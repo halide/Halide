@@ -55,7 +55,7 @@ class WeakenFunctionPtrs : public IRMutator {
 
 public:
     int count = 0;
-    WeakenFunctionPtrs(FunctionContents *f)
+    explicit WeakenFunctionPtrs(FunctionContents *f)
         : func(f) {
     }
 };
@@ -206,7 +206,7 @@ struct CheckVars : public IRGraphVisitor {
     const std::string name;
     bool unbound_reduction_vars_ok = false;
 
-    CheckVars(const std::string &n)
+    explicit CheckVars(const std::string &n)
         : name(n) {
     }
 
@@ -294,7 +294,7 @@ class FreezeFunctions : public IRGraphVisitor {
     }
 
 public:
-    FreezeFunctions(const string &f)
+    explicit FreezeFunctions(const string &f)
         : func(f) {
     }
 };
@@ -877,7 +877,7 @@ void Function::define_extern(const std::string &function_name,
     contents->func_schedule.storage_dims().clear();
     contents->init_def.schedule().dims().clear();
     for (size_t i = 0; i < args.size(); i++) {
-        contents->func_schedule.storage_dims().push_back(StorageDim{arg_names[i]});
+        contents->func_schedule.storage_dims().emplace_back(StorageDim{arg_names[i]});
         contents->init_def.schedule().dims().push_back(
             Dim{arg_names[i], ForType::Extern, DeviceAPI::None, DimType::PureVar});
     }
@@ -1200,7 +1200,7 @@ class SubstituteCalls : public IRMutator {
     }
 
 public:
-    SubstituteCalls(const map<FunctionPtr, FunctionPtr> &substitutions)
+    explicit SubstituteCalls(const map<FunctionPtr, FunctionPtr> &substitutions)
         : substitutions(substitutions) {
     }
 };

@@ -50,7 +50,7 @@ struct AutoschedulerParams {
     std::map<std::string, std::string> extra;
 
     AutoschedulerParams() = default;
-    /*not-explicit*/ AutoschedulerParams(const std::string &name)
+    /*not-explicit*/ explicit AutoschedulerParams(const std::string &name)
         : name(name) {
     }
     AutoschedulerParams(const std::string &name, const std::map<std::string, std::string> &extra)
@@ -112,26 +112,26 @@ public:
         halide_buffer_t *buf{nullptr};
         std::unique_ptr<std::vector<Buffer<>>> buffer_list;
 
-        RealizationArg(Realization &r)
+        explicit RealizationArg(Realization &r)
             : r(&r) {
         }
-        RealizationArg(Realization &&r)
+        explicit RealizationArg(Realization &&r)
             : r(&r) {
         }
-        RealizationArg(halide_buffer_t *buf)
+        explicit RealizationArg(halide_buffer_t *buf)
             : buf(buf) {
         }
         template<typename T, int Dims>
-        RealizationArg(Runtime::Buffer<T, Dims> &dst)
+        explicit RealizationArg(Runtime::Buffer<T, Dims> &dst)
             : buf(dst.raw_buffer()) {
         }
         template<typename T, int Dims>
-        HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T, Dims> &dst)
+        HALIDE_NO_USER_CODE_INLINE explicit RealizationArg(Buffer<T, Dims> &dst)
             : buf(dst.raw_buffer()) {
         }
         template<typename T, int Dims, typename... Args,
                  typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
-        RealizationArg(Buffer<T, Dims> &a, Args &&...args)
+        explicit RealizationArg(Buffer<T, Dims> &a, Args &&...args)
             : buffer_list(std::make_unique<std::vector<Buffer<>>>(std::initializer_list<Buffer<>>{a, std::forward<Args>(args)...})) {
         }
         RealizationArg(RealizationArg &&from) = default;
@@ -178,11 +178,11 @@ public:
 
     /** Make a pipeline that computes the given Func. Schedules the
      * Func compute_root(). */
-    Pipeline(const Func &output);
+    explicit Pipeline(const Func &output);
 
     /** Make a pipeline that computes the givens Funcs as
      * outputs. Schedules the Funcs compute_root(). */
-    Pipeline(const std::vector<Func> &outputs);
+    explicit Pipeline(const std::vector<Func> &outputs);
 
     std::vector<Argument> infer_arguments(const Internal::Stmt &body);
 
@@ -554,7 +554,7 @@ public:
     }
 
     template<typename RT, typename... Args>
-    ExternCFunction(RT (*f)(Args... args))
+    explicit ExternCFunction(RT (*f)(Args... args))
         : ExternCFunction((void *)f, ExternSignature(f)) {
     }
 

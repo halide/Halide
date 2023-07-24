@@ -87,7 +87,7 @@ struct IRNode {
      * visitors.
      */
     virtual void accept(IRVisitor *v) const = 0;
-    IRNode(IRNodeType t)
+    explicit IRNode(IRNodeType t)
         : node_type(t) {
     }
     virtual ~IRNode() = default;
@@ -131,7 +131,7 @@ inline void destroy<IRNode>(const IRNode *t) {
 /** A base class for statement nodes. They have no properties or
    methods beyond base IR nodes for now. */
 struct BaseStmtNode : public IRNode {
-    BaseStmtNode(IRNodeType t)
+    explicit BaseStmtNode(IRNodeType t)
         : IRNode(t) {
     }
     virtual Stmt mutate_stmt(IRMutator *v) const = 0;
@@ -140,7 +140,7 @@ struct BaseStmtNode : public IRNode {
 /** A base class for expression nodes. They all contain their types
  * (e.g. Int(32), Float(32)) */
 struct BaseExprNode : public IRNode {
-    BaseExprNode(IRNodeType t)
+    explicit BaseExprNode(IRNodeType t)
         : IRNode(t) {
     }
     virtual Expr mutate_expr(IRMutator *v) const = 0;
@@ -181,7 +181,7 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
     IRHandle() = default;
 
     HALIDE_ALWAYS_INLINE
-    IRHandle(const IRNode *p)
+    explicit IRHandle(const IRNode *p)
         : IntrusivePtr<const IRNode>(p) {
     }
 
@@ -261,7 +261,7 @@ struct Expr : public Internal::IRHandle {
 
     /** Make an expression from a concrete expression node pointer (e.g. Add) */
     HALIDE_ALWAYS_INLINE
-    Expr(const Internal::BaseExprNode *n)
+    explicit Expr(const Internal::BaseExprNode *n)
         : IRHandle(n) {
     }
 
@@ -273,7 +273,7 @@ struct Expr : public Internal::IRHandle {
     explicit Expr(int16_t x)
         : IRHandle(Internal::IntImm::make(Int(16), x)) {
     }
-    Expr(int32_t x)
+    explicit Expr(int32_t x)
         : IRHandle(Internal::IntImm::make(Int(32), x)) {
     }
     explicit Expr(int64_t x)
@@ -291,13 +291,13 @@ struct Expr : public Internal::IRHandle {
     explicit Expr(uint64_t x)
         : IRHandle(Internal::UIntImm::make(UInt(64), x)) {
     }
-    Expr(float16_t x)
+    explicit Expr(float16_t x)
         : IRHandle(Internal::FloatImm::make(Float(16), (double)x)) {
     }
-    Expr(bfloat16_t x)
+    explicit Expr(bfloat16_t x)
         : IRHandle(Internal::FloatImm::make(BFloat(16), (double)x)) {
     }
-    Expr(float x)
+    explicit Expr(float x)
         : IRHandle(Internal::FloatImm::make(Float(32), x)) {
     }
     explicit Expr(double x)
@@ -306,7 +306,7 @@ struct Expr : public Internal::IRHandle {
     // @}
 
     /** Make an expression representing a const string (i.e. a StringImm) */
-    Expr(const std::string &s)
+    explicit Expr(const std::string &s)
         : IRHandle(Internal::StringImm::make(s)) {
     }
 
@@ -417,7 +417,7 @@ bool is_parallel(ForType for_type);
 /** A reference-counted handle to a statement node. */
 struct Stmt : public IRHandle {
     Stmt() = default;
-    Stmt(const BaseStmtNode *n)
+    explicit Stmt(const BaseStmtNode *n)
         : IRHandle(n) {
     }
 

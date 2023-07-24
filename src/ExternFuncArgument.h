@@ -26,25 +26,25 @@ struct ExternFuncArgument {
     Expr expr;
     Internal::Parameter image_param;
 
-    ExternFuncArgument(Internal::FunctionPtr f)
+    explicit ExternFuncArgument(Internal::FunctionPtr f)
         : arg_type(FuncArg), func(std::move(f)) {
     }
 
     template<typename T, int Dims>
-    ExternFuncArgument(Buffer<T, Dims> b)
+    explicit ExternFuncArgument(Buffer<T, Dims> b)
         : arg_type(BufferArg), buffer(b) {
     }
-    ExternFuncArgument(Expr e)
+    explicit ExternFuncArgument(Expr e)
         : arg_type(ExprArg), expr(std::move(e)) {
     }
-    ExternFuncArgument(int e)
+    explicit ExternFuncArgument(int e)
         : arg_type(ExprArg), expr(e) {
     }
-    ExternFuncArgument(float e)
+    explicit ExternFuncArgument(float e)
         : arg_type(ExprArg), expr(e) {
     }
 
-    ExternFuncArgument(const Internal::Parameter &p)
+    explicit ExternFuncArgument(const Internal::Parameter &p)
         : arg_type(ImageParamArg), image_param(p) {
         // Scalar params come in via the Expr constructor.
         internal_assert(p.is_buffer());

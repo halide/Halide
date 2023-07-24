@@ -89,7 +89,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
                 : op(op),
                   binding(scope, op->name, derivative_bounds(op->value, loop_var, scope)) {
             }
-            Frame(const LetStmtOrLet *op)
+            explicit Frame(const LetStmtOrLet *op)
                 : op(op) {
             }
         };
@@ -191,7 +191,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         public:
             std::set<std::string> *vars;
             Scope<> scope;
-            TrackFreeVars(std::set<std::string> *vars)
+            explicit TrackFreeVars(std::set<std::string> *vars)
                 : vars(vars) {
             }
         } tracker(vars);

@@ -117,7 +117,7 @@ public:
     IntrusivePtr() = default;
 
     HALIDE_ALWAYS_INLINE
-    IntrusivePtr(T *p)
+    explicit IntrusivePtr(T *p)
         : ptr(p) {
         incref(ptr);
     }

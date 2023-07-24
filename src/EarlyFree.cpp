@@ -18,7 +18,7 @@ public:
     string func;
     Stmt last_use;
 
-    FindLastUse(string s)
+    explicit FindLastUse(string s)
         : func(std::move(s)) {
     }
 

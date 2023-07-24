@@ -178,21 +178,21 @@ public:
 
     /** Make a Buffer from a Buffer of a different type */
     template<typename T2, int D2>
-    Buffer(const Buffer<T2, D2> &other)
+    explicit Buffer(const Buffer<T2, D2> &other)
         : contents(other.contents) {
         assert_can_convert_from(other);
     }
 
     /** Move construct from a Buffer of a different type */
     template<typename T2, int D2>
-    Buffer(Buffer<T2, D2> &&other) noexcept {
+    explicit Buffer(Buffer<T2, D2> &&other) noexcept {
         assert_can_convert_from(other);
         contents = std::move(other.contents);
     }
 
     /** Construct a Buffer that captures and owns an rvalue Runtime::Buffer */
     template<int D2>
-    Buffer(Runtime::Buffer<T, D2> &&buf, const std::string &name = "")
+    explicit Buffer(Runtime::Buffer<T, D2> &&buf, const std::string &name = "")
         : contents(new Internal::BufferContents) {
         contents->buf = std::move(buf);
         if (name.empty()) {

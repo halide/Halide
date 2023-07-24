@@ -514,11 +514,11 @@ public:
         return value_;
     }
 
-    operator T() const {
+    explicit operator T() const {
         return this->value();
     }
 
-    operator Expr() const {
+    explicit operator Expr() const {
         return make_const(type_of<T>(), this->value());
     }
 
@@ -1293,7 +1293,7 @@ public:
     // compiled into the Generator's product, rather than becoming
     // a runtime Parameter.
     template<typename T2, int D2>
-    StubInputBuffer(const Buffer<T2, D2> &b)
+    explicit StubInputBuffer(const Buffer<T2, D2> &b)
         : parameter_(parameter_from_buffer(b)) {
     }
 
@@ -1386,16 +1386,16 @@ class StubInput {
 public:
     // *not* explicit.
     template<typename T2>
-    StubInput(const StubInputBuffer<T2> &b)
+    explicit StubInput(const StubInputBuffer<T2> &b)
         : kind_(ArgInfoKind::Buffer), parameter_(b.parameter_), func_(), expr_() {
     }
-    StubInput(const Parameter &p)
+    explicit StubInput(const Parameter &p)
         : kind_(ArgInfoKind::Buffer), parameter_(p), func_(), expr_() {
     }
-    StubInput(const Func &f)
+    explicit StubInput(const Func &f)
         : kind_(ArgInfoKind::Function), parameter_(), func_(f), expr_() {
     }
-    StubInput(const Expr &e)
+    explicit StubInput(const Expr &e)
         : kind_(ArgInfoKind::Scalar), parameter_(), func_(), expr_(e) {
     }
 
@@ -1721,17 +1721,17 @@ public:
     }
 
     template<typename T2>
-    operator StubInputBuffer<T2>() const {
+    explicit operator StubInputBuffer<T2>() const {
         user_assert(!this->is_array()) << "Cannot assign an array type to a non-array type for Input " << this->name();
         return StubInputBuffer<T2>(this->parameters_.at(0));
     }
 
-    operator Func() const {
+    explicit operator Func() const {
         this->check_gio_access();
         return this->funcs().at(0);
     }
 
-    operator ExternFuncArgument() const {
+    explicit operator ExternFuncArgument() const {
         this->check_gio_access();
         return ExternFuncArgument(this->parameters_.at(0));
     }
@@ -1763,7 +1763,7 @@ public:
         return Func(*this).in(others);
     }
 
-    operator ImageParam() const {
+    explicit operator ImageParam() const {
         this->check_gio_access();
         user_assert(!this->is_array()) << "Cannot convert an Input<Buffer<>[]> to an ImageParam; use an explicit subscript operator: " << this->name();
         return ImageParam(this->parameters_.at(0), Func(*this));
@@ -1887,12 +1887,12 @@ public:
         return this->funcs().at(0)(args);
     }
 
-    operator Func() const {
+    explicit operator Func() const {
         this->check_gio_access();
         return this->funcs().at(0);
     }
 
-    operator ExternFuncArgument() const {
+    explicit operator ExternFuncArgument() const {
         this->check_gio_access();
         return ExternFuncArgument(this->parameters_.at(0));
     }
@@ -1964,14 +1964,14 @@ public:
 
     /** You can use this Input as an expression in a halide
      * function definition */
-    operator Expr() const {
+    explicit operator Expr() const {
         this->check_gio_access();
         return this->exprs().at(0);
     }
 
     /** Using an Input as the argument to an external stage treats it
      * as an Expr */
-    operator ExternFuncArgument() const {
+    explicit operator ExternFuncArgument() const {
         this->check_gio_access();
         return ExternFuncArgument(this->exprs().at(0));
     }
@@ -2045,14 +2045,14 @@ public:
 
     /** You can use this Input as an expression in a halide
      * function definition */
-    operator Expr() const {
+    explicit operator Expr() const {
         this->check_gio_access();
         return this->exprs().at(0);
     }
 
     /** Using an Input as the argument to an external stage treats it
      * as an Expr */
-    operator ExternFuncArgument() const {
+    explicit operator ExternFuncArgument() const {
         this->check_gio_access();
         return ExternFuncArgument(this->exprs().at(0));
     }
@@ -2409,13 +2409,13 @@ public:
     }
 
     template<typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
-    operator Func() const {
+    explicit operator Func() const {
         this->check_gio_access();
         return get_values<ValueType>().at(0);
     }
 
     template<typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
-    operator Stage() const {
+    explicit operator Stage() const {
         this->check_gio_access();
         return get_values<ValueType>().at(0);
     }
@@ -2629,7 +2629,7 @@ public:
         return *this;
     }
 
-    operator OutputImageParam() const {
+    explicit operator OutputImageParam() const {
         this->check_gio_access();
         user_assert(!this->is_array()) << "Cannot convert an Output<Buffer<>[]> to an ImageParam; use an explicit subscript operator: " << this->name();
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);

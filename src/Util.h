@@ -364,7 +364,7 @@ struct ScopedValue {
     T &var;
     T old_value;
     /** Preserve the old value, restored at dtor time */
-    ScopedValue(T &var)
+    explicit ScopedValue(T &var)
         : var(var), old_value(var) {
     }
     /** Preserve the old value, then set the var to a new value. */
@@ -375,7 +375,7 @@ struct ScopedValue {
     ~ScopedValue() {
         var = old_value;
     }
-    operator T() const {
+    explicit operator T() const {
         return old_value;
     }
     // allow move but not copy

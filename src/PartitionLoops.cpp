@@ -226,7 +226,7 @@ class ExprUsesInvalidBuffers : public IRVisitor {
     }
 
 public:
-    ExprUsesInvalidBuffers(const Scope<> &buffers)
+    explicit ExprUsesInvalidBuffers(const Scope<> &buffers)
         : invalid_buffers(buffers) {
     }
     bool invalid = false;
@@ -452,7 +452,7 @@ class FindSimplifications : public IRVisitor {
 public:
     vector<Simplification> simplifications;
 
-    FindSimplifications(const std::string &v) {
+    explicit FindSimplifications(const std::string &v) {
         depends_on_loop_var.push(v);
     }
 };
@@ -464,7 +464,7 @@ class MakeSimplifications : public IRMutator {
     const vector<Simplification> &simplifications;
 
 public:
-    MakeSimplifications(const vector<Simplification> &s)
+    explicit MakeSimplifications(const vector<Simplification> &s)
         : simplifications(s) {
     }
 

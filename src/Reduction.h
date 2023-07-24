@@ -52,7 +52,7 @@ public:
      * all values of the given ReductionVariable in scanline order,
      * with the start of the vector being innermost, and the end of
      * the vector being outermost. */
-    ReductionDomain(const std::vector<ReductionVariable> &domain);
+    explicit ReductionDomain(const std::vector<ReductionVariable> &domain);
 
     /** Return a deep copy of this ReductionDomain. */
     ReductionDomain deep_copy() const;

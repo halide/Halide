@@ -138,7 +138,7 @@ class OptimizeShuffles : public IRMutator {
     }
 
 public:
-    OptimizeShuffles(int lut_alignment)
+    explicit OptimizeShuffles(int lut_alignment)
         : lut_alignment(lut_alignment) {
     }
 };

@@ -28,7 +28,7 @@ class QualifyExpr : public IRMutator {
     }
 
 public:
-    QualifyExpr(const string &p)
+    explicit QualifyExpr(const string &p)
         : prefix(p) {
     }
 };

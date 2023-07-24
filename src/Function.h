@@ -244,7 +244,7 @@ public:
     std::string &debug_file();
 
     /** Use an an extern argument to another function. */
-    operator ExternFuncArgument() const;
+    explicit operator ExternFuncArgument() const;
 
     /** Tracing calls and accessors, passed down from the Func
      * equivalents. */

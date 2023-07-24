@@ -86,7 +86,7 @@ public:
     }
 
 protected:
-    CodeGen_LLVM(const Target &t);
+    explicit CodeGen_LLVM(const Target &t);
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
@@ -597,7 +597,7 @@ protected:
         // If provided, put argument's type into the intrinsic name via LLVM IR type mangling.
         std::optional<size_t> mangle_index;
         int alignment;
-        VPArg(llvm::Value *value, std::optional<size_t> mangle_index = std::nullopt, int32_t alignment = 0)
+        explicit VPArg(llvm::Value *value, std::optional<size_t> mangle_index = std::nullopt, int32_t alignment = 0)
             : value(value), mangle_index(mangle_index), alignment(alignment) {
         }
     };
@@ -626,7 +626,7 @@ protected:
     struct VPResultType {
         llvm::Type *type;
         std::optional<size_t> mangle_index;
-        VPResultType(llvm::Type *type, std::optional<size_t> mangle_index = std::nullopt)
+        explicit VPResultType(llvm::Type *type, std::optional<size_t> mangle_index = std::nullopt)
             : type(type), mangle_index(mangle_index) {
         }
     };

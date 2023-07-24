@@ -37,7 +37,7 @@ struct AssociativePattern {
     bool is_commutative = false;
 
     AssociativePattern() = default;
-    AssociativePattern(size_t size)
+    explicit AssociativePattern(size_t size)
         : ops(size), identities(size) {
     }
     AssociativePattern(const std::vector<Expr> &ops, const std::vector<Expr> &ids, bool is_commutative)

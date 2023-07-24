@@ -550,7 +550,7 @@ class HexagonLinker : public Linker {
 public:
     uint32_t flags;
 
-    HexagonLinker(const Target &target) {
+    explicit HexagonLinker(const Target &target) {
         if (target.has_feature(Target::HVX_v66)) {
             flags = Elf::EF_HEXAGON_MACH_V66;
         } else if (target.has_feature(Target::HVX_v65)) {
@@ -681,7 +681,7 @@ class ReplaceParams : public IRMutator {
     }
 
 public:
-    ReplaceParams(const std::map<std::string, Parameter> &replacements)
+    explicit ReplaceParams(const std::map<std::string, Parameter> &replacements)
         : replacements(replacements) {
     }
 };
@@ -928,7 +928,7 @@ class InjectHexagonRpc : public IRMutator {
     }
 
 public:
-    InjectHexagonRpc(Module &device_code)
+    explicit InjectHexagonRpc(Module &device_code)
         : device_code(device_code) {
     }
 

@@ -56,7 +56,7 @@ class CodeGen_X86 : public CodeGen_Posix {
 public:
     /** Create an x86 code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    CodeGen_X86(Target);
+    explicit CodeGen_X86(Target);
 
 protected:
     string mcpu_target() const override;

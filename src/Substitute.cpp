@@ -25,7 +25,7 @@ class Substitute : public IRMutator {
     }
 
 public:
-    Substitute(const map<string, Expr> &m)
+    explicit Substitute(const map<string, Expr> &m)
         : replace(m) {
     }
 

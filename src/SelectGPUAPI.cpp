@@ -41,7 +41,7 @@ class SelectGPUAPI : public IRMutator {
     }
 
 public:
-    SelectGPUAPI(const Target &t) {
+    explicit SelectGPUAPI(const Target &t) {
         default_api = get_default_device_api_for_target(t);
         parent_api = DeviceAPI::Host;
     }

@@ -162,7 +162,7 @@ struct AllocationHeader {
     std::atomic<int> ref_count;
 
     // Note that ref_count always starts at 1
-    AllocationHeader(void (*deallocate_fn)(void *))
+    explicit AllocationHeader(void (*deallocate_fn)(void *))
         : deallocate_fn(deallocate_fn), ref_count(1) {
     }
 };
@@ -298,7 +298,7 @@ private:
     // operation as well.
     struct DevRefCountCropped : DeviceRefCount {
         Buffer<T, Dims, InClassDimStorage> cropped_from;
-        DevRefCountCropped(const Buffer<T, Dims, InClassDimStorage> &cropped_from)
+        explicit DevRefCountCropped(const Buffer<T, Dims, InClassDimStorage> &cropped_from)
             : cropped_from(cropped_from) {
             ownership = BufferDeviceOwnership::Cropped;
         }
@@ -608,7 +608,7 @@ public:
             return {min() + extent()};
         }
 
-        Dimension(const halide_dimension_t &dim)
+        explicit Dimension(const halide_dimension_t &dim)
             : d(dim) {
         }
     };
@@ -757,7 +757,7 @@ public:
      * Buffer<T> or Buffer<const void> to functions expected
      * Buffer<const T>. */
     template<typename T2, int D2, int S2>
-    Buffer(const Buffer<T2, D2, S2> &other)
+    explicit Buffer(const Buffer<T2, D2, S2> &other)
         : buf(other.buf),
           alloc(other.alloc) {
         assert_can_convert_from(other);
@@ -781,7 +781,7 @@ public:
      * dimensionality and type. Asserts that the types match (at
      * runtime if one of the types is void). */
     template<typename T2, int D2, int S2>
-    Buffer(Buffer<T2, D2, S2> &&other)
+    explicit Buffer(Buffer<T2, D2, S2> &&other)
         : buf(other.buf),
           alloc(other.alloc),
           dev_ref_count(other.dev_ref_count) {
@@ -1178,7 +1178,7 @@ public:
 
     /** Provide a cast operator to halide_buffer_t *, so that
      * instances can be passed directly to Halide filters. */
-    operator halide_buffer_t *() {
+    explicit operator halide_buffer_t *() {
         return &buf;
     }
 
@@ -1245,7 +1245,7 @@ public:
     /** Add some syntactic sugar to allow autoconversion from Buffer<T> to Buffer<const T>& when
      * passing arguments */
     template<typename T2 = T, typename = typename std::enable_if<!std::is_const<T2>::value>::type>
-    operator Buffer<typename std::add_const<T2>::type, Dims, InClassDimStorage> &() & {
+    explicit operator Buffer<typename std::add_const<T2>::type, Dims, InClassDimStorage> &() & {
         return as_const();
     }
 
@@ -1256,7 +1256,7 @@ public:
              typename = typename std::enable_if<std::is_same<TVoid, void>::value &&
                                                 !std::is_void<T2>::value &&
                                                 !std::is_const<T2>::value>::type>
-    operator Buffer<TVoid, Dims, InClassDimStorage> &() & {
+    explicit operator Buffer<TVoid, Dims, InClassDimStorage> &() & {
         return as<TVoid, Dims>();
     }
 
@@ -1267,7 +1267,7 @@ public:
              typename = typename std::enable_if<std::is_same<TVoid, void>::value &&
                                                 !std::is_void<T2>::value &&
                                                 std::is_const<T2>::value>::type>
-    operator Buffer<const TVoid, Dims, InClassDimStorage> &() & {
+    explicit operator Buffer<const TVoid, Dims, InClassDimStorage> &() & {
         return as<const TVoid, Dims>();
     }
 

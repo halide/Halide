@@ -1517,7 +1517,7 @@ struct Intrin {
     }
 
     HALIDE_ALWAYS_INLINE
-    Intrin(Call::IntrinsicOp intrin, Args... args) noexcept
+    explicit Intrin(Call::IntrinsicOp intrin, Args... args) noexcept
         : intrin(intrin), args(args...) {
     }
 };

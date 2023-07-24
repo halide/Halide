@@ -86,7 +86,7 @@ class ExprUsesVars : public IRGraphVisitor {
     }
 
 public:
-    ExprUsesVars(const Scope<T> &v, const Scope<Expr> *s = nullptr)
+    explicit ExprUsesVars(const Scope<T> &v, const Scope<Expr> *s = nullptr)
         : vars(v) {
         scope.set_containing_scope(s);
     }

@@ -395,7 +395,7 @@ class WithLanes : public IRMutator {
     }
 
 public:
-    WithLanes(int lanes)
+    explicit WithLanes(int lanes)
         : lanes(lanes) {
     }
 };

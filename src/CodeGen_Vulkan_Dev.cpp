@@ -28,7 +28,7 @@ namespace {  // anonymous
 
 class CodeGen_Vulkan_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_Vulkan_Dev(Target target);
+    explicit CodeGen_Vulkan_Dev(Target target);
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single
@@ -58,7 +58,7 @@ protected:
     class SPIRV_Emitter : public IRVisitor {
 
     public:
-        SPIRV_Emitter(Target t);
+        explicit SPIRV_Emitter(Target t);
 
         using IRVisitor::visit;
 
@@ -305,7 +305,7 @@ public:
     // discovered.
     int lanes = -1;
 
-    CheckAlignedDenseVectorLoadStore(std::string name)
+    explicit CheckAlignedDenseVectorLoadStore(std::string name)
         : buffer_name(std::move(name)) {
     }
 

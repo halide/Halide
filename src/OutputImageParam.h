@@ -104,11 +104,11 @@ public:
     /** Construct the appropriate argument matching this parameter,
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */
-    operator Argument() const;
+    explicit operator Argument() const;
 
     /** Using a param as the argument to an external stage treats it
      * as an Expr */
-    operator ExternFuncArgument() const;
+    explicit operator ExternFuncArgument() const;
 
     /** Set (min, extent) estimates for all dimensions in the ImageParam
      * at once; this is equivalent to calling `dim(n).set_estimate(min, extent)`

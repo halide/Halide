@@ -16,7 +16,7 @@ struct LoweredFunc;
 
 class PythonExtensionGen {
 public:
-    PythonExtensionGen(std::ostream &dest);
+    explicit PythonExtensionGen(std::ostream &dest);
 
     void compile(const Module &module);
 

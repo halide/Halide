@@ -544,7 +544,7 @@ class FuncSchedule {
     IntrusivePtr<FuncScheduleContents> contents;
 
 public:
-    FuncSchedule(IntrusivePtr<FuncScheduleContents> c)
+    explicit FuncSchedule(IntrusivePtr<FuncScheduleContents> c)
         : contents(std::move(c)) {
     }
     FuncSchedule(const FuncSchedule &other) = default;
@@ -647,7 +647,7 @@ class StageSchedule {
     IntrusivePtr<StageScheduleContents> contents;
 
 public:
-    StageSchedule(IntrusivePtr<StageScheduleContents> c)
+    explicit StageSchedule(IntrusivePtr<StageScheduleContents> c)
         : contents(std::move(c)) {
     }
     StageSchedule(const StageSchedule &other) = default;

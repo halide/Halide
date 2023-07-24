@@ -90,7 +90,7 @@ struct DoubleToExprCheck {
     explicit DoubleToExprCheck(double d)
         : e(double_to_expr_check(d)) {
     }
-    operator Expr() const {
+    explicit operator Expr() const {
         return e;
     }
 };

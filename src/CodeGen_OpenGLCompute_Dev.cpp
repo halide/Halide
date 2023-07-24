@@ -711,7 +711,7 @@ void CodeGen_OpenGLCompute_C::visit(const Select *op) {
 
 class CodeGen_OpenGLCompute_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_OpenGLCompute_Dev(const Target &target);
+    explicit CodeGen_OpenGLCompute_Dev(const Target &target);
 
     // CodeGen_GPU_Dev interface
     void add_kernel(Stmt stmt,
@@ -785,7 +785,7 @@ public:
     // discovered.
     int lanes = -1;
 
-    CheckAlignedDenseVectorLoadStore(string buffer)
+    explicit CheckAlignedDenseVectorLoadStore(string buffer)
         : buffer(std::move(buffer)) {
     }
 

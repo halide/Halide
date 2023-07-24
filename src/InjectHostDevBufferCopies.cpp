@@ -443,7 +443,7 @@ class FindLastUse : public IRVisitor {
 public:
     Stmt last_use;
 
-    FindLastUse(const string &b)
+    explicit FindLastUse(const string &b)
         : buffer(b) {
     }
 
@@ -530,7 +530,7 @@ class InjectBufferCopies : public IRMutator {
         string buffer;
 
     public:
-        InjectDeviceDestructor(string b)
+        explicit InjectDeviceDestructor(string b)
             : buffer(std::move(b)) {
         }
     };
@@ -804,7 +804,7 @@ public:
         }
     }
 
-    InjectBufferCopiesForInputsAndOutputs(Stmt s)
+    explicit InjectBufferCopiesForInputsAndOutputs(Stmt s)
         : site(std::move(s)) {
     }
 };

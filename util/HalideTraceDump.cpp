@@ -47,7 +47,7 @@ struct FuncInfo {
     Buffer<> values;
 
     FuncInfo() = default;
-    FuncInfo(Packet *p) {
+    explicit FuncInfo(Packet *p) {
         int real_dims = p->dimensions / p->type.lanes;
         if (real_dims > 16) {
             fprintf(stderr, "Error: found trace packet with dimensionality > 16. Aborting.\n");

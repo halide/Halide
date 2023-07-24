@@ -29,10 +29,10 @@ struct MangledNamePart {
     std::string with_substitutions;
 
     MangledNamePart() = default;
-    MangledNamePart(const std::string &mangled)
+    explicit MangledNamePart(const std::string &mangled)
         : full_name(mangled), with_substitutions(mangled) {
     }
-    MangledNamePart(const char *mangled)
+    explicit MangledNamePart(const char *mangled)
         : full_name(mangled), with_substitutions(mangled) {
     }
 };

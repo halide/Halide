@@ -32,7 +32,7 @@ public:
 
     /** Single-element realizations are implicitly castable to Buffers. */
     template<typename T, int Dims>
-    operator Buffer<T, Dims>() const {
+    explicit operator Buffer<T, Dims>() const {
         user_assert(images.size() == 1) << "Cannot cast Realization with "
                                         << images.size() << " elements to a Buffer";
         return images[0];
@@ -54,7 +54,7 @@ public:
     explicit Realization(std::vector<Buffer<void>> &&e);
     // This ctor allows us to avoid ambiguity when the vector is specified as
     // a braced literal, e.g. `Realization({first, second})`
-    explicit Realization(std::initializer_list<Buffer<void>> e)
+    Realization(std::initializer_list<Buffer<void>> e)
         : Realization(std::vector<Buffer<void>>{e}) {
     }
     // @}

@@ -20,7 +20,7 @@ namespace {
 
 class CodeGen_WebGPU_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_WebGPU_Dev(const Target &target);
+    explicit CodeGen_WebGPU_Dev(const Target &target);
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single

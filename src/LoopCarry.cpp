@@ -161,7 +161,7 @@ class StepForwards : public IRGraphMutator {
 
 public:
     bool success = true;
-    StepForwards(const Scope<Expr> &s)
+    explicit StepForwards(const Scope<Expr> &s)
         : linear(s) {
     }
 };
@@ -551,7 +551,7 @@ class LoopCarry : public IRMutator {
     }
 
 public:
-    LoopCarry(int max_carried_values)
+    explicit LoopCarry(int max_carried_values)
         : max_carried_values(max_carried_values) {
     }
 };

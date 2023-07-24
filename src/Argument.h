@@ -79,7 +79,7 @@ struct Argument {
     // to indicate that it shouldn't be baked into the object file,
     // but instead received as an argument at runtime
     template<typename T, int Dims>
-    Argument(Buffer<T, Dims> im)
+    explicit Argument(Buffer<T, Dims> im)
         : name(im.name()),
           kind(InputBuffer),
           dimensions(im.dimensions()),

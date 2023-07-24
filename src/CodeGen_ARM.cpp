@@ -100,7 +100,7 @@ class SubstituteInStridedLoads : public IRMutator {
 class CodeGen_ARM : public CodeGen_Posix {
 public:
     /** Create an ARM code generator for the given arm target. */
-    CodeGen_ARM(const Target &);
+    explicit CodeGen_ARM(const Target &);
 
 protected:
     using CodeGen_Posix::visit;

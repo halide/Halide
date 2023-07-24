@@ -2,6 +2,9 @@
 InheritParentConfig: true
 
 Checks: >
+
+    google-explicit-constructor,
+
     # For reasons that aren't clear, clang-tidy-16 will apparently
     # ignore disable-check requests if they were already enabled
     # by a glob, so we will individually enumerate all the ones we want (or don't want).

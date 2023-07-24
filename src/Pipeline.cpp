@@ -77,7 +77,7 @@ struct JITCallArgs {
     size_t size{0};
     const void **store;
 
-    JITCallArgs(size_t size)
+    explicit JITCallArgs(size_t size)
         : size(size) {
         if (size > kStoreSize) {
             store = new ConstVoidPtr[size];
@@ -458,7 +458,7 @@ class FindExterns : public IRGraphVisitor {
     }
 
 public:
-    FindExterns(std::map<std::string, JITExtern> &externs)
+    explicit FindExterns(std::map<std::string, JITExtern> &externs)
         : externs(externs) {
     }
 
@@ -772,7 +772,7 @@ void Pipeline::add_requirement(const Expr &condition, const std::vector<Expr> &e
         const Expr &condition;
 
     public:
-        Checker(const Expr &c)
+        explicit Checker(const Expr &c)
             : condition(c) {
             c.accept(this);
         }

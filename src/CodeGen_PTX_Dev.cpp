@@ -45,7 +45,7 @@ namespace {
 class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
 public:
     /** Create a PTX device code generator. */
-    CodeGen_PTX_Dev(const Target &host);
+    explicit CodeGen_PTX_Dev(const Target &host);
     ~CodeGen_PTX_Dev() override;
 
     void add_kernel(Stmt stmt,

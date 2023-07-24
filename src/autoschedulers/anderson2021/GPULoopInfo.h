@@ -19,7 +19,7 @@ namespace Autoscheduler {
 struct LoopNest;
 
 struct GPULoopInfo {
-    GPULoopInfo(const LoopNest *root)
+    explicit GPULoopInfo(const LoopNest *root)
         : root{root} {
     }
 

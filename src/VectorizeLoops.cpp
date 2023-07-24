@@ -1363,7 +1363,7 @@ class VectorSubs : public IRMutator {
     }
 
 public:
-    VectorSubs(const VectorizedVar &vv) {
+    explicit VectorSubs(const VectorizedVar &vv) {
         vectorized_vars.push_back(vv);
         update_replacements();
     }
@@ -1510,7 +1510,7 @@ public:
         }
     }
 
-    LiftVectorizableExprsOutOfSingleAtomicNode(const std::set<Expr, ExprCompare> &liftable)
+    explicit LiftVectorizableExprsOutOfSingleAtomicNode(const std::set<Expr, ExprCompare> &liftable)
         : liftable(liftable) {
     }
 };
@@ -1535,7 +1535,7 @@ class LiftVectorizableExprsOutOfAllAtomicNodes : public IRMutator {
     const map<string, Function> &env;
 
 public:
-    LiftVectorizableExprsOutOfAllAtomicNodes(const map<string, Function> &env)
+    explicit LiftVectorizableExprsOutOfAllAtomicNodes(const map<string, Function> &env)
         : env(env) {
     }
 };
@@ -1576,7 +1576,7 @@ class AllStoresInScope : public IRVisitor {
 public:
     bool result = true;
     const Scope<> &s;
-    AllStoresInScope(const Scope<> &s)
+    explicit AllStoresInScope(const Scope<> &s)
         : s(s) {
     }
 };

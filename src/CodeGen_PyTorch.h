@@ -28,7 +28,7 @@ struct LoweredFunc;
  */
 class CodeGen_PyTorch : public IRPrinter {
 public:
-    CodeGen_PyTorch(std::ostream &dest);
+    explicit CodeGen_PyTorch(std::ostream &dest);
     ~CodeGen_PyTorch() override = default;
 
     /** Emit the PyTorch C++ wrapper for the Halide pipeline. */

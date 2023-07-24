@@ -1764,7 +1764,7 @@ struct halide_tiff_header {
 
 template<typename ElemType, int BUFFER_SIZE = 1024>
 struct ElemWriter {
-    ElemWriter(FileOpener *f)
+    explicit ElemWriter(FileOpener *f)
         : f(f), next(&buf[0]) {
     }
     ~ElemWriter() {
@@ -2304,12 +2304,12 @@ bool save_query(const std::string &filename, std::set<FormatInfo> *info) {
 // dimensions of of the image on the LHS, a runtime error will occur.
 class load_image {
 public:
-    load_image(const std::string &f)
+    explicit load_image(const std::string &f)
         : filename(f) {
     }
 
     template<typename ImageType>
-    operator ImageType() {
+    explicit operator ImageType() {
         using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
         DynamicImageType im_d;
         (void)load<DynamicImageType, Internal::CheckFail>(filename, &im_d);
@@ -2327,12 +2327,12 @@ private:
 // if necessary, discarding information if necessary.
 class load_and_convert_image {
 public:
-    load_and_convert_image(const std::string &f)
+    explicit load_and_convert_image(const std::string &f)
         : filename(f) {
     }
 
     template<typename ImageType>
-    inline operator ImageType() {
+    inline explicit operator ImageType() {
         using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
         DynamicImageType im_d;
         (void)load<DynamicImageType, Internal::CheckFail>(filename, &im_d);

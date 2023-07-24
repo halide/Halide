@@ -84,7 +84,7 @@ struct AssociativeOp {
     bool is_associative = false;
 
     AssociativeOp() = default;
-    AssociativeOp(size_t size)
+    explicit AssociativeOp(size_t size)
         : pattern(size), xs(size), ys(size) {
     }
     AssociativeOp(const AssociativePattern &p, const std::vector<Replacement> &xs,

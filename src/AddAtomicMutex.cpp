@@ -20,7 +20,7 @@ namespace {
 /** Collect names of all stores matching the producer name inside a statement. */
 class CollectProducerStoreNames : public IRGraphVisitor {
 public:
-    CollectProducerStoreNames(const std::string &producer_name)
+    explicit CollectProducerStoreNames(const std::string &producer_name)
         : producer_name(producer_name) {
     }
 
@@ -44,7 +44,7 @@ protected:
  *  and return their indices. */
 class FindProducerStoreIndex : public IRGraphVisitor {
 public:
-    FindProducerStoreIndex(const std::string &producer_name)
+    explicit FindProducerStoreIndex(const std::string &producer_name)
         : producer_name(producer_name) {
     }
 
@@ -123,7 +123,7 @@ protected:
  *  binding from the Store node (currently only SplitTuple would do this). */
 class FindAtomicLetBindings : public IRGraphVisitor {
 public:
-    FindAtomicLetBindings(const Scope<void> &store_names)
+    explicit FindAtomicLetBindings(const Scope<void> &store_names)
         : store_names(store_names) {
     }
 
@@ -211,7 +211,7 @@ class FindStoreInAtomicMutex : public IRGraphVisitor {
 public:
     using IRGraphVisitor::visit;
 
-    FindStoreInAtomicMutex(const std::set<std::string> &store_names)
+    explicit FindStoreInAtomicMutex(const std::set<std::string> &store_names)
         : store_names(store_names) {
     }
 
@@ -276,7 +276,7 @@ protected:
 /** Add mutex allocation & lock & unlock if required. */
 class AddAtomicMutex : public IRMutator {
 public:
-    AddAtomicMutex(const map<string, Function> &env)
+    explicit AddAtomicMutex(const map<string, Function> &env)
         : env(env) {
     }
 

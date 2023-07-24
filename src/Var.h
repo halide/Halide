@@ -26,7 +26,7 @@ class Var {
 
 public:
     /** Construct a Var with the given name */
-    Var(const std::string &n);
+    explicit Var(const std::string &n);
 
     /** Construct a Var with an automatically-generated unique name. */
     Var();
@@ -155,7 +155,7 @@ public:
     //}
 
     /** A Var can be treated as an Expr of type Int(32) */
-    operator const Expr &() const {
+    explicit operator const Expr &() const {
         return e;
     }
 
@@ -175,10 +175,10 @@ struct ImplicitVar {
         }
     }
 
-    operator Var() const {
+    explicit operator Var() const {
         return to_var();
     }
-    operator Expr() const {
+    explicit operator Expr() const {
         return to_var();
     }
 };

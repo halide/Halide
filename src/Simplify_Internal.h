@@ -269,7 +269,7 @@ public:
         Expr substitute_facts(const Expr &e);
         Stmt substitute_facts(const Stmt &s);
 
-        ScopedFact(Simplify *s)
+        explicit ScopedFact(Simplify *s)
             : simplify(s) {
         }
         ~ScopedFact();

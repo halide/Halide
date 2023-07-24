@@ -192,7 +192,7 @@ class DebugSections {
 public:
     bool working = false;
 
-    DebugSections(const std::string &binary) {
+    explicit DebugSections(const std::string &binary) {
         std::string binary_path = binary;
 #ifdef __APPLE__
         size_t last_slash = binary_path.rfind('/');

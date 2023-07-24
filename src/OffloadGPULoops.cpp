@@ -253,7 +253,7 @@ class InjectGpuOffload : public IRMutator {
     }
 
 public:
-    InjectGpuOffload(const Target &target)
+    explicit InjectGpuOffload(const Target &target)
         : target(target) {
         Target device_target = target;
         // For the GPU target we just want to pass the flags, to avoid the

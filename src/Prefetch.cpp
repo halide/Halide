@@ -315,7 +315,7 @@ class ReducePrefetchDimension : public IRMutator {
     }
 
 public:
-    ReducePrefetchDimension(size_t dim)
+    explicit ReducePrefetchDimension(size_t dim)
         : max_dim(dim) {
     }
 };
@@ -386,7 +386,7 @@ class SplitPrefetch : public IRMutator {
     }
 
 public:
-    SplitPrefetch(Expr bytes)
+    explicit SplitPrefetch(Expr bytes)
         : max_byte_size(std::move(bytes)) {
     }
 };

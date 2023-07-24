@@ -666,7 +666,7 @@ class LowerWarpShuffles : public IRMutator {
     }
 
 public:
-    LowerWarpShuffles(int cuda_cap)
+    explicit LowerWarpShuffles(int cuda_cap)
         : cuda_cap(cuda_cap) {
     }
 };
@@ -764,7 +764,7 @@ class MoveIfStatementInwards : public IRMutator {
     Expr condition;
 
 public:
-    MoveIfStatementInwards(Expr c)
+    explicit MoveIfStatementInwards(Expr c)
         : condition(std::move(c)) {
     }
 };
@@ -832,7 +832,7 @@ class LowerWarpShufflesInEachKernel : public IRMutator {
     int cuda_cap;
 
 public:
-    LowerWarpShufflesInEachKernel(int cuda_cap)
+    explicit LowerWarpShufflesInEachKernel(int cuda_cap)
         : cuda_cap(cuda_cap) {
     }
 };

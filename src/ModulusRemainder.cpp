@@ -26,7 +26,7 @@ public:
     ModulusRemainder result;
     Scope<ModulusRemainder> scope;
 
-    ComputeModulusRemainder(const Scope<ModulusRemainder> *s) {
+    explicit ComputeModulusRemainder(const Scope<ModulusRemainder> *s) {
         scope.set_containing_scope(s);
     }
 

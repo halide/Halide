@@ -106,7 +106,7 @@ struct halide_handle_cplusplus_type {
     };
     ReferenceType reference_type;
 
-    halide_handle_cplusplus_type(const halide_cplusplus_type_name &inner_name,
+    explicit halide_handle_cplusplus_type(const halide_cplusplus_type_name &inner_name,
                                  const std::vector<std::string> &namespaces = {},
                                  const std::vector<halide_cplusplus_type_name> &enclosing_types = {},
                                  const std::vector<uint8_t> &modifiers = {},
@@ -316,14 +316,14 @@ public:
      * inside the compiler. This simply constructs the wrapper around
      * the runtime value. */
     HALIDE_ALWAYS_INLINE
-    Type(const halide_type_t &that, const halide_handle_cplusplus_type *handle_type = nullptr)
+    explicit Type(const halide_type_t &that, const halide_handle_cplusplus_type *handle_type = nullptr)
         : type(that), handle_type(handle_type) {
     }
 
     /** Unwrap the runtime halide_type_t for use in runtime calls, etc.
      * Representation is exactly equivalent. */
     HALIDE_ALWAYS_INLINE
-    operator halide_type_t() const {
+    explicit operator halide_type_t() const {
         return type;
     }
 

@@ -30,17 +30,17 @@ struct VarOrRVar {
     VarOrRVar(const std::string &n, bool r)
         : var(n), rvar(n), is_rvar(r) {
     }
-    VarOrRVar(const Var &v)
+    explicit VarOrRVar(const Var &v)
         : var(v), is_rvar(false) {
     }
-    VarOrRVar(const RVar &r)
+    explicit VarOrRVar(const RVar &r)
         : rvar(r), is_rvar(true) {
     }
-    VarOrRVar(const RDom &r)
+    explicit VarOrRVar(const RDom &r)
         : rvar(RVar(r)), is_rvar(true) {
     }
     template<int N>
-    VarOrRVar(const ImplicitVar<N> &u)
+    explicit VarOrRVar(const ImplicitVar<N> &u)
         : var(u), is_rvar(false) {
     }
 
@@ -559,7 +559,7 @@ public:
 
     /** Use this as a call to the function, and not the left-hand-side
      * of a definition. Only works for single-output Funcs. */
-    operator Expr() const;
+    explicit operator Expr() const;
 
     /** When a FuncRef refers to a function that provides multiple
      * outputs, you can access each output as an Expr using
@@ -649,7 +649,7 @@ public:
 
     /** Use this as a call to Tuple component 'idx' of a Func, and not the
      * left-hand-side of a definition. */
-    operator Expr() const;
+    explicit operator Expr() const;
 
     /** What function is this calling? */
     Internal::Function function() const {
@@ -2402,7 +2402,7 @@ public:
 
     /** You can cast a Func to its pure stage for the purposes of
      * scheduling it. */
-    operator Stage() const;
+    explicit operator Stage() const;
 
     /** Get a handle on the output buffer for this Func. Only relevant
      * if this is the output Func in a pipeline. Useful for making
@@ -2413,7 +2413,7 @@ public:
     // @}
 
     /** Use a Func as an argument to an external stage. */
-    operator ExternFuncArgument() const;
+    explicit operator ExternFuncArgument() const;
 
     /** Infer the arguments to the Func, sorted into a canonical order:
      * all buffers (sorted alphabetically by name), followed by all non-buffers

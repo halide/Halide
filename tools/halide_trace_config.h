@@ -106,7 +106,7 @@ struct Label {
     float h_scale = 1.0f;
 
     Label() = default;
-    Label(const std::string &text, const Point &pos = {0, 0}, int fade_in_frames = 0, float h_scale = 1.f)
+    explicit Label(const std::string &text, const Point &pos = {0, 0}, int fade_in_frames = 0, float h_scale = 1.f)
         : text(text), pos(pos), fade_in_frames(fade_in_frames), h_scale(h_scale) {
     }
 

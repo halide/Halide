@@ -76,7 +76,7 @@ public:
     bool in_parallel = false;
     bool in_leaf_task = false;
 
-    InjectProfiling(const string &pipeline_name)
+    explicit InjectProfiling(const string &pipeline_name)
         : pipeline_name(pipeline_name) {
         stack.push_back(get_func_id("overhead"));
         // ID 0 is treated specially in the runtime as overhead

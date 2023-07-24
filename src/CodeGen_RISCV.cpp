@@ -28,10 +28,10 @@ struct IntrinsicArgPattern {
     Type type;
     int relative_scale;
 
-    IntrinsicArgPattern(const Type &type)
+    explicit IntrinsicArgPattern(const Type &type)
         : type(type), relative_scale(1) {
     }
-    IntrinsicArgPattern(halide_type_code_t code)
+    explicit IntrinsicArgPattern(halide_type_code_t code)
         : type(code, 8, 1), relative_scale(1) {
     }
     IntrinsicArgPattern(halide_type_code_t code, int relative_scale)
@@ -118,7 +118,7 @@ class CodeGen_RISCV : public CodeGen_Posix {
 public:
     /** Create a RISC-V code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    CodeGen_RISCV(const Target &);
+    explicit CodeGen_RISCV(const Target &);
 
 protected:
     using CodeGen_Posix::visit;

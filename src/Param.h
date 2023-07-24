@@ -125,7 +125,7 @@ public:
 
     /** Construct a Param<void> from any other Param. */
     template<typename OTHER_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
-    Param(const Param<OTHER_TYPE> &other)
+    explicit Param(const Param<OTHER_TYPE> &other)
         : param(other.param) {
         // empty
     }
@@ -133,7 +133,7 @@ public:
     /** Construct a Param<non-void> from a Param with matching type.
      * (Do the check at runtime so that we can assign from Param<void> if the types are compatible.) */
     template<typename OTHER_TYPE, typename T2 = T, typename std::enable_if<!std::is_void<T2>::value>::type * = nullptr>
-    Param(const Param<OTHER_TYPE> &other)
+    explicit Param(const Param<OTHER_TYPE> &other)
         : param(other.param) {
         user_assert(other.type() == type_of<T>())
             << "Param<" << type_of<T>() << "> cannot be constructed from a Param with type " << other.type();
@@ -296,20 +296,20 @@ public:
 
     /** You can use this parameter as an expression in a halide
      * function definition */
-    operator Expr() const {
+    explicit operator Expr() const {
         return Internal::Variable::make(param.type(), name(), param);
     }
 
     /** Using a param as the argument to an external stage treats it
      * as an Expr */
-    operator ExternFuncArgument() const {
+    explicit operator ExternFuncArgument() const {
         return Expr(*this);
     }
 
     /** Construct the appropriate argument matching this parameter,
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */
-    operator Argument() const {
+    explicit operator Argument() const {
         return Argument(name(), Argument::InputScalar, type(), 0,
                         param.get_argument_estimates());
     }

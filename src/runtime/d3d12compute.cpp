@@ -437,7 +437,7 @@ WEAK void *lib_dxgi = nullptr;
 
 struct LibrarySymbol {
     template<typename T>
-    operator T() {
+    explicit operator T() {
         return (T)symbol;
     }
     void *symbol;
@@ -486,7 +486,7 @@ UUIDOF(IDXGIOutput)
 // !!! 'this' is THE actual d3d12 object (reinterpret is safe)
 template<typename ID3D12Type>
 struct halide_d3d12_wrapper {
-    operator ID3D12Type *() {
+    explicit operator ID3D12Type *() {
         return reinterpret_cast<ID3D12Type *>(this);
     }
     ID3D12Type *operator->() {
@@ -499,7 +499,7 @@ struct halide_d3d12_wrapper {
 template<typename ID3D12Type>
 struct halide_d3d12_deep_wrapper {
     ID3D12Type *p;
-    operator ID3D12Type *() {
+    explicit operator ID3D12Type *() {
         return p;
     }
     ID3D12Type *operator->() {
@@ -564,7 +564,7 @@ struct d3d12_buffer {
 
     uint64_t signal;
 
-    operator bool() const {
+    explicit operator bool() const {
         return resource != nullptr;
     }
 };

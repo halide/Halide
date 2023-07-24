@@ -37,7 +37,7 @@ class LowerUnsafePromises : public IRMutator {
     bool check;
 
 public:
-    LowerUnsafePromises(bool check)
+    explicit LowerUnsafePromises(bool check)
         : check(check) {
     }
 };

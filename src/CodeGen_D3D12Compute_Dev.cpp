@@ -28,7 +28,7 @@ ostringstream nil;
 
 class CodeGen_D3D12Compute_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_D3D12Compute_Dev(const Target &target);
+    explicit CodeGen_D3D12Compute_Dev(const Target &target);
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single

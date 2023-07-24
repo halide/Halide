@@ -358,7 +358,7 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
         const string &func_name;
 
     public:
-        Checker(const string &func_name)
+        explicit Checker(const string &func_name)
             : func_name(func_name) {
         }
 
@@ -2813,7 +2813,7 @@ class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
     int count = 0;
 
-    CountImplicitVars(const vector<Expr> &exprs) {
+    explicit CountImplicitVars(const vector<Expr> &exprs) {
         for (const auto &e : exprs) {
             e.accept(this);
         }

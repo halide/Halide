@@ -42,7 +42,7 @@ class FindLoads : public IRVisitor {
     }
 
 public:
-    FindLoads(const string &f)
+    explicit FindLoads(const string &f)
         : func(f) {
     }
 

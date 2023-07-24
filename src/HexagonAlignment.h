@@ -15,7 +15,7 @@ class HexagonAlignmentAnalyzer {
     const int required_alignment;
 
 public:
-    HexagonAlignmentAnalyzer(int required_alignment)
+    explicit HexagonAlignmentAnalyzer(int required_alignment)
         : required_alignment(required_alignment) {
         internal_assert(required_alignment != 0);
     }

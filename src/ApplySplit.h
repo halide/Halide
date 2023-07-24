@@ -42,7 +42,7 @@ struct ApplySplitResult {
     ApplySplitResult(const std::string &n, Expr val, Type t)
         : name(n), value(std::move(val)), type(t) {
     }
-    ApplySplitResult(Expr val, Type t = Predicate)
+    explicit ApplySplitResult(Expr val, Type t = Predicate)
         : name(""), value(std::move(val)), type(t) {
     }
 

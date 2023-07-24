@@ -1047,7 +1047,7 @@ class OptimizePatterns : public IRMutator {
     }
 
 public:
-    OptimizePatterns(const Target &t)
+    explicit OptimizePatterns(const Target &t)
         : target(t) {
     }
 };
@@ -1887,7 +1887,7 @@ class EliminateInterleaves : public IRMutator {
     using IRMutator::visit;
 
 public:
-    EliminateInterleaves(int native_vector_bytes)
+    explicit EliminateInterleaves(int native_vector_bytes)
         : native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes) {
     }
 };

@@ -17,7 +17,7 @@ class CodeGen_PowerPC : public CodeGen_Posix {
 public:
     /** Create a powerpc code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    CodeGen_PowerPC(const Target &);
+    explicit CodeGen_PowerPC(const Target &);
 
 protected:
     void init_module() override;

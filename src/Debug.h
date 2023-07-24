@@ -50,7 +50,7 @@ class debug {
     const bool logging;
 
 public:
-    debug(int verbosity)
+    explicit debug(int verbosity)
         : logging(verbosity <= debug_level()) {
     }
 

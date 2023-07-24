@@ -70,7 +70,7 @@ public:
     const std::string &name() const;
 
     /** Reduction variables can be used as expressions. */
-    operator Expr() const;
+    explicit operator Expr() const;
 };
 
 /** A multi-dimensional domain over which to iterate. Used when
@@ -212,7 +212,7 @@ public:
     /** Construct a multi-dimensional reduction domain with the given name. If the name
      * is left blank, a unique one is auto-generated. */
     // @{
-    HALIDE_NO_USER_CODE_INLINE RDom(const Region &region, std::string name = "") {
+    HALIDE_NO_USER_CODE_INLINE explicit RDom(const Region &region, std::string name = "") {
         initialize_from_region(region, std::move(name));
     }
 
@@ -229,16 +229,16 @@ public:
      * a given Buffer or ImageParam. Has the same dimensionality as
      * the argument. */
     // @{
-    RDom(const Buffer<void, -1> &);
-    RDom(const OutputImageParam &);
+    explicit RDom(const Buffer<void, -1> &);
+    explicit RDom(const OutputImageParam &);
     template<typename T, int Dims>
-    HALIDE_NO_USER_CODE_INLINE RDom(const Buffer<T, Dims> &im)
+    HALIDE_NO_USER_CODE_INLINE explicit RDom(const Buffer<T, Dims> &im)
         : RDom(Buffer<void, -1>(im)) {
     }
     // @}
 
     /** Construct a reduction domain that wraps an Internal ReductionDomain object. */
-    RDom(const Internal::ReductionDomain &d);
+    explicit RDom(const Internal::ReductionDomain &d);
 
     /** Get at the internal reduction domain object that this wraps. */
     Internal::ReductionDomain domain() const {
@@ -262,10 +262,10 @@ public:
     RVar operator[](int) const;
 
     /** Single-dimensional reduction domains can be used as RVars directly. */
-    operator RVar() const;
+    explicit operator RVar() const;
 
     /** Single-dimensional reduction domains can be also be used as Exprs directly. */
-    operator Expr() const;
+    explicit operator Expr() const;
 
     /** Add a predicate to the RDom. An RDom may have multiple
      * predicates associated with it. An update definition that uses
