@@ -24,6 +24,8 @@ public:
 
     Pipeline deserialize(const std::string &filename);
 
+    Pipeline deserialize(std::istream &in);
+
 private:
     // A lookup table for translating function ids to actual FunctionPtrs
     std::map<int32_t, FunctionPtr> reverse_function_mappings;
@@ -1296,14 +1298,31 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
         user_error << "failed to open file " << filename << "\n";
         return Pipeline();
     }
+    Pipeline result = deserialize(in);
+    if (!in.good()) {
+        user_error << "failed to deserialize from file " << filename << " properly\n";
+        return Pipeline();
+    }
+    in.close();
+    return result;
+}
+
+Pipeline Deserializer::deserialize(std::istream &in) {
+    if (!in) {
+        user_error << "failed to open input stream\n";
+        return Pipeline();
+    }
     in.seekg(0, std::ios::end);
     int size = in.tellg();
     in.seekg(0, std::ios::beg);
     std::vector<char> data(size);
     in.read(data.data(), size);
-    in.close();
 
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
+    if (pipeline_obj == nullptr) {
+        user_warning << "deserialized pipeline is empty\n";
+        return Pipeline();
+    }
     std::vector<std::string> func_names_in_order;
     for (const auto &func_name : *pipeline_obj->func_names_in_order()) {
         func_names_in_order.push_back(deserialize_string(func_name));
@@ -1377,11 +1396,17 @@ Pipeline Deserializer::deserialize(const std::string &filename) {
     }
     return Pipeline(output_funcs, requirements);
 }
+
 }  // namespace Internal
 
 Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Internal::Parameter> &external_params) {
     Internal::Deserializer deserializer(external_params);
     return deserializer.deserialize(filename);
+}
+
+Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Internal::Parameter> &external_params) {
+    Internal::Deserializer deserializer(external_params);
+    return deserializer.deserialize(in);
 }
 
 }  // namespace Halide
