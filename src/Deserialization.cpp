@@ -1346,11 +1346,8 @@ Pipeline Deserializer::deserialize(std::istream &in) {
         buffers.push_back(deserialize_buffer(buffer));
     }
     for (const auto &buffer : buffers) {
-        if (buffers_in_pipeline.find(buffer.name()) == buffers_in_pipeline.end()) {
-            buffers_in_pipeline[buffer.name()] = buffer;
-        } else {
-            user_error << "duplicate buffer " << buffer.name() << " in pipeline\n";
-        }
+        user_assert(buffers_in_pipeline.count(buffer.name()) == 0) << "duplicate buffer " << buffer.name() << " in pipeline\n";
+        buffers_in_pipeline[buffer.name()] = buffer;
     }
     std::vector<Parameter> parameters;
     parameters.reserve(pipeline_obj->parameters()->size());
@@ -1358,11 +1355,8 @@ Pipeline Deserializer::deserialize(std::istream &in) {
         parameters.push_back(deserialize_parameter(parameter));
     }
     for (const auto &param : parameters) {
-        if (parameters_in_pipeline.find(param.name()) == parameters_in_pipeline.end()) {
-            parameters_in_pipeline[param.name()] = param;
-        } else {
-            user_error << "duplicate parameter " << param.name() << " in pipeline\n";
-        }
+        user_assert(parameters_in_pipeline.count(param.name()) == 0) << "duplicate parameter " << param.name() << " in pipeline\n";
+        parameters_in_pipeline[param.name()] = param;
     }
 
     std::vector<Func> funcs;
