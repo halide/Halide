@@ -13,7 +13,7 @@ FIX=$1
 # are using to build Halide itself. If you don't have LLVM14 installed,
 # you can usually install what you need easily via:
 #
-# sudo apt-get install llvm-16 clang-14 libclang-16-dev clang-tidy-16
+# sudo apt-get install llvm-16 clang-16 libclang-16-dev clang-tidy-16
 # export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-16
 
 [ -z "$CLANG_TIDY_LLVM_INSTALL_DIR" ] && echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script." && exit
