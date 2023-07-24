@@ -10,7 +10,6 @@
 
 #include <cstddef>
 #include <cstdint>
-
 #include <map>
 #include <mutex>
 #include <vector>
@@ -58,11 +57,11 @@ public:
     static void unregister_instance(void *this_ptr);
 
     /** Returns the list of subject pointers for objects that have
-     *   been directly registered within the given range. If there is
-     *   another containing object inside the range, instances within
-     *   that object are skipped.
+     * been directly registered within the given range. If there is
+     * another containing object inside the range, instances within
+     * that object are skipped.
      */
-    static std::vector<void *> instances_in_range(void *start, size_t size, Kind kind);
+    static std::vector<std::pair<void *, Kind>> instances_in_range(void *start, size_t size);
 
 private:
     static ObjectInstanceRegistry &get_registry();
