@@ -105,3 +105,15 @@ if (WITH_TEST_FUZZ)
 else ()
     message(STATUS "Building fuzz tests disabled")
 endif ()
+
+cmake_dependent_option(
+    WITH_TEST_SERIALIZATION "Build serialization tests" ON
+    BUILD_SERIALIZATION ON
+)
+
+if (WITH_TEST_SERIALIZATION)
+    message(STATUS "Building serialization tests enabled")
+    add_subdirectory(serialization)
+else ()
+    message(STATUS "Building serialization tests disabled")
+endif ()
