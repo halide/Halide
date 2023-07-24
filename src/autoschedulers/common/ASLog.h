@@ -17,7 +17,7 @@ class aslog {
     const bool logging;
 
 public:
-    aslog(int verbosity)
+    explicit aslog(int verbosity)
         : logging(verbosity <= aslog_level()) {
     }
 

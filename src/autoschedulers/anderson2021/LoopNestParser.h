@@ -100,7 +100,7 @@ class LoopNestParser {
     std::unordered_set<std::string> all_stages;
 
 public:
-    LoopNestParser(const std::vector<std::string> &loop_nest)
+    explicit LoopNestParser(const std::vector<std::string> &loop_nest)
         : loop_nest{loop_nest} {
         parse(loop_nest);
     }
