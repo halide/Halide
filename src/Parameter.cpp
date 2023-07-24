@@ -203,7 +203,7 @@ Expr remove_self_references(const Parameter &p, const Expr &e) {
     class RemoveSelfReferences : public IRMutator {
         using IRMutator::visit;
 
-        Expr visit(const Variable *var) {
+        Expr visit(const Variable *var) override {
             if (var->param.same_as(p)) {
                 internal_assert(starts_with(var->name, p.name() + "."));
                 return Variable::make(var->type, var->name);
@@ -226,7 +226,7 @@ Expr restore_self_references(const Parameter &p, const Expr &e) {
     class RestoreSelfReferences : public IRMutator {
         using IRMutator::visit;
 
-        Expr visit(const Variable *var) {
+        Expr visit(const Variable *var) override {
             if (!var->image.defined() &&
                 !var->param.defined() &&
                 !var->reduction_domain.defined() &&
