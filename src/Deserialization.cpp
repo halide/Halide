@@ -1,5 +1,6 @@
 #include "Deserialization.h"
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -27,6 +28,19 @@ public:
     Pipeline deserialize(std::istream &in);
 
 private:
+    // Helper function to deserialize a homogenous vector from a flatbuffer vector,
+    // does not apply to union types like Stmt and Expr or enum types like MemoryType
+    template<typename src, typename dst>
+    std::vector<dst> deserialize_vector(const flatbuffers::Vector<::flatbuffers::Offset<src>> *flatbuffer_vec, std::function<dst(Deserializer &, const src *)> deserialize_func) {
+        user_assert(flatbuffer_vec != nullptr) << "deserializing a null vector\n";
+        std::vector<dst> result;
+        result.reserve(flatbuffer_vec->size());
+        for (const auto &elem : *flatbuffer_vec) {
+            result.push_back(deserialize_func(*this, elem));
+        }
+        return result;
+    }
+
     // A lookup table for translating function ids to actual FunctionPtrs
     std::map<int32_t, FunctionPtr> reverse_function_mappings;
 
@@ -401,29 +415,14 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
     user_assert(function != nullptr) << "deserializing a null Function\n";
     const std::string name = deserialize_string(function->name());
     const std::string origin_name = deserialize_string(function->origin_name());
-    std::vector<Type> output_types;
-    output_types.reserve(function->output_types()->size());
-    for (const auto &type : *function->output_types()) {
-        output_types.push_back(deserialize_type(type));
-    }
-    std::vector<Type> required_types;
-    required_types.reserve(function->required_types()->size());
-    for (const auto &type : *function->required_types()) {
-        required_types.push_back(deserialize_type(type));
-    }
+    const std::vector<Type> output_types = deserialize_vector<Serialize::Type, Type>(function->output_types(), &Deserializer::deserialize_type);
+    const std::vector<Type> required_types = deserialize_vector<Serialize::Type, Type>(function->required_types(), &Deserializer::deserialize_type);
     const int required_dim = function->required_dims();
-    std::vector<std::string> args;
-    args.reserve(function->args()->size());
-    for (const auto &arg : *function->args()) {
-        args.push_back(deserialize_string(arg));
-    }
+    const std::vector<std::string> args = deserialize_vector<flatbuffers::String, std::string>(function->args(), &Deserializer::deserialize_string);
     const auto func_schedule = deserialize_func_schedule(function->func_schedule());
     const auto init_def = deserialize_definition(function->init_def());
-    std::vector<Definition> updates;
-    for (const auto &update : *function->updates()) {
-        updates.push_back(deserialize_definition(update));
-    }
-    std::string debug_file = deserialize_string(function->debug_file());
+    const std::vector<Definition> updates = deserialize_vector<Serialize::Definition, Definition>(function->updates(), &Deserializer::deserialize_definition);
+    const std::string debug_file = deserialize_string(function->debug_file());
     std::vector<Parameter> output_buffers;
     output_buffers.reserve(function->output_buffers_names()->size());
     for (const auto &output_buffer_name_serialized : *function->output_buffers_names()) {
@@ -436,21 +435,13 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
         }
         output_buffers.push_back(output_buffer);
     }
-    std::vector<ExternFuncArgument> extern_arguments;
-    extern_arguments.reserve(function->extern_arguments()->size());
-    for (const auto &extern_argument : *function->extern_arguments()) {
-        extern_arguments.push_back(deserialize_extern_func_argument(extern_argument));
-    }
+    const std::vector<ExternFuncArgument> extern_arguments = deserialize_vector<Serialize::ExternFuncArgument, ExternFuncArgument>(function->extern_arguments(), &Deserializer::deserialize_extern_func_argument);
     const std::string extern_function_name = deserialize_string(function->extern_function_name());
     const auto name_mangling = deserialize_name_mangling(function->extern_mangling());
     const auto extern_function_device_api = deserialize_device_api(function->extern_function_device_api());
     const auto extern_proxy_expr = deserialize_expr(function->extern_proxy_expr_type(), function->extern_proxy_expr());
     const bool trace_loads = function->trace_loads(), trace_stores = function->trace_stores(), trace_realizations = function->trace_realizations();
-    std::vector<std::string> trace_tags;
-    trace_tags.reserve(function->trace_tags()->size());
-    for (const auto &tag : *function->trace_tags()) {
-        trace_tags.push_back(deserialize_string(tag));
-    }
+    const std::vector<std::string> trace_tags = deserialize_vector<flatbuffers::String, std::string>(function->trace_tags(), &Deserializer::deserialize_string);
     const bool frozen = function->frozen();
     hl_function.update_with_deserialization(name, origin_name, output_types, required_types,
                                             required_dim, args, func_schedule, init_def, updates,
@@ -537,17 +528,9 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
     case Serialize::Stmt_Realize: {
         const auto *realize_stmt = (const Serialize::Realize *)stmt;
         const auto name = deserialize_string(realize_stmt->name());
-        std::vector<Type> types;
-        types.reserve(realize_stmt->types()->size());
-        for (const auto &type : *realize_stmt->types()) {
-            types.push_back(deserialize_type(type));
-        }
+        const std::vector<Type> types = deserialize_vector<Serialize::Type, Type>(realize_stmt->types(), &Deserializer::deserialize_type);
         const MemoryType memory_type = deserialize_memory_type(realize_stmt->memory_type());
-        std::vector<Range> bounds;
-        bounds.reserve(realize_stmt->bounds()->size());
-        for (const auto &bound : *realize_stmt->bounds()) {
-            bounds.push_back(deserialize_range(bound));
-        }
+        const std::vector<Range> bounds = deserialize_vector<Serialize::Range, Range>(realize_stmt->bounds(), &Deserializer::deserialize_range);
         const auto condition = deserialize_expr(realize_stmt->condition_type(), realize_stmt->condition());
         const auto body = deserialize_stmt(realize_stmt->body_type(), realize_stmt->body());
         return Realize::make(name, types, memory_type, bounds, condition, body);
@@ -573,16 +556,8 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
     case Serialize::Stmt_Prefetch: {
         const auto *prefetch_stmt = (const Serialize::Prefetch *)stmt;
         const auto name = deserialize_string(prefetch_stmt->name());
-        std::vector<Type> types;
-        types.reserve(prefetch_stmt->types()->size());
-        for (const auto &type : *prefetch_stmt->types()) {
-            types.push_back(deserialize_type(type));
-        }
-        std::vector<Range> bounds;
-        bounds.reserve(prefetch_stmt->bounds()->size());
-        for (const auto &bound : *prefetch_stmt->bounds()) {
-            bounds.push_back(deserialize_range(bound));
-        }
+        const std::vector<Type> types = deserialize_vector<Serialize::Type, Type>(prefetch_stmt->types(), &Deserializer::deserialize_type);
+        const std::vector<Range> bounds = deserialize_vector<Serialize::Range, Range>(prefetch_stmt->bounds(), &Deserializer::deserialize_range);
         const auto prefetch = deserialize_prefetch_directive(prefetch_stmt->prefetch());
         const auto condition = deserialize_expr(prefetch_stmt->condition_type(), prefetch_stmt->condition());
         const auto body = deserialize_stmt(prefetch_stmt->body_type(), prefetch_stmt->body());
@@ -939,18 +914,9 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     user_assert(func_schedule != nullptr);
     const auto store_level = deserialize_loop_level(func_schedule->store_level());
     const auto compute_level = deserialize_loop_level(func_schedule->compute_level());
-    std::vector<StorageDim> storage_dims;
-    for (const auto &storage_dim : *func_schedule->storage_dims()) {
-        storage_dims.push_back(deserialize_storage_dim(storage_dim));
-    }
-    std::vector<Bound> bounds;
-    for (const auto &bound : *func_schedule->bounds()) {
-        bounds.push_back(deserialize_bound(bound));
-    }
-    std::vector<Bound> estimates;
-    for (const auto &estimate : *func_schedule->estimates()) {
-        estimates.push_back(deserialize_bound(estimate));
-    }
+    const std::vector<StorageDim> storage_dims = deserialize_vector<Serialize::StorageDim, StorageDim>(func_schedule->storage_dims(), &Deserializer::deserialize_storage_dim);
+    const std::vector<Bound> bounds = deserialize_vector<Serialize::Bound, Bound>(func_schedule->bounds(), &Deserializer::deserialize_bound);
+    const std::vector<Bound> estimates = deserialize_vector<Serialize::Bound, Bound>(func_schedule->estimates(), &Deserializer::deserialize_bound);
     const std::map<std::string, FunctionPtr> wrappers = deserialize_wrapper_refs(func_schedule->wrappers());
     const auto memory_type = deserialize_memory_type(func_schedule->memory_type());
     const auto memoized = func_schedule->memoized();
@@ -989,10 +955,7 @@ Definition Deserializer::deserialize_definition(const Serialize::Definition *def
     const auto args = deserialize_expr_vector(definition->args_type(), definition->args());
     const auto values = deserialize_expr_vector(definition->values_type(), definition->values());
     const auto stage_schedule = deserialize_stage_schedule(definition->stage_schedule());
-    std::vector<Specialization> specializations;
-    for (const auto &specialization : *definition->specializations()) {
-        specializations.push_back(deserialize_specialization(specialization));
-    }
+    const std::vector<Specialization> specializations = deserialize_vector<Serialize::Specialization, Specialization>(definition->specializations(), &Deserializer::deserialize_specialization);
     const auto source_location = deserialize_string(definition->source_location());
     return Definition(is_init, predicate, args, values, stage_schedule, specializations, source_location);
 }
@@ -1015,10 +978,7 @@ ReductionDomain Deserializer::deserialize_reduction_domain(const Serialize::Redu
     if (!defined) {
         return ReductionDomain();
     }
-    std::vector<ReductionVariable> domain;
-    for (const auto &reduction_variable : *reduction_domain->domain()) {
-        domain.push_back(deserialize_reduction_variable(reduction_variable));
-    }
+    const std::vector<ReductionVariable> domain = deserialize_vector<Serialize::ReductionVariable, ReductionVariable>(reduction_domain->domain(), &Deserializer::deserialize_reduction_variable);
     const auto predicate = deserialize_expr(reduction_domain->predicate_type(), reduction_domain->predicate());
     const auto frozen = reduction_domain->frozen();
     return ReductionDomain(domain, predicate, frozen);
@@ -1088,15 +1048,13 @@ Dim Deserializer::deserialize_dim(const Serialize::Dim *dim) {
 FuseLoopLevel Deserializer::deserialize_fuse_loop_level(const Serialize::FuseLoopLevel *fuse_loop_level) {
     user_assert(fuse_loop_level != nullptr);
     const auto fuse_level = deserialize_loop_level(fuse_loop_level->fuse_level());
-    std::vector<std::string> align_dimension_names;
+    const std::vector<std::string> align_dimension_names = deserialize_vector<flatbuffers::String, std::string>(fuse_loop_level->align_dimension_names(), &Deserializer::deserialize_string);
     std::vector<LoopAlignStrategy> align_strategies;
-    std::map<std::string, LoopAlignStrategy> align;
-    for (const auto &align_dimension_name : *fuse_loop_level->align_dimension_names()) {
-        align_dimension_names.push_back(deserialize_string(align_dimension_name));
-    }
+    align_strategies.reserve(fuse_loop_level->align_strategies()->size());
     for (const auto &align_strategy : *fuse_loop_level->align_strategies()) {
         align_strategies.push_back(deserialize_loop_align_strategy((Serialize::LoopAlignStrategy)align_strategy));
     }
+    std::map<std::string, LoopAlignStrategy> align;
     for (size_t i = 0; i < align_dimension_names.size(); ++i) {
         align[align_dimension_names[i]] = align_strategies[i];
     }
@@ -1113,32 +1071,12 @@ FusedPair Deserializer::deserialize_fused_pair(const Serialize::FusedPair *fused
 
 StageSchedule Deserializer::deserialize_stage_schedule(const Serialize::StageSchedule *stage_schedule) {
     user_assert(stage_schedule != nullptr);
-    std::vector<ReductionVariable> rvars;
-    rvars.reserve(stage_schedule->rvars()->size());
-    for (const auto &rvar : *stage_schedule->rvars()) {
-        rvars.push_back(deserialize_reduction_variable(rvar));
-    }
-    std::vector<Split> splits;
-    splits.reserve(stage_schedule->splits()->size());
-    for (const auto &split : *stage_schedule->splits()) {
-        splits.push_back(deserialize_split(split));
-    }
-    std::vector<Dim> dims;
-    dims.reserve(stage_schedule->dims()->size());
-    for (const auto &dim : *stage_schedule->dims()) {
-        dims.push_back(deserialize_dim(dim));
-    }
-    std::vector<PrefetchDirective> prefetches;
-    prefetches.reserve(stage_schedule->prefetches()->size());
-    for (const auto &prefetch : *stage_schedule->prefetches()) {
-        prefetches.push_back(deserialize_prefetch_directive(prefetch));
-    }
+    const std::vector<ReductionVariable> rvars = deserialize_vector<Serialize::ReductionVariable, ReductionVariable>(stage_schedule->rvars(), &Deserializer::deserialize_reduction_variable);
+    const std::vector<Split> splits = deserialize_vector<Serialize::Split, Split>(stage_schedule->splits(), &Deserializer::deserialize_split);
+    const std::vector<Dim> dims = deserialize_vector<Serialize::Dim, Dim>(stage_schedule->dims(), &Deserializer::deserialize_dim);
+    const std::vector<PrefetchDirective> prefetches = deserialize_vector<Serialize::PrefetchDirective, PrefetchDirective>(stage_schedule->prefetches(), &Deserializer::deserialize_prefetch_directive);
     const FuseLoopLevel fuse_level = deserialize_fuse_loop_level(stage_schedule->fuse_level());
-    std::vector<FusedPair> fused_pairs;
-    fused_pairs.reserve(stage_schedule->fused_pairs()->size());
-    for (const auto &fused_pair : *stage_schedule->fused_pairs()) {
-        fused_pairs.push_back(deserialize_fused_pair(fused_pair));
-    }
+    const std::vector<FusedPair> fused_pairs = deserialize_vector<Serialize::FusedPair, FusedPair>(stage_schedule->fused_pairs(), &Deserializer::deserialize_fused_pair);
     const bool touched = stage_schedule->touched();
     const bool allow_race_conditions = stage_schedule->allow_race_conditions();
     const bool atomic = stage_schedule->atomic();
@@ -1174,11 +1112,7 @@ Parameter Deserializer::deserialize_parameter(const Serialize::Parameter *parame
     const std::string name = deserialize_string(parameter->name());
     if (is_buffer) {
         const int host_alignment = parameter->host_alignment();
-        std::vector<BufferConstraint> buffer_constraints;
-        buffer_constraints.reserve(parameter->buffer_constraints()->size());
-        for (const auto &buffer_constraint : *parameter->buffer_constraints()) {
-            buffer_constraints.push_back(deserialize_buffer_constraint(buffer_constraint));
-        }
+        std::vector<BufferConstraint> buffer_constraints = deserialize_vector<Serialize::BufferConstraint, BufferConstraint>(parameter->buffer_constraints(), &Deserializer::deserialize_buffer_constraint);
         const auto memory_type = deserialize_memory_type(parameter->memory_type());
         return Parameter(type, is_buffer, dimensions, name, Buffer<>(), host_alignment, buffer_constraints, memory_type);
     } else {
@@ -1323,10 +1257,7 @@ Pipeline Deserializer::deserialize(std::istream &in) {
         user_warning << "deserialized pipeline is empty\n";
         return Pipeline();
     }
-    std::vector<std::string> func_names_in_order;
-    for (const auto &func_name : *pipeline_obj->func_names_in_order()) {
-        func_names_in_order.push_back(deserialize_string(func_name));
-    }
+    const std::vector<std::string> func_names_in_order = deserialize_vector<flatbuffers::String, std::string>(pipeline_obj->func_names_in_order(), &Deserializer::deserialize_string);
 
     // We use the first realized function to build the group and all other functions below to this same group
     std::vector<Function> functions;
@@ -1340,20 +1271,12 @@ Pipeline Deserializer::deserialize(std::istream &in) {
     build_reverse_function_mappings(functions);
 
     // Buffers need to be deserialized first as Parameters may reference them
-    std::vector<Buffer<>> buffers;
-    buffers.reserve(pipeline_obj->buffers()->size());
-    for (const auto &buffer : *pipeline_obj->buffers()) {
-        buffers.push_back(deserialize_buffer(buffer));
-    }
+    const std::vector<Buffer<>> buffers = deserialize_vector<Serialize::Buffer, Buffer<>>(pipeline_obj->buffers(), &Deserializer::deserialize_buffer);
     for (const auto &buffer : buffers) {
         user_assert(buffers_in_pipeline.count(buffer.name()) == 0) << "duplicate buffer " << buffer.name() << " in pipeline\n";
         buffers_in_pipeline[buffer.name()] = buffer;
     }
-    std::vector<Parameter> parameters;
-    parameters.reserve(pipeline_obj->parameters()->size());
-    for (const auto &parameter : *pipeline_obj->parameters()) {
-        parameters.push_back(deserialize_parameter(parameter));
-    }
+    const std::vector<Parameter> parameters = deserialize_vector<Serialize::Parameter, Parameter>(pipeline_obj->parameters(), &Deserializer::deserialize_parameter);
     for (const auto &param : parameters) {
         user_assert(parameters_in_pipeline.count(param.name()) == 0) << "duplicate parameter " << param.name() << " in pipeline\n";
         parameters_in_pipeline[param.name()] = param;
@@ -1365,11 +1288,7 @@ Pipeline Deserializer::deserialize(std::istream &in) {
         funcs.push_back(Func(functions[i]));
     }
 
-    std::vector<std::string> output_names;
-    output_names.reserve(pipeline_obj->output_names()->size());
-    for (const auto &output_name : *pipeline_obj->output_names()) {
-        output_names.push_back(deserialize_string(output_name));
-    }
+    const std::vector<std::string> output_names = deserialize_vector<flatbuffers::String, std::string>(pipeline_obj->output_names(), &Deserializer::deserialize_string);
     std::vector<Func> output_funcs;
     for (const auto &output_name : output_names) {
         for (const auto &f : funcs) {
