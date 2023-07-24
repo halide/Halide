@@ -195,6 +195,10 @@ bool Parameter::defined() const {
     return contents.defined();
 }
 
+// Helper function to remove any references in a parameter constraint to the
+// parameter itself, to avoid creating a reference count cycle and causing a
+// leak. Note that it's still possible to create a cycle by having two different
+// Parameters each have constraints that reference the other.
 Expr remove_self_references(const Parameter &p, const Expr &e) {
     class RemoveSelfReferences : public IRMutator {
         using IRMutator::visit;
