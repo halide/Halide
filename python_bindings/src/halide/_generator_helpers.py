@@ -581,7 +581,8 @@ class Generator(ABC):
             if is_input and outputs_seen and not self.allow_out_of_order_inputs_and_outputs():
                 io_order_warning = ("Generators will always produce code that orders all Inputs before all Outputs; "
                                    "this Generator declares the Inputs and Outputs in a different order, so the calling convention may not be as expected. "
-                                   "(A future version of Halide will make this illegal, and require all Inputs to be declared before all Outputs.)")
+                                   "A future version of Halide will make this illegal, and require all Inputs to be declared before all Outputs. "
+                                   "(You can avoid this requirement by overriding Generator::allow_out_of_order_inputs_and_outputs().)")
                 warnings.warn(io_order_warning)
 
             if is_output:
