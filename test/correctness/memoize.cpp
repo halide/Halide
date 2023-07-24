@@ -59,15 +59,27 @@ extern "C" HALIDE_EXPORT_SYMBOL int computed_eviction_key(int a) {
 }
 HalideExtern_1(int, computed_eviction_key, int);
 
-void simple_free(JITUserContext *user_context, void *ptr) {
-    free(ptr);
-}
-
-void *flakey_malloc(JITUserContext * /* user_context */, size_t x) {
+// A flaky allocator. Note that it has to be compatible with halide_free
+// though, because halide_free is going to be called by
+// memoization_cache_cleanup with a null user_context when we release the jit
+// shared runtimes at the endof this test. So it has to be aligned, and it has
+// to store the pointer to free just before the returned pointer.
+void *flaky_malloc(JITUserContext * /* user_context */, size_t x) {
     if ((rand() % 4) == 0) {
         return nullptr;
     } else {
-        return malloc(x);
+        x = (x + 63) & (~31);
+        void *ptr = aligned_alloc(32, x);
+        void **ret = (void **)ptr;
+        ret += 4;
+        ret[-1] = ptr;
+        return ret;
+    }
+}
+
+void simple_free(JITUserContext *user_context, void *ptr) {
+    if (ptr != nullptr) {
+        free(((void **)ptr)[-1]);
     }
 }
 
@@ -600,7 +612,7 @@ int main(int argc, char **argv) {
 
         Pipeline pipe(g);
         pipe.jit_handlers().custom_error = record_error;
-        pipe.jit_handlers().custom_malloc = flakey_malloc;
+        pipe.jit_handlers().custom_malloc = flaky_malloc;
         pipe.jit_handlers().custom_free = simple_free;
 
         int total_errors = 0;
@@ -644,7 +656,8 @@ int main(int argc, char **argv) {
             }
         }
 
-        printf("In 100 attempts with flakey malloc, %d errors and %d full completions occured.\n", total_errors, completed);
+        printf("In 100 attempts with flaky malloc, %d errors and %d full completions occured.\n",
+               total_errors, completed);
     }
 
     {
@@ -733,6 +746,7 @@ int main(int argc, char **argv) {
 
         assert(call_count == 8);
     }
+    Internal::JITSharedRuntime::release_all();
 
     printf("Success!\n");
     return 0;
