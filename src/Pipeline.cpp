@@ -581,27 +581,6 @@ void Pipeline::compile_jit(const Target &target_arg) {
     }
     // Clear all cached info in case there is an error.
     contents->invalidate_cache();
-    bool test_serialization = !get_env_variable("HL_TEST_SERIALIZATION").empty();
-    Pipeline deserialized_pipe;
-    std::vector<Function> origin_outputs;
-    std::vector<Internal::Stmt> origin_requirements;
-    if (test_serialization) {
-        std::string filename = generate_function_name() + ".hlpipe";
-        std::map<std::string, Internal::Parameter> external_params;
-        serialize_pipeline(*this, filename, external_params);
-        deserialized_pipe = deserialize_pipeline(filename, external_params);
-        std::vector<Function> outputs;
-        for (const Func &f : deserialized_pipe.outputs()) {
-            outputs.push_back(f.function());
-        }
-        // we save the original output functions and requirements
-        // and restore them once all lowering is done
-        // so reschedule/reorder storage can be properly handled
-        origin_outputs = contents->outputs;
-        origin_requirements = contents->requirements;
-        contents->outputs = outputs;
-        contents->requirements = deserialized_pipe.requirements();
-    }
 
     // Infer an arguments vector
     infer_arguments();
@@ -618,10 +597,6 @@ void Pipeline::compile_jit(const Target &target_arg) {
     Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
     contents->jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, contents->jit_externs, target);
-    if (test_serialization) {
-        contents->outputs = origin_outputs;
-        contents->requirements = origin_requirements;
-    }
 }
 
 Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, const Target &target_arg) {
