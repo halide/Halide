@@ -270,7 +270,7 @@ public:
     cl_command_queue cmd_queue = nullptr;
 
     // Constructor sets 'status' if any occurs.
-    ALWAYS_INLINE ClContext(void *user_context)
+    ALWAYS_INLINE explicit ClContext(void *user_context)
         : user_context(user_context) {
         if (clCreateContext == nullptr) {
             status = load_libopencl(user_context);
