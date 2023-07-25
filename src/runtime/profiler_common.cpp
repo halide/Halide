@@ -394,9 +394,9 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
 
                 float ft = fs->time / (p->runs * 1000000.0f);
                 if (ft < 10000) sstr << " ";
-                if (ft <  1000) sstr << " ";
-                if (ft <   100) sstr << " ";
-                if (ft <    10) sstr << " ";
+                if (ft < 1000) sstr << " ";
+                if (ft < 100) sstr << " ";
+                if (ft < 10) sstr << " ";
                 sstr << ft;
                 // We don't need 6 sig. figs.
                 sstr.erase(3);
