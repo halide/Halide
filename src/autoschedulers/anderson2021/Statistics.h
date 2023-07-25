@@ -32,7 +32,7 @@ struct ScopedTimer {
     std::chrono::time_point<Clock> start;
     std::string msg;
 
-    ScopedTimer(const std::string &msg)
+    explicit ScopedTimer(const std::string &msg)
         : start{Clock::now()}, msg{msg} {
         aslog(1) << "Start: " << msg << "\n";
     }

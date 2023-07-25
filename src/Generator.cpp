@@ -1260,7 +1260,7 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
         case ObjectInstanceRegistry::GeneratorInput: {
             if (outputs_seen) {
                 if (!generator->allow_out_of_order_inputs_and_outputs()) {
-                    user_error << io_order_warning;
+                    user_warning << io_order_warning;
                 }
             }
             auto *input = static_cast<Internal::GeneratorInputBase *>(instance);

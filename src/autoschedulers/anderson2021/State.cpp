@@ -500,7 +500,7 @@ bool State::compute_featurization(const FunctionDAG &dag, const Anderson2021Para
     }
 
     Timer timer;
-    feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, {feature_root.get()}, true, total_shared_mem_alloc_sizes, nullptr, nullptr, nullptr, features, stats, verbose);
+    feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, GPULoopInfo(feature_root.get()), true, total_shared_mem_alloc_sizes, nullptr, nullptr, nullptr, features, stats, verbose);
 
     stats.featurization_time += timer.elapsed();
     ++stats.num_featurizations;
