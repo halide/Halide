@@ -607,16 +607,6 @@ _add_halide_aot_tests(variable_num_threads
 # Create targets for the JIT tests
 ##
 
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm_threads")
-    message(STATUS "Skipping Generator JIT tests under wasm_webgpu")
-    return()
-endif ()
-
-if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm_webgpu")
-    message(STATUS "Skipping Generator JIT tests under wasm_webgpu")
-    return()
-endif ()
-
 function(_add_halide_jit_test NAME)
     set(options "")
     set(oneValueArgs "")
