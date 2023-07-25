@@ -69,7 +69,11 @@ void *flaky_malloc(JITUserContext * /* user_context */, size_t x) {
         return nullptr;
     } else {
         x = (x + 63) & (~31);
+#ifdef _MSC_VER
+        void *ptr = _aligned_malloc(x, 32);
+#else
         void *ptr = aligned_alloc(32, x);
+#endif
         void **ret = (void **)ptr;
         ret += 4;
         ret[-1] = ptr;
