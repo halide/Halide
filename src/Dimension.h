@@ -34,7 +34,7 @@ public:
     /** Set the min in a given dimension to equal the given
      * expression. Setting the mins to zero may simplify some
      * addressing math. */
-    Dimension set_min(Expr min);
+    Dimension set_min(const Expr &min);
 
     /** Set the extent in a given dimension to equal the given
      * expression. Images passed in that fail this check will generate
@@ -57,20 +57,20 @@ public:
      im.dim(0).set_extent((im.dim(0).extent()/32)*32);
      \endcode
      * tells the compiler that the extent is a multiple of 32. */
-    Dimension set_extent(Expr extent);
+    Dimension set_extent(const Expr &extent);
 
     /** Set the stride in a given dimension to equal the given
      * value. This is particularly helpful to set when
      * vectorizing. Known strides for the vectorized dimension
      * generate better code. */
-    Dimension set_stride(Expr stride);
+    Dimension set_stride(const Expr &stride);
 
     /** Set the min and extent in one call. */
-    Dimension set_bounds(Expr min, Expr extent);
+    Dimension set_bounds(const Expr &min, const Expr &extent);
 
     /** Set the min and extent estimates in one call. These values are only
      * used by the auto-scheduler and/or the RunGen tool/ */
-    Dimension set_estimate(Expr min, Expr extent);
+    Dimension set_estimate(const Expr &min, const Expr &extent);
 
     Expr min_estimate() const;
     Expr extent_estimate() const;
