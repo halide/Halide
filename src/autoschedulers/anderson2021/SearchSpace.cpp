@@ -189,7 +189,7 @@ vector<ThreadTileOption> SearchSpace::filter_thread_tile_options(vector<Intrusiv
 
         ThreadTileOption o;
         o.loop_nest = loop_nest;
-        o.max_idle_lane_wastage = loop_nest->max_idle_lane_wastage(target, {loop_nest.get()});
+        o.max_idle_lane_wastage = loop_nest->max_idle_lane_wastage(target, GPULoopInfo(loop_nest.get()));
         options.emplace_back(std::move(o));
     }
 
@@ -353,7 +353,7 @@ void SearchSpace::generate_children(const IntrusivePtr<State> &state,
             new_root->copy_from(*root);
             const auto &nodes = compute_root_nodes.get(node);
             for (const auto &n : nodes) {
-                const auto *compute_root_loop = deep_copy_loop_nest(n.get(), NoOpMutator{});
+                const auto *compute_root_loop = deep_copy_loop_nest(n, NoOpMutator{});
                 new_root->children.emplace_back(compute_root_loop);
             }
             new_root->store_at.insert(node);

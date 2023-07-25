@@ -88,18 +88,23 @@ int64_t GPULoopInfo::get_total_inner_serial_extents_outside_realization(const Lo
     return extents;
 }
 
-std::unique_ptr<ThreadInfo> GPULoopInfo::create_thread_info() {
+const ThreadInfo &GPULoopInfo::get_thread_info() const {
+    internal_assert(thread_info != nullptr) << "get_thread_info() should not be called before create_thread_info()";
+    return *thread_info;
+}
+
+const ThreadInfo &GPULoopInfo::create_thread_info() {
     internal_assert(at_or_inside_block());
     internal_assert(at_or_inside_thread());
 
     auto max_thread_counts = current_block_loop->get_union_thread_counts(nullptr);
-    std::unique_ptr<ThreadInfo> new_thread_info = std::make_unique<ThreadInfo>(
+    internal_assert(thread_info == nullptr) << "create_thread_info() should not be called twice";
+    thread_info = std::make_shared<const ThreadInfo>(
         current_thread_loop->vectorized_loop_index,
         current_thread_loop->size,
         current_thread_loop->stage->loop,
         max_thread_counts);
-    thread_info = new_thread_info.get();
-    return new_thread_info;
+    return *thread_info;
 }
 
 }  // namespace Autoscheduler
