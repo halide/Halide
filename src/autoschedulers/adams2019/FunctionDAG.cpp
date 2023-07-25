@@ -287,7 +287,7 @@ class Featurizer : public IRVisitor {
                 // (e.g. a+a, where a is a trivial function),
                 // so we can't use std::move(matrix) here without making a copy
                 vector<vector<OptionalRational>> copy = matrix;
-                e->add_load_jacobian(std::move(copy));
+                e->add_load_jacobian(LoadJacobian(std::move(copy)));
             }
         }
     }
@@ -837,7 +837,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                 int leaves = 0;
                 Type narrowest_type;
                 map<string, int> calls;
-                CheckTypes(const Function &f)
+                explicit CheckTypes(const Function &f)
                     : func(f) {
                 }
             };

@@ -507,7 +507,7 @@ struct FunctionDAG {
                 return dependencies[n.id];
             };
 
-            Stage(Halide::Stage s)
+            explicit Stage(Halide::Stage s)
                 : stage(std::move(s)) {
             }
 
@@ -674,7 +674,7 @@ public:
     int visit_binary(const Expr &a, const Expr &b);
     int visit_nary(const std::vector<Expr> &exprs);
 
-    ExprBranching(const NodeMap<int64_t> &inlined)
+    explicit ExprBranching(const NodeMap<int64_t> &inlined)
         : inlined{inlined} {
     }
 
