@@ -69,6 +69,10 @@ public:
         };
     }
 
+    bool allow_out_of_order_inputs_and_outputs() const override {
+        return false;
+    }
+
     void set_generatorparam_value(const std::string &name, const std::string &value) override {
         _halide_user_assert(!pipeline_.defined());
         _halide_user_assert(constants_.count(name) == 1) << "Unknown Constant: " << name;
