@@ -340,7 +340,8 @@
         var re = /(?:\-([^-]+))?$/;
         for (var i = 0; i < btns.size(); i++) {
             const button = btns[i];
-            const tooltip = $(prefix + re.exec(button.id)[1])[0];
+            //const tooltip = $(prefix + re.exec(button.id)[1])[0];
+            const tooltip = document.getElementById(prefix + re.exec(button.id)[1]);
             button.is_clicked = false;
             button.addEventListener('mouseenter', () => {
                 if (!button.is_clicked)
@@ -362,11 +363,11 @@
         }
     }
 
-    init_tooltips($('button[id^="cond-"]'), "span#cond-tooltip-");
-    init_tooltips($('div[id^="cc-"]'), "span#tooltip-cc-");
-    init_tooltips($('div[id^="dc-"]'), "span#tooltip-dc-");
-    init_tooltips($('div[id^="vcc-"]'), "span#tooltip-vcc-");
-    init_tooltips($('div[id^="vdc-"]'), "span#tooltip-vdc-");
+    init_tooltips($('button[id^="cond-"]'), "cond-tooltip-"); // span#
+    init_tooltips($('div[id^="cc-"]'), "tooltip-cc-"); // span#
+    init_tooltips($('div[id^="dc-"]'), "tooltip-dc-"); // span#
+    init_tooltips($('div[id^="vcc-"]'), "tooltip-vcc-"); // span#
+    init_tooltips($('div[id^="vdc-"]'), "tooltip-vdc-"); // span#
 
     function depth(elem) {
         if ($(elem).is("div#ir-visualization-tab"))
@@ -427,7 +428,7 @@
     var cost_btns = $('div[id^="cc-"], div[id^="dc-"]');
     for (var i = 0; i < cost_btns.size(); i++) {
         const button = cost_btns[i];
-        const highlight_span = $("span#cost-bg-" + re.exec(button.id)[1])[0];
+        const highlight_span = document.getElementById("cost-bg-" + re.exec(button.id)[1]); // span#
         $(button).mouseover(() => {
             $(highlight_span).css("background", "#e5e3e3");
         });
@@ -436,3 +437,4 @@
         });
     }
 </script>
+
