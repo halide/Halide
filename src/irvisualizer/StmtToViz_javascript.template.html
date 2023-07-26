@@ -133,9 +133,10 @@
         var container = document.getElementById('ir-visualization-tab');
         var scrollToObject = document.getElementById(id);
         makeVizVisible(scrollToObject);
+        scrollToObject = scrollToObject.parentElement.parentElement;
         container.scrollTo({
             top: getOffsetTop(scrollToObject) - 8,
-            left: getOffsetLeft(scrollToObject),
+            left: getOffsetLeft(scrollToObject) - 8,
             behavior: 'smooth'
         });
         scrollToObject.style.backgroundColor = 'white';
@@ -211,19 +212,31 @@
     irVizDiv.style.flexBasis = 'calc(50% - 3px)';
     resizeBarAssembly.style.flexBasis = '6px';
 
+    var currentResizer;
+    var mousedown = false;
     resizeBar.addEventListener('mousedown', (event) => {
-        document.addEventListener('mousemove', resize, false);
-        document.addEventListener('mouseup', () => {
-            document.removeEventListener('mousemove', resize, false);
-        }, false);
+        currentResizer = resizeBar;
+        mousedown = true;
+    });
+    resizeBarAssembly.addEventListener('mousedown', (event) => {
+        currentResizer = resizeBarAssembly;
+        mousedown = true;
+    });
+    document.addEventListener('mouseup', (event) => {
+        currentResizer = null;
+        mousedown = false;
     });
 
-    resizeBarAssembly.addEventListener('mousedown', (event) => {
-        document.addEventListener('mousemove', resizeAssembly, false);
-        document.addEventListener('mouseup', () => {
-            document.removeEventListener('mousemove', resizeAssembly, false);
-        }, false);
+    document.addEventListener('mousemove', (event) => {
+        if (mousedown) {
+            if (currentResizer == resizeBar) {
+                resize(event);
+            } else if (currentResizer == resizeBarAssembly) {
+                resizeAssembly(event);
+            }
+        }
     });
+
 
     function resize(e) {
         if (e.x < 25) {
@@ -386,43 +399,13 @@
         toggleViz(val.id);
     });
 
-    // CodeMirror Js
-
-    // Populate assembly code
-    assemblyCodeDiv.style.display = 'block';
-    var codeHTML = document.getElementById('assemblyContent');
-    var code = codeHTML.textContent;
-    code = code.trimLeft();
-    document.getElementById('assembly-tab').innerHTML = '';
-    var assemblyCM = CodeMirror(document.getElementById('assembly-tab'), {
-        value: code,
-        lineNumbers: true,
-        lineWrapping: true,
-        mode: {
-            name: 'gas',
-            architecture: 'ARMv6'
-        },
-        readOnly: true,
-    });
-
     function scrollToAsm(lno) {
-        assemblyCM.scrollIntoView({
-            line: assemblyCM.lineCount() - 1,
-            ch: 0
-        });
-        assemblyCM.scrollIntoView({
-            line: lno - 1,
-            ch: 0
-        });
-        assemblyCM.focus();
-        assemblyCM.setCursor({
-            line: lno,
-            ch: 0
+        document.getElementsByClassName("shj-numbers")[0].children[lno].scrollIntoView({
+            behavior: "smooth"
         });
     }
 
-    //scrollToAsm(1);
-    //collapse_assembly_tab();
+    collapse_assembly_tab();
 
     // Cost model js
     var re = /(?:\-([^-]+))?$/;
