@@ -114,7 +114,7 @@ using LocalMemInfo = MemInfoType<LocalMem>;
 
 struct Strides {
 public:
-    Strides(const std::vector<int64_t> &storage_strides)
+    explicit Strides(const std::vector<int64_t> &storage_strides)
         : storage_strides{storage_strides} {
     }
 

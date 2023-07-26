@@ -18,8 +18,8 @@ void test_thread_info() {
         std::vector<int64_t> loop_extents;
         std::vector<int64_t> max_thread_counts;
 
-        loop.push_back({});
-        loop.push_back({});
+        loop.emplace_back();
+        loop.emplace_back();
 
         // 16x8
         size.push_back(16);
@@ -65,7 +65,7 @@ void test_thread_info() {
         max_thread_counts.push_back(16);
         max_thread_counts.push_back(16);
         max_thread_counts.push_back(2);
-        loop.push_back({});
+        loop.emplace_back();
 
         {
             ThreadInfo info{vectorized_loop_index, size, loop, max_thread_counts};
