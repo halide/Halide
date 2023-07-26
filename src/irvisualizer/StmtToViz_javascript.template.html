@@ -370,12 +370,13 @@
     init_tooltips($('div[id^="vdc-"]'), "tooltip-vdc-"); // span#
 
     function depth(elem) {
-        if ($(elem).is("div#ir-visualization-tab"))
-            return 0;
-        else if ($(elem).is("div.box"))
+        if (elem.id == 'ir-visualization-tab') {
+          return 0;
+        } else if (elem.tagName == 'DIV' && elem.classList.contains("box")) {
             return 1 + depth(elem.parentNode);
-        else
+        } else {
             return depth(elem.parentNode);
+        }
     }
 
     // Collapse viz boxes beyond at depth > 1
@@ -420,8 +421,8 @@
         });
     }
 
-    scrollToAsm(1);
-    collapse_assembly_tab();
+    //scrollToAsm(1);
+    //collapse_assembly_tab();
 
     // Cost model js
     var re = /(?:\-([^-]+))?$/;
