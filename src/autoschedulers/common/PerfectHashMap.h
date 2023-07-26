@@ -9,7 +9,7 @@
 struct PerfectHashMapAsserter {
     const bool c;
 
-    PerfectHashMapAsserter(bool c)
+    explicit PerfectHashMapAsserter(bool c)
         : c(c) {
     }
 

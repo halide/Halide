@@ -29,7 +29,7 @@ class LockProfiler {
     halide_profiler_state *state;
 
 public:
-    LockProfiler(halide_profiler_state *s)
+    explicit LockProfiler(halide_profiler_state *s)
         : state(s) {
 #if TIMER_PROFILING
         halide_disable_timer_interrupt();

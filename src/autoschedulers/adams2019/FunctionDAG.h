@@ -129,7 +129,7 @@ class LoadJacobian {
     int64_t c;
 
 public:
-    LoadJacobian(vector<vector<OptionalRational>> &&matrix, int64_t c = 1)
+    explicit LoadJacobian(vector<vector<OptionalRational>> &&matrix, int64_t c = 1)
         : coeffs(matrix), c(c) {
     }
 
@@ -481,7 +481,7 @@ struct FunctionDAG {
                 return dependencies[n.id];
             };
 
-            Stage(Halide::Stage s)
+            explicit Stage(Halide::Stage s)
                 : stage(std::move(s)) {
             }
         };
