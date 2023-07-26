@@ -351,6 +351,11 @@ Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
+/** Reset the counters used for random-number seeds in random_float/int/uint
+ * when no seed is explicitly passed in; this is used for multitarget compilation
+ * to ensure that each subtarget gets the same sequence of random numbers. */
+void reset_random_counters();
+
 }  // namespace Internal
 
 /** Cast an expression to the halide type corresponding to the C++ type T. */
