@@ -11,7 +11,7 @@ namespace Internal {
 struct ScopedMutexLock {
     halide_mutex *mutex;
 
-    ALWAYS_INLINE ScopedMutexLock(halide_mutex *mutex)
+    ALWAYS_INLINE explicit ScopedMutexLock(halide_mutex *mutex)
         : mutex(mutex) {
         halide_mutex_lock(mutex);
     }

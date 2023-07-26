@@ -15,7 +15,7 @@ class PointerTable {
 public:
     static constexpr size_t default_capacity = 32;  // smallish
 
-    PointerTable(void *user_context, size_t initial_capacity = 0, const SystemMemoryAllocatorFns &sma = default_allocator());
+    explicit PointerTable(void *user_context, size_t initial_capacity = 0, const SystemMemoryAllocatorFns &sma = default_allocator());
     PointerTable(const PointerTable &other);
     ~PointerTable();
 
