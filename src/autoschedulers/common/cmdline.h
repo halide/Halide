@@ -189,7 +189,7 @@ inline std::string readable_typename<int>() {
 #ifdef HALIDE_WITH_EXCEPTIONS
 class cmdline_error : public std::exception {
 public:
-    cmdline_error(const std::string &msg)
+    explicit cmdline_error(const std::string &msg)
         : msg(msg) {
     }
     ~cmdline_error() throw() override = default;

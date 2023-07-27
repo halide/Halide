@@ -576,7 +576,7 @@ struct Filter {
     const LoopNest *loop_nest;
     bool logging = false;
 
-    Filter(const LoopNest *loop_nest)
+    explicit Filter(const LoopNest *loop_nest)
         : loop_nest{loop_nest}, logging{enable_filter_printing()} {
         if (logging) {
             std::cerr << "\nState filtered: \n";

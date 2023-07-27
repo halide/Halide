@@ -189,7 +189,7 @@ vector<ThreadTileOption> SearchSpace::filter_thread_tile_options(vector<Intrusiv
 
         ThreadTileOption o;
         o.loop_nest = loop_nest;
-        o.max_idle_lane_wastage = loop_nest->max_idle_lane_wastage(target, {loop_nest.get()});
+        o.max_idle_lane_wastage = loop_nest->max_idle_lane_wastage(target, GPULoopInfo(loop_nest.get()));
         options.emplace_back(std::move(o));
     }
 

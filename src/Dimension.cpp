@@ -50,42 +50,42 @@ Expr Dimension::stride() const {
     return Variable::make(Int(32), s.str(), param);
 }
 
-Dimension Dimension::set_extent(Expr extent) {
+Dimension Dimension::set_extent(const Expr &extent) {
     // Propagate constant bounds into estimates as well.
     if (is_const(extent)) {
         param.set_extent_constraint_estimate(d, extent);
     }
-    param.set_extent_constraint(d, std::move(extent));
+    param.set_extent_constraint(d, extent);
     return *this;
 }
 
-Dimension Dimension::set_min(Expr min) {
+Dimension Dimension::set_min(const Expr &min) {
     // Propagate constant bounds into estimates as well.
     if (is_const(min)) {
         param.set_min_constraint_estimate(d, min);
     }
-    param.set_min_constraint(d, std::move(min));
+    param.set_min_constraint(d, min);
     return *this;
 }
 
-Dimension Dimension::set_stride(Expr stride) {
-    param.set_stride_constraint(d, std::move(stride));
+Dimension Dimension::set_stride(const Expr &stride) {
+    param.set_stride_constraint(d, stride);
     return *this;
 }
 
-Dimension Dimension::set_bounds(Expr min, Expr extent) {
-    return set_min(std::move(min)).set_extent(std::move(extent));
+Dimension Dimension::set_bounds(const Expr &min, const Expr &extent) {
+    return set_min(min).set_extent(extent);
 }
 
-Dimension Dimension::set_estimate(Expr min, Expr extent) {
+Dimension Dimension::set_estimate(const Expr &min, const Expr &extent) {
     // Update the estimates on the linked Func as well.
     // (This matters mainly for OutputImageParams.)
     // Note that while it's possible/legal for a Dimension to have an undefined
     // Func, you shouldn't ever call set_estimate on such an instance.
     internal_assert(f.defined());
     f.set_estimate(f.args()[d], min, extent);
-    param.set_min_constraint_estimate(d, std::move(min));
-    param.set_extent_constraint_estimate(d, std::move(extent));
+    param.set_min_constraint_estimate(d, min);
+    param.set_extent_constraint_estimate(d, extent);
     return *this;
 }
 
