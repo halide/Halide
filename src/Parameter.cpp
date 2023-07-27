@@ -3,6 +3,7 @@
 #include "Argument.h"
 #include "Float16.h"
 #include "IR.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 
 namespace Halide {
@@ -215,34 +216,84 @@ bool Parameter::defined() const {
     return contents.defined();
 }
 
-void Parameter::set_min_constraint(int dim, Expr e) {
-    check_is_buffer();
-    check_dim_ok(dim);
-    contents->buffer_constraints[dim].min = std::move(e);
+// Helper function to remove any references in a parameter constraint to the
+// parameter itself, to avoid creating a reference count cycle and causing a
+// leak. Note that it's still possible to create a cycle by having two different
+// Parameters each have constraints that reference the other.
+Expr remove_self_references(const Parameter &p, const Expr &e) {
+    class RemoveSelfReferences : public IRMutator {
+        using IRMutator::visit;
+
+        Expr visit(const Variable *var) override {
+            if (var->param.same_as(p)) {
+                internal_assert(starts_with(var->name, p.name() + "."));
+                return Variable::make(var->type, var->name);
+            } else {
+                internal_assert(!starts_with(var->name, p.name() + "."));
+            }
+            return var;
+        }
+
+    public:
+        const Parameter &p;
+        RemoveSelfReferences(const Parameter &p)
+            : p(p) {
+        }
+    } mutator{p};
+    return mutator.mutate(e);
 }
 
-void Parameter::set_extent_constraint(int dim, Expr e) {
-    check_is_buffer();
-    check_dim_ok(dim);
-    contents->buffer_constraints[dim].extent = std::move(e);
+Expr restore_self_references(const Parameter &p, const Expr &e) {
+    class RestoreSelfReferences : public IRMutator {
+        using IRMutator::visit;
+
+        Expr visit(const Variable *var) override {
+            if (!var->image.defined() &&
+                !var->param.defined() &&
+                !var->reduction_domain.defined() &&
+                starts_with(var->name, p.name() + ".")) {
+                return Variable::make(var->type, var->name, p);
+            }
+            return var;
+        }
+
+    public:
+        const Parameter &p;
+        RestoreSelfReferences(const Parameter &p)
+            : p(p) {
+        }
+    } mutator{p};
+    return mutator.mutate(e);
 }
 
-void Parameter::set_stride_constraint(int dim, Expr e) {
+void Parameter::set_min_constraint(int dim, const Expr &e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].stride = std::move(e);
+    contents->buffer_constraints[dim].min = remove_self_references(*this, e);
 }
 
-void Parameter::set_min_constraint_estimate(int dim, Expr min) {
+void Parameter::set_extent_constraint(int dim, const Expr &e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].min_estimate = std::move(min);
+    contents->buffer_constraints[dim].extent = remove_self_references(*this, e);
 }
 
-void Parameter::set_extent_constraint_estimate(int dim, Expr extent) {
+void Parameter::set_stride_constraint(int dim, const Expr &e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].extent_estimate = std::move(extent);
+    contents->buffer_constraints[dim].stride = remove_self_references(*this, e);
+}
+
+void Parameter::set_min_constraint_estimate(int dim, const Expr &min) {
+    check_is_buffer();
+    check_dim_ok(dim);
+    contents->buffer_constraints[dim].min_estimate = remove_self_references(*this, min);
+}
+
+void Parameter::set_extent_constraint_estimate(int dim, const Expr &extent) {
+    check_is_buffer();
+    check_dim_ok(dim);
+    contents->buffer_constraints[dim].extent_estimate = remove_self_references(*this, extent);
 }
 
 void Parameter::set_host_alignment(int bytes) {
@@ -253,31 +304,31 @@ void Parameter::set_host_alignment(int bytes) {
 Expr Parameter::min_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return contents->buffer_constraints[dim].min;
+    return restore_self_references(*this, contents->buffer_constraints[dim].min);
 }
 
 Expr Parameter::extent_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return contents->buffer_constraints[dim].extent;
+    return restore_self_references(*this, contents->buffer_constraints[dim].extent);
 }
 
 Expr Parameter::stride_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return contents->buffer_constraints[dim].stride;
+    return restore_self_references(*this, contents->buffer_constraints[dim].stride);
 }
 
 Expr Parameter::min_constraint_estimate(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return contents->buffer_constraints[dim].min_estimate;
+    return restore_self_references(*this, contents->buffer_constraints[dim].min_estimate);
 }
 
 Expr Parameter::extent_constraint_estimate(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return contents->buffer_constraints[dim].extent_estimate;
+    return restore_self_references(*this, contents->buffer_constraints[dim].extent_estimate);
 }
 
 int Parameter::host_alignment() const {

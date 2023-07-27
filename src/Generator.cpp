@@ -1218,10 +1218,6 @@ GeneratorBase::~GeneratorBase() {
 }
 
 GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t size) {
-    std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
-        generator, size, ObjectInstanceRegistry::FilterParam);
-    user_assert(vf.empty()) << "ImageParam and Param<> are no longer allowed in Generators; use Input<> instead.";
-
     const auto add_synthetic_params = [this, generator](GIOBase *gio) {
         const std::string &n = gio->name();
         const std::string &gn = generator->generator_registered_name;
@@ -1239,45 +1235,68 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
         }
     };
 
-    std::vector<void *> vi = ObjectInstanceRegistry::instances_in_range(
-        generator, size, ObjectInstanceRegistry::GeneratorInput);
-    for (auto *v : vi) {
-        auto *input = static_cast<Internal::GeneratorInputBase *>(v);
-        internal_assert(input != nullptr);
-        user_assert(is_valid_name(input->name())) << "Invalid Input name: (" << input->name() << ")\n";
-        user_assert(!names.count(input->name())) << "Duplicate Input name: " << input->name();
-        names.insert(input->name());
-        internal_assert(input->generator == nullptr || input->generator == generator);
-        input->generator = generator;
-        filter_inputs.push_back(input);
-        add_synthetic_params(input);
-    }
+    const char *const io_order_warning = "Generators will always produce code that orders all Inputs before all Outputs; "
+                                         "this Generator declares the Inputs and Outputs in a different order, so the calling convention may not be as expected. "
+                                         "A future version of Halide will make this illegal, and require all Inputs to be declared before all Outputs. "
+                                         "(You can avoid this requirement by overriding Generator::allow_out_of_order_inputs_and_outputs().)";
 
-    std::vector<void *> vo = ObjectInstanceRegistry::instances_in_range(
-        generator, size, ObjectInstanceRegistry::GeneratorOutput);
-    for (auto *v : vo) {
-        auto *output = static_cast<Internal::GeneratorOutputBase *>(v);
-        internal_assert(output != nullptr);
-        user_assert(is_valid_name(output->name())) << "Invalid Output name: (" << output->name() << ")\n";
-        user_assert(!names.count(output->name())) << "Duplicate Output name: " << output->name();
-        names.insert(output->name());
-        internal_assert(output->generator == nullptr || output->generator == generator);
-        output->generator = generator;
-        filter_outputs.push_back(output);
-        add_synthetic_params(output);
-    }
-
-    std::vector<void *> vg = ObjectInstanceRegistry::instances_in_range(
-        generator, size, ObjectInstanceRegistry::GeneratorParam);
-    for (auto *v : vg) {
-        auto *param = static_cast<GeneratorParamBase *>(v);
-        internal_assert(param != nullptr);
-        user_assert(is_valid_name(param->name())) << "Invalid GeneratorParam name: " << param->name();
-        user_assert(!names.count(param->name())) << "Duplicate GeneratorParam name: " << param->name();
-        names.insert(param->name());
-        internal_assert(param->generator == nullptr || param->generator == generator);
-        param->generator = generator;
-        filter_generator_params.push_back(param);
+    bool outputs_seen = false;
+    auto vf = ObjectInstanceRegistry::instances_in_range(generator, size);
+    for (const auto &vi : vf) {
+        void *const instance = vi.first;
+        const ObjectInstanceRegistry::Kind kind = vi.second;
+        switch (kind) {
+        case ObjectInstanceRegistry::GeneratorParam: {
+            auto *param = static_cast<GeneratorParamBase *>(instance);
+            internal_assert(param != nullptr);
+            user_assert(is_valid_name(param->name())) << "Invalid GeneratorParam name: " << param->name();
+            user_assert(!names.count(param->name())) << "Duplicate GeneratorParam name: " << param->name();
+            names.insert(param->name());
+            internal_assert(param->generator == nullptr || param->generator == generator);
+            param->generator = generator;
+            filter_generator_params.push_back(param);
+            break;
+        }
+        case ObjectInstanceRegistry::GeneratorInput: {
+            if (outputs_seen) {
+                if (!generator->allow_out_of_order_inputs_and_outputs()) {
+                    user_warning << io_order_warning;
+                }
+            }
+            auto *input = static_cast<Internal::GeneratorInputBase *>(instance);
+            internal_assert(input != nullptr);
+            user_assert(is_valid_name(input->name())) << "Invalid Input name: (" << input->name() << ")\n";
+            user_assert(!names.count(input->name())) << "Duplicate Input name: " << input->name();
+            names.insert(input->name());
+            internal_assert(input->generator == nullptr || input->generator == generator);
+            input->generator = generator;
+            filter_inputs.push_back(input);
+            add_synthetic_params(input);
+            break;
+        }
+        case ObjectInstanceRegistry::GeneratorOutput: {
+            outputs_seen = true;
+            auto *output = static_cast<Internal::GeneratorOutputBase *>(instance);
+            internal_assert(output != nullptr);
+            user_assert(is_valid_name(output->name())) << "Invalid Output name: (" << output->name() << ")\n";
+            user_assert(!names.count(output->name())) << "Duplicate Output name: " << output->name();
+            names.insert(output->name());
+            internal_assert(output->generator == nullptr || output->generator == generator);
+            output->generator = generator;
+            filter_outputs.push_back(output);
+            add_synthetic_params(output);
+            break;
+        }
+        case ObjectInstanceRegistry::Generator:
+            // nothing
+            break;
+        case ObjectInstanceRegistry::FilterParam:
+            user_error << "ImageParam and Param<> are no longer allowed in Generators; use Input<> instead.";
+            break;
+        default:
+            user_error << "Unexpected ObjectInstanceRegistry::Kind value in GeneratorParamInfo. " << (int)kind;
+            break;
+        }
     }
 
     for (auto &g : owned_synthetic_params) {
@@ -1508,6 +1527,10 @@ std::vector<AbstractGenerator::ArgInfo> GeneratorBase::arginfos() {
     GeneratorBase::get_arguments(args, ArgInfoDirection::Input, param_info().inputs());
     GeneratorBase::get_arguments(args, ArgInfoDirection::Output, param_info().outputs());
     return args;
+}
+
+bool GeneratorBase::allow_out_of_order_inputs_and_outputs() const {
+    return false;
 }
 
 std::vector<Parameter> GeneratorBase::input_parameter(const std::string &name) {

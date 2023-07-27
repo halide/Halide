@@ -48,7 +48,7 @@ public:
     uint32_t queue_family_index = 0;  // used for operations requiring queue family
     halide_error_code_t error = halide_error_code_success;
 
-    HALIDE_ALWAYS_INLINE VulkanContext(void *user_context)
+    HALIDE_ALWAYS_INLINE explicit VulkanContext(void *user_context)
         : user_context(user_context) {
 
         int result = halide_vulkan_acquire_context(user_context,

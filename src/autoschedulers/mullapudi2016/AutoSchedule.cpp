@@ -2615,7 +2615,7 @@ class FindVarsUsingVar : public IRVisitor {
 public:
     Scope<> vars;
 
-    FindVarsUsingVar(const string &var) {
+    explicit FindVarsUsingVar(const string &var) {
         vars.push(var);
     }
 };

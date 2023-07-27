@@ -142,11 +142,11 @@ public:
     /** Get and set constraints for the min, extent, stride, and estimates on
      * the min/extent. */
     //@{
-    void set_min_constraint(int dim, Expr e);
-    void set_extent_constraint(int dim, Expr e);
-    void set_stride_constraint(int dim, Expr e);
-    void set_min_constraint_estimate(int dim, Expr min);
-    void set_extent_constraint_estimate(int dim, Expr extent);
+    void set_min_constraint(int dim, const Expr &e);
+    void set_extent_constraint(int dim, const Expr &e);
+    void set_stride_constraint(int dim, const Expr &e);
+    void set_min_constraint_estimate(int dim, const Expr &min);
+    void set_extent_constraint_estimate(int dim, const Expr &extent);
     void set_host_alignment(int bytes);
     Expr min_constraint(int dim) const;
     Expr extent_constraint(int dim) const;

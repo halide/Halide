@@ -30,8 +30,8 @@ public:
         uint32_t maximum_block_count = 0;
     };
 
-    MemoryArena(void *user_context, const Config &config = default_config(),
-                const SystemMemoryAllocatorFns &allocator = default_allocator());
+    explicit MemoryArena(void *user_context, const Config &config = default_config(),
+                         const SystemMemoryAllocatorFns &allocator = default_allocator());
 
     ~MemoryArena();
 
