@@ -1010,6 +1010,12 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
 
     definition.schedule().touched() = true;
 
+    user_assert(inner != outer) << "In schedule for " << name()
+                                << ", can't split " << old << " into "
+                                << outer << " and " << inner
+                                << " because the new Vars have the same name.\n"
+                                << dump_argument_list();
+
     // Check that the new names aren't already in the dims list.
     for (auto &dim : dims) {
         string new_names[2] = {inner, outer};
