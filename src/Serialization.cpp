@@ -1472,4 +1472,4 @@ void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, s
 
 }  // namespace Halide
 
-#endif // HALIDE_SERIALIZATION
+#endif  // HALIDE_SERIALIZATION
