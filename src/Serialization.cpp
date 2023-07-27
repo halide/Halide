@@ -1,3 +1,5 @@
+#ifdef HALIDE_SERIALIZATION
+
 #include "Serialization.h"
 #include "Schedule.h"
 #include "halide_ir_generated.h"
@@ -1469,3 +1471,5 @@ void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, s
 }
 
 }  // namespace Halide
+
+#endif // HALIDE_SERIALIZATION
