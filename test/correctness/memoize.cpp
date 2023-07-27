@@ -75,7 +75,7 @@ void *flaky_malloc(JITUserContext * /* user_context */, size_t x) {
         void *ptr = aligned_alloc(32, x);
 #endif
         void **ret = (void **)ptr;
-        ret += 4;
+        ret += 32 / sizeof(void *);
         ret[-1] = ptr;
         return ret;
     }
