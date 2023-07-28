@@ -172,11 +172,9 @@ int read_memory(void *dest, int src, int size) {
         int next = 1;
         if (size >= 8) {
             next = 8;
-        }
-        else if (size >= 4) {
+        } else if (size >= 4) {
             next = 4;
-        }
-        else if (size >= 2) {
+        } else if (size >= 2) {
             next = 2;
         }
         HEXAPI_Status status = sim->ReadMemory(src, next, dest);
@@ -334,8 +332,7 @@ public:
         std::swap(data, move.data);
         std::swap(dataLen, move.dataLen);
     }
-    remote_buffer &operator=(remote_buffer &&move) noexcept
-    {
+    remote_buffer &operator=(remote_buffer &&move) noexcept {
         std::swap(data, move.data);
         std::swap(dataLen, move.dataLen);
         return *this;
