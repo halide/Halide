@@ -4,7 +4,7 @@
 #include "Function.h"
 #include "IR.h"
 #include "Schedule.h"
-#include "halide_ir_generated.h"  // NOLINT: Disable linting on the generated header file
+#include "halide_ir_generated.h"
 
 #include <fstream>
 #include <functional>
