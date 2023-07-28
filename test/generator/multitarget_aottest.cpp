@@ -2,6 +2,7 @@
 #include "HalideRuntime.h"
 #include "multitarget.h"
 #include <atomic>
+#include <cmath>
 #include <string>
 #include <tuple>
 
