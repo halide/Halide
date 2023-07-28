@@ -15,12 +15,38 @@
 #include "Util.h"
 #include "Var.h"
 
+#define TRACY_GLUE_ENABLE (0)
+#include "debug/tracy_profiler_glue.hpp"
+
 namespace Halide {
 namespace Internal {
 
+#if SLOMP_REPLACE_ISOLATED_STRINGSTREAMS
+struct ostringstream {
+    std::string stream;
+
+    template<typename T>
+    ostringstream& operator << (const T& t) {
+        stream += std::to_string(t);
+        return *this;
+    }
+    ostringstream& operator << (const char* str) {
+        stream += str;
+        return *this;
+    }
+    ostringstream& operator << (const std::string& str) {
+        stream += str;
+        return *this;
+    }
+
+    const std::string& str() { return stream; }
+};
+#else
+using std::ostringstream;
+#endif
+
 using std::map;
 using std::ostream;
-using std::ostringstream;
 using std::string;
 using std::vector;
 
@@ -96,6 +122,7 @@ private:
     using IRGraphVisitor::visit;
 
     void include_type(const Type &t) {
+        ZoneScopedN("CodeGen_C::TypeInfoGatherer::include_type");
         if (t.is_vector()) {
             if (t.is_bool()) {
                 // bool vectors are always emitted as uint8 in the C++ backend
@@ -124,6 +151,7 @@ private:
     }
 
     void include_lerp_types(const Type &t) {
+        ZoneScopedN("CodeGen_C::TypeInfoGatherer::include_lerp_types");
         if (t.is_vector() && t.is_int_or_uint() && (t.bits() >= 8 && t.bits() <= 32)) {
             include_type(t.widen());
         }
@@ -131,6 +159,7 @@ private:
 
 protected:
     void include(const Expr &e) override {
+        ZoneScopedN("CodeGen_C::TypeInfoGatherer::include(Expr)");
         include_type(e.type());
         IRGraphVisitor::include(e);
     }
@@ -138,31 +167,37 @@ protected:
     // GCC's __builtin_shuffle takes an integer vector of
     // the size of its input vector. Make sure this type exists.
     void visit(const Shuffle *op) override {
+        ZoneScopedN("CodeGen_C::TypeInfoGatherer::visit(Shuffle)");
         vector_types_used.insert(Int(32, op->vectors[0].type().lanes()));
         IRGraphVisitor::visit(op);
     }
 
     void visit(const For *op) override {
+        ZoneScopedN("CodeGen_C::TypeInfoGatherer::visit(For)");
         for_types_used.insert(op->for_type);
         IRGraphVisitor::visit(op);
     }
 
     void visit(const Ramp *op) override {
+        ZoneScopedN("CodeGen_C::TypeInfoGatherer::visit(Ramp)");
         include_type(op->type.with_lanes(op->lanes));
         IRGraphVisitor::visit(op);
     }
 
     void visit(const Broadcast *op) override {
+        ZoneScopedN("CodeGen_C::TypeInfoGatherer::visit(Broadcast)");
         include_type(op->type.with_lanes(op->lanes));
         IRGraphVisitor::visit(op);
     }
 
     void visit(const Cast *op) override {
+        ZoneScopedN("CodeGen_C::TypeInfoGatherer::visit(Cast)");
         include_type(op->type);
         IRGraphVisitor::visit(op);
     }
 
     void visit(const Call *op) override {
+        ZoneScopedN("CodeGen_C::TypeInfoGatherer::visit(Call)");
         include_type(op->type);
         if (op->is_intrinsic(Call::lerp)) {
             // lower_lerp() can synthesize wider vector types.
@@ -188,8 +223,12 @@ public:
 }  // namespace
 
 CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
-    : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind) {
-
+    : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind)
+    #if SLOMP_INTERCEPT_CODEGEN_STREAMS
+    , stream(*this)
+    #endif
+    {
+    ZoneScoped;
     if (output_kind == CPlusPlusFunctionInfoHeader) {
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_FUNCTION_INFO_" << c_print_name(guard) << "\n"
@@ -263,6 +302,7 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
 }
 
 CodeGen_C::~CodeGen_C() {
+    ZoneScoped;
     set_name_mangling_mode(NameMangling::Default);
 
     if (is_header()) {
@@ -322,18 +362,20 @@ CodeGen_C::~CodeGen_C() {
 }
 
 void CodeGen_C::add_platform_prologue() {
+    ZoneScoped;
     // nothing
 }
 
 void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
+    ZoneScoped;
     if (!vector_types.empty()) {
         // Voodoo fix: on at least one config (our arm32 buildbot running gcc 5.4),
         // emitting this long text string was regularly garbled in a predictable pattern;
         // flushing the stream before or after heals it. Since C++ codegen is rarely
         // on a compilation critical path, we'll just band-aid it in this way.
-        stream << std::flush;
+        //stream << std::flush;
         stream << halide_c_template_CodeGen_C_vectors;
-        stream << std::flush;
+        //stream << std::flush;
 
         for (const auto &t : vector_types) {
             string name = print_type(t, DoNotAppendSpace);
@@ -356,6 +398,7 @@ void CodeGen_C::add_vector_typedefs(const std::set<Type> &vector_types) {
 }
 
 void CodeGen_C::set_name_mangling_mode(NameMangling mode) {
+    ZoneScoped;
     if (extern_c_open && mode != NameMangling::C) {
         stream << R"INLINE_CODE(
 #ifdef __cplusplus
@@ -376,10 +419,12 @@ extern "C" {
 }
 
 string CodeGen_C::print_type(Type type, AppendSpaceIfNeeded space_option) {
+    ZoneScoped;
     return type_to_c_type(type, space_option == AppendSpace);
 }
 
 string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
+    ZoneScoped;
     ostringstream oss;
     if (type.is_handle() || e.type().is_handle()) {
         // Use a c-style cast if either src or dest is a handle --
@@ -408,6 +453,7 @@ string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
 }
 
 string CodeGen_C::print_name(const string &name) {
+    ZoneScoped;
     return c_print_name(name);
 }
 
@@ -418,6 +464,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         std::map<string, NamespaceOrCall> names;
         NamespaceOrCall(const Call *call = nullptr)
             : call(call) {
+            ZoneScoped;
         }
     };
     std::map<string, NamespaceOrCall> c_plus_plus_externs;
@@ -428,7 +475,12 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
     using IRGraphVisitor::visit;
 
+#if SLOMP_INTERCEPT_CODEGEN_STREAMS
+    using ostream = CodeGen_C;
+#endif
+
     void visit(const Call *op) override {
+        ZoneScopedN("CodeGen_C::ExternCallPrototypes::visit(Call)");
         IRGraphVisitor::visit(op);
 
         if (!processed.count(op->name)) {
@@ -456,6 +508,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
     }
 
     void visit(const Allocate *op) override {
+        ZoneScopedN("CodeGen_C::ExternCallPrototypes::visit(Allocate)");
         IRGraphVisitor::visit(op);
         if (!op->free_function.empty()) {
             destructors.insert(op->free_function);
@@ -463,6 +516,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
     }
 
     void emit_function_decl(ostream &stream, const Call *op, const std::string &name) const {
+        ZoneScoped;
         // op->name (rather than the name arg) since we need the fully-qualified C++ name
         if (internal_linkage.count(op->name)) {
             stream << "static ";
@@ -488,6 +542,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
     }
 
     void emit_namespace_or_call(ostream &stream, const NamespaceOrCall &ns_or_call, const std::string &name) const {
+        ZoneScoped;
         if (ns_or_call.call == nullptr) {
             stream << "namespace " << name << " {\n";
             for (const auto &ns_or_call_inner : ns_or_call.names) {
@@ -501,6 +556,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
 public:
     ExternCallPrototypes() {
+        ZoneScoped;
         // Make sure we don't catch calls that are already in the global declarations
         const char *strs[] = {(const char *)halide_c_template_CodeGen_C_prologue,
                               (const char *)halide_internal_runtime_header_HalideRuntime_h,
@@ -528,18 +584,22 @@ public:
     }
 
     void set_internal_linkage(const std::string &name) {
+        ZoneScoped;
         internal_linkage.insert(name);
     }
 
     bool has_c_declarations() const {
+        ZoneScoped;
         return !c_externs.empty() || !destructors.empty();
     }
 
     bool has_c_plus_plus_declarations() const {
+        ZoneScoped;
         return !c_plus_plus_externs.empty();
     }
 
     void emit_c_declarations(ostream &stream) const {
+        ZoneScoped;
         for (const auto &call : c_externs) {
             emit_function_decl(stream, call.second, call.first);
         }
@@ -550,6 +610,7 @@ public:
     }
 
     void emit_c_plus_plus_declarations(ostream &stream) const {
+        ZoneScoped;
         for (const auto &ns_or_call : c_plus_plus_externs) {
             emit_namespace_or_call(stream, ns_or_call.second, ns_or_call.first);
         }
@@ -559,6 +620,7 @@ public:
 }  // namespace
 
 void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
+    ZoneScoped;
     if (!t.handle_type ||
         forward_declared.count(t.handle_type) ||
         t.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Simple) {
@@ -594,6 +656,7 @@ void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
 
 void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
                                   const std::vector<LoweredArgument> &args) {
+    ZoneScoped;
     if (is_header_or_extern_decl()) {
         stream << "\nHALIDE_FUNCTION_ATTRS\nint " << function_name << "_argv(void **args);\n";
         return;
@@ -627,6 +690,7 @@ void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
 void CodeGen_C::emit_metadata_getter(const std::string &function_name,
                                      const std::vector<LoweredArgument> &args,
                                      const MetadataNameMap &metadata_name_map) {
+    ZoneScoped;
     if (is_header_or_extern_decl()) {
         stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << function_name << "_metadata();\n";
         return;
@@ -835,6 +899,7 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
 void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
                                              const std::vector<LoweredArgument> &args,
                                              const MetadataNameMap &metadata_name_map) {
+    ZoneScoped;
     internal_assert(!extern_c_open)
         << "emit_constexpr_function_info() must not be called from inside an extern \"C\" block";
 
@@ -889,11 +954,13 @@ void CodeGen_C::emit_constexpr_function_info(const std::string &function_name,
 }
 
 void CodeGen_C::emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function) {
+    ZoneScoped;
     stream << get_indent() << "HalideFreeHelper<" << free_function << "> "
            << alloc_name << "_free(_ucon, " << alloc_name << ");\n";
 }
 
 void CodeGen_C::compile(const Module &input) {
+    ZoneScoped;
     add_platform_prologue();
 
     TypeInfoGatherer type_info;
@@ -955,10 +1022,12 @@ void CodeGen_C::compile(const Module &input) {
 }
 
 Stmt CodeGen_C::preprocess_function_body(const Stmt &stmt) {
+    ZoneScoped;
     return stmt;
 }
 
 void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_name_map) {
+    ZoneScoped;
     // Don't put non-external function declarations in headers.
     if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
         return;
@@ -1135,6 +1204,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_na
 }
 
 void CodeGen_C::compile(const Buffer<> &buffer) {
+    ZoneScoped;
     // Don't define buffers in headers or extern decls.
     if (is_header_or_extern_decl()) {
         return;
@@ -1225,12 +1295,14 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 }
 
 string CodeGen_C::print_expr(const Expr &e) {
+    ZoneScoped;
     id = "$$ BAD ID $$";
     e.accept(this);
     return id;
 }
 
 string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
+    ZoneScoped;
     string value = print_expr(e);
     if (e.type() == t) {
         // This is uncommon but does happen occasionally
@@ -1247,10 +1319,12 @@ string CodeGen_C::print_cast_expr(const Type &t, const Expr &e) {
 }
 
 void CodeGen_C::print_stmt(const Stmt &s) {
+    ZoneScoped;
     s.accept(this);
 }
 
 string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
+    ZoneScoped;
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
@@ -1270,6 +1344,7 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
 }
 
 void CodeGen_C::open_scope() {
+    ZoneScoped;
     cache.clear();
     stream << get_indent();
     indent++;
@@ -1277,6 +1352,7 @@ void CodeGen_C::open_scope() {
 }
 
 void CodeGen_C::close_scope(const std::string &comment) {
+    ZoneScoped;
     cache.clear();
     indent--;
     stream << get_indent();
@@ -1288,6 +1364,7 @@ void CodeGen_C::close_scope(const std::string &comment) {
 }
 
 void CodeGen_C::visit(const Variable *op) {
+    ZoneScopedN("CodeGen_C::visit(Variable)");
     if (starts_with(op->name, "::")) {
         // This is the name of a global, so we can't modify it.
         id = op->name;
@@ -1302,32 +1379,39 @@ void CodeGen_C::visit(const Variable *op) {
 }
 
 void CodeGen_C::visit(const Cast *op) {
+    ZoneScopedN("CodeGen_C::visit(Cast)");
     id = print_cast_expr(op->type, op->value);
 }
 
 void CodeGen_C::visit(const Reinterpret *op) {
+    ZoneScopedN("CodeGen_C::visit(Reinterpret)");
     id = print_assignment(op->type, print_reinterpret(op->type, op->value));
 }
 
 void CodeGen_C::visit_binop(Type t, const Expr &a, const Expr &b, const char *op) {
+    ZoneScoped;
     string sa = print_expr(a);
     string sb = print_expr(b);
     print_assignment(t, sa + " " + op + " " + sb);
 }
 
 void CodeGen_C::visit(const Add *op) {
+    ZoneScopedN("CodeGen_C::visit(Add)");
     visit_binop(op->type, op->a, op->b, "+");
 }
 
 void CodeGen_C::visit(const Sub *op) {
+    ZoneScopedN("CodeGen_C::visit(Sub)");
     visit_binop(op->type, op->a, op->b, "-");
 }
 
 void CodeGen_C::visit(const Mul *op) {
+    ZoneScopedN("CodeGen_C::visit(Mul)");
     visit_binop(op->type, op->a, op->b, "*");
 }
 
 void CodeGen_C::visit(const Div *op) {
+    ZoneScopedN("CodeGen_C::visit(Div)");
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         visit_binop(op->type, op->a, make_const(op->a.type(), bits), ">>");
@@ -1339,6 +1423,7 @@ void CodeGen_C::visit(const Div *op) {
 }
 
 void CodeGen_C::visit(const Mod *op) {
+    ZoneScopedN("CodeGen_C::visit(Mod)");
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         visit_binop(op->type, op->a, make_const(op->a.type(), (1 << bits) - 1), "&");
@@ -1356,6 +1441,7 @@ void CodeGen_C::visit(const Mod *op) {
 }
 
 void CodeGen_C::visit(const Max *op) {
+    ZoneScopedN("CodeGen_C::visit(Max)");
     // clang doesn't support the ternary operator on OpenCL style vectors.
     // See: https://bugs.llvm.org/show_bug.cgi?id=33103
     if (op->type.is_scalar()) {
@@ -1368,6 +1454,7 @@ void CodeGen_C::visit(const Max *op) {
 }
 
 void CodeGen_C::visit(const Min *op) {
+    ZoneScopedN("CodeGen_C::visit(Min)");
     // clang doesn't support the ternary operator on OpenCL style vectors.
     // See: https://bugs.llvm.org/show_bug.cgi?id=33103
     if (op->type.is_scalar()) {
@@ -1380,6 +1467,7 @@ void CodeGen_C::visit(const Min *op) {
 }
 
 void CodeGen_C::visit_relop(Type t, const Expr &a, const Expr &b, const char *scalar_op, const char *vector_op) {
+    ZoneScoped;
     if (t.is_scalar() || !using_vector_typedefs) {
         visit_binop(t, a, b, scalar_op);
     } else {
@@ -1391,42 +1479,52 @@ void CodeGen_C::visit_relop(Type t, const Expr &a, const Expr &b, const char *sc
 }
 
 void CodeGen_C::visit(const EQ *op) {
+    ZoneScopedN("CodeGen_C::visit(EQ)");
     visit_relop(op->type, op->a, op->b, "==", "eq");
 }
 
 void CodeGen_C::visit(const NE *op) {
+    ZoneScopedN("CodeGen_C::visit(NW)");
     visit_relop(op->type, op->a, op->b, "!=", "ne");
 }
 
 void CodeGen_C::visit(const LT *op) {
+    ZoneScopedN("CodeGen_C::visit(LT)");
     visit_relop(op->type, op->a, op->b, "<", "lt");
 }
 
 void CodeGen_C::visit(const LE *op) {
+    ZoneScopedN("CodeGen_C::visit(LE)");
     visit_relop(op->type, op->a, op->b, "<=", "le");
 }
 
 void CodeGen_C::visit(const GT *op) {
+    ZoneScopedN("CodeGen_C::visit(GT)");
     visit_relop(op->type, op->a, op->b, ">", "gt");
 }
 
 void CodeGen_C::visit(const GE *op) {
+    ZoneScopedN("CodeGen_C::visit(GE)");
     visit_relop(op->type, op->a, op->b, ">=", "ge");
 }
 
 void CodeGen_C::visit(const Or *op) {
+    ZoneScopedN("CodeGen_C::visit(Or)");
     visit_relop(op->type, op->a, op->b, "||", "logical_or");
 }
 
 void CodeGen_C::visit(const And *op) {
+    ZoneScopedN("CodeGen_C::visit(And)");
     visit_relop(op->type, op->a, op->b, "&&", "logical_and");
 }
 
 void CodeGen_C::visit(const Not *op) {
+    ZoneScopedN("CodeGen_C::visit(Not)");
     print_assignment(op->type, "!(" + print_expr(op->a) + ")");
 }
 
 void CodeGen_C::visit(const IntImm *op) {
+    ZoneScopedN("CodeGen_C::visit(IntImm)");
     if (op->type == Int(32)) {
         id = std::to_string(op->value);
     } else {
@@ -1440,6 +1538,7 @@ void CodeGen_C::visit(const IntImm *op) {
 }
 
 void CodeGen_C::visit(const UIntImm *op) {
+    ZoneScopedN("CodeGen_C::visit(UIntImm)");
     if (op->type == UInt(1)) {
         id = op->value ? "true" : "false";
     } else {
@@ -1453,12 +1552,14 @@ void CodeGen_C::visit(const UIntImm *op) {
 }
 
 void CodeGen_C::visit(const StringImm *op) {
-    ostringstream oss;
+    ZoneScopedN("CodeGen_C::visit(StringImm)");
+    std::ostringstream oss;
     oss << Expr(op);
     id = oss.str();
 }
 
 void CodeGen_C::visit(const FloatImm *op) {
+    ZoneScopedN("CodeGen_C::visit(FloatImm)");
     if (std::isnan(op->value)) {
         id = "nan_f32()";
     } else if (std::isinf(op->value)) {
@@ -1485,11 +1586,12 @@ void CodeGen_C::visit(const FloatImm *op) {
 }
 
 bool CodeGen_C::is_stack_private_to_thread() const {
+    ZoneScoped;
     return false;
 }
 
 void CodeGen_C::visit(const Call *op) {
-
+    ZoneScopedN("CodeGen_C::visit(Call)");
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
@@ -1871,6 +1973,7 @@ void CodeGen_C::visit(const Call *op) {
 }
 
 string CodeGen_C::print_scalarized_expr(const Expr &e) {
+    ZoneScoped;
     Type t = e.type();
     internal_assert(t.is_vector());
     string v = unique_name('_');
@@ -1891,6 +1994,7 @@ string CodeGen_C::print_scalarized_expr(const Expr &e) {
 }
 
 string CodeGen_C::print_extern_call(const Call *op) {
+    ZoneScoped;
     if (op->type.is_vector()) {
         // Need to split into multiple scalar calls.
         return print_scalarized_expr(op);
@@ -1912,6 +2016,7 @@ string CodeGen_C::print_extern_call(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
+    ZoneScopedN("CodeGen_C::visit(Load)");
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
     // aligned type equivalents for all the vector types.
@@ -1954,6 +2059,7 @@ void CodeGen_C::visit(const Load *op) {
 }
 
 void CodeGen_C::visit(const Store *op) {
+    ZoneScopedN("CodeGen_C::visit(Store)");
     Type t = op->value.type();
 
     if (inside_atomic_mutex_node) {
@@ -2015,6 +2121,7 @@ void CodeGen_C::visit(const Store *op) {
 }
 
 void CodeGen_C::visit(const Let *op) {
+    ZoneScopedN("CodeGen_C::visit(Let)");
     string id_value = print_expr(op->value);
     Expr body = op->body;
     if (op->value.type().is_handle() && op->name != "__user_context") {
@@ -2032,6 +2139,7 @@ void CodeGen_C::visit(const Let *op) {
 }
 
 void CodeGen_C::visit(const Select *op) {
+    ZoneScopedN("CodeGen_C::visit(Select)");
     ostringstream rhs;
     string type = print_type(op->type);
     string true_val = print_expr(op->true_value);
@@ -2053,6 +2161,7 @@ void CodeGen_C::visit(const Select *op) {
 }
 
 Expr CodeGen_C::scalarize_vector_reduce(const VectorReduce *op) {
+    ZoneScoped;
     Expr (*binop)(Expr, Expr) = nullptr;
     switch (op->op) {
     case VectorReduce::Add:
@@ -2098,6 +2207,7 @@ Expr CodeGen_C::scalarize_vector_reduce(const VectorReduce *op) {
 }
 
 void CodeGen_C::visit(const VectorReduce *op) {
+    ZoneScopedN("CodeGen_C::visit(VectorReduce)");
     stream << get_indent() << "// Vector reduce: " << op->op << "\n";
 
     Expr scalarized = scalarize_vector_reduce(op);
@@ -2109,6 +2219,7 @@ void CodeGen_C::visit(const VectorReduce *op) {
 }
 
 void CodeGen_C::visit(const LetStmt *op) {
+    ZoneScopedN("CodeGen_C::visit(LetStmt)");
     string id_value = print_expr(op->value);
     Stmt body = op->body;
 
@@ -2131,6 +2242,7 @@ void CodeGen_C::visit(const LetStmt *op) {
 // -1, so we can't use the C version of assert. Instead we convert
 // to an if statement.
 void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
+    ZoneScoped;
     internal_assert(!message.defined() || message.type() == Int(32))
         << "Assertion result is not an int: " << message;
 
@@ -2147,14 +2259,17 @@ void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
 }
 
 void CodeGen_C::create_assertion(const Expr &cond, const Expr &message) {
+    ZoneScoped;
     create_assertion(print_expr(cond), message);
 }
 
 void CodeGen_C::visit(const AssertStmt *op) {
+    ZoneScopedN("CodeGen_C::visit(AssertStmt)");
     create_assertion(op->condition, op->message);
 }
 
 void CodeGen_C::visit(const ProducerConsumer *op) {
+    ZoneScopedN("CodeGen_C::visit(ProducerConsumer)");
     stream << get_indent();
     if (op->is_producer) {
         stream << "// produce " << op->name << "\n";
@@ -2165,6 +2280,7 @@ void CodeGen_C::visit(const ProducerConsumer *op) {
 }
 
 void CodeGen_C::visit(const Fork *op) {
+    ZoneScopedN("CodeGen_C::visit(Fork)");
     // TODO: This doesn't actually work with nested tasks
     stream << get_indent() << "#pragma omp parallel\n";
     open_scope();
@@ -2184,6 +2300,7 @@ void CodeGen_C::visit(const Fork *op) {
 }
 
 void CodeGen_C::visit(const Acquire *op) {
+    ZoneScopedN("CodeGen_C::visit(Acquire)");
     string id_sem = print_expr(op->semaphore);
     string id_count = print_expr(op->count);
     open_scope();
@@ -2196,6 +2313,7 @@ void CodeGen_C::visit(const Acquire *op) {
 }
 
 void CodeGen_C::visit(const Atomic *op) {
+    ZoneScopedN("CodeGen_C::visit(Atomic)");
     if (!op->mutex_name.empty()) {
         internal_assert(!inside_atomic_mutex_node)
             << "Nested atomic mutex locks detected. This might causes a deadlock.\n";
@@ -2209,6 +2327,7 @@ void CodeGen_C::visit(const Atomic *op) {
 }
 
 void CodeGen_C::visit(const For *op) {
+    ZoneScopedN("CodeGen_C::visit(For)");
     string id_min = print_expr(op->min);
     string id_extent = print_expr(op->extent);
 
@@ -2236,6 +2355,7 @@ void CodeGen_C::visit(const For *op) {
 }
 
 void CodeGen_C::visit(const Ramp *op) {
+    ZoneScopedN("CodeGen_C::visit(Ramp)");
     Type vector_type = op->type.with_lanes(op->lanes);
     string id_base = print_expr(op->base);
     string id_stride = print_expr(op->stride);
@@ -2256,10 +2376,12 @@ void CodeGen_C::visit(const Broadcast *op) {
 }
 
 void CodeGen_C::visit(const Provide *op) {
+    ZoneScopedN("CodeGen_C::visit(Provide)");
     internal_error << "Cannot emit Provide statements as C\n";
 }
 
 void CodeGen_C::visit(const Allocate *op) {
+    ZoneScopedN("CodeGen_C::visit(Allocate)");
     open_scope();
 
     string op_name = print_name(op->name);
@@ -2404,6 +2526,7 @@ void CodeGen_C::visit(const Allocate *op) {
 }
 
 void CodeGen_C::print_heap_free(const std::string &alloc_name) {
+    ZoneScoped;
     if (heap_allocations.contains(alloc_name)) {
         stream << get_indent() << print_name(alloc_name) << "_free.free();\n";
         heap_allocations.pop(alloc_name);
@@ -2411,19 +2534,23 @@ void CodeGen_C::print_heap_free(const std::string &alloc_name) {
 }
 
 void CodeGen_C::visit(const Free *op) {
+    ZoneScopedN("CodeGen_C::visit(Free)");
     print_heap_free(op->name);
     allocations.pop(op->name);
 }
 
 void CodeGen_C::visit(const Realize *op) {
+    ZoneScopedN("CodeGen_C::visit(Realize)");
     internal_error << "Cannot emit realize statements to C\n";
 }
 
 void CodeGen_C::visit(const Prefetch *op) {
+    ZoneScopedN("CodeGen_C::visit(Prefetch)");
     internal_error << "Cannot emit prefetch statements to C\n";
 }
 
 void CodeGen_C::visit(const IfThenElse *op) {
+    ZoneScopedN("CodeGen_C::visit(IfThenElse)");
     string cond_id = print_expr(op->condition);
 
     stream << get_indent() << "if (" << cond_id << ")\n";
@@ -2440,6 +2567,7 @@ void CodeGen_C::visit(const IfThenElse *op) {
 }
 
 void CodeGen_C::visit(const Evaluate *op) {
+    ZoneScopedN("CodeGen_C::visit(Evaluate)");
     if (is_const(op->value)) {
         return;
     }
@@ -2448,6 +2576,7 @@ void CodeGen_C::visit(const Evaluate *op) {
 }
 
 void CodeGen_C::visit(const Shuffle *op) {
+    ZoneScopedN("CodeGen_C::visit(Shuffle)");
     internal_assert(!op->vectors.empty());
     for (size_t i = 1; i < op->vectors.size(); i++) {
         internal_assert(op->vectors[0].type() == op->vectors[i].type());
@@ -2506,6 +2635,7 @@ void CodeGen_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_C::test() {
+    ZoneScoped;
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3, ArgumentEstimates{});
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0, ArgumentEstimates{});
     LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0, ArgumentEstimates{});
@@ -2526,7 +2656,7 @@ void CodeGen_C::test() {
     Module m("", get_host_target());
     m.append(LoweredFunc("test1", args, s, LinkageType::External));
 
-    ostringstream source;
+    std::ostringstream source;
     {
         CodeGen_C cg(source, Target("host"), CodeGen_C::CImplementation);
         cg.compile(m);
@@ -2633,7 +2763,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
 
     compare_srcs(source.str(), correct_source);
 
-    ostringstream function_info;
+    std::ostringstream function_info;
     {
         CodeGen_C cg(function_info, Target("host-no_runtime"), CodeGen_C::CPlusPlusFunctionInfoHeader, "Function/Info/Test");
         cg.compile(m);

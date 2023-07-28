@@ -5,16 +5,45 @@
 #include "IROperator.h"
 #include "IRVisitor.h"
 
+#define TRACY_GLUE_ENABLE (0)
+#include "debug/tracy_profiler_glue.hpp"
+
 namespace Halide {
 namespace Internal {
+
+#if SLOMP_REPLACE_ISOLATED_STRINGSTREAMS
+struct ostringstream {
+    std::string stream;
+
+    template<typename T>
+    ostringstream& operator << (const T& t) {
+        stream += std::to_string(t);
+        return *this;
+    }
+    ostringstream& operator << (const char* str) {
+        stream += str;
+        return *this;
+    }
+    ostringstream& operator << (const std::string& str) {
+        stream += str;
+        return *this;
+    }
+
+    const std::string& str() { return stream; }
+};
+#else
+using std::ostringstream;
+#endif
 
 CodeGen_GPU_Dev::~CodeGen_GPU_Dev() = default;
 
 bool CodeGen_GPU_Dev::is_gpu_var(const std::string &name) {
+    ZoneScoped;
     return is_gpu_block_var(name) || is_gpu_thread_var(name);
 }
 
 bool CodeGen_GPU_Dev::is_gpu_block_var(const std::string &name) {
+    ZoneScoped;
     return (ends_with(name, ".__block_id_x") ||
             ends_with(name, ".__block_id_y") ||
             ends_with(name, ".__block_id_z") ||
@@ -22,6 +51,7 @@ bool CodeGen_GPU_Dev::is_gpu_block_var(const std::string &name) {
 }
 
 bool CodeGen_GPU_Dev::is_gpu_thread_var(const std::string &name) {
+    ZoneScoped;
     return (ends_with(name, ".__thread_id_x") ||
             ends_with(name, ".__thread_id_y") ||
             ends_with(name, ".__thread_id_z") ||
@@ -36,6 +66,7 @@ class IsBlockUniform : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Variable *op) override {
+        ZoneScopedN("CodeGen_GPU_Dev::IsBlockUniform::visit(Variable)");
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             result = false;
         }
@@ -49,6 +80,7 @@ public:
 }  // namespace
 
 bool CodeGen_GPU_Dev::is_block_uniform(const Expr &expr) {
+    ZoneScoped;
     IsBlockUniform v;
     expr.accept(&v);
     return v.result;
@@ -62,6 +94,7 @@ class IsBufferConstant : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Store *op) override {
+        ZoneScopedN("CodeGen_GPU_Dev::IsBufferConstant::visit(Store)");
         if (op->name == buffer) {
             result = false;
         }
@@ -71,6 +104,7 @@ class IsBufferConstant : public IRVisitor {
     }
 
     void visit(const Load *op) override {
+        ZoneScopedN("CodeGen_GPU_Dev::IsBufferConstant::visit(Load)");
         if (op->name == buffer &&
             !CodeGen_GPU_Dev::is_block_uniform(op->index)) {
             result = false;
@@ -86,12 +120,14 @@ public:
 
     IsBufferConstant(const std::string &b)
         : buffer(b) {
+        ZoneScoped;
     }
 };
 }  // namespace
 
 bool CodeGen_GPU_Dev::is_buffer_constant(const Stmt &kernel,
                                          const std::string &buffer) {
+    ZoneScoped;
     IsBufferConstant v(buffer);
     kernel.accept(&v);
     return v.result;
@@ -106,6 +142,7 @@ public:
 
 protected:
     Stmt visit(const Store *s) override {
+        ZoneScopedN("CodeGen_GPU_Dev::ScalarizePredicatedLoadStore::visit(Store)");
         if (!is_const_one(s->predicate)) {
             std::vector<Stmt> scalar_stmts;
             for (int ln = 0; ln < s->value.type().lanes(); ln++) {
@@ -125,6 +162,7 @@ protected:
     }
 
     Expr visit(const Load *op) override {
+        ZoneScopedN("CodeGen_GPU_Dev::ScalarizePredicatedLoadStore::visit(Load)");
         if (!is_const_one(op->predicate)) {
             std::vector<Expr> lane_values;
             for (int ln = 0; ln < op->type.lanes(); ln++) {
@@ -153,11 +191,13 @@ protected:
 }  // namespace
 
 Stmt CodeGen_GPU_Dev::scalarize_predicated_loads_stores(Stmt &s) {
+    ZoneScoped;
     ScalarizePredicatedLoadStore sps;
     return sps.mutate(s);
 }
 
 void CodeGen_GPU_C::visit(const Shuffle *op) {
+    ZoneScopedN("CodeGen_GPU_C::visit(Shuffle)");
     if (op->type.is_scalar()) {
         CodeGen_C::visit(op);
     } else {
@@ -177,7 +217,7 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
         }
 
         std::string src = vecs[0];
-        std::ostringstream rhs;
+        ostringstream rhs;
         std::string storage_name = unique_name('_');
         if (vector_declaration_style == VectorDeclarationStyle::OpenCLSyntax) {
             rhs << "(" << print_type(op->type) << ")(";
@@ -204,6 +244,7 @@ void CodeGen_GPU_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_GPU_C::visit(const Call *op) {
+    ZoneScopedN("CodeGen_GPU_C::visit(Call)");
     // In metal and opencl, "rint" is a polymorphic function that matches our
     // rounding semantics. GLSL handles it separately using "roundEven".
     if (op->is_intrinsic(Call::round)) {

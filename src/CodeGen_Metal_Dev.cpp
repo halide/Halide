@@ -8,10 +8,36 @@
 #include "Debug.h"
 #include "IROperator.h"
 
+#define TRACY_GLUE_ENABLE (0)
+#include "debug/tracy_profiler_glue.hpp"
+
 namespace Halide {
 namespace Internal {
 
+#if SLOMP_REPLACE_ISOLATED_STRINGSTREAMS
+struct ostringstream {
+    std::string stream;
+
+    template<typename T>
+    ostringstream& operator << (const T& t) {
+        stream += std::to_string(t);
+        return *this;
+    }
+    ostringstream& operator << (const char* str) {
+        stream += str;
+        return *this;
+    }
+    ostringstream& operator << (const std::string& str) {
+        stream += str;
+        return *this;
+    }
+
+    const std::string& str() { return stream; }
+};
+#else
 using std::ostringstream;
+#endif
+
 using std::sort;
 using std::string;
 using std::vector;
@@ -45,10 +71,12 @@ public:
     std::string print_gpu_name(const std::string &name) override;
 
     std::string api_unique_name() override {
+        ZoneScoped;
         return "metal";
     }
 
     bool kernel_run_takes_types() const override {
+        ZoneScoped;
         return true;
     }
 
@@ -106,9 +134,11 @@ protected:
 
 CodeGen_Metal_Dev::CodeGen_Metal_Dev(const Target &t)
     : metal_c(src_stream, t) {
+    ZoneScoped;
 }
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space) {
+    ZoneScoped;
     ostringstream oss;
 
     // Storage uses packed vector types.
@@ -168,14 +198,17 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type_maybe_storage(Type type, b
 }
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_type(Type type, AppendSpaceIfNeeded space) {
+    ZoneScoped;
     return print_type_maybe_storage(type, false, space);
 }
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_storage_type(Type type) {
+    ZoneScoped;
     return print_type_maybe_storage(type, true, DoNotAppendSpace);
 }
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, const Expr &e) {
+    ZoneScoped;
     ostringstream oss;
 
     string temp = unique_name('V');
@@ -187,6 +220,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_reinterpret(Type type, const Ex
 
 namespace {
 string simt_intrinsic(const string &name) {
+    ZoneScoped;
     if (ends_with(name, ".__thread_id_x")) {
         return "tid_in_tgroup.x";
     } else if (ends_with(name, ".__thread_id_y")) {
@@ -210,6 +244,7 @@ string simt_intrinsic(const string &name) {
 }  // namespace
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::print_extern_call(const Call *op) {
+    ZoneScoped;
     internal_assert(!function_takes_user_context(op->name)) << op->name;
     vector<string> args(op->args.size());
     for (size_t i = 0; i < op->args.size(); i++) {
@@ -221,14 +256,17 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::print_extern_call(const Call *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Max *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Max)");
     print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Min *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Min)");
     print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const VectorReduce *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(VectorReduce)");
     if (op->op == VectorReduce::Add && op->type.is_float() && (op->type.lanes() == 1)) {
         if (const Mul *maybe_mul = op->value.as<Mul>()) {
             string a = print_expr(maybe_mul->a);
@@ -243,6 +281,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const VectorReduce *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Div)");
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         ostringstream oss;
@@ -256,6 +295,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Div *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Mod)");
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         ostringstream oss;
@@ -269,6 +309,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Mod *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(For)");
     user_assert(loop->for_type != ForType::GPULane)
         << "The Metal backend does not support the gpu_lanes() scheduling directive.";
 
@@ -290,6 +331,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Ramp *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Ramp)");
     string id_base = print_expr(op->base);
     string id_stride = print_expr(op->stride);
 
@@ -305,6 +347,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Ramp *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Broadcast)");
     string id_value = print_expr(op->value);
 
     ostringstream rhs;
@@ -315,6 +358,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Broadcast *op) {
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        ZoneScopedN("CodeGen_Metal_Dev_C::visit(Call)::gpu_thread_barrier");
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
         const auto *fence_type_ptr = as_const_int(op->args[0]);
@@ -339,6 +383,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
         stream << ");\n";
         print_assignment(op->type, "0");
     } else {
+        ZoneTransientN(call_zone, ("CodeGen_Metal_Dev_C::visit(Call)::" + op->name).c_str(), true);
         CodeGen_GPU_C::visit(op);
     }
 }
@@ -347,6 +392,7 @@ namespace {
 
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
 Expr is_ramp_one(const Expr &e) {
+    ZoneScoped;
     const Ramp *r = e.as<Ramp>();
     if (r == nullptr) {
         return Expr();
@@ -361,6 +407,7 @@ Expr is_ramp_one(const Expr &e) {
 }  // namespace
 
 string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
+    ZoneScoped;
     if (buf == shared_name) {
         return "threadgroup";
     } else {
@@ -369,6 +416,7 @@ string CodeGen_Metal_Dev::CodeGen_Metal_C::get_memory_space(const string &buf) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Load)");
     user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside Metal kernel.\n";
     user_assert(op->type.lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->type << ".\n";
 
@@ -437,6 +485,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Load *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Store)");
     user_assert(is_const_one(op->predicate)) << "Predicated store is not supported inside Metal kernel.\n";
     user_assert(op->value.type().lanes() <= 4) << "Vectorization by widths greater than 4 is not supported by Metal -- type is " << op->value.type() << ".\n";
 
@@ -471,7 +520,6 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
                                   allocations.get(op->name).type == t);
 
         string id_index = print_expr(op->index);
-        string id_value = print_expr(op->value);
         stream << get_indent();
 
         if (type_cast_needed) {
@@ -492,6 +540,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Select *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Select)");
     ostringstream rhs;
     string true_val = print_expr(op->true_value);
     string false_val = print_expr(op->false_value);
@@ -505,7 +554,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Select *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
-
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Allocate)");
     if (op->memory_type == MemoryType::GPUShared) {
         // Already handled
         op->body.accept(this);
@@ -542,6 +591,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Allocate *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Free *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Free)");
     if (op->name == shared_name) {
         return;
     } else {
@@ -553,10 +603,12 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Free *op) {
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Cast *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Cast)");
     print_assignment(op->type, print_type(op->type) + "(" + print_expr(op->value) + ")");
 }
 
 void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Atomic *op) {
+    ZoneScopedN("CodeGen_Metal_Dev_C::visit(Atomic)");
     // It might be possible to support atomic but this is not trivial.
     // Metal requires atomic data types to be wrapped in an atomic integer data type.
     user_assert(false) << "Atomic updates are not supported inside Metal kernels";
@@ -565,6 +617,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Atomic *op) {
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
                                    const string &name,
                                    const vector<DeviceArgument> &args) {
+    ZoneScopedS(60);
     debug(2) << "CodeGen_Metal_Dev::compile " << name << "\n";
 
     // We need to scalarize/de-predicate any loads/stores, since Metal does not
@@ -587,9 +640,11 @@ struct BufferSize {
     BufferSize() = default;
     BufferSize(string name, size_t size)
         : name(std::move(name)), size(size) {
+        ZoneScoped;
     }
 
     bool operator<(const BufferSize &r) const {
+        ZoneScoped;
         return size < r.size;
     }
 };
@@ -598,7 +653,7 @@ struct BufferSize {
 void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
                                                     const string &name,
                                                     const vector<DeviceArgument> &args) {
-
+    ZoneScopedS(60);
     debug(2) << "Adding Metal kernel " << name << "\n";
 
     // Figure out which arguments should be passed in constant.
@@ -699,6 +754,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
     class FindShared : public IRVisitor {
         using IRVisitor::visit;
         void visit(const Allocate *op) override {
+            ZoneScopedN("CodeGen_Metal_Dev_C::FindShared::visit(Allocate)");
             if (op->memory_type == MemoryType::GPUShared) {
                 internal_assert(alloc == nullptr)
                     << "Found multiple shared allocations in metal kernel\n";
@@ -755,6 +811,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
 }
 
 void CodeGen_Metal_Dev::init_module() {
+    ZoneScoped;
     debug(2) << "Metal device codegen init_module\n";
 
     // wipe the internal kernel source
@@ -814,6 +871,7 @@ void CodeGen_Metal_Dev::init_module() {
 }
 
 vector<char> CodeGen_Metal_Dev::compile_to_src() {
+    ZoneScoped;
     string str = src_stream.str();
     debug(1) << "Metal kernel:\n"
              << str << "\n";
@@ -823,20 +881,24 @@ vector<char> CodeGen_Metal_Dev::compile_to_src() {
 }
 
 string CodeGen_Metal_Dev::get_current_kernel_name() {
+    ZoneScoped;
     return cur_kernel_name;
 }
 
 void CodeGen_Metal_Dev::dump() {
+    ZoneScoped;
     std::cerr << src_stream.str() << "\n";
 }
 
 std::string CodeGen_Metal_Dev::print_gpu_name(const std::string &name) {
+    ZoneScoped;
     return name;
 }
 
 }  // namespace
 
 std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_Metal_Dev(const Target &target) {
+    ZoneScoped;
     return std::make_unique<CodeGen_Metal_Dev>(target);
 }
 

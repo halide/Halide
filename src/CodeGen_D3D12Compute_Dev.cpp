@@ -12,15 +12,42 @@
 #include "IROperator.h"
 #include "Simplify.h"
 
+#define TRACY_GLUE_ENABLE (0)
+#define TRACY_GLUE_IMPLEMENTATION
+#include "debug/tracy_profiler_glue.hpp"
+
 #define DEBUG_TYPES (0)
 
 namespace Halide {
 namespace Internal {
 
-using std::ostringstream;
 using std::sort;
 using std::string;
 using std::vector;
+
+#if SLOMP_REPLACE_ISOLATED_STRINGSTREAMS
+struct ostringstream {
+    std::string stream;
+
+    template<typename T>
+    ostringstream& operator << (const T& t) {
+        stream += std::to_string(t);
+        return *this;
+    }
+    ostringstream& operator << (const char* str) {
+        stream += str;
+        return *this;
+    }
+    ostringstream& operator << (const std::string& str) {
+        stream += str;
+        return *this;
+    }
+
+    const std::string& str() { return stream; }
+};
+#else
+using std::ostringstream;
+#endif
 
 namespace {
 
@@ -51,10 +78,12 @@ public:
     std::string print_gpu_name(const std::string &name) override;
 
     std::string api_unique_name() override {
+        ZoneScoped;
         return "d3d12compute";
     }
 
     bool kernel_run_takes_types() const override {
+        ZoneScoped;
         return true;
     }
 
@@ -119,7 +148,9 @@ CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_Dev(const Target &t)
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space) {
-    ostringstream oss;
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::print_type_maybe_storage");
+    std::string oss;
+    oss.reserve(16);
 
     // Storage uses packed vector types.
     if (storage && type.lanes() != 1) {
@@ -135,10 +166,10 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
             // 16-bit floating point value. This data type is provided only for language compatibility.
             // Direct3D 10 shader targets map all half data types to float data types.
             // A half data type cannot be used on a uniform global variable (use the /Gec flag if this functionality is desired).
-            oss << "half";
+            oss += "half";
             break;
         case 32:
-            oss << "float";
+            oss += "float";
             break;
         case 64:
             // "64-bit floating point value. You cannot use double precision values as inputs and outputs for a stream.
@@ -146,7 +177,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
             //  Then, use the asdouble function to pack each double into the pair of uints and the asuint function to
             //  unpack the pair of uints back into the double."
             user_error << "HLSL (SM 5.1) does not have transparent support for 'double' types.\n";
-            oss << "double";
+            oss += "double";
             break;
         default:
             user_error << "Can't represent a float with this many bits in HLSL (SM 5.1): " << type << "\n";
@@ -154,15 +185,15 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
     } else {
         switch (type.bits()) {
         case 1:
-            oss << "bool";
+            oss += "bool";
             break;
         case 8:
         case 16:
         case 32:
             if (type.is_uint()) {
-                oss << "u";
+                oss += "u";
             }
-            oss << "int";
+            oss += "int";
 #if DEBUG_TYPES
             oss << type.bits();
 #endif
@@ -181,11 +212,11 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
     case 3:
     case 4:
 #if DEBUG_TYPES
-        oss << "_(";
+        oss += "_(";
 #endif
-        oss << type.lanes();
+        oss += type.lanes();
 #if DEBUG_TYPES
-        oss << ")";
+        oss += ")";
 #endif
         break;
     case 8:
@@ -197,21 +228,24 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
     }
 
     if (space == AppendSpace) {
-        oss << " ";
+        oss += " ";
     }
 
-    return oss.str();
+    return oss;
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type(Type type, AppendSpaceIfNeeded space) {
+    ZoneScoped;
     return print_type_maybe_storage(type, false, space);
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_storage_type(Type type) {
+    ZoneScoped;
     return print_type_maybe_storage(type, true, DoNotAppendSpace);
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, const Expr &e) {
+    ZoneScoped;
     if (type == e.type()) {
         return print_expr(e);
     } else {
@@ -221,6 +255,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type 
 
 namespace {
 string simt_intrinsic(const string &name) {
+    ZoneScoped;
     if (ends_with(name, ".__thread_id_x")) {
         return "tid_in_tgroup.x";
     } else if (ends_with(name, ".__thread_id_y")) {
@@ -244,6 +279,7 @@ string simt_intrinsic(const string &name) {
 }  // namespace
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Evaluate)");
     if (is_const(op->value)) {
         return;
     }
@@ -251,6 +287,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op)
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_extern_call(const Call *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::print_extern_call");
     internal_assert(!function_takes_user_context(op->name)) << op->name;
 
     vector<string> args(op->args.size());
@@ -263,14 +300,17 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_extern_call(const
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Max *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Max)");
     print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Min *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Min)");
     print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Div *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Div)");
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         ostringstream oss;
@@ -284,6 +324,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Div *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Mod *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Mod)");
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {
         ostringstream oss;
@@ -297,6 +338,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Mod *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(For)");
     user_assert(loop->for_type != ForType::GPULane)
         << "The D3D12Compute backend does not support the gpu_lanes() scheduling directive.";
 
@@ -318,6 +360,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Ramp *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Ramp)");
     ostringstream rhs;
     rhs << print_expr(op->base)
         << " + "
@@ -336,6 +379,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Ramp *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Broadcast)");
     string id_value = print_expr(op->value);
     user_assert(op->value.type().lanes() == 1) << "Broadcast source must be 1-wide.\n";
 
@@ -355,6 +399,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Call)::gpu_thread_barrier");
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
         const auto *fence_type_ptr = as_const_int(op->args[0]);
@@ -375,13 +420,16 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
         stream << get_indent() << "GroupMemoryBarrierWithGroupSync();\n";
         print_assignment(op->type, "0");
     } else if (op->name == "pow_f32" && can_prove(op->args[0] > 0)) {
+        ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Call)::pow");
         // If we know pow(x, y) is called with x > 0, we can use HLSL's pow
         // directly.
         stream << "pow(" << print_expr(op->args[0]) << ", " << print_expr(op->args[1]) << ")";
     } else if (op->is_intrinsic(Call::round)) {
+        ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Call)::round");
         // HLSL's round intrinsic has the correct semantics for our rounding.
         print_assignment(op->type, "round(" + print_expr(op->args[0]) + ")");
     } else {
+        ZoneTransientN(call_zone, ("CodeGen_D3D12Compute_Dev_C::visit(Call)::" + op->name).c_str(), true);
         CodeGen_GPU_C::visit(op);
     }
 }
@@ -390,6 +438,7 @@ namespace {
 
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
 Expr is_ramp_one(const Expr &e) {
+    ZoneScoped;
     const Ramp *r = e.as<Ramp>();
     if (r == nullptr) {
         return Expr();
@@ -404,7 +453,8 @@ Expr is_ramp_one(const Expr &e) {
 
 template<typename T>
 string hex_literal(T value) {
-    ostringstream hex;
+    ZoneScoped;
+    std::ostringstream hex;
     hex << "0x" << std::uppercase << std::setfill('0') << std::setw(8) << std::hex
         << value;
     return hex.str();
@@ -419,6 +469,7 @@ struct StoragePackUnpack {
     static const size_t ThreadGroupSharedStorageLimit = 32 * 1024;
 
     void pack_storage(const Allocate *op, size_t elements, size_t size_in_bytes) {
+        ZoneScoped;
         // we could try to compact things for smaller types:
         size_t packing_factor = 1;
         while (size_in_bytes > ThreadGroupSharedStorageLimit) {
@@ -434,6 +485,7 @@ struct StoragePackUnpack {
     }
 
     std::ostringstream pack_store(CodeGen &cg, const Store *op) {
+        ZoneScoped;
         std::ostringstream lhs;
         // NOTE(marcos): 8bit and 16bit word packing -- the smallest integer
         // type granularity available in HLSL SM 5.1 is 32bit (int/uint):
@@ -483,6 +535,7 @@ struct StoragePackUnpack {
     }
 
     std::ostringstream unpack_load(CodeGen &cg, const Load *op) {
+        ZoneScoped;
         std::ostringstream rhs;
         // NOTE(marcos): let's keep this block of code here (disabled) in case
         // we need to "emulate" byte/short packing in shared memory (recall that
@@ -541,6 +594,7 @@ struct StoragePackUnpack {
 };
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Load)");
     user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
     // elements in a threadgroup shared buffer are always 32bits:
@@ -661,6 +715,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Store)");
     user_assert(is_const_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
 
     Type value_type = op->value.type();
@@ -748,6 +803,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Select *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Select)");
     ostringstream rhs;
     string true_val = print_expr(op->true_value);
     string false_val = print_expr(op->false_value);
@@ -761,11 +817,12 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Select *op) {
 }
 
 bool is_shared_allocation(const Allocate *op) {
+    ZoneScoped;
     return op->memory_type == MemoryType::GPUShared;
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op) {
-
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Allocate)");
     if (is_shared_allocation(op)) {
         // Already handled
         internal_assert(!groupshared_allocations.contains(op->name));
@@ -804,6 +861,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Allocate *op)
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Free)");
     if (groupshared_allocations.contains(op->name)) {
         groupshared_allocations.pop(op->name);
         return;
@@ -816,17 +874,23 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type type, const string &rhs) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::print_assignment");
     string rhs_modified = print_reinforced_cast(type, rhs);
-    return CodeGen_GPU_C::print_assignment(type, rhs_modified);
+    {
+        ZoneScopedN("CodeGen_GPU_C::print_assignment");
+        return CodeGen_GPU_C::print_assignment(type, rhs_modified);
+    }
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, const string &value_expr) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::print_vanilla_cast");
     ostringstream ss;
     ss << print_type(type) << "(" << value_expr << ")";
     return ss.str();
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(Type type, const string &value_expr) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::print_reinforced_cast");
     if (type.is_float() || type.is_bool() || type.bits() == 32) {
         return value_expr;
     }
@@ -836,6 +900,15 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
     // that require propagation of the sign bit (MSB):
     // a) for signed types: shift-up then shift-down
     // b) for unsigned types: simply mask the LSB (but shift-up and down also works)
+#if 0
+    std::string sl;
+    sl.reserve(value_expr.size() + 16);
+    sl += "(" + value_expr + ") << (" + std::to_string(32 - type.bits()) + ")";
+    std::string rsr;
+    rsr.reserve(sl.size() + 8);
+    rsr += print_reinterpret_cast(type, sl) + " >> " + std::to_string(32 - type.bits());
+    return rsr;
+#endif
     ostringstream sl;
     sl << "(" << value_expr << ")"
        << " << "
@@ -844,9 +917,11 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
     rsr << print_reinterpret_cast(type, sl.str())  // 2. reinterpret bits
         << " >> " << (32 - type.bits());           // 3. shift-down to LSB
     return rsr.str();
+
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(Type type, const string &value_expr) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::print_reinterpret_cast");
     type = type.element_of();
 
     string cast_expr;
@@ -872,6 +947,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_type, Type source_type, const string &value_expr) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::print_cast");
     // casting to or from a float type? just use the language cast:
     if (target_type.is_float() || source_type.is_float()) {
         return print_vanilla_cast(target_type, value_expr);
@@ -945,9 +1021,9 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Cast)");
     Type target_type = op->type;
     Type source_type = op->value.type();
-    string value_expr = print_expr(op->value);
 
     string cast_expr = print_cast(target_type, source_type, print_expr(op->value));
 
@@ -955,11 +1031,13 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Atomic *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(Atomic)");
     // TODO: atomics
     user_assert(false) << "Atomics operations are not supported inside D3D12Compute kernel.\n";
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const FloatImm *op) {
+    ZoneScopedN("CodeGen_D3D12Compute_Dev_C::visit(FloatImm)");
     // TODO(marcos): just a pass-through for now, but we might consider doing
     // something different, such as adding the suffic 'u' to the integer that
     // gets passed to float_from_bits() to eliminate HLSL shader warnings; we
@@ -972,6 +1050,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const FloatImm *op)
 void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
                                           const string &name,
                                           const vector<DeviceArgument> &args) {
+    ZoneScopedS(60);
     debug(2) << "CodeGen_D3D12Compute_Dev::compile " << name << "\n";
 
     // We need to scalarize/de-predicate any loads/stores, since HLSL does not
@@ -994,9 +1073,11 @@ struct BufferSize {
     BufferSize() = default;
     BufferSize(string name, size_t size)
         : name(std::move(name)), size(size) {
+        ZoneScoped;
     }
 
     bool operator<(const BufferSize &r) const {
+        ZoneScoped;
         return size < r.size;
     }
 };
@@ -1005,6 +1086,7 @@ struct BufferSize {
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                                                                   const string &name,
                                                                   const vector<DeviceArgument> &args) {
+    ZoneScopedS(60);
 
     debug(2) << "Adding D3D12Compute kernel " << name << "\n";
 
@@ -1043,6 +1125,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     class FindSharedAllocationsAndUniquify : public IRMutator {
         using IRMutator::visit;
         Stmt visit(const Allocate *op) override {
+            ZoneScopedN("CodeGen_D3D12Compute_Dev_C::FindSharedAllocationsAndUniquify::visit(Allocate)");
             if (is_shared_allocation(op)) {
                 // Because these will go in global scope,
                 // we need to ensure they have unique names.
@@ -1070,6 +1153,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         }
 
         Stmt visit(const Free *op) override {
+            ZoneScopedN("CodeGen_D3D12Compute_Dev_C::FindSharedAllocationsAndUniquify::visit(Free)");
             auto it = replacements.find(op->name);
             if (it != replacements.end()) {
                 return Free::make(it->second);
@@ -1079,6 +1163,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         }
 
         Expr visit(const Load *op) override {
+            ZoneScopedN("CodeGen_D3D12Compute_Dev_C::FindSharedAllocationsAndUniquify::visit(Load)");
             auto it = replacements.find(op->name);
             if (it != replacements.end()) {
                 return Load::make(op->type, it->second,
@@ -1090,6 +1175,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
         }
 
         Stmt visit(const Store *op) override {
+            ZoneScopedN("CodeGen_D3D12Compute_Dev_C::FindSharedAllocationsAndUniquify::visit(Store)");
             auto it = replacements.find(op->name);
             if (it != replacements.end()) {
                 return Store::make(it->second, mutate(op->value),
@@ -1153,6 +1239,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     struct FindThreadGroupSize : public IRVisitor {
         using IRVisitor::visit;
         void visit(const For *loop) override {
+            ZoneScopedN("CodeGen_D3D12Compute_Dev_C::FindThreadGroupSize::visit(For)");
             if (!is_gpu_var(loop->name)) {
                 return loop->body.accept(this);
             }
@@ -1175,6 +1262,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
             loop->body.accept(this);
         }
         int thread_loop_workgroup_index(const string &name) {
+            ZoneScoped;
             string ids[] = {".__thread_id_x",
                             ".__thread_id_y",
                             ".__thread_id_z",
@@ -1245,6 +1333,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
 }
 
 void CodeGen_D3D12Compute_Dev::init_module() {
+    ZoneScoped;
     debug(2) << "D3D12Compute device codegen init_module\n";
 
     // wipe the internal kernel source
@@ -1356,6 +1445,7 @@ void CodeGen_D3D12Compute_Dev::init_module() {
 }
 
 vector<char> CodeGen_D3D12Compute_Dev::compile_to_src() {
+    ZoneScoped;
     string str = src_stream.str();
     debug(1) << "D3D12Compute kernel:\n"
              << str << "\n";
@@ -1365,20 +1455,24 @@ vector<char> CodeGen_D3D12Compute_Dev::compile_to_src() {
 }
 
 string CodeGen_D3D12Compute_Dev::get_current_kernel_name() {
+    ZoneScoped;
     return cur_kernel_name;
 }
 
 void CodeGen_D3D12Compute_Dev::dump() {
+    ZoneScoped;
     std::cerr << src_stream.str() << "\n";
 }
 
 std::string CodeGen_D3D12Compute_Dev::print_gpu_name(const std::string &name) {
+    ZoneScoped;
     return name;
 }
 
 }  // namespace
 
 std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_D3D12Compute_Dev(const Target &target) {
+    ZoneScoped;
     return std::make_unique<CodeGen_D3D12Compute_Dev>(target);
 }
 
