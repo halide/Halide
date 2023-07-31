@@ -749,7 +749,7 @@ Strides LoopNest::compute_strides(const LoadJacobian &jac,
                                   int innermost_storage_dim,
                                   const FunctionDAG::Node *storage_node,
                                   const Bound &store_bounds,
-                                  const ThreadInfo &thread_info,
+                                  const ThreadInfo *thread_info,
                                   bool verbose) const {
     internal_assert(innermost_storage_dim >= 0);
 
@@ -1028,13 +1028,13 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac,
 
 template<typename T>
 void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac,
-        const FunctionDAG::Node *node,
-        const Bound &store_bounds,
-        const ThreadInfo *thread_info,
-        int innermost_dim,
-        double num_requests_per_warp,
-        MemInfoType<T> &mem_info,
-        bool verbose) const {
+                                                  const FunctionDAG::Node *node,
+                                                  const Bound &store_bounds,
+                                                  const ThreadInfo *thread_info,
+                                                  int innermost_dim,
+                                                  double num_requests_per_warp,
+                                                  MemInfoType<T> &mem_info,
+                                                  bool verbose) const {
     int bytes_per_access = node->bytes_per_point;
 
     // If the consumer is a scalar and is compute_root, then it will not be
@@ -1086,32 +1086,32 @@ void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac,
 }
 
 template void LoopNest::compute_num_mem_accesses_per_block<GlobalMem>(const LoadJacobian &jac,
-        const FunctionDAG::Node *node,
-        const Bound &store_bounds,
-        const ThreadInfo *thread_info,
-        int innermost_dim,
-        double num_requests_per_warp,
-        MemInfoType<GlobalMem> &mem_info,
-        bool verbose) const;
+                                                                      const FunctionDAG::Node *node,
+                                                                      const Bound &store_bounds,
+                                                                      const ThreadInfo *thread_info,
+                                                                      int innermost_dim,
+                                                                      double num_requests_per_warp,
+                                                                      MemInfoType<GlobalMem> &mem_info,
+                                                                      bool verbose) const;
 
 template void LoopNest::compute_num_mem_accesses_per_block<SharedMem>(const LoadJacobian &jac,
-        const FunctionDAG::Node *node,
-        const Bound &store_bounds,
-        const ThreadInfo *thread_info,
-        int innermost_dim,
-        double num_requests_per_warp,
-        MemInfoType<SharedMem> &mem_info,
-        bool verbose) const;
+                                                                      const FunctionDAG::Node *node,
+                                                                      const Bound &store_bounds,
+                                                                      const ThreadInfo *thread_info,
+                                                                      int innermost_dim,
+                                                                      double num_requests_per_warp,
+                                                                      MemInfoType<SharedMem> &mem_info,
+                                                                      bool verbose) const;
 
 template<>
 void LoopNest::compute_num_mem_accesses_per_block<LocalMem>(const LoadJacobian &jac,
-        const FunctionDAG::Node *node,
-        const Bound &store_bounds,
-        const ThreadInfo *thread_info,
-        int innermost_dim,
-        double num_requests_per_warp,
-        MemInfoType<LocalMem> &mem_info,
-        bool verbose) const {
+                                                            const FunctionDAG::Node *node,
+                                                            const Bound &store_bounds,
+                                                            const ThreadInfo *thread_info,
+                                                            int innermost_dim,
+                                                            double num_requests_per_warp,
+                                                            MemInfoType<LocalMem> &mem_info,
+                                                            bool verbose) const {
     int bytes_per_access = node->bytes_per_point;
 
     // If the consumer is a scalar and is compute_root, then it will not be
@@ -1177,12 +1177,12 @@ LoopNest::compute_local_mem_store_features(const LoadJacobian &jac,
 
 template<typename T>
 MemInfoType<T> LoopNest::compute_mem_store_info(const LoadJacobian &jac,
-        int consumer_innermost_dim,
-        const FunctionDAG::Node *node,
-        const Bound &consumer_store_bounds,
-        const ThreadInfo *thread_info,
-        double serial_loop_extents,
-        bool verbose) const {
+                                                int consumer_innermost_dim,
+                                                const FunctionDAG::Node *node,
+                                                const Bound &consumer_store_bounds,
+                                                const ThreadInfo *thread_info,
+                                                double serial_loop_extents,
+                                                bool verbose) const {
     MemInfoType<T> mem_info;
 
     compute_num_mem_accesses_per_block<T>(jac,
@@ -1196,31 +1196,31 @@ MemInfoType<T> LoopNest::compute_mem_store_info(const LoadJacobian &jac,
 }
 
 template MemInfoType<GlobalMem> LoopNest::compute_mem_store_info<GlobalMem>(const LoadJacobian &jac,
-        int consumer_innermost_dim,
-        const FunctionDAG::Node *node,
-        const Bound &consumer_store_bounds,
-        const ThreadInfo *thread_info,
-        double serial_loop_extents,
-        bool verbose) const;
+                                                                            int consumer_innermost_dim,
+                                                                            const FunctionDAG::Node *node,
+                                                                            const Bound &consumer_store_bounds,
+                                                                            const ThreadInfo *thread_info,
+                                                                            double serial_loop_extents,
+                                                                            bool verbose) const;
 
 template MemInfoType<SharedMem> LoopNest::compute_mem_store_info<SharedMem>(const LoadJacobian &jac,
-        int consumer_innermost_dim,
-        const FunctionDAG::Node *node,
-        const Bound &consumer_store_bounds,
-        const ThreadInfo *thread_info,
-        double serial_loop_extents,
-        bool verbose) const;
+                                                                            int consumer_innermost_dim,
+                                                                            const FunctionDAG::Node *node,
+                                                                            const Bound &consumer_store_bounds,
+                                                                            const ThreadInfo *thread_info,
+                                                                            double serial_loop_extents,
+                                                                            bool verbose) const;
 
 template<typename T>
 void LoopNest::compute_mem_load_features(const LoadJacobian &jac,
-        int producer_innermost_dim,
-        const FunctionDAG::Node *node,
-        const Bound &producer_store_bounds,
-        bool producer_has_been_scheduled,
-        const ThreadInfo *thread_info,
-        MemInfoType<T> &mem_info,
-        double points_accessed_per_thread,
-        bool verbose) const {
+                                         int producer_innermost_dim,
+                                         const FunctionDAG::Node *node,
+                                         const Bound &producer_store_bounds,
+                                         bool producer_has_been_scheduled,
+                                         const ThreadInfo *thread_info,
+                                         MemInfoType<T> &mem_info,
+                                         double points_accessed_per_thread,
+                                         bool verbose) const {
     if (producer_has_been_scheduled) {
         compute_num_mem_accesses_per_block<T>(jac,
                                               node,
@@ -2528,29 +2528,27 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                          << "; producer: " << producer_name << "\n";
                             }
 
-                            int64_t points_accessed = points_accessed_per_thread(
-                                params,
-                                target,
-                                gpu_loop_info,
-                                edge_chain,
-                                jac.first,
-                                parent,
-                                grandparent,
-                                n,
-                                feat,
-                                serial_jac.first,
-                                producer_has_been_scheduled,
-                                gpu_loop_info.thread_info,
-                                shared_mem_loads,
-                                points_accessed,
-                                verbose);
+                            int64_t points_accessed = points_accessed_per_thread(params,
+                                                                                 target,
+                                                                                 gpu_loop_info,
+                                                                                 edge_chain,
+                                                                                 jac.first,
+                                                                                 parent,
+                                                                                 grandparent,
+                                                                                 n,
+                                                                                 feat,
+                                                                                 serial_jac.first,
+                                                                                 producer_has_been_scheduled,
+                                                                                 producer_innermost_dim,
+                                                                                 GPUMemoryType::Shared,
+                                                                                 verbose);
 
                             compute_mem_load_features<SharedMem>(jac.first,
                                                                  producer_innermost_dim,
                                                                  e->producer,
                                                                  producer_store_bounds,
                                                                  producer_has_been_scheduled,
-                                                                 *gpu_loop_info.thread_info,
+                                                                 gpu_loop_info.thread_info,
                                                                  shared_mem_loads,
                                                                  points_accessed,
                                                                  verbose);
@@ -2575,29 +2573,27 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                          << stage->index << "; producer: " << producer_name << "\n";
                             }
 
-                            int64_t points_accessed = points_accessed_per_thread(
-                                params,
-                                target,
-                                gpu_loop_info,
-                                edge_chain,
-                                jac.first,
-                                parent,
-                                grandparent,
-                                n,
-                                feat,
-                                serial_jac.first,
-                                producer_has_been_scheduled,
-                                gpu_loop_info.thread_info,
-                                global_mem_loads,
-                                points_accessed,
-                                verbose);
+                            int64_t points_accessed = points_accessed_per_thread(params,
+                                                                                 target,
+                                                                                 gpu_loop_info,
+                                                                                 edge_chain,
+                                                                                 jac.first,
+                                                                                 parent,
+                                                                                 grandparent,
+                                                                                 n,
+                                                                                 feat,
+                                                                                 serial_jac.first,
+                                                                                 producer_has_been_scheduled,
+                                                                                 producer_innermost_dim,
+                                                                                 GPUMemoryType::Global,
+                                                                                 verbose);
 
                             compute_mem_load_features<GlobalMem>(jac.first,
                                                                  producer_innermost_dim,
                                                                  e->producer,
                                                                  producer_store_bounds,
                                                                  producer_has_been_scheduled,
-                                                                 *gpu_loop_info.thread_info,
+                                                                 gpu_loop_info.thread_info,
                                                                  global_mem_loads,
                                                                  points_accessed,
                                                                  verbose);
@@ -2966,9 +2962,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
             intermediate.innermost_pure_loop_extent = feat.innermost_pure_loop_extent;
             intermediate.outer_parallelism = parallelism;
-            intermediate.num_warps_per_block = num_warps;
+            intermediate.num_warps_per_block = num_warps_per_block;
 
-            intermediate.num_threads_per_block = gpu_loop_info.thread_info->num_threads;
+            intermediate.num_threads_per_block = num_threads_per_block;
             intermediate.points_computed_per_thread = points_computed_per_thread;
         }
     }

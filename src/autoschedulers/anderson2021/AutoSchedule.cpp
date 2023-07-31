@@ -592,8 +592,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     // Construct a cost model to use to evaluate states. Currently we
     // just have the one, but it's an abstract interface, so others
     // can be slotted in for experimentation.
-    std::unique_ptr<CostModel> cost_model =
-        make_default_cost_model(stats, weights_in_path, weights_out_path, randomize_weights);
+    std::unique_ptr<CostModel> cost_model = make_default_cost_model(stats, weights_in_path, weights_out_path, randomize_weights);
     internal_assert(cost_model != nullptr);
 
     IntrusivePtr<State> optimal;
@@ -610,16 +609,15 @@ void generate_schedule(const std::vector<Function> &outputs,
     std::mt19937 rng{(uint32_t)params.random_dropout_seed};
     SearchSpace search_space{dag, params, target, rng, cost_model.get(), stats, partial_schedule.get()};
 
-    AutoSchedule autoschedule{
-        dag,
-        params,
-        target,
-        outputs,
-        rng,
-        cost_model.get(),
-        stats,
-        search_space,
-        partial_schedule.get()};
+    AutoSchedule autoschedule{dag,
+                              params,
+                              target,
+                              outputs,
+                              rng,
+                              cost_model.get(),
+                              stats,
+                              search_space,
+                              partial_schedule.get()};
 
     // Run beam search
     optimal = autoschedule.optimal_schedule(params.beam_size);
@@ -737,16 +735,15 @@ void find_and_apply_schedule(FunctionDAG &dag,
     }
 
     SearchSpace search_space{dag, params, target, rng, cost_model, stats, partial_schedule.get()};
-    AutoSchedule autoschedule{
-        dag,
-        params,
-        target,
-        outputs,
-        rng,
-        cost_model,
-        stats,
-        search_space,
-        partial_schedule.get()};
+    AutoSchedule autoschedule{dag,
+                              params,
+                              target,
+                              outputs,
+                              rng,
+                              cost_model,
+                              stats,
+                              search_space,
+                              partial_schedule.get()};
 
     IntrusivePtr<State> optimal = autoschedule.optimal_schedule(beam_size);
 

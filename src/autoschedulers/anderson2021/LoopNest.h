@@ -424,7 +424,7 @@ struct LoopNest {
                                        bool producer_has_been_scheduled,
                                        int producer_innermost_dim,
                                        const GPUMemoryType &mem_type,
-                                       bool verbose = false) const;
+                                       bool verbose) const;
 
     int64_t compute_licm_amortization(const LoopNest *innermost,
                                       const LoopNest *parent,
