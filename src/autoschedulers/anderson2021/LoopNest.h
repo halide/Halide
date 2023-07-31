@@ -300,7 +300,7 @@ struct LoopNest {
                             int innermost_storage_dim,
                             const FunctionDAG::Node *storage_node,
                             const Bound &store_bounds,
-                            const ThreadInfo &thread_info,
+                            const ThreadInfo *thread_info,
                             bool verbose = false) const;
 
     bool all_strides_exist(const LoadJacobian &jac,
@@ -350,7 +350,7 @@ struct LoopNest {
     void compute_num_mem_accesses_per_block(const LoadJacobian &jac,
                                             const FunctionDAG::Node *node,
                                             const Bound &store_bounds,
-                                            const ThreadInfo &thread_info,
+                                            const ThreadInfo *thread_info,
                                             int innermost_dim,
                                             double num_requests_per_warp,
                                             MemInfoType<T> &mem_info,
@@ -368,7 +368,7 @@ struct LoopNest {
                                           int consumer_innermost_dim,
                                           const FunctionDAG::Node *node,
                                           const Bound &consumer_store_bounds,
-                                          const ThreadInfo &thread_info,
+                                          const ThreadInfo *thread_info,
                                           double serial_loop_extents,
                                           bool verbose) const;
 
@@ -378,7 +378,7 @@ struct LoopNest {
                                    const FunctionDAG::Node *node,
                                    const Bound &producer_store_bounds,
                                    bool producer_has_been_scheduled,
-                                   const ThreadInfo &thread_info,
+                                   const ThreadInfo *thread_info,
                                    MemInfoType<T> &mem_info,
                                    double serial_loop_extents,
                                    bool verbose = false) const;

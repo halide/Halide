@@ -521,6 +521,7 @@ bool State::compute_featurization(const FunctionDAG &dag,
     }
 
     Timer timer;
+    feature_root->dump();
     feature_root->compute_features(dag,
                                    params,
                                    target,
