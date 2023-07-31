@@ -1715,7 +1715,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 bool verbose) const {
 
     gpu_loop_info.update(target, this);
-    // std::shared_ptr<const ThreadInfo> thread_info;
 
     if (is_gpu_thread(target)) {
         (void)gpu_loop_info.create_thread_info();
@@ -1844,11 +1843,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 ++stats.num_memoization_misses;
             }
 
-            c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent,
-                                root, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes,
-                                &working_set_here, &working_set_here_local_constant,
-                                &working_set_here_local_dynamic, features, stats, verbose);
-
+            c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, stats, verbose);
             if (use_memoized_features) {
                 c->features[hash_of_producers].make_large(dag.nodes[0].stages[0].max_id);
                 c->memoize_features(c->features[hash_of_producers], features);
