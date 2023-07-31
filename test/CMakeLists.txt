@@ -94,8 +94,12 @@ else ()
     message(VERBOSE "Compiler supports libfuzzer sanitizer.")
 endif ()
 
+# Note that we want to default WITH_TEST_FUZZ to OFF, even if HAS_FUZZ_FLAGS
+# is true: just because our compiler supports fuzzing doesn't mean we want to
+# build the fuzz tests, because they won't really build properly without the
+# right preset specified.
 cmake_dependent_option(
-    WITH_TEST_FUZZ "Build fuzz tests" ON
+    WITH_TEST_FUZZ "Build fuzz tests" OFF
     HAS_FUZZ_FLAGS OFF
 )
 
