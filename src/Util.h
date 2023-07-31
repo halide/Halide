@@ -152,6 +152,13 @@ std::string get_env_variable(char const *env_var_name);
  * If program name cannot be retrieved, function returns an empty string. */
 std::string running_program_name();
 
+// We use 64K of memory to store unique counters for the purpose of
+// making names unique. Using less memory increases the likelihood of
+// hash collisions. This wouldn't break anything, but makes stmts
+// slightly confusing to read because names that are actually unique
+// will get suffixes that falsely hint that they are not.
+constexpr int num_unique_name_counters = (1 << 14);
+
 /** Generate a unique name starting with the given prefix. It's unique
  * relative to all other strings returned by unique_name in this
  * process.

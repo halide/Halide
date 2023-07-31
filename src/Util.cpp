@@ -5,6 +5,8 @@
 #endif
 
 #include "Util.h"
+
+#include "CompilerGlobals.h"
 #include "Debug.h"
 #include "Error.h"
 #include "Introspection.h"
@@ -158,23 +160,9 @@ string running_program_name() {
 }
 
 namespace {
-// We use 64K of memory to store unique counters for the purpose of
-// making names unique. Using less memory increases the likelihood of
-// hash collisions. This wouldn't break anything, but makes stmts
-// slightly confusing to read because names that are actually unique
-// will get suffixes that falsely hint that they are not.
-
-const int num_unique_name_counters = (1 << 14);
-
-// We want to init these to zero, but cannot use = {0} because that
-// would invoke a (deleted) copy ctor. The default initialization for
-// atomics doesn't guarantee any actual initialization. Fortunately
-// this is a global, which is always zero-initialized.
-std::atomic<int> unique_name_counters[num_unique_name_counters] = {};
-
 int unique_count(size_t h) {
     h = h & (num_unique_name_counters - 1);
-    return unique_name_counters[h]++;
+    return globals().unique_name_counters[h]++;
 }
 }  // namespace
 

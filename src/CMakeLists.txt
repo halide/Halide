@@ -41,6 +41,8 @@ set(HEADER_FILES
     CodeGen_Targets.h
     CodeGen_Vulkan_Dev.h
     CodeGen_WebGPU_Dev.h
+    # No: we don't want this in Halide.h
+    # CompilerGlobals.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -211,6 +213,7 @@ set(SOURCE_FILES
     CodeGen_WebAssembly.cpp
     CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
+    CompilerGlobals.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
     CSE.cpp

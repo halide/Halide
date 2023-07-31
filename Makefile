@@ -490,6 +490,7 @@ SOURCE_FILES = \
   CodeGen_WebGPU_Dev.cpp \
   CodeGen_X86.cpp \
   CompilerLogger.cpp \
+  CompilerGlobals.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
   Debug.cpp \
@@ -640,6 +641,9 @@ HTML_TEMPLATE_FILES = \
 # Don't include anything here that includes llvm headers.
 # Also *don't* include anything that's only used internally (eg SpirvIR.h).
 # Keep this list sorted in alphabetical order.
+#
+# Note that CompilerGlobals.h is deliberately omitted, as we don't
+# want it in Halide.h.
 HEADER_FILES = \
   AbstractGenerator.h \
   AddAtomicMutex.h \

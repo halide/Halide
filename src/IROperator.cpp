@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "CSE.h"
+#include "CompilerGlobals.h"
 #include "Debug.h"
 #include "Func.h"
 #include "IREquality.h"
@@ -2595,8 +2596,7 @@ Expr mod_round_to_zero(Expr x, Expr y) {
 
 Expr random_float(Expr seed) {
     // Random floats get even IDs
-    static std::atomic<int> counter{0};
-    int id = (counter++) * 2;
+    int id = (globals().random_float_counter++) * 2;
 
     std::vector<Expr> args;
     if (seed.defined()) {
@@ -2615,8 +2615,7 @@ Expr random_float(Expr seed) {
 
 Expr random_uint(Expr seed) {
     // Random ints get odd IDs
-    static std::atomic<int> counter{0};
-    int id = (counter++) * 2 + 1;
+    int id = (globals().random_uint_counter++) * 2 + 1;
 
     std::vector<Expr> args;
     if (seed.defined()) {
@@ -2632,7 +2631,7 @@ Expr random_uint(Expr seed) {
 }
 
 Expr random_int(Expr seed) {
-    return cast<int32_t>(random_uint(std::move(seed)));
+    return reinterpret<int32_t>(random_uint(std::move(seed)));
 }
 
 Expr likely(Expr e) {

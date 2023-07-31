@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "CSE.h"
+#include "CompilerGlobals.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
@@ -299,9 +300,6 @@ public:
     }
 };
 
-// A counter to use in tagging random variables
-std::atomic<int> rand_counter{0};
-
 }  // namespace
 
 Function::Function(const FunctionPtr &ptr)
@@ -542,7 +540,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     // Tag calls to random() with the free vars
-    int tag = rand_counter++;
+    int tag = globals().random_variable_counter++;
     vector<VarOrRVar> free_vars;
     free_vars.reserve(args.size());
     for (const auto &arg : args) {
@@ -752,7 +750,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             free_vars.emplace_back(RVar(check.reduction_domain, i));
         }
     }
-    int tag = rand_counter++;
+    int tag = globals().random_variable_counter++;
     for (auto &arg : args) {
         arg = lower_random(arg, free_vars, tag);
     }
