@@ -72,7 +72,7 @@ std::vector<std::vector<int64_t>> generate_serial_tilings(const std::vector<int6
                     continue;
                 }
                 t.back() = outer;
-                if (d == last_d && ((!allow_inner_ones && equal_to_existing_size(s, t)) || (all_ones(t) && !all_ones(s)))) {
+                if (d == last_d && ((!allow_inner_ones && equal_to_existing_size(s, t)) || all_ones(t))) {
                     continue;
                 }
                 result.push_back(t);
