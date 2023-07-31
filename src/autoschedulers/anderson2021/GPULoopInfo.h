@@ -43,10 +43,12 @@ struct GPULoopInfo {
     std::vector<int64_t> get_inner_serial_loop_extents(const LoopNest *loop_nest) const;
 
     // assert-fails if create_thread_info() has *already* been called.
-    const ThreadInfo &create_thread_info();
+    const ThreadInfo *create_thread_info();
 
-    // assert-fails if create_thread_info() has not been called yet.
-    const ThreadInfo &get_thread_info() const;
+    // Note: if create_thread_info() has not been called yet, this will return nullptr.
+    const ThreadInfo *get_thread_info() const {
+        return thread_info.get();
+    }
 
     int64_t get_total_inner_serial_extents_outside_realization(const LoopNest *loop_nest) const;
 
