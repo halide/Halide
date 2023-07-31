@@ -62,6 +62,8 @@ void deep_copy_loop_nest(LoopNest *new_loop_nest,
     post_create_mutator(new_loop_nest);
 }
 
+using LoopNestMap = map<const LoopNest *, pair<const LoopNest *, int>>;
+
 template<typename PostCreateMutator>
 LoopNest *deep_copy_loop_nest(const IntrusivePtr<const LoopNest> &loop_nest,
                               const PostCreateMutator &post_create_mutator) {
@@ -90,13 +92,11 @@ struct State {
     uint64_t structural_hash(int depth) const;
 
     // Compute the parent and depth of every loop nest node
-    void compute_loop_nest_parents(map<const LoopNest *,
-                                       pair<const LoopNest *,
-                                            int>> &p,
+    void compute_loop_nest_parents(LoopNestMap &p,
                                    const LoopNest *here,
                                    int depth) const;
 
-    const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
+    const LoopNest *deepest_common_ancestor(const LoopNestMap &parent,
                                             const LoopNest *a,
                                             const LoopNest *b) const;
 
@@ -133,8 +133,7 @@ struct State {
     IntrusivePtr<const LoopNest> get_root_for_features(const Anderson2021Params &params,
                                                        const Target &target) const;
 
-    void set_gpu_store_site(const map<const LoopNest *,
-                                      pair<const LoopNest *, int>> &parent,
+    void set_gpu_store_site(const LoopNestMap &parent,
                             const LoopNest *loop,
                             LoopNest::Sites &site) const;
 
@@ -218,12 +217,12 @@ struct State {
     void update_always_consider_inline_options(const FunctionDAG::Node *node);
 
     const LoopNest *deepest_valid_compute_location(const Anderson2021Params &params,
-                                                   const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
+                                                   const LoopNestMap &parent,
                                                    const FunctionDAG::Node &node,
                                                    const LoopNest *loop,
                                                    const LoopNest *root,
                                                    StageMap<int64_t> &total_shared_mem_alloc_sizes) const;
-    int64_t total_loop_extents_of_ancestors(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
+    int64_t total_loop_extents_of_ancestors(const LoopNestMap &parent,
                                             const LoopNest *loop) const;
 };
 

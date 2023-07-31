@@ -19,7 +19,7 @@ uint64_t State::structural_hash(int depth) const {
 }
 
 // Compute the parent and depth of every loop nest node
-void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &p,
+void State::compute_loop_nest_parents(LoopNestMap &p,
                                       const LoopNest *here,
                                       int depth) const {
     for (const auto &c : here->children) {
@@ -29,7 +29,7 @@ void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest 
 }
 
 const LoopNest *State::deepest_valid_compute_location(const Anderson2021Params &params,
-                                                      const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
+                                                      const LoopNestMap &parent,
                                                       const FunctionDAG::Node &node,
                                                       const LoopNest *loop,
                                                       const LoopNest *root,
@@ -108,7 +108,7 @@ const LoopNest *State::deepest_valid_compute_location(const Anderson2021Params &
     return candidate;
 }
 
-int64_t State::total_loop_extents_of_ancestors(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
+int64_t State::total_loop_extents_of_ancestors(const LoopNestMap &parent,
                                                const LoopNest *loop) const {
     int64_t total = 1;
 
@@ -132,7 +132,7 @@ int64_t State::total_loop_extents_of_ancestors(const map<const LoopNest *, pair<
     return total;
 }
 
-const LoopNest *State::deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
+const LoopNest *State::deepest_common_ancestor(const LoopNestMap &parent,
                                                const LoopNest *a,
                                                const LoopNest *b) const {
     if (a->is_root()) {
@@ -372,7 +372,7 @@ IntrusivePtr<const LoopNest> State::get_root_for_features(const Anderson2021Para
     return new_root;
 }
 
-void State::set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
+void State::set_gpu_store_site(const LoopNestMap &parent,
                                const LoopNest *loop,
                                LoopNest::Sites &site) const {
     // If site.store is inside a block but outside a loop, the
@@ -444,7 +444,7 @@ bool State::compute_featurization(const FunctionDAG &dag,
     // For the unscheduled nodes, give them sites as deep as they
     // could possibly be. We'll ignore the possibility of inlining
     // them for now.
-    map<const LoopNest *, pair<const LoopNest *, int>> parent;
+    LoopNestMap parent;
     compute_loop_nest_parents(parent, feature_root.get(), 0);
     for (const auto &n : dag.nodes) {
         if (sites.contains(&(n.stages[0]))) {
