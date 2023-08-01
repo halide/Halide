@@ -33,10 +33,16 @@ struct Globals {
     void reset();
 
     Globals();
-    Globals(const Globals &copy) = delete;
-    Globals &operator=(const Globals &) = delete;
     Globals(Globals &&) = delete;
     Globals &operator=(Globals &&) = delete;
+
+private:
+    // std::atomic<> is neither copyable nor movable,
+    // so we must manually implement these.
+    Globals(const Globals &copy);
+    Globals &operator=(const Globals &);
+
+    void copy_from(const Globals &that);
 };
 
 Globals &globals();
