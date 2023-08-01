@@ -4028,7 +4028,6 @@ void LoopNest::update_producers_to_be_staged(StageScheduleState &state, const No
 
 double LoopNest::max_idle_lane_wastage(const Target &target, GPULoopInfo gpu_loop_info) const {
     gpu_loop_info.update(target, this);
-    std::unique_ptr<ThreadInfo> thread_info;
 
     if (is_gpu_thread(target)) {
         const ThreadInfo *thread_info = gpu_loop_info.create_thread_info();

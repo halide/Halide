@@ -46,8 +46,8 @@ struct GPULoopInfo {
     const ThreadInfo *create_thread_info();
 
     // Note: if create_thread_info() has not been called yet, this will return nullptr.
-    // TODO: should this just assert-fail if thread_info is null? I don't know if
-    // downstream code might legitimately check for null to mean "no thread_info exists".
+    // (Note that this is an unusual but legitimate situation, so it should *not*
+    // assert-fail if the value is null.)
     const ThreadInfo *get_thread_info() const {
         return thread_info.get();
     }
