@@ -5,7 +5,8 @@
 namespace Halide {
 namespace Internal {
 
-Globals &globals() {
+/* static */
+Globals &Globals::globals() {
     static Globals g;
     return g;
 }

@@ -35,6 +35,8 @@ struct Globals {
     Globals(Globals &&) = delete;
     Globals &operator=(Globals &&) = delete;
 
+    static Globals &globals();
+
 private:
     Globals();
 
@@ -46,7 +48,9 @@ private:
     void copy_from(const Globals &that);
 };
 
-Globals &globals();
+inline Globals &globals() {
+    return Globals::globals();
+}
 
 }  // namespace Internal
 }  // namespace Halide
