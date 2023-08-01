@@ -22,7 +22,8 @@ function(add_anderson2021_test NAME)
     endif()
     list(APPEND ARGS_LABELS anderson2021)
     list(APPEND ARGS_LABELS autoschedulers_cuda)
-    list(APPEND ARGS_LABELS auto_schedule)
+    # No: anderson2021 didn't have this label before, and it's going away soon, don't add it now
+    # list(APPEND ARGS_LABELS auto_schedule)
 
     add_test(NAME ${NAME}
              COMMAND ${ARGS_COMMAND})

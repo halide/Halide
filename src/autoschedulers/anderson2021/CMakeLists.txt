@@ -84,7 +84,7 @@ if (WITH_TESTS)
                              # This is a workaround for issues with the nvidia driver under ASAN
                              # https://forums.developer.nvidia.com/t/cuda-runtime-library-and-addresssanitizer-incompatibilty/63145
                              ENVIRONMENT ASAN_OPTIONS=protect_shadow_gap=0
-                             LABELS Anderson2021)
+                             LABELS "anderson2021;autoschedulers_cuda")
     endfunction()
 
     add_executable(anderson2021_test_function_dag test_function_dag.cpp FunctionDAG.cpp)
