@@ -11,7 +11,6 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::ostringstream;
 using std::string;
 using std::vector;
 
@@ -124,7 +123,7 @@ class AddDummyRealizations : public IRMutator {
         Stmt s = IRMutator::visit(op);
         for (const Function &out : outputs) {
             if (op->name == out.name()) {
-                std::vector<Range> output_bounds;
+                vector<Range> output_bounds;
                 for (int i = 0; i < out.dimensions(); i++) {
                     string dim = std::to_string(i);
                     Expr min = Variable::make(Int(32), out.name() + ".min." + dim);
