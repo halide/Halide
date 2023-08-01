@@ -1267,7 +1267,7 @@ void LoopNest::compute_warp_and_block_occupancy(const Anderson2021Params &params
     auto active_block_hardware_limit = get_active_block_hardware_limit(params);
     auto active_warp_hardware_limit = get_active_warp_hardware_limit(params);
 
-    auto *thread_info = gpu_loop_info.get_thread_info();
+    const ThreadInfo *thread_info = gpu_loop_info.get_thread_info();
     internal_assert(thread_info != nullptr);
     int64_t num_warps_per_block = thread_info->num_warps_per_block;
 
