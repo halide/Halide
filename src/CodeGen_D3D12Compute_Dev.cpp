@@ -947,7 +947,6 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_cast(Type target_
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Cast *op) {
     Type target_type = op->type;
     Type source_type = op->value.type();
-    string value_expr = print_expr(op->value);
 
     string cast_expr = print_cast(target_type, source_type, print_expr(op->value));
 
