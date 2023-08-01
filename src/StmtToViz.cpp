@@ -2145,7 +2145,7 @@ private:
  */
 class HTMLVisualizationPrinter : public IRVisitor {
 public:
-    HTMLVisualizationPrinter(std::ofstream &os, std::map<const IRNode *, int> &nids)
+    HTMLVisualizationPrinter(halide_stream &os, std::map<const IRNode *, int> &nids)
         : stream(os), node_ids(nids) {
     }
 
@@ -2166,7 +2166,7 @@ public:
 
 private:
     // Handle to output file stream
-    std::ofstream &stream;
+    halide_stream &stream;
 
     // Used to track the context within generated HTML
     std::vector<std::string> context_stack_tags;
@@ -2377,8 +2377,8 @@ private:
             return "Else";
         }
 
-        std::ostringstream ss;
-        HTMLCodePrinter<std::ostringstream> printer(ss, node_ids);
+        halide_stream ss;
+        HTMLCodePrinter<halide_stream> printer(ss, node_ids);
         e.accept(&printer);
         std::string html_e = ss.str();
 
@@ -2741,9 +2741,9 @@ public:
     explicit IRVisualizer(const std::string &html_output_filename,
                           const Module &m,
                           const std::string &assembly_input_filename)
-        : html_code_printer(stream, node_ids), html_viz_printer(stream, node_ids) {
+        : stream(outfile), html_code_printer(stream, node_ids), html_viz_printer(stream, node_ids) {
         // Open output file
-        stream.open(html_output_filename.c_str());
+        outfile.open(html_output_filename.c_str());
 
         // Load assembly code -- if not explicit specified, assume it will have matching pathname
         // as our output file, with a different extension.
@@ -2789,7 +2789,8 @@ public:
 
 private:
     // Handle to output file stream
-    std::ofstream stream;
+    std::ofstream outfile;
+    halide_stream stream;
 
     // Handle to assembly file stream
     std::ifstream assembly;
@@ -2801,7 +2802,7 @@ private:
     std::map<const IRNode *, int> node_ids;
 
     // Used to translate IR to code in HTML
-    HTMLCodePrinter<std::ofstream> html_code_printer;
+    HTMLCodePrinter<halide_stream> html_code_printer;
 
     // Used to translate IR to visualization in HTML
     HTMLVisualizationPrinter html_viz_printer;

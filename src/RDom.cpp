@@ -251,13 +251,13 @@ void RDom::where(Expr predicate) {
 }
 
 /** Emit an RVar in a human-readable form */
-std::ostream &operator<<(std::ostream &stream, const RVar &v) {
+halide_stream &operator<<(halide_stream &stream, const RVar &v) {
     stream << v.name() << "(" << v.min() << ", " << v.extent() << ")";
     return stream;
 }
 
 /** Emit an RDom in a human-readable form. */
-std::ostream &operator<<(std::ostream &stream, const RDom &dom) {
+halide_stream &operator<<(halide_stream &stream, const RDom &dom) {
     stream << "RDom(\n";
     for (int i = 0; i < dom.dimensions(); i++) {
         stream << "  " << dom[i] << "\n";

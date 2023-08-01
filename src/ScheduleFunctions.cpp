@@ -1953,7 +1953,7 @@ class PrintUsesOfFunc : public IRVisitor {
     int indent = 1;
     string func, caller;
     bool last_print_was_ellipsis = false;
-    std::ostream &stream;
+    halide_stream stream;
 
     Indentation get_indent() const {
         return Indentation{indent};

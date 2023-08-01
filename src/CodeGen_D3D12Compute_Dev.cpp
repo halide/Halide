@@ -13,7 +13,6 @@
 #include "Simplify.h"
 
 #define TRACY_GLUE_ENABLE (0)
-#define TRACY_GLUE_IMPLEMENTATION
 #include "debug/tracy_profiler_glue.hpp"
 
 #define DEBUG_TYPES (0)
@@ -26,32 +25,16 @@ using std::string;
 using std::vector;
 
 #if SLOMP_REPLACE_ISOLATED_STRINGSTREAMS
-struct ostringstream {
-    std::string stream;
-
-    template<typename T>
-    ostringstream& operator << (const T& t) {
-        stream += std::to_string(t);
-        return *this;
-    }
-    ostringstream& operator << (const char* str) {
-        stream += str;
-        return *this;
-    }
-    ostringstream& operator << (const std::string& str) {
-        stream += str;
-        return *this;
-    }
-
-    const std::string& str() { return stream; }
-};
+using ostringstream = halide_stream;
+size_t size(const halide_stream& stream) { return stream.strstream.size(); };
+void reserve(halide_stream& stream, std::size_t size) { return stream.strstream.reserve(size); };
 #else
 using std::ostringstream;
+size_t size(const halide_stream& stream) { return 0; };
+void reserve(halide_stream& stream, std::size_t size) { };
 #endif
 
 namespace {
-
-ostringstream nil;
 
 class CodeGen_D3D12Compute_Dev : public CodeGen_GPU_Dev {
 public:
@@ -149,8 +132,8 @@ CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_Dev(const Target &t)
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space) {
     ZoneScopedN("CodeGen_D3D12Compute_Dev_C::print_type_maybe_storage");
-    std::string oss;
-    oss.reserve(16);
+    ostringstream oss;
+    //reserve(oss, 16);
 
     // Storage uses packed vector types.
     if (storage && type.lanes() != 1) {
@@ -166,10 +149,10 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
             // 16-bit floating point value. This data type is provided only for language compatibility.
             // Direct3D 10 shader targets map all half data types to float data types.
             // A half data type cannot be used on a uniform global variable (use the /Gec flag if this functionality is desired).
-            oss += "half";
+            oss << "half";
             break;
         case 32:
-            oss += "float";
+            oss << "float";
             break;
         case 64:
             // "64-bit floating point value. You cannot use double precision values as inputs and outputs for a stream.
@@ -177,7 +160,7 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
             //  Then, use the asdouble function to pack each double into the pair of uints and the asuint function to
             //  unpack the pair of uints back into the double."
             user_error << "HLSL (SM 5.1) does not have transparent support for 'double' types.\n";
-            oss += "double";
+            oss << "double";
             break;
         default:
             user_error << "Can't represent a float with this many bits in HLSL (SM 5.1): " << type << "\n";
@@ -185,15 +168,15 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
     } else {
         switch (type.bits()) {
         case 1:
-            oss += "bool";
+            oss << "bool";
             break;
         case 8:
         case 16:
         case 32:
             if (type.is_uint()) {
-                oss += "u";
+                oss << "u";
             }
-            oss += "int";
+            oss << "int";
 #if DEBUG_TYPES
             oss << type.bits();
 #endif
@@ -212,11 +195,11 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
     case 3:
     case 4:
 #if DEBUG_TYPES
-        oss += "_(";
+        oss << "_(";
 #endif
-        oss += type.lanes();
+        oss << type.lanes();
 #if DEBUG_TYPES
-        oss += ")";
+        oss << ")";
 #endif
         break;
     case 8:
@@ -228,24 +211,21 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type_maybe_storag
     }
 
     if (space == AppendSpace) {
-        oss += " ";
+        oss << " ";
     }
 
-    return oss;
+    return oss.str();
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_type(Type type, AppendSpaceIfNeeded space) {
-    ZoneScoped;
     return print_type_maybe_storage(type, false, space);
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_storage_type(Type type) {
-    ZoneScoped;
     return print_type_maybe_storage(type, true, DoNotAppendSpace);
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret(Type type, const Expr &e) {
-    ZoneScoped;
     if (type == e.type()) {
         return print_expr(e);
     } else {
@@ -438,7 +418,6 @@ namespace {
 
 // If e is a ramp expression with stride 1, return the base, otherwise undefined.
 Expr is_ramp_one(const Expr &e) {
-    ZoneScoped;
     const Ramp *r = e.as<Ramp>();
     if (r == nullptr) {
         return Expr();
@@ -483,10 +462,10 @@ struct StoragePackUnpack {
         // smallest possible pack type is a byte (no nibbles)
         internal_assert(packing_factor <= 4);
     }
-
-    std::ostringstream pack_store(CodeGen &cg, const Store *op) {
+/*
+    ostringstream pack_store(CodeGen &cg, const Store *op) {
         ZoneScoped;
-        std::ostringstream lhs;
+        ostringstream lhs;
         // NOTE(marcos): 8bit and 16bit word packing -- the smallest integer
         // type granularity available in HLSL SM 5.1 is 32bit (int/uint):
         Type value_type = op->value.type();
@@ -591,6 +570,7 @@ struct StoragePackUnpack {
         }
         return rhs;
     }
+*/
 };
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
@@ -876,10 +856,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Free *op) {
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_assignment(Type type, const string &rhs) {
     ZoneScopedN("CodeGen_D3D12Compute_Dev_C::print_assignment");
     string rhs_modified = print_reinforced_cast(type, rhs);
-    {
-        ZoneScopedN("CodeGen_GPU_C::print_assignment");
-        return CodeGen_GPU_C::print_assignment(type, rhs_modified);
-    }
+    return CodeGen_GPU_C::print_assignment(type, rhs_modified);
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_vanilla_cast(Type type, const string &value_expr) {
@@ -900,24 +877,16 @@ string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinforced_cast(T
     // that require propagation of the sign bit (MSB):
     // a) for signed types: shift-up then shift-down
     // b) for unsigned types: simply mask the LSB (but shift-up and down also works)
-#if 0
-    std::string sl;
-    sl.reserve(value_expr.size() + 16);
-    sl += "(" + value_expr + ") << (" + std::to_string(32 - type.bits()) + ")";
-    std::string rsr;
-    rsr.reserve(sl.size() + 8);
-    rsr += print_reinterpret_cast(type, sl) + " >> " + std::to_string(32 - type.bits());
-    return rsr;
-#endif
     ostringstream sl;
+    //reserve(sl, value_expr.size() + 16);
     sl << "(" << value_expr << ")"
        << " << "
        << "(" << (32 - type.bits()) << ")";  // 1. shift-up to MSB
     ostringstream rsr;
+    //reserve(rsr, size(sl) + 8);
     rsr << print_reinterpret_cast(type, sl.str())  // 2. reinterpret bits
         << " >> " << (32 - type.bits());           // 3. shift-down to LSB
     return rsr.str();
-
 }
 
 string CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::print_reinterpret_cast(Type type, const string &value_expr) {

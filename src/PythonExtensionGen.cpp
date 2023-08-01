@@ -293,7 +293,7 @@ void PythonExtensionGen::compile(const Module &module) {
         // The CodeGen_C dtor must run to finish codegen correctly,
         // so wrap this in braces
         {
-            CodeGen_C extern_decl_gen(dest, module.target(), CodeGen_C::CPlusPlusExternDecl);
+            CodeGen_C extern_decl_gen(dest.redirect, module.target(), CodeGen_C::CPlusPlusExternDecl);
             extern_decl_gen.compile(module);
         }
 

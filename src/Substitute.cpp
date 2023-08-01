@@ -3,6 +3,9 @@
 #include "IRMutator.h"
 #include "Scope.h"
 
+#define TRACY_GLUE_ENABLE (0)
+#include "debug/tracy_profiler_glue.hpp"
+
 namespace Halide {
 namespace Internal {
 
@@ -100,28 +103,30 @@ public:
 
 }  // namespace
 
-Expr substitute(const string &name, const Expr &replacement, const Expr &expr) {
-    map<string, Expr> m;
-    m[name] = replacement;
+Expr substitute(const map<string, Expr>& m, const Expr& expr) {
+    ZoneScoped;
     Substitute s(m);
     return s.mutate(expr);
+}
+
+Stmt substitute(const map<string, Expr>& m, const Stmt& stmt) {
+    ZoneScoped;
+    Substitute s(m);
+    return s.mutate(stmt);
+}
+
+Expr substitute(const string &name, const Expr &replacement, const Expr &expr) {
+    ZoneScoped;
+    map<string, Expr> m;
+    m[name] = replacement;
+    return substitute(m, expr);
 }
 
 Stmt substitute(const string &name, const Expr &replacement, const Stmt &stmt) {
+    ZoneScoped;
     map<string, Expr> m;
     m[name] = replacement;
-    Substitute s(m);
-    return s.mutate(stmt);
-}
-
-Expr substitute(const map<string, Expr> &m, const Expr &expr) {
-    Substitute s(m);
-    return s.mutate(expr);
-}
-
-Stmt substitute(const map<string, Expr> &m, const Stmt &stmt) {
-    Substitute s(m);
-    return s.mutate(stmt);
+    return substitute(m, stmt);
 }
 
 namespace {
@@ -144,6 +149,7 @@ public:
 }  // namespace
 
 Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
+    ZoneScoped;
     SubstituteExpr s;
     s.find = find;
     s.replacement = replacement;
@@ -151,6 +157,7 @@ Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr) {
 }
 
 Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt) {
+    ZoneScoped;
     SubstituteExpr s;
     s.find = find;
     s.replacement = replacement;

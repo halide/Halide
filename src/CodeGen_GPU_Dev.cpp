@@ -12,25 +12,7 @@ namespace Halide {
 namespace Internal {
 
 #if SLOMP_REPLACE_ISOLATED_STRINGSTREAMS
-struct ostringstream {
-    std::string stream;
-
-    template<typename T>
-    ostringstream& operator << (const T& t) {
-        stream += std::to_string(t);
-        return *this;
-    }
-    ostringstream& operator << (const char* str) {
-        stream += str;
-        return *this;
-    }
-    ostringstream& operator << (const std::string& str) {
-        stream += str;
-        return *this;
-    }
-
-    const std::string& str() { return stream; }
-};
+using ostringstream = halide_stream;
 #else
 using std::ostringstream;
 #endif

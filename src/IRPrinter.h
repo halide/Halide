@@ -14,7 +14,7 @@
  * These operators are implemented using \ref Halide::Internal::IRPrinter
  */
 
-#include <ostream>
+#include "halide_stream.hpp"
 
 #include "IRVisitor.h"
 #include "Module.h"
@@ -24,31 +24,33 @@ namespace Halide {
 
 /** Emit an expression on an output stream (such as std::cout) in
  * human-readable form */
-std::ostream &operator<<(std::ostream &stream, const Expr &);
+halide_stream &operator<<(halide_stream &stream, const Expr &);
 
 /** Emit a halide type on an output stream (such as std::cout) in
  * human-readable form */
-std::ostream &operator<<(std::ostream &stream, const Type &);
+halide_stream &operator<<(halide_stream &stream, const Type &);
 
 /** Emit a halide Module on an output stream (such as std::cout) in
  * human-readable form */
-std::ostream &operator<<(std::ostream &stream, const Module &);
+halide_stream &operator<<(halide_stream &stream, const Module &);
 
 /** Emit a halide device api type in human-readable form */
+halide_stream &operator<<(halide_stream &stream, const DeviceAPI &);
 std::ostream &operator<<(std::ostream &stream, const DeviceAPI &);
 
 /** Emit a halide memory type in human-readable form */
+halide_stream &operator<<(halide_stream &stream, const MemoryType &);
 std::ostream &operator<<(std::ostream &stream, const MemoryType &);
 
 /** Emit a halide tail strategy in human-readable form */
-std::ostream &operator<<(std::ostream &stream, const TailStrategy &t);
+halide_stream &operator<<(halide_stream &stream, const TailStrategy &t);
 
 /** Emit a halide LoopLevel in human-readable form */
-std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
+halide_stream &operator<<(halide_stream &stream, const LoopLevel &);
 
 struct Target;
 /** Emit a halide Target in a human readable form */
-std::ostream &operator<<(std::ostream &stream, const Target &);
+halide_stream &operator<<(halide_stream &stream, const Target &);
 
 namespace Internal {
 
@@ -58,42 +60,47 @@ class Closure;
 
 /** Emit a halide associative pattern on an output stream (such as std::cout)
  * in a human-readable form */
+halide_stream &operator<<(halide_stream &stream, const AssociativePattern &);
 std::ostream &operator<<(std::ostream &stream, const AssociativePattern &);
 
 /** Emit a halide associative op on an output stream (such as std::cout) in a
  * human-readable form */
+halide_stream &operator<<(halide_stream &stream, const AssociativeOp &);
 std::ostream &operator<<(std::ostream &stream, const AssociativeOp &);
 
 /** Emit a halide statement on an output stream (such as std::cout) in
  * a human-readable form */
-std::ostream &operator<<(std::ostream &stream, const Stmt &);
+halide_stream &operator<<(halide_stream &stream, const Stmt &);
 
 /** Emit a halide for loop type (vectorized, serial, etc) in a human
  * readable form */
+halide_stream &operator<<(halide_stream &stream, const ForType &);
 std::ostream &operator<<(std::ostream &stream, const ForType &);
 
 /** Emit a horizontal vector reduction op in human-readable form. */
-std::ostream &operator<<(std::ostream &stream, const VectorReduce::Operator &);
+halide_stream &operator<<(halide_stream &stream, const VectorReduce::Operator &);
 
 /** Emit a halide name mangling value in a human readable format */
-std::ostream &operator<<(std::ostream &stream, const NameMangling &);
+halide_stream &operator<<(halide_stream &stream, const NameMangling &);
 
 /** Emit a halide LoweredFunc in a human readable format */
-std::ostream &operator<<(std::ostream &stream, const LoweredFunc &);
+halide_stream &operator<<(halide_stream &stream, const LoweredFunc &);
 
 /** Emit a halide linkage value in a human readable format */
-std::ostream &operator<<(std::ostream &stream, const LinkageType &);
+halide_stream &operator<<(halide_stream &stream, const LinkageType &);
 
 /** Emit a halide dimension type in human-readable format */
+halide_stream &operator<<(halide_stream &stream, const DimType &);
 std::ostream &operator<<(std::ostream &stream, const DimType &);
 
 /** Emit a Closure in human-readable format */
+halide_stream &operator<<(halide_stream &out, const Closure &);
 std::ostream &operator<<(std::ostream &out, const Closure &c);
 
 struct Indentation {
     int indent;
 };
-std::ostream &operator<<(std::ostream &stream, const Indentation &);
+halide_stream &operator<<(halide_stream &stream, const Indentation &);
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -104,6 +111,7 @@ public:
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */
     explicit IRPrinter(std::ostream &);
+    explicit IRPrinter(halide_stream &);
 
     /** emit an expression on the output stream */
     void print(const Expr &);
@@ -126,7 +134,8 @@ protected:
     }
 
     /** The stream on which we're outputting */
-    std::ostream &stream;
+    halide_stream& stream;
+    halide_stream private_stream;
 
     /** The current indentation level, useful for pretty-printing
      * statements */

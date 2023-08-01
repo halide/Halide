@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "halide_stream.hpp"
+
 namespace Halide {
 
 class Module;
@@ -21,7 +23,7 @@ public:
     void compile(const Module &module);
 
 private:
-    std::ostream &dest;
+    halide_stream dest;
 
     void compile(const LoweredFunc &f);
 };

@@ -65,6 +65,8 @@
 #include <ucontext.h>
 #endif
 
+#include "halide_stream.hpp"
+
 #ifdef _WIN32
 namespace {
 
@@ -644,7 +646,7 @@ void halide_toc_impl(const char *file, int line) {
 
 std::string c_print_name(const std::string &name,
                          bool prefix_underscore) {
-    ostringstream oss;
+    halide_stream oss;
 
     // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
     if (prefix_underscore && isalpha(name[0])) {

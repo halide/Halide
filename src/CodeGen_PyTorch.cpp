@@ -39,7 +39,7 @@ void CodeGen_PyTorch::compile(const Module &module) {
     // and should be totally safe, since we are using the same codegen logic
     // that would be in the .h file anyway.
     {
-        CodeGen_C extern_decl_gen(stream, module.target(), CodeGen_C::CPlusPlusExternDecl);
+        CodeGen_C extern_decl_gen(stream.redirect, module.target(), CodeGen_C::CPlusPlusExternDecl);
         extern_decl_gen.compile(module);
     }
 

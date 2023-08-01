@@ -16,31 +16,14 @@
 #include "Var.h"
 
 #define TRACY_GLUE_ENABLE (0)
+#define TRACY_GLUE_IMPLEMENTATION
 #include "debug/tracy_profiler_glue.hpp"
 
 namespace Halide {
 namespace Internal {
 
 #if SLOMP_REPLACE_ISOLATED_STRINGSTREAMS
-struct ostringstream {
-    std::string stream;
-
-    template<typename T>
-    ostringstream& operator << (const T& t) {
-        stream += std::to_string(t);
-        return *this;
-    }
-    ostringstream& operator << (const char* str) {
-        stream += str;
-        return *this;
-    }
-    ostringstream& operator << (const std::string& str) {
-        stream += str;
-        return *this;
-    }
-
-    const std::string& str() { return stream; }
-};
+using ostringstream = halide_stream;
 #else
 using std::ostringstream;
 #endif
@@ -224,9 +207,6 @@ public:
 
 CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind)
-    #if SLOMP_INTERCEPT_CODEGEN_STREAMS
-    , stream(*this)
-    #endif
     {
     ZoneScoped;
     if (output_kind == CPlusPlusFunctionInfoHeader) {
@@ -474,10 +454,6 @@ class ExternCallPrototypes : public IRGraphVisitor {
     std::set<std::string> destructors;
 
     using IRGraphVisitor::visit;
-
-#if SLOMP_INTERCEPT_CODEGEN_STREAMS
-    using ostream = CodeGen_C;
-#endif
 
     void visit(const Call *op) override {
         ZoneScopedN("CodeGen_C::ExternCallPrototypes::visit(Call)");
@@ -1003,12 +979,12 @@ void CodeGen_C::compile(const Module &input) {
 
         if (e.has_c_plus_plus_declarations()) {
             set_name_mangling_mode(NameMangling::CPlusPlus);
-            e.emit_c_plus_plus_declarations(stream);
+            e.emit_c_plus_plus_declarations(stream.redirect);
         }
 
         if (e.has_c_declarations()) {
             set_name_mangling_mode(NameMangling::C);
-            e.emit_c_declarations(stream);
+            e.emit_c_declarations(stream.redirect);
         }
     }
 
@@ -1325,8 +1301,12 @@ void CodeGen_C::print_stmt(const Stmt &s) {
 
 string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     ZoneScoped;
-    auto cached = cache.find(rhs);
+    auto cached = [&]() {
+        ZoneScopedN("CodeGen_C::print_assignment::cache_lookup");
+        return cache.find(rhs);
+    }();
     if (cached == cache.end()) {
+        ZoneScopedN("CodeGen_C::print_assignment::cache_insert");
         id = unique_name('_');
         const char *const_flag = output_kind == CPlusPlusImplementation ? " const " : "";
         if (t.is_handle()) {
@@ -1553,9 +1533,9 @@ void CodeGen_C::visit(const UIntImm *op) {
 
 void CodeGen_C::visit(const StringImm *op) {
     ZoneScopedN("CodeGen_C::visit(StringImm)");
-    std::ostringstream oss;
-    oss << Expr(op);
-    id = oss.str();
+    halide_stream hs;
+    hs << Expr(op);
+    id = hs.str();
 }
 
 void CodeGen_C::visit(const FloatImm *op) {

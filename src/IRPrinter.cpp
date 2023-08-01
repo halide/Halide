@@ -11,6 +11,113 @@
 #include "Target.h"
 #include "Util.h"
 
+#define TRACY_GLUE_ENABLE (0)
+#include "debug/tracy_profiler_glue.hpp"
+
+#define SLOMP_HALIDE_STREAM_REDIRECT_TO_OSTREAM (1)
+
+#if SLOMP_HALIDE_STREAM_REDIRECT_TO_OSTREAM
+halide_stream::halide_stream() : redirect(private_oss) { new(&private_oss)std::ostringstream(); }
+halide_stream::halide_stream(std::ostream& s) : redirect(s) { new(&private_oss)std::ostringstream(); }
+halide_stream::~halide_stream() { private_oss.~decltype(private_oss)(); }
+template<typename T>
+halide_stream& halide_stream::operator << (const T& t) {
+    //ZoneScopedN("halide_stream::<<(T&)");
+    redirect << t;
+    return *this;
+}
+halide_stream& halide_stream::operator << (const char* str) {
+    //ZoneScopedN("halide_stream::<<(const char*)");
+    redirect << str;
+    return *this;
+}
+halide_stream& halide_stream::operator << (char* str) {
+    //ZoneScopedN("halide_stream::<<(char*)");
+    redirect << str;
+    return *this;
+}
+halide_stream& halide_stream::operator << (const std::string& str) {
+    //ZoneScopedN("halide_stream::<<(std::string&)");
+    redirect << str;
+    return *this;
+}
+halide_stream& halide_stream::operator << (const unsigned char str[]) {
+    //ZoneScopedN("halide_stream::<<(unsigned char [])");
+    redirect << str;
+    return *this;
+}
+halide_stream& halide_stream::write(const char* str, std::streamsize count) {
+    //ZoneScoped;
+    redirect.write(str, count);
+    return *this;
+}
+std::string halide_stream::str() { return private_oss.str(); }
+void halide_stream::setf(std::ios::fmtflags flags, std::ios::fmtflags mask) { ZoneScoped; redirect.setf(flags, mask); };
+#else
+std::ostringstream halide_stream::sentinel;
+halide_stream::halide_stream() : redirect(sentinel) { new(&strstream)std::string(); }
+halide_stream::halide_stream(std::ostream& s) : redirect(s) { new(&strstream)std::string(); }
+halide_stream::~halide_stream() {
+    if (&redirect != &sentinel) {
+        //ZoneScopedN("halide_stream::~halide_stream::flush");
+        redirect << strstream;
+    }
+    strstream.~decltype(strstream)();
+}
+template<typename T>
+halide_stream& halide_stream::operator << (const T& t) {
+    //ZoneScopedN("halide_stream::<<(T&)");
+    strstream += std::to_string(t);
+    return *this;
+}
+halide_stream& halide_stream::operator << (const char* str) {
+    //ZoneScopedN("halide_stream::<<(const char*)");
+    strstream += str;
+    return *this;
+}
+halide_stream& halide_stream::operator << (char* str) {
+    //ZoneScopedN("halide_stream::<<(char*)");
+    return *this << (const char*)str;
+}
+halide_stream& halide_stream::operator << (const std::string& str) {
+    //ZoneScopedN("halide_stream::<<(std::string&)");
+    strstream += str;
+    return *this;
+}
+halide_stream& halide_stream::operator << (const unsigned char str[]) {
+    //ZoneScopedN("halide_stream::<<(unsigned char [])");
+    return *this << (const char*)str;
+}
+template<size_t N>
+halide_stream& halide_stream::operator << (const char (&str)[N]) {
+    //ZoneScopedN("halide_stream::<<(const char*)");
+    strstream.append(str, N);
+    return *this;
+}
+halide_stream& halide_stream::write(const char* str, std::streamsize count) {
+    //ZoneScoped;
+    strstream.append(str, count);
+    return *this;
+}
+std::string halide_stream::str() { return strstream; }
+void halide_stream::setf(std::ios::fmtflags flags, std::ios::fmtflags mask) { };
+#endif
+
+void halide_stream_instantiate_templates() {
+    halide_stream s;
+    unsigned const int x = 0;
+    float y = 0.0f;
+    s << x;
+    s << y;
+}
+
+template<typename T>
+std::ostream &ostream_indirect(std::ostream &stream, const T &t) {
+    halide_stream hs (stream);
+    hs << t;
+    return stream;
+}
+
 namespace Halide {
 
 using std::ostream;
@@ -19,6 +126,10 @@ using std::string;
 using std::vector;
 
 ostream &operator<<(ostream &out, const Type &type) {
+    return ostream_indirect(out, type);
+}
+
+halide_stream &operator<<(halide_stream &out, const Type &type) {
     switch (type.code()) {
     case Type::Int:
         out << "int";
@@ -47,6 +158,10 @@ ostream &operator<<(ostream &out, const Type &type) {
 }
 
 ostream &operator<<(ostream &stream, const Expr &ir) {
+    return ostream_indirect(stream, ir);
+}
+
+halide_stream &operator<<(halide_stream &stream, const Expr &ir) {
     if (!ir.defined()) {
         stream << "(undefined)";
     } else {
@@ -56,7 +171,7 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
     return stream;
 }
 
-ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
+halide_stream &operator<<(halide_stream &stream, const Buffer<> &buffer) {
     bool include_data = Internal::ends_with(buffer.name(), "_gpu_source_kernels");
     stream << "buffer " << buffer.name() << " = {";
     if (include_data) {
@@ -71,6 +186,10 @@ ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
 }
 
 ostream &operator<<(ostream &stream, const Module &m) {
+    return ostream_indirect(stream, m);
+}
+
+halide_stream &operator<<(halide_stream &stream, const Module &m) {
     for (const auto &s : m.submodules()) {
         stream << s << "\n";
     }
@@ -86,6 +205,10 @@ ostream &operator<<(ostream &stream, const Module &m) {
 }
 
 ostream &operator<<(ostream &out, const DeviceAPI &api) {
+    return ostream_indirect(out, api);
+}
+
+halide_stream &operator<<(halide_stream &out, const DeviceAPI &api) {
     switch (api) {
     case DeviceAPI::Host:
     case DeviceAPI::None:
@@ -125,6 +248,10 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
 }
 
 std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
+    return ostream_indirect(out, t);
+}
+
+halide_stream &operator<<(halide_stream &out, const MemoryType &t) {
     switch (t) {
     case MemoryType::Auto:
         out << "Auto";
@@ -157,7 +284,7 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     return out;
 }
 
-std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
+halide_stream &operator<<(halide_stream &out, const TailStrategy &t) {
     switch (t) {
     case TailStrategy::Auto:
         out << "Auto";
@@ -184,13 +311,17 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
     return out;
 }
 
-ostream &operator<<(ostream &stream, const LoopLevel &loop_level) {
+halide_stream &operator<<(halide_stream &stream, const LoopLevel &loop_level) {
     return stream << "loop_level("
                   << (loop_level.defined() ? loop_level.to_string() : "undefined")
                   << ")";
 }
 
 ostream &operator<<(ostream &stream, const Target &target) {
+    return ostream_indirect(stream, target);
+}
+
+halide_stream &operator<<(halide_stream &stream, const Target &target) {
     return stream << "target(" << target.to_string() << ")";
 }
 
@@ -250,6 +381,10 @@ void IRPrinter::test() {
 }
 
 ostream &operator<<(ostream &stream, const AssociativePattern &p) {
+    return ostream_indirect(stream, p);
+}
+
+halide_stream &operator<<(halide_stream &stream, const AssociativePattern &p) {
     stream << "{\n";
     for (size_t i = 0; i < p.ops.size(); ++i) {
         stream << "  op_" << i << " -> " << p.ops[i] << ", id_" << i << " -> " << p.identities[i] << "\n";
@@ -260,6 +395,10 @@ ostream &operator<<(ostream &stream, const AssociativePattern &p) {
 }
 
 ostream &operator<<(ostream &stream, const AssociativeOp &op) {
+    return ostream_indirect(stream, op);
+}
+
+halide_stream &operator<<(halide_stream &stream, const AssociativeOp &op) {
     stream << "Pattern:\n"
            << op.pattern;
     stream << "is associative? " << op.is_associative << "\n";
@@ -272,6 +411,10 @@ ostream &operator<<(ostream &stream, const AssociativeOp &op) {
 }
 
 ostream &operator<<(ostream &out, const ForType &type) {
+    return ostream_indirect(out, type);
+}
+
+halide_stream &operator<<(halide_stream &out, const ForType &type) {
     switch (type) {
     case ForType::Serial:
         out << "for";
@@ -301,7 +444,7 @@ ostream &operator<<(ostream &out, const ForType &type) {
     return out;
 }
 
-ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
+halide_stream &operator<<(halide_stream &out, const VectorReduce::Operator &op) {
     switch (op) {
     case VectorReduce::Add:
         out << "Add";
@@ -328,7 +471,7 @@ ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
     return out;
 }
 
-ostream &operator<<(ostream &out, const NameMangling &m) {
+halide_stream &operator<<(halide_stream &out, const NameMangling &m) {
     switch (m) {
     case NameMangling::Default:
         out << "default";
@@ -344,6 +487,10 @@ ostream &operator<<(ostream &out, const NameMangling &m) {
 }
 
 ostream &operator<<(ostream &stream, const Stmt &ir) {
+    return ostream_indirect(stream, ir);
+}
+
+halide_stream &operator<<(halide_stream &stream, const Stmt &ir) {
     if (!ir.defined()) {
         stream << "(undefined)\n";
     } else {
@@ -353,7 +500,7 @@ ostream &operator<<(ostream &stream, const Stmt &ir) {
     return stream;
 }
 
-ostream &operator<<(ostream &stream, const LoweredFunc &function) {
+halide_stream &operator<<(halide_stream &stream, const LoweredFunc &function) {
     stream << function.linkage << " func " << function.name << " (";
     for (size_t i = 0; i < function.args.size(); i++) {
         stream << function.args[i].name;
@@ -367,7 +514,7 @@ ostream &operator<<(ostream &stream, const LoweredFunc &function) {
     return stream;
 }
 
-std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
+halide_stream &operator<<(halide_stream &stream, const LinkageType &type) {
     switch (type) {
     case LinkageType::ExternalPlusArgv:
         stream << "external_plus_argv";
@@ -385,7 +532,7 @@ std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
     return stream;
 }
 
-std::ostream &operator<<(std::ostream &stream, const Indentation &indentation) {
+halide_stream &operator<<(halide_stream &stream, const Indentation &indentation) {
     for (int i = 0; i < indentation.indent; i++) {
         stream << " ";
     }
@@ -393,6 +540,10 @@ std::ostream &operator<<(std::ostream &stream, const Indentation &indentation) {
 }
 
 std::ostream &operator<<(std::ostream &out, const DimType &t) {
+    return ostream_indirect(out, t);
+}
+
+halide_stream &operator<<(halide_stream &out, const DimType &t) {
     switch (t) {
     case DimType::PureVar:
         out << "PureVar";
@@ -408,6 +559,10 @@ std::ostream &operator<<(std::ostream &out, const DimType &t) {
 }
 
 std::ostream &operator<<(std::ostream &out, const Closure &c) {
+    return ostream_indirect(out, c);
+}
+
+halide_stream &operator<<(halide_stream &out, const Closure &c) {
     for (const auto &v : c.vars) {
         out << "var: " << v.first << "\n";
     }
@@ -429,6 +584,12 @@ std::ostream &operator<<(std::ostream &out, const Closure &c) {
 }
 
 IRPrinter::IRPrinter(ostream &s)
+    : private_stream(s)
+    , stream(private_stream) {
+    s.setf(std::ios::fixed, std::ios::floatfield);
+}
+
+IRPrinter::IRPrinter(halide_stream& s)
     : stream(s) {
     s.setf(std::ios::fixed, std::ios::floatfield);
 }

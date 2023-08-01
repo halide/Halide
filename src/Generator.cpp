@@ -150,7 +150,7 @@ public:
     void emit();
 
 private:
-    std::ostream &stream;
+    halide_stream stream;
     const std::string generator_registered_name;
     const std::string generator_stub_name;
     std::string class_name;

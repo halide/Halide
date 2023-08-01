@@ -15,6 +15,8 @@
 #include "Reduction.h"
 #include "Util.h"
 
+#include "halide_stream.hpp"
+
 namespace Halide {
 
 template<typename T, int Dims>
@@ -341,10 +343,10 @@ public:
 };
 
 /** Emit an RVar in a human-readable form */
-std::ostream &operator<<(std::ostream &stream, const RVar &);
+halide_stream &operator<<(halide_stream &stream, const RVar &);
 
 /** Emit an RDom in a human-readable form. */
-std::ostream &operator<<(std::ostream &stream, const RDom &);
+halide_stream &operator<<(halide_stream &stream, const RDom &);
 }  // namespace Halide
 
 #endif

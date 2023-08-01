@@ -36,7 +36,7 @@ public:
     }
 
 private:
-    std::ostream &out;
+    halide_stream out;
     const map<string, Function> &env;
     int indent = 0;
 

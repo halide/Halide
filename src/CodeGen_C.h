@@ -10,7 +10,6 @@
 #include "Scope.h"
 #include "Target.h"
 
-#define SLOMP_INTERCEPT_CODEGEN_STREAMS (0)
 #define SLOMP_REPLACE_ISOLATED_STRINGSTREAMS (0)
 
 namespace Halide {
@@ -304,48 +303,6 @@ protected:
                                       const std::vector<LoweredArgument> &args,
                                       const MetadataNameMap &metadata_name_map);
     void emit_halide_free_helper(const std::string &alloc_name, const std::string &free_function);
-
-#if SLOMP_INTERCEPT_CODEGEN_STREAMS
-public:
-    std::string strstream;
-
-    CodeGen_C& stream;
-
-    template<typename T>
-    CodeGen_C& operator << (const T& t) {
-        strstream += std::to_string(t);
-        return *this;
-    }
-    CodeGen_C& operator << (const char* str) {
-        strstream += str;
-        return *this;
-    }
-    CodeGen_C& operator << (const std::string& str) {
-        strstream += str;
-        return *this;
-    }
-    CodeGen_C& write(const char* str, std::streamsize count) {
-        strstream.append(str, count);
-        return *this;
-    }
-    CodeGen_C& operator << (const unsigned char str[]) {
-        return *this << (const char*)str;
-    }
-    CodeGen_C& operator << (const Halide::Internal::Indentation& indent) {
-        strstream.append(indent.indent, ' ');
-        return *this;
-    }
-    CodeGen_C& operator << (const Halide::Expr& expr) {
-        if (!expr.defined()) {
-            strstream += "(undefined)";
-        }
-        else {
-            this->print(expr);
-        }
-        return *this;
-    }
-    const std::string& str() { return strstream; }
-#endif
 };
 
 }  // namespace Internal
