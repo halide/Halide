@@ -3,14 +3,9 @@
 namespace Halide {
 namespace Internal {
 
-namespace {
-
-Globals the_real_globals;
-
-}  // namespace
-
 Globals &globals() {
-    return the_real_globals;
+    static Globals g;
+    return g;
 }
 
 Globals::Globals() {
