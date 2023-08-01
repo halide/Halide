@@ -25,7 +25,10 @@ Globals::Globals(const Globals &that) {
 }
 
 Globals &Globals::operator=(const Globals &that) {
-    this->copy_from(that);
+    // Can't actually happen, but clang-tidy complains if we don't do this
+    if (this != &that) {
+        this->copy_from(that);
+    }
     return *this;
 }
 
