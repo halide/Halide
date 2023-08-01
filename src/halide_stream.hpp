@@ -25,10 +25,10 @@ struct halide_stream {
     halide_stream& operator << (const char* str);
     halide_stream& operator << (char* str);
     halide_stream& operator << (const std::string& str);
-    halide_stream& operator << (const unsigned char str[]);
+    halide_stream& operator << (const unsigned char (&str) []);
 
     template<size_t N>
-    halide_stream& operator << (const char(&str)[N]);
+    halide_stream& operator << (const char (&str) [N]);
 
     halide_stream& write(const char* str, std::streamsize count);
 

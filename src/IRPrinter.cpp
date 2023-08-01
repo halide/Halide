@@ -41,8 +41,8 @@ halide_stream& halide_stream::operator << (const std::string& str) {
     redirect << str;
     return *this;
 }
-halide_stream& halide_stream::operator << (const unsigned char str[]) {
-    //ZoneScopedN("halide_stream::<<(unsigned char [])");
+halide_stream& halide_stream::operator << (const unsigned char (&str) []) {
+    //ZoneScopedN("halide_stream::<<(unsigned char & [])");
     redirect << str;
     return *this;
 }
@@ -84,7 +84,7 @@ halide_stream& halide_stream::operator << (const std::string& str) {
     strstream += str;
     return *this;
 }
-halide_stream& halide_stream::operator << (const unsigned char str[]) {
+halide_stream& halide_stream::operator << (const unsigned char (&str) []) {
     //ZoneScopedN("halide_stream::<<(unsigned char [])");
     return *this << (const char*)str;
 }
@@ -103,13 +103,14 @@ std::string halide_stream::str() { return strstream; }
 void halide_stream::setf(std::ios::fmtflags flags, std::ios::fmtflags mask) { };
 #endif
 
-void halide_stream_instantiate_templates() {
-    halide_stream s;
-    unsigned const int x = 0;
-    float y = 0.0f;
-    s << x;
-    s << y;
-}
+// explicit template instatiations
+template halide_stream& halide_stream::operator<< <char>          (const char&);
+template halide_stream& halide_stream::operator<< <int>           (const int&);
+template halide_stream& halide_stream::operator<< <unsigned int>  (const unsigned int&);
+template halide_stream& halide_stream::operator<< <long>          (const long&);
+template halide_stream& halide_stream::operator<< <unsigned long> (const unsigned long&);
+template halide_stream& halide_stream::operator<< <long long>     (const long long&);
+template halide_stream& halide_stream::operator<< <float>         (const float&);
 
 template<typename T>
 std::ostream &ostream_indirect(std::ostream &stream, const T &t) {
