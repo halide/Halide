@@ -2596,7 +2596,7 @@ Expr mod_round_to_zero(Expr x, Expr y) {
 
 Expr random_float(Expr seed) {
     // Random floats get even IDs
-    int id = (globals().random_float_counter++) * 2;
+    int id = Globals::get_random_float_counter() * 2;
 
     std::vector<Expr> args;
     if (seed.defined()) {
@@ -2615,7 +2615,7 @@ Expr random_float(Expr seed) {
 
 Expr random_uint(Expr seed) {
     // Random ints get odd IDs
-    int id = (globals().random_uint_counter++) * 2 + 1;
+    int id = Globals::get_random_uint_counter() * 2 + 1;
 
     std::vector<Expr> args;
     if (seed.defined()) {

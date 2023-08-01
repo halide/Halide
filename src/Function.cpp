@@ -540,7 +540,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     // Tag calls to random() with the free vars
-    int tag = globals().random_variable_counter++;
+    int tag = Globals::get_random_variable_counter();
     vector<VarOrRVar> free_vars;
     free_vars.reserve(args.size());
     for (const auto &arg : args) {
@@ -750,7 +750,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             free_vars.emplace_back(RVar(check.reduction_domain, i));
         }
     }
-    int tag = globals().random_variable_counter++;
+    int tag = Globals::get_random_variable_counter();
     for (auto &arg : args) {
         arg = lower_random(arg, free_vars, tag);
     }

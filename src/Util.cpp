@@ -159,26 +159,18 @@ string running_program_name() {
 #endif
 }
 
-namespace {
-int unique_count(size_t h) {
-    h = h & (num_unique_name_counters - 1);
-    return globals().unique_name_counters[h]++;
-}
-}  // namespace
-
 // There are three possible families of names returned by the methods below:
 // 1) char pattern: (char that isn't '$') + number (e.g. v234)
 // 2) string pattern: (string without '$') + '$' + number (e.g. fr#nk82$42)
 // 3) a string that does not match the patterns above
-// There are no collisions within each family, due to the unique_count
-// done above, and there can be no collisions across families by
-// construction.
+// There are no collisions within each family, due to using Globals::get_unique_name_counter(),
+// and there can be no collisions across families by construction.
 
 string unique_name(char prefix) {
     if (prefix == '$') {
         prefix = '_';
     }
-    return prefix + std::to_string(unique_count((size_t)(prefix)));
+    return prefix + std::to_string(Globals::get_unique_name_counter((size_t)(prefix)));
 }
 
 string unique_name(const std::string &prefix) {
@@ -213,7 +205,7 @@ string unique_name(const std::string &prefix) {
 
     // Then add a suffix that's globally unique relative to the hash
     // of the sanitized name.
-    int count = unique_count(std::hash<std::string>()(sanitized));
+    int count = Globals::get_unique_name_counter(std::hash<std::string>()(sanitized));
     if (count == 0) {
         // We can return the name as-is if there's no risk of it
         // looking like something unique_name has ever returned in the
