@@ -21,7 +21,8 @@ function(add_anderson2021_test NAME)
         set(ARGS_LABELS "")
     endif()
     list(APPEND ARGS_LABELS anderson2021)
-    list(APPEND ARGS_LABELS autoschedulers)
+    list(APPEND ARGS_LABELS autoschedulers_cuda)
+    list(APPEND ARGS_LABELS auto_schedule)
 
     add_test(NAME ${NAME}
              COMMAND ${ARGS_COMMAND})
@@ -52,7 +53,7 @@ add_executable(anderson2021_demo_apps_autoscheduler ${DEMO_REGISTRATION_FILE})
 target_link_libraries(anderson2021_demo_apps_autoscheduler PRIVATE anderson2021_demo Halide::RunGenMain)
 
 add_anderson2021_test(anderson2021_demo_apps_autoscheduler
-                   COMMAND anderson2021_demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all --skip_bad_environment)
+                      COMMAND anderson2021_demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all --skip_bad_environment)
 
 # =================================================================
 
