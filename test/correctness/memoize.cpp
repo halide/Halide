@@ -59,24 +59,21 @@ extern "C" HALIDE_EXPORT_SYMBOL int computed_eviction_key(int a) {
 }
 HalideExtern_1(int, computed_eviction_key, int);
 
-// A flaky allocator. Note that it has to be compatible with halide_free
-// though, because halide_free is going to be called by
-// memoization_cache_cleanup with a null user_context when we release the jit
-// shared runtimes at the endof this test. So it has to be aligned, and it has
-// to store the pointer to free just before the returned pointer.
+// A flaky allocator. Note that it has to be compatible with halide_free,
+// because halide_free is going to be called by memoization_cache_cleanup with a
+// null user_context when we release the jit shared runtimes at the end of this
+// test. So it has to be aligned, and it has to store the pointer to free just
+// before the returned pointer.
 void *flaky_malloc(JITUserContext * /* user_context */, size_t x) {
     if ((rand() % 4) == 0) {
         return nullptr;
     } else {
-        x = (x + 63) & (~31);
-#ifdef _MSC_VER
-        void *ptr = _aligned_malloc(x, 32);
-#else
-        void *ptr = aligned_alloc(32, x);
-#endif
-        void **ret = (void **)ptr;
-        ret += 32 / sizeof(void *);
-        ret[-1] = ptr;
+        uint8_t *ptr = (uint8_t *)malloc(x + 40);
+        uint8_t *ret = ptr + 8;
+        while ((uintptr_t)ret & 31) {
+            ret++;
+        }
+        ((uint8_t **)ret)[-1] = ptr;
         return ret;
     }
 }
