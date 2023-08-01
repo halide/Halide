@@ -440,7 +440,7 @@ int main(int argc, char **argv) {
         Func f("f"), output("output");
         RDom r(0, 2000, 0, 2000);
         f() = 5;
-        output() = sum(im, r) + f();
+        output() = sum(im(r.x, r.y)) + f();
 
         Pipeline(output).apply_autoscheduler(target, params);
     }
