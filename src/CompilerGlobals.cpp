@@ -105,12 +105,12 @@ SavedGlobals::~SavedGlobals() {
     delete saved_globals;
 }
 
-SavedGlobals::SavedGlobals(SavedGlobals &&that) {
+SavedGlobals::SavedGlobals(SavedGlobals &&that) noexcept {
     this->saved_globals = that.saved_globals;
     that.saved_globals = nullptr;
 }
 
-SavedGlobals &SavedGlobals::operator=(SavedGlobals &&that) {
+SavedGlobals &SavedGlobals::operator=(SavedGlobals &&that) noexcept {
     if (this != &that) {
         this->saved_globals = that.saved_globals;
         that.saved_globals = nullptr;

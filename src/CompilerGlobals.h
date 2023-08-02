@@ -40,8 +40,8 @@ struct SavedGlobals {
     // movable, not copyable
     SavedGlobals(const SavedGlobals &) = delete;
     SavedGlobals &operator=(const SavedGlobals &) = delete;
-    SavedGlobals(SavedGlobals &&);
-    SavedGlobals &operator=(SavedGlobals &&);
+    SavedGlobals(SavedGlobals &&) noexcept;
+    SavedGlobals &operator=(SavedGlobals &&) noexcept;
 };
 
 // Reset the current state of the Globals to the default and return an opaque
