@@ -37,7 +37,7 @@ struct halide_stream {
     void setf(std::ios::fmtflags flags, std::ios::fmtflags mask);
 
 private:
-    static std::ostringstream sentinel;
+    static std::ostream nil;
 
     std::ostream& redirect;
 

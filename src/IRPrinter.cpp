@@ -54,11 +54,11 @@ halide_stream& halide_stream::write(const char* str, std::streamsize count) {
 std::string halide_stream::str() { return private_oss.str(); }
 void halide_stream::setf(std::ios::fmtflags flags, std::ios::fmtflags mask) { ZoneScoped; redirect.setf(flags, mask); };
 #else
-std::ostringstream halide_stream::sentinel;
-halide_stream::halide_stream() : redirect(sentinel) { new(&strstream)std::string(); }
+std::ostream halide_stream::nil (nullptr);
+halide_stream::halide_stream() : redirect(nil) { new(&strstream)std::string(); }
 halide_stream::halide_stream(std::ostream& s) : redirect(s) { new(&strstream)std::string(); }
 halide_stream::~halide_stream() {
-    if (&redirect != &sentinel) {
+    if (&redirect != &nil) {
         //ZoneScopedN("halide_stream::~halide_stream::flush");
         redirect << strstream;
     }
