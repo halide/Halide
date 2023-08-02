@@ -353,7 +353,7 @@ void SearchSpace::generate_children(const IntrusivePtr<State> &state,
             new_root->copy_from(*root);
             const auto &nodes = compute_root_nodes.get(node);
             for (const auto &n : nodes) {
-                const auto *compute_root_loop = deep_copy_loop_nest(n.get(), NoOpMutator{});
+                const auto *compute_root_loop = deep_copy_loop_nest(n, NoOpMutator{});
                 new_root->children.emplace_back(compute_root_loop);
             }
             new_root->store_at.insert(node);

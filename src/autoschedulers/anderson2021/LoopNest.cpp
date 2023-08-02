@@ -843,8 +843,8 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
         return;
     }
 
-    internal_assert(gpu_loop_info.thread_info != nullptr);
-    const ThreadInfo *thread_info = gpu_loop_info.thread_info;
+    internal_assert(gpu_loop_info.get_thread_info() != nullptr);
+    const ThreadInfo *thread_info = gpu_loop_info.get_thread_info();
     bool is_shared_mem = consumer_site.gpu_store_memory_type == GPUMemoryType::Shared;
 
     size_t actual_vector_dim = get_actual_vector_dim(consumer_store_bounds);
@@ -1243,7 +1243,7 @@ bool LoopNest::has_thread_loop_descendant() const {
 }
 
 void LoopNest::compute_warp_features(ScheduleFeatures &features, const GPULoopInfo &gpu_loop_info) const {
-    const ThreadInfo *thread_info = gpu_loop_info.thread_info;
+    const ThreadInfo *thread_info = gpu_loop_info.get_thread_info();
     features.warp_lane_utilization = thread_info->warp_lane_utilization();
     features.num_active_warps_per_block = thread_info->num_active_warps_per_block;
     features.idle_lane_wastage = thread_info->idle_lane_wastage();
@@ -1267,7 +1267,9 @@ void LoopNest::compute_warp_and_block_occupancy(const Anderson2021Params &params
     auto active_block_hardware_limit = get_active_block_hardware_limit(params);
     auto active_warp_hardware_limit = get_active_warp_hardware_limit(params);
 
-    int64_t num_warps_per_block = gpu_loop_info.thread_info->num_warps_per_block;
+    const ThreadInfo *thread_info = gpu_loop_info.get_thread_info();
+    internal_assert(thread_info != nullptr);
+    int64_t num_warps_per_block = thread_info->num_warps_per_block;
 
     int64_t num_blocks = std::ceil(gpu_loop_info.num_blocks / (double)params.parallelism);
 
@@ -1713,10 +1715,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 bool verbose) const {
 
     gpu_loop_info.update(target, this);
-    std::unique_ptr<ThreadInfo> thread_info;
 
     if (is_gpu_thread(target)) {
-        thread_info = gpu_loop_info.create_thread_info();
+        (void)gpu_loop_info.create_thread_info();
     }
 
     int64_t working_set_here = 0;
@@ -1843,7 +1844,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             }
 
             c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, stats, verbose);
-
             if (use_memoized_features) {
                 c->features[hash_of_producers].make_large(dag.nodes[0].stages[0].max_id);
                 c->memoize_features(c->features[hash_of_producers], features);
@@ -2363,7 +2363,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 e->producer,
                                 producer_store_bounds,
                                 producer_has_been_scheduled,
-                                gpu_loop_info.thread_info,
+                                gpu_loop_info.get_thread_info(),
                                 shared_mem_loads,
                                 points_accessed,
                                 verbose);
@@ -2394,7 +2394,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 e->producer,
                                 producer_store_bounds,
                                 producer_has_been_scheduled,
-                                gpu_loop_info.thread_info,
+                                gpu_loop_info.get_thread_info(),
                                 global_mem_loads,
                                 points_accessed,
                                 verbose);
@@ -2434,7 +2434,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 e->producer,
                                 producer_store_bounds,
                                 producer_has_been_scheduled,
-                                gpu_loop_info.thread_info,
+                                gpu_loop_info.get_thread_info(),
                                 local_mem_loads,
                                 points_accessed,
                                 verbose);
@@ -2707,7 +2707,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         inlined_feat.outer_parallelism = parallelism;
         inlined_feat.num_blocks = parallelism;
 
-        internal_assert(is_scalar() || gpu_loop_info.thread_info);
+        internal_assert(is_scalar() || gpu_loop_info.get_thread_info());
 
         auto num_warps_per_block = it.value();
         auto num_threads_per_block = 1;
@@ -2716,8 +2716,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         // be surrounded by block/thread/serial loops so there's no need to take
         // them into account when computing these features
         if (!is_scalar()) {
-            num_warps_per_block *= gpu_loop_info.total_serial_extents() * gpu_loop_info.thread_info->num_warps_per_block * inlined_feat.num_blocks;
-            num_threads_per_block = gpu_loop_info.thread_info->num_threads;
+            num_warps_per_block *= gpu_loop_info.total_serial_extents() * gpu_loop_info.get_thread_info()->num_warps_per_block * inlined_feat.num_blocks;
+            num_threads_per_block = gpu_loop_info.get_thread_info()->num_threads;
         }
         inlined_feat.num_warps_per_block += num_warps_per_block;
         inlined_feat.num_threads_per_block += num_threads_per_block;
@@ -4028,11 +4028,9 @@ void LoopNest::update_producers_to_be_staged(StageScheduleState &state, const No
 
 double LoopNest::max_idle_lane_wastage(const Target &target, GPULoopInfo gpu_loop_info) const {
     gpu_loop_info.update(target, this);
-    std::unique_ptr<ThreadInfo> thread_info;
 
     if (is_gpu_thread(target)) {
-        thread_info = gpu_loop_info.create_thread_info();
-
+        const ThreadInfo *thread_info = gpu_loop_info.create_thread_info();
         return thread_info->idle_lane_wastage();
     }
 
