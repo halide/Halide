@@ -25,7 +25,9 @@
   value of HL_DEBUG_CODEGEN, if any).
 
   HL_PERMIT_FAILED_UNROLL
-  Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
+  Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent.
+  Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not
+  turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
 
 #ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
 
@@ -199,7 +201,15 @@ AutoSchedule::AutoSchedule(const FunctionDAG &dag,
                            Statistics &stats,
                            SearchSpace &search_space,
                            const LoopNestParser *partial_schedule)
-    : dag{dag}, params{params}, target{target}, outputs{outputs}, rng{rng}, cost_model{cost_model}, stats{stats}, search_space{search_space}, partial_schedule{partial_schedule} {
+    : dag{dag},
+      params{params},
+      target{target},
+      outputs{outputs},
+      rng{rng},
+      cost_model{cost_model},
+      stats{stats},
+      search_space{search_space},
+      partial_schedule{partial_schedule} {
     configure_pipeline_features(dag, params, cost_model);
 }
 
@@ -220,27 +230,26 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
 
     int expanded = 0;
 
-    std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
-        [&](IntrusivePtr<State> &&s) {
-            // aslog(1) << "\n** Generated child: ";
-            // s->dump();
-            // s->calculate_cost(dag, params, nullptr, true);
+    std::function<void(IntrusivePtr<State> &&)> enqueue_new_children = [&](IntrusivePtr<State> &&s) {
+        // aslog(1) << "\n** Generated child: ";
+        // s->dump();
+        // s->calculate_cost(dag, params, nullptr, true);
 
-            // Each child should have one more decision made than its parent state.
-            internal_assert(s->num_decisions_made == s->parent->num_decisions_made + 1);
+        // Each child should have one more decision made than its parent state.
+        internal_assert(s->num_decisions_made == s->parent->num_decisions_made + 1);
 
-            int progress = s->num_decisions_made * beam_size + expanded;
-            size_t max_progress = dag.nodes.size() * beam_size * 2;
+        int progress = s->num_decisions_made * beam_size + expanded;
+        size_t max_progress = dag.nodes.size() * beam_size * 2;
 
-            // Update the progress bar
-            tick.set(double(progress) / max_progress);
-            s->penalized = false;
+        // Update the progress bar
+        tick.set(double(progress) / max_progress);
+        s->penalized = false;
 
-            ++stats.num_states_added;
+        ++stats.num_states_added;
 
-            // Add the state to the list of states to evaluate
-            q.emplace(std::move(s));
-        };
+        // Add the state to the list of states to evaluate
+        q.emplace(std::move(s));
+    };
 
     std::unique_ptr<LoopNestParser> target_loop_nest;
 
@@ -600,7 +609,15 @@ void generate_schedule(const std::vector<Function> &outputs,
     std::mt19937 rng{(uint32_t)params.random_dropout_seed};
     SearchSpace search_space{dag, params, target, rng, cost_model.get(), stats, partial_schedule.get()};
 
-    AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model.get(), stats, search_space, partial_schedule.get()};
+    AutoSchedule autoschedule{dag,
+                              params,
+                              target,
+                              outputs,
+                              rng,
+                              cost_model.get(),
+                              stats,
+                              search_space,
+                              partial_schedule.get()};
 
     // Run beam search
     optimal = autoschedule.optimal_schedule(params.beam_size);
@@ -656,7 +673,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Total cost model evaluation time (ms): " << stats.total_cost_model_evaluation_time() << "\n";
     aslog(1) << "Average cost model evaluation time (ms): " << stats.average_cost_model_evaluation_time() << "\n";
     std::chrono::duration<double> total_time = timer.elapsed();
-    aslog(1) << "Time taken for autoscheduler (s): " << std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count() / 1000.0 << '\n';
+    aslog(1) << "Time taken for autoscheduler (s): "
+             << std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count() / 1000.0 << '\n';
 }
 
 struct Anderson2021 {
@@ -717,7 +735,15 @@ void find_and_apply_schedule(FunctionDAG &dag,
     }
 
     SearchSpace search_space{dag, params, target, rng, cost_model, stats, partial_schedule.get()};
-    AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model, stats, search_space, partial_schedule.get()};
+    AutoSchedule autoschedule{dag,
+                              params,
+                              target,
+                              outputs,
+                              rng,
+                              cost_model,
+                              stats,
+                              search_space,
+                              partial_schedule.get()};
 
     IntrusivePtr<State> optimal = autoschedule.optimal_schedule(beam_size);
 
