@@ -7,6 +7,7 @@
  * hierarchy of blocks, threads, etc. Useful when computing GPU features
  */
 
+#include <memory>
 #include <vector>
 
 #include "Halide.h"
@@ -30,7 +31,6 @@ struct GPULoopInfo {
     int64_t num_blocks = 1;
     int64_t total_outer_serial_extents = 1;
     int64_t total_inner_serial_extents = 1;
-    const ThreadInfo *thread_info = nullptr;
 
     void update(const Target &target, const LoopNest *loop);
 
@@ -42,9 +42,23 @@ struct GPULoopInfo {
 
     std::vector<int64_t> get_inner_serial_loop_extents(const LoopNest *loop_nest) const;
 
-    std::unique_ptr<ThreadInfo> create_thread_info();
+    // assert-fails if create_thread_info() has *already* been called.
+    const ThreadInfo *create_thread_info();
+
+    // Note: if create_thread_info() has not been called yet, this will return nullptr.
+    // (Note that this is an unusual but legitimate situation, so it should *not*
+    // assert-fail if the value is null.)
+    const ThreadInfo *get_thread_info() const {
+        return thread_info.get();
+    }
 
     int64_t get_total_inner_serial_extents_outside_realization(const LoopNest *loop_nest) const;
+
+private:
+    // This is a shared_ptr mainly to allow for an automatic copy ctor to be generated --
+    // it's shared between different GPULoopInfo instances, but that is never visible to
+    // the outside world.
+    std::shared_ptr<const ThreadInfo> thread_info;
 };
 
 }  // namespace Autoscheduler

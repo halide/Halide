@@ -150,7 +150,7 @@ endfunction()
 function(_add_halide_aot_tests NAME)
     set(options OMIT_C_BACKEND)
     set(oneValueArgs "")
-    set(multiValueArgs ENABLE_IF GROUPS INCLUDES HALIDE_LIBRARIES HALIDE_RUNTIME DEPS)
+    set(multiValueArgs ENABLE_IF GROUPS INCLUDES HALIDE_LIBRARIES HALIDE_RUNTIME DEPS SRCS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
@@ -169,6 +169,10 @@ function(_add_halide_aot_tests NAME)
         set(args_HALIDE_RUNTIME "${HR}.runtime")
     endif()
 
+    if (NOT args_SRCS)
+        set(args_SRCS "${NAME}_aottest.cpp")
+    endif()
+
     set(TARGET "generator_aot_${NAME}")
     set(TARGET_CPP "generator_aotcpp_${NAME}")
 
@@ -179,7 +183,7 @@ function(_add_halide_aot_tests NAME)
             list(APPEND args_INCLUDES "${Halide_SOURCE_DIR}/src/runtime")
         endif ()
         add_wasm_executable("${TARGET}"
-                            SRCS "${NAME}_aottest.cpp"
+                            SRCS "${args_SRCS}"
                             DEPS ${args_HALIDE_LIBRARIES} ${args_HALIDE_RUNTIME} ${args_DEPS}
                             OPTIONS "${OPTIONS}"
                             INCLUDES
@@ -191,7 +195,7 @@ function(_add_halide_aot_tests NAME)
         add_wasm_halide_test("${TARGET}" GROUPS generator "${args_GROUPS}")
     else()
         _add_one_aot_test("${TARGET}"
-                          SRCS "${NAME}_aottest.cpp"
+                          SRCS "${args_SRCS}"
                           DEPS ${args_HALIDE_LIBRARIES} ${args_HALIDE_RUNTIME} ${args_DEPS}
                           INCLUDES ${args_INCLUDES}
                           GROUPS ${args_GROUPS})
@@ -201,7 +205,7 @@ function(_add_halide_aot_tests NAME)
                 list(APPEND HALIDE_LIBRARIES_CPP "${hl}_cpp")
             endforeach()
             _add_one_aot_test("${TARGET_CPP}"
-                              SRCS "${NAME}_aottest.cpp"
+                              SRCS "${args_SRCS}"
                               DEPS ${HALIDE_LIBRARIES_CPP} ${args_HALIDE_RUNTIME} ${args_DEPS}
                               INCLUDES ${args_INCLUDES}
                               GROUPS ${args_GROUPS})
@@ -513,19 +517,31 @@ if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windo
     _add_halide_aot_tests(sanitizercoverage OMIT_C_BACKEND)
 endif ()
 
-# multitarget_aottest.cpp
-# multitarget_generator.cpp
-_add_halide_libraries(multitarget
-                       # Multitarget doesn't apply to WASM...
-                       ENABLE_IF NOT ${_USING_WASM}
-                       # ... or to the C backend
-                       OMIT_C_BACKEND
-                       TARGETS cmake-no_bounds_query cmake
-                       FEATURES c_plus_plus_name_mangling
-                       FUNCTION_NAME HalideTest::multitarget)
-_add_halide_aot_tests(multitarget
-                      ENABLE_IF NOT ${_USING_WASM}
-                      OMIT_C_BACKEND)
+# multitarget and wasm don't mix well
+if (NOT _USING_WASM)
+    # multitarget_aottest.cpp
+    # multitarget_generator.cpp
+    _add_halide_libraries(multitarget
+                           # ... or to the C backend
+                           OMIT_C_BACKEND
+                           TARGETS cmake-no_bounds_query cmake
+                           FEATURES c_plus_plus_name_mangling
+                           FUNCTION_NAME HalideTest::multitarget)
+
+    # Note that we make two tests here so that we can run it two ways,
+    # to ensure that both target paths are taken.
+    _add_halide_aot_tests(multitarget_0
+                          SRCS multitarget_aottest.cpp
+                          HALIDE_LIBRARIES multitarget
+                          OMIT_C_BACKEND)
+    set_tests_properties(generator_aot_multitarget_0 PROPERTIES ENVIRONMENT "HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE=0")
+
+    _add_halide_aot_tests(multitarget_1
+                          SRCS multitarget_aottest.cpp
+                          HALIDE_LIBRARIES multitarget
+                          OMIT_C_BACKEND)
+    set_tests_properties(generator_aot_multitarget_1 PROPERTIES ENVIRONMENT "HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE=1")
+endif ()
 
 # nested_externs_aottest.cpp
 # nested_externs_generator.cpp
