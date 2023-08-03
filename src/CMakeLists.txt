@@ -461,6 +461,7 @@ if (WITH_SERIALIZATION)
         VERBATIM
     )
     add_custom_target(generate_fb_header DEPENDS "${fb_header}")
+    set_source_files_properties("${fb_header}" PROPERTIES GENERATED TRUE)
 
     add_dependencies(Halide generate_fb_header)
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
