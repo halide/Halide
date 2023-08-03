@@ -846,7 +846,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
     case Serialize::Expr::Expr_Shuffle: {
         const auto *shuffle_expr = (const Serialize::Shuffle *)expr;
         std::vector<Expr> vectors = deserialize_expr_vector(shuffle_expr->vectors_type(), shuffle_expr->vectors());
-        const auto indices_serialized = shuffle_expr->indices();
+        const auto *const indices_serialized = shuffle_expr->indices();
         std::vector<int32_t> indices;
         indices.reserve(indices_serialized->size());
         for (size_t i = 0; i < indices_serialized->size(); ++i) {
@@ -1218,7 +1218,7 @@ Buffer<> Deserializer::deserialize_buffer(const Serialize::Buffer *buffer) {
     dense_buffer_dimensions.reserve(dimensions);
     int32_t stride = -1;
     for (int i = 0; i < dimensions; ++i) {
-        auto dim = buffer->dims()->Get(i);
+        const auto *dim = buffer->dims()->Get(i);
         halide_dimension_t hl_dim, dense_dim;
         hl_dim.min = dim->min();
         hl_dim.extent = dim->extent();
@@ -1310,7 +1310,7 @@ Pipeline Deserializer::deserialize(std::istream &in) {
     std::vector<Function> functions;
     functions.reserve(func_names_in_order.size());
     if (!func_names_in_order.empty()) {
-        functions.push_back(Function(func_names_in_order[0]));
+        functions.emplace_back(func_names_in_order[0]);
         for (size_t i = 1; i < func_names_in_order.size(); ++i) {
             functions.push_back(functions[0].new_function_in_same_group(func_names_in_order[i]));
         }
@@ -1336,7 +1336,7 @@ Pipeline Deserializer::deserialize(std::istream &in) {
     std::vector<Func> funcs;
     for (size_t i = 0; i < pipeline_obj->funcs()->size(); ++i) {
         deserialize_function(pipeline_obj->funcs()->Get(i), functions[i]);
-        funcs.push_back(Func(functions[i]));
+        funcs.emplace_back(functions[i]);
     }
 
     const std::vector<std::string> output_names =
