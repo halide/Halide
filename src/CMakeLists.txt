@@ -431,8 +431,19 @@ add_library(Halide
 # Build serialization, enabled by default
 option(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
 if (WITH_SERIALIZATION)
-    find_package(flatbuffers QUIET)
-    if (NOT flatbuffers_FOUND)
+    # Sadly, there seem to be at least three variations of the Flatbuffer package
+    # in terms of case; if we guess wrong, we fail on case-sensitive file systems.
+    # We'll try this as a hack workaround: just try all three.
+    set(FB_NAME "")
+    foreach (N IN ITEMS flatbuffers Flatbuffers FlatBuffers)
+        find_package(${N} QUIET)
+        if (${N}_FOUND)
+            set(FB_NAME ${N})
+            break()
+        endif ()
+    endforeach ()
+
+    if (NOT FB_NAME)
         message(FATAL_ERROR "WITH_SERIALIZATION is ON, but could not find flatbuffers installed locally. "
                             "Either install flatbuffers or build with WITH_SERIALIZATION=OFF.")
     endif ()
@@ -443,14 +454,14 @@ if (WITH_SERIALIZATION)
     set(fb_header "${fb_dir}/halide_ir_generated.h")
     add_custom_command(
         OUTPUT "${fb_header}"
-        COMMAND flatbuffers::flatc --cpp -o "${fb_dir}" "${fb_def}"
+        COMMAND ${FB_NAME}::flatc --cpp -o "${fb_dir}" "${fb_def}"
         DEPENDS "${fb_def}"
         VERBATIM
     )
 
     target_sources(Halide PRIVATE "${fb_header}")
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
-    target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
+    target_link_libraries(Halide PRIVATE ${FB_NAME}::flatbuffers)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
 
