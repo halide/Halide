@@ -150,9 +150,8 @@ SpvInstruction SpvInstruction::make(SpvOp op_code) {
     return instance;
 }
 
-void SpvInstruction::set_block(SpvBlock block) {
-    check_defined();
-    contents->block = std::move(block);
+SpvInstruction::~SpvInstruction() {
+    clear();
 }
 
 void SpvInstruction::set_result_id(SpvId result_id) {
@@ -270,6 +269,10 @@ bool SpvInstruction::is_defined() const {
     return contents.defined();
 }
 
+void SpvInstruction::clear() {
+    contents = nullptr;
+}
+
 bool SpvInstruction::is_immediate(uint32_t index) const {
     check_defined();
     return (contents->value_types[index] != SpvOperandId);
@@ -278,11 +281,6 @@ bool SpvInstruction::is_immediate(uint32_t index) const {
 uint32_t SpvInstruction::length() const {
     check_defined();
     return (uint32_t)contents->operands.size();
-}
-
-SpvBlock SpvInstruction::block() const {
-    check_defined();
-    return contents->block;
 }
 
 void SpvInstruction::add_data(uint32_t bytes, const void *data, SpvValueType value_type) {
@@ -346,34 +344,25 @@ void SpvInstruction::encode(SpvBinary &binary) const {
 
 // --
 
-SpvBlock SpvBlock::make(SpvFunction func, SpvId block_id) {
+SpvBlock SpvBlock::make(SpvId block_id) {
     SpvBlock instance;
     instance.contents = SpvBlockContentsPtr(new SpvBlockContents());
-    instance.contents->parent = std::move(func);
     instance.contents->block_id = block_id;
     return instance;
 }
 
+SpvBlock::~SpvBlock() {
+    clear();
+}
+
 void SpvBlock::add_instruction(SpvInstruction inst) {
     check_defined();
-    inst.set_block(*this);
     contents->instructions.push_back(inst);
 }
 
 void SpvBlock::add_variable(SpvInstruction var) {
     check_defined();
-    var.set_block(*this);
     contents->variables.push_back(var);
-}
-
-void SpvBlock::set_function(SpvFunction func) {
-    check_defined();
-    contents->parent = std::move(func);
-}
-
-SpvFunction SpvBlock::function() const {
-    check_defined();
-    return contents->parent;
 }
 
 const SpvBlock::Instructions &SpvBlock::instructions() const {
@@ -423,6 +412,10 @@ void SpvBlock::check_defined() const {
     user_assert(is_defined()) << "An SpvBlock must be defined before accessing its properties\n";
 }
 
+void SpvBlock::clear() {
+    contents = nullptr;
+}
+
 void SpvBlock::encode(SpvBinary &binary) const {
     check_defined();
 
@@ -453,8 +446,16 @@ SpvFunction SpvFunction::make(SpvId func_type_id, SpvId func_id, SpvId return_ty
     return instance;
 }
 
+SpvFunction::~SpvFunction() {
+    clear();
+}
+
 bool SpvFunction::is_defined() const {
     return contents.defined();
+}
+
+void SpvFunction::clear() {
+    contents = nullptr;
 }
 
 SpvBlock SpvFunction::create_block(SpvId block_id) {
@@ -465,7 +466,7 @@ SpvBlock SpvFunction::create_block(SpvId block_id) {
             last_block.add_instruction(SpvFactory::branch(block_id));
         }
     }
-    SpvBlock block = SpvBlock::make(*this, block_id);
+    SpvBlock block = SpvBlock::make(block_id);
     contents->blocks.push_back(block);
     return block;
 }
@@ -535,11 +536,6 @@ SpvPrecision SpvFunction::parameter_precision(uint32_t index) const {
     }
 }
 
-void SpvFunction::set_module(SpvModule module) {
-    check_defined();
-    contents->parent = std::move(module);
-}
-
 SpvInstruction SpvFunction::declaration() const {
     check_defined();
     return contents->declaration;
@@ -553,11 +549,6 @@ const SpvFunction::Blocks &SpvFunction::blocks() const {
 const SpvFunction::Parameters &SpvFunction::parameters() const {
     check_defined();
     return contents->parameters;
-}
-
-SpvModule SpvFunction::module() const {
-    check_defined();
-    return contents->parent;
 }
 
 SpvId SpvFunction::return_type_id() const {
@@ -608,8 +599,16 @@ SpvModule SpvModule::make(SpvId module_id,
     return instance;
 }
 
+SpvModule::~SpvModule() {
+    clear();
+}
+
 bool SpvModule::is_defined() const {
     return contents.defined();
+}
+
+void SpvModule::clear() {
+    contents = nullptr;
 }
 
 void SpvModule::add_debug_string(SpvId result_id, const std::string &string) {
@@ -654,7 +653,6 @@ void SpvModule::add_instruction(const SpvInstruction &val) {
 
 void SpvModule::add_function(SpvFunction val) {
     check_defined();
-    val.set_module(*this);
     contents->functions.emplace_back(val);
 }
 
@@ -1297,7 +1295,7 @@ SpvId SpvBuilder::add_function(const std::string &name, SpvId return_type_id, co
         func.add_parameter(param_inst);
     }
     SpvId block_id = make_id(SpvBlockId);
-    SpvBlock entry_block = SpvBlock::make(func, block_id);
+    SpvBlock entry_block = SpvBlock::make(block_id);
     func.add_block(entry_block);
     module.add_function(func);
     function_map[func_id] = func;
