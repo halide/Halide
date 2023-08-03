@@ -37,7 +37,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install llvm-16 clang-16 liblld-16-dev libclang-16-dev clang-tidy-16 ninja-build flatbuffers-compiler flatbuffers-compiler-dev libflatbuffers-dev
           which flatc
-          ls -l /usr/lib/x86_64-linux-gnu/
           ls -l /usr/lib/x86_64-linux-gnu/cmake/
           ls -l /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/
       - name: Run clang-tidy
