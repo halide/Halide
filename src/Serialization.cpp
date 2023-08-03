@@ -1,21 +1,18 @@
-#ifdef HALIDE_SERIALIZATION
-
 #include "Serialization.h"
-#include "Schedule.h"
-#include "halide_ir_generated.h"
-
-#include <string>
-#include <utility>
-#include <vector>
-
 #include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
 #include "RealizationOrder.h"
+#include "Schedule.h"
+#include "halide_ir_generated.h"
+
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace Halide {
 namespace Internal {
@@ -1471,5 +1468,3 @@ void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, s
 }
 
 }  // namespace Halide
-
-#endif  // HALIDE_SERIALIZATION

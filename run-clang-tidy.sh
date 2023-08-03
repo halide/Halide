@@ -55,6 +55,7 @@ RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
 # generated headers files from Generators.
 #
 # Skip DefaultCostModel.cpp as it relies on cost_model.h.
+# Skip Serialization.cpp and Deserialize.cpp as they rely on halide_ir_generated.h.
 # Skip GenGen.cpp and RunGenMain.cpp as they bring clang-tidy to its knees,
 # for reasons that aren't entirely clear yet.
 CLANG_TIDY_TARGETS=$(find \
@@ -64,6 +65,8 @@ CLANG_TIDY_TARGETS=$(find \
      "${ROOT_DIR}/util" \
      \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" \
      ! -name DefaultCostModel.cpp \
+     ! -name Deserialization.cpp \
+     ! -name Serialization.cpp \
      ! -name GenGen.cpp \
      ! -name RunGenMain.cpp)
 

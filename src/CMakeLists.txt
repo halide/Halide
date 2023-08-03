@@ -448,7 +448,6 @@ if (BUILD_SERIALIZATION)
     target_sources(Halide PRIVATE "${fb_header}")
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
     target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
-    target_compile_definitions(Halide PRIVATE HALIDE_SERIALIZATION)
 endif ()
 
 add_library(Halide::Halide ALIAS Halide)

@@ -1,19 +1,17 @@
-#ifdef HALIDE_SERIALIZATION
-
 #include "Deserialization.h"
-#include <fstream>
-#include <functional>
-#include <iostream>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
 #include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
 #include "Schedule.h"
 #include "halide_ir_generated.h"
+
+#include <fstream>
+#include <functional>
+#include <iostream>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace Halide {
 namespace Internal {
@@ -1374,5 +1372,3 @@ Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Inte
 }
 
 }  // namespace Halide
-
-#endif  // HALIDE_SERIALIZATION
