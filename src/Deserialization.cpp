@@ -1393,5 +1393,4 @@ Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Inte
 
 }  // namespace Halide
 
-#endif // WITH_SERIALIZATION
-
+#endif  // WITH_SERIALIZATION
