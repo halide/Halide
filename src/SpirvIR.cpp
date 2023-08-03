@@ -357,12 +357,12 @@ SpvBlock::~SpvBlock() {
 
 void SpvBlock::add_instruction(SpvInstruction inst) {
     check_defined();
-    contents->instructions.push_back(inst);
+    contents->instructions.emplace_back(std::move(inst));
 }
 
 void SpvBlock::add_variable(SpvInstruction var) {
     check_defined();
-    contents->variables.push_back(var);
+    contents->variables.emplace_back(std::move(var));
 }
 
 const SpvBlock::Instructions &SpvBlock::instructions() const {
@@ -471,7 +471,7 @@ SpvBlock SpvFunction::create_block(SpvId block_id) {
     return block;
 }
 
-void SpvFunction::add_block(const SpvBlock &block) {
+void SpvFunction::add_block(SpvBlock block) {
     check_defined();
     if (!contents->blocks.empty()) {
         SpvBlock last_block = tail_block();
@@ -479,12 +479,12 @@ void SpvFunction::add_block(const SpvBlock &block) {
             last_block.add_instruction(SpvFactory::branch(block.id()));
         }
     }
-    contents->blocks.push_back(block);
+    contents->blocks.emplace_back(std::move(block));
 }
 
-void SpvFunction::add_parameter(const SpvInstruction &param) {
+void SpvFunction::add_parameter(SpvInstruction param) {
     check_defined();
-    contents->parameters.push_back(param);
+    contents->parameters.emplace_back(std::move(param));
 }
 
 uint32_t SpvFunction::parameter_count() const {
@@ -613,47 +613,49 @@ void SpvModule::clear() {
 
 void SpvModule::add_debug_string(SpvId result_id, const std::string &string) {
     check_defined();
-    contents->debug_source.push_back(SpvFactory::debug_string(result_id, string));
+    SpvInstruction inst = SpvFactory::debug_string(result_id, string);
+    contents->debug_source.emplace_back(std::move(inst));
 }
 
 void SpvModule::add_debug_symbol(SpvId id, const std::string &symbol) {
     check_defined();
-    contents->debug_symbols.push_back(SpvFactory::debug_symbol(id, symbol));
+    SpvInstruction inst = SpvFactory::debug_symbol(id, symbol);
+    contents->debug_symbols.emplace_back(std::move(inst));
 }
 
-void SpvModule::add_annotation(const SpvInstruction &val) {
+void SpvModule::add_annotation(SpvInstruction val) {
     check_defined();
-    contents->annotations.push_back(val);
+    contents->annotations.emplace_back(std::move(val));
 }
 
-void SpvModule::add_type(const SpvInstruction &val) {
+void SpvModule::add_type(SpvInstruction val) {
     check_defined();
-    contents->types.push_back(val);
+    contents->types.emplace_back(std::move(val));
 }
 
-void SpvModule::add_constant(const SpvInstruction &val) {
+void SpvModule::add_constant(SpvInstruction val) {
     check_defined();
-    contents->constants.push_back(val);
+    contents->constants.emplace_back(std::move(val));
 }
 
-void SpvModule::add_global(const SpvInstruction &val) {
+void SpvModule::add_global(SpvInstruction val) {
     check_defined();
-    contents->globals.push_back(val);
+    contents->globals.emplace_back(std::move(val));
 }
 
-void SpvModule::add_execution_mode(const SpvInstruction &val) {
+void SpvModule::add_execution_mode(SpvInstruction val) {
     check_defined();
-    contents->execution_modes.push_back(val);
+    contents->execution_modes.emplace_back(std::move(val));
 }
 
-void SpvModule::add_instruction(const SpvInstruction &val) {
+void SpvModule::add_instruction(SpvInstruction val) {
     check_defined();
-    contents->instructions.push_back(val);
+    contents->instructions.emplace_back(std::move(val));
 }
 
 void SpvModule::add_function(SpvFunction val) {
     check_defined();
-    contents->functions.emplace_back(val);
+    contents->functions.emplace_back(std::move(val));
 }
 
 void SpvModule::add_entry_point(const std::string &name, SpvInstruction inst) {

@@ -230,8 +230,8 @@ public:
     SpvFunction &operator=(SpvFunction &&) = default;
 
     SpvBlock create_block(SpvId block_id);
-    void add_block(const SpvBlock &block);
-    void add_parameter(const SpvInstruction &param);
+    void add_block(SpvBlock block);
+    void add_parameter(SpvInstruction param);
     void set_return_precision(SpvPrecision precision);
     void set_parameter_precision(uint32_t index, SpvPrecision precision);
     bool is_defined() const;
@@ -281,13 +281,13 @@ public:
 
     void add_debug_string(SpvId result_id, const std::string &string);
     void add_debug_symbol(SpvId id, const std::string &symbol);
-    void add_annotation(const SpvInstruction &val);
-    void add_type(const SpvInstruction &val);
-    void add_constant(const SpvInstruction &val);
-    void add_global(const SpvInstruction &val);
-    void add_execution_mode(const SpvInstruction &val);
+    void add_annotation(SpvInstruction val);
+    void add_type(SpvInstruction val);
+    void add_constant(SpvInstruction val);
+    void add_global(SpvInstruction val);
+    void add_execution_mode(SpvInstruction val);
     void add_function(SpvFunction val);
-    void add_instruction(const SpvInstruction &val);
+    void add_instruction(SpvInstruction val);
     void add_entry_point(const std::string &name, SpvInstruction entry_point);
 
     void import_instruction_set(SpvId id, const std::string &instruction_set);
