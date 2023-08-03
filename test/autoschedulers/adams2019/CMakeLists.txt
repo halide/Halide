@@ -21,7 +21,8 @@ function(add_adams2019_test NAME)
         set(ARGS_LABELS "")
     endif()
     list(APPEND ARGS_LABELS adams2019)
-    list(APPEND ARGS_LABELS autoschedulers)
+    list(APPEND ARGS_LABELS autoschedulers_cpu)
+    list(APPEND ARGS_LABELS auto_schedule)
 
     add_test(NAME ${NAME}
              COMMAND ${ARGS_COMMAND})

@@ -47,7 +47,10 @@ struct NoOpMutator {
 };
 
 template<typename PostCreateMutator>
-void deep_copy_loop_nest(LoopNest *new_loop_nest, const LoopNest *new_loop_nest_parent, const IntrusivePtr<const LoopNest> &existing_loop_nest, const PostCreateMutator &post_create_mutator) {
+void deep_copy_loop_nest(LoopNest *new_loop_nest,
+                         const LoopNest *new_loop_nest_parent,
+                         const IntrusivePtr<const LoopNest> &existing_loop_nest,
+                         const PostCreateMutator &post_create_mutator) {
     new_loop_nest->copy_from(*existing_loop_nest);
 
     for (std::size_t i = 0, N = new_loop_nest->children.size(); i < N; ++i) {
@@ -59,8 +62,11 @@ void deep_copy_loop_nest(LoopNest *new_loop_nest, const LoopNest *new_loop_nest_
     post_create_mutator(new_loop_nest);
 }
 
+using LoopNestMap = map<const LoopNest *, pair<const LoopNest *, int>>;
+
 template<typename PostCreateMutator>
-LoopNest *deep_copy_loop_nest(const IntrusivePtr<const LoopNest> &loop_nest, const PostCreateMutator &post_create_mutator) {
+LoopNest *deep_copy_loop_nest(const IntrusivePtr<const LoopNest> &loop_nest,
+                              const PostCreateMutator &post_create_mutator) {
     LoopNest *new_loop_nest = new LoopNest;
     deep_copy_loop_nest(new_loop_nest, nullptr, loop_nest, post_create_mutator);
     return new_loop_nest;
@@ -86,11 +92,13 @@ struct State {
     uint64_t structural_hash(int depth) const;
 
     // Compute the parent and depth of every loop nest node
-    void compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &p,
-                                   const LoopNest *here, int depth) const;
+    void compute_loop_nest_parents(LoopNestMap &p,
+                                   const LoopNest *here,
+                                   int depth) const;
 
-    const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
-                                            const LoopNest *a, const LoopNest *b) const;
+    const LoopNest *deepest_common_ancestor(const LoopNestMap &parent,
+                                            const LoopNest *a,
+                                            const LoopNest *b) const;
 
     // We use the post_create_mutator so that the loop nests can be modified
     // before they become IntrusivePtr<const LoopNest> as children and cannot be modified
@@ -122,15 +130,27 @@ struct State {
         void add_outer_thread_loops(LoopNest *loop_nest) const;
     };
 
-    IntrusivePtr<const LoopNest> get_root_for_features(const Anderson2021Params &params, const Target &target) const;
+    IntrusivePtr<const LoopNest> get_root_for_features(const Anderson2021Params &params,
+                                                       const Target &target) const;
 
-    void set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop, LoopNest::Sites &site) const;
+    void set_gpu_store_site(const LoopNestMap &parent,
+                            const LoopNest *loop,
+                            LoopNest::Sites &site) const;
 
-    bool compute_featurization(const FunctionDAG &dag, const Anderson2021Params &params, const Target &target, StageMap<ScheduleFeatures> *features, Statistics &stats, bool verbose = false) const;
+    bool compute_featurization(const FunctionDAG &dag,
+                               const Anderson2021Params &params,
+                               const Target &target,
+                               StageMap<ScheduleFeatures> *features,
+                               Statistics &stats,
+                               bool verbose = false) const;
 
-    void save_featurization(const FunctionDAG &dag, const Anderson2021Params &params, const Target &target, std::ostream &out) const;
+    void save_featurization(const FunctionDAG &dag,
+                            const Anderson2021Params &params,
+                            const Target &target,
+                            std::ostream &out) const;
 
-    bool contains_store_at(const set<const FunctionDAG::Node *> &outermost_store_at, const IntrusivePtr<const LoopNest> &parent) const;
+    bool contains_store_at(const set<const FunctionDAG::Node *> &outermost_store_at,
+                           const IntrusivePtr<const LoopNest> &parent) const;
 
     // For GPU, only allow store_at root or inside the outermost loop nest. Any
     // store_ats further in will be hoisted and expanded, increasing the
@@ -141,13 +161,21 @@ struct State {
 
     bool exceeds_serial_extents_limit(const Target &target) const;
 
-    int64_t get_shared_mem_alloc_size(const LoopNest *block, const LoopNest *loop) const;
+    int64_t get_shared_mem_alloc_size(const LoopNest *block,
+                                      const LoopNest *loop) const;
 
-    bool exceeds_shared_memory_limit(const Anderson2021Params &params, const Target &target) const;
+    bool exceeds_shared_memory_limit(const Anderson2021Params &params,
+                                     const Target &target) const;
 
-    bool exceeds_local_memory_limit(const Anderson2021Params &params, const Target &target) const;
+    bool exceeds_local_memory_limit(const Anderson2021Params &params,
+                                    const Target &target) const;
 
-    bool calculate_cost(const FunctionDAG &dag, const Anderson2021Params &params, const Target &target, CostModel *cost_model, Statistics &stats, bool verbose = false);
+    bool calculate_cost(const FunctionDAG &dag,
+                        const Anderson2021Params &params,
+                        const Target &target,
+                        CostModel *cost_model,
+                        Statistics &stats,
+                        bool verbose = false);
 
     // Make a child copy of this state. The loop nest is const (we
     // make mutated copies of it, rather than mutating it), so we can
@@ -159,25 +187,43 @@ struct State {
 
     void print_compute_locations() const;
 
-    void fuse_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, const vector<VarOrRVar> &parallel_vars, const vector<int64_t> &parallel_extents, const vector<int> &constant_extents) const;
+    void fuse_gpu_blocks(LoopNest::StageScheduleState *state,
+                         Stage &stage,
+                         const vector<VarOrRVar> &parallel_vars,
+                         const vector<int64_t> &parallel_extents,
+                         const vector<int> &constant_extents) const;
 
-    void mark_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, const vector<VarOrRVar> &parallel_vars, const vector<int64_t> &parallel_extents) const;
+    void mark_gpu_blocks(LoopNest::StageScheduleState *state,
+                         Stage &stage,
+                         const vector<VarOrRVar> &parallel_vars,
+                         const vector<int64_t> &parallel_extents) const;
 
-    bool mark_gpu_threads(LoopNest::StageScheduleState *state, Stage &stage, std::unordered_set<std::string> &new_serial_vars, std::ostringstream &staged_funcs_schedule_source) const;
+    bool mark_gpu_threads(LoopNest::StageScheduleState *state,
+                          Stage &stage,
+                          std::unordered_set<std::string> &new_serial_vars,
+                          std::ostringstream &staged_funcs_schedule_source) const;
 
     bool can_fuse_gpu(const vector<int64_t> &parallel_extents) const;
 
     // Apply the schedule represented by this state to a Halide
     // Pipeline. Also generate source code for the schedule for the
     // user to copy-paste to freeze this schedule as permanent artifact.
-    void apply_schedule(const FunctionDAG &dag, const Anderson2021Params &params, const Target &target);
+    void apply_schedule(const FunctionDAG &dag,
+                        const Anderson2021Params &params,
+                        const Target &target);
 
     bool should_always_consider_inline(const FunctionDAG::Node *node) const;
     void add_to_always_consider_inline_options(const FunctionDAG::Node *node);
     void update_always_consider_inline_options(const FunctionDAG::Node *node);
 
-    const LoopNest *deepest_valid_compute_location(const Anderson2021Params &params, const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root, StageMap<int64_t> &total_shared_mem_alloc_sizes) const;
-    int64_t total_loop_extents_of_ancestors(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop) const;
+    const LoopNest *deepest_valid_compute_location(const Anderson2021Params &params,
+                                                   const LoopNestMap &parent,
+                                                   const FunctionDAG::Node &node,
+                                                   const LoopNest *loop,
+                                                   const LoopNest *root,
+                                                   StageMap<int64_t> &total_shared_mem_alloc_sizes) const;
+    int64_t total_loop_extents_of_ancestors(const LoopNestMap &parent,
+                                            const LoopNest *loop) const;
 };
 
 // A priority queue of states, sorted according to increasing

@@ -114,7 +114,7 @@ using LocalMemInfo = MemInfoType<LocalMem>;
 
 struct Strides {
 public:
-    Strides(const std::vector<int64_t> &storage_strides)
+    explicit Strides(const std::vector<int64_t> &storage_strides)
         : storage_strides{storage_strides} {
     }
 
@@ -175,7 +175,10 @@ private:
 
 struct GlobalAccessAccumulator {
     GlobalAccessAccumulator(int bytes_per_access, size_t dimensions, const Strides &strides, bool verbose)
-        : bytes_per_access{bytes_per_access}, dimensions{dimensions}, strides{strides}, verbose{verbose} {
+        : bytes_per_access{bytes_per_access},
+          dimensions{dimensions},
+          strides{strides},
+          verbose{verbose} {
     }
 
     void operator()(int thread_id, int x, int y, int z, int active, bool last_thread) {
@@ -257,7 +260,10 @@ private:
 
 struct SharedAccessAccumulator {
     SharedAccessAccumulator(int bytes_per_access, size_t dimensions, const Strides &strides, bool verbose)
-        : bytes_per_access{bytes_per_access}, dimensions{dimensions}, strides{strides}, verbose{verbose} {
+        : bytes_per_access{bytes_per_access},
+          dimensions{dimensions},
+          strides{strides},
+          verbose{verbose} {
     }
 
     void operator()(int thread_id, int x, int y, int z, int active, bool last_thread) {
@@ -348,7 +354,8 @@ private:
 
 struct LocalAccessAccumulator {
     LocalAccessAccumulator(int bytes_per_access, bool verbose)
-        : bytes_per_access{bytes_per_access}, verbose{verbose} {
+        : bytes_per_access{bytes_per_access},
+          verbose{verbose} {
     }
 
     void operator()(int thread_id, int x, int y, int z, int active, bool last_thread) {

@@ -98,14 +98,14 @@ Expr double_to_expr_check(double v) {
 std::vector<Expr> collect_print_args(const py::args &args) {
     std::vector<Expr> v;
     v.reserve(args.size());
-    for (size_t i = 0; i < args.size(); ++i) {
+    for (const auto &arg : args) {
         // No way to see if a cast will work: just have to try
         // and fail. Normally we don't want string to be convertible
         // to Expr, but in this unusual case we do.
         try {
-            v.emplace_back(args[i].cast<std::string>());
+            v.emplace_back(arg.cast<std::string>());
         } catch (...) {
-            v.push_back(args[i].cast<Expr>());
+            v.push_back(arg.cast<Expr>());
         }
     }
     return v;

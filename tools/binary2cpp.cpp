@@ -12,10 +12,12 @@
 // Embeds a binary blob (from stdin) in a C++ source array of unsigned
 // chars. Similar to the xxd utility.
 
-static int usage() {
+namespace {
+int usage() {
     fprintf(stderr, "Usage: binary2cpp identifier [-header]\n");
     return -1;
 }
+}  // namespace
 
 int main(int argc, const char **argv) {
     const char *target = argv[1];

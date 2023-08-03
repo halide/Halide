@@ -10,6 +10,7 @@ from typing import Any, Optional
 import builtins
 import re
 import sys
+import warnings
 
 def _fail(msg: str):
     raise HalideError(msg)
@@ -487,6 +488,9 @@ class Generator(ABC):
             for k, v in generator_params.items():
                 self._set_generatorparam_value(k, v)
 
+    def allow_out_of_order_inputs_and_outputs(self):
+        return False
+
     def configure(self):
         pass
 
@@ -567,11 +571,22 @@ class Generator(ABC):
         self._outputs_dict = {}
         self._arginfos_in = []
         self._arginfos_out = []
+        outputs_seen = False
         for name, io in _unsorted_cls_dir(self.__class__):
             is_input = isinstance(io, (InputBuffer, InputScalar))
             is_output = isinstance(io, (OutputBuffer, OutputScalar))
             if not (is_input or is_output):
                 continue
+
+            if is_input and outputs_seen and not self.allow_out_of_order_inputs_and_outputs():
+                io_order_warning = ("Generators will always produce code that orders all Inputs before all Outputs; "
+                                   "this Generator declares the Inputs and Outputs in a different order, so the calling convention may not be as expected. "
+                                   "A future version of Halide will make this illegal, and require all Inputs to be declared before all Outputs. "
+                                   "(You can avoid this requirement by overriding Generator::allow_out_of_order_inputs_and_outputs().)")
+                warnings.warn(io_order_warning)
+
+            if is_output:
+                outputs_seen = True
             d = self._inputs_dict if is_input else self._outputs_dict
             a = self._arginfos_in if is_input else self._arginfos_out
             self._add_gpio(name, io, d, a)

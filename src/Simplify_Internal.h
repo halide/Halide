@@ -164,7 +164,7 @@ public:
 #endif
 
     bool remove_dead_code;
-    bool no_float_simplify;
+    bool no_float_simplify = false;
 
     HALIDE_ALWAYS_INLINE
     bool may_simplify(const Type &t) const {

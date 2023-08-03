@@ -35,10 +35,10 @@ class ModelTest(unittest.TestCase):
         model.BuildFromOnnxModel(onnx_model)
         schedule = model.OptimizeSchedule()
         schedule = schedule.replace('\n', ' ')
-        expected_schedule = r'// --- BEGIN machine-generated schedule // Target: .+// MachineParams: .+// Delete this line if not using Generator Pipeline pipeline = get_pipeline\(\);.+Func OUT = pipeline.get_func\(1\);.+{.+}.+'
+        expected_schedule = r'.*Func OUT = pipeline.get_func\(1\);.+'
         self.assertRegex(schedule, expected_schedule)
 
-        input = np.random.rand(2, 3) - 0.5
+        input = (np.random.rand(2, 3) - 0.5).astype('float32')
         outputs = model.run([input])
         self.assertEqual(1, len(outputs))
         output = outputs[0]
@@ -62,12 +62,12 @@ class ModelTest(unittest.TestCase):
         model = Model()
         model.BuildFromOnnxModel(onnx_model)
         schedule = model.OptimizeSchedule()
-        schedule = schedule.replace('\n', ' ')
-        expected_schedule = r'// --- BEGIN machine-generated schedule // Target: .+// MachineParams: .+// Delete this line if not using Generator Pipeline pipeline = get_pipeline\(\);.+Func C = pipeline.get_func\(2\);.+{.+}.+'
+        schedule = schedule.replace('\n', ' ')        
+        expected_schedule = r'.*Func C = pipeline.get_func\(2\);.+'
         self.assertRegex(schedule, expected_schedule)
 
-        input1 = np.random.randint(-10, 10, size=())
-        input2 = np.random.randint(-10, 10, size=())
+        input1 = np.random.randint(-10, 10, size=()).astype('int32')
+        input2 = np.random.randint(-10, 10, size=()).astype('int32')
         outputs = model.run([input1, input2])
         self.assertEqual(1, len(outputs))
         output = outputs[0]

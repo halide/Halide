@@ -20,9 +20,11 @@ std::unique_ptr<HexagonWrapper> sim;
 bool debug_mode = false;
 
 int init_sim() {
-    if (sim) return 0;
+    if (sim) {
+        return 0;
+    }
 
-    sim = std::unique_ptr<HexagonWrapper>(new HexagonWrapper(HEX_CPU_V65));
+    sim = std::make_unique<HexagonWrapper>(HEX_CPU_V65);
 
     HEXAPI_Status status = HEX_STAT_SUCCESS;
 
@@ -168,12 +170,13 @@ int read_memory(void *dest, int src, int size) {
     while (size > 0) {
         // This is the same logic as in write_memory above.
         int next = 1;
-        if (size >= 8)
+        if (size >= 8) {
             next = 8;
-        else if (size >= 4)
+        } else if (size >= 4) {
             next = 4;
-        else if (size >= 2)
+        } else if (size >= 2) {
             next = 2;
+        }
         HEXAPI_Status status = sim->ReadMemory(src, next, dest);
         if (status != HEX_STAT_SUCCESS) {
             printf("HexagonWrapper::ReadMemory failed: %d\n", status);
@@ -324,12 +327,12 @@ public:
     }
 
     // Enable usage with std::vector.
-    remote_buffer(remote_buffer &&move)
+    remote_buffer(remote_buffer &&move) noexcept
         : remote_buffer() {
         std::swap(data, move.data);
         std::swap(dataLen, move.dataLen);
     }
-    remote_buffer &operator=(remote_buffer &&move) {
+    remote_buffer &operator=(remote_buffer &&move) noexcept {
         std::swap(data, move.data);
         std::swap(dataLen, move.dataLen);
         return *this;
@@ -352,7 +355,9 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen, const 
     std::lock_guard<std::mutex> guard(mutex);
 
     int ret = init_sim();
-    if (ret != 0) return -1;
+    if (ret != 0) {
+        return -1;
+    }
 
     // Copy the pointer arguments to the simulator.
     remote_buffer remote_soname(soname, sonameLen);
@@ -361,7 +366,9 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen, const 
 
     // Run the init kernels command.
     ret = send_message(Message::LoadLibrary, {remote_soname.data, sonameLen, remote_code.data, codeLen, remote_module_ptr.data});
-    if (ret != 0) return ret;
+    if (ret != 0) {
+        return ret;
+    }
 
     // Get the module ptr.
     ret = read_memory(module_ptr, remote_module_ptr.data, 4);
@@ -422,7 +429,9 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
          remote_input_buffersPtrs.data, input_buffersLen,
          remote_output_buffersPtrs.data, output_buffersLen,
          remote_input_scalarsPtrs.data, input_scalarsLen});
-    if (ret != 0) return ret;
+    if (ret != 0) {
+        return ret;
+    }
 
     HEX_8u_t cycles_end = 0;
     sim->GetSimulatedCycleCount(&cycles_end);
@@ -435,7 +444,9 @@ int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,
     // Copy the outputs back.
     for (int i = 0; i < output_buffersLen; i++) {
         ret = read_memory(output_buffersPtrs[i].data, remote_output_buffers[i].data, output_buffersPtrs[i].dataLen);
-        if (ret != 0) return ret;
+        if (ret != 0) {
+            return ret;
+        }
     }
 
     return ret;
@@ -477,8 +488,8 @@ void *halide_hexagon_host_malloc(size_t x) {
     // Allocate enough space for aligning the pointer we return.
     const size_t alignment = 4096;
     void *orig = malloc(x + alignment);
-    if (orig == NULL) {
-        return NULL;
+    if (orig == nullptr) {
+        return nullptr;
     }
 
     // We want to store the original pointer prior to the pointer we return.

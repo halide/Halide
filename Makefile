@@ -10,7 +10,7 @@
 #     the tests in test/generator/ this times only the halide build time.
 
 # Halide project version
-HALIDE_VERSION_MAJOR ?= 16
+HALIDE_VERSION_MAJOR ?= 17
 HALIDE_VERSION_MINOR ?= 0
 HALIDE_VERSION_PATCH ?= 0
 HALIDE_VERSION=$(HALIDE_VERSION_MAJOR).$(HALIDE_VERSION_MINOR).$(HALIDE_VERSION_PATCH)
@@ -556,7 +556,6 @@ SOURCE_FILES = \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
   Parameter.cpp \
-  ParamMap.cpp \
   PartitionLoops.cpp \
   Pipeline.cpp \
   Prefetch.cpp \
@@ -754,7 +753,6 @@ HEADER_FILES = \
   ParallelRVar.h \
   Param.h \
   Parameter.h \
-  ParamMap.h \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
@@ -2260,6 +2258,10 @@ ifneq (,$(findstring clang version 17.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 18.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2280,7 +2282,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 140 150 160 170))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 160 170 180))
 LLVM_OK=yes
 endif
 

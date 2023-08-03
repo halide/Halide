@@ -20,7 +20,7 @@ int Simplify::debug_indent = 0;
 #endif
 
 Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
-    : remove_dead_code(r), no_float_simplify(false) {
+    : remove_dead_code(r) {
 
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {

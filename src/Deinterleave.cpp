@@ -29,7 +29,7 @@ public:
     StoreCollector(const std::string &name, int stride, int ms,
                    std::vector<Stmt> &lets, std::vector<Stmt> &ss)
         : store_name(name), store_stride(stride), max_stores(ms),
-          let_stmts(lets), stores(ss), collecting(true) {
+          let_stmts(lets), stores(ss) {
     }
 
 private:
@@ -57,7 +57,7 @@ private:
         return op;
     }
 
-    bool collecting;
+    bool collecting = true;
     // These are lets that we've encountered since the last collected
     // store. If we collect another store, these "potential" lets
     // become lets used by the collected stores.

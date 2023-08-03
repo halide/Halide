@@ -1010,6 +1010,12 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
 
     definition.schedule().touched() = true;
 
+    user_assert(inner != outer) << "In schedule for " << name()
+                                << ", can't split " << old << " into "
+                                << outer << " and " << inner
+                                << " because the new Vars have the same name.\n"
+                                << dump_argument_list();
+
     // Check that the new names aren't already in the dims list.
     for (auto &dim : dims) {
         string new_names[2] = {inner, outer};
@@ -2016,7 +2022,9 @@ Func create_clone_wrapper(Function wrapped_fn, const string &wrapper_name) {
     // Fix up any self-references in the clone.
     FunctionPtr self_reference = wrapper.function().get_contents();
     self_reference.weaken();
-    remapping.emplace(wrapped_fn.get_contents(), self_reference);
+    // remapping might already contain a strong self-reference from the deep
+    // copy, so we want to use operator[], not emplace or insert.
+    remapping[wrapped_fn.get_contents()] = self_reference;
     wrapper.function().substitute_calls(remapping);
     return wrapper;
 }
@@ -2811,10 +2819,9 @@ Func::operator Stage() const {
 namespace {
 class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
-    int count;
+    int count = 0;
 
-    CountImplicitVars(const vector<Expr> &exprs)
-        : count(0) {
+    CountImplicitVars(const vector<Expr> &exprs) {
         for (const auto &e : exprs) {
             e.accept(this);
         }
@@ -3175,30 +3182,26 @@ FuncTupleElementRef::operator Expr() const {
     return Internal::Call::make(func_ref.function(), args, idx);
 }
 
-Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
-                          const ParamMap &param_map) {
+Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
-    return pipeline().realize(std::move(sizes), target, param_map);
+    return pipeline().realize(std::move(sizes), target);
 }
 
 Realization Func::realize(JITUserContext *context,
                           std::vector<int32_t> sizes,
-                          const Target &target,
-                          const ParamMap &param_map) {
+                          const Target &target) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
-    return pipeline().realize(context, std::move(sizes), target, param_map);
+    return pipeline().realize(context, std::move(sizes), target);
 }
 
 void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
-                              const Target &target,
-                              const ParamMap &param_map) {
-    infer_input_bounds(nullptr, sizes, target, param_map);
+                              const Target &target) {
+    infer_input_bounds(nullptr, sizes, target);
 }
 
 void Func::infer_input_bounds(JITUserContext *context,
                               const std::vector<int32_t> &sizes,
-                              const Target &target,
-                              const ParamMap &param_map) {
+                              const Target &target) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer<>> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
@@ -3206,7 +3209,7 @@ void Func::infer_input_bounds(JITUserContext *context,
         outputs[i] = std::move(im);
     }
     Realization r(std::move(outputs));
-    infer_input_bounds(context, r, target, param_map);
+    infer_input_bounds(context, r, target);
 }
 
 OutputImageParam Func::output_buffer() const {
@@ -3373,29 +3376,25 @@ JITHandlers &Func::jit_handlers() {
 }
 
 void Func::realize(Pipeline::RealizationArg outputs,
-                   const Target &target,
-                   const ParamMap &param_map) {
-    pipeline().realize(std::move(outputs), target, param_map);
+                   const Target &target) {
+    pipeline().realize(std::move(outputs), target);
 }
 
 void Func::realize(JITUserContext *context,
                    Pipeline::RealizationArg outputs,
-                   const Target &target,
-                   const ParamMap &param_map) {
-    pipeline().realize(context, std::move(outputs), target, param_map);
+                   const Target &target) {
+    pipeline().realize(context, std::move(outputs), target);
 }
 
 void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
-                              const Target &target,
-                              const ParamMap &param_map) {
-    pipeline().infer_input_bounds(std::move(outputs), target, param_map);
+                              const Target &target) {
+    pipeline().infer_input_bounds(std::move(outputs), target);
 }
 
 void Func::infer_input_bounds(JITUserContext *context,
                               Pipeline::RealizationArg outputs,
-                              const Target &target,
-                              const ParamMap &param_map) {
-    pipeline().infer_input_bounds(context, std::move(outputs), target, param_map);
+                              const Target &target) {
+    pipeline().infer_input_bounds(context, std::move(outputs), target);
 }
 
 void Func::compile_jit(const Target &target) {
