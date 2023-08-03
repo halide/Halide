@@ -431,10 +431,10 @@ add_library(Halide
 # Build serialization, enabled by default
 option(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
 if (WITH_SERIALIZATION)
-    find_package(FlatBuffers QUIET)
-    if (NOT FlatBuffers_FOUND)
-        message(FATAL_ERROR "WITH_SERIALIZATION is ON, but could not find FlatBuffers installed locally. "
-                            "Either install FlatBuffers or build with WITH_SERIALIZATION=OFF.")
+    find_package(Flatbuffers QUIET)
+    if (NOT Flatbuffers_FOUND)
+        message(FATAL_ERROR "WITH_SERIALIZATION is ON, but could not find Flatbuffers installed locally. "
+                            "Either install Flatbuffers or build with WITH_SERIALIZATION=OFF.")
     endif ()
 
     set(fb_dir "${Halide_BINARY_DIR}/flatc/include")
@@ -443,14 +443,14 @@ if (WITH_SERIALIZATION)
     set(fb_header "${fb_dir}/halide_ir_generated.h")
     add_custom_command(
         OUTPUT "${fb_header}"
-        COMMAND FlatBuffers::flatc --cpp -o "${fb_dir}" "${fb_def}"
+        COMMAND Flatbuffers::flatc --cpp -o "${fb_dir}" "${fb_def}"
         DEPENDS "${fb_def}"
         VERBATIM
     )
 
     target_sources(Halide PRIVATE "${fb_header}")
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
-    target_link_libraries(Halide PRIVATE FlatBuffers::flatbuffers)
+    target_link_libraries(Halide PRIVATE Flatbuffers::flatbuffers)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
 
