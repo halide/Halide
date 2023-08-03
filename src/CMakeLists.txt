@@ -460,8 +460,9 @@ if (WITH_SERIALIZATION)
         DEPENDS "${fb_def}"
         VERBATIM
     )
+    add_custom_target(generate_fb_header DEPENDS "${fb_header}")
 
-    target_sources(Halide PRIVATE "${fb_header}")
+    add_dependencies(Halide generate_fb_header)
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
     target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)

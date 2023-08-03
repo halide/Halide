@@ -39,7 +39,6 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
       -DHalide_CLANG_TIDY_BUILD=ON \
       -DHalide_SHARED_LLVM=ON \
-      -DCMAKE_FIND_DEBUG_MODE=ON \
       -DLLVM_DIR=${CLANG_TIDY_LLVM_INSTALL_DIR}/lib/cmake/llvm \
       -S ${ROOT_DIR} \
       -B ${CLANG_TIDY_BUILD_DIR} \
@@ -48,7 +47,9 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
 [ -a ${CLANG_TIDY_BUILD_DIR}/compile_commands.json ]
 
 # We must populate the includes directory to check things outside of src/
+echo Building HalideIncludes...
 cmake --build ${CLANG_TIDY_BUILD_DIR} --target HalideIncludes
+cmake --build ${CLANG_TIDY_BUILD_DIR} --target flatc/include/halide_ir_generated.h
 
 RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
 
@@ -56,7 +57,6 @@ RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
 # generated headers files from Generators.
 #
 # Skip DefaultCostModel.cpp as it relies on cost_model.h.
-# Skip Serialization.cpp and Deserialize.cpp as they rely on halide_ir_generated.h.
 # Skip GenGen.cpp and RunGenMain.cpp as they bring clang-tidy to its knees,
 # for reasons that aren't entirely clear yet.
 CLANG_TIDY_TARGETS=$(find \
@@ -66,8 +66,6 @@ CLANG_TIDY_TARGETS=$(find \
      "${ROOT_DIR}/util" \
      \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" \
      ! -name DefaultCostModel.cpp \
-     ! -name Deserialization.cpp \
-     ! -name Serialization.cpp \
      ! -name GenGen.cpp \
      ! -name RunGenMain.cpp)
 
