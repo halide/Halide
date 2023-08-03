@@ -428,7 +428,11 @@ add_library(Halide
 # Build the serialization header file.
 ##
 if (BUILD_SERIALIZATION)
-    find_package(Flatbuffers REQUIRED)
+    find_package(Flatbuffers QUIET)
+    if (NOT Flatbuffers_FOUND)
+        message(FATAL_ERROR "BUILD_SERIALIZATION is ON, but could not find Flatbuffers installed locally. "
+                            "Either install Flatbuffers or build with BUILD_SERIALIZATION=OFF.")
+    endif ()
 
     set(fb_dir "${Halide_BINARY_DIR}/flatc/include")
 
