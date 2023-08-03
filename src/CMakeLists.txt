@@ -432,8 +432,10 @@ add_library(Halide
 option(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
 if (WITH_SERIALIZATION)
     # Sadly, there seem to be at least three variations of the Flatbuffer package
-    # in terms of case; if we guess wrong, we fail on case-sensitive file systems.
-    # We'll try this as a hack workaround: just try all three.
+    # in terms of the case of the relevant CMake files; if we guess wrong, we
+    # fail on case-sensitive file systems. We'll try this as a hack workaround:
+    # just try all three. (Note that the internal CMake library name appears to be
+    # `flatbuffers` in all cases.)
     set(FB_NAME "")
     foreach (N IN ITEMS flatbuffers Flatbuffers FlatBuffers)
         find_package(${N} QUIET)
@@ -454,14 +456,14 @@ if (WITH_SERIALIZATION)
     set(fb_header "${fb_dir}/halide_ir_generated.h")
     add_custom_command(
         OUTPUT "${fb_header}"
-        COMMAND ${FB_NAME}::flatc --cpp -o "${fb_dir}" "${fb_def}"
+        COMMAND flatbuffers::flatc --cpp -o "${fb_dir}" "${fb_def}"
         DEPENDS "${fb_def}"
         VERBATIM
     )
 
     target_sources(Halide PRIVATE "${fb_header}")
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
-    target_link_libraries(Halide PRIVATE ${FB_NAME}::flatbuffers)
+    target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
 
