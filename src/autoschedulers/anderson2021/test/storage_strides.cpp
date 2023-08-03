@@ -167,7 +167,7 @@ void test_bounds() {
         const auto &jac = node_f->outgoing_edges.front()->load_jacobians.front();
 
         const auto &thread = root->children[0]->children[0];
-        Strides strides = thread->compute_strides(jac, 0, node_f, root_bounds_f, thread_info, verbose);
+        Strides strides = thread->compute_strides(jac, 0, node_f, root_bounds_f, &thread_info, verbose);
 
         GlobalAccessAccumulator accumulator{bytes_per_point, 1, strides, verbose};
         thread_info.for_each_thread_id_in_first_warp(accumulator);
@@ -227,7 +227,7 @@ void test_bounds() {
         const auto &jac = node_f->outgoing_edges.front()->load_jacobians.front();
 
         const auto &thread = root->children[0]->children[0];
-        Strides strides = thread->compute_strides(jac, 0, node_f, root_bounds_f, thread_info, verbose);
+        Strides strides = thread->compute_strides(jac, 0, node_f, root_bounds_f, &thread_info, verbose);
 
         GlobalAccessAccumulator accumulator{bytes_per_point, 1, strides, verbose};
         thread_info.for_each_thread_id_in_first_warp(accumulator);
@@ -293,7 +293,7 @@ void test_bounds() {
         const auto &jac = node_f->outgoing_edges.front()->load_jacobians.front();
 
         const auto &thread = root->children[0]->children[0];
-        Strides strides = thread->compute_strides(jac, 0, node_f, root_bounds_f, thread_info, verbose);
+        Strides strides = thread->compute_strides(jac, 0, node_f, root_bounds_f, &thread_info, verbose);
         strides.dump(true);
 
         GlobalAccessAccumulator accumulator{bytes_per_point, 1, strides, verbose};
@@ -367,7 +367,7 @@ void test_bounds() {
 
         const auto &thread = root->children[0]->children[0];
         const auto &thread_bounds_g = thread->get_bounds(node_g);
-        Strides strides = thread->compute_strides(jac, 0, node_g, thread_bounds_g, thread_info, verbose);
+        Strides strides = thread->compute_strides(jac, 0, node_g, thread_bounds_g, &thread_info, verbose);
 
         GlobalAccessAccumulator accumulator{bytes_per_point, 1, strides, verbose};
         thread_info.for_each_thread_id_in_first_warp(accumulator);

@@ -433,5 +433,17 @@ int main(int argc, char **argv) {
         Pipeline(output).apply_autoscheduler(target, params);
     }
 
+    // Scalars with a reduction
+    if (true) {
+        ImageParam im(Int(32), 2);
+
+        Func f("f"), output("output");
+        RDom r(0, 2000, 0, 2000);
+        f() = 5;
+        output() = sum(im(r.x, r.y)) + f();
+
+        Pipeline(output).apply_autoscheduler(target, params);
+    }
+
     return 0;
 }

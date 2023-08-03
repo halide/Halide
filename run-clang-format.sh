@@ -32,5 +32,6 @@ find "${ROOT_DIR}/apps" \
      "${ROOT_DIR}/test" \
      "${ROOT_DIR}/util" \
      "${ROOT_DIR}/python_bindings" \
+     -not -path "${ROOT_DIR}/src/runtime/hexagon_remote/bin/src/*" \
      \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" | \
      xargs ${CLANG_FORMAT_LLVM_INSTALL_DIR}/bin/clang-format -i -style=file

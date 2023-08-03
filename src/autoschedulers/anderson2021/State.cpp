@@ -19,15 +19,21 @@ uint64_t State::structural_hash(int depth) const {
 }
 
 // Compute the parent and depth of every loop nest node
-void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &p,
-                                      const LoopNest *here, int depth) const {
+void State::compute_loop_nest_parents(LoopNestMap &p,
+                                      const LoopNest *here,
+                                      int depth) const {
     for (const auto &c : here->children) {
         p.emplace(c.get(), pair<const LoopNest *, int>{here, depth});
         compute_loop_nest_parents(p, c.get(), depth + 1);
     }
 }
 
-const LoopNest *State::deepest_valid_compute_location(const Anderson2021Params &params, const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root, StageMap<int64_t> &total_shared_mem_alloc_sizes) const {
+const LoopNest *State::deepest_valid_compute_location(const Anderson2021Params &params,
+                                                      const LoopNestMap &parent,
+                                                      const FunctionDAG::Node &node,
+                                                      const LoopNest *loop,
+                                                      const LoopNest *root,
+                                                      StageMap<int64_t> &total_shared_mem_alloc_sizes) const {
     std::vector<const LoopNest *> ancestors;
 
     // Innermost loop nests are never considered as compute locations
@@ -102,7 +108,8 @@ const LoopNest *State::deepest_valid_compute_location(const Anderson2021Params &
     return candidate;
 }
 
-int64_t State::total_loop_extents_of_ancestors(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop) const {
+int64_t State::total_loop_extents_of_ancestors(const LoopNestMap &parent,
+                                               const LoopNest *loop) const {
     int64_t total = 1;
 
     if (loop->is_root()) {
@@ -125,7 +132,9 @@ int64_t State::total_loop_extents_of_ancestors(const map<const LoopNest *, pair<
     return total;
 }
 
-const LoopNest *State::deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *a, const LoopNest *b) const {
+const LoopNest *State::deepest_common_ancestor(const LoopNestMap &parent,
+                                               const LoopNest *a,
+                                               const LoopNest *b) const {
     if (a->is_root()) {
         return a;
     }
@@ -343,7 +352,8 @@ void State::FeatureLoopNestMutator::add_outer_thread_loops(LoopNest *loop_nest) 
     }
 }
 
-IntrusivePtr<const LoopNest> State::get_root_for_features(const Anderson2021Params &params, const Target &target) const {
+IntrusivePtr<const LoopNest> State::get_root_for_features(const Anderson2021Params &params,
+                                                          const Target &target) const {
     if (!has_compute_root_loops_without_blocks() && !has_loop_nest_without_thread_loops()) {
         return root;
     }
@@ -352,7 +362,8 @@ IntrusivePtr<const LoopNest> State::get_root_for_features(const Anderson2021Para
 
     // We copy the loop nest in 2 cases:
     // - If the current loop nest has compute root loops without blocks (it is
-    // in phase 1 and the outer loops are marked 'none'), we split the loop into blocks and threads so we can compute meaningful features
+    // in phase 1 and the outer loops are marked 'none'), we split the loop into blocks and threads so we can compute
+    // meaningful features
     // - If there are serial loops inside blocks without a surrounding
     // thread loop nest, we create a surrounding thread loop nest with
     // extents 1 (which Halide will do when the schedule is compiled) so
@@ -361,7 +372,9 @@ IntrusivePtr<const LoopNest> State::get_root_for_features(const Anderson2021Para
     return new_root;
 }
 
-void State::set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop, LoopNest::Sites &site) const {
+void State::set_gpu_store_site(const LoopNestMap &parent,
+                               const LoopNest *loop,
+                               LoopNest::Sites &site) const {
     // If site.store is inside a block but outside a loop, the
     // GPU store site should instead be the block because the shared
     // mem allocation will be hoisted
@@ -393,7 +406,12 @@ void State::set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *
     internal_assert(type_has_been_set);
 }
 
-bool State::compute_featurization(const FunctionDAG &dag, const Anderson2021Params &params, const Target &target, StageMap<ScheduleFeatures> *features, Statistics &stats, bool verbose) const {
+bool State::compute_featurization(const FunctionDAG &dag,
+                                  const Anderson2021Params &params,
+                                  const Target &target,
+                                  StageMap<ScheduleFeatures> *features,
+                                  Statistics &stats,
+                                  bool verbose) const {
     auto feature_root = get_root_for_features(params, target);
 
     StageMap<LoopNest::Sites> sites;
@@ -426,7 +444,7 @@ bool State::compute_featurization(const FunctionDAG &dag, const Anderson2021Para
     // For the unscheduled nodes, give them sites as deep as they
     // could possibly be. We'll ignore the possibility of inlining
     // them for now.
-    map<const LoopNest *, pair<const LoopNest *, int>> parent;
+    LoopNestMap parent;
     compute_loop_nest_parents(parent, feature_root.get(), 0);
     for (const auto &n : dag.nodes) {
         if (sites.contains(&(n.stages[0]))) {
@@ -474,14 +492,17 @@ bool State::compute_featurization(const FunctionDAG &dag, const Anderson2021Para
                 }
             }
         }
-        internal_assert(loop)
-            << "Could not compute plausible site for unscheduled Func: "
-            << n.func.name() << "\n";
+        internal_assert(loop) << "Could not compute plausible site for unscheduled Func: " << n.func.name() << "\n";
 
         // If 'loop' would never be considered as a compute location (i.e. by
         // LoopNest::compute_in_tiles()), walk up the loop nest until we reach a
         // location that would be considered
-        loop = deepest_valid_compute_location(params, parent, n, loop, feature_root.get(), total_shared_mem_alloc_sizes);
+        loop = deepest_valid_compute_location(params,
+                                              parent,
+                                              n,
+                                              loop,
+                                              feature_root.get(),
+                                              total_shared_mem_alloc_sizes);
         int64_t num_realizations = total_loop_extents_of_ancestors(parent, loop);
 
         for (const auto &stage : n.stages) {
@@ -500,7 +521,25 @@ bool State::compute_featurization(const FunctionDAG &dag, const Anderson2021Para
     }
 
     Timer timer;
-    feature_root->compute_features(dag, params, target, sites, 1, 1, nullptr, nullptr, *feature_root, GPULoopInfo(feature_root.get()), true, total_shared_mem_alloc_sizes, nullptr, nullptr, nullptr, features, stats, verbose);
+    feature_root->dump();
+    feature_root->compute_features(dag,
+                                   params,
+                                   target,
+                                   sites,
+                                   1,
+                                   1,
+                                   nullptr,
+                                   nullptr,
+                                   *feature_root,
+                                   GPULoopInfo(feature_root.get()),
+                                   true,
+                                   total_shared_mem_alloc_sizes,
+                                   nullptr,
+                                   nullptr,
+                                   nullptr,
+                                   features,
+                                   stats,
+                                   verbose);
 
     stats.featurization_time += timer.elapsed();
     ++stats.num_featurizations;
@@ -508,15 +547,17 @@ bool State::compute_featurization(const FunctionDAG &dag, const Anderson2021Para
     for (const auto &n : dag.nodes) {
         if (sites.get(&(n.stages[0])).produce == nullptr) {
             internal_assert(!features->contains(&(n.stages[0])))
-                << "Somehow an input or unscheduled node ended up in the featurization: "
-                << n.func.name() << "\n";
+                << "Somehow an input or unscheduled node ended up in the featurization: " << n.func.name() << "\n";
         }
     }
 
     return true;
 }
 
-void State::save_featurization(const FunctionDAG &dag, const Anderson2021Params &params, const Target &target, std::ostream &out) const {
+void State::save_featurization(const FunctionDAG &dag,
+                               const Anderson2021Params &params,
+                               const Target &target,
+                               std::ostream &out) const {
     StageMap<ScheduleFeatures> features;
     Statistics stats;
     compute_featurization(dag, params, target, &features, stats);
@@ -546,7 +587,8 @@ void State::save_featurization(const FunctionDAG &dag, const Anderson2021Params 
     }
 }
 
-bool State::contains_store_at(const set<const FunctionDAG::Node *> &outermost_store_at, const IntrusivePtr<const LoopNest> &parent) const {
+bool State::contains_store_at(const set<const FunctionDAG::Node *> &outermost_store_at,
+                              const IntrusivePtr<const LoopNest> &parent) const {
     for (const auto &c : parent->children) {
         if (!c->store_at.empty()) {
             return true;
@@ -593,7 +635,8 @@ bool State::exceeds_serial_extents_limit(const Target &target) const {
     return root->exceeds_serial_extents_limit(target, nullptr, false);
 }
 
-int64_t State::get_shared_mem_alloc_size(const LoopNest *block, const LoopNest *loop) const {
+int64_t State::get_shared_mem_alloc_size(const LoopNest *block,
+                                         const LoopNest *loop) const {
     int64_t result = 0;
 
     if (loop->gpu_label == GPU_parallelism::Thread) {
@@ -621,7 +664,8 @@ int64_t State::get_shared_mem_alloc_size(const LoopNest *block, const LoopNest *
     return result;
 }
 
-bool State::exceeds_shared_memory_limit(const Anderson2021Params &params, const Target &target) const {
+bool State::exceeds_shared_memory_limit(const Anderson2021Params &params,
+                                        const Target &target) const {
     if (!target.has_gpu_feature()) {
         return false;
     }
@@ -643,7 +687,8 @@ bool State::exceeds_shared_memory_limit(const Anderson2021Params &params, const 
     return false;
 }
 
-bool State::exceeds_local_memory_limit(const Anderson2021Params &params, const Target &target) const {
+bool State::exceeds_local_memory_limit(const Anderson2021Params &params,
+                                       const Target &target) const {
     if (!target.has_gpu_feature()) {
         return false;
     }
@@ -661,7 +706,12 @@ bool State::exceeds_local_memory_limit(const Anderson2021Params &params, const T
     return false;
 }
 
-bool State::calculate_cost(const FunctionDAG &dag, const Anderson2021Params &params, const Target &target, CostModel *cost_model, Statistics &stats, bool verbose) {
+bool State::calculate_cost(const FunctionDAG &dag,
+                           const Anderson2021Params &params,
+                           const Target &target,
+                           CostModel *cost_model,
+                           Statistics &stats,
+                           bool verbose) {
     Timer timer;
     if (!root->has_valid_thread_extents()) {
         Filter(root.get()) << "Invalid thread extents\n";
@@ -777,7 +827,11 @@ void State::print_compute_locations() const {
     aslog(1) << "END compute locations\n";
 }
 
-void State::fuse_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, const vector<VarOrRVar> &parallel_vars, const vector<int64_t> &parallel_extents, const vector<int> &constant_extents) const {
+void State::fuse_gpu_blocks(LoopNest::StageScheduleState *state,
+                            Stage &stage,
+                            const vector<VarOrRVar> &parallel_vars,
+                            const vector<int64_t> &parallel_extents,
+                            const vector<int> &constant_extents) const {
     if (parallel_vars.empty() || parallel_extents.empty()) {
         return;
     }
@@ -847,12 +901,16 @@ void State::fuse_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, c
     }
 }
 
-void State::mark_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, const vector<VarOrRVar> &parallel_vars, const vector<int64_t> &parallel_extents) const {
+void State::mark_gpu_blocks(LoopNest::StageScheduleState *state,
+                            Stage &stage,
+                            const vector<VarOrRVar> &parallel_vars,
+                            const vector<int64_t> &parallel_extents) const {
     int max_blocks[3] = {2147483647, 65535, 65535};
     uint8_t n_loops_tagged_gpu_blocks = 0;
 
     for (const auto &v : parallel_vars) {
-        if (n_loops_tagged_gpu_blocks >= 3 || parallel_extents[n_loops_tagged_gpu_blocks] > max_blocks[n_loops_tagged_gpu_blocks]) {
+        if (n_loops_tagged_gpu_blocks >= 3 ||
+            parallel_extents[n_loops_tagged_gpu_blocks] > max_blocks[n_loops_tagged_gpu_blocks]) {
             break;
         }
 
@@ -866,7 +924,10 @@ void State::mark_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, c
     }
 }
 
-bool State::mark_gpu_threads(LoopNest::StageScheduleState *state, Stage &stage, std::unordered_set<std::string> &new_serial_vars, std::ostringstream &staged_funcs_schedule_source) const {
+bool State::mark_gpu_threads(LoopNest::StageScheduleState *state,
+                             Stage &stage,
+                             std::unordered_set<std::string> &new_serial_vars,
+                             std::ostringstream &staged_funcs_schedule_source) const {
     uint8_t num_loops_tagged_gpu_thread = 0;
     int64_t total_threads = 1;
     int max_threads[3] = {1024, 1024, 64};
@@ -878,7 +939,9 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState *state, Stage &stage, 
             continue;
         }
 
-        if (num_loops_tagged_gpu_thread >= 3 || total_threads >= MAX_THREADS_PER_BLOCK || v.extent > max_threads[num_loops_tagged_gpu_thread]) {
+        if (num_loops_tagged_gpu_thread >= 3 ||
+            total_threads >= MAX_THREADS_PER_BLOCK ||
+            v.extent > max_threads[num_loops_tagged_gpu_thread]) {
             break;
         }
 
@@ -1146,7 +1209,10 @@ void State::apply_schedule(const FunctionDAG &dag, const Anderson2021Params &par
                     }
                 }
 
-                bool thread_loop_exists = mark_gpu_threads(p.second.get(), stage, new_serial_vars, staged_funcs_schedule_source);
+                bool thread_loop_exists = mark_gpu_threads(p.second.get(),
+                                                           stage,
+                                                           new_serial_vars,
+                                                           staged_funcs_schedule_source);
                 // The stage has no threads and no blocks. This is likely an update
                 // stage where the reduction is a serial loop
                 if (!thread_loop_exists && !has_enclosing_parallel) {
