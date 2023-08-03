@@ -21,9 +21,6 @@ include(HalideGeneratorHelpers)
 # Build Halide as a shared lib by default, but still honor command-line settings.
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
-# Build serialization, enabled by default
-option(BUILD_SERIALIZATION "Build Halide serialization" ON)
-
 # Warn if the user did not set a build type and is using a single-configuration generator.
 get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if (NOT IS_MULTI_CONFIG AND NOT DEFINED CMAKE_BUILD_TYPE)

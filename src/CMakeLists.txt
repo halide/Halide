@@ -427,11 +427,14 @@ add_library(Halide
 ##
 # Build the serialization header file.
 ##
-if (BUILD_SERIALIZATION)
-    find_package(Flatbuffers QUIET)
-    if (NOT Flatbuffers_FOUND)
-        message(FATAL_ERROR "BUILD_SERIALIZATION is ON, but could not find Flatbuffers installed locally. "
-                            "Either install Flatbuffers or build with BUILD_SERIALIZATION=OFF.")
+
+# Build serialization, enabled by default
+option(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
+if (WITH_SERIALIZATION)
+    find_package(FlatBuffers QUIET)
+    if (NOT FlatBuffers_FOUND)
+        message(FATAL_ERROR "WITH_SERIALIZATION is ON, but could not find FlatBuffers installed locally. "
+                            "Either install FlatBuffers or build with WITH_SERIALIZATION=OFF.")
     endif ()
 
     set(fb_dir "${Halide_BINARY_DIR}/flatc/include")
@@ -448,6 +451,7 @@ if (BUILD_SERIALIZATION)
     target_sources(Halide PRIVATE "${fb_header}")
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
     target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
+    target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
 
 add_library(Halide::Halide ALIAS Halide)

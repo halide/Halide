@@ -1,4 +1,7 @@
 #include "Deserialization.h"
+
+#ifdef WITH_SERIALIZATION
+
 #include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
@@ -15,6 +18,7 @@
 
 namespace Halide {
 namespace Internal {
+
 class Deserializer {
 public:
     Deserializer() = default;
@@ -1372,3 +1376,22 @@ Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Inte
 }
 
 }  // namespace Halide
+
+#else  // WITH_SERIALIZATION
+
+namespace Halide {
+
+Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Internal::Parameter> &external_params) {
+    user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+    return Pipeline();
+}
+
+Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Internal::Parameter> &external_params) {
+    user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+    return Pipeline();
+}
+
+}  // namespace Halide
+
+#endif // WITH_SERIALIZATION
+

@@ -1,4 +1,7 @@
 #include "Serialization.h"
+
+#ifdef WITH_SERIALIZATION
+
 #include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
@@ -1468,3 +1471,17 @@ void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, s
 }
 
 }  // namespace Halide
+
+#else  // WITH_SERIALIZATION
+
+namespace Halide {
+
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Internal::Parameter> &params) {
+    user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+}
+
+}  // namespace Halide
+
+#endif // WITH_SERIALIZATION
+
+
