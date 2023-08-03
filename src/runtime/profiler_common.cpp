@@ -29,7 +29,7 @@ class LockProfiler {
     halide_profiler_state *state;
 
 public:
-    LockProfiler(halide_profiler_state *s)
+    explicit LockProfiler(halide_profiler_state *s)
         : state(s) {
 #if TIMER_PROFILING
         halide_disable_timer_interrupt();
@@ -385,6 +385,16 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         if (print_f_states) {
             int f_stats_count = 0;
             halide_profiler_func_stats **f_stats = (halide_profiler_func_stats **)__builtin_alloca(p->num_funcs * sizeof(halide_profiler_func_stats *));
+
+            int max_func_name_length = 0;
+            for (int i = 0; i < p->num_funcs; i++) {
+                halide_profiler_func_stats *fs = p->funcs + i;
+                int name_len = strlen(fs->name);
+                if (name_len > max_func_name_length) {
+                    max_func_name_length = name_len;
+                }
+            }
+
             for (int i = 0; i < p->num_funcs; i++) {
                 halide_profiler_func_stats *fs = p->funcs + i;
 
@@ -414,17 +424,29 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 halide_profiler_func_stats *fs = f_stats[i];
 
                 sstr << "  " << fs->name << ": ";
-                cursor += 25;
+                cursor += max_func_name_length + 5;
                 while (sstr.size() < cursor) {
                     sstr << " ";
                 }
 
                 float ft = fs->time / (p->runs * 1000000.0f);
+                if (ft < 10000) {
+                    sstr << " ";
+                }
+                if (ft < 1000) {
+                    sstr << " ";
+                }
+                if (ft < 100) {
+                    sstr << " ";
+                }
+                if (ft < 10) {
+                    sstr << " ";
+                }
                 sstr << ft;
                 // We don't need 6 sig. figs.
                 sstr.erase(3);
                 sstr << "ms";
-                cursor += 10;
+                cursor += 12;
                 while (sstr.size() < cursor) {
                     sstr << " ";
                 }

@@ -18,7 +18,7 @@ public:
     StringTable(const StringTable &) = delete;
     StringTable &operator=(const StringTable &) = delete;
 
-    StringTable(const SystemMemoryAllocatorFns &allocator = StringStorage::default_allocator());
+    explicit StringTable(const SystemMemoryAllocatorFns &allocator = StringStorage::default_allocator());
     StringTable(void *user_context, size_t capacity, const SystemMemoryAllocatorFns &allocator = StringStorage::default_allocator());
     StringTable(void *user_context, const char **array, size_t count, const SystemMemoryAllocatorFns &allocator = StringStorage::default_allocator());
     ~StringTable();

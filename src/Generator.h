@@ -3673,6 +3673,7 @@ public:
     std::string name() override;
     GeneratorContext context() const override;
     std::vector<ArgInfo> arginfos() override;
+    bool allow_out_of_order_inputs_and_outputs() const override;
 
     void set_generatorparam_value(const std::string &name, const std::string &value) override;
     void set_generatorparam_value(const std::string &name, const LoopLevel &loop_level) override;

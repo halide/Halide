@@ -603,7 +603,7 @@ WEAK int parking_control::unpark_requeue(uintptr_t addr_from, uintptr_t addr_to,
 struct mutex_parking_control final : public parking_control {
     uintptr_t *const lock_state;
 
-    ALWAYS_INLINE mutex_parking_control(uintptr_t *lock_state)
+    ALWAYS_INLINE explicit mutex_parking_control(uintptr_t *lock_state)
         : lock_state(lock_state) {
     }
 

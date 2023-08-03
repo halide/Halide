@@ -91,6 +91,7 @@ tests(GROUPS error
       specialize_fail.cpp
       split_inner_wrong_tail_strategy.cpp
       split_non_innermost_predicated.cpp
+      split_same_var_names.cpp
       thread_id_outside_block_id.cpp
       too_many_args.cpp
       tuple_arg_select_undef.cpp

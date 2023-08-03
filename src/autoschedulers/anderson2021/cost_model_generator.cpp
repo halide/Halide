@@ -43,7 +43,8 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
     GeneratorOutput<Buffer<float>> grad;
 
     ModelWeight(const std::string &name, int dim)
-        : GeneratorInput<Buffer<float>>(name, dim), grad("updated_" + name, dim + 1) {
+        : GeneratorInput<Buffer<float>>(name, dim),
+          grad("updated_" + name, dim + 1) {
     }
     void backprop(const Derivative &d, Expr learning_rate, const Expr &timestep) {
         std::vector<Expr> args(dimensions() + 1);
@@ -118,6 +119,11 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
 
 template<bool training>
 class CostModel : public Generator<CostModel<training>> {
+protected:
+    bool allow_out_of_order_inputs_and_outputs() const override {
+        return true;
+    }
+
 public:
     template<typename T>
     using Input = GeneratorInput<T>;

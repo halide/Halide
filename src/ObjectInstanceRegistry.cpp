@@ -40,9 +40,9 @@ void ObjectInstanceRegistry::unregister_instance(void *this_ptr) {
 }
 
 /* static */
-std::vector<void *> ObjectInstanceRegistry::instances_in_range(void *start, size_t size,
-                                                               Kind kind) {
-    std::vector<void *> results;
+std::vector<std::pair<void *, ObjectInstanceRegistry::Kind>>
+ObjectInstanceRegistry::instances_in_range(void *start, size_t size) {
+    std::vector<std::pair<void *, ObjectInstanceRegistry::Kind>> results;
 
     ObjectInstanceRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
@@ -52,9 +52,7 @@ std::vector<void *> ObjectInstanceRegistry::instances_in_range(void *start, size
 
     uintptr_t limit_ptr = ((uintptr_t)start) + size;
     while (it != registry.instances.end() && it->first < limit_ptr) {
-        if (it->second.kind == kind) {
-            results.push_back(it->second.subject_ptr);
-        }
+        results.emplace_back(it->second.subject_ptr, it->second.kind);
 
         if (it->first > (uintptr_t)start && it->second.size != 0) {
             // Skip over containers that we enclose

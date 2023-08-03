@@ -17,7 +17,7 @@ struct SearchSpaceOptions {
 
     std::bitset<4> options;
 
-    SearchSpaceOptions(const std::string &bit_str)
+    explicit SearchSpaceOptions(const std::string &bit_str)
         : options{bit_str} {
         aslog(1) << "Search space options:\n";
         aslog(1) << "Input string: " << bit_str << "\n";

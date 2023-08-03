@@ -177,6 +177,14 @@ public:
      */
     virtual bool emit_cpp_stub(const std::string &stub_file_path) = 0;
 
+    /** By default, a Generator must declare all Inputs before all Outputs.
+     *  In some unusual situations (e.g. metaprogramming situations), it's
+     * desirable to allow them to be declared out-of-order and put the onus
+     * of a non-obvious call order on the coder; a Generator may override this
+     * to return 'true' to allow this behavior.
+     */
+    virtual bool allow_out_of_order_inputs_and_outputs() const = 0;
+
     // Below are some concrete methods that build on top of the rest of the AbstractGenerator API.
     // Note that they are nonvirtual. TODO: would these be better as freestanding methods that
     // just take AbstractGeneratorPtr as arguments?

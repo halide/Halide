@@ -39,7 +39,8 @@ struct OptionalRational {
 
     OptionalRational() = default;
     OptionalRational(int64_t n, int64_t d)
-        : numerator(n), denominator(d) {
+        : numerator(n),
+          denominator(d) {
     }
 
     void operator+=(const OptionalRational &other) {
@@ -137,7 +138,9 @@ class LoadJacobian {
 
 public:
     LoadJacobian(size_t producer_storage_dims, size_t consumer_loop_dims, int64_t count)
-        : c(count), rows(producer_storage_dims), cols(consumer_loop_dims) {
+        : c(count),
+          rows(producer_storage_dims),
+          cols(consumer_loop_dims) {
         coeffs.resize(rows * cols);
     }
 
@@ -283,7 +286,9 @@ public:
     }
 
     Span(int64_t a, int64_t b, bool c)
-        : min_(a), max_(b), constant_extent_(c) {
+        : min_(a),
+          max_(b),
+          constant_extent_(c) {
     }
     Span() = default;
     Span(const Span &other) = default;
@@ -507,7 +512,7 @@ struct FunctionDAG {
                 return dependencies[n.id];
             };
 
-            Stage(Halide::Stage s)
+            explicit Stage(Halide::Stage s)
                 : stage(std::move(s)) {
             }
 
@@ -674,7 +679,7 @@ public:
     int visit_binary(const Expr &a, const Expr &b);
     int visit_nary(const std::vector<Expr> &exprs);
 
-    ExprBranching(const NodeMap<int64_t> &inlined)
+    explicit ExprBranching(const NodeMap<int64_t> &inlined)
         : inlined{inlined} {
     }
 
