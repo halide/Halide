@@ -450,7 +450,16 @@ if (WITH_SERIALIZATION)
         set(FLATBUFFERS_BUILD_TESTS OFF)
         set(FLATBUFFERS_INSTALL OFF)
         FetchContent_MakeAvailable(flatbuffers)
-        add_library(flatbuffers::flatbuffers ALIAS flatbuffers)
+
+        add_library(Halide_flatbuffers INTERFACE)
+        target_sources(Halide_flatbuffers INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:flatbuffers>>)
+        target_include_directories(Halide_flatbuffers
+                                   SYSTEM # Use -isystem instead of -I; this is a trick so that clang-tidy won't analyze these includes
+                                   INTERFACE
+                                   $<BUILD_INTERFACE:${flatbuffers_SOURCE_DIR}>/include
+                                   $<BUILD_INTERFACE:${flatbuffers_BINARY_DIR}>/include)
+        set_target_properties(Halide_flatbuffers PROPERTIES EXPORT_NAME flatbuffers)
+
         add_executable(flatbuffers::flatc ALIAS flatc)
         message(STATUS "Using fetched-and-built flatbuffers, version ${FLATBUFFERS_VER}")
     else ()
@@ -475,6 +484,8 @@ if (WITH_SERIALIZATION)
                                 "but could not find flatbuffers installed locally. "
                                 "Either install flatbuffers or build with WITH_SERIALIZATION=OFF.")
         endif ()
+
+        add_library(Halide_flatbuffers ALIAS flatbuffers::flatbuffers)
     endif ()
 
     set(fb_dir "${Halide_BINARY_DIR}/flatc/include")
@@ -492,7 +503,7 @@ if (WITH_SERIALIZATION)
 
     add_dependencies(Halide generate_fb_header)
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
-    target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
+    target_link_libraries(Halide PRIVATE Halide_flatbuffers)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
 
