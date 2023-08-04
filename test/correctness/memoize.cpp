@@ -59,29 +59,24 @@ extern "C" HALIDE_EXPORT_SYMBOL int computed_eviction_key(int a) {
 }
 HalideExtern_1(int, computed_eviction_key, int);
 
+void *(*default_malloc)(JITUserContext *, size_t);
+void (*default_free)(JITUserContext *, void *);
+
 // A flaky allocator. Note that it has to be compatible with halide_free,
 // because halide_free is going to be called by memoization_cache_cleanup with a
 // null user_context when we release the jit shared runtimes at the end of this
 // test. So it has to be aligned, and it has to store the pointer to free just
 // before the returned pointer.
-void *flaky_malloc(JITUserContext * /* user_context */, size_t x) {
+void *flaky_malloc(JITUserContext *user_context, size_t x) {
     if ((rand() % 4) == 0) {
         return nullptr;
     } else {
-        uint8_t *ptr = (uint8_t *)malloc(x + 40);
-        uint8_t *ret = ptr + 8;
-        while ((uintptr_t)ret & 31) {
-            ret++;
-        }
-        ((uint8_t **)ret)[-1] = ptr;
-        return ret;
+        return default_malloc(user_context, x);
     }
 }
 
 void simple_free(JITUserContext *user_context, void *ptr) {
-    if (ptr != nullptr) {
-        free(((void **)ptr)[-1]);
-    }
+    return default_free(user_context, ptr);
 }
 
 bool error_occured = false;
@@ -597,6 +592,15 @@ int main(int argc, char **argv) {
         return 0;
     } else {
         // Test out of memory handling.
+
+        // Get the runtime's malloc and free. We need to use the ones
+        // in the runtime to ensure the matching free is called when
+        // we release all the runtimes at the end.
+        JITUserContext ctx;
+        Internal::JITSharedRuntime::populate_jit_handlers(&ctx, JITHandlers{});
+        default_malloc = ctx.handlers.custom_malloc;
+        default_free = ctx.handlers.custom_free;
+
         Param<float> val;
 
         Func count_calls;
