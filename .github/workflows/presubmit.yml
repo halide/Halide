@@ -35,7 +35,7 @@ jobs:
           sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
           sudo apt-add-repository "deb https://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-16 main"
           sudo apt-get update
-          sudo apt-get install llvm-16 clang-16 liblld-16-dev libclang-16-dev clang-tidy-16 ninja-build flatbuffers-compiler flatbuffers-compiler-dev libflatbuffers-dev
+          sudo apt-get install llvm-16 clang-16 liblld-16-dev libclang-16-dev clang-tidy-16 ninja-build
       - name: Run clang-tidy
         run: |
           export CC=clang-16

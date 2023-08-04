@@ -425,29 +425,56 @@ add_library(Halide
             $<TARGET_OBJECTS:Halide_c_templates>)
 
 ##
-# Build the serialization header file.
+# Flatbuffers and Serialization dependencies.
 ##
 
 # Build serialization, enabled by default
 option(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
-if (WITH_SERIALIZATION)
-    # Sadly, there seem to be at least three variations of the Flatbuffer package
-    # in terms of the case of the relevant CMake files; if we guess wrong, we
-    # fail on case-sensitive file systems. We'll try this as a hack workaround:
-    # just try all three. (Note that the internal CMake library name appears to be
-    # `flatbuffers` in all cases.)
-    set(FB_NAME "")
-    foreach (N IN ITEMS flatbuffers Flatbuffers FlatBuffers)
-        find_package(${N} QUIET)
-        if (${N}_FOUND)
-            set(FB_NAME ${N})
-            break()
-        endif ()
-    endforeach ()
 
-    if (NOT FB_NAME)
-        message(FATAL_ERROR "WITH_SERIALIZATION is ON, but could not find flatbuffers installed locally. "
-                            "Either install flatbuffers or build with WITH_SERIALIZATION=OFF.")
+# flatbuffers is small and compiles quickly, but if you want/need to use
+# a local version (via find_package), configure with FLATBUFFERS_USE_FETCHCONTENT=OFF
+option(FLATBUFFERS_USE_FETCHCONTENT "Enable to download the Flatbuffers library via FetchContent" ON)
+set(FLATBUFFERS_VER 23.5.26 CACHE STRING "The Flatbuffers version to use (or download)")
+
+if (WITH_SERIALIZATION)
+    if (FLATBUFFERS_USE_FETCHCONTENT)
+        include(FetchContent)
+        message(STATUS "Fetching flatbuffers ${FLATBUFFERS_VER}...")
+        FetchContent_Declare(
+            flatbuffers
+            GIT_REPOSITORY https://github.com/google/flatbuffers.git
+            GIT_TAG v${FLATBUFFERS_VER}
+            GIT_SHALLOW TRUE
+        )
+        # configuration for flatbuffers
+        set(FLATBUFFERS_BUILD_TESTS OFF)
+        set(FLATBUFFERS_INSTALL OFF)
+        FetchContent_MakeAvailable(flatbuffers)
+        add_library(flatbuffers::flatbuffers ALIAS flatbuffers)
+        add_executable(flatbuffers::flatc ALIAS flatc)
+        message(STATUS "Using fetched-and-built flatbuffers, version ${FLATBUFFERS_VER}")
+    else ()
+        # Sadly, there seem to be at least three variations of the Flatbuffer package
+        # in terms of the case of the relevant CMake files; if we guess wrong, we
+        # fail on case-sensitive file systems. We'll try this as a hack workaround:
+        # just try all three. (Note that the internal CMake library name appears to be
+        # `flatbuffers` in all cases.)
+        set(FB_NAME "")
+        foreach (N IN ITEMS flatbuffers Flatbuffers FlatBuffers)
+            # TODO: should we check the version here?
+            find_package(${N} QUIET)
+            if (${N}_FOUND)
+                set(FB_NAME ${N})
+                message(STATUS "Using installed flatbuffers, version ${${N}_VERSION}")
+                break()
+            endif ()
+        endforeach ()
+
+        if (NOT FB_NAME)
+            message(FATAL_ERROR "WITH_SERIALIZATION is ON and FLATBUFFERS_USE_FETCHCONTENT is OFF, "
+                                "but could not find flatbuffers installed locally. "
+                                "Either install flatbuffers or build with WITH_SERIALIZATION=OFF.")
+        endif ()
     endif ()
 
     set(fb_dir "${Halide_BINARY_DIR}/flatc/include")

@@ -110,8 +110,7 @@ issue.
 ### TL;DR
 
 Have llvm-16.0 (or greater) installed and run `make` in the root directory of
-the repository (where this README is). If you want to use the experimental
-serialization code, you must also have Flatbuffers installed locally.
+the repository (where this README is).
 
 ### Acquiring LLVM
 
@@ -165,27 +164,6 @@ tests, and adding `clang-tools-extra` is only necessary if you plan to
 contribute code to Halide (so that you can run `clang-tidy` on your pull
 requests). We recommend enabling both in all cases to simplify builds. You can
 disable exception handling (EH) and RTTI if you don't want the Python bindings.
-
-### Acquiring Flatbuffers
-
-Flatbuffers can be installed on most operating systems by a standard package
-manager. Some recipes we know to work:
-
-```
-# Ubuntu 20.04+
-$ sudo apt install flatbuffers-compiler flatbuffers-compiler-dev libflatbuffers-dev
-
-# macOS, using Homebrew:
-$ brew install flatbuffers
-
-# Windows, using vcpkg:
-$ vcpkg install flatbuffers
-  (and then explicitly add the path to the flatc tool to the system path)
-```
-
-If you don't have Flatbuffers installed locally, you will need to configure
-CMake with `-DWITH_SERIALIZATION=OFF`.
-
 
 ### Building Halide with make
 
