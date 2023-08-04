@@ -13,7 +13,7 @@ while getopts ":j:f" o; do
     case "${o}" in
         j)
             J="${OPTARG}"
-            [[ ${J} == ?(-)+([0-9]) ]] || ( echo "-j requires an integer argument" && usage )
+            [[ "${J}" =~ ^[0-9]+$ ]] || ( echo "-j requires an integer argument"; usage )
             ;;
         f)
             FIX="-fix"
