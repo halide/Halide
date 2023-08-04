@@ -83,6 +83,7 @@ RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
 # Skip DefaultCostModel.cpp as it relies on cost_model.h.
 # Skip GenGen.cpp and RunGenMain.cpp as they bring clang-tidy to its knees,
 # for reasons that aren't entirely clear yet.
+echo Finding targets...
 CLANG_TIDY_TARGETS=$(find \
      "${ROOT_DIR}/src" \
      "${ROOT_DIR}/python_bindings" \
@@ -97,6 +98,7 @@ CLANG_TIDY_TARGETS=$(find \
 # so we will instead build an include filter
 CLANG_TIDY_HEADER_FILTER=".*/src/.*|.*/python_bindings/.*|.*/tools/.*|.*/util/.*"
 
+echo Running clang-tidy...
 ${RUN_CLANG_TIDY} \
     ${FIX} \
     -j ${J} \
