@@ -62,6 +62,7 @@ CLANG_TIDY_TARGETS=$(find \
      "${ROOT_DIR}/python_bindings" \
      "${ROOT_DIR}/tools" \
      "${ROOT_DIR}/util" \
+     -not -path "${ROOT_DIR}/src/runtime/hexagon_remote/bin/src/*" \
      \( -name "*.cpp" -o -name "*.h" -o -name "*.c" \) -and -not -wholename "*/.*" \
      ! -name DefaultCostModel.cpp \
      ! -name GenGen.cpp \
