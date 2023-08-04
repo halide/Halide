@@ -62,11 +62,7 @@ HalideExtern_1(int, computed_eviction_key, int);
 void *(*default_malloc)(JITUserContext *, size_t);
 void (*default_free)(JITUserContext *, void *);
 
-// A flaky allocator. Note that it has to be compatible with halide_free,
-// because halide_free is going to be called by memoization_cache_cleanup with a
-// null user_context when we release the jit shared runtimes at the end of this
-// test. So it has to be aligned, and it has to store the pointer to free just
-// before the returned pointer.
+// A flaky allocator that wraps the built-in runtime one.
 void *flaky_malloc(JITUserContext *user_context, size_t x) {
     if ((rand() % 4) == 0) {
         return nullptr;
