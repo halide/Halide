@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -ex
 
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
@@ -70,10 +70,10 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
 
 # We must populate the includes directory to check things outside of src/
 echo Building HalideIncludes...
-cmake --build ${CLANG_TIDY_BUILD_DIR} --target HalideIncludes
+cmake --build ${CLANG_TIDY_BUILD_DIR} -j 3 --target HalideIncludes
 
 echo Building flatbuffer stuff...
-cmake --build ${CLANG_TIDY_BUILD_DIR} --target generate_fb_header
+cmake --build ${CLANG_TIDY_BUILD_DIR} -j 3 --target generate_fb_header
 
 RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
 
