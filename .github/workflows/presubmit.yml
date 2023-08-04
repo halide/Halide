@@ -41,7 +41,7 @@ jobs:
           export CC=clang-16
           export CXX=clang++-16
           export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-16
-          ./run-clang-tidy.sh
+          ./run-clang-tidy.sh -j 1
   check_cmake_file_lists:
     name: Check CMake file lists
     runs-on: ubuntu-20.04
