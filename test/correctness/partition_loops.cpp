@@ -56,7 +56,6 @@ int main(int argc, char *argv[]) {
         f.split(x, x_outer, x_inner, 2, TailStrategy::PredicateStores).fuse(y, x_inner, y_x_inner_fused);
         Pipeline p(f);
         p.realize({100, 100});
-        return 0;
     }
 
     printf("Success!\n");
