@@ -70,10 +70,10 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
 
 # We must populate the includes directory to check things outside of src/
 echo Building HalideIncludes...
-cmake --build ${CLANG_TIDY_BUILD_DIR} -j 3 --target HalideIncludes
+cmake --build ${CLANG_TIDY_BUILD_DIR} -j $(nproc) --target HalideIncludes
 
 echo Building flatbuffer stuff...
-cmake --build ${CLANG_TIDY_BUILD_DIR} -j 3 --target generate_fb_header
+cmake --build ${CLANG_TIDY_BUILD_DIR} -j $(nproc) --target generate_fb_header
 
 RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
 
