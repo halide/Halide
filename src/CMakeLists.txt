@@ -458,7 +458,9 @@ if (WITH_SERIALIZATION)
                                    INTERFACE
                                    $<BUILD_INTERFACE:${flatbuffers_SOURCE_DIR}>/include
                                    $<BUILD_INTERFACE:${flatbuffers_BINARY_DIR}>/include)
-        set_target_properties(Halide_flatbuffers PROPERTIES EXPORT_NAME flatbuffers)
+        set_target_properties(Halide_flatbuffers PROPERTIES
+                              EXPORT_NAME flatbuffers
+                              POSITION_INDEPENDENT_CODE ON)
 
         add_executable(flatbuffers::flatc ALIAS flatc)
         message(STATUS "Using fetched-and-built flatbuffers, version ${FLATBUFFERS_VER}")
