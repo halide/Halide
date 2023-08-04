@@ -450,6 +450,7 @@ if (WITH_SERIALIZATION)
         set(FLATBUFFERS_BUILD_TESTS OFF)
         set(FLATBUFFERS_INSTALL OFF)
         FetchContent_MakeAvailable(flatbuffers)
+        set_target_properties(flatbuffers PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
         add_library(Halide_flatbuffers INTERFACE)
         target_sources(Halide_flatbuffers INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:flatbuffers>>)
@@ -458,9 +459,7 @@ if (WITH_SERIALIZATION)
                                    INTERFACE
                                    $<BUILD_INTERFACE:${flatbuffers_SOURCE_DIR}>/include
                                    $<BUILD_INTERFACE:${flatbuffers_BINARY_DIR}>/include)
-        set_target_properties(Halide_flatbuffers PROPERTIES
-                              EXPORT_NAME flatbuffers
-                              POSITION_INDEPENDENT_CODE ON)
+        set_target_properties(Halide_flatbuffers PROPERTIES EXPORT_NAME flatbuffers)
 
         add_executable(flatbuffers::flatc ALIAS flatc)
         message(STATUS "Using fetched-and-built flatbuffers, version ${FLATBUFFERS_VER}")
