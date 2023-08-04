@@ -411,7 +411,7 @@ class FindSimplifications : public IRVisitor {
         IRVisitor::visit(op);
         if (has_uncaptured_likely_tag(op->predicate)) {
             const int lanes = op->predicate.type().lanes();
-            new_simplification(op->predicate, op->predicate, const_true(lanes), op->predicate);
+            new_simplification(op->predicate, op->predicate, const_true(lanes), remove_likelies(op->predicate));
         }
     }
 
@@ -419,7 +419,7 @@ class FindSimplifications : public IRVisitor {
         IRVisitor::visit(op);
         if (has_uncaptured_likely_tag(op->predicate)) {
             const int lanes = op->predicate.type().lanes();
-            new_simplification(op->predicate, op->predicate, const_true(lanes), op->predicate);
+            new_simplification(op->predicate, op->predicate, const_true(lanes), remove_likelies(op->predicate));
         }
     }
 
@@ -472,6 +472,9 @@ public:
     Expr mutate(const Expr &e) override {
         for (auto const &s : simplifications) {
             if (e.same_as(s.old_expr)) {
+                internal_assert(!s.likely_value.same_as(s.old_expr))
+                    << "Loop partitioning simplification does not mutate value: "
+                    << s.old_expr << "\n";
                 return mutate(s.likely_value);
             }
         }
