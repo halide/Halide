@@ -13,11 +13,19 @@ SearchSpace::SearchSpace(const FunctionDAG &dag,
                          CostModel *cost_model,
                          Statistics &stats,
                          const LoopNestParser *partial_schedule)
-    : dag{dag}, params{params}, target{target}, search_space_options{params.search_space_options}, rng{rng}, cost_model{cost_model}, stats{stats}, partial_schedule{partial_schedule} {
+    : dag{dag},
+      params{params},
+      target{target},
+      search_space_options{params.search_space_options},
+      rng{rng},
+      cost_model{cost_model},
+      stats{stats},
+      partial_schedule{partial_schedule} {
     memoized_compute_root_blocks.make_large(dag.nodes.size());
 }
 
-void SearchSpace::memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root) {
+void SearchSpace::memoize_blocks(const FunctionDAG::Node *node,
+                                 LoopNest *new_root) {
     int vector_dim = -1;
     bool loop_nest_found = false;
     for (auto &c : new_root->children) {
@@ -141,8 +149,7 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
                     }
                     const double tasks_per_core = ((double)total) / params.parallelism;
                     o.idle_core_wastage = std::max(o.idle_core_wastage,
-                                                   std::ceil(tasks_per_core) /
-                                                       tasks_per_core);
+                                                   std::ceil(tasks_per_core) / tasks_per_core);
                 }
             }
         }
@@ -353,7 +360,7 @@ void SearchSpace::generate_children(const IntrusivePtr<State> &state,
             new_root->copy_from(*root);
             const auto &nodes = compute_root_nodes.get(node);
             for (const auto &n : nodes) {
-                const auto *compute_root_loop = deep_copy_loop_nest(n.get(), NoOpMutator{});
+                const auto *compute_root_loop = deep_copy_loop_nest(n, NoOpMutator{});
                 new_root->children.emplace_back(compute_root_loop);
             }
             new_root->store_at.insert(node);
@@ -391,7 +398,15 @@ void SearchSpace::generate_children(const IntrusivePtr<State> &state,
         std::unordered_map<uint64_t, StateVector> secondary_options;
         for (int vector_dim : vector_dims) {
             Timer timer;
-            auto tile_options = root->compute_in_tiles(node, nullptr, params, target, search_space_options, vector_dim, false, false, is_pre_pass);
+            auto tile_options = root->compute_in_tiles(node,
+                                                       nullptr,
+                                                       params,
+                                                       target,
+                                                       search_space_options,
+                                                       vector_dim,
+                                                       false,
+                                                       false,
+                                                       is_pre_pass);
             stats.compute_in_tiles_time += timer.elapsed();
 
             timer.restart();
@@ -490,7 +505,13 @@ void SearchSpace::generate_children(const IntrusivePtr<State> &state,
             // at root level sibling thread counts are in separate blocks, extents are irrelevant
             vector<int64_t> max_size((int)(stage_sizes[0].size()), 1);
 
-            auto block_tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, node->dimensions - 1, vectorized_indices, false, true);
+            auto block_tilings = generate_gpu_tilings(stage_sizes,
+                                                      pure_dims,
+                                                      max_size,
+                                                      node->dimensions - 1,
+                                                      vectorized_indices,
+                                                      false,
+                                                      true);
 
             // If no options, create a thread tiling as large as possible with block size (1,1,1).
             // This can happen if the loops are too small to generate desired gpu tiles.
@@ -517,7 +538,10 @@ void SearchSpace::generate_children(const IntrusivePtr<State> &state,
 
             double prev_idle_core_wastage = 0;
             for (const auto &o : options) {
-                if (!params.randomize_tilings && num_children >= 1 && o.idle_core_wastage > 1.2 && o.idle_core_wastage != prev_idle_core_wastage) {
+                if (!params.randomize_tilings &&
+                    num_children >= 1 &&
+                    o.idle_core_wastage > 1.2 &&
+                    o.idle_core_wastage != prev_idle_core_wastage) {
                     // We have considered several options, and the
                     // remaining ones leave lots of cores idle.
                     break;
@@ -606,9 +630,8 @@ void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> &best) {
         internal_assert(n.first >= 0);
     }
 
-    std::sort(node_ids_and_costs.begin(), node_ids_and_costs.end(), [](const std::pair<int, double> &a, const std::pair<int, double> &b) {
-        return a.second < b.second;
-    });
+    std::sort(node_ids_and_costs.begin(), node_ids_and_costs.end(),
+              [](const std::pair<int, double> &a, const std::pair<int, double> &b) { return a.second < b.second; });
 
     size_t num_to_freeze = num_nodes - std::log2(num_nodes);
     NodeMap<bool> nodes_to_freeze;
@@ -631,7 +654,8 @@ void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> &best) {
     }
 }
 
-vector<vector<int64_t>> SearchSpace::generate_compute_root_serial_tilings(const IntrusivePtr<const LoopNest> &pure_stage, const FunctionDAG::Node *node) const {
+vector<vector<int64_t>> SearchSpace::generate_compute_root_serial_tilings(const IntrusivePtr<const LoopNest> &pure_stage,
+                                                                          const FunctionDAG::Node *node) const {
     std::vector<int> vec_dim_serial_sizes;
     pure_stage->generate_vec_dim_serial_tilings(vec_dim_serial_sizes);
 

@@ -879,6 +879,11 @@ private:
         stream << "</a>";
     }
 
+    // Prints newline to stream
+    void print_ln() {
+        stream << '\n';
+    }
+
     // Prints a variable to stream
     void print_variable(const std::string &x) {
         stream << variable(x);
@@ -1459,18 +1464,22 @@ private:
         scope.push(op->name, gen_unique_id());
         print_opening_tag("div", "LetStmt");
         print_cost_buttons(op);
-        print_opening_tag("p", "WrapLine");
+        print_opening_tag("div", "WrapLine");
         print_opening_tag("span", "cost-highlight", "cost-bg-" + std::to_string(id));
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "let ");
         print_variable(op->name);
         print_html_element("span", "Operator Assign", " = ");
-        print_closing_tag("span");
+        print_closing_tag("span");  // matched
         print(op->value);
-        print_closing_tag("span");
-        print_closing_tag("p");
-        print(op->body);
+        print_closing_tag("span");  // Cost-Highlight
+        print_closing_tag("div");   // WrapLine
         print_closing_tag("div");
+        print_ln();
+        // Technically, the body of the LetStmt is a child node in the IR
+        // tree, but moving it out of the <div> doesn't make any difference to
+        // the rendering, and significantly reduces DOM depth.
+        print(op->body);
         scope.pop(op->name);
     }
 
@@ -1479,6 +1488,7 @@ private:
         print_cost_buttons(op);
         print_function_call("assert", {op->condition, op->message});
         print_closing_tag("div");
+        print_ln();
     }
 
     void visit(const ProducerConsumer *op) override {
@@ -1529,6 +1539,8 @@ private:
 
         // Close div holding this producer/consumer
         print_closing_tag("div");
+
+        print_ln();
 
         // Pop out of loop scope
         scope.pop(op->name);
@@ -1590,6 +1602,8 @@ private:
         // Close div holding this for loop
         print_closing_tag("div");
 
+        print_ln();
+
         // Pop out of loop scope
         scope.pop(op->name);
     }
@@ -1639,6 +1653,8 @@ private:
 
         // Close div holding this acquire
         print_closing_tag("div");
+
+        print_ln();
     }
 
     void visit(const Store *op) override {
@@ -1672,6 +1688,8 @@ private:
 
         // Close div holding this store
         print_closing_tag("div");
+
+        print_ln();
     }
 
     void visit(const Provide *op) override {
@@ -1690,6 +1708,8 @@ private:
             print(op->values[0]);
         }
         print_closing_tag("div");
+
+        print_ln();
     }
 
     void visit(const Allocate *op) override {
@@ -1752,12 +1772,15 @@ private:
         print_visualization_button("allocate-viz-" + std::to_string(id));
 
         // Print allocation body
+        print_ln();
         print_opening_tag("div", "AllocateBody");
         print(op->body);
         print_closing_tag("div");
 
         // Close dive holding the allocate
         print_closing_tag("div");
+
+        print_ln();
 
         // Pop out of allocate scope
         scope.pop(op->name);
@@ -1769,6 +1792,7 @@ private:
         print_html_element("span", "keyword", "free ");
         print_variable(op->name);
         print_closing_tag("div");
+        print_ln();
     }
 
     void visit(const Realize *op) override {
@@ -1842,6 +1866,7 @@ private:
         print_block_stmt(op->first);
         print_block_stmt(op->rest);
         print_closing_tag("div");
+        print_ln();
     }
 
     void visit(const Fork *op) override {
@@ -1880,6 +1905,7 @@ private:
 
         // Close div holding this fork
         print_closing_tag("div");
+        print_ln();
     }
 
     void visit(const IfThenElse *op) override {
@@ -1928,6 +1954,7 @@ private:
 
             // Close indented div holding `then` case
             print_closing_tag("div");
+            print_ln();
 
             // Close code block holding `then` case
             print_html_element("span", "matched ClosingBrace cb-" + std::to_string(then_block_id), "}");
@@ -2005,6 +2032,7 @@ private:
 
                 // Close indented div holding `else` case
                 print_closing_tag("div");
+                print_ln();
 
                 // Close code block holding `else` case
                 print_html_element("span", "matched ClosingBrace cb-" + std::to_string(else_block_id), "}");
@@ -2015,6 +2043,7 @@ private:
 
         // Close div holding the conditional
         print_closing_tag("div");
+        print_ln();
     }
 
     void visit(const Evaluate *op) override {
@@ -2023,10 +2052,10 @@ private:
         print_cost_buttons(op);
         print(op->value);
         print_closing_tag("div");
+        print_ln();
     }
 
     void visit(const Shuffle *op) override {
-        print_opening_tag("div", "Block");
         if (op->is_concat()) {
             print_function_call("concat_vectors", op->vectors);
         } else if (op->is_interleave()) {
@@ -2048,7 +2077,6 @@ private:
             }
             print_function_call("shuffle", args);
         }
-        print_closing_tag("div");
     }
 
     void visit(const VectorReduce *op) override {
@@ -2056,6 +2084,7 @@ private:
         print_type(op->type);
         print_function_call("vector_reduce", {op->op, op->value});
         print_closing_tag("div");
+        print_ln();
     }
 
     void visit(const Prefetch *op) override {
@@ -2092,6 +2121,7 @@ private:
         print_closing_tag("div");
 
         print_closing_tag("div");
+        print_ln();
     }
 
     void visit(const Atomic *op) override {
@@ -2134,6 +2164,7 @@ private:
 
         // Close div holding this atomic
         print_closing_tag("div");
+        print_ln();
     }
 };
 
@@ -2781,6 +2812,7 @@ public:
         html_viz_printer.init_cost_info(cost_model);
 
         // Generate html page
+        stream << "<!DOCTYPE html>\n";
         stream << "<html>\n";
         generate_head(m);
         generate_body(m);
@@ -2864,7 +2896,7 @@ private:
     // Generate tab 3/3: Generated assembly code
     void generate_assembly_tab(const Module &m) {
         stream << "<div id='assembly-tab'>\n";
-        stream << "<div id='assemblyContent' style='display: none;'>\n";
+        stream << "<div id='assemblyContent' class='shj-lang-asm'>\n";
         stream << "<pre>\n";
         stream << asm_stream.str();
         stream << "</pre>\n";

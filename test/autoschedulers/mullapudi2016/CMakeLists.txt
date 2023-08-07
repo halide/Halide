@@ -3,13 +3,13 @@ if (NOT TARGET Halide::Mullapudi2016)
     return()
 endif()
 
-tests(GROUPS mullapudi2016 autoschedulers auto_schedule
+tests(GROUPS mullapudi2016 autoschedulers_cpu auto_schedule
       SOURCES
       extern.cpp
       param.cpp
       ARGS $<TARGET_FILE:Halide::Mullapudi2016>)
 
-tests(GROUPS mullapudi2016 autoschedulers auto_schedule multithreaded
+tests(GROUPS mullapudi2016 autoschedulers_cpu auto_schedule multithreaded
       SOURCES
       cost_function.cpp
       data_dependent.cpp
