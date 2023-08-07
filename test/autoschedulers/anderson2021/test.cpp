@@ -8,6 +8,10 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+#ifdef HALIDE_WITH_EXCEPTIONS
+    try {
+#endif
+
     load_plugin(argv[1]);
 
     constexpr int hardware_parallelism = 80;
@@ -444,6 +448,23 @@ int main(int argc, char **argv) {
 
         Pipeline(output).apply_autoscheduler(target, params);
     }
+
+#ifdef HALIDE_WITH_EXCEPTIONS
+    } catch (::Halide::Error &err) {
+        // Do *not* use user_error here (or elsewhere in this function): it
+        // will throw an exception, and since there is almost certainly no
+        // try/catch block in our caller, it will call std::terminate,
+        // swallowing all error messages.
+        std::cerr << "Unhandled exception: " << err.what() << "\n";
+        return 1;
+    } catch (std::exception &err) {
+        std::cerr << "Unhandled exception: " << err.what() << "\n";
+        return 1;
+    } catch (...) {
+        std::cerr << "Unhandled exception: (unknown)\n";
+        return 1;
+    }
+#endif
 
     return 0;
 }
