@@ -1,5 +1,6 @@
 #include "Dimension.h"
 
+#include "Expr.h"
 #include "IR.h"
 #include "IROperator.h"
 #include <utility>

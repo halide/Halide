@@ -5,6 +5,7 @@
 #include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
