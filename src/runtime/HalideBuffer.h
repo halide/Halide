@@ -162,7 +162,7 @@ struct AllocationHeader {
     std::atomic<int> ref_count;
 
     // Note that ref_count always starts at 1
-    AllocationHeader(void (*deallocate_fn)(void *))
+    explicit AllocationHeader(void (*deallocate_fn)(void *))
         : deallocate_fn(deallocate_fn), ref_count(1) {
     }
 };
@@ -298,7 +298,7 @@ private:
     // operation as well.
     struct DevRefCountCropped : DeviceRefCount {
         Buffer<T, Dims, InClassDimStorage> cropped_from;
-        DevRefCountCropped(const Buffer<T, Dims, InClassDimStorage> &cropped_from)
+        explicit DevRefCountCropped(const Buffer<T, Dims, InClassDimStorage> &cropped_from)
             : cropped_from(cropped_from) {
             ownership = BufferDeviceOwnership::Cropped;
         }
@@ -608,7 +608,7 @@ public:
             return {min() + extent()};
         }
 
-        Dimension(const halide_dimension_t &dim)
+        explicit Dimension(const halide_dimension_t &dim)
             : d(dim) {
         }
     };

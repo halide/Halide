@@ -53,6 +53,13 @@
         position: relative;
     }
 
+    div#assembly-tab {
+        overflow-y: scroll;
+        padding-top: 20px;
+        padding-left: 20px;
+        position: relative;
+    }
+
     /* Resize bars */
     div#visualization-tabs div.resize-bar {
         background: rgb(201, 231, 190);
@@ -247,18 +254,11 @@
         font-weight: bold;
     }
 
-    p.WrapLine {
-        margin: 0px;
-        margin-left: 30px;
-        text-indent: -30px;
-    }
-
     div.WrapLine {
         margin-left: 30px;
         text-indent: -30px;
     }
 
-    p.WrapLine,
     span.IfSpan,
     span.ClosingBrace,
     div.Module,
@@ -272,7 +272,6 @@
         counter-increment: line;
     }
 
-        p.WrapLine:before,
         span.IfSpan:before,
         span.ClosingBrace:before,
         div.WrapLine:before,
@@ -292,7 +291,6 @@
             -webkit-user-select: none;
         }
 
-        p.WrapLine:before,
         div.WrapLine:before {
             left: 30px;
         }

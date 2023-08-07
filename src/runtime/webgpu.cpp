@@ -128,7 +128,7 @@ public:
 
     int error_code = 0;
 
-    ALWAYS_INLINE WgpuContext(void *user_context)
+    ALWAYS_INLINE explicit WgpuContext(void *user_context)
         : user_context(user_context) {
         error_code = halide_webgpu_acquire_context(
             user_context, &instance, &adapter, &device, &staging_buffer);

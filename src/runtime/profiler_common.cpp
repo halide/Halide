@@ -29,7 +29,7 @@ class LockProfiler {
     halide_profiler_state *state;
 
 public:
-    LockProfiler(halide_profiler_state *s)
+    explicit LockProfiler(halide_profiler_state *s)
         : state(s) {
 #if TIMER_PROFILING
         halide_disable_timer_interrupt();
@@ -333,6 +333,23 @@ WEAK void halide_profiler_memory_free(void *user_context,
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
     StringStreamPrinter<1024> sstr(user_context);
 
+    int64_t (*compare_fs_fn)(halide_profiler_func_stats *a, halide_profiler_func_stats *b) = nullptr;
+
+    const char *sort_str = getenv("HL_PROFILER_SORT");
+    if (sort_str) {
+        if (!strcmp(sort_str, "time")) {
+            // Sort by descending time
+            compare_fs_fn = [](halide_profiler_func_stats *a, halide_profiler_func_stats *b) -> int64_t {
+                return (int64_t)b->time - (int64_t)a->time;
+            };
+        } else if (!strcmp(sort_str, "name")) {
+            // Sort by ascending name
+            compare_fs_fn = [](halide_profiler_func_stats *a, halide_profiler_func_stats *b) -> int64_t {
+                return strcmp(a->name, b->name);
+            };
+        }
+    }
+
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
         float t = p->time / 1000000.0f;
@@ -366,9 +383,19 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         }
 
         if (print_f_states) {
+            int f_stats_count = 0;
+            halide_profiler_func_stats **f_stats = (halide_profiler_func_stats **)__builtin_alloca(p->num_funcs * sizeof(halide_profiler_func_stats *));
+
+            int max_func_name_length = 0;
             for (int i = 0; i < p->num_funcs; i++) {
-                size_t cursor = 0;
-                sstr.clear();
+                halide_profiler_func_stats *fs = p->funcs + i;
+                int name_len = strlen(fs->name);
+                if (name_len > max_func_name_length) {
+                    max_func_name_length = name_len;
+                }
+            }
+
+            for (int i = 0; i < p->num_funcs; i++) {
                 halide_profiler_func_stats *fs = p->funcs + i;
 
                 // The first func is always a catch-all overhead
@@ -377,18 +404,49 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     continue;
                 }
 
+                f_stats[f_stats_count++] = fs;
+            }
+
+            if (compare_fs_fn) {
+                for (int i = 1; i < f_stats_count; i++) {
+                    for (int j = i; j > 0 && compare_fs_fn(f_stats[j - 1], f_stats[j]) > 0; j--) {
+                        auto *a = f_stats[j - 1];
+                        auto *b = f_stats[j];
+                        f_stats[j - 1] = b;
+                        f_stats[j] = a;
+                    }
+                }
+            }
+
+            for (int i = 0; i < f_stats_count; i++) {
+                size_t cursor = 0;
+                sstr.clear();
+                halide_profiler_func_stats *fs = f_stats[i];
+
                 sstr << "  " << fs->name << ": ";
-                cursor += 25;
+                cursor += max_func_name_length + 5;
                 while (sstr.size() < cursor) {
                     sstr << " ";
                 }
 
                 float ft = fs->time / (p->runs * 1000000.0f);
+                if (ft < 10000) {
+                    sstr << " ";
+                }
+                if (ft < 1000) {
+                    sstr << " ";
+                }
+                if (ft < 100) {
+                    sstr << " ";
+                }
+                if (ft < 10) {
+                    sstr << " ";
+                }
                 sstr << ft;
                 // We don't need 6 sig. figs.
                 sstr.erase(3);
                 sstr << "ms";
-                cursor += 10;
+                cursor += 12;
                 while (sstr.size() < cursor) {
                     sstr << " ";
                 }

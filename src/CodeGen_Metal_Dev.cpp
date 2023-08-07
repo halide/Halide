@@ -471,7 +471,6 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Store *op) {
                                   allocations.get(op->name).type == t);
 
         string id_index = print_expr(op->index);
-        string id_value = print_expr(op->value);
         stream << get_indent();
 
         if (type_cast_needed) {

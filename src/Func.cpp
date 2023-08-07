@@ -1010,6 +1010,12 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
 
     definition.schedule().touched() = true;
 
+    user_assert(inner != outer) << "In schedule for " << name()
+                                << ", can't split " << old << " into "
+                                << outer << " and " << inner
+                                << " because the new Vars have the same name.\n"
+                                << dump_argument_list();
+
     // Check that the new names aren't already in the dims list.
     for (auto &dim : dims) {
         string new_names[2] = {inner, outer};
@@ -2016,7 +2022,9 @@ Func create_clone_wrapper(Function wrapped_fn, const string &wrapper_name) {
     // Fix up any self-references in the clone.
     FunctionPtr self_reference = wrapper.function().get_contents();
     self_reference.weaken();
-    remapping.emplace(wrapped_fn.get_contents(), self_reference);
+    // remapping might already contain a strong self-reference from the deep
+    // copy, so we want to use operator[], not emplace or insert.
+    remapping[wrapped_fn.get_contents()] = self_reference;
     wrapper.function().substitute_calls(remapping);
     return wrapper;
 }

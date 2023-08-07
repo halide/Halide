@@ -637,7 +637,7 @@ int generate_filter_main_inner(int argc,
                                char **argv,
                                const GeneratorFactoryProvider &generator_factory_provider) {
     static const char kUsage[] = R"INLINE_CODE(
-gengen
+gengenz
   [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]
   [-d 1|0] [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]
   [-s AUTOSCHEDULER_NAME] [-t TIMEOUT]
@@ -668,8 +668,8 @@ gengen
      generation, such as `no_asserts` and `no_runtime`, are ignored.
 
  -t  Timeout for the Generator to run, in seconds; mainly useful to ensure that
-     bugs and/or degenerate cases don't stall build systems. Defaults to 900
-     (=15 minutes). Specify 0 to allow ~infinite time.
+     bugs and/or degenerate cases don't stall build systems. Specify 0 to allow
+     infinite time. Defaults to infinite.
 
  -v  If nonzero, log the path to all generated files to stdout.
 )INLINE_CODE";
@@ -684,7 +684,7 @@ gengen
         {"-p", ""},
         {"-r", ""},
         {"-v", "0"},
-        {"-t", "900"},  // 15 minutes
+        {"-t", "0"},
     };
 
     ExecuteGeneratorArgs args;

@@ -272,7 +272,7 @@ public:
     CUcontext context = nullptr;
 
     // Constructor sets 'status' if any error occurs.
-    ALWAYS_INLINE Context(void *user_context)
+    ALWAYS_INLINE explicit Context(void *user_context)
         : user_context(user_context) {
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);

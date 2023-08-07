@@ -15,7 +15,8 @@ bool all_ones(const std::vector<int64_t> &nums) {
     return true;
 }
 
-bool equal_to_existing_size(const std::vector<int64_t> &s, const std::vector<int64_t> &nums) {
+bool equal_to_existing_size(const std::vector<int64_t> &s,
+                            const std::vector<int64_t> &nums) {
     for (size_t i = 0; i < s.size(); ++i) {
         if (s[i] != nums[i]) {
             return false;
@@ -24,7 +25,8 @@ bool equal_to_existing_size(const std::vector<int64_t> &s, const std::vector<int
     return true;
 }
 
-std::vector<std::vector<int64_t>> generate_serial_tilings(const std::vector<int64_t> &s, int d,
+std::vector<std::vector<int64_t>> generate_serial_tilings(const std::vector<int64_t> &s,
+                                                          int d,
                                                           int last_d,
                                                           int vectorized_index,
                                                           const std::vector<int> &vec_dim_serial_sizes,
@@ -35,7 +37,13 @@ std::vector<std::vector<int64_t>> generate_serial_tilings(const std::vector<int6
         result.emplace_back();
     } else {
         std::vector<std::vector<int64_t>> v;
-        v = generate_serial_tilings(s, d - 1, last_d, vectorized_index, vec_dim_serial_sizes, filter_small_outer_extents, allow_inner_ones);
+        v = generate_serial_tilings(s,
+                                    d - 1,
+                                    last_d,
+                                    vectorized_index,
+                                    vec_dim_serial_sizes,
+                                    filter_small_outer_extents,
+                                    allow_inner_ones);
         for (auto t : v) {
             t.push_back(0);
             bool used_full_extent = false;
@@ -90,7 +98,9 @@ std::vector<std::vector<int64_t>> generate_serial_tilings(const std::vector<int6
 // producer-consumer fusion, or tiling for parallelism.
 // inner_sizes is optional vector of fixed sizes to choose from for inner loop.
 // used for GPU schedules when we split a 'none' loop into a parallel loop and a serial loop
-std::vector<std::vector<int64_t>> generate_tilings(const std::vector<int64_t> &s, int d, int factor,
+std::vector<std::vector<int64_t>> generate_tilings(const std::vector<int64_t> &s,
+                                                   int d,
+                                                   int factor,
                                                    bool allow_splits,
                                                    const std::vector<int> &inner_sizes) {
     std::vector<std::vector<int64_t>> result;
@@ -199,7 +209,9 @@ std::vector<std::vector<int64_t>> generate_tilings(const std::vector<int64_t> &s
 
 // Moves vectorized dimension first and also removes dimensions with size 1
 // to reflect actual thread dimensions when loop nests are lowered
-void lowered_dims(const std::vector<int64_t> &size, int vector_loop_i, std::vector<int64_t> &lowered_size) {
+void lowered_dims(const std::vector<int64_t> &size,
+                  int vector_loop_i,
+                  std::vector<int64_t> &lowered_size) {
     if (vector_loop_i >= 0 && size[vector_loop_i] > 1) {
         lowered_size.push_back(size[vector_loop_i]);
     }
@@ -238,12 +250,20 @@ std::vector<std::vector<int64_t>> generate_gpu_tilings(const std::vector<std::ve
         }
 
         std::vector<std::vector<int64_t>> v;
-        v = generate_gpu_tilings(stage_sizes, pure_dims, max_s, d - 1, vectorized_indices, serial_inner, is_compute_root_stage);
+        v = generate_gpu_tilings(stage_sizes,
+                                 pure_dims,
+                                 max_s,
+                                 d - 1,
+                                 vectorized_indices,
+                                 serial_inner,
+                                 is_compute_root_stage);
 
         for (auto t : v) {
-            enum validity { serial_count_err,
-                            thread_count_err,
-                            valid_tiling };
+            enum validity {
+                serial_count_err,
+                thread_count_err,
+                valid_tiling
+            };
 
             // helper function detects whether tiling is legal: cannot exceed max thread count,
             // have more than three dimensions with ext > 1, or result in large serial loops
@@ -314,11 +334,14 @@ std::vector<std::vector<int64_t>> generate_gpu_tilings(const std::vector<std::ve
                     break;
                 }
                 // reject if inner exceeds hardware thread limit
-                if ((d == vectorized_indices[0] && threads_ext > max_threads_extent) || (d != vectorized_indices[0] && threads_ext > 16)) {
+                if ((d == vectorized_indices[0] && threads_ext > max_threads_extent) ||
+                    (d != vectorized_indices[0] && threads_ext > 16)) {
                     break;
                 }
                 int64_t other_ext = (stage_sizes[0][d] + threads_ext - 1) / threads_ext;
-                if (d != vectorized_indices[0] && threads_ext > 1 && threads_ext * other_ext * 7 > stage_sizes[0][d] * 8) {
+                if (d != vectorized_indices[0] &&
+                    threads_ext > 1 &&
+                    threads_ext * other_ext * 7 > stage_sizes[0][d] * 8) {
                     break;
                 }
                 t.back() = threads_ext;
