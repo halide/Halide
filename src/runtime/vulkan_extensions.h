@@ -153,9 +153,10 @@ uint32_t vk_get_supported_instance_extensions(void *user_context, StringTable &e
         return 0;
     }
 
+    debug(user_context) << "Vulkan: Checking vkEnumerateInstanceExtensionProperties for extensions ...\n";
+
     uint32_t avail_ext_count = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &avail_ext_count, nullptr);
-    debug(user_context) << "Vulkan: vkEnumerateInstanceExtensionProperties found  " << avail_ext_count << " extensions ...\n";
 
     if (avail_ext_count) {
         BlockStorage::Config config;
@@ -170,7 +171,7 @@ uint32_t vk_get_supported_instance_extensions(void *user_context, StringTable &e
 
         for (uint32_t n = 0; n < avail_ext_count; ++n) {
             const VkExtensionProperties *properties = static_cast<const VkExtensionProperties *>(extension_properties[n]);
-            debug(user_context) << "    extension: " << properties->extensionName << "\n";
+            debug(user_context) << "    [" << n << "]: " << properties->extensionName << "\n";
         }
 
         ext_table.resize(user_context, avail_ext_count);
@@ -179,7 +180,7 @@ uint32_t vk_get_supported_instance_extensions(void *user_context, StringTable &e
             ext_table.assign(user_context, n, properties->extensionName);
         }
     }
-
+    debug(user_context) << "Vulkan: vkEnumerateInstanceExtensionProperties found  " << avail_ext_count << " extensions ...\n";
     return avail_ext_count;
 }
 
@@ -197,11 +198,7 @@ uint32_t vk_get_optional_device_extensions(void *user_context, StringTable &ext_
         "VK_KHR_shader_float16_int8",
         "VK_KHR_shader_float_controls"};
     const uint32_t optional_ext_count = sizeof(optional_ext_table) / sizeof(optional_ext_table[0]);
-
-    ext_table.resize(user_context, optional_ext_count);
-    for (uint32_t n = 0; n < optional_ext_count; ++n) {
-        ext_table.assign(user_context, n, optional_ext_table[n]);
-    }
+    ext_table.fill(user_context, (const char **)optional_ext_table, optional_ext_count);
     return optional_ext_count;
 }
 
@@ -212,10 +209,10 @@ uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalDevice
         return 0;
     }
 
+    debug(user_context) << "Vulkan: Checking vkEnumerateDeviceExtensionProperties for extensions ...\n";
+
     uint32_t avail_ext_count = 0;
     vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &avail_ext_count, nullptr);
-    debug(user_context) << "Vulkan: vkEnumerateDeviceExtensionProperties found  " << avail_ext_count << " extensions ...\n";
-
     if (avail_ext_count > 0) {
         BlockStorage::Config config;
         config.entry_size = sizeof(VkExtensionProperties);
@@ -229,7 +226,7 @@ uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalDevice
 
         for (uint32_t n = 0; n < avail_ext_count; ++n) {
             const VkExtensionProperties *properties = static_cast<const VkExtensionProperties *>(extension_properties[n]);
-            debug(user_context) << "    extension: " << properties->extensionName << "\n";
+            debug(user_context) << "    [" << n << "]: " << properties->extensionName << "\n";
         }
 
         ext_table.resize(user_context, avail_ext_count);
@@ -239,17 +236,19 @@ uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalDevice
         }
     }
 
+    debug(user_context) << "Vulkan: vkEnumerateDeviceExtensionProperties found  " << avail_ext_count << " extensions ...\n";
     return avail_ext_count;
 }
 
 bool vk_validate_required_extension_support(void *user_context,
                                             const StringTable &required_extensions,
                                             const StringTable &supported_extensions) {
+    debug(user_context) << "Vulkan: Validating " << uint32_t(required_extensions.size()) << " extensions ...\n";
     bool validated = true;
     for (uint32_t n = 0; n < required_extensions.size(); ++n) {
         const char *extension = required_extensions[n];
         if (!supported_extensions.contains(extension)) {
-            debug(user_context) << "Vulkan: Missing required extension: '" << extension << "'! \n";
+            debug(user_context) << "Vulkan: Missing required extension: '" << extension << "'!\n";
             validated = false;
         }
     }
