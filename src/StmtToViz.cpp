@@ -734,7 +734,7 @@ private:
             print_html_element("span", "matched", " {");
 
             // Open indented div to hold buffer data
-            print_opening_tag("div", "indent BufferData", id);
+            print_opening_tag("div", "indent BufferData collapsed-block", id);
 
             std::string str((const char *)buf.data(), buf.size_in_bytes());
             if (starts_with(buf.name(), "cuda_")) {
