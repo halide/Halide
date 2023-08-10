@@ -350,11 +350,9 @@
     }
 
     function init_tooltips(btns, prefix) {
-        var re = /(?:\-([^-]+))?$/;
         for (var i = 0; i < btns.size(); i++) {
             const button = btns[i];
-            //const tooltip = $(prefix + re.exec(button.id)[1])[0];
-            const tooltip = document.getElementById(prefix + re.exec(button.id)[1]);
+            const tooltip = button.firstElementChild;
             button.is_clicked = false;
             button.addEventListener('mouseenter', () => {
                 if (!button.is_clicked)
