@@ -130,6 +130,7 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
                 for (const auto &l : c->stage->loop) {
                     if (!l.rvar) {
                         total *= o.outer_tiling[l.pure_dim];
+                        internal_assert(l.pure_dim < c->size.size()) << "l.pure_dim " << l.pure_dim << " c->size.size() " << c->size.size() << "\n";
                         max_available *= c->size[l.pure_dim];
                     }
                 }
