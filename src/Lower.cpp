@@ -423,6 +423,8 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 
+    const Stmt pseudo_code{s};
+
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";
@@ -559,6 +561,8 @@ void lower_impl(const vector<Function> &output_funcs,
     }
 
     result_module.append(main_func);
+
+    result_module.stashPseudoCode(LoweredFunc{pipeline_name, public_args, pseudo_code, linkage_type});
 
     auto *logger = get_compiler_logger();
     if (logger) {

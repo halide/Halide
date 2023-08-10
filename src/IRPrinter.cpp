@@ -79,9 +79,7 @@ ostream &operator<<(ostream &stream, const Module &m) {
     for (const auto &b : m.buffers()) {
         stream << b << "\n";
     }
-    for (const auto &f : m.functions()) {
-        stream << f << "\n";
-    }
+    stream << m.pseudoCode() << "\n";
     return stream;
 }
 

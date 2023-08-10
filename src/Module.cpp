@@ -320,6 +320,7 @@ struct ModuleContents {
     Target target;
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
+    std::unique_ptr<Internal::LoweredFunc> pseudo_code;
     std::vector<Module> submodules;
     MetadataNameMap metadata_name_map;
     bool any_strict_float{false};
@@ -399,6 +400,9 @@ const std::vector<Internal::LoweredFunc> &Module::functions() const {
     return contents->functions;
 }
 
+const Internal::LoweredFunc &Module::pseudoCode() const {
+    return *(contents->pseudo_code);
+}
 std::vector<Internal::LoweredFunc> &Module::functions() {
     return contents->functions;
 }
@@ -423,6 +427,10 @@ void Module::append(const Buffer<> &buffer) {
 
 void Module::append(const Internal::LoweredFunc &function) {
     contents->functions.push_back(function);
+}
+
+void Module::stashPseudoCode(Internal::LoweredFunc &&function) {
+    contents->pseudo_code = std::make_unique<Internal::LoweredFunc>(function);
 }
 
 void Module::append(const Module &module) {

@@ -161,6 +161,8 @@ public:
     const std::vector<Internal::LoweredFunc> &functions() const;
     std::vector<Internal::LoweredFunc> &functions();
     const std::vector<Module> &submodules() const;
+
+    const Internal::LoweredFunc &pseudoCode() const;
     // @}
 
     /** Return the function with the given name. If no such function
@@ -172,6 +174,7 @@ public:
     void append(const Buffer<void> &buffer);
     void append(const Internal::LoweredFunc &function);
     void append(const Module &module);
+    void stashPseudoCode(Internal::LoweredFunc &&function);
     // @}
 
     /** Compile a halide Module to variety of outputs, depending on

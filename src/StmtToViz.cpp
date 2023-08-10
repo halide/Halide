@@ -46,9 +46,7 @@ public:
     // Pre-compute all costs to avoid repeated work
     void compute_all_costs(const Module &m) {
         // Compute all node costs
-        for (const auto &fn : m.functions()) {
-            fn.body.accept(this);
-        }
+        m.pseudoCode().body.accept(this);
 
         // Compute the max cost for each category
         max_compute_cost = -1;
@@ -526,9 +524,7 @@ public:
         // nodes we need to map and generate their assembly
         // markers (comments that appear in the assembly code
         // associating the code with this node)
-        for (const auto &fn : m.functions()) {
-            fn.body.accept(this);
-        }
+        m.pseudoCode().body.accept(this);
 
         // Find markers in asm code
         std::istringstream asm_stream(code);
@@ -672,9 +668,7 @@ public:
         }
 
         // Print module functions
-        for (const auto &fn : m.functions()) {
-            print(fn);
-        }
+        print(m.pseudoCode());
 
         // Close indented div holding body code
         print_closing_tag("div");
@@ -2190,9 +2184,7 @@ public:
 
     void print(const Module &m, AssemblyInfo asm_info) {
         assembly_info = std::move(asm_info);
-        for (const auto &fn : m.functions()) {
-            print(fn);
-        }
+        print(m.pseudoCode());
     }
 
 private:
