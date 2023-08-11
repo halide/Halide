@@ -1,0 +1,692 @@
+namespace Halide.Serialize;
+
+// This corresponds to the corresponding Halide version.
+file_identifier "HL17";
+
+// File extension of any written files. "hlpipe" stands for Halide Pipeline.
+file_extension "hlpipe";
+
+// from src/IR.cpp
+union Stmt {
+    LetStmt,
+    AssertStmt,
+    ProducerConsumer,
+    For,
+    Store,
+    Provide,
+    Allocate,
+    Free,
+    Realize,
+    Block,
+    IfThenElse,
+    Evaluate,
+    Prefetch,
+    Acquire,
+    Fork,
+    Atomic,
+    UndefinedStmt,
+}
+
+union Expr {
+    IntImm,
+    UIntImm,
+    FloatImm,
+    StringImm,
+    Cast,
+    Reinterpret,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Min,
+    Max,
+    EQ,
+    NE,
+    LT,
+    LE,
+    GT,
+    GE,
+    And,
+    Or,
+    Not,
+    Select,
+    Load,
+    Ramp,
+    Broadcast,
+    Let,
+    Call,
+    Variable,
+    Shuffle,
+    VectorReduce,
+    UndefinedExpr,
+}
+
+enum ForType: byte {
+    Serial,
+    Parallel,
+    Vectorized,
+    Unrolled,
+    Extern,
+    GPUBlock,
+    GPUThread,
+    GPULane,
+}
+
+enum DeviceAPI: byte {
+    None,
+    Host,
+    Default_GPU,
+    CUDA,
+    OpenCL,
+    OpenGLCompute,
+    Metal,
+    Hexagon,
+    HexagonDma,
+    D3D12Compute,
+    Vulkan,
+    WebGPU,
+}
+
+enum MemoryType: byte {
+    Auto,
+    Heap,
+    Stack,
+    Register,
+    GPUShared,
+    GPUTexture,
+    LockedCache,
+    VTCM,
+    AMXTile,
+}
+
+table Range {
+    min: Expr;
+    extent: Expr;
+}
+
+table LetStmt {
+    name: string;
+    value: Expr;
+    body: Stmt;
+}
+
+table AssertStmt {
+    condition: Expr;
+    message: Expr;
+}
+
+table ProducerConsumer {
+    name: string;
+    is_producer: bool;
+    body: Stmt;
+}
+
+table For {
+    name: string;
+    min: Expr;
+    extent: Expr;
+    for_type: ForType;
+    device_api: DeviceAPI;
+    body: Stmt;
+}
+
+table ModulusRemainder {
+    modulus: int64;
+    remainder: int64;
+}
+
+table Store {
+    name: string;
+    predicate: Expr;
+    value: Expr;
+    index: Expr;
+    param_name: string;
+    alignment: ModulusRemainder;
+}
+
+table Provide {
+    name: string;
+    values: [Expr];
+    args: [Expr];
+    predicate: Expr;
+}
+
+table Allocate {
+    name: string;
+    type: Type;
+    memory_type: MemoryType;
+    extents: [Expr];
+    condition: Expr;
+    new_expr: Expr;
+    free_function: string;
+    padding: int32;
+    body: Stmt;
+}
+
+table Free {
+    name: string;
+}
+
+table Realize {
+    name: string;
+    types: [Type];
+    memory_type: MemoryType;
+    bounds: [Range];
+    condition: Expr;
+    body: Stmt;
+}
+
+table Block {
+    first: Stmt;
+    rest: Stmt;
+}
+
+table IfThenElse {
+    condition: Expr;
+    then_case: Stmt;
+    else_case: Stmt;
+}
+
+table Evaluate {
+    value: Expr;
+}
+
+enum PrefetchBoundStrategy: ubyte {
+    Clamp,
+    GuardWithIf,
+    NonFaulting,
+}
+
+table PrefetchDirective {
+    name: string;
+    at: string;
+    from: string;
+    offset: Expr;
+    strategy: PrefetchBoundStrategy;
+    param_name: string;
+}
+
+table Prefetch {
+    name: string;
+    types: [Type];
+    bounds: [Range];
+    prefetch: PrefetchDirective;
+    condition: Expr;
+    body: Stmt;
+}
+
+table Acquire {
+    semaphore: Expr;
+    count: Expr;
+    body: Stmt;
+}
+
+table Fork {
+    first: Stmt;
+    rest: Stmt;
+}
+
+table Atomic {
+    producer_name: string;
+    mutex_name: string;
+    body: Stmt;
+}
+
+table UndefinedStmt {
+}
+
+table IntImm {
+    value: int64;
+    type: Type;
+}
+
+table UIntImm {
+    value: uint64;
+    type: Type;
+}
+
+table FloatImm {
+    value: float64;
+    type: Type;
+}
+
+table StringImm {
+    value: string;
+}
+
+table Cast {
+    value: Expr;
+    type: Type;
+}
+
+table Reinterpret {
+    value: Expr;
+    type: Type;
+}
+
+table Add {
+    a: Expr;
+    b: Expr;
+}
+
+table Sub {
+    a: Expr;
+    b: Expr;
+}
+
+table Mul {
+    a: Expr;
+    b: Expr;
+}
+
+table Div {
+    a: Expr;
+    b: Expr;
+}
+
+table Mod {
+    a: Expr;
+    b: Expr;
+}
+
+table Min {
+    a: Expr;
+    b: Expr;
+}
+
+table Max {
+    a: Expr;
+    b: Expr;
+}
+
+table EQ {
+    a: Expr;
+    b: Expr;
+}
+
+table NE {
+    a: Expr;
+    b: Expr;
+}
+
+table LT {
+    a: Expr;
+    b: Expr;
+}
+
+table LE {
+    a: Expr;
+    b: Expr;
+}
+
+table GT {
+    a: Expr;
+    b: Expr;
+}
+
+table GE {
+    a: Expr;
+    b: Expr;
+}
+
+table And {
+    a: Expr;
+    b: Expr;
+}
+
+table Or {
+    a: Expr;
+    b: Expr;
+}
+
+table Not {
+    a: Expr;
+}
+
+table Select {
+    condition: Expr;
+    true_value: Expr;
+    false_value: Expr;
+}
+
+table Load {
+    name: string;
+    predicate: Expr;
+    index: Expr;
+    image_name: string;
+    param_name: string;
+    alignment: ModulusRemainder;
+    type: Type;
+}
+
+table Ramp {
+    base: Expr;
+    stride: Expr;
+    lanes: int32;
+}
+
+table Broadcast {
+    value: Expr;
+    lanes: int32;
+}
+
+table Let {
+    name: string;
+    value: Expr;
+    body: Expr;
+}
+
+enum CallType: ubyte {
+    Image,
+    Extern,
+    ExternCPlusPlus,
+    PureExtern,
+    Halide,
+    Intrinsic,
+    PureIntrinsic,
+}
+
+table Call {
+    name: string;
+    args: [Expr];
+    call_type: CallType;
+    func_index: int32;
+    value_index: int32;
+    image_name: string;
+    param_name: string;
+    type: Type;
+}
+
+table ReductionVariable {
+    var: string;
+    min: Expr;
+    extent: Expr;
+}
+
+table ReductionDomain {
+    defined: bool;
+    domain: [ReductionVariable];
+    predicate: Expr;
+    frozen: bool = false;
+}
+
+table Variable {
+    name: string;
+    type: Type;
+    param_name: string;
+    image_name: string;
+    reduction_domain: ReductionDomain;
+}
+
+table Shuffle {
+    vectors: [Expr];
+    indices: [int32];
+}
+
+enum VectorReduceOp: ubyte {
+    Add,
+    SaturatingAdd,
+    Mul,
+    Min,
+    Max,
+    And,
+    Or,
+}
+
+table VectorReduce {
+    value: Expr;
+    reduction_op: VectorReduceOp;
+    lanes: int32;
+}
+
+table UndefinedExpr {
+}
+
+enum TypeCode: byte {
+    Int,
+    UInt,
+    Float,
+    Handle,
+    BFloat,
+}
+
+// TODO: no halide_handle_cplusplus_type yet
+table Type {
+    code: TypeCode;
+    bits: uint8;
+    lanes: int32;
+}
+
+table Bound {
+    var: string;
+    min: Expr;
+    extent: Expr;
+    modulus: Expr;
+    remainder: Expr;
+}
+
+table StorageDim {
+    var: string;
+    alignment: Expr;
+    bound: Expr;
+    fold_factor: Expr;
+    fold_forward: bool;
+}
+
+table LoopLevel {
+    func_name: string;
+    stage_index: int32;
+    var_name: string;
+    is_rvar: bool;
+    locked: bool;
+}
+
+table WrapperRef {
+    func_name: string;
+    func_index: int32;
+}
+
+table FuncSchedule {
+    store_level: LoopLevel;
+    compute_level: LoopLevel;
+    storage_dims: [StorageDim];
+    bounds: [Bound];
+    estimates: [Bound];
+    wrappers: [WrapperRef];
+    memory_type: MemoryType = Auto;
+    memoized: bool;
+    async: bool;
+    memoize_eviction_key: Expr;
+}
+
+table Specialization {
+    condition: Expr;
+    definition: Definition;
+    failure_message: string;
+}
+
+enum TailStrategy: ubyte {
+    RoundUp,
+    GuardWithIf,
+    Predicate,
+    PredicateLoads,
+    PredicateStores,
+    ShiftInwards,
+    Auto,
+}
+
+enum SplitType: ubyte {
+    SplitVar,
+    RenameVar,
+    FuseVars,
+    PurifyRVar,
+}
+
+table Split {
+    old_var: string;
+    outer: string;
+    inner: string;
+    factor: Expr;
+    exact: bool;
+    tail: TailStrategy;
+    split_type: SplitType;
+}
+
+enum DimType: ubyte {
+    PureVar,
+    PureRVar,
+    ImpureRVar,
+}
+
+table Dim {
+    var: string;
+    for_type: ForType;
+    device_api: DeviceAPI;
+    dim_type: DimType;
+}
+
+enum LoopAlignStrategy: ubyte {
+    AlignStart,
+    AlignEnd,
+    NoAlign,
+    Auto,
+}
+
+table FuseLoopLevel {
+    fuse_level: LoopLevel;
+    align_dimension_names: [string];
+    align_strategies: [LoopAlignStrategy];
+}
+
+table FusedPair {
+    func_1: string;
+    func_2: string;
+    stage_1: int32;
+    stage_2: int32;
+    var_name: string;
+}
+
+table StageSchedule {
+    rvars: [ReductionVariable];
+    splits: [Split];
+    dims: [Dim];
+    prefetches: [PrefetchDirective];
+    fuse_level: FuseLoopLevel;
+    fused_pairs: [FusedPair];
+    touched: bool = false;
+    allow_race_conditions: bool = false;
+    atomic: bool = false;
+    override_atomic_associativity_test: bool = false;
+}
+
+table Definition {
+    is_init: bool;
+    predicate: Expr;
+    values: [Expr];
+    args: [Expr];
+    stage_schedule: StageSchedule;
+    specializations: [Specialization];
+    source_location: string;
+}
+
+table FuncMapping {
+    name: string;
+    index: int32;
+}
+
+enum NameMangling: ubyte {
+    Default,
+    C,
+    CPlusPlus,
+}
+
+table BufferConstraint {
+    min: Expr;
+    extent: Expr;
+    stride: Expr;
+    min_estimate: Expr;
+    extent_estimate: Expr;
+}
+
+table Parameter {
+    defined: bool;
+    is_buffer: bool;
+    type: Type;
+    dimensions: int32;
+    name: string;
+    host_alignment: int32;
+    buffer_constraints: [BufferConstraint];
+    memory_type: MemoryType;
+    data: uint64;
+    scalar_default: Expr;
+    scalar_min: Expr;
+    scalar_max: Expr;
+    scalar_estimate: Expr;
+}
+
+enum ExternFuncArgumentType: ubyte {
+    UndefinedArg,
+    FuncArg,
+    BufferArg,
+    ExprArg,
+    ImageParamArg,
+}
+
+table ExternFuncArgument {
+    arg_type: ExternFuncArgumentType;
+    func_index: int32;
+    buffer_name: string;
+    expr: Expr;
+    image_param_name: string;
+}
+
+table BufferDimension {
+    min: int32;
+    extent: int32;
+    stride: int32;
+}
+
+table Buffer {
+    defined: bool;
+    name: string;
+    type: Type;
+    dimensions: int32;
+    dims: [BufferDimension];
+    data: [uint8];
+}
+
+table Func {
+    name: string;
+    origin_name: string;
+    output_types: [Type];
+    required_types: [Type];
+    required_dims: int32;
+    args: [string];
+    func_schedule: FuncSchedule;
+    init_def: Definition;
+    updates: [Definition];
+    debug_file: string;
+    output_buffers_names: [string];
+    extern_arguments: [ExternFuncArgument];
+    extern_function_name: string;
+    extern_mangling: NameMangling;
+    extern_function_device_api: DeviceAPI;
+    extern_proxy_expr: Expr;
+    trace_loads: bool = false;
+    trace_stores: bool = false;
+    trace_realizations: bool = false;
+    trace_tags: [string];
+    frozen: bool = false;
+}
+
+table Pipeline {
+    funcs: [Func];
+    output_names: [string];
+    requirements: [Stmt];
+    func_names_in_order: [string];
+    parameters: [Parameter];
+    buffers: [Buffer];
+}
+
+root_type Pipeline;

@@ -68,6 +68,29 @@ public:
     /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
     explicit Function(const FunctionPtr &);
 
+    /** Update a function with deserialized data */
+    void update_with_deserialization(const std::string &name,
+                                     const std::string &origin_name,
+                                     const std::vector<Halide::Type> &output_types,
+                                     const std::vector<Halide::Type> &required_types,
+                                     int required_dims,
+                                     const std::vector<std::string> &args,
+                                     const FuncSchedule &func_schedule,
+                                     const Definition &init_def,
+                                     const std::vector<Definition> &updates,
+                                     const std::string &debug_file,
+                                     const std::vector<Parameter> &output_buffers,
+                                     const std::vector<ExternFuncArgument> &extern_arguments,
+                                     const std::string &extern_function_name,
+                                     NameMangling name_mangling,
+                                     DeviceAPI device_api,
+                                     const Expr &extern_proxy_expr,
+                                     bool trace_loads,
+                                     bool trace_stores,
+                                     bool trace_realizations,
+                                     const std::vector<std::string> &trace_tags,
+                                     bool frozen);
+
     /** Get a handle on the halide function contents that this Function
      * represents. */
     FunctionPtr get_contents() const {
