@@ -2897,6 +2897,7 @@ private:
     // Generate tab 3/3: Generated assembly code
     void generate_assembly_tab(const Module &m) {
         stream << "<div id='assembly-tab'>\n";
+        stream << "<button id='highlight-button' onclick='highlightAssembly();'>Highlight</button>\n";
         stream << "<div id='assemblyContent' class='shj-lang-asm'>\n";
         stream << "<pre>\n";
         stream << asm_stream.str();
