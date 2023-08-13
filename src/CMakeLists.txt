@@ -43,6 +43,7 @@ set(HEADER_FILES
     CodeGen_WebGPU_Dev.h
     CompilerLogger.h
     ConciseCasts.h
+    ConstantBounds.h
     CPlusPlusMangle.h
     CSE.h
     Debug.h
@@ -214,6 +215,7 @@ set(SOURCE_FILES
     CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
+    ConstantBounds.cpp
     CPlusPlusMangle.cpp
     CSE.cpp
     Debug.cpp
@@ -233,6 +235,7 @@ set(SOURCE_FILES
     EmulateFloat16Math.cpp
     Error.cpp
     Expr.cpp
+    ExprUsesVar.cpp
     ExtractTileOperations.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp

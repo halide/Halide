@@ -2,6 +2,7 @@
 
 #include "Bounds.h"
 #include "CSE.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
