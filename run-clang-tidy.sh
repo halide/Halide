@@ -4,9 +4,31 @@ set -e
 
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-[[ "$1" != "" && "$1" != "-fix" ]] && echo "The only supported argument is -fix" && exit
+usage() { echo "Usage: $0 [-j MAX_PROCESS_COUNT] [-f]" 1>&2; exit 1; }
 
-FIX=$1
+J=$(nproc)
+FIX=
+
+while getopts ":j:f" o; do
+    case "${o}" in
+        j)
+            J="${OPTARG}"
+            [[ "${J}" =~ ^[0-9]+$ ]] || ( echo "-j requires an integer argument"; usage )
+            ;;
+        f)
+            FIX="-fix"
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+echo "Using ${J} processes."
+if [ -n "${FIX}" ]; then
+    echo "Operating in -fix mode!"
+fi
 
 # We are currently standardized on using LLVM/Clang16 for this script.
 # Note that this is totally independent of the version of LLVM that you
@@ -47,7 +69,8 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
 [ -a ${CLANG_TIDY_BUILD_DIR}/compile_commands.json ]
 
 # We must populate the includes directory to check things outside of src/
-cmake --build ${CLANG_TIDY_BUILD_DIR} --target HalideIncludes
+echo Building HalideIncludes...
+cmake --build ${CLANG_TIDY_BUILD_DIR} -j $(nproc) --target HalideIncludes
 
 RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
 
@@ -57,6 +80,7 @@ RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
 # Skip DefaultCostModel.cpp as it relies on cost_model.h.
 # Skip GenGen.cpp and RunGenMain.cpp as they bring clang-tidy to its knees,
 # for reasons that aren't entirely clear yet.
+echo Finding targets...
 CLANG_TIDY_TARGETS=$(find \
      "${ROOT_DIR}/src" \
      "${ROOT_DIR}/python_bindings" \
@@ -71,9 +95,10 @@ CLANG_TIDY_TARGETS=$(find \
 # so we will instead build an include filter
 CLANG_TIDY_HEADER_FILTER=".*/src/.*|.*/python_bindings/.*|.*/tools/.*|.*/util/.*"
 
+echo Running clang-tidy...
 ${RUN_CLANG_TIDY} \
     ${FIX} \
-    -j $(nproc) \
+    -j ${J} \
     -header-filter="${CLANG_TIDY_HEADER_FILTER}" \
     -quiet \
     -p ${CLANG_TIDY_BUILD_DIR} \

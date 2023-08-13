@@ -79,6 +79,7 @@ if (WITH_TESTS)
 
     function(_add_test TARGET)
         add_test(NAME ${TARGET} COMMAND ${TARGET})
+        add_dependencies(${TARGET} Halide::Anderson2021)
         set_tests_properties(${TARGET}
                              PROPERTIES
                              # This is a workaround for issues with the nvidia driver under ASAN

@@ -27,6 +27,7 @@ function(add_anderson2021_test NAME)
 
     add_test(NAME ${NAME}
              COMMAND ${ARGS_COMMAND})
+    add_dependencies(${NAME} Halide::Anderson2021)
     set_tests_properties(${NAME}
                          PROPERTIES
                          LABELS "${ARGS_LABELS}"
@@ -79,7 +80,7 @@ add_anderson2021_test(anderson2021_demo_included_schedule_file
 
 add_executable(anderson2021_test_apps_autoscheduler test.cpp)
 target_link_libraries(anderson2021_test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
-add_dependencies(anderson2021_test_apps_autoscheduler Halide_Anderson2021)
+add_dependencies(anderson2021_test_apps_autoscheduler Halide::Anderson2021)
 
 add_anderson2021_test(anderson2021_test_apps_autoscheduler
                    COMMAND anderson2021_test_apps_autoscheduler $<TARGET_FILE:Halide_Anderson2021>

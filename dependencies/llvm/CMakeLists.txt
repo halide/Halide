@@ -20,8 +20,8 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
 
-if (LLVM_PACKAGE_VERSION VERSION_LESS 16.0)
-    message(FATAL_ERROR "LLVM version must be 16.0 or newer")
+if (LLVM_PACKAGE_VERSION VERSION_LESS 15.0)
+    message(FATAL_ERROR "LLVM version must be 15.0 or newer")
 endif ()
 
 if (LLVM_PACKAGE_VERSION VERSION_GREATER 18.0)
