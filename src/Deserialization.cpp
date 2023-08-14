@@ -27,9 +27,14 @@ public:
         : external_params(external_params) {
     }
 
+    // Deserialize a pipeline from the given filename
     Pipeline deserialize(const std::string &filename);
 
+    // Deserialize a pipeline from the given input stream
     Pipeline deserialize(std::istream &in);
+
+    // Deserialize a pipeline from the given buffer of bytes
+    Pipeline deserialize(const std::vector<uint8_t> &data);
 
 private:
     // Helper function to deserialize a homogenous vector from a flatbuffer vector,
@@ -1294,9 +1299,12 @@ Pipeline Deserializer::deserialize(std::istream &in) {
     in.seekg(0, std::ios::end);
     int size = in.tellg();
     in.seekg(0, std::ios::beg);
-    std::vector<char> data(size);
-    in.read(data.data(), size);
+    std::vector<uint8_t> data(size);
+    in.read((char*)data.data(), size);
+    return deserialize(data);
+}
 
+Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
     if (pipeline_obj == nullptr) {
         user_warning << "deserialized pipeline is empty\n";
@@ -1375,6 +1383,11 @@ Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Inte
     return deserializer.deserialize(in);
 }
 
+Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map<std::string, Internal::Parameter> &external_params) {
+    Internal::Deserializer deserializer(external_params);
+    return deserializer.deserialize(buffer);
+}
+
 }  // namespace Halide
 
 #else  // WITH_SERIALIZATION
@@ -1387,6 +1400,11 @@ Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::s
 }
 
 Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Internal::Parameter> &external_params) {
+    user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+    return Pipeline();
+}
+
+Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map<std::string, Internal::Parameter> &external_params) {
     user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
     return Pipeline();
 }

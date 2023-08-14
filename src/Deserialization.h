@@ -15,7 +15,19 @@ namespace Halide {
  */
 Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Internal::Parameter> &external_params);
 
+/**
+ * Deserialize a Halide pipeline from an input stream.
+ * external_params is an optional map, all parameters in the map
+ * will be treated as external parameters so won't be deserialized.
+ */
 Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Internal::Parameter> &external_params);
+
+/**
+ * Deserialize a Halide pipeline from a byte buffer containing a serizalized pipeline in binary format
+ * external_params is an optional map, all parameters in the map
+ * will be treated as external parameters so won't be deserialized.
+ */
+Pipeline deserialize_pipeline(const std::vector<uint8_t> &data, const std::map<std::string, Internal::Parameter> &external_params);
 
 }  // namespace Halide
 
