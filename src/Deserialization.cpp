@@ -1300,7 +1300,7 @@ Pipeline Deserializer::deserialize(std::istream &in) {
     int size = in.tellg();
     in.seekg(0, std::ios::beg);
     std::vector<uint8_t> data(size);
-    in.read((char*)data.data(), size);
+    in.read((char *)data.data(), size);
     return deserialize(data);
 }
 
