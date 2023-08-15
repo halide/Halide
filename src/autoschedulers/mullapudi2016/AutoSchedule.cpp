@@ -24,14 +24,27 @@ namespace {
 
 struct ArchParams {
     /** Maximum level of parallelism avalaible. */
-    int parallelism = 16;
+    int parallelism{};
 
     /** Size of the last-level cache (in bytes). */
-    uint64_t last_level_cache_size = 16 * 1024 * 1024;
+    uint64_t last_level_cache_size{};
 
     /** Indicates how much more expensive is the cost of a load compared to
      * the cost of an arithmetic operation at last level cache. */
-    float balance = 40;
+    float balance{};
+
+    /** If GPU target is detected, but machine parameters are not specified, *
+     * make a realistic estimate based on consumer-grade GPUs (Nvidia GTX *
+     * 1660/Turing), or low-cost scientific-grade GPUs (Nvidia K40/Tesla).
+     *
+     * Section 5.4 of the Mullapudi2016 article: We configure the auto-scheduler
+     * to target the GPU by setting the PARALLELISM_THRESHOLD to 128, ..., and
+     * CACHE_SIZE to 48 KB.
+     */
+    constexpr ArchParams(bool has_gpu_feature)
+        : parallelism(has_gpu_feature ? 128 : 16), last_level_cache_size(has_gpu_feature ? 48 * 1024 : 16 * 1024 * 1024),
+          balance(has_gpu_feature ? 20 : 40) {
+    }
 };
 
 // Substitute parameter estimates into the exprs describing the box bounds.
@@ -887,6 +900,419 @@ struct AutoSchedule {
     }
 };
 
+std::string_view to_string(TailStrategy strategy) {
+    switch (strategy) {
+    case TailStrategy::RoundUp:
+        return "TailStrategy::RoundUp";
+    case TailStrategy::GuardWithIf:
+        return "TailStrategy::GuardWithIf";
+    case TailStrategy::ShiftInwards:
+        return "TailStrategy::ShiftInwards";
+    case TailStrategy::Auto:
+        return "TailStrategy::Auto";
+    default:
+        internal_error;
+        return "";
+    }
+}
+
+/** Apply gpu_threads and gpu_blocks as an atomic transaction. */
+class GPUTileHelper {
+public:
+    /** A data structure documenting the split factor and tail strategy. */
+    struct split_t {
+        VarOrRVar v;
+        VarOrRVar outer;
+        VarOrRVar inner;
+        Expr factor;
+        TailStrategy strategy;
+    };
+
+    GPUTileHelper(Stage &_f, uint32_t n)
+        : f(_f), stage_num(n) {
+    }
+
+    /** Indicate the need to split the dimensions with `gpu_tile()` method. */
+    void applySplit(const split_t &x) {
+        vars.emplace_back(x);
+    }
+
+    /** Apply Halide schedules.
+     * @param[in] sched schedule header file code printer
+     * @param[in] is_compute_at whether the current stage is computed at another stage.
+     */
+    void commit(AutoSchedule &sched, bool is_compute_at) const {
+        if (vars.empty() && !is_compute_at) {
+            /** When split dimensions are not specified, implement the compute
+             * in a single GPU thread. Examples are: scalar reduction, scalar
+             * data copy. */
+            f.gpu_single_thread();
+            debug(2) << f.name() << ".gpu_single_thread()\n";
+            sched.push_schedule(f.name(), stage_num, "gpu_single_thread()", {});
+            return;
+        }
+
+        std::stringstream oss;
+        switch (vars.size()) {
+        case 0:
+            return;
+        case 1: {
+            const auto &[v, outer, inner, factor, strategy] = vars.front();
+            f.split(v, outer, inner, factor, strategy);
+            oss << "split(" << v.name() << ", " << outer.name() << ", " << inner.name() << ", " << factor << ")";
+
+            /** When the current stage is computed_at another stage, we assume
+             * the `gpu_blocks()` is already defined. We implement the
+             * vectorization feature as `gpu_threads()`.
+             */
+            if (is_compute_at) {
+                f.gpu_threads(inner);
+                oss << ".gpu_threads(" << inner.name() << ")";
+            } else {
+                f.gpu(outer, inner);
+                oss << "gpu(" << outer.name() << ", " << inner.name() << ")";
+            }
+
+            break;
+        }
+        case 2: {
+            const auto &x = vars.front();
+            const auto &y = vars.back();
+            internal_assert(x.strategy == y.strategy);
+
+            f.tile(x.v, y.v, x.outer, y.outer, x.inner, y.inner, x.factor, y.factor);
+            oss << "tile("
+                << x.v.name() << ", "
+                << y.v.name() << ", "  //
+                << x.outer.name() << ", "
+                << y.outer.name() << ", "  //
+                << x.inner.name() << ", "
+                << y.inner.name() << ", "  //
+                << x.factor << ", "
+                << y.factor << ")";
+
+            if (is_compute_at) {
+                f.gpu_threads(x.inner, y.inner);
+                oss << ".gpu_threads(" << x.inner.name() << ", " << y.inner.name() << ")";
+            } else {
+                f.gpu(x.outer, x.inner);
+                f.gpu(y.outer, y.inner);
+                oss << ".gpu(" << x.outer.name() << ", " << x.inner.name() << ")";
+                oss << ".gpu(" << y.outer.name() << ", " << y.inner.name() << ")";
+            }
+
+            break;
+        }
+        default: {
+            const auto &x = vars[0];
+            const auto &y = vars[1];
+            const auto &z = vars[2];
+            f.tile({x.v, y.v, z.v}, {x.outer, y.outer, z.outer}, {x.inner, y.inner, z.inner}, {x.factor, y.factor, z.factor});
+
+            oss << "tile({"
+                << x.v.name() << ", "
+                << y.v.name() << ", "
+                << z.v.name() << "}, {"  //
+                << x.outer.name() << ", "
+                << y.outer.name() << ", "
+                << z.outer.name() << "}, {"  //
+                << x.inner.name() << ", "
+                << y.inner.name() << ", "
+                << z.inner.name() << "}, {"  //
+                << x.factor << ", "
+                << y.factor << ", "
+                << z.factor << "})";
+
+            if (is_compute_at) {
+                f.gpu_threads(x.inner, y.inner, z.inner);
+                oss << ".gpu_threads(" << x.inner.name() << ", " << y.inner.name() << ", " << z.inner.name() << ")";
+            } else {
+                f.gpu(x.outer, x.inner);
+                f.gpu(y.outer, y.inner);
+                f.gpu(z.outer, z.inner);
+                oss << ".gpu(" << x.outer.name() << ", " << x.inner.name() << ")";
+                oss << ".gpu(" << y.outer.name() << ", " << y.inner.name() << ")";
+                oss << ".gpu(" << z.outer.name() << ", " << z.inner.name() << ")";
+            }
+
+            break;
+        }
+        }
+
+        std::set<std::string> var_name;
+        for (const auto &x : vars) {
+            var_name.emplace(x.v.name());
+            var_name.emplace(x.outer.name());
+            var_name.emplace(x.inner.name());
+        }
+
+        sched.push_schedule(f.name(), stage_num, oss.str(), var_name);
+    }
+
+private:
+    Stage &f;
+    const uint32_t stage_num;
+
+    std::vector<split_t> vars;
+};
+
+/** Idempotent Halide scheduling for GPU.
+ *
+ * The Halide scheduling methods parallel() and vectorize() is tolerant to the
+ * reorder() operations. Mullapudi2016 algorithm utilizes such feature to
+ * decouple the auto-vectorization algorithm from the auto-split algorithm. The
+ * latter reorders the dimensions extensively to maximize spatial locality.
+ *
+ * However, the gpu_threads() must be in the inner dimensions of gpu_blocks().
+ * These calls are sensitive to the dimension orders; once the Func is split,
+ * it cannot be reordered without failing internal assertions.
+ *
+ * This class is designed to intercept these Halide scheduling calls to make
+ * them indempotent; the Halide schedules methods are called only once no matter
+ * how the dimensions are reordered repeatedly.
+ */
+class GPUTilingDedup {
+public:
+    /** Mullapudi2016, Section 5.4: Additionally, we add two new parameters
+     * TARGET_THREADS_PER_BLOCK and MAX_THREADS_PER_BLOCK whose values are
+     * set to 128 and 2048 respectively. These parameters enable the
+     * auto-scheduler to avoid tiling configurations that generate too few or
+     * too many threads per GPU thread block.
+     */
+    constexpr static int min_n_threads = 32;
+    constexpr static int max_n_threads = 1024;
+
+private:
+    const bool is_compute_at = false;
+    Stage &f;
+    const uint32_t stage_num;
+
+    using split_t = GPUTileHelper::split_t;
+    std::map<std::string, split_t> parallelize;
+
+    bool is_initial_order = true;
+    std::vector<VarOrRVar> ordering;
+
+    std::set<std::string> is_split;
+    std::set<std::string> outer_vars;
+    std::set<std::string> inner_vars;
+
+    /** True if Func::parallelize(v_o) is already handled by gpu_blocks() before. */
+    bool is_outer(const std::string &variable_name) const {
+        return outer_vars.find(variable_name) != outer_vars.end();
+    }
+
+    /** True if Func::vectorize(v_i) is already handled by gpu_threads() before. */
+    bool is_inner(const std::string &variable_name) const {
+        return inner_vars.find(variable_name) != inner_vars.end();
+    }
+
+    bool is_update() const {
+        return f.name().find("update") != std::string::npos;
+    }
+
+    void mark_gpu_threads(AutoSchedule &sched) const {
+        bool is_gpu_block_marked = false;
+        for (const auto &v : ordering) {
+
+            const auto &v_name = v.name();
+            if (is_inner(v_name)) {
+                // Mark as gpu theads.
+                f.gpu_threads(v);
+                sched.push_schedule(f.name(), stage_num, "gpu_threads(" + v_name + ")", {v_name});
+                continue;
+            }
+
+            // Skip all gpu_blocks if the current Stage is "compute_at" another
+            // stage, in which the gpu_blocks are already specified.
+            if (is_compute_at) {
+                continue;
+            }
+
+            if (is_outer(v_name) || is_gpu_block_marked) {
+                // Mark as gpu blocks;
+                f.gpu_blocks(v);
+                sched.push_schedule(f.name(), stage_num, "gpu_blocks(" + v_name + ")", {v_name});
+                is_gpu_block_marked = true;
+            }
+        }
+    }
+
+public:
+    GPUTilingDedup(bool i, Stage &_f, uint32_t n)
+        : is_compute_at(i), f(_f), stage_num(n) {
+    }
+
+    /** Indicate the desire to Func::parallel(v_o).
+     * @param[in] v dimension to parallelize.
+     * @param[in] factor expected extent of the dimension.
+     */
+    std::optional<split_t> can_parallelize(const VarOrRVar &v, const Expr &factor) {
+        const auto &var = v.name();
+
+        if (is_outer(var) || is_inner(var)) {
+            // For CPU, it makes sense to mark the outer loop to execute in
+            // parallel. But this operation is redundant in GPU as the gpu_block
+            // is already specified.
+            return std::nullopt;
+        }
+
+        debug(2) << f.name() << ".parallel(" << v.name() << "," << factor << ")\n";
+        VarOrRVar outer{var + "_o", v.is_rvar};
+        VarOrRVar inner{var + "_i", v.is_rvar};
+
+        split_t entry{v, outer, inner, factor, TailStrategy::Auto};
+        const auto [_, insertion_happened] = parallelize.try_emplace(var, entry);
+        if (!insertion_happened) {
+            return std::nullopt;
+        }
+
+        return entry;
+    }
+
+    /** Indicate the desire to Func::vectorize(v_i).
+     * @param[in] v dimension to vectorize.
+     * @param[in] vo split into outer dimension
+     * @param[in] vi split into inner dimension
+     * @param[in] factor the partition size.
+     * @return whether the vectorize() request is accepted or rejected.
+     */
+    bool can_vectorize(const VarOrRVar &v, const VarOrRVar &vo, const VarOrRVar &vi, const Expr &factor) {
+        const auto &var = v.name();
+
+        if (is_inner(var)) {
+            // For CPU, it makes sense to further split the inner loop and run
+            // SIMD instruction. But this operation is redundant in GPU as the
+            // gpu_block is already specified.
+            return false;
+        }
+
+        debug(2) << f.name() << ".vectorize(" << v.name() << "," << factor << ")\n";
+        if (is_compute_at) {
+            // If the current Stage is compute_at() another Stage G, then the
+            // vectorized dimension is treated as a thread in GPU. No need to
+            // further split it to match the natural_vector_size() of CPUs.
+            inner_vars.emplace(v.name());
+            return false;
+        }
+
+        parallelize.try_emplace(var, split_t{v, vo, vi, factor, TailStrategy::Auto});
+        return true;
+    }
+
+    /** Mark the current dimension is already split by Mullapudi2016's
+     * auto-tiling algorithm.
+     *
+     * Unlike can_vectorize() and can_parallelize(), we do not intercept the calls
+     * to split() in the main algorithm. Mullapudi2016 will reorder the split
+     * dimensions `v_i` and `v_o` to maximize spatial locality.
+     *
+     * @param[in] v dimension that is already split.
+     * @param[in] v_o outer dimension
+     * @param[in] v_i inner dimension
+     * @param[in] factor partition size
+     * @param[in] strategy tail strategy (unused).
+     */
+    void has_split(const VarOrRVar &v, const VarOrRVar &vo, const VarOrRVar &vi, const Expr &factor, TailStrategy strategy) {
+        debug(2) << f.name() << ".split(" << v.name() << "," << factor << ")\n";
+        is_split.emplace(v.name());
+        outer_vars.emplace(vo.name());
+        inner_vars.emplace(vi.name());
+
+        parallelize.try_emplace(v.name(), split_t{v, vo, vi, factor, strategy});
+    }
+
+    /** Indicate the default dimension order of the Func. */
+    void setInitialOrder(const Func &func) {
+        debug(2) << f.name() << ".initialOrder()\n";
+
+        ordering.clear();
+        for (const auto &v : func.args()) {
+            ordering.emplace_back(v);
+        }
+    }
+
+    /** Indicate to desire to reorder the dimensions.
+     *
+     * Func::reorder() is called by the auto-parallelization algorithm multiple
+     * times, as it seeks to over-subscribe the available CPU cores
+     * aggressively. For GPU schedule, we only need the very last reorder() call
+     * to map the tile orders. Here, we always cache the current dimension
+     * order, and override the previous ones.
+     */
+    void canReorder(const std::vector<VarOrRVar> &vars) {
+        debug(2) << f.name() << ".reorder(" << vars.front().name();
+        ordering = vars;
+        is_initial_order = false;
+
+        for (auto iter = ordering.begin() + 1; iter != ordering.end(); ++iter) {
+            debug(2) << ", " << iter->name();
+        }
+        debug(2) << ")\n";
+    }
+
+    /** Generate Halide GPU schedules. */
+    void apply(AutoSchedule &sched) const {
+        if (!ordering.empty() && !is_initial_order) {
+            std::set<std::string> var_list;
+            for (const auto &v : ordering) {
+                var_list.emplace(v.name());
+            }
+
+            std::stringstream oss;
+            oss << "reorder(" << ordering[0].name();
+            for (auto iter = ordering.begin() + 1; iter != ordering.end(); ++iter) {
+                oss << ", " << iter->name();
+            }
+            oss << ")";
+
+            f.reorder(ordering);
+            sched.push_schedule(f.name(), stage_num, oss.str(), var_list);
+        }
+
+        const bool is_already_split = (!is_split.empty());
+        if (is_already_split) {
+            // If the Mullapudi's auto-splitting algorithm already computes the
+            // tile size, we simply mark the inner dims as gpu_threads();
+            // similarly, outer dims as gpu_blocks().
+            mark_gpu_threads(sched);
+            return;
+        }
+
+        GPUTileHelper helper{f, stage_num};
+        Expr threads_budget = max_n_threads;
+
+        // Traverse the dimensions, ordered by the variable names (x, y, z) in lexilogical order.
+        for (const auto &v : ordering) {
+
+            const auto &v_name = v.name();
+            const auto iter = parallelize.find(v_name);
+            if (iter == parallelize.end()) {
+                // Skip inner dimensions that are not parallelized.
+                continue;
+            }
+
+            const auto &[var, entry] = *iter;
+
+            const bool should_unroll = can_prove(entry.factor <= 1);
+            if (should_unroll) {
+                // Skip thread size of 1.
+                continue;
+            }
+
+            split_t new_entry{entry};
+            new_entry.factor = simplify(min(threads_budget, new_entry.factor));
+
+            helper.applySplit(new_entry);
+            threads_budget = simplify(max(threads_budget / new_entry.factor, 1));
+        }
+
+        if (!is_already_split) {
+            helper.commit(sched, is_compute_at);
+        }
+    }
+};
+
 // Implement the grouping algorithm and the cost model for making the grouping
 // choices.
 struct Partitioner {
@@ -1023,7 +1449,7 @@ struct Partitioner {
             : cost(c), parallelism(std::move(p)) {
         }
 
-        bool defined() const {
+        inline bool defined() const {
             return cost.defined() && parallelism.defined();
         }
 
@@ -1226,21 +1652,23 @@ struct Partitioner {
     pair<VarOrRVar, VarOrRVar> split_dim(
         const Group &g, Stage f_handle, int stage_num, const Definition &def,
         bool is_group_output, const VarOrRVar &v, const Expr &factor, const string &in_suffix,
-        const string &out_suffix, map<string, Expr> &estimates, AutoSchedule &sched);
+        const string &out_suffix, map<string, Expr> &estimates, AutoSchedule &sched,
+        const Target &t, GPUTilingDedup *gpu_tiling = nullptr);
 
     // Loop over the dimensions of function stage 'f_handle' starting from innermost
     // and vectorize the first pure dimension encountered.
-    void vectorize_stage(
+    std::optional<pair<VarOrRVar, VarOrRVar>> vectorize_stage(
         const Group &g, Stage f_handle, int stage_num, Definition def,
         const Function &func, bool is_group_output, const Target &t, set<string> &rvars,
-        map<string, Expr> &estimates, AutoSchedule &sched);
+        map<string, Expr> &estimates, AutoSchedule &sched, GPUTilingDedup &gpu_tiling);
 
     // Reorder the dimensions to preserve spatial locality. This function
     // checks the stride of each access. The dimensions of the loop are reordered
     // such that the dimension with the smallest access stride is innermost.
     // This takes the strides along each dimension as input.
     void reorder_dims(Stage f_handle, int stage_num, Definition def,
-                      map<string, Expr> strides, AutoSchedule &sched);
+                      map<string, Expr> strides, AutoSchedule &sched,
+                      const Target &t, GPUTilingDedup &gpu_tiling);
 
     // Helper functions to display partition information of the pipeline.
     void disp_pipeline_costs();
@@ -1359,7 +1787,7 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
         for (int s = 0; s < num_stages; s++) {
             FStage stg(f.second, s);
             Group g(stg, {stg});
-            groups.emplace(stg, g);
+            groups.insert(make_pair(stg, g));
         }
     }
 
@@ -2343,7 +2771,8 @@ string get_base_name(string name) {
 pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
     const Group &g, Stage f_handle, int stage_num, const Definition &def,
     bool is_group_output, const VarOrRVar &v, const Expr &factor, const string &in_suffix,
-    const string &out_suffix, map<string, Expr> &estimates, AutoSchedule &sched) {
+    const string &out_suffix, map<string, Expr> &estimates, AutoSchedule &sched,
+    const Target &t, GPUTilingDedup *gpu_tiling) {
     // Create new variables for the split dimensions
     string arg_name = v.name();
     string inner_name = arg_name + in_suffix;
@@ -2392,25 +2821,18 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
         strategy = TailStrategy::GuardWithIf;
     }
 
-    f_handle.split(v, outer, inner, factor, strategy);
+    if (t.has_gpu_feature() && gpu_tiling) {
+        gpu_tiling->has_split(v, outer, inner, factor, strategy);
+    }
 
+    f_handle.split(v, outer, inner, factor, strategy);
     std::ostringstream oss;
     oss << "split(" << arg_name << ", " << outer_name << ", " << inner_name << ", " << factor;
-    switch (strategy) {
-    case TailStrategy::RoundUp:
-        oss << ", TailStrategy::RoundUp)";
-        break;
-    case TailStrategy::GuardWithIf:
-        oss << ", TailStrategy::GuardWithIf)";
-        break;
-    case TailStrategy::ShiftInwards:
-        oss << ", TailStrategy::ShiftInwards)";
-        break;
-    case TailStrategy::Auto:
+
+    if (strategy == TailStrategy::Auto) {
         oss << ")";
-        break;
-    default:
-        internal_error;
+    } else {
+        oss << ", " << to_string(strategy) << ")";
     }
     sched.push_schedule(f_handle.name(), stage_num, oss.str(),
                         {arg_name, outer_name, inner_name});
@@ -2425,19 +2847,31 @@ pair<VarOrRVar, VarOrRVar> Partitioner::split_dim(
     return make_pair(inner, outer);
 }
 
-void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
-                                  Definition def, const Function &func, bool is_group_output,
-                                  const Target &t, set<string> &rvars,
-                                  map<string, Expr> &estimates, AutoSchedule &sched) {
+std::optional<pair<VarOrRVar, VarOrRVar>> Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
+                                                                       Definition def, const Function &func, bool is_group_output,
+                                                                       const Target &t, set<string> &rvars,
+                                                                       map<string, Expr> &estimates, AutoSchedule &sched,
+                                                                       GPUTilingDedup &gpu_tiling) {
     vector<Dim> &dims = def.schedule().dims();
     int vec_dim_index = -1;
 
     // Set the vector length as the maximum of the natural vector size of all
     // values produced by the function.
-    int vec_len = 0;
-    for (const auto &type : func.output_types()) {
-        vec_len = std::max(vec_len, t.natural_vector_size(type));
-    }
+    const auto vec_len = [&]() -> int {
+        if (t.has_gpu_feature()) {
+            /** Section 5.4 of the Mullapudi2016 article: We configure the
+             * auto-scheduler to target the GPU by set- ting the ...,
+             * VECTOR_WIDTH to 32.
+             */
+            return GPUTilingDedup::min_n_threads;
+        }
+
+        int vec_len = 0;
+        for (const auto &type : func.output_types()) {
+            vec_len += t.natural_vector_size(type);
+        }
+        return vec_len;
+    }();
 
     for (int d = 0; d < (int)dims.size() - 1; d++) {
         string dim_name = get_base_name(dims[d].var);
@@ -2460,33 +2894,46 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
         internal_assert(is_rvar == dims[vec_dim_index].is_rvar());
 
         VarOrRVar vec_var(vec_dim_name, is_rvar);
-        pair<VarOrRVar, VarOrRVar> split_vars =
-            split_dim(g, f_handle, stage_num, def, is_group_output, vec_var, vec_len,
-                      "_vi", "_vo", estimates, sched);
+        auto [inner, outer, accepted] = [&]() -> std::tuple<VarOrRVar, VarOrRVar, bool> {
+            if (t.has_gpu_feature()) {
+                VarOrRVar inner{vec_var.name() + "_vi", vec_var.is_rvar}, outer{vec_var.name() + "_vo", vec_var.is_rvar};
+                const bool accepted = gpu_tiling.can_vectorize(vec_var, outer, inner, vec_len);
+                return {inner, outer, accepted};
+            }
 
-        f_handle.vectorize(split_vars.first);
-        sched.push_schedule(f_handle.name(), stage_num,
-                            "vectorize(" + split_vars.first.name() + ")",
-                            {split_vars.first.name()});
+            auto split_vars = split_dim(g, f_handle, stage_num, def, is_group_output, vec_var, vec_len,
+                                        "_vi", "_vo", estimates, sched, t);
+
+            f_handle.vectorize(split_vars.first);
+            sched.push_schedule(f_handle.name(), stage_num,
+                                "vectorize(" + split_vars.first.name() + ")",
+                                {split_vars.first.name()});
+            return std::make_tuple(split_vars.first, split_vars.second, true);
+        }();
 
         if (is_rvar) {
             rvars.erase(vec_dim_name);
-            rvars.insert(split_vars.first.name());
-            rvars.insert(split_vars.second.name());
+            rvars.insert(inner.name());
+            rvars.insert(outer.name());
         }
 
         // TODO: Reorder vector dim to innermost if it is the innermost
         // storage dimension of the func.
         //
         // TODO: Check if the warning is necessary.
-        //
-        // Disabled: this isn't really user actionable, and is just noise.
-        //
-        // if (vec_dim_index > 0) {
-        //     user_warning << "Outer dim vectorization of var \"" << vec_dim_name
-        //                  << "\" in function \"" << f_handle.name() << "\"\n";
-        // }
+        if (vec_dim_index > 0) {
+            debug(1) << "Outer dim vectorization of var \"" << vec_dim_name
+                     << "\" in function \"" << f_handle.name() << "\"\n";
+        }
+
+        if (!accepted) {
+            return std::nullopt;
+        }
+
+        return make_pair(inner, outer);
     }
+
+    return std::nullopt;
 }
 
 // Return true if the vars/rvars in 'ordering' are in the same order as the
@@ -2510,7 +2957,7 @@ inline bool operator!=(const vector<Dim> &dims, const vector<VarOrRVar> &orderin
 }
 
 void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
-                               map<string, Expr> strides, AutoSchedule &sched) {
+                               map<string, Expr> strides, AutoSchedule &sched, const Target &t, GPUTilingDedup &gpu_tiling) {
     vector<Dim> &dims = def.schedule().dims();
     internal_assert(dims.size() > 1);
     vector<pair<string, int>> order;
@@ -2605,8 +3052,12 @@ void Partitioner::reorder_dims(Stage f_handle, int stage_num, Definition def,
     }
 
     if (dims != ordering) {
-        f_handle.reorder(ordering);
-        sched.push_schedule(f_handle.name(), stage_num, "reorder(" + var_order + ")", var_list);
+        if (t.has_gpu_feature()) {
+            gpu_tiling.canReorder(ordering);
+        } else {
+            f_handle.reorder(ordering);
+            sched.push_schedule(f_handle.name(), stage_num, "reorder(" + var_order + ")", var_list);
+        }
     }
 }
 
@@ -2685,6 +3136,9 @@ void Partitioner::generate_group_cpu_schedule(
         }
     }
 
+    GPUTilingDedup gpu_tiling{false, f_handle, g.output.stage_num};
+    gpu_tiling.setInitialOrder(Func(g_out));
+
     // Reorder the dimensions for better spatial locality (i.e. smallest stride
     // is innermost). If we only have one dimension (excluding __outermost),
     // there is nothing to reorder.
@@ -2692,7 +3146,7 @@ void Partitioner::generate_group_cpu_schedule(
         map<string, Expr> strides =
             analyze_spatial_locality(g.output, group_storage_bounds, inlines);
         if (!strides.empty()) {
-            reorder_dims(f_handle, g.output.stage_num, def, strides, sched);
+            reorder_dims(f_handle, g.output.stage_num, def, strides, sched, t, gpu_tiling);
         }
     }
 
@@ -2716,7 +3170,7 @@ void Partitioner::generate_group_cpu_schedule(
             } else {
                 pair<VarOrRVar, VarOrRVar> tile_vars =
                     split_dim(g, f_handle, g.output.stage_num, def, true, v,
-                              tile_size, "_i", "_o", stg_estimates, sched);
+                              tile_size, "_i", "_o", stg_estimates, sched, t, &gpu_tiling);
 
                 inner_dims.push_back(tile_vars.first);
                 outer_dims.push_back(tile_vars.second);
@@ -2751,14 +3205,26 @@ void Partitioner::generate_group_cpu_schedule(
         }
 
         if (dims != ordering) {
-            f_handle.reorder(ordering);
-            sched.push_schedule(f_handle.name(), g.output.stage_num,
-                                "reorder(" + var_order + ")", var_list);
+            if (t.has_gpu_feature()) {
+                gpu_tiling.canReorder(ordering);
+            } else {
+                f_handle.reorder(ordering);
+                sched.push_schedule(f_handle.name(), g.output.stage_num,
+                                    "reorder(" + var_order + ")", var_list);
+            }
         }
     }
 
-    vectorize_stage(g, f_handle, g.output.stage_num, def, g_out, true, t,
-                    rvars, stg_estimates, sched);
+    {
+        auto vectorized_split = vectorize_stage(g, f_handle, g.output.stage_num, def, g_out, true, t,
+                                                rvars, stg_estimates, sched, gpu_tiling);
+
+        if (t.has_gpu_feature() && vectorized_split) {
+            auto [v_i, v_o] = *vectorized_split;
+            inner_dims.emplace_back(v_i);
+            outer_dims.emplace_back(v_o);
+        }
+    }
 
     // Parallelize definition
     Expr def_par = 1;
@@ -2769,8 +3235,8 @@ void Partitioner::generate_group_cpu_schedule(
     // is achieved. Stop the search once we find a vectorized dimension since
     // it doesn't make any sense to have a parallelized inner loop within a
     // vectorized outer loop.
-    bool nested_parallelism = true;
-    if (nested_parallelism) {
+    constexpr bool nested_parallelism = true;
+    if constexpr (nested_parallelism) {
         int dim_start = dims.size() - 2;
         string seq_var;
         for (int d = dim_start; d >= 0; d--) {
@@ -2799,14 +3265,27 @@ void Partitioner::generate_group_cpu_schedule(
             if ((iter != stg_estimates.end()) && iter->second.defined()) {
                 if (!seq_var.empty()) {
                     VarOrRVar seq(seq_var, (rvars.find(seq_var) != rvars.end()));
-                    f_handle.reorder(seq, v);
-                    sched.push_schedule(f_handle.name(), g.output.stage_num,
-                                        "reorder(" + seq_var + ", " + var + ")",
-                                        {seq_var, var});
+                    if (t.has_gpu_feature()) {
+                        gpu_tiling.canReorder({seq, v});
+                    } else {
+                        f_handle.reorder(seq, v);
+                        sched.push_schedule(f_handle.name(), g.output.stage_num,
+                                            "reorder(" + seq_var + ", " + var + ")",
+                                            {seq_var, var});
+                    }
                 }
-                f_handle.parallel(v);
-                sched.push_schedule(f_handle.name(), g.output.stage_num,
-                                    "parallel(" + var + ")", {var});
+                if (t.has_gpu_feature()) {
+                    auto parallelized_split = gpu_tiling.can_parallelize(v, iter->second);
+                    if (parallelized_split) {
+                        auto split_vars = *parallelized_split;
+                        inner_dims.emplace_back(split_vars.inner);
+                        outer_dims.emplace_back(split_vars.outer);
+                    }
+                } else {
+                    f_handle.parallel(v);
+                    sched.push_schedule(f_handle.name(), g.output.stage_num,
+                                        "parallel(" + var + ")", {var});
+                }
                 def_par = simplify(def_par * iter->second);
             } else {
                 break;
@@ -2814,15 +3293,17 @@ void Partitioner::generate_group_cpu_schedule(
         }
     }
 
-    // Silenced: the user can't really do anything about it,
-    // and it triggers on things like tiny lookup tables
-    //
-    // if (can_prove(def_par < arch_params.parallelism)) {
-    //     user_warning << "Insufficient parallelism for " << f_handle.name() << "\n";
-    // }
+    if (can_prove(def_par < arch_params.parallelism)) {
+        debug(1) << "Insufficient parallelism for " << f_handle.name() << "\n";
+    }
+
+    if (t.has_gpu_feature()) {
+        gpu_tiling.apply(sched);
+    }
 
     // Find the level at which group members will be computed.
-    int tile_inner_index = dims.size() - outer_dims.size() - 1;
+    internal_assert(dims.size() > outer_dims.size());
+    const auto tile_inner_index = dims.size() - outer_dims.size() - 1;
     VarOrRVar tile_inner_var(Var::outermost());
     if (!outer_dims.empty()) {
         string var_name = get_base_name(dims[tile_inner_index].var);
@@ -2860,12 +3341,15 @@ void Partitioner::generate_group_cpu_schedule(
             mem_handle = Func(mem.func).update(mem.stage_num - 1);
         } else {
             if (!outer_dims.empty()) {
+                string sanitized_g_out = get_sanitized_name(g_out.name());
                 if (tile_inner_var.is_rvar) {
                     Func(mem.func).compute_at(Func(g_out), tile_inner_var.rvar);
+                    debug(2) << mem_handle.name() << ".compute_at(" << sanitized_g_out << ", " << tile_inner_var.rvar << ")\n";
                 } else {
                     Func(mem.func).compute_at(Func(g_out), tile_inner_var.var);
+                    debug(2) << mem_handle.name() << ".compute_at(" << sanitized_g_out << ", " << tile_inner_var.var << ")\n";
                 }
-                string sanitized_g_out = get_sanitized_name(g_out.name());
+
                 sched.push_schedule(mem_handle.name(), mem.stage_num,
                                     "compute_at(" + sanitized_g_out + ", " + tile_inner_var.name() + ")",
                                     {sanitized_g_out, tile_inner_var.name()});
@@ -2878,6 +3362,8 @@ void Partitioner::generate_group_cpu_schedule(
                 sched.push_schedule(mem_handle.name(), mem.stage_num, "compute_root()", {});
             }
         }
+        GPUTilingDedup gpu_tiling2{true, mem_handle, mem.stage_num};
+        gpu_tiling2.setInitialOrder(Func(mem.func));
 
         // Reorder the dimensions for better spatial locality. If we only have
         // one dimension (excluding __outermost), there is nothing to reorder.
@@ -2885,12 +3371,16 @@ void Partitioner::generate_group_cpu_schedule(
             map<string, Expr> mem_strides =
                 analyze_spatial_locality(mem, group_storage_bounds, inlines);
             if (!mem_strides.empty()) {
-                reorder_dims(mem_handle, mem.stage_num, mem_def, mem_strides, sched);
+                reorder_dims(mem_handle, mem.stage_num, mem_def, mem_strides, sched, t, gpu_tiling2);
             }
         }
 
         vectorize_stage(g, mem_handle, mem.stage_num, mem_def, mem.func, false,
-                        t, mem_rvars, mem_estimates, sched);
+                        t, mem_rvars, mem_estimates, sched, gpu_tiling2);
+
+        if (t.has_gpu_feature()) {
+            gpu_tiling2.apply(sched);
+        }
     }
 }
 
@@ -3200,6 +3690,8 @@ bool inline_unbounded(const vector<Function> &outputs,
     return inlined;
 }
 
+}  // anonymous namespace
+
 // Generate schedules for all functions in the pipeline required to compute the
 // outputs. This applies the schedules and returns a string representation of
 // the schedules. The target architecture is specified by 'target'.
@@ -3394,16 +3886,6 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     debug(2) << "Generating CPU schedule...\n";
     part.generate_cpu_schedule(target, sched);
 
-    // Ensure that all update stages are "touched" so we get no warnings/errors
-    for (const auto &f : sched.func_schedules) {
-        const Function &func = get_element(sched.env, f.first);
-        const int num_update_stages = func.updates().size();
-        for (int stage = 0; stage < num_update_stages; stage++) {
-            Definition def = get_stage_definition(func, stage + 1);
-            def.schedule().touched() = true;
-        }
-    }
-
     std::ostringstream oss;
     oss << sched;
     string sched_string = oss.str();
@@ -3432,7 +3914,7 @@ struct Mullapudi2016 {
             pipeline_outputs.push_back(f.function());
         }
 
-        ArchParams arch_params;
+        ArchParams arch_params{target.has_gpu_feature()};
         {
             ParamParser parser(params_in.extra);
             parser.parse("parallelism", &arch_params.parallelism);
@@ -3448,7 +3930,6 @@ struct Mullapudi2016 {
 };
 
 REGISTER_AUTOSCHEDULER(Mullapudi2016)
-}  // anonymous namespace
 
 }  // namespace Autoscheduler
 }  // namespace Internal
