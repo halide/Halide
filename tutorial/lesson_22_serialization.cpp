@@ -8,12 +8,15 @@
 // using the WITH_SERIALIZATION=ON macro defined in order for this tutorial
 // to work.
 
+// Disclaimer: Serialization is experimental in Halide 17 and is subject to 
+// change; we recommend that you avoid relying on it for production work at this time.
+
 // On linux, you can compile this tutorial and run it like so:
-// g++ lesson_22*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_22 -std=c++17
+// g++ lesson_22*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_22 -std=c++17
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_22
 
 // On os x:
-// g++ lesson_22*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_22 -std=c++17
+// g++ lesson_22*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -o lesson_22 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_22
 
 // If you have the entire Halide source tree, you can also build it by
@@ -27,141 +30,98 @@
 #include <stdio.h>
 using namespace Halide;
 
-void print_ascii(Buffer<int> result) {
-    const char code[] = " .:-~*={}&%#@";
-    const size_t code_count = sizeof(code) / sizeof(char);
-    for (int y = 0; y < result.height(); y++) {
-        for (int x = 0; x < result.width(); x++) {
-            int value = result(x, y);
-            if(value < code_count) {
-                printf("%c", code[value]);
-            } else {
-                printf("X");
-            }
-        }
-        printf("\n");
-    }
-}
+// Support code for loading pngs.
+#include "halide_image_io.h"
 
 int main(int argc, char **argv) {
 
-    int width = 64;
-    int height = 32;
+    // First we'll declare some Vars to use below.
+    Var x("x"), y("y"), c("c");
 
-    // Let's create a reasonably complicated Pipeline that computes a Julia Set fractal
+    // Let's start with the same separable blur pipeline that we used in Tutorial 7,
+    // with the clamped boundary condition
     {
-        struct Complex {
-            Expr real, imag;
+        // Let's create an ImageParam for an 8-bit RGB image that we'll use for input.
+        ImageParam input(UInt(8), 3, "input");
 
-            // Construct from a Tuple
-            Complex(Tuple t)
-                : real(t[0]), imag(t[1]) {
-            }
+        // Wrap the input in a Func that prevents reading out of bounds:
+        Func clamped("clamped");
+        Expr clamped_x = clamp(x, 0, input.width() - 1);
+        Expr clamped_y = clamp(y, 0, input.height() - 1);
+        clamped(x, y, c) = input(clamped_x, clamped_y, c);
 
-            // Construct from a pair of Exprs
-            Complex(Expr r, Expr i)
-                : real(r), imag(i) {
-            }
+        // Upgrade it to 16-bit, so we can do math without it overflowing.
+        Func input_16("input_16");
+        input_16(x, y, c) = cast<uint16_t>(clamped(x, y, c));
 
-            // Construct from a call to a Func by treating it as a Tuple
-            Complex(FuncRef t)
-                : Complex(Tuple(t)) {
-            }
+        // Blur it horizontally:
+        Func blur_x("blur_x");
+        blur_x(x, y, c) = (input_16(x - 1, y, c) +
+                           2 * input_16(x, y, c) +
+                           input_16(x + 1, y, c)) / 4;
 
-            // Convert to a Tuple
-            operator Tuple() const {
-                return {real, imag};
-            }
+        // Blur it vertically:
+        Func blur_y("blur_y");
+        blur_y(x, y, c) = (blur_x(x, y - 1, c) +
+                           2 * blur_x(x, y, c) +
+                           blur_x(x, y + 1, c)) / 4;
 
-            // Complex addition
-            Complex operator+(const Complex &other) const {
-                return {real + other.real, imag + other.imag};
-            }
-
-            // Complex multiplication
-            Complex operator*(const Complex &other) const {
-                return {real * other.real - imag * other.imag,
-                        real * other.imag + imag * other.real};
-            }
-
-            // Complex magnitude, squared for efficiency
-            Expr magnitude_squared() const {
-                return real * real + imag * imag;
-            }
-
-            // Other complex operators would go here. The above are
-            // sufficient for this example.
-        };
-
-        // Let's use the Complex struct to compute a Julia set.
-        Func julia;
-        Var x, y;
-
-        // Lets define the coordinate mapping from pixel coordinates to values in the complex plane
-        Complex extent(2.0f, 2.0f);
-        Expr scale = max(extent.real / width, extent.imag / height);
-        Complex position(scale * (x - cast<float>(width) / 2.0f), scale * (y - cast<float>(height) / 2.0f));
-        
-        // Let's center the fractal around a pretty position in the complex plane
-        Complex initial(-0.79f, 0.15f); 
-
-        // Pure definition.
-        Var t;
-        julia(x, y, t) = position;
-
-        // We'll use an update definition to take 12 steps.
-        RDom r(1, 12);
-        Complex current = julia(x, y, r - 1);
-
-        // The following line uses the complex multiplication and
-        // addition we defined above.
-        julia(x, y, r) = current * current + initial;
-
-        // We'll use another tuple reduction to compute the iteration
-        // number where the value first escapes a circle of radius 2.
-        // This can be expressed as an argmin of a boolean - we want
-        // the index of the first time the given boolean expression is
-        // false (we consider false to be less than true).  The argmax
-        // would return the index of the first time the expression is
-        // true.
-        Expr escape_condition = Complex(julia(x, y, r)).magnitude_squared() < 4.0f;
-        Tuple first_escape = argmin(escape_condition);
-
-        // We only want the index, not the value, but argmin returns
-        // both, so we'll index the argmin Tuple expression using
-        // square brackets to get the Expr representing the index.
-        Func escape;
-        escape(x, y) = first_escape[0];
+        // Convert back to 8-bit.
+        Func output("output");
+        output(x, y, c) = cast<uint8_t>(blur_y(x, y, c));
 
         // Now lets serialize the pipeline to disk (must use the .hlpipe file extension)
-        std::map<std::string, Internal::Parameter> params; // params are not used in this example
-        serialize_pipeline(escape, "julias.hlpipe", params);
+        Pipeline blur_pipeline(output);
+        std::map<std::string, Internal::Parameter> params;
+        serialize_pipeline(blur_pipeline, "blur.hlpipe", params);
+
+        // The call to serialize_pipeline populates the params map with any input or output parameters
+        // that were found ... object's we'll need to attach to buffers if we wish to execute the pipeline
+        for(auto named_param: params) {
+            std::cout << "Found Param: " << named_param.first << std::endl;
+        } 
     }
 
-    // new scope ... everything above is now destroyed!
+    // new scope ... everything above is now destroyed! Now lets reconstruct the entire pipeline 
+    // from scratch by deserializing it from a file 
     {
-        // Lets construct a new pipeline from scratch by deserializing the file we wrote to disk
-        std::map<std::string, Internal::Parameter> params; // params are not used in this example
-        Pipeline deserialized = deserialize_pipeline("julias.hlpipe", params);
+        // Lets load a color 8-bit input and connect it to an ImageParam
+        Buffer<uint8_t> rgb_image = Halide::Tools::load_image("images/rgb.png");
+        ImageParam input(UInt(8), 3, "input");
+        input.set(rgb_image); 
 
-        // Now lets realize it ... and print the results as ascii art
-        Buffer<int> result = deserialized.realize({width, height});
-        print_ascii(result);
+        // Now lets populate the params map so we can override the input 
+        std::map<std::string, Internal::Parameter> params; 
+        params.insert({"input", input.parameter()});
+
+        // Lets construct a new pipeline from scratch by deserializing the file we wrote to disk
+        Pipeline blur_pipeline = deserialize_pipeline("blur.hlpipe", params);
+
+        // Now realize the pipeline and blur out input image
+        Buffer<uint8_t> result = blur_pipeline.realize({rgb_image.width(), rgb_image.height(), 3});
+
+        // Now lets save the result ... we should have another blurry parrot!
+        Halide::Tools::save_image(result, "another_blurry_parrot.png");
     }
 
     // new scope ... everything above is now destroyed!
     {
         // Lets do the same thing again ... construct a new pipeline from scratch by deserializing the file we wrote to disk
-        std::map<std::string, Internal::Parameter> params; // params are not used in this example
-        Pipeline julia = deserialize_pipeline("julias.hlpipe", params);
+
+        // FIXME: We shouldn't have to populate the params ... but passing an empty map triggers an error in deserialize?
+        std::map<std::string, Internal::Parameter> params; 
+        ImageParam input(UInt(8), 3, "input");
+        params.insert({"input", input.parameter()});
+
+        // Now deserialize the pipeline from file
+        Pipeline blur_pipeline = deserialize_pipeline("blur.hlpipe", params);
 
         // Now, lets serialize it to an in memory buffer ... rather than writing it to disk
         std::vector<uint8_t> data;
-        serialize_pipeline(julia, data, params);
+        serialize_pipeline(blur_pipeline, data, params);
 
-        // Now lets deserialize it ... and run it!
+        // Now lets deserialize it from memory
         Pipeline deserialized = deserialize_pipeline(data, params);
-        Buffer<int> result = deserialized.realize({width, height});
     }
 
     printf("Success!\n");

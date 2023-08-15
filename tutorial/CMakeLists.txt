@@ -211,4 +211,4 @@ if (TARGET Halide::Mullapudi2016)
 endif ()
 
 # Lesson 22
-add_tutorial(lesson_22_serialization.cpp)
+add_tutorial(lesson_22_serialization.cpp WITH_IMAGE_IO)
