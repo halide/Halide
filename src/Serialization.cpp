@@ -1459,6 +1459,7 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
     int size = builder.GetSize();
 
     if (buf != nullptr && size > 0) {
+        result.clear();
         result.reserve(size);
         result.insert(result.begin(), buf, buf + size);
     } else {
