@@ -246,7 +246,7 @@ CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 # Serialization requires flatc and flatbuffers.h
 # On ubuntu, this requires packages flatbuffers-compiler and libflatbuffers-dev
 ifneq (,$(shell which flatc))
-CXX_FLAGS += -DWITH_SERIALIZATION
+CXX_FLAGS += -DWITH_SERIALIZATION -I $(BUILD_DIR)
 endif
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
@@ -1391,6 +1391,9 @@ $(BIN_DIR)/%/runtime.a: $(BIN_DIR)/runtime.generator
 $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
 	@mkdir -p $(@D)
 	$(CXX) $(TEST_CXX_FLAGS) $< -I$(SRC_DIR) $(TEST_LD_FLAGS) -o $@
+
+$(BUILD_DIR)/Deserialization.o : $(BUILD_DIR)/halide_ir_generated.h
+$(BUILD_DIR)/Serialization.o : $(BUILD_DIR)/halide_ir_generated.h
 
 # Generated header for serialization/deserialization
 $(BUILD_DIR)/halide_ir_generated.h: $(SRC_DIR)/halide_ir.fbs
