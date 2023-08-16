@@ -30,3 +30,7 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
 set(CMAKE_CROSSCOMPILING_EMULATOR /usr/bin/env)
+
+# Sanitizer builds intermittently fail when using CCache for reasons that aren't
+# clear; default to turning it off
+set(Halide_CCACHE_BUILD OFF)
