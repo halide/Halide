@@ -508,8 +508,8 @@ if (WITH_SERIALIZATION)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
 endif ()
 
-# Enable serialization testing by intercepting JIT compilation with a serialization roundtrip,
-# it is for a special build that is only useful for testing serialization, disabled by default
+# Enable serialization testing by intercepting JIT compilation with a serialization roundtrip;
+# This is used only for special builds made specifically for testing, and must be disabled by default.
 option(WITH_SERIALIZATION_JIT "Intercepting JIT compilation with a serialization roundtrip, for test only" OFF)
 if (WITH_SERIALIZATION_JIT)
     if (WITH_SERIALIZATION)

@@ -583,7 +583,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
     contents->invalidate_cache();
 
 #ifdef WITH_SERIALIZATION_JIT
-    // TODO: replace file serialization with in-memory serialization
+    // TODO(https://github.com/halide/Halide/pull/7760): replace file serialization with in-memory serialization
     std::string filename = generate_function_name() + ".hlpipe";
     std::map<std::string, Internal::Parameter> external_params;
     serialize_pipeline(*this, filename, external_params);
@@ -592,9 +592,9 @@ void Pipeline::compile_jit(const Target &target_arg) {
     for (const Func &f : deserialized_pipe.outputs()) {
         outputs.push_back(f.function());
     }
-    // we save the original output functions and requirements
-    // and restore them once all lowering is done
-    // so reschedule/reorder storage can be properly handled
+    // We save the original output functions and requirements,
+    // and restore them once all lowering is done,
+    // so that reschedule/reorder storage can be properly handled.
     std::vector<Function> origin_outputs = contents->outputs;
     std::vector<Internal::Stmt> origin_requirements = contents->requirements;
     contents->outputs = outputs;
@@ -617,7 +617,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
     contents->jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, contents->jit_externs, target);
 #ifdef WITH_SERIALIZATION_JIT
-    // restore the original outputs and requirements
+    // Restore the original outputs and requirements.
     contents->outputs = origin_outputs;
     contents->requirements = origin_requirements;
 #endif
