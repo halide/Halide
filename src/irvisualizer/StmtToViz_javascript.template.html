@@ -389,10 +389,12 @@
     function scrollToAsm(lno) {
         if (highlighted) {
             var asmContent = document.getElementById("assemblyContent");
-            var line_height = asmContent.computedStyleMap().get("line-height").value;
+            var line_height = window.getComputedStyle(asmContent).getPropertyValue("line-height");
+            line_height = parseInt(line_height, 10);
         } else {
             var pre = document.getElementById("assemblyContent").firstElementChild;
-            var line_height = pre.computedStyleMap().get("line-height").value;
+            var line_height = window.getComputedStyle(pre).getPropertyValue("line-height");
+            line_height = parseInt(line_height, 10);
         }
         document.getElementById("assembly-tab").scrollTo({
             behavior: "smooth",
