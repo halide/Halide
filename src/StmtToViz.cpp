@@ -2080,10 +2080,12 @@ private:
     }
 
     void visit(const VectorReduce *op) override {
-        print_opening_tag("div", "VectorReduce");
+        print_opening_tag("span", "VectorReduce");
+        print_text("(");
         print_type(op->type);
+        print_text(")");
         print_function_call("vector_reduce", {op->op, op->value});
-        print_closing_tag("div");
+        print_closing_tag("span");
         print_ln();
     }
 
