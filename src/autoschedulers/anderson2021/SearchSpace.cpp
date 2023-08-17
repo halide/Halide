@@ -128,7 +128,7 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
                 int64_t total = 1;
                 int64_t max_available = 1;
                 for (size_t i = 0; i < c->stage->loop.size(); i++) {
-                    const auto& l = c->stage->loop[i];
+                    const auto &l = c->stage->loop[i];
                     if (!l.rvar) {
                         total *= o.outer_tiling[l.pure_dim];
                         max_available *= c->size[i];
