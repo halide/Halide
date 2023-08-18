@@ -1777,6 +1777,9 @@ void halide_register_argv_and_metadata(
 
 /** Per-Func state tracked by the sampling profiler. */
 struct HALIDE_ATTRIBUTE_ALIGN(8) halide_profiler_func_stats {
+    /** Total number of times this Func was evaluated. */
+    uint64_t count;
+
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
 

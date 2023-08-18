@@ -81,6 +81,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
         return nullptr;
     }
     for (int i = 0; i < num_funcs; i++) {
+        p->funcs[i].count = 0;
         p->funcs[i].time = 0;
         p->funcs[i].name = (const char *)(func_names[i]);
         p->funcs[i].memory_current = 0;
@@ -108,6 +109,7 @@ WEAK void bill_func(halide_profiler_state *s, int func_id, uint64_t time, int ac
                 s->pipelines = p;
             }
             halide_profiler_func_stats *f = p->funcs + func_id - p->first_func_id;
+            f->count += 1;
             f->time += time;
             f->active_threads_numerator += active_threads;
             f->active_threads_denominator += 1;
@@ -347,6 +349,11 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             compare_fs_fn = [](halide_profiler_func_stats *a, halide_profiler_func_stats *b) -> int64_t {
                 return strcmp(a->name, b->name);
             };
+        } else if (!strcmp(sort_str, "count")) {
+            // Sort by ascending count
+            compare_fs_fn = [](halide_profiler_func_stats *a, halide_profiler_func_stats *b) -> int64_t {
+                return (int64_t)b->count - (int64_t)a->count;
+            };
         }
     }
 
@@ -457,6 +464,12 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
                 sstr << "(" << percent << "%)";
                 cursor += 8;
+                while (sstr.size() < cursor) {
+                    sstr << " ";
+                }
+
+                sstr << " evals=" << fs->count;
+                cursor += 12;
                 while (sstr.size() < cursor) {
                     sstr << " ";
                 }
