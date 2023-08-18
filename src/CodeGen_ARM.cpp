@@ -7,6 +7,7 @@
 #include "ConciseCasts.h"
 #include "DistributeShifts.h"
 #include "Debug.h"
+#include "FindIntrinsics.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -856,6 +857,8 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
     // Look for opportunities to turn a + b * c into umlal/smlal
     // and a - b * c into umlsl/smlsl.
     func.body = distribute_shifts(func.body, /* polynomials_only */ true);
+    // May need to re-find intrinsics after distribution.
+    func.body = find_intrinsics(func.body);
 
     CodeGen_Posix::compile_func(func, simple_name, extern_name);
 }

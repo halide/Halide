@@ -385,7 +385,14 @@ protected:
         if (narrow_a.defined() && narrow_b.defined() &&
             (narrow_a.type().is_int_or_uint() == narrow_b.type().is_int_or_uint() ||
              narrow_a.type().is_float() == narrow_b.type().is_float())) {
-            Expr result = widening_mul(narrow_a, narrow_b);
+            Expr result;
+            // Enforce a normalization of widening_mul
+            // widening_mul(u8, i8)
+            if (narrow_a.type().is_int() && narrow_b.type().is_uint()) {
+                result = widening_mul(narrow_b, narrow_a);
+            } else {
+                result = widening_mul(narrow_a, narrow_b);
+            }
             if (result.type() != op->type) {
                 result = Cast::make(op->type, result);
             }
@@ -736,8 +743,17 @@ protected:
         const auto is_x_wider_int_or_uint = (op->type.is_int() && is_int(x, 2 * bits)) || (op->type.is_uint() && is_uint(x, 2 * bits));
         Type opposite_type = op->type.is_int() ? op->type.with_code(halide_type_uint) : op->type.with_code(halide_type_int);
         const auto is_x_wider_opposite_int = (op->type.is_int() && is_uint(x, 2 * bits)) || (op->type.is_uint() && is_int(x, 2 * bits));
+        const Type unsigned_narrow_type = (bits > 8) ? unsigned_type.narrow() : unsigned_type;
+        const auto un_c0 = cast(unsigned_narrow_type, c0);
 
         if (
+            // Enforce a normalization of widening_mul.
+            // widening_mul(u, i)
+            rewrite(widening_mul(x, y), widening_mul(y, x), is_int(x) && is_uint(y)) ||
+            // Rewrite widening_mul(u, i) to reinterpret(widening_mul(u, u)) when possible.
+            rewrite(widening_mul(x, c0), cast(op->type, typed(unsigned_type, widening_mul(x, un_c0))),
+                    (c0 > 0) && is_uint(x) && is_int(c0)) ||
+
             // Simplify extending patterns.
             // (x + widen(y)) + widen(z) = x + widening_add(y, z).
             rewrite(widen_right_add(widen_right_add(x, y), z),
