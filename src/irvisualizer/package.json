@@ -1,0 +1,29 @@
+{
+  "name": "halide-irvisualizer",
+  "description": "Halide IRVisualizer web toolchain",
+  "author": "Halide IRVisualizer workgroup",
+  "version": "0.0.1",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "scripts": {
+    "build": "esbuild StmtToViz_javascript.template.html --bundle --minify --sourcemap --outdir=build --target=es6",
+    "lint": "eslint StmtToViz_javascript.template.html",
+    "watch": "esbuild StmtToViz_javascript.template.html --bundle --watch --outdir=build"
+  },
+  "dependencies": {
+    "@speed-highlight/core": "speed-highlight/core",
+    "bootstrap": "5.2.0",
+    "bootstrap-icons": "1.5.0",
+    "font-awesome": "4.1.0",
+    "jquery": "3.7.0",
+    "treeflex": "^2.0.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.18.13",
+    "eslint": "^2.11.1",
+    "yarn": "^1.22.10"
+  }
+}
