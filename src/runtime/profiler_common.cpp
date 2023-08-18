@@ -468,8 +468,12 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     sstr << " ";
                 }
 
-                sstr << " evals=" << fs->count;
-                cursor += 12;
+                sstr << " evals/run=";
+                float avg_runs = (float)fs->count / p->runs;
+                sstr << avg_runs;
+                // Only use one dec point here
+                sstr.erase(5);
+                cursor += 16;
                 while (sstr.size() < cursor) {
                     sstr << " ";
                 }
