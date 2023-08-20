@@ -2,7 +2,7 @@
 # Test apps from the perspective of a consuming project.
 ##
 
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.24)
 project(Halide_apps)
 
 enable_testing()

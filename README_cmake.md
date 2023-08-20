@@ -67,12 +67,11 @@ we strongly suggest reading through the [CMake documentation][cmake-docs] first.
 
 ## Installing CMake
 
-Halide requires at least version 3.22, which was released in November 2021.
-Fortunately, getting a recent version of CMake couldn't be easier, and there are
-multiple good options on any system to do so. Generally, one should always have
-the most recent version of CMake installed system-wide. CMake is committed to
-backwards compatibility and even the most recent release can build projects over
-a decade old.
+Halide requires at least version 3.24. Fortunately, getting a recent version of
+CMake couldn't be easier, and there are multiple good options on any system to do
+so. Generally, one should always have the most recent version of CMake installed
+system-wide. CMake is committed to backwards compatibility and even the most recent
+release can build projects over a decade old.
 
 ### Cross-platform
 
@@ -90,13 +89,14 @@ See the [PyPI website][pypi-cmake] for more details.
 
 On Windows, there are three primary methods for installing an up-to-date CMake:
 
-1. If you have Visual Studio 2019 installed, you can get CMake 3.17 through the
-   Visual Studio installer. This is the recommended way of getting CMake if you
-   are able to use Visual Studio 2019. See Microsoft's
-   [documentation][vs2019-cmake-docs] for more details.
-2. If you use [Chocolatey][chocolatey], its [CMake package][choco-cmake] is kept
+1. If you have Visual Studio installed, you can get a recent CMake version through
+   the Visual Studio installer. This is the recommended way of getting CMake if you
+   are able to use Visual Studio 2019. See Microsoft's [documentation][vs2019-cmake-docs]
+   for more details.
+2. On Windows 11 and newer, `winget install cmake` should work out of the box.
+3. If you use [Chocolatey][chocolatey], its [CMake package][choco-cmake] is kept
    up to date. It should be as simple as `choco install cmake`.
-3. Otherwise, you should install CMake from [Kitware's website][cmake-download].
+4. Otherwise, you should install CMake from [Kitware's website][cmake-download].
 
 ### macOS
 
@@ -116,18 +116,13 @@ is also a viable option.
 
 There are a few good ways to install a modern CMake on Ubuntu:
 
-1. If you're on Ubuntu Linux 22.04 (Jammy Jellyfish), then simply running
-   `sudo apt install cmake` will get you CMake 3.22.
-2. If you are on an older Ubuntu release or would like to use the newest CMake,
-   try installing via the snap store: `snap install cmake`. Be sure you do not
-   already have `cmake` installed via APT. The snap package automatically stays
-   up to date.
-3. For older versions of Debian, Ubuntu, Mint, and derivatives, Kitware provides
-   an [APT repository][cmake-apt] with up-to-date releases. Note that this is
-   still useful for Ubuntu 20.04 because it will remain up to date.
-4. If all else fails, you might need to build CMake from source (eg. on old
-   Ubuntu versions running on ARM). In that case, follow the directions posted
-   on [Kitware's website][cmake-from-source].
+1. On any Ubuntu release, you can get the newest CMake via the snap
+   store: `snap install cmake`. Be sure you do not already have `cmake` installed
+   via APT. The snap package automatically stays up to date.
+2. If you do not wish to use Snap, Kitware provides an [APT repository][cmake-apt]
+   with up-to-date releases. Compatible with Debian, Ubuntu, Mint, and derivatives.
+3. If all else fails, you might need to build CMake from source. In that case,
+   follow the directions posted on [Kitware's website][cmake-from-source].
 
 For other Linux distributions, check with your distribution's package manager or
 use pip as detailed above. Snap packages might also be available.
@@ -575,7 +570,7 @@ No matter how you intend to use Halide, you will need some basic CMake
 boilerplate.
 
 ```cmake
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.24)
 project(HalideExample)
 
 set(CMAKE_CXX_STANDARD 17)  # or newer
