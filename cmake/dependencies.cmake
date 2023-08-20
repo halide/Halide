@@ -8,7 +8,7 @@ include(FetchContent)
 FetchContent_Declare(
     flatbuffers
     GIT_REPOSITORY https://github.com/google/flatbuffers.git
-    GIT_TAG 0100f6a5779831fa7a651e4b67ef389a8752bd9b # 23.5.26
+    GIT_TAG 0100f6a5779831fa7a651e4b67ef389a8752bd9b # v23.5.26
     GIT_SHALLOW TRUE
     OVERRIDE_FIND_PACKAGE
 )
@@ -22,3 +22,14 @@ if (BUILD_SHARED_LIBS)
 endif ()
 ]=])
 endif ()
+
+##
+# pybind11
+
+FetchContent_Declare(
+    pybind11
+    GIT_REPOSITORY https://github.com/pybind/pybind11.git
+    GIT_TAG 5b0a6fc2017fcc176545afe3e09c9f9885283242 # v3.10.4
+    GIT_SHALLOW TRUE
+    OVERRIDE_FIND_PACKAGE
+)
