@@ -16,6 +16,8 @@ FetchContent_Declare(
 # Fix up the targets
 if (NOT EXISTS "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/flatbuffers-extra.cmake")
     file(WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/flatbuffers-extra.cmake" [=[
+add_executable(flatbuffers::flatc ALIAS flatc)
+
 add_library(flatbuffers::flatbuffers ALIAS flatbuffers)
 if (BUILD_SHARED_LIBS)
     set_property(TARGET flatbuffers PROPERTY POSITION_INDEPENDENT_CODE ON)
