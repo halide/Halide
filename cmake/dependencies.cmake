@@ -13,7 +13,7 @@ FetchContent_Declare(
     OVERRIDE_FIND_PACKAGE
 )
 
-# Patch busted flatbuffers build that doesn't play nice with FetchContent
+# Fix up the targets
 if (NOT EXISTS "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/flatbuffers-extra.cmake")
     file(WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/flatbuffers-extra.cmake" [=[
 add_library(flatbuffers::flatbuffers ALIAS flatbuffers)
@@ -33,3 +33,38 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
     OVERRIDE_FIND_PACKAGE
 )
+
+##
+# wabt
+
+FetchContent_Declare(
+    wabt
+    GIT_REPOSITORY https://github.com/WebAssembly/wabt.git
+    GIT_TAG 963f973469b45969ce198e0c86d3af316790a780 # 1.0.33
+    GIT_SHALLOW TRUE
+    OVERRIDE_FIND_PACKAGE
+)
+
+# Configure the project for vendored usage
+set(CMAKE_PROJECT_WABT_INCLUDE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/wabt-vars.cmake")
+if (NOT EXISTS "${CMAKE_PROJECT_WABT_INCLUDE}")
+    file(WRITE "${CMAKE_PROJECT_WABT_INCLUDE}" [=[
+set(WITH_EXCEPTIONS ${Halide_ENABLE_EXCEPTIONS})
+set(BUILD_TESTS OFF)
+set(BUILD_TOOLS OFF)
+set(BUILD_LIBWASM OFF)
+set(USE_INTERNAL_SHA256 ON)
+]=])
+endif ()
+
+# Fix up the targets
+if (NOT EXISTS "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/wabt-extra.cmake")
+    file(WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/wabt-extra.cmake" [=[
+target_compile_options(
+    wabt PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-alloca-larger-than>
+)
+if (BUILD_SHARED_LIBS)
+    set_property(TARGET wabt PROPERTY POSITION_INDEPENDENT_CODE ON)
+endif ()
+]=])
+endif ()
