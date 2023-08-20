@@ -417,12 +417,18 @@ add_custom_target(HalideIncludes ALL DEPENDS "${Halide_BINARY_DIR}/include/Halid
 # Define the Halide library target.
 ##
 
-add_library(Halide
-            ${SOURCE_FILES}
-            ${HEADER_FILES}
-            # Including these as sources works around the need to "install" Halide_initmod
-            $<TARGET_OBJECTS:Halide_initmod>
-            $<TARGET_OBJECTS:Halide_c_templates>)
+add_library(Halide)
+add_library(Halide::Halide ALIAS Halide)
+
+target_sources(
+    Halide
+    PRIVATE
+    ${SOURCE_FILES}
+    ${HEADER_FILES}
+    # Including these as sources works around the need to "install" Halide_initmod
+    $<TARGET_OBJECTS:Halide_initmod>
+    $<TARGET_OBJECTS:Halide_c_templates>
+)
 
 ##
 # Flatbuffers and Serialization dependencies.
@@ -431,84 +437,25 @@ add_library(Halide
 # Build serialization, enabled by default
 option(WITH_SERIALIZATION "Include experimental Serialization/Deserialization code" ON)
 
-# flatbuffers is small and compiles quickly, but if you want/need to use
-# a local version (via find_package), configure with FLATBUFFERS_USE_FETCHCONTENT=OFF
-option(FLATBUFFERS_USE_FETCHCONTENT "Enable to download the Flatbuffers library via FetchContent" ON)
-set(FLATBUFFERS_VER 23.5.26 CACHE STRING "The Flatbuffers version to use (or download)")
-
 if (WITH_SERIALIZATION)
-    if (FLATBUFFERS_USE_FETCHCONTENT)
-        include(FetchContent)
-        message(STATUS "Fetching flatbuffers ${FLATBUFFERS_VER}...")
-        FetchContent_Declare(
-            flatbuffers
-            GIT_REPOSITORY https://github.com/google/flatbuffers.git
-            GIT_TAG v${FLATBUFFERS_VER}
-            GIT_SHALLOW TRUE
-        )
-        # configuration for flatbuffers
-        set(FLATBUFFERS_BUILD_TESTS OFF)
-        set(FLATBUFFERS_INSTALL OFF)
-        FetchContent_MakeAvailable(flatbuffers)
-        set_target_properties(flatbuffers PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-        add_library(Halide_flatbuffers INTERFACE)
-        target_sources(Halide_flatbuffers INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:flatbuffers>>)
-        target_include_directories(Halide_flatbuffers
-                                   SYSTEM # Use -isystem instead of -I; this is a trick so that clang-tidy won't analyze these includes
-                                   INTERFACE
-                                   $<BUILD_INTERFACE:${flatbuffers_SOURCE_DIR}>/include
-                                   $<BUILD_INTERFACE:${flatbuffers_BINARY_DIR}>/include)
-        set_target_properties(Halide_flatbuffers PROPERTIES EXPORT_NAME flatbuffers)
-
-        add_executable(flatbuffers::flatc ALIAS flatc)
-        message(STATUS "Using fetched-and-built flatbuffers, version ${FLATBUFFERS_VER}")
-    else ()
-        # Sadly, there seem to be at least three variations of the Flatbuffer package
-        # in terms of the case of the relevant CMake files; if we guess wrong, we
-        # fail on case-sensitive file systems. We'll try this as a hack workaround:
-        # just try all three. (Note that the internal CMake library name appears to be
-        # `flatbuffers` in all cases.)
-        set(FB_NAME "")
-        foreach (N IN ITEMS flatbuffers Flatbuffers FlatBuffers)
-            # TODO: should we check the version here?
-            find_package(${N} QUIET)
-            if (${N}_FOUND)
-                set(FB_NAME ${N})
-                message(STATUS "Using installed flatbuffers, version ${${N}_VERSION}")
-                break()
-            endif ()
-        endforeach ()
-
-        if (NOT FB_NAME)
-            message(FATAL_ERROR "WITH_SERIALIZATION is ON and FLATBUFFERS_USE_FETCHCONTENT is OFF, "
-                                "but could not find flatbuffers installed locally. "
-                                "Either install flatbuffers or build with WITH_SERIALIZATION=OFF.")
-        endif ()
-
-        add_library(Halide_flatbuffers ALIAS flatbuffers::flatbuffers)
-    endif ()
-
-    set(fb_dir "${Halide_BINARY_DIR}/flatc/include")
+    find_package(flatbuffers 23.5.26 REQUIRED)
 
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
+    set(fb_dir "${Halide_BINARY_DIR}/flatc/include")
     set(fb_header "${fb_dir}/halide_ir_generated.h")
+
     add_custom_command(
         OUTPUT "${fb_header}"
         COMMAND flatbuffers::flatc --cpp -o "${fb_dir}" "${fb_def}"
         DEPENDS "${fb_def}"
         VERBATIM
     )
-    add_custom_target(generate_fb_header DEPENDS "${fb_header}")
-    set_source_files_properties("${fb_header}" PROPERTIES GENERATED TRUE)
 
-    add_dependencies(Halide generate_fb_header)
-    target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
-    target_link_libraries(Halide PRIVATE Halide_flatbuffers)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
+    target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
+    target_link_libraries(Halide PRIVATE flatbuffers::flatbuffers)
+    target_sources(Halide PRIVATE "${fb_header}")
 endif ()
-
-add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)

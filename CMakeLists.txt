@@ -1,4 +1,12 @@
 cmake_minimum_required(VERSION 3.24)
+
+# Use our dependency provider by default, but make it easy to
+# override
+
+if (NOT DEFINED CMAKE_PROJECT_TOP_LEVEL_INCLUDES)
+    set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES "${CMAKE_CURRENT_LIST_DIR}/cmake/dependencies.cmake")
+endif ()
+
 project(Halide
         VERSION 17.0.0
         DESCRIPTION "Halide compiler and libraries"
