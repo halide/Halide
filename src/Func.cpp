@@ -1091,7 +1091,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     }
 
     bool predicate_loads_ok = !exact;
-    if (predicate_loads_ok) {
+    if (predicate_loads_ok && tail == TailStrategy::PredicateLoads) {
         // If it's the outermost split in this dimension, PredicateLoads
         // is OK. Otherwise we can't prove it's safe.
         std::set<string> inner_vars;
