@@ -60,6 +60,13 @@
         position: relative;
     }
 
+    button#highlight-button {
+      margin: 0.4em;
+      padding: 0.5em;
+      border-radius: 4px;
+    }
+
+
     /* Resize bars */
     div#visualization-tabs div.resize-bar {
         background: rgb(201, 231, 190);
@@ -469,10 +476,11 @@
     }
 
     span.tooltip {
-        display: none;
-        position: absolute;
-        top: 0;
-        left: 0;
+        opacity: 1;
+        visibility: hidden;
+        position: relative;
+        left: 50px;
+        top: -10px;
         width: max-content;
         padding: 8px;
         background: #fff7e0;
@@ -482,6 +490,10 @@
         z-index: 9999;
         box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0;
         text-indent: 0px;
+    }
+
+    div.cost-btn:hover span.tooltip {
+        visibility: visible;
     }
 
     .conditionTooltip {
@@ -540,12 +552,6 @@
             border-style: dashed;
         }
 
-    /* CodeMirror */
-    .CodeMirror {
-        height: 100%;
-        width: 100%;
-    }
-
     /* Cost model */
 
     div.node-cost {
@@ -553,9 +559,8 @@
         left: 35px;
         display: flex;
     }
-
     div.cost-btn {
-        width: 10px;
+        width: 15px;
         height: 14px;
         margin-top: 2px;
     }

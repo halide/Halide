@@ -84,15 +84,29 @@
     }
 
     /* Expand/Collapse buttons in Viz */
-    function toggleViz(id) {
-        var buttonShow = document.getElementById(id + '-show');
-        var buttonHide = document.getElementById(id + '-hide');
-        var body = document.getElementById(id);
-        var re = /(?:\-([^-]+))?$/;
-        var ccost_btn = document.getElementById("vcc-" + re.exec(id)[1]);
-        var dcost_btn = document.getElementById("vdc-" + re.exec(id)[1]);
-        var ccost_tt = document.getElementById("tooltip-vcc-" + re.exec(id)[1]);
-        var dcost_tt = document.getElementById("tooltip-vdc-" + re.exec(id)[1]);
+    function toggleVizByElem(body) {
+        var id = body.id;
+        var group = body.parentElement;
+        var header = group.firstElementChild;
+        const safe_but_slow_code = false;
+        if (safe_but_slow_code) {
+            var buttonShow = header.querySelector('#' + id + '-show');
+            var buttonHide = header.querySelector('#' + id + '-hide');
+            var re = /(?:\-([^-]+))?$/;
+            var viz_id = re.exec(id)[1];
+            var ccost_btn = header.querySelector("#vcc-" + viz_id);
+            var dcost_btn = header.querySelector("#vdc-" + viz_id);
+            var ccost_tt = header.querySelector("#tooltip-vcc-" + viz_id);
+            var dcost_tt = header.querySelector("#tooltip-vdc-" + viz_id);
+        } else {
+            var buttonHide = header.firstElementChild; // #id-hide
+            var buttonShow = header.firstElementChild.nextElementSibling; // #id-show
+            var cost_div = header.lastElementChild; // #box-header > .viz-cost-btns
+            var ccost_btn = cost_div.firstElementChild; // # vcc-id
+            var dcost_btn = cost_div.lastElementChild; // # vdc-id
+            var ccost_tt = ccost_btn.firstElementChild; // #tooltip-vcc-id
+            var dcost_tt = dcost_btn.firstElementChild; // #tooltip-vdc-id
+        }
         if (body.classList.contains("collapsed-viz")) {
             body.classList.remove("collapsed-viz");
             buttonShow.style.display = 'none';
@@ -127,6 +141,10 @@
             }
         }
     };
+
+    function toggleViz(id) {
+        toggleVizByElem(document.getElementById(id));
+    }
 
     /* Scroll to visualization from IR code */
     function scrollToViz(id) {
@@ -308,40 +326,9 @@
     }
 
     // Tooltips
-    function update(buttonElement, tooltipElement) {
-        window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, {
-            placement: 'top',
-            middleware: [
-                window.FloatingUIDOM.offset(6),
-                window.FloatingUIDOM.flip(),
-                window.FloatingUIDOM.shift({
-                    padding: 5
-                }),
-            ],
-        }).then(({
-            x,
-            y,
-            placement,
-            middlewareData
-        }) => {
-            Object.assign(tooltipElement.style, {
-                left: `${x}px`,
-                top: `${y}px`,
-            });
-            // Accessing the data
-            const staticSide = {
-                top: 'bottom',
-                right: 'left',
-                bottom: 'top',
-                left: 'right',
-            }[placement.split('-')[0]];
-        });
-    }
-
     function showTooltip(buttonElement, tooltipElement) {
         tooltipElement.style.display = 'block';
         tooltipElement.style.opacity = '1';
-        update(buttonElement, tooltipElement);
     }
 
     function hideTooltip(tooltipElement) {
@@ -349,7 +336,7 @@
         tooltipElement.style.opacity = '0';
     }
 
-    function init_tooltips(btns, prefix) {
+    function init_tooltips(btns) {
         for (var i = 0; i < btns.size(); i++) {
             const button = btns[i];
             const tooltip = button.firstElementChild;
@@ -374,11 +361,11 @@
         }
     }
 
-    init_tooltips($('button[id^="cond-"]'), "cond-tooltip-"); // span#
-    init_tooltips($('div[id^="cc-"]'), "tooltip-cc-"); // span#
-    init_tooltips($('div[id^="dc-"]'), "tooltip-dc-"); // span#
-    init_tooltips($('div[id^="vcc-"]'), "tooltip-vcc-"); // span#
-    init_tooltips($('div[id^="vdc-"]'), "tooltip-vdc-"); // span#
+    init_tooltips($('button[id^="cond-"]')); // span#cond-tooltip-
+    init_tooltips($('div[id^="cc-"]')); // span#tooltip-cc-
+    init_tooltips($('div[id^="dc-"]')); // span#tooltip-dc-
+    init_tooltips($('div[id^="vcc-"]')); // span#tooltip-vcc-
+    init_tooltips($('div[id^="vdc-"]')); // span#tooltip-vdc-
 
     function depth(elem) {
         if (elem.id == 'ir-visualization-tab') {
@@ -394,16 +381,22 @@
     $('div[id^="viz-"]').filter((idx, val) => {
         return depth(val) > 1;
     }).each((idx, val) => {
-        toggleViz(val.id);
+        toggleVizByElem(val);
     });
 
     function scrollToAsm(lno) {
-        document.getElementsByClassName("shj-numbers")[0].children[lno].scrollIntoView({
-            behavior: "smooth"
+        var asmContent = document.getElementById("assemblyContent");
+        var line_height = window.getComputedStyle(asmContent).getPropertyValue("line-height");
+        line_height = parseInt(line_height, 10);
+        document.getElementById("assembly-tab").scrollTo({
+            behavior: "smooth",
+            top: lno * line_height
         });
     }
 
-    collapse_assembly_tab();
+    // Instead of calling 'collapse_assembly_tab();' we use the
+    // last bit of it, which skips a whole Layout Recalculation.
+    assemblyCodeDiv.style.display = 'none';
 
     // Cost model js
     var re = /(?:\-([^-]+))?$/;
