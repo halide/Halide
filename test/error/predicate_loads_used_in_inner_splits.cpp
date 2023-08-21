@@ -8,6 +8,7 @@ int main(int argc, char **argv) {
     f(x) = x;
     f.split(x, xo, xi, 2, TailStrategy::Auto)
         .split(xi, xio, xii, 4, TailStrategy::PredicateLoads);
+        .reorder(xo, xio, xii);
 
     printf("Success!\n");
     return 0;
