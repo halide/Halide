@@ -3420,6 +3420,8 @@ protected:
     void post_generate();
     void pre_schedule();
     void post_schedule();
+    void pre_serialization();
+    void post_serialization();
 
     template<typename T>
     using Input = GeneratorInput<T>;
@@ -3463,6 +3465,10 @@ protected:
         return !autoscheduler_.value().name.empty();
     }
 
+    bool is_serializable() const {
+        return serializable;
+    }
+
     // These must remain here for legacy code that access the fields directly.
     GeneratorParam<Target> target{"target", Target()};
     GeneratorParam_AutoSchedulerParams autoscheduler_;
@@ -3477,6 +3483,9 @@ private:
     friend class StubOutputBufferBase;
 
     const size_t size;
+
+    // Flag to enable serialization (and bypass asserts for unbound target)
+    bool serializable = false;
 
     // Lazily-allocated-and-inited struct with info about our various Params.
     // Do not access directly: use the param_info() getter.
@@ -3689,6 +3698,7 @@ public:
     void bind_input(const std::string &name, const std::vector<Expr> &v) override;
 
     bool emit_cpp_stub(const std::string &stub_file_path) override;
+    bool emit_hlpipe(const std::string &hlpipe_file_path) override;
 
     GeneratorBase(const GeneratorBase &) = delete;
     GeneratorBase &operator=(const GeneratorBase &) = delete;
@@ -3921,7 +3931,10 @@ struct ExecuteGeneratorArgs {
         Default,
 
         // Build a version suitable for using for gradient descent calculation.
-        Gradient
+        Gradient,
+
+        // Build a non-target oriented version for serializing the pipeline
+        Serialization,
     } build_mode = Default;
 
     // The fn that will produce Generator(s) from the name specified.

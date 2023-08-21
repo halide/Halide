@@ -11,6 +11,7 @@
 #include "IRPrinter.h"
 #include "Module.h"
 #include "Simplify.h"
+#include "Serialization.h"
 
 #ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
 #pragma message "Support for Generator build() methods has been removed in Halide version 15."
@@ -651,7 +652,7 @@ gengen
  -e  A comma separated list of files to emit. Accepted values are:
      [assembly, bitcode, c_header, c_source, cpp_stub, featurization,
       llvm_assembly, object, python_extension, pytorch_wrapper, registration,
-      schedule, static_library, stmt, stmt_html, compiler_log].
+      schedule, static_library, stmt, stmt_html, compiler_log, hlpipe].
      If omitted, default value is [c_header, static_library, registration].
 
  -p  A comma-separated list of shared libraries that will be loaded before the
@@ -798,6 +799,7 @@ gengen
                 {"html", OutputFileType::stmt_html},
                 {"o", OutputFileType::object},
                 {"py.c", OutputFileType::python_extension},
+                {"hlpipe", OutputFileType::hlpipe},
             };
             // extensions won't vary across multitarget output
             const Target t = args.targets.empty() ? Target() : args.targets[0];
@@ -996,10 +998,19 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
     // -------------- Do some sanity checking.
     internal_assert(!args.output_dir.empty());
 
+    const bool hlpipe_only = args.output_types.size() == 1 &&
+                             args.output_types.count(OutputFileType::hlpipe) == 1;
+
     const bool cpp_stub_only = args.output_types.size() == 1 &&
                                args.output_types.count(OutputFileType::cpp_stub) == 1;
-    if (!cpp_stub_only) {
-        // It's ok to leave targets unspecified if we are generating *only* a cpp_stub
+
+    const bool hlpipe_and_cpp_stub_only = args.output_types.size() == 2 &&
+                                          (args.output_types.count(OutputFileType::cpp_stub) == 1) &&
+                                          (args.output_types.count(OutputFileType::hlpipe) == 1);
+
+    const bool target_is_optional = hlpipe_only || cpp_stub_only || hlpipe_and_cpp_stub_only;
+    if (!target_is_optional) {
+        // It's ok to leave targets unspecified if we are generating *only* a cpp_stub and/or a hlpipe
         internal_assert(!args.targets.empty());
     }
 
@@ -1047,17 +1058,23 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
     if (!args.generator_name.empty()) {
         const std::string base_path = args.output_dir + "/" + args.file_base_name;
         debug(1) << "Generator " << args.generator_name << " has base_path " << base_path << "\n";
-        if (args.output_types.count(OutputFileType::cpp_stub)) {
-            // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
+
+        if (args.output_types.count(OutputFileType::cpp_stub) || args.output_types.count(OutputFileType::hlpipe)) {
+            // When generating cpp_stub or hlpipe, we ignore all generator args passed in, and supply a fake Target.
             // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             const Target fake_target = Target();
             auto gen = args.create_generator(args.generator_name, GeneratorContext(fake_target));
             auto output_files = compute_output_files(fake_target, base_path, args.output_types);
-            gen->emit_cpp_stub(output_files[OutputFileType::cpp_stub]);
+            if(args.output_types.count(OutputFileType::cpp_stub)) {
+                gen->emit_cpp_stub(output_files[OutputFileType::cpp_stub]);
+            }
+            if (args.output_types.count(OutputFileType::hlpipe)) {
+                gen->emit_hlpipe(output_files[OutputFileType::hlpipe]);
+            }
         }
 
-        // Don't bother with this if we're just emitting a cpp_stub.
-        if (!cpp_stub_only) {
+        // Don't bother with this if we're just emitting a cpp_stub or hlpipe
+        if (!target_is_optional) {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
                 // Must re-create each time since each instance will have a different Target.
@@ -1402,7 +1419,7 @@ void GeneratorBase::pre_generate() {
     advance_phase(GenerateCalled);
     GeneratorParamInfo &pi = param_info();
     user_assert(!pi.outputs().empty()) << "Must use Output<> with generate() method.";
-    user_assert(get_target() != Target()) << "The Generator target has not been set.";
+    user_assert(get_target() != Target() || is_serializable()) << "The Generator target has not been set.";
 
     for (auto *input : pi.inputs()) {
         input->init_internals();
@@ -1420,6 +1437,14 @@ void GeneratorBase::pre_schedule() {
 }
 
 void GeneratorBase::post_schedule() {
+}
+
+void GeneratorBase::pre_serialization() {
+    serializable = true;    
+}
+
+void GeneratorBase::post_serialization() {
+    serializable = false;    
 }
 
 void GeneratorBase::add_requirement(const Expr &condition, const std::vector<Expr> &error_args) {
@@ -1606,6 +1631,16 @@ bool GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     std::ofstream file(stub_file_path);
     StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params(), pi.inputs(), pi.outputs());
     emit.emit();
+    return true;
+}
+
+bool GeneratorBase::emit_hlpipe(const std::string &hlpipe_file_path) {
+    user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
+    pre_serialization();
+    Pipeline pipeline = build_pipeline();
+    std::map<std::string, Internal::Parameter> params; // FIXME: Remove when API allows this to be optional
+    serialize_pipeline(pipeline, hlpipe_file_path, params);
+    post_serialization();
     return true;
 }
 
