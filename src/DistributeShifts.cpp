@@ -1,7 +1,7 @@
-#include "FindIntrinsics.h"
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
+#include "FindIntrinsics.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "Simplify.h"
@@ -20,7 +20,10 @@ namespace Internal {
 // widening_mul_add operands.
 class DistributeShiftsAsMuls : public IRMutator {
 public:
-    DistributeShiftsAsMuls(const bool polys_only) : polynomials_only(polys_only) {}
+    DistributeShiftsAsMuls(const bool polys_only)
+        : polynomials_only(polys_only) {
+    }
+
 private:
     const bool polynomials_only;
 
