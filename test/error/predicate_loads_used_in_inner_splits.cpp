@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Var x, xo, xi, xio, xii;
     f(x) = x;
     f.split(x, xo, xi, 2, TailStrategy::Auto)
-        .split(xi, xio, xii, 4, TailStrategy::PredicateLoads);
+        .split(xi, xio, xii, 4, TailStrategy::PredicateLoads)
         .reorder(xo, xio, xii);
 
     printf("Success!\n");
