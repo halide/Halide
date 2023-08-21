@@ -1090,6 +1090,36 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
             << "Use TailStrategy::GuardWithIf instead.";
     }
 
+    bool predicate_loads_ok = !exact;
+    if (predicate_loads_ok) {
+        // If it's the outermost split in this dimension, PredicateLoads
+        // is OK. Otherwise we can't prove it's safe.
+        std::set<string> inner_vars;
+        for (const Split &s : definition.schedule().splits()) {
+            if (s.is_split()) {
+                inner_vars.insert(s.inner);
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_rename() || s.is_purify()) {
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_fuse()) {
+                if (inner_vars.count(s.inner) || inner_vars.count(s.outer)) {
+                    inner_vars.insert(s.old_var);
+                }
+            }
+        }
+        predicate_loads_ok = !inner_vars.count(old_name);
+        user_assert(predicate_loads_ok || tail != TailStrategy::PredicateLoads)
+            << "Can't use TailStrategy::PredicateLoads for splitting " << old_name
+            << " in the definition of " << name() << ". "
+            << "It may write zeros to tail regions overlapping the valid region "
+            << "of the next outer loop iteration and thus should be only used in "
+            << "the outermost split of the dimension.";
+    }
+
     if (tail == TailStrategy::Auto) {
         // Select a tail strategy
         if (exact) {
