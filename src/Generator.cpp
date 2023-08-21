@@ -10,8 +10,8 @@
 #include "Generator.h"
 #include "IRPrinter.h"
 #include "Module.h"
-#include "Simplify.h"
 #include "Serialization.h"
+#include "Simplify.h"
 
 #ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
 #pragma message "Support for Generator build() methods has been removed in Halide version 15."
@@ -1065,7 +1065,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             const Target fake_target = Target();
             auto gen = args.create_generator(args.generator_name, GeneratorContext(fake_target));
             auto output_files = compute_output_files(fake_target, base_path, args.output_types);
-            if(args.output_types.count(OutputFileType::cpp_stub)) {
+            if (args.output_types.count(OutputFileType::cpp_stub)) {
                 gen->emit_cpp_stub(output_files[OutputFileType::cpp_stub]);
             }
             if (args.output_types.count(OutputFileType::hlpipe)) {
@@ -1440,11 +1440,11 @@ void GeneratorBase::post_schedule() {
 }
 
 void GeneratorBase::pre_serialization() {
-    serializable = true;    
+    serializable = true;
 }
 
 void GeneratorBase::post_serialization() {
-    serializable = false;    
+    serializable = false;
 }
 
 void GeneratorBase::add_requirement(const Expr &condition, const std::vector<Expr> &error_args) {
@@ -1638,7 +1638,7 @@ bool GeneratorBase::emit_hlpipe(const std::string &hlpipe_file_path) {
     user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
     pre_serialization();
     Pipeline pipeline = build_pipeline();
-    std::map<std::string, Internal::Parameter> params; // FIXME: Remove when API allows this to be optional
+    std::map<std::string, Internal::Parameter> params;  // FIXME: Remove when API allows this to be optional
     serialize_pipeline(pipeline, hlpipe_file_path, params);
     post_serialization();
     return true;
