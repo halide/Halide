@@ -32,6 +32,13 @@ struct Cast : public ExprNode<Cast> {
     static Expr make(Type t, Expr v);
 
     static const IRNodeType _node_type = IRNodeType::Cast;
+
+    /** Check if the cast is equivalent to a reinterpret. */
+    bool is_reinterpret() const {
+        return (type.is_int_or_uint() &&
+                value.type().is_int_or_uint() &&
+                type.bits() == value.type().bits());
+    }
 };
 
 /** Reinterpret value as another type, without affecting any of the bits
