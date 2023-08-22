@@ -3420,8 +3420,6 @@ protected:
     void post_generate();
     void pre_schedule();
     void post_schedule();
-    void pre_serialization();
-    void post_serialization();
 
     template<typename T>
     using Input = GeneratorInput<T>;
@@ -3463,10 +3461,6 @@ protected:
     }
     bool using_autoscheduler() const {
         return !autoscheduler_.value().name.empty();
-    }
-
-    bool is_serializable() const {
-        return serializable;
     }
 
     // These must remain here for legacy code that access the fields directly.

@@ -998,19 +998,11 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
     // -------------- Do some sanity checking.
     internal_assert(!args.output_dir.empty());
 
-    const bool hlpipe_only = args.output_types.size() == 1 &&
-                             args.output_types.count(OutputFileType::hlpipe) == 1;
-
     const bool cpp_stub_only = args.output_types.size() == 1 &&
                                args.output_types.count(OutputFileType::cpp_stub) == 1;
 
-    const bool hlpipe_and_cpp_stub_only = args.output_types.size() == 2 &&
-                                          (args.output_types.count(OutputFileType::cpp_stub) == 1) &&
-                                          (args.output_types.count(OutputFileType::hlpipe) == 1);
-
-    const bool target_is_optional = hlpipe_only || cpp_stub_only || hlpipe_and_cpp_stub_only;
-    if (!target_is_optional) {
-        // It's ok to leave targets unspecified if we are generating *only* a cpp_stub and/or a hlpipe
+    if (!cpp_stub_only) {
+        // It's ok to leave targets unspecified if we are generating *only* a cpp_stub
         internal_assert(!args.targets.empty());
     }
 
@@ -1059,8 +1051,21 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         const std::string base_path = args.output_dir + "/" + args.file_base_name;
         debug(1) << "Generator " << args.generator_name << " has base_path " << base_path << "\n";
 
-        if (args.output_types.count(OutputFileType::cpp_stub) || args.output_types.count(OutputFileType::hlpipe)) {
-            // When generating cpp_stub or hlpipe, we ignore all generator args passed in, and supply a fake Target.
+        // Factory function for creating a generator instance for a given function name and target
+        auto generator_factory = [&](const std::string &function_name, const Target &target) -> AbstractGeneratorPtr {
+            // Must re-create each time since each instance will have a different Target.
+            auto gen = args.create_generator(args.generator_name, GeneratorContext(target));
+            for (const auto &kv : args.generator_params) {
+                if (kv.first == "target") {
+                    continue;
+                }
+                gen->set_generatorparam_value(kv.first, kv.second);
+            }
+            return gen;
+        };
+
+        if (args.output_types.count(OutputFileType::cpp_stub)) {
+            // When generating cpp_stub we ignore all generator args passed in, and supply a fake Target.
             // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             const Target fake_target = Target();
             auto gen = args.create_generator(args.generator_name, GeneratorContext(fake_target));
@@ -1068,23 +1073,26 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             if (args.output_types.count(OutputFileType::cpp_stub)) {
                 gen->emit_cpp_stub(output_files[OutputFileType::cpp_stub]);
             }
-            if (args.output_types.count(OutputFileType::hlpipe)) {
+        }
+
+        if (args.output_types.count(OutputFileType::hlpipe)) {
+            // When serializing a halide pipeline, target is required (since the schedule may be target dependent)
+            // If multiple targets are specified, add the target name as a suffix to the filename
+            const bool use_target_suffix = (args.targets.size() > 1);
+            for (size_t i = 0; i < args.targets.size(); ++i) {
+                const Target &target = args.targets[i];
+                const std::string hlpipe_path = use_target_suffix ? (base_path + "-" + target.to_string()) : base_path;
+                auto output_files = compute_output_files(target, hlpipe_path, args.output_types);
+                auto gen = generator_factory(args.function_name, target);
                 gen->emit_hlpipe(output_files[OutputFileType::hlpipe]);
             }
         }
 
-        // Don't bother with this if we're just emitting a cpp_stub or hlpipe
-        if (!target_is_optional) {
+        // Don't bother with this if we're just emitting a cpp_stub
+        if (!cpp_stub_only) {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
-                // Must re-create each time since each instance will have a different Target.
-                auto gen = args.create_generator(args.generator_name, GeneratorContext(target));
-                for (const auto &kv : args.generator_params) {
-                    if (kv.first == "target") {
-                        continue;
-                    }
-                    gen->set_generatorparam_value(kv.first, kv.second);
-                }
+                auto gen = generator_factory(function_name, target);
                 return args.build_mode == ExecuteGeneratorArgs::Gradient ?
                            gen->build_gradient_module(function_name) :
                            gen->build_module(function_name);
@@ -1419,7 +1427,7 @@ void GeneratorBase::pre_generate() {
     advance_phase(GenerateCalled);
     GeneratorParamInfo &pi = param_info();
     user_assert(!pi.outputs().empty()) << "Must use Output<> with generate() method.";
-    user_assert(get_target() != Target() || is_serializable()) << "The Generator target has not been set.";
+    user_assert(get_target() != Target()) << "The Generator target has not been set.";
 
     for (auto *input : pi.inputs()) {
         input->init_internals();
@@ -1437,14 +1445,6 @@ void GeneratorBase::pre_schedule() {
 }
 
 void GeneratorBase::post_schedule() {
-}
-
-void GeneratorBase::pre_serialization() {
-    serializable = true;
-}
-
-void GeneratorBase::post_serialization() {
-    serializable = false;
 }
 
 void GeneratorBase::add_requirement(const Expr &condition, const std::vector<Expr> &error_args) {
@@ -1636,11 +1636,16 @@ bool GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
 
 bool GeneratorBase::emit_hlpipe(const std::string &hlpipe_file_path) {
     user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
-    pre_serialization();
     Pipeline pipeline = build_pipeline();
+    AutoSchedulerResults auto_schedule_results;
+    const auto context = this->context();
+    const auto &asp = context.autoscheduler_params();
+    if (!asp.name.empty()) {
+        debug(1) << "Applying autoscheduler " << asp.name << " to Generator " << name() << " ...\n";
+        auto_schedule_results = pipeline.apply_autoscheduler(context.target(), asp);
+    }
     std::map<std::string, Internal::Parameter> params;  // FIXME: Remove when API allows this to be optional
     serialize_pipeline(pipeline, hlpipe_file_path, params);
-    post_serialization();
     return true;
 }
 
