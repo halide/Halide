@@ -2205,7 +2205,7 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
 
     // Hexagon prefers widening shifts to be expressed as multiplies to
     // hopefully hit compound widening multiplies.
-    s = distribute_shifts(s, /* polynomials_only */ false);
+    s = distribute_shifts(s, /* multiply_adds */ false);
 
     // Pattern match VectorReduce IR node. Handle vector reduce instructions
     // before OptimizePatterns to prevent being mutated by patterns like

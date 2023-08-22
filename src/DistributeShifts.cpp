@@ -20,12 +20,12 @@ namespace Internal {
 // widening_mul_add operands.
 class DistributeShiftsAsMuls : public IRMutator {
 public:
-    DistributeShiftsAsMuls(const bool polys_only)
-        : polynomials_only(polys_only) {
+    DistributeShiftsAsMuls(const bool _multiply_adds)
+        : multiply_adds(_multiply_adds) {
     }
 
 private:
-    const bool polynomials_only;
+    const bool multiply_adds;
 
     static bool is_cast(const Expr &e, Type value_t) {
         if (const Cast *cast = e.as<Cast>()) {
@@ -144,7 +144,7 @@ private:
 
     template<typename T>
     Expr visit_add_sub(const T *op) {
-        if (polynomials_only) {
+        if (multiply_adds) {
             Expr a, b;
             if (const Call *a_call = op->a.template as<Call>()) {
                 if (a_call->is_intrinsic({Call::shift_left, Call::widening_shift_left})) {
@@ -176,7 +176,7 @@ private:
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (polynomials_only) {
+        if (multiply_adds) {
             return IRMutator::visit(op);
         } else {
             return distribute_shift(op);
@@ -192,8 +192,8 @@ private:
     }
 };
 
-Stmt distribute_shifts(const Stmt &s, const bool polynomials_only) {
-    return DistributeShiftsAsMuls(polynomials_only).mutate(s);
+Stmt distribute_shifts(const Stmt &s, const bool multiply_adds) {
+    return DistributeShiftsAsMuls(multiply_adds).mutate(s);
 }
 
 }  // namespace Internal

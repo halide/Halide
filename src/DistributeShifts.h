@@ -10,12 +10,12 @@
 namespace Halide {
 namespace Internal {
 
-// Distributes shifts as multiplies. If `polynomials_only` is set,
+// Distributes shifts as multiplies. If `multiply_adds` is set,
 // then only distributes the patterns `a + widening_shl(b, c)` /
 // `a - widening_shl(b, c)` and `a + b << c` / `a - b << c`, to
 // produce `a (+/-) widening_mul(b, 1 << c)` and `a (+/-) b * (1 << c)`,
 // respectively
-Stmt distribute_shifts(const Stmt &stmt, const bool polynomials_only = false);
+Stmt distribute_shifts(const Stmt &stmt, const bool multiply_adds = false);
 
 }  // namespace Internal
 }  // namespace Halide
