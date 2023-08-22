@@ -68,10 +68,10 @@ we strongly suggest reading through the [CMake documentation][cmake-docs] first.
 ## Installing CMake
 
 Halide requires at least version 3.24. Fortunately, getting a recent version of
-CMake couldn't be easier, and there are multiple good options on any system to do
-so. Generally, one should always have the most recent version of CMake installed
-system-wide. CMake is committed to backwards compatibility and even the most recent
-release can build projects over a decade old.
+CMake is easy, and there are multiple good options on any system to do so.
+Generally, one should always have the most recent version of CMake installed
+system-wide. CMake is committed to backwards compatibility and even the most
+recent release can build projects over a decade old.
 
 ### Cross-platform
 

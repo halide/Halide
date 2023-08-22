@@ -185,6 +185,9 @@ If you wish to build Halide in a separate directory, you can do that like so:
 
 # Building Halide with CMake
 
+Halide requires CMake 3.24 or newer. For guidance on installing a recent CMake
+version, please see [README_cmake.md](./README_cmake.md#installing-cmake).
+
 ### MacOS and Linux
 
 Follow the above instructions to build LLVM or acquire a suitable binary
