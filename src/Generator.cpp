@@ -1070,14 +1070,12 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             const Target fake_target = Target();
             auto gen = args.create_generator(args.generator_name, GeneratorContext(fake_target));
             auto output_files = compute_output_files(fake_target, base_path, args.output_types);
-            if (args.output_types.count(OutputFileType::cpp_stub)) {
-                gen->emit_cpp_stub(output_files[OutputFileType::cpp_stub]);
-            }
+            gen->emit_cpp_stub(output_files[OutputFileType::cpp_stub]);
         }
 
         if (args.output_types.count(OutputFileType::hlpipe)) {
-            // When serializing a halide pipeline, target is required (since the schedule may be target dependent)
-            // If multiple targets are specified, add the target name as a suffix to the filename
+            // When serializing a halide pipeline, target is required (since the schedule may be target dependent).
+            // If multiple targets are specified, add the target name as a suffix to the filename.
             const bool use_target_suffix = (args.targets.size() > 1);
             for (size_t i = 0; i < args.targets.size(); ++i) {
                 const Target &target = args.targets[i];
@@ -1088,7 +1086,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             }
         }
 
-        // Don't bother with this if we're just emitting a cpp_stub
+        // Don't bother with this if we're just emitting a cpp_stub.
         if (!cpp_stub_only) {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {

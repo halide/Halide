@@ -3478,9 +3478,6 @@ private:
 
     const size_t size;
 
-    // Flag to enable serialization (and bypass asserts for unbound target)
-    bool serializable = false;
-
     // Lazily-allocated-and-inited struct with info about our various Params.
     // Do not access directly: use the param_info() getter.
     std::unique_ptr<GeneratorParamInfo> param_info_ptr;
