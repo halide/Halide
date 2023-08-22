@@ -9,6 +9,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 // Distribute constant RHS widening shift lefts as multiplies.
 // TODO: This is an extremely unfortunate mess. I think the better
 // solution is for the simplifier to distribute constant multiplications
@@ -20,8 +22,8 @@ namespace Internal {
 // widening_mul_add operands.
 class DistributeShiftsAsMuls : public IRMutator {
 public:
-    DistributeShiftsAsMuls(const bool _multiply_adds)
-        : multiply_adds(_multiply_adds) {
+    DistributeShiftsAsMuls(const bool multiply_adds)
+        : multiply_adds(multiply_adds) {
     }
 
 private:
@@ -191,6 +193,8 @@ private:
         return visit_add_sub<Sub>(op);
     }
 };
+
+}  // namespace
 
 Stmt distribute_shifts(const Stmt &s, const bool multiply_adds) {
     return DistributeShiftsAsMuls(multiply_adds).mutate(s);
