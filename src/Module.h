@@ -32,6 +32,7 @@ enum class OutputFileType {
     cpp_stub,
     featurization,
     function_info_header,
+    hlpipe,
     llvm_assembly,
     object,
     python_extension,
@@ -41,7 +42,6 @@ enum class OutputFileType {
     static_library,
     stmt,
     stmt_html,
-    hlpipe
 };
 
 /** Type of linkage a function in a lowered Halide module can have.

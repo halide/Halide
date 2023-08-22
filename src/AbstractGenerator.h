@@ -182,10 +182,10 @@ public:
      * If you call this method, you should not call any other AbstractGenerator methods
      * on this instance, before or after this call.
      *
-     * If the Generator is capable of emitting a hlpipe, do so and return true. (Errors
-     * during stub emission should assert-fail rather than returning false.)
+     * If the Generator is capable of emitting an hlpipe, do so and return true. (Errors
+     * during hlpipe emission should assert-fail rather than returning false.)
      *
-     * If the Generator is not capable of emitting a hlpipe, do nothing and return false.
+     * If the Generator is not capable of emitting an hlpipe, do nothing and return false.
      *
      * CALL-AFTER: none
      * CALL-BEFORE: none

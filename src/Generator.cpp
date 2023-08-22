@@ -796,10 +796,10 @@ gengen
             std::map<std::string, OutputFileType> output_name_to_enum = {
                 {"cpp", OutputFileType::c_source},
                 {"h", OutputFileType::c_header},
+                {"hlpipe", OutputFileType::hlpipe},
                 {"html", OutputFileType::stmt_html},
                 {"o", OutputFileType::object},
                 {"py.c", OutputFileType::python_extension},
-                {"hlpipe", OutputFileType::hlpipe},
             };
             // extensions won't vary across multitarget output
             const Target t = args.targets.empty() ? Target() : args.targets[0];
