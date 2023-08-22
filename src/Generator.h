@@ -3926,9 +3926,6 @@ struct ExecuteGeneratorArgs {
 
         // Build a version suitable for using for gradient descent calculation.
         Gradient,
-
-        // Build a non-target oriented version for serializing the pipeline
-        Serialization,
     } build_mode = Default;
 
     // The fn that will produce Generator(s) from the name specified.
