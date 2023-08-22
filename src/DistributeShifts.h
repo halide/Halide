@@ -15,7 +15,7 @@ namespace Internal {
 // `a - widening_shl(b, c)` and `a + b << c` / `a - b << c`, to
 // produce `a (+/-) widening_mul(b, 1 << c)` and `a (+/-) b * (1 << c)`,
 // respectively
-Stmt distribute_shifts(const Stmt &stmt, const bool multiply_adds = false);
+Stmt distribute_shifts(const Stmt &stmt, bool multiply_adds);
 
 }  // namespace Internal
 }  // namespace Halide

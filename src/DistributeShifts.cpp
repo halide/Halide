@@ -11,15 +11,14 @@ namespace Internal {
 
 namespace {
 
-// Distribute constant RHS widening shift lefts as multiplies.
-// TODO: This is an extremely unfortunate mess. I think the better
-// solution is for the simplifier to distribute constant multiplications
-// instead of factoring them, and then this logic is unnecessary (find_mpy_ops
-// would need to handle shifts, but that's easy).
-// Another possibility would be adding a widening_mul_add intrinsic that takes
-// a list of pairs of operands, and computes a widening sum of widening multiplies
-// of these pairs. FindIntrinsics could aggressively rewrite shifts as
-// widening_mul_add operands.
+/**
+ * Distribute constant RHS widening shift lefts as multiplies.
+ * This is an extremely unfortunate mess. Unfortunately, the
+ * simplifier needs to lift constant multiplications due to its
+ * cost model. This transformation is very architecture and data-
+ * type specific (e.g. useful on ARM and HVX due to a plethora of
+ * dot product / widening multiply instructions).
+ */
 class DistributeShiftsAsMuls : public IRMutator {
 public:
     DistributeShiftsAsMuls(const bool multiply_adds)
