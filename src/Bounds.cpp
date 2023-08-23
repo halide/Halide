@@ -1517,15 +1517,29 @@ private:
                 result.include(arg_bounds.get(i));
             }
             interval = result;
-        } else if (op->is_intrinsic(Call::widen_right_add)) {
-            Expr add = Add::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            add.accept(this);
-        } else if (op->is_intrinsic(Call::widen_right_sub)) {
-            Expr sub = Sub::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            sub.accept(this);
-        } else if (op->is_intrinsic(Call::widen_right_mul)) {
-            Expr mul = Mul::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            mul.accept(this);
+        } else if (op->is_intrinsic({Call::widening_add,
+                                     Call::widening_mul,
+                                     Call::widening_shift_left,
+                                     Call::widening_shift_right,
+                                     Call::widening_sub,
+                                     Call::widen_right_add,
+                                     Call::widen_right_sub,
+                                     Call::widen_right_mul,
+                                     // TODO: the below intrinsics should not use the optimal lowering,
+                                     // because that's harder for bounds inference to reason about. 
+                                     Call::rounding_halving_add,
+                                     Call::halving_add,
+                                     Call::saturating_add,
+                                     Call::saturating_sub,
+                                     Call::halving_sub,
+                                     Call::rounding_shift_left,
+                                     Call::rounding_shift_right,
+                                     Call::mul_shift_right,
+                                     Call::rounding_mul_shift_right
+                                     })) {
+            Expr a = lower_intrinsic(op);
+            internal_assert(a.defined());
+            a.accept(this);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {

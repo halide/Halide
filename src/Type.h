@@ -561,6 +561,13 @@ inline Type type_of() {
 /** Halide type to a C++ type */
 std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true);
 
+/** Returns maximum representable unsigned integer. */
+uint64_t max_uint(int bits);
+/** Returns maximum representable signed integer. */
+int64_t max_int(int bits);
+/** Returns minimum representable signed integer. */
+int64_t min_int(int bits);
+
 }  // namespace Halide
 
 #endif

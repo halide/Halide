@@ -1,3 +1,4 @@
+#include "Bounds.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
@@ -488,7 +489,6 @@ void CodeGen_X86::visit(const Select *op) {
 }
 
 void CodeGen_X86::visit(const Cast *op) {
-
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors in here.
         CodeGen_Posix::visit(op);
@@ -520,6 +520,59 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
+    // clang-format off
+    static Pattern truncate_patterns[] = {
+        {"saturating_narrow", i16(wild_i32x_)},
+        {"saturating_narrow", u16(wild_i32x_)},
+        {"saturating_narrow", i8(wild_i16x_)},
+        {"saturating_narrow", u8(wild_i16x_)},
+    };
+    // clang-format on
+
+    // Search for truncating casts that can be rewritten to
+    // saturating casts (safely), so that we can use existing
+    // saturating_narrow patterns. x86 doesn't support truncating
+    // casts natively.
+    for (const auto &pattern : truncate_patterns) {
+        if (expr_match(pattern.pattern, op, matches)) {
+            const Expr &expr = matches[0];
+            Interval bounds = find_constant_bounds(expr, Scope<Interval>::empty_scope());
+            if (bounds.is_bounded()) {
+                // All of these patterns have signed arguments.
+                const int64_t *lower = as_const_int(bounds.min);
+                const int64_t *upper = as_const_int(bounds.max);
+                internal_assert(lower && upper);
+                const int bits = op->type.bits();
+                const bool can_saturate = (op->type.is_int() &&
+                                           *lower >= min_int(bits) &&
+                                           *upper <= max_int(bits)) ||
+                                          (op->type.is_uint() &&
+                                           *lower >= 0 &&
+                                           // first make sure upper bound is non-negative
+                                           // before casting to unsigned.
+                                           *upper >= 0 &&  
+                                           (uint64_t)*upper <= max_uint(bits));
+                if (can_saturate) {
+                    value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+                    if (value) {
+                        std::cout << "success! rewrite to saturating_narrow\n";
+                        return;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+
+    // std::cout << "\nvisiting Cast: " << Expr(op) << "\n";
+    // Expr upper_bound = find_constant_bound(op->value, Direction::Upper);
+    // std::cout << "upper bound = " << upper_bound << "\n";
+    // Expr lower_bound = find_constant_bound(op->value, Direction::Lower);
+    // std::cout << "lower bound = " << lower_bound << "\n";
+
+        
+
     if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
         if (op->value.type().bits() < op->type.bits() && op->type.bits() <= 32) {
             // LLVM/x86 really doesn't like 8 -> 16 bit multiplication. If we're
@@ -547,6 +600,8 @@ void CodeGen_X86::visit(const Call *op) {
         CodeGen_Posix::visit(op);
         return;
     }
+
+    std::cout << "visiting Call: " << Expr(op) << "\n";
 
     // A 16-bit mul-shift-right of less than 16 can sometimes be rounded up to a
     // full 16 to use pmulh(u)w by left-shifting one of the operands. This is
@@ -628,6 +683,37 @@ void CodeGen_X86::visit(const Call *op) {
             if (value) {
                 return;
             }
+        }
+    }
+
+    // clang-format off
+    static Pattern reinterpret_patterns[] = {
+        {"saturating_narrow", i16_sat(wild_u32x_)},
+        {"saturating_narrow", u16_sat(wild_u32x_)},
+        {"saturating_narrow", i8_sat(wild_u16x_)},
+        {"saturating_narrow", u8_sat(wild_u16x_)},
+    };
+    // clang-format on
+
+    // Search for saturating casts where the inner value can be
+    // reinterpreted to signed, so that we can use existing
+    // saturating_narrow patterns.
+    for (const auto &pattern : reinterpret_patterns) {
+        if (expr_match(pattern.pattern, op, matches)) {
+            const Expr &expr = matches[0];
+            Expr upper_bound = find_constant_bound(expr, Direction::Upper);
+            if (const uint64_t *bound = as_const_uint(upper_bound)) {
+                Type t = matches[0].type();
+                if (*bound <= (uint64_t)max_int(t.bits())) {
+                    // Can safely reinterpret to signed integer.
+                    matches[0] = cast(t.with_code(halide_type_int), matches[0]);
+                    value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+                    if (value) {
+                        return;
+                    }
+                }
+            } 
+            break;
         }
     }
 
