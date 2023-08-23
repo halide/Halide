@@ -143,20 +143,28 @@ private:
         return IRMutator::visit(op);
     }
 
+    Expr handle_shift(const Expr &expr) {
+        Expr ret;
+        if (const Call *as_call = expr.template as<Call>()) {
+            if (as_call->is_intrinsic({Call::shift_left, Call::widening_shift_left})) {
+                ret = distribute_shift(as_call);
+            }
+        } else if (const Cast *as_cast = expr.template as<Cast>()) {
+            if (as_cast->is_reinterpret()) {
+                ret = handle_shift(as_cast->value);
+                if (ret.defined()) {
+                    ret = cast(as_cast->type, ret);
+                }
+            }
+        }
+        return ret;
+    }
+
     template<typename T>
     Expr visit_add_sub(const T *op) {
         if (multiply_adds) {
-            Expr a, b;
-            if (const Call *a_call = op->a.template as<Call>()) {
-                if (a_call->is_intrinsic({Call::shift_left, Call::widening_shift_left})) {
-                    a = distribute_shift(a_call);
-                }
-            }
-            if (const Call *b_call = op->b.template as<Call>()) {
-                if (b_call->is_intrinsic({Call::shift_left, Call::widening_shift_left})) {
-                    b = distribute_shift(b_call);
-                }
-            }
+            Expr a = handle_shift(op->a);
+            Expr b = handle_shift(op->b);
 
             if (a.defined() && b.defined()) {
                 return T::make(a, b);
