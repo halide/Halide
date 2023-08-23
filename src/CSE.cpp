@@ -298,7 +298,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     for (size_t i = 0; i < gvn.entries.size(); i++) {
         const auto &e = gvn.entries[i];
         if (e->use_count > 1) {
-            string name = unique_name('t');
+            string name = "$" + unique_name('t');
             lets.emplace_back(name, e->expr);
             // Point references to this expr to the variable instead.
             replacements[e->expr] = Variable::make(e->expr.type(), name);
@@ -354,7 +354,7 @@ class NormalizeVarNames : public IRMutator {
     }
 
     Expr visit(const Let *let) override {
-        string new_name = "t" + std::to_string(counter++);
+        string new_name = "$t" + std::to_string(counter++);
         new_names[let->name] = new_name;
         Expr value = mutate(let->value);
         Expr body = mutate(let->body);
