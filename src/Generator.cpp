@@ -1073,6 +1073,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             gen->emit_cpp_stub(output_files[OutputFileType::cpp_stub]);
         }
 
+#ifdef WITH_SERIALIZATION
         if (args.output_types.count(OutputFileType::hlpipe)) {
             // When serializing a halide pipeline, target is required (since the schedule may be target dependent).
             // If multiple targets are specified, add the target name as a suffix to the filename.
@@ -1085,6 +1086,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                 gen->emit_hlpipe(output_files[OutputFileType::hlpipe]);
             }
         }
+#endif
 
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!cpp_stub_only) {
@@ -1633,6 +1635,7 @@ bool GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
 }
 
 bool GeneratorBase::emit_hlpipe(const std::string &hlpipe_file_path) {
+#ifdef WITH_SERIALIZATION
     user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
     Pipeline pipeline = build_pipeline();
     AutoSchedulerResults auto_schedule_results;
@@ -1645,6 +1648,10 @@ bool GeneratorBase::emit_hlpipe(const std::string &hlpipe_file_path) {
     std::map<std::string, Internal::Parameter> params;  // FIXME: Remove when API allows this to be optional
     serialize_pipeline(pipeline, hlpipe_file_path, params);
     return true;
+#else
+    user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+    return false;
+#endif
 }
 
 GIOBase::GIOBase(size_t array_size,
