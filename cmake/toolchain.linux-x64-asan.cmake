@@ -34,6 +34,10 @@ set(CMAKE_CROSSCOMPILING_EMULATOR /usr/bin/env)
 # Can't mix -fsanitize=address with -fsanitize=fuzzer
 set(WITH_TEST_FUZZ OFF)
 
+# Sanitizer builds intermittently fail when using CCache for reasons that aren't
+# clear; default to turning it off
+set(Halide_CCACHE_BUILD OFF)
+
 if (NOT DEFINED Halide_SHARED_ASAN_RUNTIME_LIBRARY)
     execute_process(
         COMMAND ${CMAKE_CXX_COMPILER} "-print-file-name=libclang_rt.asan.so"
@@ -49,3 +53,4 @@ set(
     Halide_PYTHON_LAUNCHER
     ${CMAKE_COMMAND} -E env ASAN_OPTIONS=detect_leaks=0 LD_PRELOAD=${Halide_SHARED_ASAN_RUNTIME_LIBRARY}
 )
+

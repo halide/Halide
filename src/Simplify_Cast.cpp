@@ -74,14 +74,21 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
         } else if (op->type.is_int() &&
                    const_uint(value, &u) &&
                    op->type.bits() < value.type().bits()) {
-            // uint -> int
+            // uint -> int narrowing
             // Recursively call mutate just to set the bounds
             return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), bounds);
         } else if (op->type.is_int() &&
                    const_uint(value, &u) &&
-                   op->type.bits() >= value.type().bits()) {
-            // uint -> int with less than or equal to the number of bits
+                   op->type.bits() == value.type().bits()) {
+            // uint -> int reinterpret
+            // Recursively call mutate just to set the bounds
+            return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), bounds);
+        } else if (op->type.is_int() &&
+                   const_uint(value, &u) &&
+                   op->type.bits() > value.type().bits()) {
+            // uint -> int widening
             if (op->type.can_represent(u) || op->type.bits() < 32) {
+                // If the type can represent the value or overflow is well-defined.
                 // Recursively call mutate just to set the bounds
                 return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), bounds);
             } else {
