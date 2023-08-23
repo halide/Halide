@@ -879,19 +879,6 @@ protected:
                 return mutate(result);
             }
 
-            // Try to lossless cast to uint.
-            if (op->type.is_int() && bits >= 16) {
-                Type uint_type = op->type.narrow().with_code(halide_type_uint);
-                Expr a_narrow = lossless_cast(uint_type, op->args[0]);
-                Expr b_narrow = lossless_cast(uint_type, op->args[1]);
-                if (a_narrow.defined() && b_narrow.defined()) {
-                    Expr result = op->is_intrinsic(Call::shift_left) ? widening_shift_left(a_narrow, b_narrow) : widening_shift_right(a_narrow, b_narrow);
-                    internal_assert(result.type() != op->type);
-                    result = Cast::make(op->type, result);
-                    return mutate(result);
-                }
-            }
-
             // Try to turn this into a rounding shift.
             Expr rounding_shift = to_rounding_shift(op);
             if (rounding_shift.defined()) {
