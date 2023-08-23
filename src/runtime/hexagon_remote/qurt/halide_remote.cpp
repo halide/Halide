@@ -15,8 +15,8 @@ extern "C" {
 #include "known_symbols.h"
 #include "log.h"
 
-const int stack_alignment = 128;
-const int stack_size = 1024 * 1024;
+// const int stack_alignment = 128;
+// const int stack_size = 1024 * 1024;
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
