@@ -28,7 +28,7 @@ public:
     void clear(void *user_context);
 
     // fills the contents of the table (copies strings from given array)
-    void fill(void *user_context, const char **array, size_t coun);
+    void fill(void *user_context, const char **array, size_t count);
 
     // assign the entry at given index the given string
     void assign(void *user_context, size_t index, const char *str, size_t length = 0);  // if length is zero, strlen is used
@@ -88,9 +88,10 @@ StringTable::~StringTable() {
 
 void StringTable::resize(void *user_context, size_t capacity) {
     pointers.resize(user_context, capacity);
-    while (contents.size() < capacity) {
+    contents.resize(user_context, capacity);
+    for (size_t n = 0; n < contents.size(); ++n) {
         StringStorage *storage_ptr = StringStorage::create(user_context, contents.current_allocator());
-        contents.append(user_context, storage_ptr);
+        contents.assign(user_context, n, storage_ptr);
     }
 }
 

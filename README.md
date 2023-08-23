@@ -109,7 +109,7 @@ issue.
 
 ### TL;DR
 
-Have llvm-15.0 (or greater) installed and run `make` in the root directory of
+Have llvm-16.0 (or greater) installed and run `make` in the root directory of
 the repository (where this README is).
 
 ### Acquiring LLVM

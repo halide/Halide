@@ -21,10 +21,13 @@ function(add_anderson2021_test NAME)
         set(ARGS_LABELS "")
     endif()
     list(APPEND ARGS_LABELS anderson2021)
-    list(APPEND ARGS_LABELS autoschedulers)
+    list(APPEND ARGS_LABELS autoschedulers_cuda)
+    # No: anderson2021 didn't have this label before, and it's going away soon, don't add it now
+    # list(APPEND ARGS_LABELS auto_schedule)
 
     add_test(NAME ${NAME}
              COMMAND ${ARGS_COMMAND})
+    add_dependencies(${NAME} Halide::Anderson2021)
     set_tests_properties(${NAME}
                          PROPERTIES
                          LABELS "${ARGS_LABELS}"
@@ -52,7 +55,7 @@ add_executable(anderson2021_demo_apps_autoscheduler ${DEMO_REGISTRATION_FILE})
 target_link_libraries(anderson2021_demo_apps_autoscheduler PRIVATE anderson2021_demo Halide::RunGenMain)
 
 add_anderson2021_test(anderson2021_demo_apps_autoscheduler
-                   COMMAND anderson2021_demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all --skip_bad_environment)
+                      COMMAND anderson2021_demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all --skip_bad_environment)
 
 # =================================================================
 
@@ -77,7 +80,7 @@ add_anderson2021_test(anderson2021_demo_included_schedule_file
 
 add_executable(anderson2021_test_apps_autoscheduler test.cpp)
 target_link_libraries(anderson2021_test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
-add_dependencies(anderson2021_test_apps_autoscheduler Halide_Anderson2021)
+add_dependencies(anderson2021_test_apps_autoscheduler Halide::Anderson2021)
 
 add_anderson2021_test(anderson2021_test_apps_autoscheduler
                    COMMAND anderson2021_test_apps_autoscheduler $<TARGET_FILE:Halide_Anderson2021>

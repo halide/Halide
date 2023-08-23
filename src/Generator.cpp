@@ -668,8 +668,8 @@ gengen
      generation, such as `no_asserts` and `no_runtime`, are ignored.
 
  -t  Timeout for the Generator to run, in seconds; mainly useful to ensure that
-     bugs and/or degenerate cases don't stall build systems. Defaults to 900
-     (=15 minutes). Specify 0 to allow ~infinite time.
+     bugs and/or degenerate cases don't stall build systems. Specify 0 to allow
+     infinite time. Defaults to infinite.
 
  -v  If nonzero, log the path to all generated files to stdout.
 )INLINE_CODE";
@@ -684,7 +684,7 @@ gengen
         {"-p", ""},
         {"-r", ""},
         {"-v", "0"},
-        {"-t", "900"},  // 15 minutes
+        {"-t", "0"},
     };
 
     ExecuteGeneratorArgs args;

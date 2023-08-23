@@ -47,6 +47,10 @@ public:
     Definition(const std::vector<Expr> &args, const std::vector<Expr> &values,
                const ReductionDomain &rdom, bool is_init);
 
+    /** Construct a Definition with deserialized data. */
+    Definition(bool is_init, const Expr &predicate, const std::vector<Expr> &args, const std::vector<Expr> &values,
+               const StageSchedule &schedule, const std::vector<Specialization> &specializations, const std::string &source_location);
+
     /** Construct an undefined Definition object. */
     Definition();
 

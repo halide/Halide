@@ -51,8 +51,7 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
     const int pipeline_feat_size = head1_w * head1_h;
     // We ignore the first seven pipeline features in the cost
     // model. It's just a mask of which types are in use.
-    static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) ==
-                      sizeof(int) * pipeline_feat_size,
+    static_assert(sizeof(PipelineFeatures) - 7 * sizeof(int) == sizeof(int) * pipeline_feat_size,
                   "Incorrect size for pipeline features");
     int num_stages = 0;
     for (const auto &n : dag.nodes) {
@@ -231,15 +230,22 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
                                   batch_id,
                                   pipeline_feat_queue,
                                   schedule_feat_queue,
-                                  weights.head1_filter, weights.head1_bias,
-                                  weights.head2_filter, weights.head2_bias,
-                                  weights.conv1_filter, weights.conv1_bias,
-                                  learning_rate, timestep++,
+                                  weights.head1_filter,
+                                  weights.head1_bias,
+                                  weights.head2_filter,
+                                  weights.head2_bias,
+                                  weights.conv1_filter,
+                                  weights.conv1_bias,
+                                  learning_rate,
+                                  timestep++,
                                   fastest_idx,
                                   true_runtimes.alias(),
-                                  head1_filter_update, head1_bias_update,
-                                  head2_filter_update, head2_bias_update,
-                                  conv1_filter_update, conv1_bias_update,
+                                  head1_filter_update,
+                                  head1_bias_update,
+                                  head2_filter_update,
+                                  head2_bias_update,
+                                  conv1_filter_update,
+                                  conv1_bias_update,
                                   dst,
                                   dst_costs_per_stage,
                                   loss);

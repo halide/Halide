@@ -266,10 +266,9 @@ size_t load_samples(map<int, PipelineSample> &training_set, map<int, PipelineSam
 
         uint64_t schedule_hash = 0;
         for (size_t i = 0; i < num_stages; i++) {
-            schedule_hash =
-                hash_floats(schedule_hash,
-                            &scratch[i * features_per_stage],
-                            &scratch[i * features_per_stage + head2_w]);
+            schedule_hash = hash_floats(schedule_hash,
+                                        &scratch[i * features_per_stage],
+                                        &scratch[i * features_per_stage + head2_w]);
         }
 
         uint64_t hash = flags.partition_schedules ? schedule_hash : p.pipeline_hash;
@@ -629,7 +628,8 @@ int main(int argc, char **argv) {
                                     good++;
                                 } else {
                                     if (train) {
-                                        float badness = (sched.second.runtimes[0] - ref.runtimes[0]) * (ref.prediction[model] - sched.second.prediction[model]);
+                                        float badness = (sched.second.runtimes[0] - ref.runtimes[0]) *
+                                                        (ref.prediction[model] - sched.second.prediction[model]);
                                         badness /= (ref.runtimes[0] * ref.runtimes[0]);
                                         if (badness > worst_inversion.badness) {
                                             worst_inversion.pipeline_id = p.pipeline_id;

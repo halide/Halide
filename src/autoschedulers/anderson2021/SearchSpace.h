@@ -69,7 +69,8 @@ struct SearchSpace {
 
     vector<ThreadTileOption> filter_thread_tile_options(vector<IntrusivePtr<const LoopNest>> &loop_nests) const;
 
-    void memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root);
+    void memoize_blocks(const FunctionDAG::Node *node,
+                        LoopNest *new_root);
 
     bool add_states_from_memoized_blocks(const IntrusivePtr<State> &state,
                                          std::function<void(IntrusivePtr<State> &&)> &accept_child,
@@ -84,7 +85,8 @@ struct SearchSpace {
 
     void freeze_lowest_cost_stages(const IntrusivePtr<State> &best);
 
-    vector<vector<int64_t>> generate_compute_root_serial_tilings(const IntrusivePtr<const LoopNest> &pure_stage, const FunctionDAG::Node *node) const;
+    vector<vector<int64_t>> generate_compute_root_serial_tilings(const IntrusivePtr<const LoopNest> &pure_stage,
+                                                                 const FunctionDAG::Node *node) const;
 
     bool add_child(const IntrusivePtr<State> &state,
                    const IntrusivePtr<const LoopNest> &new_root,

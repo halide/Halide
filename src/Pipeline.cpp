@@ -5,6 +5,7 @@
 #include "Argument.h"
 #include "Callable.h"
 #include "CodeGen_Internal.h"
+#include "Deserialization.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "IRVisitor.h"
@@ -15,6 +16,7 @@
 #include "Pipeline.h"
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
+#include "Serialization.h"
 #include "WasmExecutor.h"
 
 using namespace Halide::Internal;
@@ -205,12 +207,25 @@ Pipeline::Pipeline(const vector<Func> &outputs)
     }
 }
 
+Pipeline::Pipeline(const std::vector<Func> &outputs, const std::vector<Internal::Stmt> &requirements)
+    : contents(new PipelineContents) {
+    for (const Func &f : outputs) {
+        f.function().freeze();
+        contents->outputs.push_back(f.function());
+        contents->requirements = requirements;
+    }
+}
+
 vector<Func> Pipeline::outputs() const {
     vector<Func> funcs;
     for (const Function &f : contents->outputs) {
         funcs.emplace_back(f);
     }
     return funcs;
+}
+
+std::vector<Internal::Stmt> Pipeline::requirements() const {
+    return contents->requirements;
 }
 
 /* static */
@@ -564,7 +579,6 @@ void Pipeline::compile_jit(const Target &target_arg) {
                  << target << "\n";
         return;
     }
-
     // Clear all cached info in case there is an error.
     contents->invalidate_cache();
 

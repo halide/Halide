@@ -147,7 +147,11 @@ WEAK int init_hexagon_runtime(void *user_context) {
     if (!host_lib) {
         host_lib = halide_load_library("libhalide_hexagon_host.dll");
     }
-
+    if (!host_lib) {
+        // This will now cause a more specific error 'halide_error_code_symbol_not_found' down the line.
+        // So, just print this message and continue on instead of returning a generic error here.
+        error(user_context) << "Hexagon: unable to load libhalide_hexagon_host.so";
+    }
     debug(user_context) << "Hexagon: init_hexagon_runtime (user_context: " << user_context << ")\n";
 
     // Get the symbols we need from the library.

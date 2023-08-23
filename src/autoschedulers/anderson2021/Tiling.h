@@ -10,9 +10,11 @@ namespace Autoscheduler {
 
 bool all_ones(const std::vector<int64_t> &nums);
 
-bool equal_to_existing_size(const std::vector<int64_t> &s, const std::vector<int64_t> &nums);
+bool equal_to_existing_size(const std::vector<int64_t> &s,
+                            const std::vector<int64_t> &nums);
 
-std::vector<std::vector<int64_t>> generate_serial_tilings(const std::vector<int64_t> &s, int d,
+std::vector<std::vector<int64_t>> generate_serial_tilings(const std::vector<int64_t> &s,
+                                                          int d,
                                                           int last_d,
                                                           int vectorized_index,
                                                           const std::vector<int> &vec_dim_serial_sizes,
@@ -27,13 +29,17 @@ std::vector<std::vector<int64_t>> generate_serial_tilings(const std::vector<int6
 // producer-consumer fusion, or tiling for parallelism.
 // inner_sizes is optional vector of fixed sizes to choose from for inner loop.
 // used for GPU schedules when we split a 'none' loop into a parallel loop and a serial loop
-std::vector<std::vector<int64_t>> generate_tilings(const std::vector<int64_t> &s, int d, int factor,
+std::vector<std::vector<int64_t>> generate_tilings(const std::vector<int64_t> &s,
+                                                   int d,
+                                                   int factor,
                                                    bool allow_splits,
                                                    const std::vector<int> &inner_sizes = std::vector<int>());
 
 /** moves vectorized dimension first and also removes dimensions with size 1
     to reflect actual thread dimensions when loop nests are lowered **/
-void lowered_dims(const std::vector<int64_t> &size, int vector_loop_i, std::vector<int64_t> &lowered_size);
+void lowered_dims(const std::vector<int64_t> &size,
+                  int vector_loop_i,
+                  std::vector<int64_t> &lowered_size);
 
 // creates tilings for gpu threads loops.
 // Innermost thread loop is always the vectorized dim and its extent is a multiple of 32.

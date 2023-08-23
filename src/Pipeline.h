@@ -184,10 +184,16 @@ public:
      * outputs. Schedules the Funcs compute_root(). */
     Pipeline(const std::vector<Func> &outputs);
 
+    /** Make a pipeline from deserialization. */
+    Pipeline(const std::vector<Func> &outputs, const std::vector<Internal::Stmt> &requirements);
+
     std::vector<Argument> infer_arguments(const Internal::Stmt &body);
 
     /** Get the Funcs this pipeline outputs. */
     std::vector<Func> outputs() const;
+
+    /** Get the requirements of this pipeline. */
+    std::vector<Internal::Stmt> requirements() const;
 
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults apply_autoscheduler(const Target &target,

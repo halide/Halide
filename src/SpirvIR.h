@@ -113,6 +113,7 @@ class SpvFunction;
 class SpvBlock;
 class SpvInstruction;
 class SpvBuilder;
+class SpvContext;
 struct SpvFactory;
 
 /** Pre-declarations for SPIR-V IR data structures */
@@ -136,14 +137,13 @@ public:
     using ValueTypes = std::vector<SpvValueType>;
 
     SpvInstruction() = default;
-    ~SpvInstruction() = default;
+    ~SpvInstruction();
 
     SpvInstruction(const SpvInstruction &) = default;
     SpvInstruction &operator=(const SpvInstruction &) = default;
     SpvInstruction(SpvInstruction &&) = default;
     SpvInstruction &operator=(SpvInstruction &&) = default;
 
-    void set_block(SpvBlock block);
     void set_result_id(SpvId id);
     void set_type_id(SpvId id);
     void set_op_code(SpvOp opcode);
@@ -170,8 +170,8 @@ public:
     bool is_defined() const;
     bool is_immediate(uint32_t index) const;
     uint32_t length() const;
-    SpvBlock block() const;
     void check_defined() const;
+    void clear();
 
     void encode(SpvBinary &binary) const;
 
@@ -189,7 +189,7 @@ public:
     using Blocks = std::vector<SpvBlock>;
 
     SpvBlock() = default;
-    ~SpvBlock() = default;
+    ~SpvBlock();
 
     SpvBlock(const SpvBlock &) = default;
     SpvBlock &operator=(const SpvBlock &) = default;
@@ -198,19 +198,18 @@ public:
 
     void add_instruction(SpvInstruction inst);
     void add_variable(SpvInstruction var);
-    void set_function(SpvFunction func);
     const Instructions &instructions() const;
     const Variables &variables() const;
-    SpvFunction function() const;
     bool is_reachable() const;
     bool is_terminated() const;
     bool is_defined() const;
     SpvId id() const;
     void check_defined() const;
+    void clear();
 
     void encode(SpvBinary &binary) const;
 
-    static SpvBlock make(SpvFunction func, SpvId id);
+    static SpvBlock make(SpvId block_id);
 
 protected:
     SpvBlockContentsPtr contents;
@@ -223,7 +222,7 @@ public:
     using Parameters = std::vector<SpvInstruction>;
 
     SpvFunction() = default;
-    ~SpvFunction() = default;
+    ~SpvFunction();
 
     SpvFunction(const SpvFunction &) = default;
     SpvFunction &operator=(const SpvFunction &) = default;
@@ -231,12 +230,12 @@ public:
     SpvFunction &operator=(SpvFunction &&) = default;
 
     SpvBlock create_block(SpvId block_id);
-    void add_block(const SpvBlock &block);
-    void add_parameter(const SpvInstruction &param);
-    void set_module(SpvModule module);
+    void add_block(SpvBlock block);
+    void add_parameter(SpvInstruction param);
     void set_return_precision(SpvPrecision precision);
     void set_parameter_precision(uint32_t index, SpvPrecision precision);
     bool is_defined() const;
+    void clear();
 
     const Blocks &blocks() const;
     SpvBlock entry_block() const;
@@ -247,7 +246,6 @@ public:
     uint32_t parameter_count() const;
     uint32_t control_mask() const;
     SpvInstruction declaration() const;
-    SpvModule module() const;
     SpvId return_type_id() const;
     SpvId type_id() const;
     SpvId id() const;
@@ -274,7 +272,7 @@ public:
     using Imports = std::vector<ImportDefinition>;
 
     SpvModule() = default;
-    ~SpvModule() = default;
+    ~SpvModule();
 
     SpvModule(const SpvModule &) = default;
     SpvModule &operator=(const SpvModule &) = default;
@@ -283,13 +281,13 @@ public:
 
     void add_debug_string(SpvId result_id, const std::string &string);
     void add_debug_symbol(SpvId id, const std::string &symbol);
-    void add_annotation(const SpvInstruction &val);
-    void add_type(const SpvInstruction &val);
-    void add_constant(const SpvInstruction &val);
-    void add_global(const SpvInstruction &val);
-    void add_execution_mode(const SpvInstruction &val);
+    void add_annotation(SpvInstruction val);
+    void add_type(SpvInstruction val);
+    void add_constant(SpvInstruction val);
+    void add_global(SpvInstruction val);
+    void add_execution_mode(SpvInstruction val);
     void add_function(SpvFunction val);
-    void add_instruction(const SpvInstruction &val);
+    void add_instruction(SpvInstruction val);
     void add_entry_point(const std::string &name, SpvInstruction entry_point);
 
     void import_instruction_set(SpvId id, const std::string &instruction_set);
@@ -334,6 +332,7 @@ public:
     bool is_defined() const;
     SpvId id() const;
     void check_defined() const;
+    void clear();
 
     void encode(SpvBinary &binary) const;
 
@@ -724,7 +723,6 @@ struct SpvInstructionContents {
     SpvId type_id = SpvNoType;
     Operands operands;
     ValueTypes value_types;
-    SpvBlock block;
 };
 
 /** Contents of a SPIR-V code block */
@@ -734,7 +732,6 @@ struct SpvBlockContents {
     using Blocks = std::vector<SpvBlock>;
     mutable RefCount ref_count;
     SpvId block_id = SpvInvalidId;
-    SpvFunction parent;
     Instructions instructions;
     Variables variables;
     Blocks before;
@@ -748,7 +745,6 @@ struct SpvFunctionContents {
     using Parameters = std::vector<SpvInstruction>;
     using Blocks = std::vector<SpvBlock>;
     mutable RefCount ref_count;
-    SpvModule parent;
     SpvId function_id;
     SpvId function_type_id;
     SpvId return_type_id;

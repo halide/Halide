@@ -9,11 +9,6 @@
 namespace Halide {
 namespace Internal {
 
-struct BufferConstraint {
-    Expr min, extent, stride;
-    Expr min_estimate, extent_estimate;
-};
-
 struct ParameterContents {
     mutable RefCount ref_count;
     const Type type;
@@ -83,6 +78,27 @@ Parameter::Parameter(const Type &t, bool is_buffer, int d)
 Parameter::Parameter(const Type &t, bool is_buffer, int d, const std::string &name)
     : contents(new ParameterContents(t, is_buffer, d, name)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
+}
+
+Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
+                     const Buffer<void> &buffer, int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
+                     MemoryType memory_type)
+    : contents(new ParameterContents(t, is_buffer, dimensions, name)) {
+    contents->buffer = buffer;
+    contents->host_alignment = host_alignment;
+    contents->buffer_constraints = buffer_constraints;
+    contents->memory_type = memory_type;
+}
+
+Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
+                     uint64_t data, const Expr &scalar_default, const Expr &scalar_min,
+                     const Expr &scalar_max, const Expr &scalar_estimate)
+    : contents(new ParameterContents(t, is_buffer, dimensions, name)) {
+    contents->data = data;
+    contents->scalar_default = scalar_default;
+    contents->scalar_min = scalar_min;
+    contents->scalar_max = scalar_max;
+    contents->scalar_estimate = scalar_estimate;
 }
 
 Type Parameter::type() const {
@@ -183,6 +199,11 @@ void Parameter::set_buffer(const Buffer<> &b) {
 void *Parameter::scalar_address() const {
     check_is_scalar();
     return &contents->data;
+}
+
+uint64_t Parameter::scalar_raw_value() const {
+    check_is_scalar();
+    return contents->data;
 }
 
 /** Tests if this handle is the same as another handle */
@@ -313,6 +334,11 @@ Expr Parameter::extent_constraint_estimate(int dim) const {
 int Parameter::host_alignment() const {
     check_is_buffer();
     return contents->host_alignment;
+}
+
+const std::vector<BufferConstraint> &Parameter::buffer_constraints() const {
+    check_is_buffer();
+    return contents->buffer_constraints;
 }
 
 void Parameter::set_default_value(const Expr &e) {
