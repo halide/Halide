@@ -126,6 +126,9 @@ int main(int argc, char **argv) {
     check(result, correct);
     in.dim = shape;
 
+    free(in.host);
+    free(out.host);
+
     printf("Success!\n");
     return 0;
 }
