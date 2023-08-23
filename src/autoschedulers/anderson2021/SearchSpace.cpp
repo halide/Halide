@@ -127,11 +127,11 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
             if (c->node == node) {
                 int64_t total = 1;
                 int64_t max_available = 1;
-                for (const auto &l : c->stage->loop) {
+                for (size_t i = 0; i < c->stage->loop.size(); i++) {
+                    const auto &l = c->stage->loop[i];
                     if (!l.rvar) {
                         total *= o.outer_tiling[l.pure_dim];
-                        internal_assert(l.pure_dim < c->size.size()) << "l.pure_dim " << l.pure_dim << " c->size.size() " << c->size.size() << "\n";
-                        max_available *= c->size[l.pure_dim];
+                        max_available *= c->size[i];
                     }
                 }
                 max_total = std::max(max_total, total);

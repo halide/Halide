@@ -228,6 +228,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    Internal::JITSharedRuntime::release_all();
+
     printf("Success!\n");
     return 0;
 }
