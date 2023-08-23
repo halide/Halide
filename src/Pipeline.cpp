@@ -582,7 +582,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
     // Clear all cached info in case there is an error.
     contents->invalidate_cache();
 
-#ifdef WITH_SERIALIZATION_JIT
+#ifdef WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
     // TODO(https://github.com/halide/Halide/pull/7760): replace file serialization with in-memory serialization
     std::string filename = generate_function_name() + ".hlpipe";
     std::map<std::string, Internal::Parameter> external_params;
@@ -616,7 +616,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
     Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
     contents->jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, contents->jit_externs, target);
-#ifdef WITH_SERIALIZATION_JIT
+#ifdef WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
     // Restore the original outputs and requirements.
     contents->outputs = origin_outputs;
     contents->requirements = origin_requirements;
