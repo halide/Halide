@@ -397,10 +397,10 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     pass_manager.add(llvm::createRewriteSymbolsPass());
 #endif
 
-    if(target_machine->isPositionIndependent()) {
+    if (target_machine->isPositionIndependent()) {
         Internal::debug(1) << "Target machine is Position Independent!\n";
     }
-    
+
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
 
@@ -596,7 +596,6 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
         f.close();
         return;
     }
-
 
 #if LLVM_VERSION >= 180
     const llvm::SymtabWritingMode write_symtab = llvm::SymtabWritingMode::NormalSymtab;
