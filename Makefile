@@ -502,6 +502,7 @@ SOURCE_FILES = \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   Dimension.cpp \
+  DistributeShifts.cpp \
   EarlyFree.cpp \
   Elf.cpp \
   EliminateBoolVectors.cpp \
@@ -691,6 +692,7 @@ HEADER_FILES = \
   DeviceArgument.h \
   DeviceInterface.h \
   Dimension.h \
+  DistributeShifts.h \
   EarlyFree.h \
   Elf.h \
   EliminateBoolVectors.h \

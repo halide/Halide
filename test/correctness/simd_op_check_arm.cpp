@@ -401,19 +401,31 @@ public:
 
             // VMLAL    I       -       Multiply Accumulate Long
             check(arm32 ? "vmlal.s8" : "smlal", 8 * w, i16_1 + i16(i8_2) * i8_3);
+            check(arm32 ? "vmlal.s8" : "smlal", 8 * w, i16_1 + i16(i8_2) * 2);
             check(arm32 ? "vmlal.u8" : "umlal", 8 * w, u16_1 + u16(u8_2) * u8_3);
+            check(arm32 ? "vmlal.u8" : "umlal", 8 * w, u16_1 + u16(u8_2) * 2);
             check(arm32 ? "vmlal.s16" : "smlal", 4 * w, i32_1 + i32(i16_2) * i16_3);
+            check(arm32 ? "vmlal.s16" : "smlal", 4 * w, i32_1 + i32(i16_2) * 2);
             check(arm32 ? "vmlal.u16" : "umlal", 4 * w, u32_1 + u32(u16_2) * u16_3);
+            check(arm32 ? "vmlal.u16" : "umlal", 4 * w, u32_1 + u32(u16_2) * 2);
             check(arm32 ? "vmlal.s32" : "smlal", 2 * w, i64_1 + i64(i32_2) * i32_3);
+            check(arm32 ? "vmlal.s32" : "smlal", 2 * w, i64_1 + i64(i32_2) * 2);
             check(arm32 ? "vmlal.u32" : "umlal", 2 * w, u64_1 + u64(u32_2) * u32_3);
+            check(arm32 ? "vmlal.u32" : "umlal", 2 * w, u64_1 + u64(u32_2) * 2);
 
             // VMLSL    I       -       Multiply Subtract Long
             check(arm32 ? "vmlsl.s8" : "smlsl", 8 * w, i16_1 - i16(i8_2) * i8_3);
+            check(arm32 ? "vmlsl.s8" : "smlsl", 8 * w, i16_1 - i16(i8_2) * 2);
             check(arm32 ? "vmlsl.u8" : "umlsl", 8 * w, u16_1 - u16(u8_2) * u8_3);
+            check(arm32 ? "vmlsl.u8" : "umlsl", 8 * w, u16_1 - u16(u8_2) * 2);
             check(arm32 ? "vmlsl.s16" : "smlsl", 4 * w, i32_1 - i32(i16_2) * i16_3);
+            check(arm32 ? "vmlsl.s16" : "smlsl", 4 * w, i32_1 - i32(i16_2) * 2);
             check(arm32 ? "vmlsl.u16" : "umlsl", 4 * w, u32_1 - u32(u16_2) * u16_3);
+            check(arm32 ? "vmlsl.u16" : "umlsl", 4 * w, u32_1 - u32(u16_2) * 2);
             check(arm32 ? "vmlsl.s32" : "smlsl", 2 * w, i64_1 - i64(i32_2) * i32_3);
+            check(arm32 ? "vmlsl.s32" : "smlsl", 2 * w, i64_1 - i64(i32_2) * 2);
             check(arm32 ? "vmlsl.u32" : "umlsl", 2 * w, u64_1 - u64(u32_2) * u32_3);
+            check(arm32 ? "vmlsl.u32" : "umlsl", 2 * w, u64_1 - u64(u32_2) * 2);
 
             // VMOV     X       F, D    Move Register or Immediate
             // This is for loading immediates, which we won't do in the inner loop anyway
