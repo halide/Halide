@@ -593,7 +593,11 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
         return;
     }
 
+#if LLVM_VERSION >= 180
+    const llvm::SymtabWritingMode write_symtab = llvm::SymtabWritingMode::NormalSymtab;
+#else
     const bool write_symtab = true;
+#endif
     const auto kind = Internal::get_triple_for_target(target).isOSDarwin() ? llvm::object::Archive::K_BSD : llvm::object::Archive::K_GNU;
     const bool thin = false;
     auto result = llvm::writeArchive(dst_file, new_members,
