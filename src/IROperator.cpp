@@ -2595,24 +2595,21 @@ Expr mod_round_to_zero(Expr x, Expr y) {
 
 namespace {
 
-std::atomic<int> random_float_counter = 0;
-std::atomic<int> random_uint_counter = 0;
+std::atomic<int> random_number_counter = 0;
 
 }  // namespace
 
 namespace Internal {
 
 void reset_random_counters() {
-    random_float_counter = 0;
-    random_uint_counter = 0;
+    random_number_counter = 0;
     random_variable_counter = 0;
 }
 
 }  // namespace Internal
 
 Expr random_float(Expr seed) {
-    // Random floats get even IDs
-    int id = (random_float_counter++) * 2;
+    const int id = random_number_counter++;
 
     std::vector<Expr> args;
     if (seed.defined()) {
@@ -2630,8 +2627,7 @@ Expr random_float(Expr seed) {
 }
 
 Expr random_uint(Expr seed) {
-    // Random ints get odd IDs
-    int id = (random_uint_counter++) * 2 + 1;
+    const int id = random_number_counter++;
 
     std::vector<Expr> args;
     if (seed.defined()) {
