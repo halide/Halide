@@ -562,11 +562,21 @@ inline Type type_of() {
 std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true);
 
 /** Returns maximum representable unsigned integer. */
-uint64_t max_uint(int bits);
+constexpr uint64_t max_uint(int bits) {
+    uint64_t max_val = 0xffffffffffffffffULL;
+    return max_val >> (64 - bits);
+}
+
 /** Returns maximum representable signed integer. */
-int64_t max_int(int bits);
+constexpr int64_t max_int(int bits) {
+    int64_t max_val = 0x7fffffffffffffffLL;
+    return max_val >> (64 - bits);
+}
+
 /** Returns minimum representable signed integer. */
-int64_t min_int(int bits);
+constexpr int64_t min_int(int bits) {
+    return -max_int(bits) - 1;
+}
 
 }  // namespace Halide
 
