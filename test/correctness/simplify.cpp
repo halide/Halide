@@ -76,6 +76,20 @@ Expr slice(const Expr &e, int begin, int stride, int w) {
     return Shuffle::make_slice(e, begin, stride, w);
 }
 
+// An arbitrary fixed permutation of the lanes of a single vector that isn't one
+// of the classes above. Requires a power of two number of lanes.
+Expr permute_lanes(const Expr &e) {
+    std::vector<int> mask(e.type().lanes());
+    for (int i = 0; i < e.type().lanes(); i++) {
+        mask[i] = i;
+        // Some arbitrary permutation
+        if (i & 1) {
+            std::swap(mask[i], mask[i / 2]);
+        }
+    }
+    return Shuffle::make({e}, std::move(mask));
+}
+
 Expr ramp(const Expr &base, const Expr &stride, int w) {
     return Ramp::make(base, stride, w);
 }
@@ -158,6 +172,11 @@ void check_casts() {
     Expr some_vector = ramp(y, 2, 8) * ramp(x, 1, 8);
     check(slice(cast(UInt(64, 8), some_vector), 2, 1, 3),
           cast(UInt(64, 3), slice(some_vector, 2, 1, 3)));
+
+    // But we currently have no logic for pulling things outside of shuffles
+    // other than slices.
+    check(permute_lanes(some_vector) + permute_lanes(some_vector + 1),
+          permute_lanes(some_vector) + permute_lanes(some_vector + 1));
 
     std::vector<int> indices(18);
     for (int i = 0; i < 18; i++) {

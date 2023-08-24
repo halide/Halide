@@ -108,6 +108,18 @@ Definition::Definition(const std::vector<Expr> &args, const std::vector<Expr> &v
     }
 }
 
+Definition::Definition(bool is_init, const Expr &predicate, const std::vector<Expr> &args, const std::vector<Expr> &values,
+                       const StageSchedule &schedule, const std::vector<Specialization> &specializations, const std::string &source_location)
+    : contents(new DefinitionContents) {
+    contents->is_init = is_init;
+    contents->values = values;
+    contents->args = args;
+    contents->predicate = predicate;
+    contents->stage_schedule = schedule;
+    contents->specializations = specializations;
+    contents->source_location = source_location;
+}
+
 Definition Definition::get_copy() const {
     internal_assert(contents.defined()) << "Cannot copy undefined Definition\n";
 

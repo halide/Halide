@@ -39,7 +39,7 @@ if (TARGET Halide_Adams2019)
 endif ()
 
 # Halide_LLVM
-foreach (dep IN ITEMS Halide_LLVM Halide_wabt)
+foreach (dep IN ITEMS Halide_LLVM Halide_wabt Halide_flatbuffers)
     if (TARGET ${dep})
         install(TARGETS ${dep} EXPORT Halide_Targets)
     endif ()

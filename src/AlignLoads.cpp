@@ -1,7 +1,6 @@
 #include <algorithm>
 
 #include "AlignLoads.h"
-#include "Bounds.h"
 #include "HexagonAlignment.h"
 #include "IRMutator.h"
 #include "IROperator.h"

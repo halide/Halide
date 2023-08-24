@@ -1260,14 +1260,14 @@ private:
         }
 
         stream << "<div id='" << id << "' class='cost-btn CostColor" << line_costc << "'"
-               << "   aria-describedby='tooltip-" << id << "'"
                << "   line-cost='" << line_cost << "' block-cost='" << block_cost << "'"
-               << "   line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>"
-               << "</div>";
+               << "   line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>";
 
         stream << "<span id='tooltip-" << id << "' class='tooltip cond-tooltop' role='tooltip-" << id << "'>"
                << prefix << line_cost
                << "</span>";
+
+        stream << "</div>";
     }
 
     /* Misc utility methods */
@@ -2080,10 +2080,12 @@ private:
     }
 
     void visit(const VectorReduce *op) override {
-        print_opening_tag("div", "VectorReduce");
+        print_opening_tag("span", "VectorReduce");
+        print_text("(");
         print_type(op->type);
+        print_text(")");
         print_function_call("vector_reduce", {op->op, op->value});
-        print_closing_tag("div");
+        print_closing_tag("span");
         print_ln();
     }
 
@@ -2367,14 +2369,14 @@ private:
         }
 
         stream << "<div id='" << id << "' class='cost-btn CostColor" << line_costc << "'"
-               << "   aria-describedby='tooltip-" << id << "'"
                << "   line-cost='" << line_cost << "' block-cost='" << block_cost << "'"
-               << "   line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>"
-               << "</div>";
+               << "   line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>";
 
         stream << "<span id='tooltip-" << id << "' class='tooltip cond-tooltop' role='tooltip-" << id << "'>"
                << prefix << line_cost
                << "</span>";
+
+        stream << "</div>";
     }
 
     // Prints the box .box-header within div.box
@@ -2439,14 +2441,15 @@ private:
         std::ostringstream ss;
 
         // Show condition expression button
-        ss << "<button title='Click to see path condition' id='cond-" << id << "' aria-describedby='cond-tooltip-" << id << "' class='trunc-cond' role='button'>"
-           << "..."
-           << "</button>";
+        ss << "<button title='Click to see path condition' id='cond-" << id << "' class='trunc-cond' role='button'>"
+           << "...";
 
         // Tooltip that shows condition expression
         ss << "<span id='cond-tooltip-" << id << "' class='tooltip cond-tooltop' role='cond-tooltip-" << id << "'>"
            << cond
            << "</span>";
+
+        ss << "</button>";
 
         return ss.str();
     }

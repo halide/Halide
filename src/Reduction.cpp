@@ -147,6 +147,13 @@ ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain)
     contents->domain = domain;
 }
 
+ReductionDomain::ReductionDomain(const std::vector<ReductionVariable> &domain, const Expr &predictate, bool frozen)
+    : contents(new ReductionDomainContents) {
+    contents->domain = domain;
+    contents->predicate = predictate;
+    contents->frozen = frozen;
+}
+
 ReductionDomain ReductionDomain::deep_copy() const {
     if (!contents.defined()) {
         return ReductionDomain();
