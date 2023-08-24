@@ -6,6 +6,7 @@
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
+#include "DistributeShifts.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -852,6 +853,9 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f,
         // actually faster.
         func.body = SubstituteInStridedLoads().mutate(func.body);
     }
+    // Look for opportunities to turn a + (b << c) into umlal/smlal
+    // and a - (b << c) into umlsl/smlsl.
+    func.body = distribute_shifts(func.body, /* multiply_adds */ true);
 
     CodeGen_Posix::compile_func(func, simple_name, extern_name);
 }
