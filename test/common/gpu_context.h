@@ -246,7 +246,8 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
                 fprintf(stderr, "WGPU Device Lost: %d %s", (int)reason, message);
                 abort();
             };
-            wgpuDeviceSetDeviceLostCallback(device, device_lost_callback, userdata);
+            // TODO: missing from recent Emscripten/Dawn builds, commenting out to unbreak build
+            // wgpuDeviceSetDeviceLostCallback(device, device_lost_callback, userdata);
 
             // Create a staging buffer for transfers.
             constexpr int kStagingBufferSize = 4 * 1024 * 1024;
@@ -287,7 +288,8 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
 }
 
 inline void destroy_webgpu_context(WGPUInstance instance, WGPUAdapter adapter, WGPUDevice device, WGPUBuffer staging_buffer) {
-    wgpuDeviceSetDeviceLostCallback(device, nullptr, nullptr);
+    // TODO: missing from recent Emscripten/Dawn builds, commenting out to unbreak build
+    // wgpuDeviceSetDeviceLostCallback(device, nullptr, nullptr);
     wgpuBufferRelease(staging_buffer);
     wgpuDeviceRelease(device);
     wgpuAdapterRelease(adapter);
