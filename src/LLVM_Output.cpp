@@ -597,7 +597,6 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
         return;
     }
 
-
 #if LLVM_VERSION >= 180
     const llvm::SymtabWritingMode write_symtab = llvm::SymtabWritingMode::NormalSymtab;
 #else
