@@ -1526,7 +1526,7 @@ private:
                                      Call::widen_right_sub,
                                      Call::widen_right_mul,
                                      // TODO: the below intrinsics should not use the optimal lowering,
-                                     // because that's harder for bounds inference to reason about. 
+                                     // because that's harder for bounds inference to reason about.
                                      Call::rounding_halving_add,
                                      Call::halving_add,
                                      Call::saturating_add,
@@ -1535,8 +1535,7 @@ private:
                                      Call::rounding_shift_left,
                                      Call::rounding_shift_right,
                                      Call::mul_shift_right,
-                                     Call::rounding_mul_shift_right
-                                     })) {
+                                     Call::rounding_mul_shift_right})) {
             Expr a = lower_intrinsic(op);
             internal_assert(a.defined());
             a.accept(this);
