@@ -6,7 +6,6 @@ namespace Halide {
 
 using std::ostringstream;
 
-
 /** Return an expression which is the maximum value of this type */
 Halide::Expr Type::max() const {
     if (is_vector()) {
