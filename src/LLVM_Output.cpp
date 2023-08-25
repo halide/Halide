@@ -397,6 +397,10 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     pass_manager.add(llvm::createRewriteSymbolsPass());
 #endif
 
+    if (target_machine->isPositionIndependent()) {
+        Internal::debug(1) << "Target machine is Position Independent!\n";
+    }
+
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
 

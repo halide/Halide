@@ -1,7 +1,6 @@
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
-#include "ConciseCasts.h"
 #include "Debug.h"
 #include "IREquality.h"
 #include "IRMatch.h"
