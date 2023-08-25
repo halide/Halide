@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <atomic>
 #include <utility>
 
 #include "Argument.h"
