@@ -6,7 +6,6 @@
 #include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 #include "Simplify.h"
-#include "Simplify_Internal.h"
 #include "runtime/constants.h"
 
 namespace Halide {
