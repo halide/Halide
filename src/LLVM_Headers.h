@@ -102,6 +102,9 @@
 #include <llvm/Transforms/Scalar/GVN.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
+#if LLVM_VERSION >= 180
+#include <llvm/Transforms/Utils/RelLookupTableConverter.h>
+#endif
 
 // IWYU pragma: end_exports
 
