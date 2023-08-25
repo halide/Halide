@@ -158,7 +158,11 @@ inline void destroy_metal_context(id<MTLDevice> device, id<MTLCommandQueue> queu
 
 #elif defined(TEST_WEBGPU)
 
+#if defined(__EMSCRIPTEN__)
+#include <webgpu/webgpu_cpp.h>
+#else
 #include "mini_webgpu.h"
+#endif
 
 extern "C" {
 // TODO: Remove all of this when wgpuInstanceProcessEvents() is supported.
@@ -182,15 +186,9 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
         bool success = true;
     } results;
 
-    // TODO: Unify this when Emscripten implements wgpuCreateInstance().
-    // See https://github.com/halide/Halide/issues/7248
-#ifdef WITH_DAWN_NATIVE
     WGPUInstanceDescriptor desc{};
     desc.nextInChain = nullptr;
     results.instance = wgpuCreateInstance(&desc);
-#else
-    results.instance = nullptr;
-#endif
 
     auto request_adapter_callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, char const *message, void *userdata) {
         auto *results = (Results *)userdata;
@@ -222,12 +220,29 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
         }
 #endif
 
+        auto device_lost_callback = [](WGPUDeviceLostReason reason,
+                                       char const *message,
+                                       void *userdata) {
+            // Apparently this should not be treated as a fatal error
+            if (reason == WGPUDeviceLostReason_Destroyed) {
+                return;
+            }
+            fprintf(stderr, "WGPU Device Lost: %d %s", (int)reason, message);
+            abort();
+        };
+
         WGPUDeviceDescriptor desc{};
         desc.nextInChain = nullptr;
         desc.label = nullptr;
+#if defined(__EMSCRIPTEN__)
+        // ...sigh, really?
         desc.requiredFeaturesCount = 0;
+#else
+        desc.requiredFeatureCount = 0;
+#endif
         desc.requiredFeatures = nullptr;
         desc.requiredLimits = &requestedLimits;
+        desc.deviceLostCallback = device_lost_callback;
 
         auto request_device_callback = [](WGPURequestDeviceStatus status,
                                           WGPUDevice device,
@@ -239,14 +254,6 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
                 return;
             }
             results->device = device;
-
-            auto device_lost_callback = [](WGPUDeviceLostReason reason,
-                                           char const *message,
-                                           void *userdata) {
-                fprintf(stderr, "WGPU Device Lost: %d %s", (int)reason, message);
-                abort();
-            };
-            wgpuDeviceSetDeviceLostCallback(device, device_lost_callback, userdata);
 
             // Create a staging buffer for transfers.
             constexpr int kStagingBufferSize = 4 * 1024 * 1024;
@@ -287,16 +294,10 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
 }
 
 inline void destroy_webgpu_context(WGPUInstance instance, WGPUAdapter adapter, WGPUDevice device, WGPUBuffer staging_buffer) {
-    wgpuDeviceSetDeviceLostCallback(device, nullptr, nullptr);
     wgpuBufferRelease(staging_buffer);
     wgpuDeviceRelease(device);
     wgpuAdapterRelease(adapter);
-
-    // TODO: Unify this when Emscripten supports wgpuInstanceRelease().
-    // See https://github.com/halide/Halide/issues/7248
-#ifdef WITH_DAWN_NATIVE
     wgpuInstanceRelease(instance);
-#endif
 }
 
 #endif
