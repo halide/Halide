@@ -42,6 +42,7 @@ jobs:
       - name: Install clang-tidy
         run: |
           brew update
+          brew upgrade
           brew install llvm@16 ninja coreutils flatbuffers
       - name: Run clang-tidy
         run: |
