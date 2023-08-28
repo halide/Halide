@@ -33,9 +33,12 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install clang-tidy
         run: |
-          # see https://github.com/actions/runner-images/issues/7725
-          rm -rf /usr/local/bin/2to3
           brew update
+          #
+          # see https://github.com/actions/runner-images/issues/7725
+          brew install python@3.11
+          brew link --overwrite python@3.11
+          #
           brew install llvm@16 ninja coreutils
       - name: Run clang-tidy
         run: |
