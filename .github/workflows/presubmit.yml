@@ -41,8 +41,6 @@ jobs:
           rm -f /usr/local/bin/python3*-config;
       - name: Install clang-tidy
         run: |
-          echo WHICH CLANG-TIDY
-          which clang-tidy
           brew update
           brew install llvm@16 ninja coreutils flatbuffers
       - name: Run clang-tidy
