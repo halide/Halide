@@ -2,6 +2,7 @@
 
 using namespace Halide;
 using namespace Halide::Internal;
+using namespace Halide::ConciseCasts;
 
 #define internal_assert _halide_user_assert
 
@@ -1297,6 +1298,11 @@ void check_bounds() {
     check(max(x * 4 + 63, y) - max(y - 3, x * 4), clamp(x * 4 - y, -63, -3) + 66);
     check(max(x * 4, y - 3) - max(x * 4 + 63, y), clamp(y - x * 4, 3, 63) + -66);
     check(max(y - 3, x * 4) - max(x * 4 + 63, y), clamp(y - x * 4, 3, 63) + -66);
+
+    // Check the simplifier doesn't make constant-bounds-based simplifications
+    // through potentially-wrapping casts.
+    check(max(i32(select(x == 0, u32(0), u32(Expr(0x80000000U)))), -1),
+          max(i32(select(x == 0, u32(0), u32(Expr(0x80000000U)))), -1));
 }
 
 void check_boolean() {
