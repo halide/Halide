@@ -68,6 +68,10 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
 
 [ -a ${CLANG_TIDY_BUILD_DIR}/compile_commands.json ]
 
+echo "CAT ${CLANG_TIDY_BUILD_DIR}/compile_commands.json:"
+cat ${CLANG_TIDY_BUILD_DIR}/compile_commands.json
+echo "DONE"
+
 # We must populate the includes directory to check things outside of src/
 echo Building HalideIncludes...
 cmake --build ${CLANG_TIDY_BUILD_DIR} -j $(nproc) --target HalideIncludes
@@ -99,7 +103,7 @@ CLANG_TIDY_TARGETS=$(find \
 # so we will instead build an include filter
 CLANG_TIDY_HEADER_FILTER=".*/src/.*|.*/python_bindings/.*|.*/tools/.*|.*/util/.*"
 
-echo Running clang-tidy...
+echo Running clang-tidy at ${RUN_CLANG_TIDY}...
 ${RUN_CLANG_TIDY} \
     ${FIX} \
     -j ${J} \

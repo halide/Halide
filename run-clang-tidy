@@ -219,6 +219,8 @@ def run_tidy(args, clang_tidy_binary, tmpdir, build_path, queue, lock,
 
 
 def main():
+  print("HI THERE I AM YOUR CLANG-TIDY")
+
   parser = argparse.ArgumentParser(description='Runs clang-tidy over all files '
                                    'in a compilation database. Requires '
                                    'clang-tidy and clang-apply-replacements in '
