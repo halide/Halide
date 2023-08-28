@@ -28,7 +28,7 @@ jobs:
   # a bit of a sluggard
   check_clang_tidy:
     name: Check clang-tidy
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
       - name: Install clang-tidy
