@@ -177,6 +177,21 @@ public:
      */
     virtual bool emit_cpp_stub(const std::string &stub_file_path) = 0;
 
+    /** Emit a Serialized Halide Pipeline (.hlpipe) file to the given path. Not all Generators support this.
+     *
+     * If you call this method, you should not call any other AbstractGenerator methods
+     * on this instance, before or after this call.
+     *
+     * If the Generator is capable of emitting an hlpipe, do so and return true. (Errors
+     * during hlpipe emission should assert-fail rather than returning false.)
+     *
+     * If the Generator is not capable of emitting an hlpipe, do nothing and return false.
+     *
+     * CALL-AFTER: none
+     * CALL-BEFORE: none
+     */
+    virtual bool emit_hlpipe(const std::string &hlpipe_file_path) = 0;
+
     /** By default, a Generator must declare all Inputs before all Outputs.
      *  In some unusual situations (e.g. metaprogramming situations), it's
      * desirable to allow them to be declared out-of-order and put the onus

@@ -32,6 +32,7 @@ enum class OutputFileType {
     cpp_stub,
     featurization,
     function_info_header,
+    hlpipe,
     llvm_assembly,
     object,
     python_extension,

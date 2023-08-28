@@ -40,6 +40,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
         {OutputFileType::featurization, {"featurization", ".featurization", IsMulti}},
         {OutputFileType::function_info_header, {"function_info_header", ".function_info.h", IsSingle}},
+        {OutputFileType::hlpipe, {"hlpipe", ".hlpipe", IsSingle}},
         {OutputFileType::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
         {OutputFileType::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
         {OutputFileType::python_extension, {"python_extension", ".py.cpp", IsSingle}},
