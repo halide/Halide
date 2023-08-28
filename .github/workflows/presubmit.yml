@@ -42,8 +42,7 @@ jobs:
       - name: Install clang-tidy
         run: |
           brew update
-          brew upgrade
-          brew install llvm@16 ninja coreutils flatbuffers
+          brew install llvm@16 ninja coreutils
       - name: Run clang-tidy
         run: |
           export LLVM_DIR=/usr/local/opt/llvm

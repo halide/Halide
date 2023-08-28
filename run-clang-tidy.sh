@@ -43,6 +43,10 @@ echo CLANG_TIDY_LLVM_INSTALL_DIR = ${CLANG_TIDY_LLVM_INSTALL_DIR}
 
 echo "MACOSX_DEPLOYMENT_TARGET is ${MACOSX_DEPLOYMENT_TARGET}"
 
+echo "ENV:"
+env
+echo "ENV-DONE"
+
 VERSION=$(${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy --version)
 if [[ ${VERSION} =~ .*version\ 16.* ]]
 then
