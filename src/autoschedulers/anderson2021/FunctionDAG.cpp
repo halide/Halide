@@ -239,10 +239,10 @@ class Featurizer : public IRVisitor {
     void visit_memory_access(const std::string &name, Type t, const vector<Expr> &args, PipelineFeatures::AccessType type) {
         // Compute matrix of partial derivatives of args w.r.t. loop params
         LoadJacobian matrix(args.size(), stage.loop.size(), 1);
-        vector<size_t> ones_per_row(args.size(), 0),
-            zeros_per_row(args.size(), 0),
-            ones_per_col(stage.loop.size(), 0),
-            zeros_per_col(stage.loop.size(), 0);
+        vector<size_t> ones_per_row(args.size(), 0);
+        vector<size_t> zeros_per_row(args.size(), 0);
+        vector<size_t> ones_per_col(stage.loop.size(), 0);
+        vector<size_t> zeros_per_col(stage.loop.size(), 0);
         bool is_pointwise = args.size() == stage.loop.size();
         for (size_t i = 0; i < args.size(); i++) {
             for (size_t j = 0; j < stage.loop.size(); j++) {
@@ -295,7 +295,8 @@ class Featurizer : public IRVisitor {
 
 public:
     Featurizer(Function &func, FunctionDAG::Node::Stage &stage)
-        : func(func), stage(stage) {
+        : func(func),
+          stage(stage) {
     }
 
     void visit_store_args(const std::string &name, Type t, vector<Expr> args) {

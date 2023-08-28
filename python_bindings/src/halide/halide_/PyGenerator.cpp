@@ -100,6 +100,12 @@ public:
         // but don't throw an error, just return false.
         return false;
     }
+
+    bool emit_hlpipe(const std::string & /*hlpipe_file_path*/) override {
+        // Python Generators don't support this yet ...
+        // but don't throw an error, just return false.
+        return false;
+    }
 };
 
 class PyGeneratorFactoryProvider : public GeneratorFactoryProvider {

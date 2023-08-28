@@ -312,13 +312,13 @@ int vk_create_device(void *user_context, const StringTable &requested_layers, Vk
     }
 
     debug(user_context) << "  found " << (uint32_t)required_device_extensions.size() << " required extensions for device!\n";
-    for (int n = 0; n < (int)required_device_extensions.size(); ++n) {
+    for (uint32_t n = 0; n < required_device_extensions.size(); ++n) {
         debug(user_context) << "   required extension: " << required_device_extensions[n] << "\n";
     }
 
     // enable all available optional extensions
     debug(user_context) << "  checking for " << (uint32_t)optional_device_extensions.size() << " optional extensions for device ...\n";
-    for (int n = 0; n < (int)optional_device_extensions.size(); ++n) {
+    for (uint32_t n = 0; n < optional_device_extensions.size(); ++n) {
         if (supported_device_extensions.contains(optional_device_extensions[n])) {
             debug(user_context) << "   optional extension: " << optional_device_extensions[n] << "\n";
             required_device_extensions.append(user_context, optional_device_extensions[n]);

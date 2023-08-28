@@ -179,8 +179,6 @@ class LoopLevel {
     explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c)
         : contents(std::move(c)) {
     }
-    LoopLevel(const std::string &func_name, const std::string &var_name,
-              bool is_rvar, int stage_index, bool locked = false);
 
 public:
     /** Return the index of the function stage associated with this loop level.
@@ -196,6 +194,10 @@ public:
     /** Construct an undefined LoopLevel. Calling any method on an undefined
      * LoopLevel (other than set()) will assert. */
     LoopLevel();
+
+    /** For deserialization only. */
+    LoopLevel(const std::string &func_name, const std::string &var_name,
+              bool is_rvar, int stage_index, bool locked = false);
 
     /** Construct a special LoopLevel value that implies
      * that a function should be inlined away. */
@@ -232,6 +234,21 @@ public:
     // Test if a loop level is 'root', which describes the site
     // outside of all for loops.
     bool is_root() const;
+
+    // For serialization only. Do not use in other cases.
+    int get_stage_index() const;
+
+    // For serialization only. Do not use in other cases.
+    std::string func_name() const;
+
+    // For serialization only. Do not use in other cases.
+    std::string var_name() const;
+
+    // For serialization only. Do not use in other cases.
+    bool is_rvar() const;
+
+    // For serialization only. Do not use in other cases.
+    bool locked() const;
 
     // Return a string of the form func.var -- note that this is safe
     // to call for root or inline LoopLevels, but asserts if !defined().
@@ -652,6 +669,10 @@ public:
     }
     StageSchedule(const StageSchedule &other) = default;
     StageSchedule();
+    StageSchedule(const std::vector<ReductionVariable> &rvars, const std::vector<Split> &splits,
+                  const std::vector<Dim> &dims, const std::vector<PrefetchDirective> &prefetches,
+                  const FuseLoopLevel &fuse_level, const std::vector<FusedPair> &fused_pairs,
+                  bool touched, bool allow_race_conditions, bool atomic, bool override_atomic_associativity_test);
 
     /** Return a copy of this StageSchedule. */
     StageSchedule get_copy() const;

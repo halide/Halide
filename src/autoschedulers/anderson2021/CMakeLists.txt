@@ -79,12 +79,13 @@ if (WITH_TESTS)
 
     function(_add_test TARGET)
         add_test(NAME ${TARGET} COMMAND ${TARGET})
+        add_dependencies(${TARGET} Halide::Anderson2021)
         set_tests_properties(${TARGET}
                              PROPERTIES
                              # This is a workaround for issues with the nvidia driver under ASAN
                              # https://forums.developer.nvidia.com/t/cuda-runtime-library-and-addresssanitizer-incompatibilty/63145
                              ENVIRONMENT ASAN_OPTIONS=protect_shadow_gap=0
-                             LABELS Anderson2021)
+                             LABELS "anderson2021;autoschedulers_cuda")
     endfunction()
 
     add_executable(anderson2021_test_function_dag test_function_dag.cpp FunctionDAG.cpp)
