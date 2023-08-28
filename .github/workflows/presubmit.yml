@@ -45,9 +45,13 @@ jobs:
           brew install llvm@16 ninja coreutils flatbuffers
       - name: Run clang-tidy
         run: |
-          export CC=/usr/local/opt/llvm/bin/clang
-          export CXX=/usr/local/opt/llvm/bin/clang++
-          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/local/opt/llvm
+          export LLVM_DIR=/usr/local/opt/llvm
+          export CC=${LLVM_DIR}/bin/clang
+          export CXX=${LLVM_DIR}/bin/clang++
+          export PATH="${LLVM_DIR}/bin:$PATH"
+          export LDFLAGS="-L${LLVM_DIR}/lib"
+          export CPPFLAGS="-I${LLVM_DIR}/include"
+          export CLANG_TIDY_LLVM_INSTALL_DIR=${LLVM_DIR}
           export CMAKE_GENERATOR=Ninja
           ./run-clang-tidy.sh
   check_cmake_file_lists:
