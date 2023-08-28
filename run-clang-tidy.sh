@@ -75,7 +75,8 @@ cmake --build ${CLANG_TIDY_BUILD_DIR} -j $(nproc) --target HalideIncludes
 echo Building flatbuffer stuff...
 cmake --build ${CLANG_TIDY_BUILD_DIR} -j $(nproc) --target generate_fb_header
 
-RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
+# RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
+RUN_CLANG_TIDY=${ROOT_DIR}/run-clang-tidy
 
 # We deliberately skip apps/ and test/ for now, as the compile commands won't include
 # generated headers files from Generators.
