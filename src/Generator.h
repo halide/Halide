@@ -3689,6 +3689,7 @@ public:
     void bind_input(const std::string &name, const std::vector<Expr> &v) override;
 
     bool emit_cpp_stub(const std::string &stub_file_path) override;
+    bool emit_hlpipe(const std::string &hlpipe_file_path) override;
 
     GeneratorBase(const GeneratorBase &) = delete;
     GeneratorBase &operator=(const GeneratorBase &) = delete;
@@ -3921,7 +3922,7 @@ struct ExecuteGeneratorArgs {
         Default,
 
         // Build a version suitable for using for gradient descent calculation.
-        Gradient
+        Gradient,
     } build_mode = Default;
 
     // The fn that will produce Generator(s) from the name specified.

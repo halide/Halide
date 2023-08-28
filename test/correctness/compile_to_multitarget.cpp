@@ -192,15 +192,18 @@ void test_compile_to_everything(Func j, bool do_object) {
         // {OutputFileType::cpp_stub, filename_prefix + ".stub.h"},  // IsSingle
         {OutputFileType::featurization, filename_prefix + ".featurization"},           // IsMulti
         {OutputFileType::function_info_header, filename_prefix + ".function_info.h"},  // IsSingle
-        {OutputFileType::llvm_assembly, filename_prefix + ".ll"},                      // IsMulti
-        {OutputFileType::object, filename_prefix + o},                                 // IsMulti
-        {OutputFileType::python_extension, filename_prefix + ".py.cpp"},               // IsSingle
-        {OutputFileType::pytorch_wrapper, filename_prefix + ".pytorch.h"},             // IsSingle
-        {OutputFileType::registration, filename_prefix + ".registration.cpp"},         // IsSingle
-        {OutputFileType::schedule, filename_prefix + ".schedule.h"},                   // IsSingle
-        {OutputFileType::static_library, filename_prefix + a},                         // IsSingle
-        {OutputFileType::stmt, filename_prefix + ".stmt"},                             // IsMulti
-        {OutputFileType::stmt_html, filename_prefix + ".stmt.html"},                   // IsMulti
+        // Note: compile_multitarget() doesn't produce hlpipe output,
+        // even if you pass this in (since the pipeline has already been lowered)
+        // {OutputFileType::hlpipe, filename_prefix + ".hlpipe"},  // IsSingle
+        {OutputFileType::llvm_assembly, filename_prefix + ".ll"},               // IsMulti
+        {OutputFileType::object, filename_prefix + o},                          // IsMulti
+        {OutputFileType::python_extension, filename_prefix + ".py.cpp"},        // IsSingle
+        {OutputFileType::pytorch_wrapper, filename_prefix + ".pytorch.h"},      // IsSingle
+        {OutputFileType::registration, filename_prefix + ".registration.cpp"},  // IsSingle
+        {OutputFileType::schedule, filename_prefix + ".schedule.h"},            // IsSingle
+        {OutputFileType::static_library, filename_prefix + a},                  // IsSingle
+        {OutputFileType::stmt, filename_prefix + ".stmt"},                      // IsMulti
+        {OutputFileType::stmt_html, filename_prefix + ".stmt.html"},            // IsMulti
     };
     if (do_object) {
         outputs.erase(OutputFileType::static_library);

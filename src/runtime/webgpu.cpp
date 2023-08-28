@@ -77,6 +77,9 @@ WEAK int halide_webgpu_acquire_context(void *user_context,
                                        WGPUDevice *device_ret,
                                        WGPUBuffer *staging_buffer_ret,
                                        bool create = true) {
+    debug(user_context)
+        << "WGPU: halide_webgpu_acquire_context (user_context: " << user_context
+        << ")\n";
     halide_abort_if_false(user_context, &context_lock != nullptr);
     while (__atomic_test_and_set(&context_lock, __ATOMIC_ACQUIRE)) {
     }
@@ -245,6 +248,10 @@ halide_error_code_t init_error_code = halide_error_code_success;
 void device_lost_callback(WGPUDeviceLostReason reason,
                           char const *message,
                           void *user_context) {
+    // Apparently this should not be treated as a fatal error
+    if (reason == WGPUDeviceLostReason_Destroyed) {
+        return;
+    }
     error(user_context) << "WGPU device lost (" << reason << "): "
                         << message << "\n";
 }
@@ -260,7 +267,6 @@ void request_device_callback(WGPURequestDeviceStatus status,
         return;
     }
     device_was_lost = false;
-    wgpuDeviceSetDeviceLostCallback(device, device_lost_callback, user_context);
     global_device = device;
 }
 
@@ -302,9 +308,10 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
     WGPUDeviceDescriptor desc{};
     desc.nextInChain = nullptr;
     desc.label = nullptr;
-    desc.requiredFeaturesCount = 0;
+    desc.requiredFeatureCount = 0;
     desc.requiredFeatures = nullptr;
     desc.requiredLimits = &requestedLimits;
+    desc.deviceLostCallback = device_lost_callback;
 
     wgpuAdapterRequestDevice(adapter, &desc, request_device_callback,
                              user_context);
@@ -317,16 +324,20 @@ size_t round_up_to_multiple_of_4(size_t x) {
 }  // namespace
 
 WEAK int create_webgpu_context(void *user_context) {
-    // TODO: Unify this when Emscripten implements wgpuCreateInstance().
-    // See https://github.com/halide/Halide/issues/7248
-#if HALIDE_RUNTIME_WEBGPU_NATIVE_API
+    debug(user_context)
+        << "WGPU: create_webgpu_context (user_context: " << user_context
+        << ")\n";
+
     WGPUInstanceDescriptor desc{};
     desc.nextInChain = nullptr;
     global_instance = wgpuCreateInstance(&desc);
-#else
-    global_instance = nullptr;
-#endif
+    debug(user_context)
+        << "WGPU: wgpuCreateInstance produces: " << global_instance
+        << ")\n";
 
+    debug(user_context)
+        << "WGPU: global_instance is: (" << global_instance
+        << ")\n";
     wgpuInstanceRequestAdapter(
         global_instance, nullptr, request_adapter_callback, user_context);
 
@@ -514,19 +525,14 @@ WEAK int halide_webgpu_device_release(void *user_context) {
                 global_staging_buffer = nullptr;
             }
 
-            wgpuDeviceSetDeviceLostCallback(device, nullptr, nullptr);
             wgpuDeviceRelease(device);
             global_device = nullptr;
 
             wgpuAdapterRelease(adapter);
             global_adapter = nullptr;
 
-            // TODO: Unify this when Emscripten supports wgpuInstanceRelease().
-            // See https://github.com/halide/Halide/issues/7248
-#if HALIDE_RUNTIME_WEBGPU_NATIVE_API
             wgpuInstanceRelease(instance);
             global_instance = nullptr;
-#endif
         }
     }
 
@@ -838,7 +844,7 @@ WEAK int halide_webgpu_initialize_kernels(void *user_context, void **state_ptr, 
                 WGPUShaderModuleWGSLDescriptor wgsl_desc{};
                 wgsl_desc.chain.next = nullptr;
                 wgsl_desc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-                wgsl_desc.source = src;
+                wgsl_desc.code = src;
                 WGPUShaderModuleDescriptor desc{};
                 desc.nextInChain = (const WGPUChainedStruct *)(&wgsl_desc);
                 desc.label = nullptr;
