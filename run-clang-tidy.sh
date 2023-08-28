@@ -69,6 +69,7 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
       -DHalide_CLANG_TIDY_BUILD=ON \
       -DHalide_SHARED_LLVM=ON \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET="" \
       -DLLVM_DIR=${CLANG_TIDY_LLVM_INSTALL_DIR}/lib/cmake/llvm \
       -S ${ROOT_DIR} \
       -B ${CLANG_TIDY_BUILD_DIR}
