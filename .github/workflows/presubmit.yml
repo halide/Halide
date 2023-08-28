@@ -31,14 +31,17 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
+      # Workaround for https://github.com/actions/setup-python/issues/577
+      - name: Clean up python binaries
+        run: |
+          rm -f /usr/local/bin/2to3*;
+          rm -f /usr/local/bin/idle3*;
+          rm -f /usr/local/bin/pydoc3*;
+          rm -f /usr/local/bin/python3*;
+          rm -f /usr/local/bin/python3*-config;
       - name: Install clang-tidy
         run: |
           brew update
-          #
-          # see https://github.com/actions/runner-images/issues/7725
-          brew install python@3.11
-          brew link --overwrite python@3.11
-          #
           brew install llvm@16 ninja coreutils
       - name: Run clang-tidy
         run: |
