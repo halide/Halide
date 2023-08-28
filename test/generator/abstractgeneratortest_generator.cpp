@@ -135,6 +135,11 @@ public:
         // not supported
         return false;
     }
+
+    bool emit_hlpipe(const std::string & /*hlpipe_file_path*/) override {
+        // not supported
+        return false;
+    }
 };
 
 RegisterGenerator register_something(AbstractGeneratorTestName,

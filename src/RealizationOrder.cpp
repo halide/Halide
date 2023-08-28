@@ -3,7 +3,6 @@
 
 #include "FindCalls.h"
 #include "Func.h"
-#include "IREquality.h"
 #include "IRVisitor.h"
 #include "RealizationOrder.h"
 

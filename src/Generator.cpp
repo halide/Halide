@@ -10,6 +10,7 @@
 #include "Generator.h"
 #include "IRPrinter.h"
 #include "Module.h"
+#include "Serialization.h"
 #include "Simplify.h"
 
 #ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
@@ -651,7 +652,7 @@ gengen
  -e  A comma separated list of files to emit. Accepted values are:
      [assembly, bitcode, c_header, c_source, cpp_stub, featurization,
       llvm_assembly, object, python_extension, pytorch_wrapper, registration,
-      schedule, static_library, stmt, stmt_html, compiler_log].
+      schedule, static_library, stmt, stmt_html, compiler_log, hlpipe].
      If omitted, default value is [c_header, static_library, registration].
 
  -p  A comma-separated list of shared libraries that will be loaded before the
@@ -795,6 +796,7 @@ gengen
             std::map<std::string, OutputFileType> output_name_to_enum = {
                 {"cpp", OutputFileType::c_source},
                 {"h", OutputFileType::c_header},
+                {"hlpipe", OutputFileType::hlpipe},
                 {"html", OutputFileType::stmt_html},
                 {"o", OutputFileType::object},
                 {"py.c", OutputFileType::python_extension},
@@ -998,6 +1000,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
 
     const bool cpp_stub_only = args.output_types.size() == 1 &&
                                args.output_types.count(OutputFileType::cpp_stub) == 1;
+
     if (!cpp_stub_only) {
         // It's ok to leave targets unspecified if we are generating *only* a cpp_stub
         internal_assert(!args.targets.empty());
@@ -1047,8 +1050,22 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
     if (!args.generator_name.empty()) {
         const std::string base_path = args.output_dir + "/" + args.file_base_name;
         debug(1) << "Generator " << args.generator_name << " has base_path " << base_path << "\n";
+
+        // Factory function for creating a generator instance for a given function name and target
+        auto generator_factory = [&](const std::string &function_name, const Target &target) -> AbstractGeneratorPtr {
+            // Must re-create each time since each instance will have a different Target.
+            auto gen = args.create_generator(args.generator_name, GeneratorContext(target));
+            for (const auto &kv : args.generator_params) {
+                if (kv.first == "target") {
+                    continue;
+                }
+                gen->set_generatorparam_value(kv.first, kv.second);
+            }
+            return gen;
+        };
+
         if (args.output_types.count(OutputFileType::cpp_stub)) {
-            // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
+            // When generating cpp_stub we ignore all generator args passed in, and supply a fake Target.
             // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             const Target fake_target = Target();
             auto gen = args.create_generator(args.generator_name, GeneratorContext(fake_target));
@@ -1056,18 +1073,26 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             gen->emit_cpp_stub(output_files[OutputFileType::cpp_stub]);
         }
 
+#ifdef WITH_SERIALIZATION
+        if (args.output_types.count(OutputFileType::hlpipe)) {
+            // When serializing a halide pipeline, target is required (since the schedule may be target dependent).
+            // If multiple targets are specified, add the target name as a suffix to the filename.
+            const bool use_target_suffix = (args.targets.size() > 1);
+            for (size_t i = 0; i < args.targets.size(); ++i) {
+                const Target &target = args.targets[i];
+                const std::string hlpipe_path = use_target_suffix ? (base_path + "-" + target.to_string()) : base_path;
+                auto output_files = compute_output_files(target, hlpipe_path, args.output_types);
+                auto gen = generator_factory(args.function_name, target);
+                gen->emit_hlpipe(output_files[OutputFileType::hlpipe]);
+            }
+        }
+#endif
+
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!cpp_stub_only) {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
-                // Must re-create each time since each instance will have a different Target.
-                auto gen = args.create_generator(args.generator_name, GeneratorContext(target));
-                for (const auto &kv : args.generator_params) {
-                    if (kv.first == "target") {
-                        continue;
-                    }
-                    gen->set_generatorparam_value(kv.first, kv.second);
-                }
+                auto gen = generator_factory(function_name, target);
                 return args.build_mode == ExecuteGeneratorArgs::Gradient ?
                            gen->build_gradient_module(function_name) :
                            gen->build_module(function_name);
@@ -1607,6 +1632,26 @@ bool GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params(), pi.inputs(), pi.outputs());
     emit.emit();
     return true;
+}
+
+bool GeneratorBase::emit_hlpipe(const std::string &hlpipe_file_path) {
+#ifdef WITH_SERIALIZATION
+    user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
+    Pipeline pipeline = build_pipeline();
+    AutoSchedulerResults auto_schedule_results;
+    const auto context = this->context();
+    const auto &asp = context.autoscheduler_params();
+    if (!asp.name.empty()) {
+        debug(1) << "Applying autoscheduler " << asp.name << " to Generator " << name() << " ...\n";
+        auto_schedule_results = pipeline.apply_autoscheduler(context.target(), asp);
+    }
+    std::map<std::string, Internal::Parameter> params;  // FIXME: Remove when API allows this to be optional
+    serialize_pipeline(pipeline, hlpipe_file_path, params);
+    return true;
+#else
+    user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+    return false;
+#endif
 }
 
 GIOBase::GIOBase(size_t array_size,
