@@ -41,6 +41,8 @@ fi
 [ -z "$CLANG_TIDY_LLVM_INSTALL_DIR" ] && echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script." && exit
 echo CLANG_TIDY_LLVM_INSTALL_DIR = ${CLANG_TIDY_LLVM_INSTALL_DIR}
 
+echo "MACOSX_DEPLOYMENT_TARGET is ${MACOSX_DEPLOYMENT_TARGET}"
+
 VERSION=$(${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy --version)
 if [[ ${VERSION} =~ .*version\ 16.* ]]
 then
