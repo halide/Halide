@@ -281,9 +281,10 @@ private:
         bool could_overflow = true;
         if (to.can_represent(from) || to.is_float()) {
             could_overflow = false;
-        } else if (to.is_int() && to.bits() >= 32) {
-            // If we cast to an int32 or greater, assume that it won't
-            // overflow. Signed 32-bit integer overflow is undefined.
+        } else if (from.is_float() && to.is_int() && to.bits() >= 32) {
+            // If we cast from float to an int32 or greater, assume that it
+            // won't overflow. Signed 32-bit integer overflow on floating point
+            // casts is undefined. (Casting from uint is defined to wrap).
             could_overflow = false;
         } else if (a.is_bounded()) {
             if (from.can_represent(to)) {

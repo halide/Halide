@@ -45,6 +45,19 @@ int main(int argc, char **argv) {
     f5 = lambda(x, input(cast<int>(clamp(abs(1.0f / (x + .1f)), -50, 50))));
     check(f5, input, 0, 51);
 
+    // Verify that casting the result of abs of a uint32 back to an int32 is
+    // considered unbounded below - it may produce the most negative int if the
+    // cast wraps. We won't phrase this like the tests above, because we would
+    // expect it to fail to compile with an unbounded access error.
+    Internal::Scope<Internal::Interval> scope;
+    scope.push(x.name(), Internal::Interval::everything());
+    Internal::Interval i =
+        Internal::bounds_of_expr_in_scope(cast<int>(abs(x)), scope);
+    if (i.has_lower_bound()) {
+        printf("Interval should not have had a lower bound\n");
+        return 1;
+    }
+
     printf("Success!\n");
     return 0;
 }
