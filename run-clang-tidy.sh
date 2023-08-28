@@ -107,7 +107,8 @@ ${RUN_CLANG_TIDY} \
     -p ${CLANG_TIDY_BUILD_DIR} \
     -clang-tidy-binary ${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy \
     -clang-apply-replacements-binary ${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-apply-replacements \
-    ${CLANG_TIDY_TARGETS}
+    ${CLANG_TIDY_TARGETS} \
+    2>&1
 
 RESULT=${PIPESTATUS[0]}
 
