@@ -639,6 +639,9 @@ int generate_filter_main_inner(int argc,
                                const GeneratorFactoryProvider &generator_factory_provider) {
     static const char kUsage[] = R"INLINE_CODE(
 gengen
+
+FOO
+
   [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]
   [-d 1|0] [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]
   [-s AUTOSCHEDULER_NAME] [-t TIMEOUT]
