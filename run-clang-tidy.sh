@@ -62,7 +62,7 @@ CLANG_TIDY_BUILD_DIR=`mktemp -d`
 echo CLANG_TIDY_BUILD_DIR = ${CLANG_TIDY_BUILD_DIR}
 
 # Specify Halide_SHARED_LLVM=ON because some installers may provide only that.
-echo Building compile_commands.json...
+echo Buildxing compile_commands.json...
 which cmake
 cmake --version
 cmake -DCMAKE_BUILD_TYPE=Debug \
