@@ -28,13 +28,21 @@ jobs:
   # a bit of a sluggard
   check_clang_tidy:
     name: Check clang-tidy
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
+      # Workaround for https://github.com/actions/setup-python/issues/577
+      - name: Clean up python binaries
+        run: |
+          rm -f /usr/local/bin/2to3*;
+          rm -f /usr/local/bin/idle3*;
+          rm -f /usr/local/bin/pydoc3*;
+          rm -f /usr/local/bin/python3*;
+          rm -f /usr/local/bin/python3*-config;
       - name: Install clang-tidy
         run: |
           brew update
-          brew install llvm@16 ninja coreutils
+          brew install llvm@16 ninja coreutils flatbuffers
       - name: Run clang-tidy
         run: |
           export CC=/usr/local/opt/llvm/bin/clang
