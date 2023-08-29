@@ -1115,9 +1115,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
         user_assert(predicate_loads_ok || tail != TailStrategy::PredicateLoads)
             << "Can't use TailStrategy::PredicateLoads for splitting " << old_name
             << " in the definition of " << name() << ". "
-            << "It may write zeros to tail regions overlapping the valid region "
-            << "of the next outer loop iteration and thus should be only used in "
-            << "the outermost split of the dimension.";
+            << "PredicateLoads may not be used to split a Var stemming from the inner Var of a prior split.";
     }
 
     if (tail == TailStrategy::Auto) {
