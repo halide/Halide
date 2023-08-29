@@ -367,6 +367,15 @@ private:
             // This might overflow, so use the bounds of the destination type.
             bounds_of_type(to);
         }
+
+        // DO NOT MERGE
+        if (from.is_uint() && to.is_int() && to.bits() >= 32 && !to.can_represent(from) &&
+            a.is_bounded() && !interval.is_bounded()) {
+            user_warning << "Formerly bounded cast is no longer bounded:\n"
+                         << " Cast: " << Expr(op) << "\n"
+                         << " Bounds of arg: " << a.min << " " << a.max << "\n"
+                         << " Bounds of output: " << a.min << " " << a.max << "\n";
+        }
     }
 
     void visit(const Variable *op) override {
