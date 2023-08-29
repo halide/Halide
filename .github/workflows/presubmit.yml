@@ -28,26 +28,22 @@ jobs:
   # a bit of a sluggard
   check_clang_tidy:
     name: Check clang-tidy
-    runs-on: macos-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
-      # Workaround for https://github.com/actions/setup-python/issues/577
-      - name: Clean up python binaries
-        run: |
-          rm -f /usr/local/bin/2to3*;
-          rm -f /usr/local/bin/idle3*;
-          rm -f /usr/local/bin/pydoc3*;
-          rm -f /usr/local/bin/python3*;
-          rm -f /usr/local/bin/python3*-config;
       - name: Install clang-tidy
         run: |
-          brew update
-          brew install llvm@16 ninja coreutils flatbuffers
+          # from apt.llvm.org
+          # wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+          sudo apt-add-repository "deb https://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-16 main"
+          sudo apt-get update
+          sudo apt-get install llvm-16 clang-16 liblld-16-dev libclang-16-dev clang-tidy-16 ninja-build
       - name: Run clang-tidy
         run: |
-          export CC=/usr/local/opt/llvm/bin/clang
-          export CXX=/usr/local/opt/llvm/bin/clang++
-          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/local/opt/llvm
+          export CC=clang-16
+          export CXX=clang++-16
+          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-16
           export CMAKE_GENERATOR=Ninja
           ./run-clang-tidy.sh
   check_cmake_file_lists:
