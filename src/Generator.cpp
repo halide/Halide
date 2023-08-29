@@ -640,7 +640,7 @@ int generate_filter_main_inner(int argc,
     static const char kUsage[] = R"INLINE_CODE(
 gengen
 
-FOO
+FOOz
 
   [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]
   [-d 1|0] [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]
