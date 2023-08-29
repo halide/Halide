@@ -41,6 +41,17 @@ using std::string;
 using std::vector;
 
 namespace {
+
+Expr widen(Expr a) {
+    Type result_type = a.type().widen();
+    return Cast::make(result_type, std::move(a));
+}
+
+Expr narrow(Expr a) {
+    Type result_type = a.type().narrow();
+    return Cast::make(result_type, std::move(a));
+}
+
 int static_sign(const Expr &x) {
     if (is_positive_const(x)) {
         return 1;
@@ -56,6 +67,7 @@ int static_sign(const Expr &x) {
     }
     return 0;
 }
+
 }  // anonymous namespace
 
 const FuncValueBounds &empty_func_value_bounds() {
@@ -1276,6 +1288,18 @@ private:
         } else if (op->is_intrinsic(Call::return_second)) {
             internal_assert(op->args.size() == 2);
             interval = arg_bounds.get(1);
+        } else if (op->is_intrinsic(Call::strict_float)) {
+            internal_assert(op->args.size() == 1);
+            interval = arg_bounds.get(0);
+        } else if (op->is_intrinsic(Call::round)) {
+            internal_assert(op->args.size() == 1);
+            interval = arg_bounds.get(0);
+            if (interval.has_lower_bound()) {
+                interval.min -= 1.f;
+            }
+            if (interval.has_upper_bound()) {
+                interval.max += 1.f;
+            }
         } else if (op->is_intrinsic(Call::if_then_else)) {
             internal_assert(op->args.size() == 2 || op->args.size() == 3);
             // Probably more conservative than necessary
@@ -1517,15 +1541,24 @@ private:
                 result.include(arg_bounds.get(i));
             }
             interval = result;
-        } else if (op->is_intrinsic(Call::widen_right_add)) {
-            Expr add = Add::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            add.accept(this);
-        } else if (op->is_intrinsic(Call::widen_right_sub)) {
-            Expr sub = Sub::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            sub.accept(this);
-        } else if (op->is_intrinsic(Call::widen_right_mul)) {
-            Expr mul = Mul::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            mul.accept(this);
+        } else if (op->is_intrinsic(Call::halving_add)) {
+            // lower_halving_add() uses bitwise tricks that are hard to reason
+            // about; let's do this instead:
+            Expr e = narrow((widen(op->args[0]) + widen(op->args[1])) / 2);
+            e.accept(this);
+        } else if (op->is_intrinsic(Call::rounding_halving_add)) {
+            // lower_rounding_halving_add() uses bitwise tricks that are hard to reason
+            // about; let's do this instead:
+            Expr e = narrow((widen(op->args[0]) + widen(op->args[1]) + 1) / 2);
+            e.accept(this);
+        } else if (op->call_type == Call::PureIntrinsic) {
+            Expr e = lower_intrinsic(op);
+            if (e.defined()) {
+                e.accept(this);
+            } else {
+                // Just use the bounds of the type
+                bounds_of_type(t);
+            }
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {
