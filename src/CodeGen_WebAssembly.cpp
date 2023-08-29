@@ -344,6 +344,14 @@ string CodeGen_WebAssembly::mattrs() const {
         sep = ",";
     }
 
+    // PIC implies +mutable-globals because the PIC ABI used by the linker
+    // depends on importing and exporting mutable globals. Also -pthread implies
+    // mutable-globals too, so quitely enable it if either of these are specified.
+    if (use_pic() || target.has_feature(Target::WasmThreads)) {
+        s << sep << "+mutable-globals";
+        sep = ",";
+    }
+
     // Recent Emscripten builds assume that specifying `-pthread` implies bulk-memory too,
     // so quietly enable it if either of these are specified.
     if (target.has_feature(Target::WasmBulkMemory) || target.has_feature(Target::WasmThreads)) {
@@ -362,7 +370,18 @@ bool CodeGen_WebAssembly::use_soft_float_abi() const {
 }
 
 bool CodeGen_WebAssembly::use_pic() const {
+#if LLVM_VERSION >= 180
+    // Issues with WASM PIC and dynamic linking only got fixed in LLVM v18.x (June 26th 2023)
+    // See https://reviews.llvm.org/D153293
+
+    // Always emitting PIC "does add a little bloat to the object files, due to the extra
+    // indirection, but when linked into a static binary 100% of this can be removed by
+    // wasm-opt in release builds."
+    // See https://github.com/halide/Halide/issues/7796
+    return true;
+#else
     return false;
+#endif
 }
 
 int CodeGen_WebAssembly::native_vector_bits() const {
