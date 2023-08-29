@@ -374,7 +374,7 @@ private:
             user_warning << "Formerly bounded cast is no longer bounded:\n"
                          << " Cast: " << Expr(op) << "\n"
                          << " Bounds of arg: " << a.min << " " << a.max << "\n"
-                         << " Bounds of output: " << a.min << " " << a.max << "\n";
+                         << " Bounds of output: " << interval.min << " " << interval.max << "\n";
         }
     }
 
