@@ -2276,6 +2276,7 @@ private:
                     }
                     IRVisitor::visit(op);
                 }
+
             public:
                 bool result = false;
             };
@@ -2305,7 +2306,6 @@ private:
                                          << " Call: " << Expr(op) << "\n"
                                          << " Dodgy arg: " << e << "\n";
                         }
-
 
                         b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
                     }

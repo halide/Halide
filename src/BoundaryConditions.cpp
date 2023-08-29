@@ -184,8 +184,8 @@ Func mirror_interior(const Func &source,
             coord = coord - limit;        // Range is -w, w
             coord = abs(coord);           // Range is 0, w
             coord = saturating_cast<int>(coord);
-            coord = limit - coord;        // Range is 0, w
-            coord = coord + min;          // Restore correct min
+            coord = limit - coord;  // Range is 0, w
+            coord = coord + min;    // Restore correct min
 
             // The boundary condition probably doesn't apply
             coord = select(arg_var < min || arg_var >= min + extent, coord,
