@@ -2271,15 +2271,47 @@ private:
 
             IRGraphVisitor::visit(op);
 
+            // DO NOT MERGE
+            class ContainsDodgyIntCast : public IRVisitor {
+                using IRVisitor::visit;
+
+                void visit(const Cast *op) {
+                    if (op->type == Int(32) && !op->value.type().is_float() && !op->type.can_represent(op->value.type())) {
+                        result = true;
+                    }
+                    IRVisitor::visit(op);
+                }
+            public:
+                bool result = false;
+            };
+
             if (op->call_type == Call::Halide ||
                 op->call_type == Call::Image) {
                 for (const Expr &e : op->args) {
+                    ContainsDodgyIntCast checker;
+                    e.accept(&checker);
+                    if (checker.result) {
+                        user_warning << "Call node contains potentially-wrapping cast to int:\n"
+                                     << " Call: " << Expr(op) << "\n"
+                                     << " Dodgy arg: " << e << "\n";
+                    }
+
                     e.accept(this);
                 }
                 if (op->name == func || func.empty()) {
                     Box b(op->args.size());
                     b.used = const_true();
                     for (size_t i = 0; i < op->args.size(); i++) {
+                        const Expr &e = op->args[i];
+                        ContainsDodgyIntCast checker;
+                        e.accept(&checker);
+                        if (checker.result) {
+                            user_warning << "Call node contains potentially-wrapping cast to int:\n"
+                                         << " Call: " << Expr(op) << "\n"
+                                         << " Dodgy arg: " << e << "\n";
+                        }
+
+
                         b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
                     }
                     merge_boxes(boxes[op->name], b);
