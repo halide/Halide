@@ -243,6 +243,12 @@ CXX_FLAGS += $(SPIRV_CXX_FLAGS)
 CXX_FLAGS += $(VULKAN_CXX_FLAGS)
 CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 
+# Serialization requires flatc and flatbuffers.h
+# On ubuntu, this requires packages flatbuffers-compiler and libflatbuffers-dev
+ifneq (,$(shell which flatc))
+CXX_FLAGS += -DWITH_SERIALIZATION -I $(BUILD_DIR) -I $(shell which flatc | sed 's/bin.flatc/include/')
+endif
+
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
 # everything with -fno-exceptions.  Without -funwind-tables, libHalide.so fails
 # to propagate exceptions and causes a test failure.
@@ -499,9 +505,11 @@ SOURCE_FILES = \
   Deinterleave.cpp \
   Derivative.cpp \
   DerivativeUtils.cpp \
+  Deserialization.cpp \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   Dimension.cpp \
+  DistributeShifts.cpp \
   EarlyFree.cpp \
   Elf.cpp \
   EliminateBoolVectors.cpp \
@@ -577,6 +585,7 @@ SOURCE_FILES = \
   Schedule.cpp \
   ScheduleFunctions.cpp \
   SelectGPUAPI.cpp \
+  Serialization.cpp \
   Simplify.cpp \
   Simplify_Add.cpp \
   Simplify_And.cpp \
@@ -687,10 +696,12 @@ HEADER_FILES = \
   Deinterleave.h \
   Derivative.h \
   DerivativeUtils.h \
+  Deserialization.h \
   DeviceAPI.h \
   DeviceArgument.h \
   DeviceInterface.h \
   Dimension.h \
+  DistributeShifts.h \
   EarlyFree.h \
   Elf.h \
   EliminateBoolVectors.h \
@@ -776,6 +787,7 @@ HEADER_FILES = \
   ScheduleFunctions.h \
   Scope.h \
   SelectGPUAPI.h \
+  Serialization.h \
   Simplify.h \
   SimplifyCorrelatedDifferences.h \
   SimplifySpecializations.h \
@@ -1381,6 +1393,16 @@ $(BIN_DIR)/%/runtime.a: $(BIN_DIR)/runtime.generator
 $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
 	@mkdir -p $(@D)
 	$(CXX) $(TEST_CXX_FLAGS) $< -I$(SRC_DIR) $(TEST_LD_FLAGS) -o $@
+
+ifneq (,$(shell which flatc))
+$(BUILD_DIR)/Deserialization.o : $(BUILD_DIR)/halide_ir_generated.h
+$(BUILD_DIR)/Serialization.o : $(BUILD_DIR)/halide_ir_generated.h
+endif
+
+# Generated header for serialization/deserialization
+$(BUILD_DIR)/halide_ir_generated.h: $(SRC_DIR)/halide_ir.fbs
+	@mkdir -p $(@D)
+	flatc -o $(BUILD_DIR) -c $^  
 
 # Correctness test that link against libHalide
 $(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)

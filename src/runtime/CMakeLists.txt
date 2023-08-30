@@ -338,4 +338,8 @@ add_library(Halide_Runtime INTERFACE)
 add_library(Halide::Runtime ALIAS Halide_Runtime)
 target_include_directories(Halide_Runtime INTERFACE $<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>)
 set_target_properties(Halide_Runtime PROPERTIES EXPORT_NAME Runtime)
+option(Halide_BUILD_HEXAGON_REMOTE_RUNTIME "Build the hexagon remote runtime for offloading to Hexagon (HVX)" OFF)
 
+if (Halide_BUILD_HEXAGON_REMOTE_RUNTIME AND NOT Halide_CLANG_TIDY_BUILD)
+  add_subdirectory(hexagon_remote)
+endif ()

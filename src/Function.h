@@ -350,6 +350,8 @@ std::pair<std::vector<Function>, std::map<std::string, Function>> deep_copy(
     const std::vector<Function> &outputs,
     const std::map<std::string, Function> &env);
 
+extern std::atomic<int> random_variable_counter;
+
 }  // namespace Internal
 }  // namespace Halide
 
