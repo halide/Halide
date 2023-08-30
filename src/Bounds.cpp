@@ -1239,6 +1239,26 @@ private:
                     bounds_of_type(t);
                 }
             }
+        } else if (op->is_intrinsic(Call::saturating_cast)) {
+            internal_assert(op->args.size() == 1);
+            bounds_of_type(t);
+            Interval type_bounds = interval;
+            interval = arg_bounds.get(0);
+
+            if (interval.has_lower_bound()) {
+                interval.min = saturating_cast(t, interval.min);
+            } else if (op->args[0].type().is_uint()) {
+                // If we're casting from a uint, we can at least lower bound it
+                // with zero.
+                interval.min = make_zero(t);
+            } else {
+                interval.min = type_bounds.min;
+            }
+            if (interval.has_upper_bound()) {
+                interval.max = saturating_cast(t, interval.max);
+            } else {
+                interval.max = type_bounds.max;
+            }
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
             // Unlike an explicit clamp, we are also permitted to
@@ -1472,19 +1492,21 @@ private:
             }
         } else if (op->args.size() == 1 &&
                    (op->is_intrinsic(Call::round) ||
-                    op->is_intrinsic(Call::saturating_cast) ||
                     op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
                     op->name == "exp_f32" || op->name == "exp_f64" ||
-                    op->name == "log_f32" || op->name == "log_f64") &&
-                   (interval = arg_bounds.get(0)).is_bounded()) {
+                    op->name == "log_f32" || op->name == "log_f64")) {
             // For monotonic, pure, single-argument functions, we can
             // make two calls for the min and the max.
-            interval = Interval(
-                Call::make(t, op->name, {interval.min}, op->call_type,
-                           op->func, op->value_index, op->image, op->param),
-                Call::make(t, op->name, {interval.max}, op->call_type,
-                           op->func, op->value_index, op->image, op->param));
+            interval = arg_bounds.get(0);
+            if (interval.has_lower_bound()) {
+                interval.min = Call::make(t, op->name, {interval.min}, op->call_type,
+                                          op->func, op->value_index, op->image, op->param);
+            }
+            if (interval.has_upper_bound()) {
+                interval.max = Call::make(t, op->name, {interval.max}, op->call_type,
+                                          op->func, op->value_index, op->image, op->param);
+            }
         } else if (op->is_intrinsic(Call::popcount) ||
                    op->is_intrinsic(Call::count_leading_zeros) ||
                    op->is_intrinsic(Call::count_trailing_zeros)) {
@@ -3667,6 +3689,13 @@ void bounds_test() {
         check(scope, saturating_cast<int32_t>(max(cast<uint32_t>(x), cast<uint32_t>(5))), cast<int32_t>(5), Int(32).max());
         scope.pop("x");
     }
+
+    {
+        scope.push("x", Interval::everything());
+        check(scope, saturating_cast<int16_t>(cast<uint32_t>(x)), cast<int16_t>(0), cast<int16_t>(32767));
+        scope.pop("x");
+    }
+
     {
         Expr z = Variable::make(Float(32), "z");
         scope.push("z", Interval(cast<float>(-1), cast<float>(1)));
