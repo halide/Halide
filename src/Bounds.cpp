@@ -1288,18 +1288,6 @@ private:
         } else if (op->is_intrinsic(Call::return_second)) {
             internal_assert(op->args.size() == 2);
             interval = arg_bounds.get(1);
-        } else if (op->is_intrinsic(Call::strict_float)) {
-            internal_assert(op->args.size() == 1);
-            interval = arg_bounds.get(0);
-        } else if (op->is_intrinsic(Call::round)) {
-            internal_assert(op->args.size() == 1);
-            interval = arg_bounds.get(0);
-            if (interval.has_lower_bound()) {
-                interval.min -= 1.f;
-            }
-            if (interval.has_upper_bound()) {
-                interval.max += 1.f;
-            }
         } else if (op->is_intrinsic(Call::if_then_else)) {
             internal_assert(op->args.size() == 2 || op->args.size() == 3);
             // Probably more conservative than necessary
@@ -1492,6 +1480,7 @@ private:
             }
         } else if (op->args.size() == 1 &&
                    (op->is_intrinsic(Call::round) ||
+                    op->is_intrinsic(Call::strict_float) ||
                     op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
                     op->name == "exp_f32" || op->name == "exp_f64" ||
