@@ -1533,13 +1533,22 @@ private:
         } else if (op->is_intrinsic(Call::halving_add)) {
             // lower_halving_add() uses bitwise tricks that are hard to reason
             // about; let's do this instead:
-            Expr e = narrow((widen(op->args[0]) + widen(op->args[1])) / 2);
-            e.accept(this);
+            Expr e;
+            if (op->type.bits() == 64) {
+                bounds_of_type(t);
+            } else {
+                Expr e = narrow((widen(op->args[0]) + widen(op->args[1])) / 2);
+                e.accept(this);
+            }
         } else if (op->is_intrinsic(Call::rounding_halving_add)) {
             // lower_rounding_halving_add() uses bitwise tricks that are hard to reason
             // about; let's do this instead:
-            Expr e = narrow((widen(op->args[0]) + widen(op->args[1]) + 1) / 2);
-            e.accept(this);
+            if (op->type.bits() == 64) {
+                bounds_of_type(t);
+            } else {
+                Expr e = narrow((widen(op->args[0]) + widen(op->args[1]) + 1) / 2);
+                e.accept(this);
+            }
         } else if (op->call_type == Call::PureIntrinsic) {
             Expr e = lower_intrinsic(op);
             if (e.defined()) {
