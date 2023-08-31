@@ -213,12 +213,48 @@ private:
         }
     }
 
+    // Is a type not permitted to be +/- infinity for the purpose of bounds
+    // inference. Note that we let UInt(32) and UInt(64) be infinite, because
+    // treating them as bounded just invites signed integer overflow in the
+    // simplifier when we work with their maximum possible values.
+    bool bounded(Type t) const {
+        return (t.is_uint() || t.is_int()) && t.bits() <= 16;
+    }
+
     void bounds_of_type(Type t) {
         t = t.element_of();
-        if ((t.is_uint() || t.is_int()) && t.bits() <= 16) {
+        if (bounded(t)) {
             interval = Interval(t.min(), t.max());
         } else {
             interval = Interval::everything();
+        }
+    }
+
+    // Convert bounds that invoke signed integer overflow into unbounded exprs
+    // instead. TODO: This is a little flawed because it relies on detecting the
+    // signed integer overflow eagerly. It's possible that some value will get
+    // substituted in later in compilation which will trigger signed integer
+    // overflow.
+    void handle_signed_integer_overflow() {
+        if (interval.has_upper_bound()) {
+            interval.max = simplify(interval.max);
+            if (has_signed_integer_overflow(interval.max)) {
+                if (bounded(interval.max.type())) {
+                    interval.max = interval.max.type().max();
+                } else {
+                    interval.max = Interval::pos_inf();
+                }
+            }
+        }
+        if (interval.has_lower_bound()) {
+            interval.min = simplify(interval.min);
+            if (has_signed_integer_overflow(interval.min)) {
+                if (bounded(interval.min.type())) {
+                    interval.min = interval.min.type().min();
+                } else {
+                    interval.min = Interval::neg_inf();
+                }
+            }
         }
     }
 
@@ -275,6 +311,11 @@ private:
             interval = Interval::single_point(Cast::make(to, a.min));
             return;
         }
+
+        // We may be about to cast to a narrower type, so this is a good place
+        // to stop the propagation of signed integer overflow and treat it as
+        // unbounded instead.
+        handle_signed_integer_overflow();
 
         // If overflow is impossible, cast the min and max. If it's
         // possible, use the bounds of the destination type.
@@ -1244,6 +1285,10 @@ private:
             bounds_of_type(t);
             Interval type_bounds = interval;
             interval = arg_bounds.get(0);
+            // We're about to cast to a narrower type, so this is a good place
+            // to stop the propagation of signed integer overflow and treat it
+            // as unbounded instead.
+            handle_signed_integer_overflow();
 
             if (interval.has_lower_bound()) {
                 interval.min = saturating_cast(t, interval.min);
@@ -2301,7 +2346,7 @@ private:
             class ContainsDodgyIntCast : public IRVisitor {
                 using IRVisitor::visit;
 
-                void visit(const Cast *op) {
+                void visit(const Cast *op) override {
                     if (op->type == Int(32) && !op->value.type().is_float() && !op->type.can_represent(op->value.type())) {
                         result = true;
                     }
@@ -3694,6 +3739,17 @@ void bounds_test() {
         scope.push("x", Interval::everything());
         check(scope, saturating_cast<int16_t>(cast<uint32_t>(x)), cast<int16_t>(0), cast<int16_t>(32767));
         scope.pop("x");
+    }
+
+    {
+        Expr z1 = Variable::make(Int(16), "z1");
+        Expr z2 = Variable::make(Int(16), "z2");
+        scope.push("z1", Interval(z1.type().min(), z1.type().max()));
+        scope.push("z2", Interval(z1.type().min(), z1.type().max()));
+        check(scope, saturating_cast<int16_t>(10 * cast<int>(z1) * z2), Int(16).min(), Int(16).max());
+        check(scope, cast<int16_t>(10 * cast<int>(z1) * z2), Int(16).min(), Int(16).max());
+        scope.pop("z1");
+        scope.pop("z2");
     }
 
     {

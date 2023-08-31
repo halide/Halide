@@ -426,6 +426,24 @@ bool is_signed_integer_overflow(const Expr &expr) {
     return call && call->is_intrinsic(Call::signed_integer_overflow);
 }
 
+bool has_signed_integer_overflow(const Expr &expr) {
+    class Checker : public IRVisitor {
+        using IRVisitor::visit;
+        void visit(const Call *op) override {
+            if (op->is_intrinsic(Call::signed_integer_overflow)) {
+                result = true;
+            } else {
+                IRVisitor::visit(op);
+            }
+        }
+
+    public:
+        bool result = false;
+    } checker;
+    expr.accept(&checker);
+    return checker.result;
+}
+
 Expr const_true(int w) {
     return make_one(UInt(1, w));
 }
