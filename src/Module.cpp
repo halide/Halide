@@ -814,6 +814,7 @@ void compile_multitarget(const std::string &fn_name,
         // This would make the filename outputs more symmetrical (ie the same for n=1 as for n>1)
         // but at the expense of breaking existing users. So for now, we're going to continue
         // with the legacy treatment below:
+        reset_random_counters();
         module_factory(fn_name, base_target).compile(output_files);
         return;
     }
@@ -878,6 +879,8 @@ void compile_multitarget(const std::string &fn_name,
         // We always produce the runtime separately, so add NoRuntime explicitly.
         Target sub_fn_target = target.with_feature(Target::NoRuntime);
 
+        // Ensure that each subtarget sees the same sequence of random numbers
+        reset_random_counters();
         {
             ScopedCompilerLogger activate(compiler_logger_factory, sub_fn_name, sub_fn_target);
             Module sub_module = module_factory(sub_fn_name, sub_fn_target);
