@@ -1,5 +1,11 @@
 include ../support/Makefile.inc
 
+ifeq ($(UNAME), Darwin)
+build:
+	@echo "Temporarily skipping this test on Mac, as not all dependencies are installed on one of the bots (https://github.com/halide/Halide/issues/7831)"
+test: build
+else
+
 ifneq (,$(findstring -m32,$(CXX) $(CC) $(CCFLAGS) $(CXXFLAGS)))
 build:
 	@echo "Not testing this app in a 32-bit build (-m32 found in flags)"
@@ -109,5 +115,6 @@ build:
 	@echo "No protoc in $(PATH), you need to install protocol buffers"
 test: build
 
+endif
 endif
 endif
