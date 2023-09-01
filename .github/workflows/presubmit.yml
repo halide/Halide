@@ -54,11 +54,15 @@ jobs:
       - name: Run test sources check
         run: |
           shopt -s nullglob
+          (cd test/autoschedulers/adams2019     && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/autoschedulers/anderson2021  && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
           (cd test/autoschedulers/li2018        && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
           (cd test/autoschedulers/mullapudi2016 && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
           (cd test/correctness                  && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
           (cd test/error                        && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
-          (cd test/generator                    && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
           (cd test/failing_with_issue           && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/fuzz                         && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/generator                    && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
           (cd test/performance                  && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/runtime                      && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
           (cd test/warning                      && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
