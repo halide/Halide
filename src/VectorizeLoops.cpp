@@ -960,8 +960,8 @@ class VectorSubs : public IRMutator {
 
             vectorized_vars.push_back({op->name, min, (int)extent_int->value});
             update_replacements();
-            // Go over lets which were vectorized in order of occurance and update them according
-            // to the current loop level.
+            // Go over lets which were vectorized in the order of their occurance and update
+            // them according to the current loop level.
             for (auto let = containing_lets.begin(); let != containing_lets.end(); let++) {
                 // Skip if this var wasn't vectorized.
                 if (!scope.contains(let->first)) {
