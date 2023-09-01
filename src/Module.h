@@ -41,7 +41,10 @@ enum class OutputFileType {
     schedule,
     static_library,
     stmt,
+    conceptual_stmt,
     stmt_html,
+    conceptual_stmt_html,
+    ptx_assembly,
 };
 
 /** Type of linkage a function in a lowered Halide module can have.
@@ -201,6 +204,13 @@ public:
 
     /** Set whether this module uses strict floating-point directives anywhere. */
     void set_any_strict_float(bool any_strict_float);
+
+    /** Remember the Stmt during lowing which is still 3GL, before device-specific
+     * offloading. */
+    void set_conceptual_code_stmt(const Internal::Stmt &stmt);
+
+    /** Get the remembered Stmt which is supposed to be 3GL. */
+    const Internal::Stmt &get_conceptual_stmt() const;
 };
 
 /** Link a set of modules together into one module. */

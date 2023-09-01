@@ -49,7 +49,10 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::schedule, {"schedule", ".schedule.h", IsSingle}},
         {OutputFileType::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {OutputFileType::stmt, {"stmt", ".stmt", IsMulti}},
+        {OutputFileType::conceptual_stmt, {"coneptual_stmt", ".conceptual.stmt", IsMulti}},
         {OutputFileType::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
+        {OutputFileType::conceptual_stmt_html, {"conceptual_stmt_html", ".conceptual.stmt.html", IsMulti}},
+        {OutputFileType::ptx_assembly, {"ptx_assembly", ".ptx", IsMulti}},
     };
     return ext;
 }
@@ -325,6 +328,12 @@ struct ModuleContents {
     MetadataNameMap metadata_name_map;
     bool any_strict_float{false};
     std::unique_ptr<AutoSchedulerResults> auto_scheduler_results;
+
+    /** This is a copy of the code throughout the lowering process, which
+     * reflects best the actual pipeline, without introducing assembly generated
+     * from device-specific offloads (such as Cuda PTX). In other words, we'd
+     * like to keep this 3GL. */
+    Stmt conceptual_code;
 };
 
 template<>
@@ -519,6 +528,14 @@ MetadataNameMap Module::get_metadata_name_map() const {
     return contents->metadata_name_map;
 }
 
+void Module::set_conceptual_code_stmt(const Internal::Stmt &stmt) {
+    contents->conceptual_code = stmt;
+}
+
+const Internal::Stmt &Module::get_conceptual_stmt() const {
+    return contents->conceptual_code;
+}
+
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
 
@@ -551,7 +568,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     std::string assembly_path;
     if (contains(output_files, OutputFileType::assembly)) {
         assembly_path = output_files.at(OutputFileType::assembly);
-    } else if (contains(output_files, OutputFileType::stmt_html)) {
+    } else if (contains(output_files, OutputFileType::stmt_html) || contains(output_files, OutputFileType::conceptual_stmt_html)) {
         // We need assembly in order to generate stmt_html, but the user doesn't
         // want it on its own, so we will generate it to a temp directory, since some
         // build systems (e.g. Bazel) are strict about what you can generate to the 'expected'
@@ -627,10 +644,39 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::ofstream file(output_files.at(OutputFileType::stmt));
         file << *this;
     }
+    if (contains(output_files, OutputFileType::conceptual_stmt)) {
+        debug(1) << "Module.compile(): conceptual_stmt " << output_files.at(OutputFileType::conceptual_stmt) << "\n";
+        std::ofstream file(output_files.at(OutputFileType::conceptual_stmt));
+        file << get_conceptual_stmt();
+    }
     if (contains(output_files, OutputFileType::stmt_html)) {
         internal_assert(!assembly_path.empty());
         debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
-        Internal::print_to_viz(output_files.at(OutputFileType::stmt_html), *this, assembly_path);
+        Internal::print_to_stmt_html(output_files.at(OutputFileType::stmt_html), *this, assembly_path, false);
+    }
+    if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
+        internal_assert(!assembly_path.empty());
+        debug(1) << "Module.compile(): conceptual_stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
+        Internal::print_to_conceptual_stmt_html(output_files.at(OutputFileType::conceptual_stmt_html), *this, assembly_path);
+    }
+    if (contains(output_files, OutputFileType::ptx_assembly)) {
+        debug(1) << "Module.compile(): ptx_assembly " << output_files.at(OutputFileType::ptx_assembly) << "\n";
+        std::string gpu_kernel_sources;
+        for (const Buffer<> &buf : buffers()) {
+            debug(1) << "Looking for GPU sources: " << buf.name() << "\n";
+            if (ends_with(buf.name(), "_gpu_source_kernels")) {
+                internal_assert(gpu_kernel_sources.empty()); // There should be only one!
+                gpu_kernel_sources = std::string((const char *)buf.data(), buf.size_in_bytes());
+            }
+        }
+        if (gpu_kernel_sources.empty()) {
+            debug(1) << "No GPU kernel sources emitted.\n";
+        } else {
+            std::ofstream file(output_files.at(OutputFileType::ptx_assembly));
+            file << gpu_kernel_sources << "\n";
+            file.close();
+            debug(1) << "Saved GPU kernel sources (" << gpu_kernel_sources.size() << " bytes).\n";
+        }
     }
     if (contains(output_files, OutputFileType::function_info_header)) {
         debug(1) << "Module.compile(): function_info_header " << output_files.at(OutputFileType::function_info_header) << "\n";
