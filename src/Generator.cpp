@@ -1645,7 +1645,7 @@ bool GeneratorBase::emit_hlpipe(const std::string &hlpipe_file_path) {
         debug(1) << "Applying autoscheduler " << asp.name << " to Generator " << name() << " ...\n";
         auto_schedule_results = pipeline.apply_autoscheduler(context.target(), asp);
     }
-    std::map<std::string, Internal::Parameter> params;  // FIXME: Remove when API allows this to be optional
+    std::map<std::string, Parameter> params;  // FIXME: Remove when API allows this to be optional
     serialize_pipeline(pipeline, hlpipe_file_path, params);
     return true;
 #else

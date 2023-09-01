@@ -44,6 +44,8 @@ void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {
     delete p;
 }
 
+}  // namespace Internal
+
 void Parameter::check_defined() const {
     user_assert(defined()) << "Parameter is undefined\n";
 }
@@ -71,19 +73,19 @@ void Parameter::check_type(const Type &t) const {
 }
 
 Parameter::Parameter(const Type &t, bool is_buffer, int d)
-    : contents(new ParameterContents(t, is_buffer, d, unique_name('p'))) {
+    : contents(new Internal::ParameterContents(t, is_buffer, d, Internal::unique_name('p'))) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
 
 Parameter::Parameter(const Type &t, bool is_buffer, int d, const std::string &name)
-    : contents(new ParameterContents(t, is_buffer, d, name)) {
+    : contents(new Internal::ParameterContents(t, is_buffer, d, name)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
 
 Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
                      const Buffer<void> &buffer, int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
                      MemoryType memory_type)
-    : contents(new ParameterContents(t, is_buffer, dimensions, name)) {
+    : contents(new Internal::ParameterContents(t, is_buffer, dimensions, name)) {
     contents->buffer = buffer;
     contents->host_alignment = host_alignment;
     contents->buffer_constraints = buffer_constraints;
@@ -93,7 +95,7 @@ Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::s
 Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
                      uint64_t data, const Expr &scalar_default, const Expr &scalar_min,
                      const Expr &scalar_max, const Expr &scalar_estimate)
-    : contents(new ParameterContents(t, is_buffer, dimensions, name)) {
+    : contents(new Internal::ParameterContents(t, is_buffer, dimensions, name)) {
     contents->data = data;
     contents->scalar_default = scalar_default;
     contents->scalar_min = scalar_min;
@@ -151,7 +153,7 @@ Expr Parameter::scalar_expr() const {
     } else if (t.is_uint()) {
         switch (t.bits()) {
         case 1:
-            return make_bool(scalar<bool>());
+            return Internal::make_bool(scalar<bool>());
         case 8:
             return Expr(scalar<uint8_t>());
         case 16:
@@ -220,6 +222,8 @@ bool Parameter::defined() const {
 // parameter itself, to avoid creating a reference count cycle and causing a
 // leak. Note that it's still possible to create a cycle by having two different
 // Parameters each have constraints that reference the other.
+namespace Internal {
+
 Expr remove_self_references(const Parameter &p, const Expr &e) {
     class RemoveSelfReferences : public IRMutator {
         using IRMutator::visit;
@@ -251,8 +255,8 @@ Expr restore_self_references(const Parameter &p, const Expr &e) {
             if (!var->image.defined() &&
                 !var->param.defined() &&
                 !var->reduction_domain.defined() &&
-                starts_with(var->name, p.name() + ".")) {
-                return Variable::make(var->type, var->name, p);
+                Internal::starts_with(var->name, p.name() + ".")) {
+                return Internal::Variable::make(var->type, var->name, p);
             }
             return var;
         }
@@ -266,34 +270,36 @@ Expr restore_self_references(const Parameter &p, const Expr &e) {
     return mutator.mutate(e);
 }
 
+}  // namespace Internal
+
 void Parameter::set_min_constraint(int dim, const Expr &e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].min = remove_self_references(*this, e);
+    contents->buffer_constraints[dim].min = Internal::remove_self_references(*this, e);
 }
 
 void Parameter::set_extent_constraint(int dim, const Expr &e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].extent = remove_self_references(*this, e);
+    contents->buffer_constraints[dim].extent = Internal::remove_self_references(*this, e);
 }
 
 void Parameter::set_stride_constraint(int dim, const Expr &e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].stride = remove_self_references(*this, e);
+    contents->buffer_constraints[dim].stride = Internal::remove_self_references(*this, e);
 }
 
 void Parameter::set_min_constraint_estimate(int dim, const Expr &min) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].min_estimate = remove_self_references(*this, min);
+    contents->buffer_constraints[dim].min_estimate = Internal::remove_self_references(*this, min);
 }
 
 void Parameter::set_extent_constraint_estimate(int dim, const Expr &extent) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].extent_estimate = remove_self_references(*this, extent);
+    contents->buffer_constraints[dim].extent_estimate = Internal::remove_self_references(*this, extent);
 }
 
 void Parameter::set_host_alignment(int bytes) {
@@ -304,31 +310,31 @@ void Parameter::set_host_alignment(int bytes) {
 Expr Parameter::min_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return restore_self_references(*this, contents->buffer_constraints[dim].min);
+    return Internal::restore_self_references(*this, contents->buffer_constraints[dim].min);
 }
 
 Expr Parameter::extent_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return restore_self_references(*this, contents->buffer_constraints[dim].extent);
+    return Internal::restore_self_references(*this, contents->buffer_constraints[dim].extent);
 }
 
 Expr Parameter::stride_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return restore_self_references(*this, contents->buffer_constraints[dim].stride);
+    return Internal::restore_self_references(*this, contents->buffer_constraints[dim].stride);
 }
 
 Expr Parameter::min_constraint_estimate(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return restore_self_references(*this, contents->buffer_constraints[dim].min_estimate);
+    return Internal::restore_self_references(*this, contents->buffer_constraints[dim].min_estimate);
 }
 
 Expr Parameter::extent_constraint_estimate(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return restore_self_references(*this, contents->buffer_constraints[dim].extent_estimate);
+    return Internal::restore_self_references(*this, contents->buffer_constraints[dim].extent_estimate);
 }
 
 int Parameter::host_alignment() const {
@@ -431,6 +437,18 @@ ArgumentEstimates Parameter::get_argument_estimates() const {
     return argument_estimates;
 }
 
+void Parameter::store_in(MemoryType memory_type) {
+    check_is_buffer();
+    contents->memory_type = memory_type;
+}
+
+MemoryType Parameter::memory_type() const {
+    // check_is_buffer();
+    return contents->memory_type;
+}
+
+namespace Internal {
+
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {
     user_assert(args->size() == (size_t)dims)
         << args->size() << "-argument call to \""
@@ -449,16 +467,6 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
             (*args)[i] = Cast::make(Int(32), (*args)[i]);
         }
     }
-}
-
-void Parameter::store_in(MemoryType memory_type) {
-    check_is_buffer();
-    contents->memory_type = memory_type;
-}
-
-MemoryType Parameter::memory_type() const {
-    // check_is_buffer();
-    return contents->memory_type;
 }
 
 }  // namespace Internal

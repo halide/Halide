@@ -19,14 +19,16 @@ struct Expr;
 struct Type;
 enum class MemoryType;
 
-namespace Internal {
-
-struct ParameterContents;
-
 struct BufferConstraint {
     Expr min, extent, stride;
     Expr min_estimate, extent_estimate;
 };
+
+namespace Internal {
+
+struct ParameterContents;
+
+}  // namespace Internal
 
 /** A reference-counted handle to a parameter to a halide
  * pipeline. May be a scalar parameter or a buffer */
@@ -38,7 +40,7 @@ class Parameter {
     void check_type(const Type &t) const;
 
 protected:
-    IntrusivePtr<ParameterContents> contents;
+    Internal::IntrusivePtr<Internal::ParameterContents> contents;
 
 public:
     /** Construct a new undefined handle */
@@ -192,6 +194,8 @@ public:
     void store_in(MemoryType memory_type);
     MemoryType memory_type() const;
 };
+
+namespace Internal {
 
 /** Validate arguments to a call to a func, image or imageparam. */
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims);

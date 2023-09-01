@@ -6,8 +6,6 @@
 namespace Halide {
 namespace PythonBindings {
 
-using Halide::Internal::Parameter;
-
 namespace {
 
 template<typename TYPE>
