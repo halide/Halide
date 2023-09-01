@@ -304,6 +304,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
             }
         }
         std::set<string> vars;
+
     public:
         string make_unique_name() {
             string name;
