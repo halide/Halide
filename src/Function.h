@@ -168,7 +168,12 @@ public:
     int required_dimensions() const;
 
     /** Get the right-hand-side of the pure definition. Returns an
-     * empty vector if there is no pure definition. */
+     * empty vector if there is no pure definition.
+     *
+     * Warning: Any Vars in the Exprs are not qualified with the Func name, so
+     * the Exprs may contain names which collide with names provided by
+     * unique_name.
+     */
     const std::vector<Expr> &values() const;
 
     /** Does this function have a pure definition? */
