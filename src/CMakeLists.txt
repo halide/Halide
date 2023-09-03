@@ -362,9 +362,12 @@ set(C_TEMPLATE_FILES
     )
 
 set(HTML_TEMPLATE_FILES
-    StmtToViz_dependencies
-    StmtToViz_javascript
-    StmtToViz_stylesheet
+    StmtToHTML_dependencies.html
+    StmtToHTML.js
+    StmtToHTML.css
+    StmtToViz_dependencies.html
+    StmtToViz.js
+    StmtToViz.css
     )
 
 ##
@@ -390,11 +393,12 @@ foreach (f IN LISTS C_TEMPLATE_FILES)
 endforeach ()
 
 foreach (f IN LISTS HTML_TEMPLATE_FILES)
-    set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/irvisualizer/${f}.template.html>")
-    set(DST "html_template.${f}.template.cpp")
+    set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/irvisualizer/html_template_${f}>")
+    string(REPLACE "." "_" VARNAME "halide_html_template_${f}")
+    set(DST "html_template.${f}.cpp")
 
     add_custom_command(OUTPUT "${DST}"
-                       COMMAND binary2cpp "halide_html_template_${f}" < "${SRC}" > "${DST}"
+                       COMMAND binary2cpp "${VARNAME}" < "${SRC}" > "${DST}"
                        DEPENDS "${SRC}" binary2cpp
                        VERBATIM)
     target_sources(Halide_c_templates PRIVATE ${DST})

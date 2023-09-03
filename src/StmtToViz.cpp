@@ -558,8 +558,8 @@ public:
         while (getline(asm_stream, line)) {
             // Try all markers
             std::vector<uint64_t> matched_nodes;
-            for (auto const &[node, regex] : markers) {
-                if (std::regex_search(line, regex)) {
+            for (auto const &[node, marker] : markers) {
+                if (std::regex_search(line, marker)) {
                     // Save line number
                     lnos[node] = lno;
                     // Save this node's id
@@ -583,6 +583,13 @@ public:
         return -1;
     }
 
+    std::string get_label(uint64_t node_id) {
+        if (labels.count(node_id)) {
+            return labels[node_id];
+        }
+        return "(label not found)";
+    }
+
 private:
     // Generate asm markers for Halide loops
     int loop_id = 0;
@@ -590,11 +597,11 @@ private:
         return ++loop_id;
     }
 
-    std::regex gen_loop_asm_marker(int id, const std::string &loop_var) {
+    std::string gen_loop_asm_marker(int id, const std::string &loop_var) {
         std::regex dollar("\\$");
         std::string marker = "%\"" + std::to_string(id) + "_for_" + loop_var;
         marker = std::regex_replace(marker, dollar, "\\$");
-        return std::regex(marker);
+        return marker;
     }
 
     // Generate asm markers for Halide producer/consumer ndoes
@@ -603,15 +610,16 @@ private:
         return ++prodcons_id;
     }
 
-    std::regex gen_prodcons_asm_marker(int id, const std::string &var, bool is_producer) {
+    std::string gen_prodcons_asm_marker(int id, const std::string &var, bool is_producer) {
         std::regex dollar("\\$");
         std::string marker = "%\"" + std::to_string(id) + (is_producer ? "_produce_" : "_consume_") + var;
         marker = std::regex_replace(marker, dollar, "\\$");
-        return std::regex(marker);
+        return marker;
     }
 
     // Mapping of IR nodes to their asm markers
     std::map<uint64_t, std::regex> markers;
+    std::map<uint64_t, std::string> labels;
 
     // Mapping of IR nodes to their asm line numbers
     std::map<uint64_t, int> lnos;
@@ -620,14 +628,18 @@ private:
 
     void visit(const ProducerConsumer *op) override {
         // Generate asm marker
-        markers[(uint64_t)op] = gen_prodcons_asm_marker(gen_prodcons_id(), op->name, op->is_producer);
+        std::string marker = gen_prodcons_asm_marker(gen_prodcons_id(), op->name, op->is_producer);
+        markers[(uint64_t)op] = std::regex(marker);
+        labels[(uint64_t)op] = marker;
         // Continue traversal
         IRVisitor::visit(op);
     }
 
     void visit(const For *op) override {
         // Generate asm marker
-        markers[(uint64_t)op] = gen_loop_asm_marker(gen_loop_id(), op->name);
+        std::string marker = gen_loop_asm_marker(gen_loop_id(), op->name);
+        markers[(uint64_t)op] = std::regex(marker);
+        labels[(uint64_t)op] = marker;
         // Continue traversal
         IRVisitor::visit(op);
     }
@@ -676,7 +688,7 @@ public:
         print_closing_tag("span");
 
         // Open code block to hold module body
-        print_html_element("span", "matched", " {");
+        print_opening_brace();
         print_show_hide_btn_end();
 
         // Open indented div to hold body code
@@ -724,7 +736,7 @@ public:
         print_closing_tag("span");
 
         // Open code block to hold module body
-        print_html_element("span", "matched", " {");
+        print_opening_brace();
         print_show_hide_btn_end();
 
         // Open indented div to hold body code
@@ -799,7 +811,7 @@ private:
             print_text(" = ");
 
             // Open code block to hold module body
-            print_html_element("span", "matched", " {");
+            print_opening_brace();
             print_show_hide_btn_end();
 
             // Open indented div to hold buffer data
@@ -852,7 +864,7 @@ private:
         print_visualization_button("lowered-func-viz-" + std::to_string(id));
 
         // Open code block to hold function body
-        print_html_element("span", "matched", "{");
+        print_opening_brace();
         print_show_hide_btn_end();
 
         // Open indented div to hold body code
@@ -927,6 +939,14 @@ private:
         print_closing_tag(tag);
     }
 
+    void print_opening_brace() {
+        print_html_element("span", "matched OpeningBrace", "{");
+    }
+
+    void print_closing_brace() {
+        print_html_element("span", "matched ClosingBrace", "}");
+    }
+
     // Prints the opening/closing tags for an anchor that toggles code block view
     void print_show_hide_btn_begin(int id, bool collapsed = false) {
         stream << "<input type=checkbox id='show-hide-btn-" << id << "' class='show-hide-btn'";
@@ -986,7 +1006,8 @@ private:
             int asm_lno = assembly_info.get_asm_lno((uint64_t)op);
             if (asm_lno != -1) {
                 stream << "<button class='icon-btn jump-to-asm-btn tooltip-parent' onclick='scrollToAsm(\"" << asm_lno << "\")'>"
-                       << "  <span class='tooltip'>Jump to Assembly</span>"
+                       << "<span class='tooltip'>Jump to Assembly"
+                       << "<span>" << assembly_info.get_label((uint64_t)op) << "</span></span>"
                        << "</button>";
             }
         }
@@ -1032,7 +1053,7 @@ private:
                 line = "<span class='matched'>)</span>" + line.substr(1);
             } else if (starts_with(line, "{") && !in_braces) {
                 in_braces = true;
-                print_html_element("span", "matched", "{");
+                print_opening_brace();
                 print_show_hide_btn_end();
                 internal_assert(current_id != -1);
                 print_opening_tag("div", "indent", current_id);
@@ -1091,8 +1112,8 @@ private:
                 line = "<span class='Pred'>@" + variable(pred) + "</span>" + line.substr(idx);
             }
 
-            // Labels
-            if (line.front() == 'L' && !indent && (idx = line.find(':')) != std::string::npos) {
+            // Labels (depending on the LLVM version we get L with or without a dollar)
+            if (starts_with(line, "$L_") && !indent && (idx = line.find(':')) != std::string::npos) {
                 std::string label = line.substr(0, idx);
                 line = "<span class='Label'>" + variable(label) + "</span>:" + line.substr(idx + 1);
             }
@@ -1141,7 +1162,7 @@ private:
                     } else if (op.front() == '{') {
                         std::string reg = op.substr(1);
                         operands_str += '{' + variable(reg);
-                    } else if (op.front() == 'L') {
+                    } else if (starts_with(op, "$L_")) {
                         // Labels
                         operands_str += "<span class='Label'>" + variable(op) + "</span>";
                     } else {
@@ -1251,7 +1272,7 @@ private:
             print_show_hide_btn_end();
 
             // Open code block to hold task body
-            print_html_element("span", "matched", " {");
+            print_opening_brace();
 
             // Open indented div to hold body code
             print_opening_tag("div", "indent ForkTask", id);
@@ -1288,6 +1309,9 @@ private:
         int max_line_cost = cost_model.get_max_compute_cost(false);
         int line_cost = cost_model.get_compute_cost(op, false);
         int block_cost = cost_model.get_compute_cost(op, true);
+        if (dynamic_cast<const LetStmt *>(op)) {
+            block_cost = line_cost;
+        }
         std::string _id = "cc-" + std::to_string(id);
         print_cost_btn(line_cost, block_cost, max_line_cost, _id, "Op Count: ");
     }
@@ -1297,6 +1321,9 @@ private:
         int max_line_cost = cost_model.get_max_data_movement_cost(false);
         int line_cost = cost_model.get_data_movement_cost(op, false);
         int block_cost = cost_model.get_data_movement_cost(op, true);
+        if (dynamic_cast<const LetStmt *>(op)) {
+            block_cost = line_cost;
+        }
         std::string _id = "dc-" + std::to_string(id);
         print_cost_btn(line_cost, block_cost, max_line_cost, _id, "Bits Moved: ");
     }
@@ -1318,13 +1345,33 @@ private:
             block_costc = num_cost_buckets - 1;
         }
 
-        stream << "<div id='" << id << "' class='cost-btn tooltip-parent CostColor" << line_costc << "'"
+        std::string line_cost_class;
+        std::string block_cost_class;
+        if (line_cost == 0) {
+            line_cost_class = "CostColorNone";
+        } else {
+            line_cost_class = "CostColor" + std::to_string(line_costc);
+        }
+        if (block_cost == 0) {
+            block_cost_class = "CostColorNone";
+        } else {
+            block_cost_class = "CostColor" + std::to_string(block_costc);
+        }
+        if (block_cost == line_cost) {
+            block_cost_class += " NoChildCost";
+        }
+
+        stream << "<div id='" << id << "' class='cost-btn tooltip-parent "
+               << "line-" << line_cost_class << " block-" << block_cost_class << "'"
                << "   line-cost='" << line_cost << "' block-cost='" << block_cost << "'"
                << "   line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>";
 
         stream << "<span class='tooltip' role='tooltip'>"
-               << prefix << line_cost
-               << "</span>";
+               << prefix << line_cost;
+        if (line_cost != block_cost) {
+            stream << "<br/>Total " << prefix << block_cost;
+        }
+        stream << "</span>";
 
         stream << "</div>";
     }
@@ -1578,7 +1625,7 @@ private:
         print_assembly_button(op);
 
         // Open code block to hold function body
-        print_html_element("span", "matched", "{");
+        print_opening_brace();
         print_show_hide_btn_end();
 
         // Open indented div to hold body code
@@ -1659,7 +1706,7 @@ private:
         print_assembly_button(op);
 
         // Open code block to hold function body
-        print_html_element("span", "matched", " {");
+        print_opening_brace();
         print_show_hide_btn_end();
 
         // Open indented div to hold body code
@@ -1707,7 +1754,7 @@ private:
         print_visualization_button("acquire-viz-" + std::to_string(id));
 
         // Open code block to hold function body
-        print_html_element("span", "matched", "{");
+        print_opening_brace();
         print_show_hide_btn_end();
 
         // Open indented div to hold body code
@@ -1906,7 +1953,7 @@ private:
         print_visualization_button("realize-viz-" + std::to_string(id));
 
         // Open code block to hold function body
-        print_html_element("span", "matched", " {");
+        print_opening_brace();
         print_show_hide_btn_end();
 
         // Open indented div to hold body code
@@ -1950,7 +1997,7 @@ private:
         print_html_element("span", "keyword matched", "fork");
 
         // Open code block to hold fork body
-        print_html_element("span", "matched", " {");
+        print_opening_brace();
         print_show_hide_btn_end();
 
         // Open indented div to hold body code
@@ -2003,7 +2050,7 @@ private:
             /* Handle the `then` case */
 
             // Open code block to hold `then` case
-            print_html_element("span", "matched", " {");
+            print_opening_brace();
             print_show_hide_btn_end();
 
             // Open indented div to hold code for the `then` case
@@ -2078,7 +2125,7 @@ private:
                 print_visualization_button("cond-viz-" + std::to_string(else_node_id));
 
                 // Open code block to hold `else` case
-                print_html_element("span", "matched", " {");
+                print_opening_brace();
                 print_show_hide_btn_end();
 
                 // Open indented div to hold code for the `then` case
@@ -2202,7 +2249,7 @@ private:
         }
 
         // Open code block to hold atomic body
-        print_html_element("span", "matched", " {");
+        print_opening_brace();
         print_show_hide_btn_end();
 
         // Open indented div to hold atomic code
@@ -2342,14 +2389,14 @@ private:
     // Prints a button to sync visualization with code
     void print_code_button(const std::string &id) {
         stream << "<button class='icon-btn sync-btn' onclick='scrollToCode(\"" << id << "\")'>"
-               << "  <i class='bi bi-arrow-left-square' title='Jump to code'></i>"
+               << "  <span class='bi bi-arrow-left-square' title='Jump to code'></span>"
                << "</button>";
     }
 
     // Prints a button to sync visualization with assembly
     void print_asm_button(const std::string &id) {
         stream << "<button class='icon-btn sync-btn' onclick='scrollToAsm(\"" << id << "\")'>"
-               << "  <i class='bi bi-arrow-right-square' title='Jump to assembly'></i>"
+               << "  <span class='bi bi-arrow-right-square' title='Jump to assembly'></span>"
                << "</button>";
     }
 
@@ -2364,10 +2411,10 @@ private:
     // Prints a button to collapse or expand a visualization box
     void print_collapse_expand_btn(int id) {
         stream << "<button class='icon-btn' id='viz-" << id << "-hide' onclick='return toggleViz(\"viz-" << id << "\");'>"
-               << "  <i class='bi bi-dash-square' title='Collapse block'></i>"
+               << "  <span class='bi bi-dash-square' title='Collapse block'></span>"
                << "</button>"
                << "<button class='icon-btn' id='viz-" << id << "-show' style = 'display:none;' onclick='return toggleViz(\"viz-" << id << "\");'>"
-               << "  <i class='bi bi-plus-square' title='Expand block'></i>"
+               << "  <span class='bi bi-plus-square' title='Expand block'></span>"
                << "</button>";
     }
 
@@ -3015,13 +3062,11 @@ private:
         stream << "<div class='resize-bar' id='resize-bar-" << num << "'>\n";
         stream << "   <div class='collapse-btns'>\n";
         stream << "     <div>\n";
-        stream << "      <button class='icon-btn resize-btn' onclick='collapse_tab(" << num << ")'>\n";
-        stream << "         <i class='bi bi-arrow-bar-left' title='Collapse tab on the left'></i>\n";
+        stream << "      <button class='collapse-left' onclick='collapse_tab(" << num << ")' title='Collapse tab on the left'></span>\n";
         stream << "       </button>\n";
         stream << "     </div>\n";
         stream << "     <div>\n";
-        stream << "       <button class='icon-btn resize-btn' onclick='collapse_tab(" << (num + 1) << ")'>\n";
-        stream << "         <i class='bi bi-arrow-bar-right' title='Collapse tab on the right'></i>\n";
+        stream << "       <button class='collapse-right' onclick='collapse_tab(" << (num + 1) << ")' title='Collapse tab on the right'></span>\n";
         stream << "       </button>\n";
         stream << "     </div>\n";
         stream << "   </div>\n";

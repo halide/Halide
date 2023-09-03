@@ -42,6 +42,9 @@ div.tab {
     position: relative;
     flex-grow: 1;
 }
+div.tab.collapsed-tab {
+    display: none;
+}
 
 div#ir-code-tab {
     counter-reset: line;
@@ -67,19 +70,41 @@ div.resize-bar {
     cursor: col-resize;
     border-left: 1px solid rgb(0, 0, 0);
     border-right: 1px solid rgb(0, 0, 0);
+}
 
-    > div.collapse-btns {
-        position: relative;
-        top: 50%;
-        margin: 0px;
+div.resize-bar > div.collapse-btns {
+    position: relative;
+    top: 50%;
+    margin: 0px;
+}
 
-        & button:hover {
-            background-color: rgba(255, 255, 255, 0.5);
-        }
+div.resize-bar > div.collapse-btns button {
+    font-size: 11px;
+    height: 3em;
+    width: 1.5em;
+    border-radius: 0;
+    margin: 1em 0;
+    border: none;
+    padding: 0;
+    background-color: rgba(0, 0, 0, 0.1);
+}
 
-        & i.bi-arrow-bar-left:before { content: "<"; }
-        & i.bi-arrow-bar-right:before { content: ">"; }
-    }
+div.resize-bar > div.collapse-btns button:hover { background-color: rgba(255, 255, 255, 0.5); }
+div.resize-bar > div.collapse-btns button.collapse-left:before  { content: "\21E4"; }
+div.resize-bar > div.collapse-btns button.collapse-right:before { content: "\21E5"; }
+
+/* Revert collapser button that points to the left. */
+div.collapsed-tab + div.resize-bar button.collapse-left {
+    background-color: rgba(0, 0, 0, 0.2);
+}
+div.collapsed-tab + div.resize-bar button.collapase-left:before {
+    content: "\21A6";
+}
+div.resize-bar:has(+ div.collapsed-tab) button.collapse-right {
+    background-color: rgba(0, 0, 0, 0.2);
+}
+div.resize-bar:has(+ div.collapsed-tab) button.collapse-right:before {
+    content: "\21A4";
 }
 
 
@@ -90,33 +115,62 @@ button.resize-btn {
 
 /* IR Code Section CSS */
 .ModuleBody {
-    padding-left: 42px !important;
-}
-div.conceptual .ModuleBody {
-    /* With conceptual IR, the indent is not big enough, as we are missing one extra level from the functions. */
-    padding-left: 55px !important;
+    padding-left: 70px !important;
 }
 
 div.Function, div.Buffer {
-    padding-top: 0.6em;
-    padding-bottom: 0.6em;
-    padding-left: 1.6em;
-    padding-right: 1.6em;
-    border-radius: 6px;
-    margin-right: 1.0em;
+    margin: 0.2em 0.0em;
+    padding: 0.1em;
+    margin-right: 0.8em;
+    margin-left: calc(-0.2em - 16px);
+    padding-left: calc(0.2em + 16px);
+    border-width: 3px;
+    border-style: solid;
+    border-radius: 8px;
 }
 div.Function + div.Function {
     margin-top: 1.5em; /* Leave space between two functions. */
 }
+div.Buffer { background-color: rgba(200, 100, 0, 0.025); border-color: rgba(200, 100, 0, 0.03); }
 
 /* Give functions a slightly different background color to visually help navigate quickly. */
-div.Function:nth-child(3n + 1) { background-color: rgba(200, 0, 0, 0.025); }
-div.Function:nth-child(3n + 2) { background-color: rgba(0, 200, 0, 0.025); }
-div.Function:nth-child(3n + 3) { background-color: rgba(0, 0, 200, 0.025); }
+div.Function:nth-child(3n + 1) { background-color: rgba(200, 0, 0, 0.025); border-color: rgba(200, 0, 0, 0.03); }
+div.Function:nth-child(3n + 2) { background-color: rgba(0, 200, 0, 0.025); border-color: rgba(0, 200, 0, 0.03); }
+div.Function:nth-child(3n + 3) { background-color: rgba(0, 0, 200, 0.025); border-color: rgba(0, 0, 200, 0.03); }
 
 /* Give Parallel fors a different color */
-div.For.for-type-parallel { background-color: rgba(200, 200, 0, 0.03); margin: 0.5em; }
-div.For.for-type-gpu_block { background-color: rgba(200, 200, 0, 0.03); margin: 0.5em; }
+div.For { border-radius: 8px; }
+div.For.for-type-parallel,
+div.For.for-type-gpu_block {
+    background-color: rgba(240, 200, 0, 0.03);
+    border: 3px solid rgba(240, 200, 0, 0.10);
+    margin: 0.2em 0.0em;
+    padding: 0.1em;
+    margin-right: 0.8em;
+    margin-left: calc(-0.2em - 16px);
+    padding-left: calc(0.2em + 16px);
+}
+div.For.for-type-gpu_block div.For.for-type-gpu_block {
+    background-color: transparent;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+div.For.for-type-gpu_thread {
+    background-color: rgba(240, 100, 50, 0.03);
+    border: 3px solid rgba(240, 100, 50, 0.10);
+    margin: 0.2em 0.0em;
+    padding: 0.1em;
+    margin-right: 0.8em;
+    margin-left: calc(-0.2em - 16px);
+    padding-left: calc(0.2em + 16px);
+}
+div.For.for-type-gpu_thread div.For.for-type-gpu_thread {
+    background-color: transparent;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
 
 b.Highlight {
     font-weight: bold;
@@ -210,31 +264,31 @@ input.show-hide-btn {
     margin-top: 0px;
     margin-bottom: 0px;
     padding: 0;
-    height: 14px;
+    height: 12px;
     vertical-align: top;
+}
 
-    &:before {
-        content: "-";
-        font-size: 15px;
-        width: 14px;
-        height: 14px;
-        box-sizing: border-box;
-        text-anchor: middle;
-        line-height: 9px;
-        display: inline-block;
-        border: 1px solid black;
-        border-radius: 4px;
-        text-align: center;
-        padding: 0;
-        margin: 0;
-        overflow: hidden;
-    }
+input.show-hide-btn:before {
+    content: ">";
+    font-size: 10px;
+    width: 12px;
+    height: 12px;
+    box-sizing: border-box;
+    text-anchor: middle;
+    text-align: center;
+    line-height: 9px;
+    display: inline-block;
+    border: 1px solid black;
+    border-radius: 4px;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    transition: transform 0.2s;
+    transform: rotate(90deg);
+}
 
-    &:checked:before {
-        content: "+";
-        font-size: 10px;
-        line-height: 11px;
-    }
+input.show-hide-btn:checked:before {
+    transform: rotate(0deg);
 }
 
 
@@ -249,12 +303,11 @@ input.show-hide-btn:hover {
     color: #c30000;
 }
 
-/* The structure always has to be <button/><label/><div>...</div>.
+/* The structure always has to be <button/><label/><div class=indent>...</div>.
  * All the random buttons, should go in the label.
  */
 input.show-hide-btn + label + div.indent {
     max-height: 10000000000px;
-    overflow: hidden;
     opacity: 1;
     transition: opacity 0.4s, max-height 0.4s;
     border-left: 2px solid transparent;
@@ -282,6 +335,7 @@ input.show-hide-btn:hover + label + div.indent + span.ClosingBrace:after {
 input.show-hide-btn:checked + label + div.indent {
     opacity: 0;
     max-height: 0px;
+    overflow: hidden;
 }
 input.show-hide-btn:checked + label > span:last-child:after {
     content: "(collapsed)";
@@ -291,28 +345,43 @@ input.show-hide-btn:checked + label > span:last-child:after {
 }
 
 button.icon-btn {
-    padding: 0;
+    padding: 0 3px;
     margin-left: 2px;
-    margin-right: 2px;
-    width: 14px;
+    margin-right: 0px;
+    width: 24px;
     height: 14px;
     vertical-align: middle;
     background: transparent;
-    font-size: 10px;
+    font-size: 15px;
+    line-height: 12px;
     border: 1px solid black;
     border-radius: 4px;
 
-    :before {
-        margin: 0;
-        padding: 0;
-        border: 0;
-        color: black;
-        display: inline-block;
-    }
+}
+button.icon-btn :before {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    color: black;
+    display: inline-block;
+}
+
+button.jump-to-asm-btn {
+    background:   rgba(255,50,0,0.1);
+    border-color: rgb(255,50,0);
+    color:        rgb(255,50,0);
+}
+
+button.jump-to-asm-btn span.tooltip span {
+    display: block;
+    margin-top: 0.6em;
+    font-size: 10px;
+    font-family: monospace;
+    color: green;
 }
 
 button.jump-to-asm-btn:before, button.jump-to-viz-btn:before {
-    content: ">";
+    content: "\279F";
 }
 
 div#ir-visualization-tab button.icon-btn {
@@ -320,7 +389,8 @@ div#ir-visualization-tab button.icon-btn {
 }
 
 button.icon-btn:hover {
-    color: #c30000;
+    border-width: 2px;
+    line-height: 10px;
 }
 
 code.ptx {
@@ -373,6 +443,15 @@ div.WrapLine {
     text-indent: -30px;
 }
 
+span.OpeningBrace {
+    margin-left: 0.3em;
+}
+
+span.Comment {
+    color: green;
+    font-style: italic;
+}
+
 span.IfSpan,
 span.ClosingBrace,
 div.WrapLine,
@@ -385,36 +464,45 @@ div.Function,
 div.Buffer,
 div.Evaluate {
     counter-increment: line;
-    &:before {
-        font-weight: normal;
-        content: counter(line) '. ';
-        display: inline-block;
-        position: absolute;
-        left: 0px;
-        width: 50px;
-        text-align: right;
-        color: rgb(175, 175, 175);
-        user-select: none;
-        -webkit-user-select: none;
-    }
 }
-
-.collapsed-block {
+span.IfSpan:before,
+span.ClosingBrace:before,
+div.WrapLine:before,
+div.Consumer:before,
+div.Produce:before,
+div.For:before,
+div.Evaluate:before,
+div.Allocate:before,
+div.Function:before,
+div.Buffer:before,
+div.Evaluat:before {
+    font-weight: normal;
+    content: counter(line) '. ';
+    display: inline-block;
     position: absolute;
-    left: -9999px;
-    max-height: 0px;
-    overflow: hidden;
-    opacity: 0;
+    left: 0px;
+    width: 50px;
+    text-align: right;
+    color: rgb(175, 175, 175);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
+.tooltip-parent {
+    position: relative;
+    overflow: visible;
+}
 
 span.tooltip {
     opacity: 1;
+    color: black;
+    font-weight: normal;
     visibility: hidden;
-    position: absolute;
     left: 50px;
     top: -10px;
     width: max-content;
+    position: relative;
+    display: block;
     padding: 8px;
     background: #fff7e0;
     font-size: 12px;
@@ -434,42 +522,117 @@ span.tooltip {
 div.node-cost {
     position: absolute;
     left: 52px; /* Enough for 4 digit line counter. */
+    width: 40px;
 }
 div.cost-btn {
-    width: 10px;
+    width: 16px;
     height: 10px;
     margin-top: 0px;
-    border: 1px solid rgba(0,0,0,0.1);
+    /*border: 1px solid rgba(0,0,0,0.1);*/
     position: relative;
     float: left;
     margin-right: 3px;
+    box-sizing: border-box;
+    outline: 1px solid rgba(0,0,0,0.1);
 }
 div.cost-btn:hover {
     cursor: pointer;
-    border: 1px solid lightgray;
+    /*border: 1px solid lightgray;*/
 }
 
 
-.CostColor19 { background-color: rgb(130,  31, 27); }
-.CostColor18 { background-color: rgb(145,  33, 30); }
-.CostColor17 { background-color: rgb(160,  33, 32); }
-.CostColor16 { background-color: rgb(176,  34, 34); }
-.CostColor15 { background-color: rgb(185,  47, 32); }
-.CostColor14 { background-color: rgb(193,  59, 30); }
-.CostColor13 { background-color: rgb(202,  71, 27); }
-.CostColor12 { background-color: rgb(210,  82, 22); }
-.CostColor11 { background-color: rgb(218,  93, 16); }
-.CostColor10 { background-color: rgb(226, 104,  6); }
-.CostColor9  { background-color: rgb(229, 118,  9); }
-.CostColor8  { background-color: rgb(230, 132, 15); }
-.CostColor7  { background-color: rgb(231, 146, 20); }
-.CostColor6  { background-color: rgb(232, 159, 25); }
-.CostColor5  { background-color: rgb(233, 172, 30); }
-.CostColor4  { background-color: rgb(233, 185, 35); }
-.CostColor3  { background-color: rgb(233, 198, 40); }
-.CostColor2  { background-color: rgb(232, 211, 45); }
-.CostColor1  { background-color: rgb(231, 223, 50); }
-.CostColor0  { background-color: rgb(236, 233, 89); }
+.line-CostColor19   { border-right: 8px solid rgb(130,  31, 27); }
+.line-CostColor18   { border-right: 8px solid rgb(145,  33, 30); }
+.line-CostColor17   { border-right: 8px solid rgb(160,  33, 32); }
+.line-CostColor16   { border-right: 8px solid rgb(176,  34, 34); }
+.line-CostColor15   { border-right: 8px solid rgb(185,  47, 32); }
+.line-CostColor14   { border-right: 8px solid rgb(193,  59, 30); }
+.line-CostColor13   { border-right: 8px solid rgb(202,  71, 27); }
+.line-CostColor12   { border-right: 8px solid rgb(210,  82, 22); }
+.line-CostColor11   { border-right: 8px solid rgb(218,  93, 16); }
+.line-CostColor10   { border-right: 8px solid rgb(226, 104,  6); }
+.line-CostColor9    { border-right: 8px solid rgb(229, 118,  9); }
+.line-CostColor8    { border-right: 8px solid rgb(230, 132, 15); }
+.line-CostColor7    { border-right: 8px solid rgb(231, 146, 20); }
+.line-CostColor6    { border-right: 8px solid rgb(232, 159, 25); }
+.line-CostColor5    { border-right: 8px solid rgb(233, 172, 30); }
+.line-CostColor4    { border-right: 8px solid rgb(233, 185, 35); }
+.line-CostColor3    { border-right: 8px solid rgb(233, 198, 40); }
+.line-CostColor2    { border-right: 8px solid rgb(232, 211, 45); }
+.line-CostColor1    { border-right: 8px solid rgb(231, 223, 50); }
+.line-CostColor0    { border-right: 8px solid rgb(236, 233, 89); }
+.line-CostColorNone { border-right: transparent; }
+
+.block-CostColor19   { border-left: 8px solid rgb(130,  31, 27); }
+.block-CostColor18   { border-left: 8px solid rgb(145,  33, 30); }
+.block-CostColor17   { border-left: 8px solid rgb(160,  33, 32); }
+.block-CostColor16   { border-left: 8px solid rgb(176,  34, 34); }
+.block-CostColor15   { border-left: 8px solid rgb(185,  47, 32); }
+.block-CostColor14   { border-left: 8px solid rgb(193,  59, 30); }
+.block-CostColor13   { border-left: 8px solid rgb(202,  71, 27); }
+.block-CostColor12   { border-left: 8px solid rgb(210,  82, 22); }
+.block-CostColor11   { border-left: 8px solid rgb(218,  93, 16); }
+.block-CostColor10   { border-left: 8px solid rgb(226, 104,  6); }
+.block-CostColor9    { border-left: 8px solid rgb(229, 118,  9); }
+.block-CostColor8    { border-left: 8px solid rgb(230, 132, 15); }
+.block-CostColor7    { border-left: 8px solid rgb(231, 146, 20); }
+.block-CostColor6    { border-left: 8px solid rgb(232, 159, 25); }
+.block-CostColor5    { border-left: 8px solid rgb(233, 172, 30); }
+.block-CostColor4    { border-left: 8px solid rgb(233, 185, 35); }
+.block-CostColor3    { border-left: 8px solid rgb(233, 198, 40); }
+.block-CostColor2    { border-left: 8px solid rgb(232, 211, 45); }
+.block-CostColor1    { border-left: 8px solid rgb(231, 223, 50); }
+.block-CostColor0    { border-left: 8px solid rgb(236, 233, 89); }
+.block-CostColorNone { border-color: transparent; }
+
+
+
+.line-CostColor19:last-child   { border-right: 8px solid rgb( 31, 27, 130); }
+.line-CostColor18:last-child   { border-right: 8px solid rgb( 33, 30, 145); }
+.line-CostColor17:last-child   { border-right: 8px solid rgb( 33, 32, 160); }
+.line-CostColor16:last-child   { border-right: 8px solid rgb( 34, 34, 176); }
+.line-CostColor15:last-child   { border-right: 8px solid rgb( 47, 32, 185); }
+.line-CostColor14:last-child   { border-right: 8px solid rgb( 59, 30, 193); }
+.line-CostColor13:last-child   { border-right: 8px solid rgb( 71, 27, 202); }
+.line-CostColor12:last-child   { border-right: 8px solid rgb( 82, 22, 210); }
+.line-CostColor11:last-child   { border-right: 8px solid rgb( 93, 16, 218); }
+.line-CostColor10:last-child   { border-right: 8px solid rgb(104,  6, 226); }
+.line-CostColor9:last-child    { border-right: 8px solid rgb(118,  9, 229); }
+.line-CostColor8:last-child    { border-right: 8px solid rgb(132, 15, 230); }
+.line-CostColor7:last-child    { border-right: 8px solid rgb(146, 20, 231); }
+.line-CostColor6:last-child    { border-right: 8px solid rgb(159, 25, 232); }
+.line-CostColor5:last-child    { border-right: 8px solid rgb(172, 30, 233); }
+.line-CostColor4:last-child    { border-right: 8px solid rgb(185, 35, 233); }
+.line-CostColor3:last-child    { border-right: 8px solid rgb(198, 40, 233); }
+.line-CostColor2:last-child    { border-right: 8px solid rgb(211, 45, 232); }
+.line-CostColor1:last-child    { border-right: 8px solid rgb(223, 50, 231); }
+.line-CostColor0:last-child    { border-right: 8px solid rgb(233, 89, 236); }
+.line-CostColorNone { border-right: transparent; }
+
+.block-CostColor19:last-child   { border-left: 8px solid rgb( 31, 27, 130); }
+.block-CostColor18:last-child   { border-left: 8px solid rgb( 33, 30, 145); }
+.block-CostColor17:last-child   { border-left: 8px solid rgb( 33, 32, 160); }
+.block-CostColor16:last-child   { border-left: 8px solid rgb( 34, 34, 176); }
+.block-CostColor15:last-child   { border-left: 8px solid rgb( 47, 32, 185); }
+.block-CostColor14:last-child   { border-left: 8px solid rgb( 59, 30, 193); }
+.block-CostColor13:last-child   { border-left: 8px solid rgb( 71, 27, 202); }
+.block-CostColor12:last-child   { border-left: 8px solid rgb( 82, 22, 210); }
+.block-CostColor11:last-child   { border-left: 8px solid rgb( 93, 16, 218); }
+.block-CostColor10:last-child   { border-left: 8px solid rgb(104,  6, 226); }
+.block-CostColor9:last-child    { border-left: 8px solid rgb(118,  9, 229); }
+.block-CostColor8:last-child    { border-left: 8px solid rgb(132, 15, 230); }
+.block-CostColor7:last-child    { border-left: 8px solid rgb(146, 20, 231); }
+.block-CostColor6:last-child    { border-left: 8px solid rgb(159, 25, 232); }
+.block-CostColor5:last-child    { border-left: 8px solid rgb(172, 30, 233); }
+.block-CostColor4:last-child    { border-left: 8px solid rgb(185, 35, 233); }
+.block-CostColor3:last-child    { border-left: 8px solid rgb(198, 40, 233); }
+.block-CostColor2:last-child    { border-left: 8px solid rgb(211, 45, 232); }
+.block-CostColor1:last-child    { border-left: 8px solid rgb(223, 50, 231); }
+.block-CostColor0:last-child    { border-left: 8px solid rgb(233, 89, 236); }
+.block-CostColorNone { border-color: transparent; }
+
+
+.NoChildCost { border-left: none !important; }
 
 /* Below is the style for the Syntax Highlighting with speed-highlight.
  * It's adapted from the default style from: https://unpkg.com/@speed-highlight/core@1.1.11/dist/themes/default.css

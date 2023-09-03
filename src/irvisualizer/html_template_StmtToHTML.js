@@ -1,12 +1,38 @@
-/* Highlighting 'matched' elements in IR code */
-$('#ir-code-tab .matched').each(function () {
-    this.onmouseover = function () {
-        $('#ir-code-tab .matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight');
-    }
-    this.onmouseout = function () {
-        $('#ir-code-tab .matched[id^=' + this.id.split('-')[0] + '-]').removeClass('Highlight');
-    }
+// /* Highlighting 'matched' elements in IR code */
+// $('#ir-code-tab .matched').each(function () {
+//     this.onmouseover = function () {
+//         $('#ir-code-tab .matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight');
+//     }
+//     this.onmouseout = function () {
+//         $('#ir-code-tab .matched[id^=' + this.id.split('-')[0] + '-]').removeClass('Highlight');
+//     }
+// });
+
+
+// Highlighting 'matched' elements in IR code
+var matchedElements = document.querySelectorAll('#ir-code-tab .matched');
+
+matchedElements.forEach(function(element) {
+    element.addEventListener('mouseover', function() {
+        var idPrefix = this.id.split('-')[0];
+        var matchingElements = document.querySelectorAll('#ir-code-tab .matched[id^="' + idPrefix + '-"]');
+
+        matchingElements.forEach(function(matchingElement) {
+            matchingElement.classList.add('Highlight');
+        });
+    });
+
+    element.addEventListener('mouseout', function() {
+        var idPrefix = this.id.split('-')[0];
+        var matchingElements = document.querySelectorAll('#ir-code-tab .matched[id^="' + idPrefix + '-"]');
+
+        matchingElements.forEach(function(matchingElement) {
+            matchingElement.classList.remove('Highlight');
+        });
+    });
 });
+
+
 
 /* Expand/Collapse buttons in IR code */
 function toggle(id) {
@@ -82,34 +108,19 @@ function makeCodeVisible(element) {
     makeCodeVisible(element.parentNode);
 }
 
-/* Resizing visualization tabs */
-var codeDiv = document.getElementById('ir-code-tab');
-var resizeBar = document.getElementById('resize-bar-1');
-var irVizDiv = document.getElementById('ir-visualization-tab');
-var resizeBarAssembly = document.getElementById('resize-bar-2');
-var assemblyCodeDiv = document.getElementById('assembly-tab');
-
-codeDiv.style.flexGrow = '0';
-resizeBar.style.flexGrow = '0';
-irVizDiv.style.flexGrow = '0';
-resizeBarAssembly.style.flexGrow = '0';
-assemblyCodeDiv.style.flexGrow = '0';
-
-codeDiv.style.flexBasis = 'calc(50% - 6px)';
-resizeBar.style.flexBasis = '6px';
-irVizDiv.style.flexBasis = 'calc(50% - 3px)';
-resizeBarAssembly.style.flexBasis = '6px';
 
 var currentResizer;
 var mousedown = false;
-resizeBar.addEventListener('mousedown', (event) => {
-    currentResizer = resizeBar;
-    mousedown = true;
-});
-resizeBarAssembly.addEventListener('mousedown', (event) => {
-    currentResizer = resizeBarAssembly;
-    mousedown = true;
-});
+
+var resizeBars = document.querySelectorAll('div.resize-bar');
+
+for (var i = 0; i < resizeBars.length; i++) {
+    resizeBars[i].addEventListener('mousedown', (event) => {
+        currentResizer = event.target;
+        mousedown = true;
+    });
+}
+
 document.addEventListener('mouseup', (event) => {
     currentResizer = null;
     mousedown = false;
@@ -117,54 +128,15 @@ document.addEventListener('mouseup', (event) => {
 
 document.addEventListener('mousemove', (event) => {
     if (mousedown) {
-        if (currentResizer == resizeBar) {
-            resize(event);
-        } else if (currentResizer == resizeBarAssembly) {
-            resizeAssembly(event);
-        }
+        resize(event);
     }
 });
 
 
 function resize(e) {
-    if (e.x < 25) {
-        collapse_code_tab();
-        return;
-    }
-
     const size = `${e.x}px`;
-    var rect = resizeBarAssembly.getBoundingClientRect();
-
-    if (e.x > rect.left) {
-        collapseR_visualization_tab();
-        return;
-    }
-
-    codeDiv.style.display = 'block';
-    irVizDiv.style.display = 'block';
-    codeDiv.style.flexBasis = size;
-    irVizDiv.style.flexBasis = `calc(${rect.left}px - ${size})`;
-}
-
-function resizeAssembly(e) {
-    if (e.x > screen.width - 25) {
-        collapse_assembly_tab();
-        return;
-    }
-
-    var rect = resizeBar.getBoundingClientRect();
-
-    if (e.x < rect.right) {
-        collapseL_visualization_tab();
-        return;
-    }
-
-    const size = `${e.x}px`;
-    irVizDiv.style.display = 'block';
-    assemblyCodeDiv.style.display = 'block';
-    irVizDiv.style.flexBasis = `calc(${size} - ${rect.right}px)`;
-    assemblyCodeDiv.style.flexBasis = `calc(100% - ${size})`;
-
+    var rect = currentResizer.getBoundingClientRect();
+    // TODO resize
 }
 
 function collapse_tab(index) {
@@ -174,21 +146,7 @@ function collapse_tab(index) {
         tab = tab.nextElementSibling.nextElementSibling;
     }
 
-    tab.style.display = 'none';
-}
-
-function collapse_code_tab() {
-    irVizDiv.style.display = 'block';
-    var rect = resizeBarAssembly.getBoundingClientRect();
-    irVizDiv.style.flexBasis = `${rect.left}px`;
-    codeDiv.style.display = 'none';
-}
-
-function collapse_assembly_tab() {
-    irVizDiv.style.display = 'block';
-    var rect = resizeBar.getBoundingClientRect();
-    irVizDiv.style.flexBasis = `calc(100% - ${rect.right}px)`;
-    assemblyCodeDiv.style.display = 'none';
+    tab.classList.toggle('collapsed-tab');
 }
 
 function scrollToAsm(lno) {
@@ -198,23 +156,5 @@ function scrollToAsm(lno) {
     document.getElementById("assembly-tab").scrollTo({
         behavior: "smooth",
         top: lno * line_height
-    });
-}
-
-// Instead of calling 'collapse_assembly_tab();' we use the
-// last bit of it, which skips a whole Layout Recalculation.
-assemblyCodeDiv.style.display = 'none';
-
-// Cost model js
-var re = /(?:\-([^-]+))?$/;
-var cost_btns = $('div[id^="cc-"], div[id^="dc-"]');
-for (var i = 0; i < cost_btns.size(); i++) {
-    const button = cost_btns[i];
-    const highlight_span = document.getElementById("cost-bg-" + re.exec(button.id)[1]); // span#
-    $(button).mouseover(() => {
-        $(highlight_span).css("background", "#e5e3e3");
-    });
-    $(button).mouseout(() => {
-        $(highlight_span).css("background", "none");
     });
 }
