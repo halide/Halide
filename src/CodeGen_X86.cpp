@@ -211,12 +211,19 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.x86.sse2.pmulhu.w", UInt(16, 8), "pmulh", {UInt(16, 8), UInt(16, 8)}},
     {"llvm.x86.ssse3.pmul.hr.sw.128", Int(16, 8), "pmulhrs", {Int(16, 8), Int(16, 8)}, Target::SSE41},
 
+    // As of LLVM main September 5 2023, LLVM only has partial handling of
+    // bfloat16. The below rules will match fine for simple examples, but bfloat
+    // conversion will get folded through any nearby shuffles and cause
+    // unimplemented errors in llvm's x86 instruction selection for the shuffle
+    // node. Disabling them for now. See https://github.com/halide/Halide/issues/7219
+    /*
     // Convert FP32 to BF16
     {"vcvtne2ps2bf16x32", BFloat(16, 32), "f32_to_bf16", {Float(32, 32)}, Target::AVX512_Zen4},
     {"llvm.x86.avx512bf16.cvtneps2bf16.512", BFloat(16, 16), "f32_to_bf16", {Float(32, 16)}, Target::AVX512_Zen4},
     {"llvm.x86.avx512bf16.cvtneps2bf16.256", BFloat(16, 8), "f32_to_bf16", {Float(32, 8)}, Target::AVX512_Zen4},
     // LLVM does not provide an unmasked 128bit cvtneps2bf16 intrinsic, so provide a wrapper around the masked version.
     {"vcvtneps2bf16x4", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_Zen4},
+    */
 
     // 2-way dot products
     {"llvm.x86.avx2.pmadd.ub.sw", Int(16, 16), "saturating_dot_product", {UInt(8, 32), Int(8, 32)}, Target::AVX2},

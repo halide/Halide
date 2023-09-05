@@ -585,10 +585,13 @@ public:
         }
         if (use_avx512_vnni) {
             // For our targets, avx512_vnni implies avx512_bf16
+            // Disabled due to https://github.com/halide/Halide/issues/7219
+            /*
             check("vcvtne2ps2bf16*zmm", 32, cast(BFloat(16), f32_1));
             check("vcvtneps2bf16*ymm", 16, cast(BFloat(16), f32_1));
             check("vcvtneps2bf16*xmm", 8, cast(BFloat(16), f32_1));
             check("vcvtneps2bf16*xmm", 4, cast(BFloat(16), f32_1));
+            */
 
             {
                 // 16 bit, 2 element dot product
@@ -640,9 +643,9 @@ public:
 
 private:
     bool use_avx2{false};
-    bool use_avx512{false}; 
+    bool use_avx512{false};
     bool use_avx512_vnni{false};
-    bool use_avx_vnni{false};    
+    bool use_avx_vnni{false};
     bool use_avx{false};
     bool use_sse41{false};
     bool use_sse42{false};
