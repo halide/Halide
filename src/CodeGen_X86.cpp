@@ -486,19 +486,24 @@ void CodeGen_X86::visit(const Select *op) {
 }
 
 void CodeGen_X86::visit(const Cast *op) {
+    Type src = op->value.type();
+    Type dst = op->type;
 
     if (target.has_feature(Target::F16C) &&
-        ((op->type.is_float() && op->type.bits() == 16 && op->value.type().is_float()) ||
-         (op->value.type().is_float() && op->value.type().bits() == 16 && op->type.is_float()))) {
+        dst.code() == Type::Float &&
+        src.code() == Type::Float &&
+        (dst.bits() == 16 || src.bits() == 16)) {
+        // Node we use code() == Type::Float instead of is_float(), because we
+        // don't want to bfloat casts.
+
         // This target doesn't support full float16 arithmetic, but it *does*
         // support float16 casts, so we emit a vanilla LLVM cast node.
         value = codegen(op->value);
-        llvm::Type *llvm_dst = llvm_type_of(op->type);
-        value = builder->CreateFPCast(value, llvm_dst);
+        value = builder->CreateFPCast(value, llvm_type_of(dst));
         return;
     }
 
-    if (!op->type.is_vector()) {
+    if (!dst.is_vector()) {
         // We only have peephole optimizations for vectors after this point.
         CodeGen_Posix::visit(op);
         return;
@@ -522,7 +527,7 @@ void CodeGen_X86::visit(const Cast *op) {
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
         if (expr_match(p.pattern, op, matches)) {
-            value = call_overloaded_intrin(op->type, p.intrin, matches);
+            value = call_overloaded_intrin(dst, p.intrin, matches);
             if (value) {
                 return;
             }
@@ -530,12 +535,12 @@ void CodeGen_X86::visit(const Cast *op) {
     }
 
     if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
-        if (op->value.type().bits() < op->type.bits() && op->type.bits() <= 32) {
+        if (src.bits() < dst.bits() && dst.bits() <= 32) {
             // LLVM/x86 really doesn't like 8 -> 16 bit multiplication. If we're
             // widening to 32-bits after a widening multiply, LLVM prefers to see a
             // widening multiply directly to 32-bits. This may result in extra
             // casts, so simplify to remove them.
-            value = codegen(simplify(Mul::make(Cast::make(op->type, mul->args[0]), Cast::make(op->type, mul->args[1]))));
+            value = codegen(simplify(Mul::make(Cast::make(dst, mul->args[0]), Cast::make(dst, mul->args[1]))));
             return;
         }
     }
