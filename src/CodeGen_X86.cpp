@@ -67,8 +67,6 @@ protected:
 
     int vector_lanes_for_slice(const Type &t) const;
 
-    llvm::Type *llvm_type_of(const Type &t) const override;
-
     using CodeGen_Posix::visit;
 
     void init_module() override;
@@ -489,8 +487,19 @@ void CodeGen_X86::visit(const Select *op) {
 
 void CodeGen_X86::visit(const Cast *op) {
 
+    if (target.has_feature(Target::F16C) &&
+        ((op->type.is_float() && op->type.bits() == 16 && op->value.type().is_float()) ||
+         (op->value.type().is_float() && op->value.type().bits() == 16 && op->type.is_float()))) {
+        // This target doesn't support full float16 arithmetic, but it *does*
+        // support float16 casts, so we emit a vanilla LLVM cast node.
+        value = codegen(op->value);
+        llvm::Type *llvm_dst = llvm_type_of(op->type);
+        value = builder->CreateFPCast(value, llvm_dst);
+        return;
+    }
+
     if (!op->type.is_vector()) {
-        // We only have peephole optimizations for vectors in here.
+        // We only have peephole optimizations for vectors after this point.
         CodeGen_Posix::visit(op);
         return;
     }
@@ -995,21 +1004,6 @@ int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
                                                                    128);
     // clang-format on
     return slice_bits / t.bits();
-}
-
-llvm::Type *CodeGen_X86::llvm_type_of(const Type &t) const {
-    if (t.is_float() && t.bits() < 32) {
-        // LLVM as of August 2019 has all sorts of issues in the x86
-        // backend for half types. It injects expensive calls to
-        // convert between float and half for seemingly no reason
-        // (e.g. to do a select), and bitcasting to int16 doesn't
-        // help, because it simplifies away the bitcast for you.
-        // See: https://bugs.llvm.org/show_bug.cgi?id=43065
-        // and: https://github.com/halide/Halide/issues/4166
-        return llvm_type_of(t.with_code(halide_type_uint));
-    } else {
-        return CodeGen_Posix::llvm_type_of(t);
-    }
 }
 
 }  // namespace
