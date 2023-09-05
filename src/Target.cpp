@@ -223,10 +223,8 @@ Target calculate_host_target() {
             t.set_features({Target::SSE41, Target::AVX,
                             Target::F16C, Target::FMA,
                             Target::AVX2, Target::AVX512,
-                            Target::AVX512_Skylake, Target::AVX512_Cannonlake});
-            // Zen4 is supposed to support VNNI too, but this seems to throw
-            // illegal instruction exceptions (See
-            // https://github.com/halide/Halide/issues/7834)
+                            Target::AVX512_Skylake, Target::AVX512_Cannonlake,
+                            Target::AVX512_Zen4});
             return t;
         }
     }
@@ -521,6 +519,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_skylake", Target::AVX512_Skylake},
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
     {"avx512_sapphirerapids", Target::AVX512_SapphireRapids},
+    {"avx512_zen4", Target::AVX512_Zen4},
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
@@ -1277,7 +1276,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 14> intersection_features = {{
+    const std::array<Feature, 15> intersection_features = {{
         ARMv7s,
         ARMv81a,
         AVX,
@@ -1287,6 +1286,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         AVX512_KNL,
         AVX512_SapphireRapids,
         AVX512_Skylake,
+        AVX512_Zen4,
         F16C,
         FMA,
         FMA4,
