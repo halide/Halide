@@ -917,6 +917,8 @@ string CodeGen_X86::mcpu_tune() const {
         return "znver2";
     case Target::Processor::ZnVer3:
         return "znver3";
+    case Target::Processor::ZnVer4:
+        return "znver4";
 
     case Target::Processor::ProcessorGeneric:
         break;

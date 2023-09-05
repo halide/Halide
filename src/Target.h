@@ -73,6 +73,7 @@ struct Target {
         ZnVer1,    /// Tune for AMD Zen   CPU (AMD Family 17h, launched 2017).
         ZnVer2,    /// Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
         ZnVer3,    /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
+        ZnVer4,    /// Tune for AMD Zen 4 CPU (AMD Family 19h, launched 2022).
     } processor_tune = ProcessorGeneric;
 
     /** Optional features a target can have.

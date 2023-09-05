@@ -128,8 +128,10 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
         }
         break;
     case 0x19:  // AMD Family 19h
-        if (model <= 0x0f || model == 0x21) {
+        if ((model & 0xf0) == 0 || model == 0x21) {
             return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
+        } else if (model == 0x10) {
+            return Target::Processor::ZnVer4;  // 10h: Zen4
         }
         break;
     default:
@@ -215,7 +217,23 @@ Target calculate_host_target() {
 
     if (vendor_signature == VendorSignatures::AuthenticAMD) {
         processor = get_amd_processor(family, model, have_sse3);
+
+        if (processor == Target::Processor::ZnVer4) {
+            Target t {os, arch, bits, processor, initial_features, vector_bits};
+            t.set_features({Target::SSE41, Target::AVX,
+                            Target::F16C, Target::FMA,
+                            Target::AVX2, Target::AVX512,
+                            Target::AVX512_Skylake, Target::AVX512_Cannonlake});
+            // Zen4 is supposed to support VNNI too, but this seems to throw
+            // illegal instruction exceptions (See
+            // https://github.com/halide/Halide/issues/7834)
+            return t;
+        }
     }
+
+    // Processors not specifically detected by model number above use the cpuid
+    // feature bits to determine what flags are supported. For future models,
+    // detect them explicitly above rather than extending the code below.
 
     if (have_sse41) {
         initial_features.push_back(Target::SSE41);
@@ -441,6 +459,7 @@ const std::map<std::string, Target::Processor> processor_name_map = {
     {"tune_znver1", Target::Processor::ZnVer1},
     {"tune_znver2", Target::Processor::ZnVer2},
     {"tune_znver3", Target::Processor::ZnVer3},
+    {"tune_znver4", Target::Processor::ZnVer4},
 };
 
 bool lookup_processor(const std::string &tok, Target::Processor &result) {
