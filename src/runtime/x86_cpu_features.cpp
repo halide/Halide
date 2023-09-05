@@ -56,7 +56,7 @@ WEAK CpuFeatures halide_get_cpu_features() {
 
     if (vendor[1] == 0x68747541 && vendor[3] == 0x69746e65 && vendor[2] == 0x444d4163) {
         // AMD
-        if (family == 0x19 && model == 0x10) {
+        if (family == 0x19 && model == 0x61) {
             // Zen4
             features.set_available(halide_target_feature_sse41);
             features.set_available(halide_target_feature_avx);
