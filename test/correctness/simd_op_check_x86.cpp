@@ -644,9 +644,9 @@ int main(int argc, char **argv) {
         {
             Target("x86-32-linux"),
             Target("x86-32-linux-sse41"),
-            // Always turn on f16c when using avx. Haswell had avx without f16c,
-            // but f16c is orthogonal to everything else, so there's no real
-            // reason to test avx without it.
+            // Always turn on f16c when using avx. Sandy Bridge had avx without
+            // f16c, but f16c is orthogonal to everything else, so there's no
+            // real reason to test avx without it.
             Target("x86-64-linux-sse41-avx-f16c"),
             Target("x86-64-linux-sse41-avx-f16c-avx2"),
             // See above: don't test avx512 without extra features, the test
