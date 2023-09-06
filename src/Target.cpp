@@ -131,7 +131,7 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
         if ((model & 0xf0) == 0 || model == 0x21) {
             return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
         } else if (model == 0x61) {
-            return Target::Processor::ZnVer4;  // 10h: Zen4
+            return Target::Processor::ZnVer4;  // 61h: Zen4
         }
         break;
     default:
