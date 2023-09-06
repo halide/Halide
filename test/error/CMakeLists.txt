@@ -77,6 +77,7 @@ tests(GROUPS error
       overflow_during_constant_folding.cpp
       pointer_arithmetic.cpp
       race_condition.cpp
+      predicate_loads_used_in_inner_splits.cpp
       rdom_undefined.cpp
       rdom_where_races.cpp
       realization_with_too_many_outputs.cpp
