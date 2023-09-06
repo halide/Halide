@@ -494,7 +494,7 @@ void CodeGen_X86::visit(const Cast *op) {
         src.code() == Type::Float &&
         (dst.bits() == 16 || src.bits() == 16)) {
         // Node we use code() == Type::Float instead of is_float(), because we
-        // don't want to bfloat casts.
+        // don't want to catch bfloat casts.
 
         // This target doesn't support full float16 arithmetic, but it *does*
         // support float16 casts, so we emit a vanilla LLVM cast node.
