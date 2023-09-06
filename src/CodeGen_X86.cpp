@@ -67,8 +67,6 @@ protected:
 
     int vector_lanes_for_slice(const Type &t) const;
 
-    llvm::Type *llvm_type_of(const Type &t) const override;
-
     using CodeGen_Posix::visit;
 
     void init_module() override;
@@ -488,9 +486,25 @@ void CodeGen_X86::visit(const Select *op) {
 }
 
 void CodeGen_X86::visit(const Cast *op) {
+    Type src = op->value.type();
+    Type dst = op->type;
 
-    if (!op->type.is_vector()) {
-        // We only have peephole optimizations for vectors in here.
+    if (target.has_feature(Target::F16C) &&
+        dst.code() == Type::Float &&
+        src.code() == Type::Float &&
+        (dst.bits() == 16 || src.bits() == 16)) {
+        // Node we use code() == Type::Float instead of is_float(), because we
+        // don't want to catch bfloat casts.
+
+        // This target doesn't support full float16 arithmetic, but it *does*
+        // support float16 casts, so we emit a vanilla LLVM cast node.
+        value = codegen(op->value);
+        value = builder->CreateFPCast(value, llvm_type_of(dst));
+        return;
+    }
+
+    if (!dst.is_vector()) {
+        // We only have peephole optimizations for vectors after this point.
         CodeGen_Posix::visit(op);
         return;
     }
@@ -513,7 +527,7 @@ void CodeGen_X86::visit(const Cast *op) {
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
         if (expr_match(p.pattern, op, matches)) {
-            value = call_overloaded_intrin(op->type, p.intrin, matches);
+            value = call_overloaded_intrin(dst, p.intrin, matches);
             if (value) {
                 return;
             }
@@ -521,12 +535,12 @@ void CodeGen_X86::visit(const Cast *op) {
     }
 
     if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
-        if (op->value.type().bits() < op->type.bits() && op->type.bits() <= 32) {
+        if (src.bits() < dst.bits() && dst.bits() <= 32) {
             // LLVM/x86 really doesn't like 8 -> 16 bit multiplication. If we're
             // widening to 32-bits after a widening multiply, LLVM prefers to see a
             // widening multiply directly to 32-bits. This may result in extra
             // casts, so simplify to remove them.
-            value = codegen(simplify(Mul::make(Cast::make(op->type, mul->args[0]), Cast::make(op->type, mul->args[1]))));
+            value = codegen(simplify(Mul::make(Cast::make(dst, mul->args[0]), Cast::make(dst, mul->args[1]))));
             return;
         }
     }
@@ -995,21 +1009,6 @@ int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
                                                                    128);
     // clang-format on
     return slice_bits / t.bits();
-}
-
-llvm::Type *CodeGen_X86::llvm_type_of(const Type &t) const {
-    if (t.is_float() && t.bits() < 32) {
-        // LLVM as of August 2019 has all sorts of issues in the x86
-        // backend for half types. It injects expensive calls to
-        // convert between float and half for seemingly no reason
-        // (e.g. to do a select), and bitcasting to int16 doesn't
-        // help, because it simplifies away the bitcast for you.
-        // See: https://bugs.llvm.org/show_bug.cgi?id=43065
-        // and: https://github.com/halide/Halide/issues/4166
-        return llvm_type_of(t.with_code(halide_type_uint));
-    } else {
-        return CodeGen_Posix::llvm_type_of(t);
-    }
 }
 
 }  // namespace
