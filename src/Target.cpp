@@ -219,7 +219,7 @@ Target calculate_host_target() {
         processor = get_amd_processor(family, model, have_sse3);
 
         if (processor == Target::Processor::ZnVer4) {
-            Target t {os, arch, bits, processor, initial_features, vector_bits};
+            Target t{os, arch, bits, processor, initial_features, vector_bits};
             t.set_features({Target::SSE41, Target::AVX,
                             Target::F16C, Target::FMA,
                             Target::AVX2, Target::AVX512,
@@ -281,8 +281,8 @@ Target calculate_host_target() {
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
 
-                const uint32_t avxvnni = 1U << 4;  // avxvnni (note, not avx512vnni) result in eax
-                const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
+                const uint32_t avxvnni = 1U << 4;     // avxvnni (note, not avx512vnni) result in eax
+                const uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, with cpuid(eax=7, ecx=1)
                 int info3[4];
                 cpuid(info3, 7, 1);
                 // TODO: port to family/model -based detection.

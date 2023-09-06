@@ -106,7 +106,7 @@ WEAK CpuFeatures halide_get_cpu_features() {
         constexpr uint32_t avx512vl = 1U << 31;
         constexpr uint32_t avx512ifma = 1U << 21;
         constexpr uint32_t avxvnni = 1U << 4;
-        constexpr uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, cpuid(eax=7, ecx=1)
+        constexpr uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, cpuid(eax=7, ecx=1)
         constexpr uint32_t avx512 = avx512f | avx512cd;
         constexpr uint32_t avx512_knl = avx512 | avx512pf | avx512er;
         constexpr uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
