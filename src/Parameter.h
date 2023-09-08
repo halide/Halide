@@ -25,7 +25,9 @@ struct BufferConstraint {
 };
 
 namespace Internal {
-
+#ifdef WITH_SERIALIZATION
+class Serializer;
+#endif
 struct ParameterContents;
 
 }  // namespace Internal
@@ -41,6 +43,23 @@ class Parameter {
 
 protected:
     Internal::IntrusivePtr<Internal::ParameterContents> contents;
+
+#ifdef WITH_SERIALIZATION
+    friend class Internal::Serializer;  //< for scalar_raw_value()
+#endif
+    friend class Pipeline;  //< for scalar_address()
+
+    /** Get the raw currently-bound buffer. null if unbound */
+    const halide_buffer_t *raw_buffer() const;
+
+    /** Get the pointer to the current value of the scalar
+     * parameter. For a given parameter, this address will never
+     * change. Only relevant when jitting. */
+    void *scalar_address() const;
+
+    /** Get the raw data of the current value of the scalar
+     * parameter. Only relevant when serializing. */
+    uint64_t scalar_raw_value() const;
 
 public:
     /** Construct a new undefined handle */
@@ -119,21 +138,9 @@ public:
      * bound buffer. Only relevant when jitting */
     Buffer<void> buffer() const;
 
-    /** Get the raw currently-bound buffer. null if unbound */
-    const halide_buffer_t *raw_buffer() const;
-
     /** If the parameter is a buffer parameter, set its current
      * value. Only relevant when jitting */
     void set_buffer(const Buffer<void> &b);
-
-    /** Get the pointer to the current value of the scalar
-     * parameter. For a given parameter, this address will never
-     * change. Only relevant when jitting. */
-    void *scalar_address() const;
-
-    /** Get the raw data of the current value of the scalar
-     * parameter. Only relevant when serializing. */
-    uint64_t scalar_raw_value() const;
 
     /** Tests if this handle is the same as another handle */
     bool same_as(const Parameter &other) const;
