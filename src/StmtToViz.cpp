@@ -1358,7 +1358,7 @@ private:
         int max_line_cost = cost_model.get_max_compute_cost(false);
         int line_cost = cost_model.get_compute_cost(op, false);
         int block_cost = cost_model.get_compute_cost(op, true);
-        if (dynamic_cast<const LetStmt *>(op)) {
+        if (dynamic_cast<const LetStmt *>(op) || dynamic_cast<const Allocate*>(op)) {
             block_cost = line_cost;
         }
         std::string _id = "cc-" + std::to_string(id);
@@ -1370,7 +1370,7 @@ private:
         int max_line_cost = cost_model.get_max_data_movement_cost(false);
         int line_cost = cost_model.get_data_movement_cost(op, false);
         int block_cost = cost_model.get_data_movement_cost(op, true);
-        if (dynamic_cast<const LetStmt *>(op)) {
+        if (dynamic_cast<const LetStmt *>(op) || dynamic_cast<const Allocate*>(op)) {
             block_cost = line_cost;
         }
         std::string _id = "dc-" + std::to_string(id);
@@ -3080,6 +3080,7 @@ private:
     void generate_visualization_tabs(const Module &m) {
         int tab_count = 0;
         stream << "<div id='visualization-tabs'>\n";
+        stream << "<div id='resizer-preview'></div>\n";
         generate_ir_tab(m);
         if (include_viztree) {
             generate_resize_bar(tab_count++);

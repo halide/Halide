@@ -1,14 +1,3 @@
-// /* Highlighting 'matched' elements in IR code */
-// $('#ir-code-tab .matched').each(function () {
-//     this.onmouseover = function () {
-//         $('#ir-code-tab .matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight');
-//     }
-//     this.onmouseout = function () {
-//         $('#ir-code-tab .matched[id^=' + this.id.split('-')[0] + '-]').removeClass('Highlight');
-//     }
-// });
-
-
 // Highlighting 'matched' elements in IR code
 function addHighlight(selector) {
     var matchedElements = document.querySelectorAll(selector + ' .matched');
@@ -36,57 +25,9 @@ function addHighlight(selector) {
 
 // Example usage:
 addHighlight('#ir-code-tab');
-addHighlight('#ptx-assembly-tab');
+addHighlight('#device-code-tab');
 
 
-
-/* Expand/Collapse buttons in IR code */
-function toggle(id) {
-    e = document.getElementById(id);
-    e_cb = document.getElementsByClassName("cb-" + id)[0];
-    show = document.getElementById(id + '-show');
-    hide = document.getElementById(id + '-hide');
-    ccost_btn = document.getElementById("cc-" + id);
-    dcost_btn = document.getElementById("dc-" + id);
-    ccost_tt = document.getElementById("tooltip-cc-" + id);
-    dcost_tt = document.getElementById("tooltip-dc-" + id);
-    if (e.classList.contains("collapsed-block")) {
-        e.classList.remove("collapsed-block");
-        e_cb.classList.add("ClosingBrace");
-        show.style.display = 'none';
-        hide.style.display = 'block';
-        if (ccost_btn && dcost_tt) {
-            // Update cost indicators
-            ccost_color = ccost_btn.getAttribute('line-cost-color');
-            dcost_color = dcost_btn.getAttribute('line-cost-color');
-            ccost_btn.className = ccost_btn.className.replace(/CostColor\d+/, 'CostColor' + ccost_color);
-            dcost_btn.className = dcost_btn.className.replace(/CostColor\d+/, 'CostColor' + dcost_color);
-            // Update cost tooltips
-            ccost = ccost_btn.getAttribute('line-cost');
-            dcost = dcost_btn.getAttribute('line-cost');
-            ccost_tt.innerText = 'Op Count: ' + ccost;
-            dcost_tt.innerText = 'Bits Moved: ' + dcost;
-        }
-    } else {
-        e.classList.add("collapsed-block");
-        e_cb.classList.remove("ClosingBrace");
-        show.style.display = 'block';
-        hide.style.display = 'none';
-        if (ccost_btn && dcost_tt) {
-            // Update cost indicators
-            collapsed_ccost_color = ccost_btn.getAttribute('block-cost-color');
-            collapsed_dcost_color = dcost_btn.getAttribute('block-cost-color');
-            ccost_btn.className = ccost_btn.className.replace(/CostColor\d+/, 'CostColor' + collapsed_ccost_color);
-            dcost_btn.className = dcost_btn.className.replace(/CostColor\d+/, 'CostColor' + collapsed_dcost_color);
-            // Update cost tooltips
-            collapsed_ccost = ccost_btn.getAttribute('block-cost');
-            collapsed_dcost = dcost_btn.getAttribute('block-cost');
-            ccost_tt.innerText = 'Op Count: ' + collapsed_ccost;
-            dcost_tt.innerText = 'Bits Moved: ' + collapsed_dcost;
-        }
-    }
-    return false;
-}
 
 /* Scroll to code from visualization */
 function scrollToCode(id) {
@@ -103,51 +44,86 @@ function scrollToCode(id) {
     }, 1000);
 }
 
-// In case the code we are scrolling to code that sits within
-// a collapsed code block, uncollapse it
-function makeCodeVisible(element) {
-    if (!element) return;
-    if (element == document) return;
-    if (element.classList.contains("collapsed-block")) {
-        toggle(element.id);
-    }
-    makeCodeVisible(element.parentNode);
-}
-
-
 var currentResizer;
+var currentResizerIndex;
 var mousedown = false;
 
-var resizeBars = document.querySelectorAll('div.resize-bar');
+var resizeBars = Array.from(document.querySelectorAll('div.resize-bar'));
+var resizerInitCenter = 0;
+var resizerPreview = document.getElementById('resizer-preview');
+var resizerPreviewX;
 
 for (var i = 0; i < resizeBars.length; i++) {
     resizeBars[i].addEventListener('mousedown', (event) => {
-        currentResizer = event.target;
-        mousedown = true;
+        document.body.classList.add("no-select");
+        if (event.target.classList.contains("resize-bar")) {
+            console.log(event.target);
+
+            currentResizer = event.target;
+            currentResizerIndex = resizeBars.indexOf(currentResizer);
+            var rect = currentResizer.getBoundingClientRect();
+            mousedown = true;
+            resizerInitCenter = event.x;
+            resizerPreviewX = event.x;
+            resizerPreview.style.left = resizerInitCenter + 'px';
+            resizerPreview.style.display = 'block';
+        }
     });
 }
 
 document.addEventListener('mouseup', (event) => {
-    currentResizer = null;
-    mousedown = false;
+    if (mousedown) {
+
+        currentResizer = null;
+        mousedown = false;
+        resizerPreview.style.display = 'none';
+
+        // Gather tab widths
+        var tabs = Array.from(document.querySelectorAll('div.tab'));
+        var widths = tabs.map(function(tab) {
+            return tab.getBoundingClientRect().width;
+        });
+
+
+        // Adjust tab widths
+        var diff = resizerPreviewX - resizerInitCenter;
+        console.log(diff);
+        var currentIndex = currentResizerIndex;
+        while (currentIndex >= 0 && tabs[currentIndex].classList.contains('collapsed-tab')) {
+            currentIndex--
+        }
+        widths[currentIndex] += diff;
+
+        currentIndex = currentResizerIndex + 1;
+        while (currentIndex < tabs.length && tabs[currentIndex].classList.contains('collapsed-tab')) {
+            currentIndex++;
+        }
+        widths[currentIndex] -= diff;
+
+        // Apply tab widths
+        tabs.forEach(function(tab, index) {
+            if (widths[index] >= 0) {
+                tab.style.width = widths[index] + 'px';
+            } else {
+                tab.style.width = '0px'; // or any other default value you want to set
+            }
+        });
+    }
+
+    document.body.classList.remove("no-select");
 });
 
 document.addEventListener('mousemove', (event) => {
     if (mousedown) {
-        resize(event);
+        resizerPreview.style.left = event.x + 'px';
+        resizerPreviewX = event.x;
     }
 });
 
 
-function resize(e) {
-    const size = `${e.x}px`;
-    var rect = currentResizer.getBoundingClientRect();
-    // TODO resize
-}
-
 function collapse_tab(index) {
     var tabs = document.getElementById("visualization-tabs");
-    var tab = tabs.firstElementChild;
+    var tab = tabs.firstElementChild.nextElementSibling;
     for (var i = 0; i < index; ++i) {
         tab = tab.nextElementSibling.nextElementSibling;
     }

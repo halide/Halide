@@ -8,6 +8,11 @@ body {
     line-height: 14px;
 }
 
+.no-select {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
 div#page-container {
     height: 100vh;
     display: flex;
@@ -36,13 +41,17 @@ div#visualization-tabs {
     flex-grow: 1;
     width: 100%;
     height: 100%;
+    position: relative;
 }
 
 div.tab {
     overflow: scroll;
     position: relative;
     flex-grow: 1;
+    flex-shrink: 1;
     counter-reset: line;
+    min-width: 5vw;
+    width: 33vw;
 }
 div.tab.collapsed-tab {
     display: none;
@@ -52,26 +61,31 @@ div#ir-code-tab {
     counter-reset: line;
     padding-left: 50px;
     padding-top: 20px;
-    flex-grow: 2;
+    width: 50vw;
+    /*flex-grow: 2;
     flex-shrink: 20;
-    flex-basis: 50%;
+    flex-basis: 50%;*/
 }
 
 div#host-assembly-tab {
+    width: 20vw;
+    /*
     min-width: 350px;
     width: 30vw;
     flex-grow: 1;
     flex-shrink: 1;
-    flex-basis: 20%;
+    flex-basis: 20%;*/
 }
 
 div#device-code-tab {
+    padding-left: 6em;
+    width: 30vw;
+    /*
     min-width: 550px;
     width: 50vw;
-    padding-left: 6em;
     flex-grow: 2;
     flex-shrink: 1;
-    flex-basis: 30%;
+    flex-basis: 30%;*/
 }
 
 button#highlight-button {
@@ -136,11 +150,24 @@ div.resize-bar:has(+ div.collapsed-tab) > div.collapse-btns button.collapse-righ
     content: "\21A4";
 }
 
-
 button.resize-btn {
     margin: 10px 3px;
     font-size: 18px;
 }
+
+/* Resizer Preview */
+div#resizer-preview {
+    position: absolute;
+    width: 4px;
+    height: 100%;
+    background-color: gray;
+    padding: 0;
+    margin: 0;
+    opacity: 50%;
+    z-index: 190000;
+}
+
+
 
 div#device-code-tab code {
     line-height: 14px;
