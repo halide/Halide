@@ -95,6 +95,7 @@ struct Indentation {
 };
 std::ostream &operator<<(std::ostream &stream, const Indentation &);
 
+
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
  * which it prints.

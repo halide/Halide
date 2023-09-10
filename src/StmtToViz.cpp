@@ -804,7 +804,6 @@ public:
         std::string current_kernel;
         std::istringstream ss(str);
 
-
         for (std::string line; std::getline(ss, line);) {
             if (line.empty()) {
                 stream << "<span class='line'></span>\n";
@@ -1358,7 +1357,7 @@ private:
         int max_line_cost = cost_model.get_max_compute_cost(false);
         int line_cost = cost_model.get_compute_cost(op, false);
         int block_cost = cost_model.get_compute_cost(op, true);
-        if (dynamic_cast<const LetStmt *>(op) || dynamic_cast<const Allocate*>(op)) {
+        if (dynamic_cast<const LetStmt *>(op) || dynamic_cast<const Allocate *>(op)) {
             block_cost = line_cost;
         }
         std::string _id = "cc-" + std::to_string(id);
@@ -1370,7 +1369,7 @@ private:
         int max_line_cost = cost_model.get_max_data_movement_cost(false);
         int line_cost = cost_model.get_data_movement_cost(op, false);
         int block_cost = cost_model.get_data_movement_cost(op, true);
-        if (dynamic_cast<const LetStmt *>(op) || dynamic_cast<const Allocate*>(op)) {
+        if (dynamic_cast<const LetStmt *>(op) || dynamic_cast<const Allocate *>(op)) {
             block_cost = line_cost;
         }
         std::string _id = "dc-" + std::to_string(id);
@@ -2237,7 +2236,33 @@ private:
         print_text("(");
         print_type(op->type);
         print_text(")");
-        print_function_call("vector_reduce", {op->op, op->value});
+        std::string op_str;
+        switch (op->op) {
+        case VectorReduce::Add:
+            op_str = "add";
+            break;
+        case VectorReduce::SaturatingAdd:
+            op_str = "saturating_add";
+            break;
+        case VectorReduce::Mul:
+            op_str = "mul";
+            break;
+        case VectorReduce::Min:
+            op_str = "min";
+            break;
+        case VectorReduce::Max:
+            op_str = "max";
+            break;
+        case VectorReduce::And:
+            op_str = "and";
+            break;
+        case VectorReduce::Or:
+            op_str = "or";
+            break;
+        default:
+            internal_assert(false) << "Not a valid VectorReduce::Operator";
+        }
+        print_function_call("vector_reduce_" + op_str, {op->value});
         print_closing_tag("span");
         print_ln();
     }
@@ -2972,7 +2997,7 @@ public:
             debug(1) << "Generating device AssemblyInfo\n";
             // TODO(mcourteaux): This doesn't generate anything useful, as the
             // LLVM comments are only added later in the LLVM CodeGen IRVisitor.
-            // This conceptual Stmt hasn't seen this seen this 
+            // This conceptual Stmt hasn't seen this seen this
             device_asm_info.gather_nodes_from_conceptual_stmt(m);
             device_asm_info.generate(device_assembly);
         } else {

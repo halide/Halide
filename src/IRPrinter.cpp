@@ -1085,10 +1085,35 @@ void IRPrinter::visit(const Shuffle *op) {
 }
 
 void IRPrinter::visit(const VectorReduce *op) {
+    std::string op_str;
+    switch (op->op) {
+    case VectorReduce::Add:
+        op_str = "add";
+        break;
+    case VectorReduce::SaturatingAdd:
+        op_str = "saturating_add";
+        break;
+    case VectorReduce::Mul:
+        op_str = "mul";
+        break;
+    case VectorReduce::Min:
+        op_str = "min";
+        break;
+    case VectorReduce::Max:
+        op_str = "max";
+        break;
+    case VectorReduce::And:
+        op_str = "and";
+        break;
+    case VectorReduce::Or:
+        op_str = "or";
+        break;
+    default:
+        internal_assert(false) << "Not a valid VectorReduce::Operator";
+    }
     stream << "("
            << op->type
-           << ")vector_reduce("
-           << op->op
+           << ")vector_reduce_" << op_str << "("
            << ", "
            << op->value
            << ")";
