@@ -542,15 +542,27 @@ class AssemblyInfo : public IRVisitor {
 public:
     AssemblyInfo() = default;
 
-    void generate(const std::string &code, const Module &m) {
+    void gather_nodes_from_functions(const Module &m) {
         // Traverse the module to populate the list of
         // nodes we need to map and generate their assembly
         // markers (comments that appear in the assembly code
         // associating the code with this node)
+        ids_are_known = true;
         for (const auto &fn : m.functions()) {
             fn.body.accept(this);
         }
+    }
 
+    void gather_nodes_from_conceptual_stmt(const Module &m) {
+        // Traverse the module's conceptual Stmt to populate the list of
+        // nodes we need to map and generate their assembly
+        // markers (comments that appear in the assembly code
+        // associating the code with this node)
+        ids_are_known = false;
+        m.get_conceptual_stmt().accept(this);
+    }
+
+    void generate(const std::string &code) {
         // Find markers in asm code
         std::istringstream asm_stream(code);
         std::string line;
@@ -592,6 +604,7 @@ public:
 
 private:
     // Generate asm markers for Halide loops
+    bool ids_are_known{true};
     int loop_id = 0;
     int gen_loop_id() {
         return ++loop_id;
@@ -599,7 +612,13 @@ private:
 
     std::string gen_loop_asm_marker(int id, const std::string &loop_var) {
         std::regex dollar("\\$");
-        std::string marker = "%\"" + std::to_string(id) + "_for_" + loop_var;
+        std::string marker = "%\"";
+        if (ids_are_known) {
+            marker += std::to_string(id);
+        } else {
+            marker += "\\d+";
+        }
+        marker += "_for_" + loop_var;
         marker = std::regex_replace(marker, dollar, "\\$");
         return marker;
     }
@@ -612,7 +631,13 @@ private:
 
     std::string gen_prodcons_asm_marker(int id, const std::string &var, bool is_producer) {
         std::regex dollar("\\$");
-        std::string marker = "%\"" + std::to_string(id) + (is_producer ? "_produce_" : "_consume_") + var;
+        std::string marker = "%\"";
+        if (ids_are_known) {
+            marker += std::to_string(id);
+        } else {
+            marker += "\\d+";
+        }
+        marker += (is_producer ? "_produce_" : "_consume_") + var;
         marker = std::regex_replace(marker, dollar, "\\$");
         return marker;
     }
@@ -666,8 +691,9 @@ public:
         cost_model = std::move(cm);
     }
 
-    void print_conceptual_stmt(const Module &m, AssemblyInfo asm_info) {
-        assembly_info = std::move(asm_info);
+    void print_conceptual_stmt(const Module &m, AssemblyInfo host_asm_info, AssemblyInfo device_asm_info) {
+        host_assembly_info = std::move(host_asm_info);
+        device_assembly_info = std::move(device_asm_info);
 
         // Generate a unique ID for this module
         int id = gen_unique_id();
@@ -709,8 +735,9 @@ public:
         scope.pop(m.name());
     }
 
-    void print(const Module &m, AssemblyInfo asm_info) {
-        assembly_info = std::move(asm_info);
+    void print(const Module &m, AssemblyInfo host_asm_info, AssemblyInfo device_asm_info) {
+        host_assembly_info = std::move(host_asm_info);
+        device_assembly_info = std::move(device_asm_info);
 
         // Generate a unique ID for this module
         int id = gen_unique_id();
@@ -765,6 +792,183 @@ public:
         scope.pop(m.name());
     }
 
+    // CUDA kernels are embedded into modules as PTX assembly. This
+    // routine pretty - prints that assembly format.
+    void print_cuda_gpu_source_kernels(const std::string &str) {
+        print_opening_tag("code", "ptx");
+
+        int current_id = -1;
+        bool in_braces = false;
+        bool in_func_signature = false;
+
+        std::string current_kernel;
+        std::istringstream ss(str);
+
+
+        for (std::string line; std::getline(ss, line);) {
+            if (line.empty()) {
+                stream << "<span class='line'></span>\n";
+                continue;
+            }
+            line = replace_all(line, "&", "&amp;");
+            line = replace_all(line, "<", "&lt;");
+            line = replace_all(line, ">", "&gt;");
+            line = replace_all(line, "\"", "&quot;");
+            line = replace_all(line, "/", "&#x2F;");
+            line = replace_all(line, "'", "&#39;");
+
+            bool should_print_open_indent = false;
+
+            if (starts_with(line, ".visible .entry")) {
+                std::vector<std::string> parts = split_string(line, " ");
+                if (parts.size() == 3) {
+                    in_func_signature = true;
+                    current_id = gen_unique_id();
+                    print_show_hide_btn_begin(current_id);
+                    std::string kernel_name = parts[2].substr(0, parts[2].length() - 1);
+                    line = "<span class='keyword'>.visible</span> <span class='keyword'>.entry</span> ";
+                    line += variable(kernel_name) + " <span class='matched'>(</span>";
+                    current_kernel = kernel_name;
+                }
+            } else if (starts_with(line, ")") && in_func_signature) {
+                in_func_signature = false;
+                line = "<span class='matched'>)</span>" + line.substr(1);
+            } else if (starts_with(line, "{") && !in_braces) {
+                print_opening_brace();
+                in_braces = true;
+                internal_assert(current_id != -1);
+                should_print_open_indent = true;
+                current_id = -1;
+                line = line.substr(1);
+                scope.push(current_kernel, gen_unique_id());
+            } else if (starts_with(line, "}") && in_braces) {
+                print_closing_tag("div");
+                line = "<span class='matched'>}</span>" + line.substr(1);
+                in_braces = false;
+                scope.pop(current_kernel);
+            }
+
+            bool indent = false;
+
+            if (line[0] == '\t') {
+                // Replace first tab with four spaces.
+                line = line.substr(1);
+                indent = true;
+            }
+
+            line = replace_all(line, ".f32", ".<span class='OpF32'>f32</span>");
+            line = replace_all(line, ".f64", ".<span class='OpF64'>f64</span>");
+
+            line = replace_all(line, ".s8", ".<span class='OpI8'>s8</span>");
+            line = replace_all(line, ".s16", ".<span class='OpI16'>s16</span>");
+            line = replace_all(line, ".s32", ".<span class='OpI32'>s32</span>");
+            line = replace_all(line, ".s64", ".<span class='OpI64'>s64</span>");
+
+            line = replace_all(line, ".u8", ".<span class='OpI8'>u8</span>");
+            line = replace_all(line, ".u16", ".<span class='OpI16'>u16</span>");
+            line = replace_all(line, ".u32", ".<span class='OpI32'>u32</span>");
+            line = replace_all(line, ".u64", ".<span class='OpI64'>u64</span>");
+
+            line = replace_all(line, ".b8", ".<span class='OpB8'>b8</span>");
+            line = replace_all(line, ".b16", ".<span class='OpB16'>b16</span>");
+            line = replace_all(line, ".b32", ".<span class='OpB32'>b32</span>");
+            line = replace_all(line, ".b64", ".<span class='OpB64'>b64</span>");
+
+            line = replace_all(line, ".v2", ".<span class='OpVec2'>v2</span>");
+            line = replace_all(line, ".v4", ".<span class='OpVec4'>v4</span>");
+
+            line = replace_all(line, "ld.", "<span class='Memory'>ld</span>.");
+            line = replace_all(line, "st.", "<span class='Memory'>st</span>.");
+
+            size_t idx;
+            if ((idx = line.find("&#x2F;&#x2F")) != std::string::npos) {
+                line.insert(idx, "<span class='Comment'>");
+                line += "</span>";
+            }
+
+            // Predicated instructions
+            if (line.front() == '@' && indent) {
+                idx = line.find(' ');
+                std::string pred = line.substr(1, idx - 1);
+                line = "<span class='Pred'>@" + variable(pred) + "</span>" + line.substr(idx);
+            }
+
+            // Labels (depending on the LLVM version we get L with or without a dollar)
+            if (starts_with(line, "$L_") && !indent && (idx = line.find(':')) != std::string::npos) {
+                std::string label = line.substr(0, idx);
+                line = "<span class='Label'>" + variable(label) + "</span>:" + line.substr(idx + 1);
+            }
+
+            // Highlight operands
+            if ((idx = line.find(" \t")) != std::string::npos && line.back() == ';') {
+                std::string operands_str = line.substr(idx + 2);
+                operands_str = operands_str.substr(0, operands_str.length() - 1);
+                std::vector<std::string> operands = split_string(operands_str, ", ");
+                operands_str = "";
+                for (size_t opidx = 0; opidx < operands.size(); ++opidx) {
+                    std::string op = operands[opidx];
+                    internal_assert(!op.empty());
+                    if (opidx != 0) {
+                        operands_str += ", ";
+                    }
+                    if (op.back() == '}') {
+                        std::string reg = op.substr(0, op.size() - 1);
+                        operands_str += variable(reg) + '}';
+                    } else if (op.front() == '%') {
+                        operands_str += variable(op);
+                    } else if (op.find_first_not_of("-0123456789") == std::string::npos) {
+                        operands_str += "<span class='IntImm Imm'>";
+                        operands_str += op;
+                        operands_str += "</span>";
+                    } else if (starts_with(op, "0f") &&
+                               op.find_first_not_of("0123456789ABCDEF", 2) == std::string::npos) {
+                        operands_str += "<span class='FloatImm Imm'>";
+                        operands_str += op;
+                        operands_str += "</span>";
+                    } else if (op.front() == '[' && op.back() == ']') {
+                        size_t idx = op.find('+');
+                        if (idx == std::string::npos) {
+                            std::string reg = op.substr(1, op.size() - 2);
+                            operands_str += '[' + variable(reg) + ']';
+                        } else {
+                            std::string reg = op.substr(1, idx - 1);
+                            std::string offset = op.substr(idx + 1);
+                            offset = offset.substr(0, offset.size() - 1);
+                            operands_str += '[' + variable(reg) + "+";
+                            operands_str += "<span class='IntImm Imm'>";
+                            operands_str += offset;
+                            operands_str += "</span>";
+                            operands_str += ']';
+                        }
+                    } else if (op.front() == '{') {
+                        std::string reg = op.substr(1);
+                        operands_str += '{' + variable(reg);
+                    } else if (starts_with(op, "$L_")) {
+                        // Labels
+                        operands_str += "<span class='Label'>" + variable(op) + "</span>";
+                    } else {
+                        operands_str += op;
+                    }
+                }
+                operands_str += ";";
+                line = line.substr(0, idx + 2) + operands_str;
+            }
+
+            stream << "<span class='line'>";
+            if (indent) {
+                stream << "    ";
+            }
+            stream << line << "</span>\n";
+
+            // Indent-divs can only be opened after the line is finished.
+            if (should_print_open_indent) {
+                print_show_hide_btn_end();
+                print_opening_tag("div", "indent", current_id);
+            }
+        }
+        print_closing_tag("code");
+    }
+
 private:
     // Handle to output file stream
     T &stream;
@@ -784,7 +988,8 @@ private:
 
     // Holds cost information for visualized program
     IRCostModel cost_model;
-    AssemblyInfo assembly_info;
+    AssemblyInfo host_assembly_info;
+    AssemblyInfo device_assembly_info;
     bool enable_viztree_features;
     bool enable_assembly_features;
 
@@ -1002,183 +1207,27 @@ private:
 
     // Prints a button to sync text with visualization
     void print_assembly_button(const void *op) {
-        if (enable_assembly_features) {
-            int asm_lno = assembly_info.get_asm_lno((uint64_t)op);
+        if (!enable_assembly_features) {
+            return;
+        }
+        {
+            int asm_lno = host_assembly_info.get_asm_lno((uint64_t)op);
             if (asm_lno != -1) {
-                stream << "<button class='icon-btn jump-to-asm-btn tooltip-parent' onclick='scrollToAsm(\"" << asm_lno << "\")'>"
-                       << "<span class='tooltip'>Jump to Assembly"
-                       << "<span>" << assembly_info.get_label((uint64_t)op) << "</span></span>"
+                stream << "<button class='icon-btn jump-to-host-asm-btn tooltip-parent' onclick='scrollToHostAsm(" << asm_lno << ")'>"
+                       << "<span class='tooltip'>Jump to Host Assembly"
+                       << "<span>" << host_assembly_info.get_label((uint64_t)op) << "</span></span>"
                        << "</button>";
             }
         }
-    }
-
-    // CUDA kernels are embedded into modules as PTX assembly. This
-    // routine pretty - prints that assembly format.
-    void print_cuda_gpu_source_kernels(const std::string &str) {
-        print_opening_tag("code", "ptx");
-
-        int current_id = -1;
-        bool in_braces = false;
-        bool in_func_signature = false;
-
-        std::string current_kernel;
-        std::istringstream ss(str);
-
-        for (std::string line; std::getline(ss, line);) {
-            if (line.empty()) {
-                stream << "\n";
-                continue;
+        {
+            int asm_lno = device_assembly_info.get_asm_lno((uint64_t)op);
+            if (asm_lno != -1) {
+                stream << "<button class='icon-btn jump-to-device-code-btn tooltip-parent' onclick='scrollToDeviceCode(" << asm_lno << ")'>"
+                       << "<span class='tooltip'>Jump to Device Code"
+                       << "<span>" << device_assembly_info.get_label((uint64_t)op) << "</span></span>"
+                       << "</button>";
             }
-            line = replace_all(line, "&", "&amp;");
-            line = replace_all(line, "<", "&lt;");
-            line = replace_all(line, ">", "&gt;");
-            line = replace_all(line, "\"", "&quot;");
-            line = replace_all(line, "/", "&#x2F;");
-            line = replace_all(line, "'", "&#39;");
-
-            if (starts_with(line, ".visible .entry")) {
-                std::vector<std::string> parts = split_string(line, " ");
-                if (parts.size() == 3) {
-                    in_func_signature = true;
-                    current_id = gen_unique_id();
-                    print_show_hide_btn_begin(current_id);
-                    std::string kernel_name = parts[2].substr(0, parts[2].length() - 1);
-                    line = "<span class='keyword'>.visible</span> <span class='keyword'>.entry</span> ";
-                    line += variable(kernel_name) + " <span class='matched'>(</span>";
-                    current_kernel = kernel_name;
-                }
-            } else if (starts_with(line, ")") && in_func_signature) {
-                in_func_signature = false;
-                line = "<span class='matched'>)</span>" + line.substr(1);
-            } else if (starts_with(line, "{") && !in_braces) {
-                in_braces = true;
-                print_opening_brace();
-                print_show_hide_btn_end();
-                internal_assert(current_id != -1);
-                print_opening_tag("div", "indent", current_id);
-                current_id = -1;
-                line = line.substr(1);
-                scope.push(current_kernel, gen_unique_id());
-            } else if (starts_with(line, "}") && in_braces) {
-                print_closing_tag("div");
-                line = "<span class='matched'>}</span>" + line.substr(1);
-                in_braces = false;
-                scope.pop(current_kernel);
-            }
-
-            bool indent = false;
-
-            if (line[0] == '\t') {
-                // Replace first tab with four spaces.
-                line = line.substr(1);
-                indent = true;
-            }
-
-            line = replace_all(line, ".f32", ".<span class='OpF32'>f32</span>");
-            line = replace_all(line, ".f64", ".<span class='OpF64'>f64</span>");
-
-            line = replace_all(line, ".s8", ".<span class='OpI8'>s8</span>");
-            line = replace_all(line, ".s16", ".<span class='OpI16'>s16</span>");
-            line = replace_all(line, ".s32", ".<span class='OpI32'>s32</span>");
-            line = replace_all(line, ".s64", ".<span class='OpI64'>s64</span>");
-
-            line = replace_all(line, ".u8", ".<span class='OpI8'>u8</span>");
-            line = replace_all(line, ".u16", ".<span class='OpI16'>u16</span>");
-            line = replace_all(line, ".u32", ".<span class='OpI32'>u32</span>");
-            line = replace_all(line, ".u64", ".<span class='OpI64'>u64</span>");
-
-            line = replace_all(line, ".b8", ".<span class='OpB8'>b8</span>");
-            line = replace_all(line, ".b16", ".<span class='OpB16'>b16</span>");
-            line = replace_all(line, ".b32", ".<span class='OpB32'>b32</span>");
-            line = replace_all(line, ".b64", ".<span class='OpB64'>b64</span>");
-
-            line = replace_all(line, ".v2", ".<span class='OpVec2'>v2</span>");
-            line = replace_all(line, ".v4", ".<span class='OpVec4'>v4</span>");
-
-            line = replace_all(line, "ld.", "<span class='Memory'>ld</span>.");
-            line = replace_all(line, "st.", "<span class='Memory'>st</span>.");
-
-            size_t idx;
-            if ((idx = line.find("&#x2F;&#x2F")) != std::string::npos) {
-                line.insert(idx, "<span class='Comment'>");
-                line += "</span>";
-            }
-
-            // Predicated instructions
-            if (line.front() == '@' && indent) {
-                idx = line.find(' ');
-                std::string pred = line.substr(1, idx - 1);
-                line = "<span class='Pred'>@" + variable(pred) + "</span>" + line.substr(idx);
-            }
-
-            // Labels (depending on the LLVM version we get L with or without a dollar)
-            if (starts_with(line, "$L_") && !indent && (idx = line.find(':')) != std::string::npos) {
-                std::string label = line.substr(0, idx);
-                line = "<span class='Label'>" + variable(label) + "</span>:" + line.substr(idx + 1);
-            }
-
-            // Highlight operands
-            if ((idx = line.find(" \t")) != std::string::npos && line.back() == ';') {
-                std::string operands_str = line.substr(idx + 2);
-                operands_str = operands_str.substr(0, operands_str.length() - 1);
-                std::vector<std::string> operands = split_string(operands_str, ", ");
-                operands_str = "";
-                for (size_t opidx = 0; opidx < operands.size(); ++opidx) {
-                    std::string op = operands[opidx];
-                    internal_assert(!op.empty());
-                    if (opidx != 0) {
-                        operands_str += ", ";
-                    }
-                    if (op.back() == '}') {
-                        std::string reg = op.substr(0, op.size() - 1);
-                        operands_str += variable(reg) + '}';
-                    } else if (op.front() == '%') {
-                        operands_str += variable(op);
-                    } else if (op.find_first_not_of("-0123456789") == std::string::npos) {
-                        operands_str += "<span class='IntImm Imm'>";
-                        operands_str += op;
-                        operands_str += "</span>";
-                    } else if (starts_with(op, "0f") &&
-                               op.find_first_not_of("0123456789ABCDEF", 2) == std::string::npos) {
-                        operands_str += "<span class='FloatImm Imm'>";
-                        operands_str += op;
-                        operands_str += "</span>";
-                    } else if (op.front() == '[' && op.back() == ']') {
-                        size_t idx = op.find('+');
-                        if (idx == std::string::npos) {
-                            std::string reg = op.substr(1, op.size() - 2);
-                            operands_str += '[' + variable(reg) + ']';
-                        } else {
-                            std::string reg = op.substr(1, idx - 1);
-                            std::string offset = op.substr(idx + 1);
-                            offset = offset.substr(0, offset.size() - 1);
-                            operands_str += '[' + variable(reg) + "+";
-                            operands_str += "<span class='IntImm Imm'>";
-                            operands_str += offset;
-                            operands_str += "</span>";
-                            operands_str += ']';
-                        }
-                    } else if (op.front() == '{') {
-                        std::string reg = op.substr(1);
-                        operands_str += '{' + variable(reg);
-                    } else if (starts_with(op, "$L_")) {
-                        // Labels
-                        operands_str += "<span class='Label'>" + variable(op) + "</span>";
-                    } else {
-                        operands_str += op;
-                    }
-                }
-                operands_str += ";";
-                line = line.substr(0, idx + 2) + operands_str;
-            }
-
-            if (indent) {
-                stream << "    ";
-            }
-            stream << line << "\n";
         }
-        print_closing_tag("code");
     }
 
     // Prints the args in a function declaration
@@ -2290,8 +2339,9 @@ public:
         cost_model = std::move(cm);
     }
 
-    void print(const Module &m, AssemblyInfo asm_info) {
-        assembly_info = std::move(asm_info);
+    void print(const Module &m, AssemblyInfo host_asm_info, AssemblyInfo device_asm_info) {
+        host_assembly_info = std::move(host_asm_info);
+        device_assembly_info = std::move(device_asm_info);
         for (const auto &fn : m.functions()) {
             print(fn);
         }
@@ -2305,7 +2355,8 @@ private:
     std::vector<std::string> context_stack_tags;
 
     // Assembly line number info
-    AssemblyInfo assembly_info;
+    AssemblyInfo host_assembly_info;
+    AssemblyInfo device_assembly_info;
 
     // Holds cost information for visualized program
     IRCostModel cost_model;
@@ -2641,7 +2692,7 @@ private:
 
         // Print box header
         std::string aid = std::to_string(id);
-        int asm_lno = assembly_info.get_asm_lno((uint64_t)op);
+        int asm_lno = host_assembly_info.get_asm_lno((uint64_t)op);
         if (asm_lno == -1) {
             print_box_header(id, op, "loop-viz-" + aid, "loop-" + aid, "For: " + get_as_var(op->name));
         } else {
@@ -2726,7 +2777,7 @@ private:
         // Print box header
         std::string aid = std::to_string(id);
         std::string prefix = op->is_producer ? "Produce: " : "Consume: ";
-        int asm_lno = assembly_info.get_asm_lno((uint64_t)op);
+        int asm_lno = host_assembly_info.get_asm_lno((uint64_t)op);
         if (asm_lno == -1) {
             print_box_header(id, op, "prodcons-viz-" + aid, "prodcons-" + aid, prefix + get_as_var(op->name));
         } else {
@@ -2912,7 +2963,21 @@ public:
         // code is based on darya-ver's original implementation. We
         // use comments in the generated assembly to infer association
         // between Halide IR and assembly -- unclear how reliable this is.
-        asm_info.generate(asm_stream.str(), m);
+        host_asm_info.gather_nodes_from_functions(m);
+        host_asm_info.generate(asm_stream.str());
+
+        if (const Buffer<> *device_assembly_buf = m.get_device_code_buffer()) {
+            std::string device_assembly((char *)device_assembly_buf->data(),
+                                        ((char *)device_assembly_buf->data() + device_assembly_buf->size_in_bytes()));
+            debug(1) << "Generating device AssemblyInfo\n";
+            // TODO(mcourteaux): This doesn't generate anything useful, as the
+            // LLVM comments are only added later in the LLVM CodeGen IRVisitor.
+            // This conceptual Stmt hasn't seen this seen this 
+            device_asm_info.gather_nodes_from_conceptual_stmt(m);
+            device_asm_info.generate(device_assembly);
+        } else {
+            debug(1) << "No device code buffer found.\n";
+        }
 
         // Run the cost model over this module to pre-compute all
         // node costs
@@ -2961,26 +3026,26 @@ private:
         stream << "<head>\n";
         stream << "<title>Halide Module: " << m.name() << "</title>\n";
         stream << halide_html_template_StmtToHTML_dependencies_html;
-        if constexpr (INLINE_TEMPLATES) {
+#if INLINE_TEMPLATES
+        stream << "<style type='text/css'>\n"
+               << halide_html_template_StmtToHTML_css
+               << "\n</style>\n";
+        if (include_viztree) {
+            stream << halide_html_template_StmtToViz_dependencies_html;
             stream << "<style type='text/css'>\n"
-                   << halide_html_template_StmtToHTML_css
+                   << halide_html_template_StmtToViz_css
                    << "\n</style>\n";
-            if (include_viztree) {
-                stream << halide_html_template_StmtToViz_dependencies_html;
-                stream << "<style type='text/css'>\n"
-                       << halide_html_template_StmtToViz_css
-                       << "\n</style>\n";
-            }
-        } else {
-            std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path() / "irvisualizer";
-            debug(1) << "Will link CSS in directory: " << dir << "\n";
-            internal_assert(std::filesystem::exists(dir));
-            stream << "<link rel='stylesheet' href='file://" << (dir / "html_template_StmtToHTML.css").string() << "'>\n";
-            if (include_viztree) {
-                stream << halide_html_template_StmtToViz_dependencies_html;
-                stream << "<link rel='stylesheet' href='file://" << (dir / "html_template_StmtToViz.css").string() << "'>\n";
-            }
         }
+#else
+        std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path() / "irvisualizer";
+        debug(1) << "Will link CSS in directory: " << dir << "\n";
+        internal_assert(std::filesystem::exists(dir));
+        stream << "<link rel='stylesheet' href='file://" << (dir / "html_template_StmtToHTML.css").string() << "'>\n";
+        if (include_viztree) {
+            stream << halide_html_template_StmtToViz_dependencies_html;
+            stream << "<link rel='stylesheet' href='file://" << (dir / "html_template_StmtToViz.css").string() << "'>\n";
+        }
+#endif
         stream << "</head>\n";
     }
 
@@ -2991,24 +3056,24 @@ private:
         generate_visualization_tabs(m);
         stream << "  </div>\n";
         stream << "</body>";
-        if constexpr (INLINE_TEMPLATES) {
+#if INLINE_TEMPLATES
+        stream << "<script>\n"
+               << halide_html_template_StmtToHTML_js
+               << "</script>";
+        if (include_viztree) {
             stream << "<script>\n"
-                   << halide_html_template_StmtToHTML_js
+                   << halide_html_template_StmtToViz_js
                    << "</script>";
-            if (include_viztree) {
-                stream << "<script>\n"
-                       << halide_html_template_StmtToViz_js
-                       << "</script>";
-            }
-        } else {
-            std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path() / "irvisualizer";
-            debug(1) << "Will link Javascript in directory: " << dir << "\n";
-            internal_assert(std::filesystem::exists(dir));
-            stream << "<script src='file://" << (dir / "html_template_StmtToHTML.js").string() << "'></script>\n";
-            if (include_viztree) {
-                stream << "<script src='file://" << (dir / "html_template_StmtToViz.js").string() << "'></script>\n";
-            }
         }
+#else
+        std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path() / "irvisualizer";
+        debug(1) << "Will link Javascript in directory: " << dir << "\n";
+        internal_assert(std::filesystem::exists(dir));
+        stream << "<script src='file://" << (dir / "html_template_StmtToHTML.js").string() << "'></script>\n";
+        if (include_viztree) {
+            stream << "<script src='file://" << (dir / "html_template_StmtToViz.js").string() << "'></script>\n";
+        }
+#endif
     }
 
     // Generate the three visualization tabs
@@ -3016,44 +3081,65 @@ private:
         int tab_count = 0;
         stream << "<div id='visualization-tabs'>\n";
         generate_ir_tab(m);
-        generate_resize_bar(tab_count++);
         if (include_viztree) {
-            generate_visualization_tab(m);
             generate_resize_bar(tab_count++);
+            generate_visualization_tab(m);
         }
-        generate_assembly_tab(m);
+        generate_resize_bar(tab_count++);
+        generate_host_assembly_tab(m);
+        const Buffer<> *device_assembly = m.get_device_code_buffer();
+        if (device_assembly) {
+            generate_resize_bar(tab_count++);
+            generate_device_code_tab(*device_assembly);
+        }
+
         stream << "</div>\n";
     }
 
-    // Generate tab 1/3: Lowered IR code with syntax highlighting in HTML
+    // Generate tab: Lowered IR code with syntax highlighting in HTML
     void generate_ir_tab(const Module &m) {
         if (use_conceptual_stmt_ir) {
             stream << "<div id='ir-code-tab' class='tab conceptual'>\n";
-            html_code_printer.print_conceptual_stmt(m, asm_info);
+            html_code_printer.print_conceptual_stmt(m, host_asm_info, device_asm_info);
             stream << "</div>\n";
         } else {
             stream << "<div id='ir-code-tab' class='tab'>\n";
-            html_code_printer.print(m, asm_info);
+            html_code_printer.print(m, host_asm_info, device_asm_info);
             stream << "</div>\n";
         }
     }
 
-    // Generate tab 2/3: Lowered IR code with syntax highlighting in HTML
+    // Generate tab: Lowered IR code with syntax highlighting in HTML
     void generate_visualization_tab(const Module &m) {
         stream << "<div id='ir-visualization-tab' class='tab'>\n";
-        html_viz_printer.print(m, asm_info);
+        html_viz_printer.print(m, host_asm_info, device_asm_info);
         stream << "</div>\n";
     }
 
-    // Generate tab 3/3: Generated assembly code
-    void generate_assembly_tab(const Module &m) {
-        stream << "<div id='assembly-tab' class='tab'>\n";
+    // Generate tab: Generated host assembly code
+    void generate_host_assembly_tab(const Module &m) {
+        stream << "<div id='host-assembly-tab' class='tab'>\n";
         stream << "<div id='assemblyContent' class='shj-lang-asm'>\n";
         stream << "<pre>\n";
         stream << asm_stream.str();
         stream << "\n";
         stream << "</pre>\n";
         stream << "</div>\n";
+        stream << "</div>\n";
+    }
+
+    // Generate tab: Generated device code
+    void generate_device_code_tab(const Buffer<> &buf) {
+        stream << "<div id='device-code-tab' class='tab'>\n";
+        std::string str((const char *)buf.data(), buf.size_in_bytes());
+        if (starts_with(buf.name(), "cuda_")) {
+            html_code_printer.print_cuda_gpu_source_kernels(str);
+        } else {
+            stream << "<pre>\n";
+            stream << str;
+            stream << "\n";
+            stream << "</pre>\n";
+        }
         stream << "</div>\n";
     }
 
@@ -3077,7 +3163,8 @@ private:
 
     // Load assembly code from file
     std::ostringstream asm_stream;
-    AssemblyInfo asm_info;
+    AssemblyInfo host_asm_info;
+    AssemblyInfo device_asm_info;
 
     void load_asm_code(const std::string &asm_file) {
         user_assert(file_exists(asm_file)) << "Unable to open assembly file: " << asm_file << "\n";

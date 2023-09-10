@@ -10,27 +10,33 @@
 
 
 // Highlighting 'matched' elements in IR code
-var matchedElements = document.querySelectorAll('#ir-code-tab .matched');
+function addHighlight(selector) {
+    var matchedElements = document.querySelectorAll(selector + ' .matched');
 
-matchedElements.forEach(function(element) {
-    element.addEventListener('mouseover', function() {
-        var idPrefix = this.id.split('-')[0];
-        var matchingElements = document.querySelectorAll('#ir-code-tab .matched[id^="' + idPrefix + '-"]');
+    matchedElements.forEach(function(element) {
+        element.addEventListener('mouseover', function() {
+            var idPrefix = this.id.split('-')[0];
+            var matchingElements = document.querySelectorAll(selector + ' .matched[id^="' + idPrefix + '-"]');
 
-        matchingElements.forEach(function(matchingElement) {
-            matchingElement.classList.add('Highlight');
+            matchingElements.forEach(function(matchingElement) {
+                matchingElement.classList.add('Highlight');
+            });
+        });
+
+        element.addEventListener('mouseout', function() {
+            var idPrefix = this.id.split('-')[0];
+            var matchingElements = document.querySelectorAll(selector + ' .matched[id^="' + idPrefix + '-"]');
+
+            matchingElements.forEach(function(matchingElement) {
+                matchingElement.classList.remove('Highlight');
+            });
         });
     });
+}
 
-    element.addEventListener('mouseout', function() {
-        var idPrefix = this.id.split('-')[0];
-        var matchingElements = document.querySelectorAll('#ir-code-tab .matched[id^="' + idPrefix + '-"]');
-
-        matchingElements.forEach(function(matchingElement) {
-            matchingElement.classList.remove('Highlight');
-        });
-    });
-});
+// Example usage:
+addHighlight('#ir-code-tab');
+addHighlight('#ptx-assembly-tab');
 
 
 
@@ -149,12 +155,21 @@ function collapse_tab(index) {
     tab.classList.toggle('collapsed-tab');
 }
 
-function scrollToAsm(lno) {
+function scrollToHostAsm(lno) {
     var asmContent = document.getElementById("assemblyContent");
     var line_height = window.getComputedStyle(asmContent).getPropertyValue("line-height");
     line_height = parseInt(line_height, 10);
-    document.getElementById("assembly-tab").scrollTo({
+    document.getElementById("host-assembly-tab").scrollTo({
         behavior: "smooth",
         top: lno * line_height
+    });
+}
+
+function scrollToDeviceCode(lno) {
+    var device_code_tab = document.getElementById("device-code-tab");
+    const lineSpans = device_code_tab.querySelectorAll('span.line');
+    line = lineSpans[lno - 1]
+    line.scrollIntoView({
+        behavior: "smooth",
     });
 }

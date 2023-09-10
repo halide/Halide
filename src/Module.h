@@ -167,6 +167,18 @@ public:
     const std::vector<Module> &submodules() const;
     // @}
 
+    /** Tries to locate the offloaded CUDA PTX assembly contained in this Module.
+     * Might return a nullptr in case such buffer is not present in this Module.
+     */
+    const Buffer<> *get_cuda_ptx_assembly_buffer() const;
+
+
+    /**
+     * Tries to locate the offloaded (GPU) Device assembly contained in this Module.
+     * This can be any of the GPU kernel sources, etc...
+     */
+    const Buffer<> *get_device_code_buffer() const;
+
     /** Return the function with the given name. If no such function
      * exists in this module, assert. */
     Internal::LoweredFunc get_function_by_name(const std::string &name) const;

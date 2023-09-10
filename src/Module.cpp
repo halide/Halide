@@ -417,6 +417,26 @@ const std::vector<Module> &Module::submodules() const {
     return contents->submodules;
 }
 
+const Buffer<> *Module::get_cuda_ptx_assembly_buffer() const {
+    for (const Buffer<> &buf : buffers()) {
+        if (ends_with(buf.name(), "_gpu_source_kernels")) {
+            if (starts_with(buf.name(), "cuda_")) {
+                return &buf;
+            }
+        }
+    }
+    return nullptr;
+}
+
+const Buffer<> *Module::get_device_code_buffer() const {
+    for (const Buffer<> &buf : buffers()) {
+        if (ends_with(buf.name(), "_gpu_source_kernels")) {
+            return &buf;
+        }
+    }
+    return nullptr;
+}
+
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
     for (const auto &f : functions()) {
         if (f.name == name) {
@@ -665,7 +685,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         for (const Buffer<> &buf : buffers()) {
             debug(1) << "Looking for GPU sources: " << buf.name() << "\n";
             if (ends_with(buf.name(), "_gpu_source_kernels")) {
-                internal_assert(gpu_kernel_sources.empty()); // There should be only one!
+                internal_assert(gpu_kernel_sources.empty());  // There should be only one!
                 gpu_kernel_sources = std::string((const char *)buf.data(), buf.size_in_bytes());
             }
         }
