@@ -171,6 +171,7 @@ div#resizer-preview {
 
 div#device-code-tab code {
     line-height: 14px;
+    white-space: pre;
 }
 
 /* IR Code Section CSS */
@@ -460,7 +461,6 @@ button.icon-btn:hover {
 
 code.ptx {
     tab-size: 26;
-    white-space: pre;
 }
 
 span.comment {

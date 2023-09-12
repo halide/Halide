@@ -3161,10 +3161,10 @@ private:
         if (starts_with(buf.name(), "cuda_")) {
             html_code_printer.print_cuda_gpu_source_kernels(str);
         } else {
-            stream << "<pre>\n";
+            stream << "<code>\n";
             stream << str;
             stream << "\n";
-            stream << "</pre>\n";
+            stream << "</code>\n";
         }
         stream << "</div>\n";
     }
