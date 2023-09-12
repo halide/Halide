@@ -655,6 +655,8 @@ gengen
       schedule, static_library, stmt, stmt_html, conceptual_stmt,
       conceptual_stmt_html, compiler_log, hlpipe, ptx_assembly].
      If omitted, default value is [c_header, static_library, registration].
+     For the HTML-options optionally setting HL_HTML_VIZTREE=1 will enable the
+     old VizIR Tree pane in the generated HTML.
 
  -p  A comma-separated list of shared libraries that will be loaded before the
      generator is run. Useful for custom auto-schedulers. The generator must
@@ -663,7 +665,7 @@ gengen
      (Note that this does not change the default autoscheduler; use the -s flag
      to set that value.)"
 
- -r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'
+ -r  The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'
      and 'static_library'. When multiple targets are specified, it picks a
      runtime that is compatible with all of the targets, or fails if it cannot
      find one. Flags across all of the targets that do not affect runtime code
