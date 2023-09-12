@@ -25,12 +25,11 @@ using namespace Halide::Tools; // for benchmark()
 
 // Let's define a helper function to construct a simple pipeline that we'll use for our performance tests.
 Pipeline make_pipeline() {
-
-    // We'll start with a simple transpose operation ...
+    // We'll start with a simple transpose operation...
     Func input("input"), output("output");
     Var x("x"), y("y");
 
-    // Fill the input with a linear combination of the coordinate values ...
+    // Fill the input with a linear combination of the coordinate values...
     input(x, y) = cast<uint16_t>(x + y);
     input.compute_root();
 
@@ -60,13 +59,12 @@ Pipeline make_pipeline() {
 }
 
 int main(int argc, char **argv) {
-
     // Since we'll be using the same sample and iteration counts for our benchmarking,
     // let's define them here in the outermost scope.
     constexpr int samples = 100;
     constexpr int iterations = 1;
     
-    // Now, let's measure the performance of constructing and executing a simple pipeline from scratch ...
+    // Now, let's measure the performance of constructing and executing a simple pipeline from scratch...
     {
         size_t count = 0;
         double t = benchmark(samples, iterations, [&]() {
@@ -86,7 +84,7 @@ int main(int argc, char **argv) {
         std::cout << "Compile & Execute Pipeline (from scratch): " << int(count / t) << " times/sec\n";
     }
 
-    // This time, let's create the pipeline outside the timing loop and re-use it for each execution ...
+    // This time, let's create the pipeline outside the timing loop and re-use it for each execution...
     {
         // Create our pipeline, and re-use it in the loop below
         Pipeline pipeline = make_pipeline();
@@ -106,11 +104,11 @@ int main(int argc, char **argv) {
         std::cout << "Compile & Execute Pipeline (re-use pipeline): " << int(count / t) << " times/sec\n";
     }
 
-    // Let's do the same thing as before, but explicitly JIT compile before we realize ...
+    // Let's do the same thing as before, but explicitly JIT compile before we realize...
     {
         Pipeline pipeline = make_pipeline();
 
-        // Let's JIT compile for our target before we realize, and see what happens ...
+        // Let's JIT compile for our target before we realize, and see what happens...
         const Target target = get_jit_target_from_environment();
         pipeline.compile_jit(target);
 
@@ -123,17 +121,17 @@ int main(int argc, char **argv) {
  
         // On a MacBook Pro M1, this should be about the same as the previous run (about ~175000 times/sec)
         //
-        // This may seem somewhat surprisingly, since compiling before realizing doesn't seem to make 
+        // This may seem somewhat surprising, since compiling before realizing doesn't seem to make 
         // much of a difference to the previous case.  However, the first call to realize() will implicitly
         // JIT-compile and cache the generated code associated with the Pipeline object, which is basically 
         // what we've done here. Each subsequent call to realize uses the cached version of the native code, 
         // so there's no additional overhead, and the cost is amortized as we re-use the pipeline.
         std::cout << "Execute Pipeline (compile before realize): " << int(count / t) << " times/sec\n";
 
-
         // Another subtlety is the creation of the result buffer ... the declaration implicitly
-        // allocates memory. Instead, we could use the realize({1024, 1024}) call which use the
-        // buffer managed by the pipeline object for the outputs ...
+        // allocates memory which will add overhead to each loop iteration. This time, let's try 
+        // using the realize({1024, 1024}) call which will use the buffer managed by the pipeline 
+        // object for the outputs...
         count = 0;
         t = benchmark(samples, iterations, [&]() {
             Buffer<uint16_t> result = pipeline.realize({1024, 1024});
@@ -156,10 +154,9 @@ int main(int argc, char **argv) {
 
         // On a MacBook Pro M1, this should be much more efficient ... ~200000 times/sec (or 10-12% faster).
         std::cout << "Execute Pipeline (re-use buffer with realize): " << int(count / t) << " times/sec\n";
-
     }
 
-    // Alternatively, we could compile to a Callable object ...
+    // Alternatively, we could compile to a Callable object...
     {
         Pipeline pipeline = make_pipeline();
         const Target target = get_jit_target_from_environment();
@@ -169,7 +166,7 @@ int main(int argc, char **argv) {
         // calling convention.
         auto arguments = pipeline.infer_arguments();
 
-        // The Callable object acts as a convienient way of invoking the compiled code like
+        // The Callable object acts as a convenient way of invoking the compiled code like
         // a function call, using an argv-like syntax for the argument list. It also caches 
         // the JIT compiled code, so there's no code generation overhead when invoking the
         // callable object and executing the pipeline.
@@ -206,7 +203,7 @@ int main(int argc, char **argv) {
         std::cout << "Execute Pipeline (compile to std::function): " << int(count / t) << " times/sec\n";
     }
 
-    // Let's see how much time is spent on just compiling ...
+    // Let's see how much time is spent on just compiling...
     {
         Pipeline pipeline = make_pipeline();
 
@@ -235,10 +232,9 @@ int main(int argc, char **argv) {
         // This is an intentionally expensive loop, and very slow!
         // On a MacBook Pro M1, we should see only ~2000 times/sec.
         std::cout << "Compile JIT (from scratch): " << int(count / t) << " times/sec\n";
-
     }
 
-    // Alternatively we could compile to a Module ...
+    // Alternatively we could compile to a Module...
     {
         Pipeline pipeline = make_pipeline();
         auto args = pipeline.infer_arguments();
