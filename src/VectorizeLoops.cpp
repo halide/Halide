@@ -960,19 +960,27 @@ class VectorSubs : public IRMutator {
 
             vectorized_vars.push_back({op->name, min, (int)extent_int->value});
             update_replacements();
-            // Go over lets which were vectorized and update them according to the current
-            // loop level.
-            for (auto it = scope.cbegin(); it != scope.cend(); ++it) {
-                string vectorized_name = get_widened_var_name(it.name());
-                Expr vectorized_value = mutate(it.value());
+            // Go over lets which were vectorized in the order of their occurrence and update
+            // them according to the current loop level.
+            for (auto let = containing_lets.begin(); let != containing_lets.end(); let++) {
+                // Skip if this var wasn't vectorized.
+                if (!scope.contains(let->first)) {
+                    continue;
+                }
+                string vectorized_name = get_widened_var_name(let->first);
+                Expr vectorized_value = mutate(scope.get(let->first));
                 vector_scope.push(vectorized_name, vectorized_value);
             }
 
             body = mutate(body);
 
             // Append vectorized lets for this loop level.
-            for (auto it = scope.cbegin(); it != scope.cend(); ++it) {
-                string vectorized_name = get_widened_var_name(it.name());
+            for (auto let = containing_lets.rbegin(); let != containing_lets.rend(); let++) {
+                // Skip if this var wasn't vectorized.
+                if (!scope.contains(let->first)) {
+                    continue;
+                }
+                string vectorized_name = get_widened_var_name(let->first);
                 Expr vectorized_value = vector_scope.get(vectorized_name);
                 vector_scope.pop(vectorized_name);
                 InterleavedRamp ir;
