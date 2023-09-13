@@ -1054,7 +1054,8 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i16 load<native_vector_i1
     xb_vecNx16 r;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const int16_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LANX16_IP(r, align, (const xb_vecNx16 *)ptr8);
+    const xb_vecNx16 *__restrict ptr = (const xb_vecNx16 *)ptr8;
+    IVP_LANX16_IP(r, align, ptr);
     return r;
 }
 
@@ -1082,7 +1083,8 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u16 load<native_vector_u1
     xb_vecNx16U r;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const uint16_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LANX16U_IP(r, align, (const xb_vecNx16U *)ptr8);
+    const xb_vecNx16U *__restrict ptr = (const xb_vecNx16U *)ptr8;
+    IVP_LANX16U_IP(r, align, ptr);
 
     return r;
 }
@@ -1100,8 +1102,9 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i16_x2 load<native_vector
     xb_vecNx16 r1, r2;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const int16_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LANX16_IP(r1, align, (const xb_vecNx16 *)ptr8);
-    IVP_LANX16_IP(r2, align, (const xb_vecNx16 *)ptr8);
+    const xb_vecNx16 *__restrict ptr = (const xb_vecNx16 *)ptr8;
+    IVP_LANX16_IP(r1, align, ptr);
+    IVP_LANX16_IP(r2, align, ptr);
 
     return native_vector_i16_x2(native_vector_i16_x2::from_native_vector, r1, r2);
 }
@@ -1111,8 +1114,9 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u16_x2 load<native_vector
     xb_vecNx16U r1, r2;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const int16_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LANX16U_IP(r1, align, (const xb_vecNx16U *)ptr8);
-    IVP_LANX16U_IP(r2, align, (const xb_vecNx16U *)ptr8);
+    const native_vector_u16 *__restrict ptr = (const native_vector_u16 *)ptr8;
+    IVP_LANX16U_IP(r1, align, ptr);
+    IVP_LANX16U_IP(r2, align, ptr);
 
     return native_vector_u16_x2(native_vector_u16_x2::from_native_vector, r1, r2);
 }
@@ -1140,27 +1144,28 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i32_x4 load<native_vector
 }
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 load<native_vector_f32, float32_t, VECTOR_WIDTH_F32>(const void *base, int32_t offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32 load<native_vector_f32, float, VECTOR_WIDTH_F32>(const void *base, int32_t offset) {
     native_vector_f32 r;
-    const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const float32_t *)base + offset);
+    const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const float *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LAN_2XF32_IP(r, align, (const native_vector_f32 *)ptr8);
+    const native_vector_f32 *__restrict ptr = (const native_vector_f32 *)ptr8;
+    IVP_LAN_2XF32_IP(r, align, ptr);
     return r;
 }
 
 template<>
-HALIDE_ALWAYS_INLINE void store<native_vector_f32, float32_t, VECTOR_WIDTH_F32>(const native_vector_f32 &a, void *base, int32_t offset) {
+HALIDE_ALWAYS_INLINE void store<native_vector_f32, float, VECTOR_WIDTH_F32>(const native_vector_f32 &a, void *base, int32_t offset) {
     valign align = IVP_ZALIGN();
-    native_vector_f32 *ptr = (native_vector_f32 *)((float32_t *)base + offset);
+    native_vector_f32 *ptr = (native_vector_f32 *)((float *)base + offset);
     IVP_SAN_2XF32_IP(a, align, ptr);
     // Flush alignment register.
     IVP_SAPOSN_2XF32_FP(align, ptr);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE void store<native_vector_f32_x2, float32_t, 2 * VECTOR_WIDTH_F32>(const native_vector_f32_x2 &a, void *base, int32_t offset) {
+HALIDE_ALWAYS_INLINE void store<native_vector_f32_x2, float, 2 * VECTOR_WIDTH_F32>(const native_vector_f32_x2 &a, void *base, int32_t offset) {
     valign align = IVP_ZALIGN();
-    native_vector_f32 *ptr = (native_vector_f32 *)((float32_t *)base + offset);
+    native_vector_f32 *ptr = (native_vector_f32 *)((float *)base + offset);
     IVP_SAN_2XF32_IP(a.native_vector[0], align, ptr);
     IVP_SAN_2XF32_IP(a.native_vector[1], align, ptr);
     // Flush alignment register.
@@ -1175,7 +1180,8 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i16 widening_load<native_
     xb_vecNx16 r;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const uint8_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LANX8U_IP(r, align, (const xb_vecNx8U *)ptr8);
+    const xb_vecNx8U *__restrict ptr = (const xb_vecNx8U *)ptr8;
+    IVP_LANX8U_IP(r, align, ptr);
     return r;
 }
 
@@ -1184,21 +1190,23 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i16_x2 widening_load<nati
     xb_vecNx16 r1, r2;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const uint8_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LANX8U_IP(r1, align, (const xb_vecNx8U *)ptr8);
+    const xb_vecNx8U *__restrict ptr = (const xb_vecNx8U *)ptr8;
+    IVP_LANX8U_IP(r1, align, ptr);
     // Pointer is automatically incremented by previous call.
-    IVP_LANX8U_IP(r2, align, (const xb_vecNx8U *)ptr8);
+    IVP_LANX8U_IP(r2, align, ptr);
 
     return native_vector_i16_x2(native_vector_i16_x2::from_native_vector, r1, r2);
 }
 
 template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u16_x2 widening_load<native_vector_u16_x2, uint8_t>(const void *base, int32_t offset) {
-    xb_vecNx16 r1, r2;
+    xb_vecNx16U r1, r2;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const uint8_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LANX8U_IP(r1, align, (const xb_vecNx8U *)ptr8);
+    const xb_vecNx8U *__restrict ptr = (const xb_vecNx8U *)ptr8;
+    IVP_LANX8U_IP(r1, align, ptr);
     // Pointer is automatically incremented by previous call.
-    IVP_LANX8U_IP(r2, align, (const xb_vecNx8U *)ptr8);
+    IVP_LANX8U_IP(r2, align, ptr);
 
     return native_vector_u16_x2(native_vector_u16_x2::from_native_vector, r1, r2);
 }
@@ -1208,7 +1216,8 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i32 widening_load<native_
     native_vector_i32 r1;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const int16_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LAN_2X16S_IP(r1, align, (const xb_vecN_2x16 *)ptr8);
+    const xb_vecN_2x16 *__restrict ptr = (const xb_vecN_2x16 *)ptr8;
+    IVP_LAN_2X16S_IP(r1, align, ptr);
     return r1;
 }
 
@@ -1217,9 +1226,10 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i32_x2 widening_load<nati
     native_vector_i32 r1, r2;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const int16_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LAN_2X16S_IP(r1, align, (const xb_vecN_2x16 *)ptr8);
+    const xb_vecN_2x16 *__restrict ptr = (const xb_vecN_2x16 *)ptr8;
+    IVP_LAN_2X16S_IP(r1, align, ptr);
     // Pointers is automatically incremented by previous call.
-    IVP_LAN_2X16S_IP(r2, align, (const xb_vecN_2x16 *)ptr8);
+    IVP_LAN_2X16S_IP(r2, align, ptr);
 
     return native_vector_i32_x2(native_vector_i32_x2::from_native_vector, r1, r2);
 }
@@ -1229,9 +1239,10 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i32_x2 widening_load<nati
     native_vector_i32 r1, r2;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const uint16_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LAN_2X16U_IP(r1, align, (const xb_vecN_2x16U *)ptr8);
+    const xb_vecN_2x16U *__restrict ptr = (const xb_vecN_2x16U *)ptr8;
+    IVP_LAN_2X16U_IP(r1, align, ptr);
     // Pointers is automatically incremented by previous call.
-    IVP_LAN_2X16U_IP(r2, align, (const xb_vecN_2x16U *)ptr8);
+    IVP_LAN_2X16U_IP(r2, align, ptr);
 
     return native_vector_i32_x2(native_vector_i32_x2::from_native_vector, r1, r2);
 }
@@ -1241,9 +1252,10 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u32_x2 widening_load<nati
     native_vector_u32 r1, r2;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const uint16_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LAN_2X16U_IP(r1, align, (const xb_vecN_2x16U *)ptr8);
+    const xb_vecN_2x16U *__restrict ptr = (const xb_vecN_2x16U *)ptr8;
+    IVP_LAN_2X16U_IP(r1, align, ptr);
     // Pointers is automatically incremented by previous call.
-    IVP_LAN_2X16U_IP(r2, align, (const xb_vecN_2x16U *)ptr8);
+    IVP_LAN_2X16U_IP(r2, align, ptr);
 
     return native_vector_u32_x2(native_vector_u32_x2::from_native_vector, r1, r2);
 }
@@ -1253,11 +1265,12 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i32_x4 widening_load<nati
     native_vector_i32 r1, r2, r3, r4;
     const xb_vec2Nx8 *__restrict ptr8 = (const xb_vec2Nx8 *)((const uint16_t *)base + offset);
     valign align = IVP_LA_PP(ptr8);
-    IVP_LAN_2X16U_IP(r1, align, (const xb_vecN_2x16U *)ptr8);
+    const xb_vecN_2x16U *__restrict ptr = (const xb_vecN_2x16U *)ptr8;
+    IVP_LAN_2X16U_IP(r1, align, ptr);
     // Pointers is automatically incremented by previous call.
-    IVP_LAN_2X16U_IP(r2, align, (const xb_vecN_2x16U *)ptr8);
-    IVP_LAN_2X16U_IP(r3, align, (const xb_vecN_2x16U *)ptr8);
-    IVP_LAN_2X16U_IP(r4, align, (const xb_vecN_2x16U *)ptr8);
+    IVP_LAN_2X16U_IP(r2, align, ptr);
+    IVP_LAN_2X16U_IP(r3, align, ptr);
+    IVP_LAN_2X16U_IP(r4, align, ptr);
 
     return native_vector_i32_x4(native_vector_i32_x4::from_native_vector, r1, r2, r3, r4);
 }
@@ -2175,7 +2188,8 @@ template<>
 HALIDE_ALWAYS_INLINE native_vector_u16_x2 convert<native_vector_u16_x2, native_vector_u8>(const native_vector_u8 &src) {
     xb_vec2Nx24 wide = src * native_vector_u8(1);
     return native_vector_u16_x2(native_vector_u16_x2::from_native_vector,
-                                IVP_CVT16U2NX24L(wide), IVP_CVT16U2NX24H(wide));
+                                xb_vecNx16_rtor_xb_vecNx16U(IVP_CVT16U2NX24L(wide)),
+                                xb_vecNx16_rtor_xb_vecNx16U(IVP_CVT16U2NX24H(wide)));
 }
 
 template<>
@@ -2194,7 +2208,8 @@ HALIDE_ALWAYS_INLINE native_vector_i16_x2 convert<native_vector_i16_x2, native_v
 template<>
 HALIDE_ALWAYS_INLINE native_vector_u16_x2 convert<native_vector_u16_x2, native_vector_i24>(const native_vector_i24 &wide) {
     return native_vector_u16_x2(native_vector_u16_x2::from_native_vector,
-                                IVP_CVT16U2NX24L(wide), IVP_CVT16U2NX24H(wide));
+                                xb_vecNx16_rtor_xb_vecNx16U(IVP_CVT16U2NX24L(wide)),
+                                xb_vecNx16_rtor_xb_vecNx16U(IVP_CVT16U2NX24H(wide)));
 }
 
 template<>
@@ -2407,19 +2422,22 @@ HALIDE_ALWAYS_INLINE native_vector_i32_x2 convert<native_vector_i32_x2, native_v
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i32_x2 convert<native_vector_i32_x2, native_vector_u32_x2>(const native_vector_u32_x2 &src) {
     return native_vector_i32_x2(native_vector_i32_x2::from_native_vector,
-                                src.native_vector[0], src.native_vector[1]);
+                                xb_vecN_2x32Uv_rtor_xb_vecN_2x32v(src.native_vector[0]),
+                                xb_vecN_2x32Uv_rtor_xb_vecN_2x32v(src.native_vector[1]));
 }
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_u32_x2 convert<native_vector_u32_x2, native_vector_i32_x2>(const native_vector_i32_x2 &src) {
     return native_vector_u32_x2(native_vector_u32_x2::from_native_vector,
-                                src.native_vector[0], src.native_vector[1]);
+                                xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(src.native_vector[0]),
+                                xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(src.native_vector[1]));
 }
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_u16_x2 convert<native_vector_u16_x2, native_vector_i16_x2>(const native_vector_i16_x2 &src) {
     return native_vector_u16_x2(native_vector_u16_x2::from_native_vector,
-                                src.native_vector[0], src.native_vector[1]);
+                                xb_vecNx16_rtor_xb_vecNx16U(src.native_vector[0]),
+                                xb_vecNx16_rtor_xb_vecNx16U(src.native_vector[1]));
 }
 
 template<>
@@ -2446,7 +2464,9 @@ HALIDE_ALWAYS_INLINE native_vector_u32_x2 convert<native_vector_u32_x2, native_v
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i16_x2 convert<native_vector_i16_x2, native_vector_u16_x2>(const native_vector_u16_x2 &src) {
-    return native_vector_i16_x2(native_vector_i16_x2::from_native_vector, src.native_vector[0], src.native_vector[1]);
+    return native_vector_i16_x2(native_vector_i16_x2::from_native_vector,
+                                xb_vecNx16U_rtor_xb_vecNx16(src.native_vector[0]),
+                                xb_vecNx16U_rtor_xb_vecNx16(src.native_vector[1]));
 }
 
 template<>
@@ -2580,7 +2600,8 @@ HALIDE_ALWAYS_INLINE native_vector_f16 convert<native_vector_f16, native_vector_
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_u16 convert<native_vector_u16, native_vector_f16>(const native_vector_f16 &src) {
-    return xb_vecNx16U_rtor_xb_vecNx16(convert<native_vector_i16, native_vector_f16>(src));
+    native_vector_i16 tmp = convert<native_vector_i16, native_vector_f16>(src);
+    return xb_vecNx16U_rtor_xb_vecNx16(tmp);
 }
 
 template<>
@@ -2807,6 +2828,7 @@ VectorType gather_load(const void *base, const OffsetType &offset) {
 
     return *((VectorType *)tmp);
 }
+#if defined(__XTENSA__)
 
 template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_i8 gather_load<native_vector_i8, native_vector_i32_x4, int8_t, VECTOR_WIDTH_U8, true>(const void *base, const native_vector_i32_x4 &offset) {
@@ -2919,6 +2941,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_f32_x2 gather_load<native
                                 IVP_GATHERDN_2XF32(gsr0),
                                 IVP_GATHERDN_2XF32(gsr1));
 }
+#endif
 
 HALIDE_ALWAYS_INLINE native_vector_u16
 halide_xtensa_mul_add_u16(const native_vector_u16 &a, const native_vector_u16 &b, const native_vector_u16 &c) {
@@ -3014,6 +3037,7 @@ halide_xtensa_widen_mul_sub_i48(const native_vector_i48 &a, const native_vector_
     IVP_MULSNX16(r, b, c);
     return r;
 }
+#if defined(__XTENSA__)
 
 template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED native_vector_u8
@@ -3033,3 +3057,4 @@ gather_load<native_vector_u8, native_vector_i16_x2, uint8_t, VECTOR_WIDTH_U8, tr
     // NOTE(aelphy): the intrinsic for gathering 8-bit elements extends them to 16-bit, and the conversion back to 8-bit is needed
     return convert<native_vector_u8, native_vector_u16_x2>(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, output1, output2));
 }
+#endif
