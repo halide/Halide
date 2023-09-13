@@ -33,6 +33,9 @@ public:
         // There's no separate target for SSS4.2; we currently assume that
         // it should be used iff AVX is being used.
         use_sse42 = use_avx;
+
+        use_avx512_vnni = target.has_feature(Target::AVX512_Zen4);
+        use_avx_vnni = target.has_feature(Target::AVX512_SapphireRapids);
     }
 
     void add_tests() override {
@@ -45,6 +48,7 @@ public:
     void check_sse_and_avx() {
         Expr f64_1 = in_f64(x), f64_2 = in_f64(x + 16), f64_3 = in_f64(x + 32);
         Expr f32_1 = in_f32(x), f32_2 = in_f32(x + 16), f32_3 = in_f32(x + 32);
+        Expr f16_1 = in_f16(x), f16_2 = in_f16(x + 16), f16_3 = in_f16(x + 32);
         Expr i8_1 = in_i8(x), i8_2 = in_i8(x + 16), i8_3 = in_i8(x + 32);
         Expr u8_1 = in_u8(x), u8_2 = in_u8(x + 16), u8_3 = in_u8(x + 32);
         Expr i16_1 = in_i16(x), i16_2 = in_i16(x + 16), i16_3 = in_i16(x + 32);
@@ -496,6 +500,11 @@ public:
                 check_x86_fixed_point("zmm", 2);
             }
 
+            if (target.has_feature(Target::F16C)) {
+                check("vcvtps2ph", 8, cast(Float(16), f32_1));
+                check("vcvtph2ps", 8, cast(Float(32), f16_1));
+            }
+
             check(use_avx512 ? "vpaddq*zmm" : "vpaddq*ymm", 8, i64_1 + i64_2);
             check(use_avx512 ? "vpsubq*zmm" : "vpsubq*ymm", 8, i64_1 - i64_2);
             check(use_avx512 ? "vpmullq" : "vpmuludq*ymm", 8, u64_1 * u64_2);
@@ -574,49 +583,60 @@ public:
             check("vpmaxsq", 8, max(i64_1, i64_2));
             check("vpminsq", 8, min(i64_1, i64_2));
         }
-        if (use_avx512 && target.has_feature(Target::AVX512_SapphireRapids)) {
-            // TODO: broken, see https://github.com/halide/Halide/issues/7219
-            // check("vcvtne2ps2bf16*zmm", 32, cast(BFloat(16), f32_1));
-            // check("vcvtneps2bf16*ymm", 16, cast(BFloat(16), f32_1));
-            // check("vcvtneps2bf16*xmm", 8, cast(BFloat(16), f32_1));
-            // check("vcvtneps2bf16*xmm", 4, cast(BFloat(16), f32_1));
+        if (use_avx512_vnni) {
+            // For our targets, avx512_vnni implies avx512_bf16
+            // Disabled due to https://github.com/halide/Halide/issues/7219
+            /*
+            check("vcvtne2ps2bf16*zmm", 32, cast(BFloat(16), f32_1));
+            check("vcvtneps2bf16*ymm", 16, cast(BFloat(16), f32_1));
+            check("vcvtneps2bf16*xmm", 8, cast(BFloat(16), f32_1));
+            check("vcvtneps2bf16*xmm", 4, cast(BFloat(16), f32_1));
+            */
 
             {
                 // 16 bit, 2 element dot product
                 RDom r(0, 2);
                 check("vdpbf16ps*zmm", 16, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
-                check("vdpbf16ps*ymm", 8, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
-                check("vdpbf16ps*xmm", 4, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
                 check("vpdpwssd*zmm", 16, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                check("vpdpwssd*ymm", 8, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                check("vpdpwssd*xmm", 4, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                if (use_avx_vnni) {
+                    check("vdpbf16ps*ymm", 8, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
+                    check("vdpbf16ps*xmm", 4, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
+                    check("vpdpwssd*ymm", 8, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                    check("vpdpwssd*xmm", 4, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                }
             }
             {
                 // 8 bit, 4 element dot product
                 RDom r(0, 4);
                 check("vpdpbusd*zmm", 16, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
                 check("vpdpbusd*zmm", 16, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                check("vpdpbusd*ymm", 8, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
-                check("vpdpbusd*ymm", 8, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                check("vpdpbusd*xmm", 4, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
-                check("vpdpbusd*xmm", 4, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                if (use_avx_vnni) {
+                    check("vpdpbusd*ymm", 8, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                    check("vpdpbusd*ymm", 8, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                    check("vpdpbusd*xmm", 4, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                    check("vpdpbusd*xmm", 4, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                }
             }
             {
                 // 16 bit, 2 element saturaing dot product
                 RDom r(0, 2);
                 check("vpdpwssds*zmm", 16, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                check("vpdpwssds*ymm", 8, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                check("vpdpwssds*xmm", 4, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                if (use_avx_vnni) {
+                    check("vpdpwssds*ymm", 8, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                    check("vpdpwssds*xmm", 4, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                }
             }
             {
                 // 8 bit, 4 element saturating dot product
                 RDom r(0, 4);
                 check("vpdpbusds*zmm", 16, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
                 check("vpdpbusds*zmm", 16, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
-                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
-                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                if (use_avx_vnni) {
+                    check("vpdpbusds*ymm", 8, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                    check("vpdpbusds*ymm", 8, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                    check("vpdpbusds*xmm", 4, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                    check("vpdpbusds*xmm", 4, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                }
             }
         }
     }
@@ -624,6 +644,8 @@ public:
 private:
     bool use_avx2{false};
     bool use_avx512{false};
+    bool use_avx512_vnni{false};
+    bool use_avx_vnni{false};
     bool use_avx{false};
     bool use_sse41{false};
     bool use_sse42{false};
@@ -638,14 +660,18 @@ int main(int argc, char **argv) {
         {
             Target("x86-32-linux"),
             Target("x86-32-linux-sse41"),
-            Target("x86-64-linux-sse41-avx"),
-            Target("x86-64-linux-sse41-avx-avx2"),
+            // Always turn on f16c when using avx. Sandy Bridge had avx without
+            // f16c, but f16c is orthogonal to everything else, so there's no
+            // real reason to test avx without it.
+            Target("x86-64-linux-sse41-avx-f16c"),
+            Target("x86-64-linux-sse41-avx-f16c-avx2"),
             // See above: don't test avx512 without extra features, the test
             // isn't yet set up to test it properly.
             // Target("x86-64-linux-sse41-avx-avx2-avx512"),
             // Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_knl"),
-            Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_skylake"),
-            Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_skylake-avx512_cannonlake"),
-            Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_sapphirerapids"),
+            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake"),
+            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake"),
+            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
+            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
         });
 }

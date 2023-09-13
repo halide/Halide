@@ -41,6 +41,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
         {OutputFileType::featurization, {"featurization", ".featurization", IsMulti}},
         {OutputFileType::function_info_header, {"function_info_header", ".function_info.h", IsSingle}},
+        {OutputFileType::hlpipe, {"hlpipe", ".hlpipe", IsSingle}},
         {OutputFileType::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
         {OutputFileType::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
         {OutputFileType::python_extension, {"python_extension", ".py.cpp", IsSingle}},
@@ -821,6 +822,7 @@ void compile_multitarget(const std::string &fn_name,
         // This would make the filename outputs more symmetrical (ie the same for n=1 as for n>1)
         // but at the expense of breaking existing users. So for now, we're going to continue
         // with the legacy treatment below:
+        reset_random_counters();
         module_factory(fn_name, base_target).compile(output_files);
         return;
     }
@@ -885,6 +887,8 @@ void compile_multitarget(const std::string &fn_name,
         // We always produce the runtime separately, so add NoRuntime explicitly.
         Target sub_fn_target = target.with_feature(Target::NoRuntime);
 
+        // Ensure that each subtarget sees the same sequence of random numbers
+        reset_random_counters();
         {
             ScopedCompilerLogger activate(compiler_logger_factory, sub_fn_name, sub_fn_target);
             Module sub_module = module_factory(sub_fn_name, sub_fn_target);

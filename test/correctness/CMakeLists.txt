@@ -59,6 +59,7 @@ tests(GROUPS correctness
       constraints.cpp
       convolution_multiple_kernels.cpp
       cross_compilation.cpp
+      cse_name_collision.cpp
       cse_nan.cpp
       cuda_8_bit_dot_product.cpp
       custom_allocator.cpp

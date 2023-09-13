@@ -63,7 +63,11 @@ Stmt Simplify::visit(const IfThenElse *op) {
     if (else_unreachable) {
         return then_case;
     } else if (then_unreachable) {
-        return else_case;
+        if (else_case.defined()) {
+            return else_case;
+        } else {
+            return Evaluate::make(0);
+        }
     }
 
     if (is_no_op(else_case)) {

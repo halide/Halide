@@ -631,7 +631,9 @@ public:
         cost_model = std::move(cm);
     }
 
-    void print(const Module &m) {
+    void print(const Module &m, AssemblyInfo asm_info) {
+        assembly_info = std::move(asm_info);
+
         // Generate a unique ID for this module
         int id = gen_unique_id();
 
@@ -708,6 +710,7 @@ private:
 
     // Holds cost information for visualized program
     IRCostModel cost_model;
+    AssemblyInfo assembly_info;
 
     /* Private print functions to handle various IR types */
     void print(const Buffer<> &buf) {
@@ -926,6 +929,16 @@ private:
         stream << "<button class='icon-btn sync-btn' onclick='scrollToViz(\"" << id << "\")'>"
                << "  <i class='bi bi-arrow-right-square' title='Jump to visualization'></i>"
                << "</button>";
+    }
+
+    // Prints a button to sync text with visualization
+    void print_assembly_button(const void *op) {
+        int asm_lno = assembly_info.get_asm_lno((uint64_t)op);
+        if (asm_lno != -1) {
+            stream << "<button class='icon-btn text-info sync-btn' onclick='scrollToAsm(\"" << asm_lno << "\")'>"
+                   << "  <i class='bi bi-arrow-right-square' title='Jump to Assembly'></i>"
+                   << "</button>";
+        }
     }
 
     // CUDA kernels are embedded into modules as PTX assembly. This
@@ -1521,6 +1534,7 @@ private:
 
         // Add a button to jump to this producer/consumer in the viz
         print_visualization_button("prodcons-viz-" + std::to_string(id));
+        print_assembly_button(op);
 
         // Open code block to hold function body
         print_html_element("span", "matched", "{");
@@ -1583,6 +1597,7 @@ private:
 
         // Add a button to jump to this loop in the viz
         print_visualization_button("loop-viz-" + std::to_string(id));
+        print_assembly_button(op);
 
         // Open code block to hold function body
         print_html_element("span", "matched", "{");
@@ -2885,7 +2900,7 @@ private:
     // Generate tab 1/3: Lowered IR code with syntax highlighting in HTML
     void generate_ir_tab(const Module &m) {
         stream << "<div id='ir-code-tab'>\n";
-        html_code_printer.print(m);
+        html_code_printer.print(m, asm_info);
         stream << "</div>\n";
     }
 
