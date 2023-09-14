@@ -52,7 +52,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::conceptual_stmt, {"coneptual_stmt", ".conceptual.stmt", IsMulti}},
         {OutputFileType::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
         {OutputFileType::conceptual_stmt_html, {"conceptual_stmt_html", ".conceptual.stmt.html", IsMulti}},
-        {OutputFileType::ptx_assembly, {"ptx_assembly", ".ptx", IsMulti}},
+        {OutputFileType::device_code, {"device_code", ".device_code", IsMulti}},
     };
     return ext;
 }
@@ -685,23 +685,24 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         Internal::print_to_conceptual_stmt_html(output_files.at(OutputFileType::conceptual_stmt_html),
                                                 *this, assembly_path, enable_viztree);
     }
-    if (contains(output_files, OutputFileType::ptx_assembly)) {
-        debug(1) << "Module.compile(): ptx_assembly " << output_files.at(OutputFileType::ptx_assembly) << "\n";
-        std::string gpu_kernel_sources;
-        for (const Buffer<> &buf : buffers()) {
-            debug(1) << "Looking for GPU sources: " << buf.name() << "\n";
-            if (ends_with(buf.name(), "_gpu_source_kernels")) {
-                internal_assert(gpu_kernel_sources.empty());  // There should be only one!
-                gpu_kernel_sources = std::string((const char *)buf.data(), buf.size_in_bytes());
+    if (contains(output_files, OutputFileType::device_code)) {
+        debug(1) << "Module.compile(): device_code " << output_files.at(OutputFileType::device_code) << "\n";
+        if (const Buffer<> *buf = get_device_code_buffer()) {
+            int length = buf->size_in_bytes();
+            while (length > 0 && ((const char*)buf->data())[length - 1] == '\0') {
+                length--;
             }
-        }
-        if (gpu_kernel_sources.empty()) {
-            debug(1) << "No GPU kernel sources emitted.\n";
-        } else {
-            std::ofstream file(output_files.at(OutputFileType::ptx_assembly));
-            file << gpu_kernel_sources << "\n";
+            std::string str((const char *)buf->data(), length);
+            std::string device_code = std::string((const char *)buf->data(), buf->size_in_bytes());
+            while (!device_code.empty() && device_code.back() == 0) {
+                device_code = device_code.substr(0, device_code.length() - 1);
+            }
+            std::ofstream file(output_files.at(OutputFileType::device_code));
+            file << device_code << "\n";
             file.close();
-            debug(1) << "Saved GPU kernel sources (" << gpu_kernel_sources.size() << " bytes).\n";
+            debug(1) << "Saved GPU kernel sources (" << device_code.size() << " bytes).\n";
+        } else {
+            debug(1) << "No GPU kernel sources emitted.\n";
         }
     }
     if (contains(output_files, OutputFileType::function_info_header)) {

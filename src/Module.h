@@ -44,7 +44,7 @@ enum class OutputFileType {
     conceptual_stmt,
     stmt_html,
     conceptual_stmt_html,
-    ptx_assembly,
+    device_code,
 };
 
 /** Type of linkage a function in a lowered Halide module can have.
@@ -171,7 +171,6 @@ public:
      * Might return a nullptr in case such buffer is not present in this Module.
      */
     const Buffer<> *get_cuda_ptx_assembly_buffer() const;
-
 
     /**
      * Tries to locate the offloaded (GPU) Device assembly contained in this Module.

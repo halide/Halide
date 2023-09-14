@@ -24,22 +24,20 @@ function addHighlight(selector) {
 }
 
 // Example usage:
-addHighlight('#ir-code-tab');
-addHighlight('#device-code-tab');
-
-
+addHighlight('#ir-code-pane');
+addHighlight('#device-code-pane');
 
 /* Scroll to code from visualization */
-function scrollToCode(id) {
-    var container = document.getElementById('ir-code-tab');
+function scrollToCode(id) {  // eslint-disable-line no-unused-vars
+    var container = document.getElementById('ir-code-pane');
     var scrollToObject = document.getElementById(id);
     makeCodeVisible(scrollToObject);
     container.scrollTo({
-        top: scrollToObject.offsetTop,
-        behavior: 'smooth'
+        top : scrollToObject.offsetTop,
+        behavior : 'smooth'
     });
     scrollToObject.style.backgroundColor = 'lightgray';
-    setTimeout(function () {
+    setTimeout(function() {
         scrollToObject.style.backgroundColor = 'transparent';
     }, 1000);
 }
@@ -57,11 +55,8 @@ for (var i = 0; i < resizeBars.length; i++) {
     resizeBars[i].addEventListener('mousedown', (event) => {
         document.body.classList.add("no-select");
         if (event.target.classList.contains("resize-bar")) {
-            console.log(event.target);
-
             currentResizer = event.target;
             currentResizerIndex = resizeBars.indexOf(currentResizer);
-            var rect = currentResizer.getBoundingClientRect();
             mousedown = true;
             resizerInitCenter = event.x;
             resizerPreviewX = event.x;
@@ -73,39 +68,36 @@ for (var i = 0; i < resizeBars.length; i++) {
 
 document.addEventListener('mouseup', (event) => {
     if (mousedown) {
-
         currentResizer = null;
         mousedown = false;
         resizerPreview.style.display = 'none';
 
-        // Gather tab widths
-        var tabs = Array.from(document.querySelectorAll('div.tab'));
-        var widths = tabs.map(function(tab) {
-            return tab.getBoundingClientRect().width;
+        // Gather pane widths
+        var panes = Array.from(document.querySelectorAll('div.pane'));
+        var widths = panes.map(function(pane) {
+            return pane.getBoundingClientRect().width;
         });
 
-
-        // Adjust tab widths
+        // Adjust pane widths
         var diff = resizerPreviewX - resizerInitCenter;
-        console.log(diff);
         var currentIndex = currentResizerIndex;
-        while (currentIndex >= 0 && tabs[currentIndex].classList.contains('collapsed-tab')) {
+        while (currentIndex >= 0 && panes[currentIndex].classList.contains('collapsed-pane')) {
             currentIndex--
         }
         widths[currentIndex] += diff;
 
         currentIndex = currentResizerIndex + 1;
-        while (currentIndex < tabs.length && tabs[currentIndex].classList.contains('collapsed-tab')) {
+        while (currentIndex < panes.length && panes[currentIndex].classList.contains('collapsed-pane')) {
             currentIndex++;
         }
         widths[currentIndex] -= diff;
 
-        // Apply tab widths
-        tabs.forEach(function(tab, index) {
+        // Apply pane widths
+        panes.forEach(function(pane, index) {
             if (widths[index] >= 0) {
-                tab.style.width = widths[index] + 'px';
+                pane.style.width = widths[index] + 'px';
             } else {
-                tab.style.width = '0px'; // or any other default value you want to set
+                pane.style.width = '0px';  // or any other default value you want to set
             }
         });
     }
@@ -120,32 +112,42 @@ document.addEventListener('mousemove', (event) => {
     }
 });
 
-
-function collapse_tab(index) {
-    var tabs = document.getElementById("visualization-tabs");
-    var tab = tabs.firstElementChild.nextElementSibling;
+function collapseTab(index) {  // eslint-disable-line no-unused-vars
+    var panes = document.getElementById("visualization-panes");
+    var pane = panes.firstElementChild.nextElementSibling;
     for (var i = 0; i < index; ++i) {
-        tab = tab.nextElementSibling.nextElementSibling;
+        pane = pane.nextElementSibling.nextElementSibling;
     }
 
-    tab.classList.toggle('collapsed-tab');
+    pane.classList.toggle('collapsed-pane');
 }
 
-function scrollToHostAsm(lno) {
+function scrollToHostAsm(lno) {  // eslint-disable-line no-unused-vars
     var asmContent = document.getElementById("assemblyContent");
     var line_height = window.getComputedStyle(asmContent).getPropertyValue("line-height");
     line_height = parseInt(line_height, 10);
-    document.getElementById("host-assembly-tab").scrollTo({
-        behavior: "smooth",
-        top: lno * line_height
+    document.getElementById("host-assembly-pane").scrollTo({
+        behavior : "smooth",
+        top : lno * line_height
     });
 }
 
-function scrollToDeviceCode(lno) {
-    var device_code_tab = document.getElementById("device-code-tab");
-    const lineSpans = device_code_tab.querySelectorAll('span.line');
-    line = lineSpans[lno - 1]
-    line.scrollIntoView({
-        behavior: "smooth",
-    });
+function scrollToDeviceCode(lno) {  // eslint-disable-line no-unused-vars
+    var device_code_pane = document.getElementById("device-code-pane");
+    const lineSpans = device_code_pane.querySelectorAll('span.line');
+    if (lno - 1 < lineSpans.length) {
+        var line = lineSpans[lno - 1]
+        line.scrollIntoView({
+            behavior : "smooth"
+        });
+    } else {
+        // Non-syntax highlighted code does not have the line-spans.
+        // We will have to calculate based on the line height.
+        var line_height = window.getComputedStyle(device_code_Tab.firstElementChild).getPropertyValue("line-height");
+        line_height = parseInt(line_height, 10);
+        device_code_pane.scrollTo({
+            behavior : "smooth",
+            top : lno * line_height
+        });
+    }
 }

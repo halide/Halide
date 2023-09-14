@@ -35,8 +35,8 @@ table {
     font-size: 12px;
 }
 
-/* Visualization tabs */
-div#visualization-tabs {
+/* Visualization panes */
+div#visualization-panes {
     display: flex;
     flex-grow: 1;
     width: 100%;
@@ -44,7 +44,7 @@ div#visualization-tabs {
     position: relative;
 }
 
-div.tab {
+div.pane {
     overflow: scroll;
     position: relative;
     flex-grow: 1;
@@ -53,11 +53,11 @@ div.tab {
     min-width: 5vw;
     width: 33vw;
 }
-div.tab.collapsed-tab {
+div.pane.collapsed-pane {
     display: none;
 }
 
-div#ir-code-tab {
+div#ir-code-pane {
     counter-reset: line;
     padding-left: 50px;
     padding-top: 20px;
@@ -67,7 +67,7 @@ div#ir-code-tab {
     flex-basis: 50%;*/
 }
 
-div#host-assembly-tab {
+div#host-assembly-pane {
     width: 20vw;
     /*
     min-width: 350px;
@@ -77,7 +77,7 @@ div#host-assembly-tab {
     flex-basis: 20%;*/
 }
 
-div#device-code-tab {
+div#device-code-pane {
     padding-left: 6em;
     width: 30vw;
     /*
@@ -137,16 +137,16 @@ div.resize-bar > div.collapse-btns button.collapse-left:before  { content: "\21E
 div.resize-bar > div.collapse-btns button.collapse-right:before { content: "\21E5"; }
 
 /* Revert collapser button that points to the left. */
-div.collapsed-tab + div.resize-bar button.collapse-left {
+div.collapsed-pane + div.resize-bar button.collapse-left {
     background-color: rgba(0, 0, 0, 0.2);
 }
-div.collapsed-tab + div.resize-bar button.collapse-left:before {
+div.collapsed-pane + div.resize-bar button.collapse-left:before {
     content: "\21A6";
 }
-div.resize-bar:has(+ div.collapsed-tab) button.collapse-right {
+div.resize-bar:has(+ div.collapsed-pane) button.collapse-right {
     background-color: rgba(0, 0, 0, 0.2);
 }
-div.resize-bar:has(+ div.collapsed-tab) > div.collapse-btns button.collapse-right:before {
+div.resize-bar:has(+ div.collapsed-pane) > div.collapse-btns button.collapse-right:before {
     content: "\21A4";
 }
 
@@ -169,7 +169,7 @@ div#resizer-preview {
 
 
 
-div#device-code-tab code {
+div#device-code-pane code {
     line-height: 14px;
     white-space: pre;
 }
@@ -450,7 +450,7 @@ button.jump-to-host-asm-btn:before, button.jump-to-device-code-btn:before, butto
     content: "\279F";
 }
 
-div#ir-visualization-tab button.icon-btn {
+div#ir-visualization-pane button.icon-btn {
     margin-left: 1px;
 }
 
@@ -460,7 +460,7 @@ button.icon-btn:hover {
 }
 
 code.ptx {
-    tab-size: 26;
+    pane-size: 26;
 }
 
 span.comment {

@@ -1021,7 +1021,11 @@ private:
             // Open indented div to hold buffer data
             print_opening_tag("div", "indent BufferData", id);
 
-            std::string str((const char *)buf.data(), buf.size_in_bytes());
+            int length = buf.size_in_bytes();
+            while (length > 0 && ((const char*)buf.data())[length - 1] == '\0') {
+                length--;
+            }
+            std::string str((const char *)buf.data(), length);
             if (starts_with(buf.name(), "cuda_")) {
                 print_cuda_gpu_source_kernels(str);
             } else {
@@ -3078,7 +3082,7 @@ private:
     void generate_body(const Module &m) {
         stream << "<body>\n";
         stream << "  <div id='page-container'>\n";
-        generate_visualization_tabs(m);
+        generate_visualization_panes(m);
         stream << "  </div>\n";
         stream << "</body>";
 #if INLINE_TEMPLATES
@@ -3101,50 +3105,50 @@ private:
 #endif
     }
 
-    // Generate the three visualization tabs
-    void generate_visualization_tabs(const Module &m) {
-        int tab_count = 0;
-        stream << "<div id='visualization-tabs'>\n";
+    // Generate the three visualization panes
+    void generate_visualization_panes(const Module &m) {
+        int pane_count = 0;
+        stream << "<div id='visualization-panes'>\n";
         stream << "<div id='resizer-preview'></div>\n";
-        generate_ir_tab(m);
+        generate_ir_pane(m);
         if (include_viztree) {
-            generate_resize_bar(tab_count++);
-            generate_visualization_tab(m);
+            generate_resize_bar(pane_count++);
+            generate_visualization_pane(m);
         }
-        generate_resize_bar(tab_count++);
-        generate_host_assembly_tab(m);
+        generate_resize_bar(pane_count++);
+        generate_host_assembly_pane(m);
         const Buffer<> *device_assembly = m.get_device_code_buffer();
         if (device_assembly) {
-            generate_resize_bar(tab_count++);
-            generate_device_code_tab(*device_assembly);
+            generate_resize_bar(pane_count++);
+            generate_device_code_pane(*device_assembly);
         }
 
         stream << "</div>\n";
     }
 
-    // Generate tab: Lowered IR code with syntax highlighting in HTML
-    void generate_ir_tab(const Module &m) {
+    // Generate pane: Lowered IR code with syntax highlighting in HTML
+    void generate_ir_pane(const Module &m) {
         if (use_conceptual_stmt_ir) {
-            stream << "<div id='ir-code-tab' class='tab conceptual'>\n";
+            stream << "<div id='ir-code-pane' class='pane conceptual'>\n";
             html_code_printer.print_conceptual_stmt(m, host_asm_info, device_asm_info);
             stream << "</div>\n";
         } else {
-            stream << "<div id='ir-code-tab' class='tab'>\n";
+            stream << "<div id='ir-code-pane' class='pane'>\n";
             html_code_printer.print(m, host_asm_info, device_asm_info);
             stream << "</div>\n";
         }
     }
 
-    // Generate tab: Lowered IR code with syntax highlighting in HTML
-    void generate_visualization_tab(const Module &m) {
-        stream << "<div id='ir-visualization-tab' class='tab'>\n";
+    // Generate pane: Lowered IR code with syntax highlighting in HTML
+    void generate_visualization_pane(const Module &m) {
+        stream << "<div id='ir-visualization-pane' class='pane'>\n";
         html_viz_printer.print(m, host_asm_info, device_asm_info);
         stream << "</div>\n";
     }
 
-    // Generate tab: Generated host assembly code
-    void generate_host_assembly_tab(const Module &m) {
-        stream << "<div id='host-assembly-tab' class='tab'>\n";
+    // Generate pane: Generated host assembly code
+    void generate_host_assembly_pane(const Module &m) {
+        stream << "<div id='host-assembly-pane' class='pane'>\n";
         stream << "<div id='assemblyContent' class='shj-lang-asm'>\n";
         stream << "<pre>\n";
         stream << asm_stream.str();
@@ -3154,10 +3158,14 @@ private:
         stream << "</div>\n";
     }
 
-    // Generate tab: Generated device code
-    void generate_device_code_tab(const Buffer<> &buf) {
-        stream << "<div id='device-code-tab' class='tab'>\n";
-        std::string str((const char *)buf.data(), buf.size_in_bytes());
+    // Generate pane: Generated device code
+    void generate_device_code_pane(const Buffer<> &buf) {
+        stream << "<div id='device-code-pane' class='pane'>\n";
+        int length = buf.size_in_bytes();
+        while (length > 0 && ((const char*)buf.data())[length - 1] == '\0') {
+            length--;
+        }
+        std::string str((const char *)buf.data(), length);
         if (starts_with(buf.name(), "cuda_")) {
             html_code_printer.print_cuda_gpu_source_kernels(str);
         } else {
@@ -3169,16 +3177,16 @@ private:
         stream << "</div>\n";
     }
 
-    // Generate a resizing bar to control the width of code and visualization tabs
+    // Generate a resizing bar to control the width of code and visualization panes
     void generate_resize_bar(int num) {
         stream << "<div class='resize-bar' id='resize-bar-" << num << "'>\n";
         stream << "   <div class='collapse-btns'>\n";
         stream << "     <div>\n";
-        stream << "      <button class='collapse-left' onclick='collapse_tab(" << num << ")' title='Collapse tab on the left'></span>\n";
+        stream << "      <button class='collapse-left' onclick='collapseTab(" << num << ")' title='Collapse pane on the left'></span>\n";
         stream << "       </button>\n";
         stream << "     </div>\n";
         stream << "     <div>\n";
-        stream << "       <button class='collapse-right' onclick='collapse_tab(" << (num + 1) << ")' title='Collapse tab on the right'></span>\n";
+        stream << "       <button class='collapse-right' onclick='collapseTab(" << (num + 1) << ")' title='Collapse pane on the right'></span>\n";
         stream << "       </button>\n";
         stream << "     </div>\n";
         stream << "   </div>\n";
