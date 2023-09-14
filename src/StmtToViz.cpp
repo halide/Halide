@@ -1022,7 +1022,7 @@ private:
             print_opening_tag("div", "indent BufferData", id);
 
             int length = buf.size_in_bytes();
-            while (length > 0 && ((const char*)buf.data())[length - 1] == '\0') {
+            while (length > 0 && ((const char *)buf.data())[length - 1] == '\0') {
                 length--;
             }
             std::string str((const char *)buf.data(), length);
@@ -3162,7 +3162,7 @@ private:
     void generate_device_code_pane(const Buffer<> &buf) {
         stream << "<div id='device-code-pane' class='pane'>\n";
         int length = buf.size_in_bytes();
-        while (length > 0 && ((const char*)buf.data())[length - 1] == '\0') {
+        while (length > 0 && ((const char *)buf.data())[length - 1] == '\0') {
             length--;
         }
         std::string str((const char *)buf.data(), length);

@@ -689,7 +689,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         debug(1) << "Module.compile(): device_code " << output_files.at(OutputFileType::device_code) << "\n";
         if (const Buffer<> *buf = get_device_code_buffer()) {
             int length = buf->size_in_bytes();
-            while (length > 0 && ((const char*)buf->data())[length - 1] == '\0') {
+            while (length > 0 && ((const char *)buf->data())[length - 1] == '\0') {
                 length--;
             }
             std::string str((const char *)buf->data(), length);
