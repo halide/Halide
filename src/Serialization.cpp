@@ -1346,6 +1346,9 @@ Offset<Serialize::Buffer> Serializer::serialize_buffer(FlatBufferBuilder &builde
     if (!buffer.defined()) {
         return Serialize::CreateBuffer(builder, false);
     }
+    if (buffer.device_dirty()) {
+        user_error << "Cannot serialize on-device buffer: " << buffer.name() << "\n";
+    }
     buffer.copy_to_host();
     const auto name_serialized = serialize_string(builder, buffer.name());
     const auto type_serialized = serialize_type(builder, buffer.type());
