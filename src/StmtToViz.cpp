@@ -22,7 +22,7 @@
 // causes you to be able to just edit the files without having to recompile Halide
 // and then rerun your generator.
 // For distribution purposes, they should be inlined, and this define should be on 1.
-#define INLINE_TEMPLATES 0  // nocheckin
+#define INLINE_TEMPLATES 1  // nocheckin
 
 #if !INLINE_TEMPLATES
 #include <filesystem>
@@ -3180,17 +3180,17 @@ private:
     // Generate a resizing bar to control the width of code and visualization panes
     void generate_resize_bar(int num) {
         stream << "<div class='resize-bar' id='resize-bar-" << num << "'>\n";
-        stream << "   <div class='collapse-btns'>\n";
-        stream << "     <div>\n";
-        stream << "      <button class='collapse-left' onclick='collapseTab(" << num << ")' title='Collapse pane on the left'></span>\n";
-        stream << "       </button>\n";
-        stream << "     </div>\n";
-        stream << "     <div>\n";
-        stream << "       <button class='collapse-right' onclick='collapseTab(" << (num + 1) << ")' title='Collapse pane on the right'></span>\n";
-        stream << "       </button>\n";
-        stream << "     </div>\n";
-        stream << "   </div>\n";
+        stream << " <div class='collapse-btns'>\n";
+        stream << "  <div>\n";
+        stream << "   <button class='collapse-left' onclick='collapseTab(" << num << ")' title='Collapse pane on the left'></span>\n";
+        stream << "   </button>\n";
+        stream << "  </div>\n";
+        stream << "  <div>\n";
+        stream << "    <button class='collapse-right' onclick='collapseTab(" << (num + 1) << ")' title='Collapse pane on the right'></span>\n";
+        stream << "    </button>\n";
+        stream << "  </div>\n";
         stream << " </div>\n";
+        stream << "</div>\n";
     }
 
     /* Misc helper methods */
