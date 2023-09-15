@@ -73,6 +73,7 @@ struct Target {
         ZnVer1,    /// Tune for AMD Zen   CPU (AMD Family 17h, launched 2017).
         ZnVer2,    /// Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
         ZnVer3,    /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
+        ZnVer4,    /// Tune for AMD Zen 4 CPU (AMD Family 19h, launched 2022).
     } processor_tune = ProcessorGeneric;
 
     /** Optional features a target can have.
@@ -130,6 +131,7 @@ struct Target {
         AVX512_Skylake = halide_target_feature_avx512_skylake,
         AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
         AVX512_SapphireRapids = halide_target_feature_avx512_sapphirerapids,
+        AVX512_Zen4 = halide_target_feature_avx512_zen4,
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,

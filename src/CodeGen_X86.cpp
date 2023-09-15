@@ -29,6 +29,9 @@ namespace {
 // oldest feature flag that supports an instruction.
 Target complete_x86_target(Target t) {
     if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        t.set_feature(Target::AVX512_Zen4);
+    }
+    if (t.has_feature(Target::AVX512_Zen4)) {
         t.set_feature(Target::AVX512_Cannonlake);
     }
     if (t.has_feature(Target::AVX512_Cannonlake)) {
@@ -66,8 +69,6 @@ protected:
     int native_vector_bits() const override;
 
     int vector_lanes_for_slice(const Type &t) const;
-
-    llvm::Type *llvm_type_of(const Type &t) const override;
 
     using CodeGen_Posix::visit;
 
@@ -210,12 +211,19 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.x86.sse2.pmulhu.w", UInt(16, 8), "pmulh", {UInt(16, 8), UInt(16, 8)}},
     {"llvm.x86.ssse3.pmul.hr.sw.128", Int(16, 8), "pmulhrs", {Int(16, 8), Int(16, 8)}, Target::SSE41},
 
+    // As of LLVM main September 5 2023, LLVM only has partial handling of
+    // bfloat16. The below rules will match fine for simple examples, but bfloat
+    // conversion will get folded through any nearby shuffles and cause
+    // unimplemented errors in llvm's x86 instruction selection for the shuffle
+    // node. Disabling them for now. See https://github.com/halide/Halide/issues/7219
+    /*
     // Convert FP32 to BF16
-    {"vcvtne2ps2bf16x32", BFloat(16, 32), "f32_to_bf16", {Float(32, 32)}, Target::AVX512_SapphireRapids},
-    {"llvm.x86.avx512bf16.cvtneps2bf16.512", BFloat(16, 16), "f32_to_bf16", {Float(32, 16)}, Target::AVX512_SapphireRapids},
-    {"llvm.x86.avx512bf16.cvtneps2bf16.256", BFloat(16, 8), "f32_to_bf16", {Float(32, 8)}, Target::AVX512_SapphireRapids},
+    {"vcvtne2ps2bf16x32", BFloat(16, 32), "f32_to_bf16", {Float(32, 32)}, Target::AVX512_Zen4},
+    {"llvm.x86.avx512bf16.cvtneps2bf16.512", BFloat(16, 16), "f32_to_bf16", {Float(32, 16)}, Target::AVX512_Zen4},
+    {"llvm.x86.avx512bf16.cvtneps2bf16.256", BFloat(16, 8), "f32_to_bf16", {Float(32, 8)}, Target::AVX512_Zen4},
     // LLVM does not provide an unmasked 128bit cvtneps2bf16 intrinsic, so provide a wrapper around the masked version.
-    {"vcvtneps2bf16x4", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_SapphireRapids},
+    {"vcvtneps2bf16x4", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_Zen4},
+    */
 
     // 2-way dot products
     {"llvm.x86.avx2.pmadd.ub.sw", Int(16, 16), "saturating_dot_product", {UInt(8, 32), Int(8, 32)}, Target::AVX2},
@@ -242,23 +250,23 @@ const x86Intrinsic intrinsic_defs[] = {
 
     // 4-way dot product vector reduction
     // The LLVM intrinsics combine the bf16 pairs into i32, so provide a wrapper to correctly call the intrinsic.
-    {"dpbf16psx16", Float(32, 16), "dot_product", {Float(32, 16), BFloat(16, 32), BFloat(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpbf16psx16", Float(32, 16), "dot_product", {Float(32, 16), BFloat(16, 32), BFloat(16, 32)}, Target::AVX512_Zen4},
     {"dpbf16psx8", Float(32, 8), "dot_product", {Float(32, 8), BFloat(16, 16), BFloat(16, 16)}, Target::AVX512_SapphireRapids},
     {"dpbf16psx4", Float(32, 4), "dot_product", {Float(32, 4), BFloat(16, 8), BFloat(16, 8)}, Target::AVX512_SapphireRapids},
 
-    {"dpbusdx16", Int(32, 16), "dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_SapphireRapids},
+    {"dpbusdx16", Int(32, 16), "dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_Zen4},
     {"dpbusdx8", Int(32, 8), "dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_SapphireRapids},
     {"dpbusdx4", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_SapphireRapids},
 
-    {"dpwssdx16", Int(32, 16), "dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpwssdx16", Int(32, 16), "dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_Zen4},
     {"dpwssdx8", Int(32, 8), "dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
     {"dpwssdx4", Int(32, 4), "dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
 
-    {"dpbusdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_SapphireRapids},
+    {"dpbusdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_Zen4},
     {"dpbusdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_SapphireRapids},
     {"dpbusdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_SapphireRapids},
 
-    {"dpwssdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpwssdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_Zen4},
     {"dpwssdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
     {"dpwssdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
 
@@ -488,9 +496,25 @@ void CodeGen_X86::visit(const Select *op) {
 }
 
 void CodeGen_X86::visit(const Cast *op) {
+    Type src = op->value.type();
+    Type dst = op->type;
 
-    if (!op->type.is_vector()) {
-        // We only have peephole optimizations for vectors in here.
+    if (target.has_feature(Target::F16C) &&
+        dst.code() == Type::Float &&
+        src.code() == Type::Float &&
+        (dst.bits() == 16 || src.bits() == 16)) {
+        // Node we use code() == Type::Float instead of is_float(), because we
+        // don't want to catch bfloat casts.
+
+        // This target doesn't support full float16 arithmetic, but it *does*
+        // support float16 casts, so we emit a vanilla LLVM cast node.
+        value = codegen(op->value);
+        value = builder->CreateFPCast(value, llvm_type_of(dst));
+        return;
+    }
+
+    if (!dst.is_vector()) {
+        // We only have peephole optimizations for vectors after this point.
         CodeGen_Posix::visit(op);
         return;
     }
@@ -513,7 +537,7 @@ void CodeGen_X86::visit(const Cast *op) {
     vector<Expr> matches;
     for (const Pattern &p : patterns) {
         if (expr_match(p.pattern, op, matches)) {
-            value = call_overloaded_intrin(op->type, p.intrin, matches);
+            value = call_overloaded_intrin(dst, p.intrin, matches);
             if (value) {
                 return;
             }
@@ -521,12 +545,12 @@ void CodeGen_X86::visit(const Cast *op) {
     }
 
     if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
-        if (op->value.type().bits() < op->type.bits() && op->type.bits() <= 32) {
+        if (src.bits() < dst.bits() && dst.bits() <= 32) {
             // LLVM/x86 really doesn't like 8 -> 16 bit multiplication. If we're
             // widening to 32-bits after a widening multiply, LLVM prefers to see a
             // widening multiply directly to 32-bits. This may result in extra
             // casts, so simplify to remove them.
-            value = codegen(simplify(Mul::make(Cast::make(op->type, mul->args[0]), Cast::make(op->type, mul->args[1]))));
+            value = codegen(simplify(Mul::make(Cast::make(dst, mul->args[0]), Cast::make(dst, mul->args[1]))));
             return;
         }
     }
@@ -871,6 +895,8 @@ string CodeGen_X86::mcpu_target() const {
     //          The CPU choice here *WILL* affect -mattrs!
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         return "sapphirerapids";
+    } else if (target.has_feature(Target::AVX512_Zen4)) {
+        return "znver4";
     } else if (target.has_feature(Target::AVX512_Cannonlake)) {
         return "cannonlake";
     } else if (target.has_feature(Target::AVX512_Skylake)) {
@@ -917,6 +943,8 @@ string CodeGen_X86::mcpu_tune() const {
         return "znver2";
     case Target::Processor::ZnVer3:
         return "znver3";
+    case Target::Processor::ZnVer4:
+        return "znver4";
 
     case Target::Processor::ProcessorGeneric:
         break;
@@ -958,8 +986,11 @@ string CodeGen_X86::mattrs() const {
         if (target.has_feature(Target::AVX512_Cannonlake)) {
             features += ",+avx512ifma,+avx512vbmi";
         }
+        if (target.has_feature(Target::AVX512_Zen4)) {
+            features += ",+avx512bf16,+avx512vnni,+avx512bitalg,+avx512vbmi2";
+        }
         if (target.has_feature(Target::AVX512_SapphireRapids)) {
-            features += ",+avx512bf16,+avx512vnni,+amx-int8,+amx-bf16";
+            features += ",+avxvnni,+amx-int8,+amx-bf16";
         }
     }
     return features;
@@ -995,21 +1026,6 @@ int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
                                                                    128);
     // clang-format on
     return slice_bits / t.bits();
-}
-
-llvm::Type *CodeGen_X86::llvm_type_of(const Type &t) const {
-    if (t.is_float() && t.bits() < 32) {
-        // LLVM as of August 2019 has all sorts of issues in the x86
-        // backend for half types. It injects expensive calls to
-        // convert between float and half for seemingly no reason
-        // (e.g. to do a select), and bitcasting to int16 doesn't
-        // help, because it simplifies away the bitcast for you.
-        // See: https://bugs.llvm.org/show_bug.cgi?id=43065
-        // and: https://github.com/halide/Halide/issues/4166
-        return llvm_type_of(t.with_code(halide_type_uint));
-    } else {
-        return CodeGen_Posix::llvm_type_of(t);
-    }
 }
 
 }  // namespace
