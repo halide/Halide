@@ -1,7 +1,10 @@
 /* General CSS Rules*/
-body {
+* {
     font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
     font-size: 12px;
+}
+
+body {
     background: #f8f8f8;
     padding: 0;
     margin: 0;
@@ -88,12 +91,6 @@ div#device-code-pane {
     flex-basis: 30%;*/
 }
 
-button#highlight-button {
-  margin: 0.4em;
-  padding: 0.5em;
-  border-radius: 4px;
-}
-
 span.line {
     counter-increment: line;
 }
@@ -138,13 +135,15 @@ div.resize-bar > div.collapse-btns button.collapse-right:before { content: "\21E
 
 /* Revert collapser button that points to the left. */
 div.collapsed-pane + div.resize-bar button.collapse-left {
-    background-color: rgba(0, 0, 0, 0.2);
+    background-color: rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(0, 0, 0, 0.4);
 }
 div.collapsed-pane + div.resize-bar button.collapse-left:before {
     content: "\21A6";
 }
 div.resize-bar:has(+ div.collapsed-pane) button.collapse-right {
-    background-color: rgba(0, 0, 0, 0.2);
+    background-color: rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(0, 0, 0, 0.4);
 }
 div.resize-bar:has(+ div.collapsed-pane) > div.collapse-btns button.collapse-right:before {
     content: "\21A4";
@@ -168,7 +167,6 @@ div#resizer-preview {
 }
 
 
-
 div#device-code-pane code {
     line-height: 14px;
     white-space: pre;
@@ -179,7 +177,7 @@ div#device-code-pane code {
     padding-left: 70px !important;
 }
 
-div.Function, div.Buffer {
+div.Function {
     margin: 0.2em 0.0em;
     padding: 0.1em;
     margin-right: 0.8em;
@@ -192,7 +190,6 @@ div.Function, div.Buffer {
 div.Function + div.Function {
     margin-top: 1.5em; /* Leave space between two functions. */
 }
-div.Buffer { background-color: rgba(200, 100, 0, 0.025); border-color: rgba(200, 100, 0, 0.03); }
 
 /* Give functions a slightly different background color to visually help navigate quickly. */
 div.Function:nth-child(3n + 1) { background-color: rgba(200, 0, 0, 0.025); border-color: rgba(200, 0, 0, 0.03); }
@@ -327,30 +324,29 @@ input.show-hide-btn {
     padding: 0;
     height: 12px;
     vertical-align: top;
+    width: 12px;
+    height: 12px;
+    border: 1px solid black;
+    border-radius: 4px;
+    transition: transform 0.2s;
+    transform: rotate(0deg);
+}
+input.show-hide-btn:checked {
+    transform: rotate(-90deg);
 }
 
 input.show-hide-btn:before {
-    content: ">";
-    font-size: 10px;
-    width: 12px;
-    height: 12px;
+    content: "V";
+    font-size: 9px;
+    width: 100%;
     box-sizing: border-box;
-    text-anchor: middle;
     text-align: center;
-    line-height: 9px;
     display: inline-block;
-    border: 1px solid black;
-    border-radius: 4px;
     padding: 0;
     margin: 0;
     overflow: hidden;
-    transition: transform 0.2s;
-    transform: rotate(90deg);
 }
 
-input.show-hide-btn:checked:before {
-    transform: rotate(0deg);
-}
 
 
 div.indent {
@@ -405,7 +401,7 @@ input.show-hide-btn:checked + label > span:last-child:after {
     color: gray;
 }
 
-button.icon-btn {
+div.button.icon-btn {
     padding: 0 3px;
     margin-left: 2px;
     margin-right: 0px;
@@ -419,7 +415,7 @@ button.icon-btn {
     border-radius: 4px;
 
 }
-button.icon-btn :before {
+div.button.icon-btn:before {
     margin: 0;
     padding: 0;
     border: 0;
@@ -427,18 +423,18 @@ button.icon-btn :before {
     display: inline-block;
 }
 
-button.jump-to-host-asm-btn {
+div.button.jump-to-host-asm-btn {
     background:   rgba(255,50,0,0.1);
     border-color: rgb( 255,50,0);
     color:        rgb( 255,50,0);
 }
-button.jump-to-device-code-btn {
+div.button.jump-to-device-code-btn {
     background:   rgba(70,170,50,0.1);
     border-color: rgb( 70,170,50);
     color:        rgb( 70,170,50);
 }
 
-button.jump-to-host-asm-btn span.tooltip span, button.jump-to-device-code-btn span.tooltip span {
+div.button.jump-to-host-asm-btn span.tooltip span, div.button.jump-to-device-code-btn span.tooltip span {
     display: block;
     margin-top: 0.6em;
     font-size: 10px;
@@ -446,21 +442,24 @@ button.jump-to-host-asm-btn span.tooltip span, button.jump-to-device-code-btn sp
     color: green;
 }
 
-button.jump-to-host-asm-btn:before, button.jump-to-device-code-btn:before, button.jump-to-viz-btn:before {
+div.button.jump-to-host-asm-btn:before, div.button.jump-to-device-code-btn:before, div.button.jump-to-viz-btn:before {
     content: "\279F";
 }
 
-div#ir-visualization-pane button.icon-btn {
+div#ir-visualization-pane div.button.icon-btn {
     margin-left: 1px;
 }
 
-button.icon-btn:hover {
+div.button.icon-btn:hover {
     border-width: 2px;
     line-height: 10px;
 }
 
-code.ptx {
-    pane-size: 26;
+div.code {
+    white-space: pre;
+}
+div.code.ptx {
+    tab-size: 26;
 }
 
 span.comment {
@@ -711,6 +710,7 @@ div.cost-btn:hover {
     font: 12px Consolas,Courier New,Monaco,Andale Mono,Ubuntu Mono,monospace;
     line-height:14px;
     box-sizing:border-box;
+    width: fit-content;
 }
 .shj-inline{
     margin:0;
@@ -722,8 +722,9 @@ div.cost-btn:hover {
     background:#bdf5
 }
 [class*=shj-lang-]>div{
-    display:flex;
-    overflow:auto
+    display: block;
+    overflow: visible;
+    width: fit-content;
 }
 [class*=shj-lang-]>div :last-child{
     flex:1;
@@ -735,7 +736,7 @@ div.cost-btn:hover {
 }
 .shj-numbers div{
     padding-right:5px;
-     width:0;
+    width:0;
 }
 .shj-numbers div:before{
     color:#999;

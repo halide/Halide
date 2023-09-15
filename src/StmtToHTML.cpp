@@ -22,7 +22,7 @@
 // causes you to be able to just edit the files without having to recompile Halide
 // and then rerun your generator.
 // For distribution purposes, they should be inlined, and this define should be on 1.
-#define INLINE_TEMPLATES 1  // nocheckin
+#define INLINE_TEMPLATES 0
 
 #if !INLINE_TEMPLATES
 #include <filesystem>
@@ -784,10 +784,20 @@ public:
         scope.pop(m.name());
     }
 
+    inline std::string escape_html(std::string src) {
+        src = replace_all(src, "&", "&amp;");
+        src = replace_all(src, "<", "&lt;");
+        src = replace_all(src, ">", "&gt;");
+        src = replace_all(src, "\"", "&quot;");
+        src = replace_all(src, "/", "&#x2F;");
+        src = replace_all(src, "'", "&#39;");
+        return src;
+    }
+
     // CUDA kernels are embedded into modules as PTX assembly. This
     // routine pretty - prints that assembly format.
     void print_cuda_gpu_source_kernels(const std::string &str) {
-        print_opening_tag("code", "ptx");
+        print_opening_tag("div", "code ptx");
 
         int current_id = -1;
         bool in_braces = false;
@@ -801,12 +811,7 @@ public:
                 stream << "<span class='line'></span>\n";
                 continue;
             }
-            line = replace_all(line, "&", "&amp;");
-            line = replace_all(line, "<", "&lt;");
-            line = replace_all(line, ">", "&gt;");
-            line = replace_all(line, "\"", "&quot;");
-            line = replace_all(line, "/", "&#x2F;");
-            line = replace_all(line, "'", "&#39;");
+            line = escape_html(line);
 
             bool should_print_open_indent = false;
 
@@ -957,7 +962,7 @@ public:
                 print_opening_tag("div", "indent", current_id);
             }
         }
-        print_closing_tag("code");
+        print_closing_tag("div");
     }
 
 private:
@@ -985,54 +990,12 @@ private:
 
     /* Private print functions to handle various IR types */
     void print(const Buffer<> &buf) {
-        // Generate a unique ID for this module
-        int id = gen_unique_id();
-
-        // Determine whether to print buffer data
-        bool print_data = ends_with(buf.name(), "_gpu_source_kernels");
-
         // Open div to hold this buffer
         print_opening_tag("div", "Buffer");
 
-        if (print_data) {
-            // Generate the show hide icon/text buttons
-            print_show_hide_btn_begin(id, true);
-
-            // -- print text
-            print_html_element("span", "keyword", "buffer ");
-            print_variable(buf.name());
-
-            // Print data
-            print_text(" = ");
-
-            // Open code block to hold module body
-            print_opening_brace();
-            print_show_hide_btn_end();
-
-            // Open indented div to hold buffer data
-            print_opening_tag("div", "indent BufferData", id);
-
-            int length = buf.size_in_bytes();
-            while (length > 0 && ((const char *)buf.data())[length - 1] == '\0') {
-                length--;
-            }
-            std::string str((const char *)buf.data(), length);
-            if (starts_with(buf.name(), "cuda_")) {
-                print_cuda_gpu_source_kernels(str);
-            } else {
-                stream << "<pre>\n"
-                       << str << "</pre>\n";
-            }
-
-            print_closing_tag("div");
-
-            // Close code block holding buffer body
-            print_html_element("span", "matched ClosingBrace cb-" + std::to_string(id), " }");
-        } else {
-            // Print buffer name and move on
-            print_html_element("span", "keyword", "buffer ");
-            print_variable(buf.name());
-        }
+        // Print buffer name and move on
+        print_html_element("span", "keyword", "buffer ");
+        print_variable(buf.name());
 
         // Close div holding this buffer
         print_closing_tag("div");
@@ -1195,19 +1158,19 @@ private:
         {
             int asm_lno = host_assembly_info.get_asm_lno((uint64_t)op);
             if (asm_lno != -1) {
-                stream << "<button class='icon-btn jump-to-host-asm-btn tooltip-parent' onclick='scrollToHostAsm(" << asm_lno << ")'>"
+                stream << "<div class='icon-btn jump-to-host-asm-btn tooltip-parent' onclick='scrollToHostAsm(" << asm_lno << ")'>"
                        << "<span class='tooltip'>Jump to Host Assembly"
                        << "<span>" << host_assembly_info.get_label((uint64_t)op) << "</span></span>"
-                       << "</button>";
+                       << "</div>";
             }
         }
         {
             int asm_lno = device_assembly_info.get_asm_lno((uint64_t)op);
             if (asm_lno != -1) {
-                stream << "<button class='icon-btn jump-to-device-code-btn tooltip-parent' onclick='scrollToDeviceCode(" << asm_lno << ")'>"
+                stream << "<div class='icon-btn jump-to-device-code-btn tooltip-parent' onclick='scrollToDeviceCode(" << asm_lno << ")'>"
                        << "<span class='tooltip'>Jump to Device Code"
                        << "<span>" << device_assembly_info.get_label((uint64_t)op) << "</span></span>"
-                       << "</button>";
+                       << "</div>";
             }
         }
     }
@@ -1392,10 +1355,11 @@ private:
             block_cost_class += " NoChildCost";
         }
 
-        stream << "<div id='" << id << "' class='cost-btn tooltip-parent "
-               << "line-" << line_cost_class << " block-" << block_cost_class << "' "
-               << "line-cost='" << line_cost << "' block-cost='" << block_cost << "' "
-               << "line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>";
+        stream << "<div id='" << id << "' "
+               << "class='cost-btn tooltip-parent line-" << line_cost_class << " block-" << block_cost_class << "' "
+               //<< "line-cost='" << line_cost << "' block-cost='" << block_cost << "' "
+               //<< "line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'"
+               << ">";
 
         stream << "<span class='tooltip' role='tooltip'>"
                << prefix << line_cost;
@@ -1508,7 +1472,7 @@ private:
     }
 
     void visit(const LE *op) override {
-        print_binary_op(op->a, op->b, "&lt=");
+        print_binary_op(op->a, op->b, "&lt;=");
     }
 
     void visit(const GT *op) override {
@@ -2314,9 +2278,9 @@ class PipelineHTMLInspector {
 public:
     // Construct the visualizer and point it to the output file
     explicit PipelineHTMLInspector(const std::string &html_output_filename,
-                          const Module &m,
-                          const std::string &assembly_input_filename,
-                          bool use_conceptual_stmt_ir)
+                                   const Module &m,
+                                   const std::string &assembly_input_filename,
+                                   bool use_conceptual_stmt_ir)
         : use_conceptual_stmt_ir(use_conceptual_stmt_ir),
           html_code_printer(stream, node_ids, true) {
         // Open output file
@@ -2377,7 +2341,7 @@ public:
 
         // Generate html page
         stream << "<!DOCTYPE html>\n";
-        stream << "<html>\n";
+        stream << "<html lang='en'>\n";
         generate_head(m);
         generate_body(m);
         stream << "</html>";
@@ -2421,7 +2385,6 @@ private:
         stream << "  <div id='page-container'>\n";
         generate_visualization_panes(m);
         stream << "  </div>\n";
-        stream << "</body>";
 #if INLINE_TEMPLATES
         stream << "<script>\n"
                << halide_html_template_StmtToHTML_js
@@ -2432,13 +2395,14 @@ private:
         internal_assert(std::filesystem::exists(dir));
         stream << "<script src='file://" << (dir / "html_template_StmtToHTML.js").string() << "'></script>\n";
 #endif
+        stream << "</body>";
     }
 
     // Generate the three visualization panes
     void generate_visualization_panes(const Module &m) {
         int pane_count = 0;
         stream << "<div id='visualization-panes'>\n";
-        stream << "<div id='resizer-preview'></div>\n";
+        stream << "<div id='resizer-preview' style='display:none;'></div>\n";
         generate_ir_pane(m);
         generate_resize_bar(pane_count++);
         generate_host_assembly_pane(m);
@@ -2469,7 +2433,16 @@ private:
         stream << "<div id='host-assembly-pane' class='pane'>\n";
         stream << "<div id='assemblyContent' class='shj-lang-asm'>\n";
         stream << "<pre>\n";
-        stream << asm_stream.str();
+        std::istringstream ss{asm_stream.str()};
+        for (std::string line; std::getline(ss, line);) {
+            if (line.length() > 500) {
+                // Very long lines in the assembly are typically the _gpu_kernel_sources
+                // as a raw ASCII block in the assembly. Let's chop that off to make
+                // browsers faster when dealing with this.
+                line = line.substr(0, 100) + "\" # omitted the remainder of the ASCII buffer";
+            }
+            stream << html_code_printer.escape_html(line) << "\n";
+        }
         stream << "\n";
         stream << "</pre>\n";
         stream << "</div>\n";
@@ -2487,10 +2460,13 @@ private:
         if (starts_with(buf.name(), "cuda_")) {
             html_code_printer.print_cuda_gpu_source_kernels(str);
         } else {
-            stream << "<code>\n";
-            stream << str;
-            stream << "\n";
-            stream << "</code>\n";
+            std::istringstream ss{str};
+            stream << "<div class='code'>\n";
+            for (std::string line; std::getline(ss, line);) {
+                stream << "<span class='line'>" << html_code_printer.escape_html(line) << "</span>\n";
+                // stream << html_code_printer.escape_html(line) << "\n";
+            }
+            stream << "\n</div>\n";
         }
         stream << "</div>\n";
     }
@@ -2500,11 +2476,11 @@ private:
         stream << "<div class='resize-bar' id='resize-bar-" << num << "'>\n";
         stream << " <div class='collapse-btns'>\n";
         stream << "  <div>\n";
-        stream << "   <button class='collapse-left' onclick='collapseTab(" << num << ")' title='Collapse pane on the left'></span>\n";
+        stream << "   <button class='collapse-left' onclick='collapseTab(" << num << ")' title='Collapse pane on the left'>\n";
         stream << "   </button>\n";
         stream << "  </div>\n";
         stream << "  <div>\n";
-        stream << "    <button class='collapse-right' onclick='collapseTab(" << (num + 1) << ")' title='Collapse pane on the right'></span>\n";
+        stream << "    <button class='collapse-right' onclick='collapseTab(" << (num + 1) << ")' title='Collapse pane on the right'>\n";
         stream << "    </button>\n";
         stream << "  </div>\n";
         stream << " </div>\n";
