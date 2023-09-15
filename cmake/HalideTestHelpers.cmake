@@ -77,6 +77,13 @@ function(add_halide_test TARGET)
                           CXX_VISIBILITY_PRESET hidden
                           VISIBILITY_INLINES_HIDDEN TRUE)
 
+
+    if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
+        if (WITH_SERIALIZATION)
+            target_compile_definitions(${TARGET} PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
+        endif ()
+    endif ()
+
     # Add a meta-target for each group, to allow us to build by group easily
     foreach (GROUP IN LISTS args_GROUPS)
         set(META_TARGET build_${GROUP})
