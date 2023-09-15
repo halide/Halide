@@ -339,7 +339,6 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
 #else
     tm_builder.setCodeGenOptLevel(CodeGenOpt::Aggressive);
 #endif
-    tm_builder.setCodeGenOptLevel(opt_level);
     if (target.arch == Target::Arch::RISCV) {
         tm_builder.setCodeModel(llvm::CodeModel::Medium);
     }

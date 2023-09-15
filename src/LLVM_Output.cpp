@@ -430,7 +430,6 @@ void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &
 #else
     emit_file(module, out, llvm::CGFT_ObjectFile);
 #endif
-    emit_file(module, out, file_type);
 }
 
 void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
