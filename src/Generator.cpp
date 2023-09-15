@@ -655,8 +655,6 @@ gengen
       schedule, static_library, stmt, stmt_html, conceptual_stmt,
       conceptual_stmt_html, compiler_log, hlpipe, device_code].
      If omitted, default value is [c_header, static_library, registration].
-     For the HTML-options optionally setting HL_HTML_VIZTREE=1 will enable the
-     old VizIR Tree pane in the generated HTML.
 
  -p  A comma-separated list of shared libraries that will be loaded before the
      generator is run. Useful for custom auto-schedulers. The generator must

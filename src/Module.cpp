@@ -671,19 +671,15 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     }
     if (contains(output_files, OutputFileType::stmt_html)) {
         internal_assert(!assembly_path.empty());
-        bool enable_viztree = get_env_variable("HL_HTML_VIZTREE") == "1";
-        debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html)
-                 << " (viztree_enabled: " << enable_viztree << ")\n";
+        debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
         Internal::print_to_stmt_html(output_files.at(OutputFileType::stmt_html),
-                                     *this, assembly_path, enable_viztree);
+                                     *this, assembly_path);
     }
     if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
         internal_assert(!assembly_path.empty());
-        bool enable_viztree = get_env_variable("HL_HTML_VIZTREE") == "1";
-        debug(1) << "Module.compile(): conceptual_stmt_html " << output_files.at(OutputFileType::conceptual_stmt_html)
-                 << " (viztree_enabled: " << enable_viztree << ")\n";
+        debug(1) << "Module.compile(): conceptual_stmt_html " << output_files.at(OutputFileType::conceptual_stmt_html) << "\n";
         Internal::print_to_conceptual_stmt_html(output_files.at(OutputFileType::conceptual_stmt_html),
-                                                *this, assembly_path, enable_viztree);
+                                                *this, assembly_path);
     }
     if (contains(output_files, OutputFileType::device_code)) {
         debug(1) << "Module.compile(): device_code " << output_files.at(OutputFileType::device_code) << "\n";

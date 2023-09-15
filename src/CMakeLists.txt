@@ -365,9 +365,6 @@ set(HTML_TEMPLATE_FILES
     StmtToHTML_dependencies.html
     StmtToHTML.js
     StmtToHTML.css
-    StmtToViz_dependencies.html
-    StmtToViz.js
-    StmtToViz.css
     )
 
 ##

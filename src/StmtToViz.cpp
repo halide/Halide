@@ -31,23 +31,16 @@
 namespace Halide {
 namespace Internal {
 
-// Simple HTML specific
 extern "C" unsigned char halide_html_template_StmtToHTML_dependencies_html[];
 extern "C" unsigned char halide_html_template_StmtToHTML_css[];
 extern "C" unsigned char halide_html_template_StmtToHTML_js[];
-
-// Viz Tree specific
-extern "C" unsigned char halide_html_template_StmtToViz_dependencies_html[];
-extern "C" unsigned char halide_html_template_StmtToViz_css[];
-extern "C" unsigned char halide_html_template_StmtToViz_js[];
 
 // Classes defined within this file
 class CostModel;
 class AssemblyInfo;
 template<typename T>
 class HTMLCodePrinter;
-class HTMLVisualizationPrinter;
-class IRVisualizer;
+class PipelineHTMLInspector;
 
 /** IRCostModel
  * A basic cost model for Halide IR. Estimates computation
@@ -677,9 +670,8 @@ private:
 template<typename T>
 class HTMLCodePrinter : public IRVisitor {
 public:
-    HTMLCodePrinter(T &os, std::map<const IRNode *, int> &nids, bool enable_viztree_features, bool enable_assembly_features)
+    HTMLCodePrinter(T &os, std::map<const IRNode *, int> &nids, bool enable_assembly_features)
         : stream(os), node_ids(nids), context_stack(1, 0),
-          enable_viztree_features(enable_viztree_features),
           enable_assembly_features(enable_assembly_features) {
     }
 
@@ -989,7 +981,6 @@ private:
     IRCostModel cost_model;
     AssemblyInfo host_assembly_info;
     AssemblyInfo device_assembly_info;
-    bool enable_viztree_features;
     bool enable_assembly_features;
 
     /* Private print functions to handle various IR types */
@@ -1067,9 +1058,6 @@ private:
         print_closing_tag("span");
         print_fndecl_args(fn.args);
         print_html_element("span", "matched", ")");
-
-        // Add a button to jump to this function in the viz
-        print_visualization_button("lowered-func-viz-" + std::to_string(id));
 
         // Open code block to hold function body
         print_opening_brace();
@@ -1197,15 +1185,6 @@ private:
     // Prints text to stream
     void print_text(const std::string &x) {
         stream << x;
-    }
-
-    // Prints a button to sync text with visualization
-    void print_visualization_button(std::string id) {
-        if (enable_viztree_features) {
-            stream << "<button class='icon-btn jump-to-viz-btn tooltip-parent' onclick='scrollToViz(\"" << id << "\")'>"
-                   << "  <span class='tooltip'>Jump to Visualization</span>"
-                   << "</button>";
-        }
     }
 
     // Prints a button to sync text with visualization
@@ -1414,9 +1393,9 @@ private:
         }
 
         stream << "<div id='" << id << "' class='cost-btn tooltip-parent "
-               << "line-" << line_cost_class << " block-" << block_cost_class << "'"
-               << "   line-cost='" << line_cost << "' block-cost='" << block_cost << "'"
-               << "   line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>";
+               << "line-" << line_cost_class << " block-" << block_cost_class << "' "
+               << "line-cost='" << line_cost << "' block-cost='" << block_cost << "' "
+               << "line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>";
 
         stream << "<span class='tooltip' role='tooltip'>"
                << prefix << line_cost;
@@ -1672,8 +1651,6 @@ private:
         print_variable(op->name);
         print_closing_tag("span");
 
-        // Add a button to jump to this producer/consumer in the viz
-        print_visualization_button("prodcons-viz-" + std::to_string(id));
         print_assembly_button(op);
 
         // Open code block to hold function body
@@ -1753,8 +1730,6 @@ private:
         print(op->extent);
         print_html_element("span", "matched", ")");
 
-        // Add a button to jump to this loop in the viz
-        print_visualization_button("loop-viz-" + std::to_string(id));
         print_assembly_button(op);
 
         // Open code block to hold function body
@@ -1801,9 +1776,6 @@ private:
         print_html_element("span", "matched", ", ");
         print(op->count);
         print_html_element("span", "matched", ")");
-
-        // Add a button to jump to this acquire in the viz
-        print_visualization_button("acquire-viz-" + std::to_string(id));
 
         // Open code block to hold function body
         print_opening_brace();
@@ -1938,9 +1910,6 @@ private:
             print_html_element("span", "matched", "}");
         }
 
-        // Add a button to jump to this allocation in the viz
-        print_visualization_button("allocate-viz-" + std::to_string(id));
-
         // Print allocation body
         print_ln();
         print_opening_tag("div", "AllocateBody");
@@ -2000,9 +1969,6 @@ private:
             print_html_element("span", "keyword", " if ");
             print(op->condition);
         }
-
-        // Add a button to jump to this realize in the viz
-        print_visualization_button("realize-viz-" + std::to_string(id));
 
         // Open code block to hold function body
         print_opening_brace();
@@ -2093,9 +2059,6 @@ private:
         print(op->condition);
         print_html_element("span", "matched", ")");
 
-        // Add a button to jump to this conditional in the viz
-        print_visualization_button("cond-viz-" + std::to_string(then_node_id));
-
         // Flatten nested if's in the else case as an
         // `if-then-else_if-else` sequence
         while (true) {
@@ -2147,9 +2110,6 @@ private:
                 print(nested_if->condition);
                 print_html_element("span", "matched", ")");
 
-                // Add a button to jump to this conditional branch in the viz
-                print_visualization_button("cond-viz-" + std::to_string(then_node_id));
-
                 // Update op to the nested if for next loop iteration
                 op = nested_if;
                 last_then_block_id = then_block_id;
@@ -2172,9 +2132,6 @@ private:
                 print_opening_tag("span", "matched");
                 print_html_element("span", "keyword IfSpan", " else", "cond-" + std::to_string(else_node_id));
                 print_closing_tag("span");
-
-                // Add a button to jump to this conditional branch in the viz
-                print_visualization_button("cond-viz-" + std::to_string(else_node_id));
 
                 // Open code block to hold `else` case
                 print_opening_brace();
@@ -2348,620 +2305,20 @@ private:
     }
 };
 
-/** HTMLVisualizationPrinter
- * Visualizes the IR in HTML. The visualization is essentially
- * an abstracted version of the code, highlighting the higher
- * level execution pipeline along with key properties of the
- * computation performed at each stage.
- */
-class HTMLVisualizationPrinter : public IRVisitor {
-public:
-    HTMLVisualizationPrinter(std::ofstream &os, std::map<const IRNode *, int> &nids)
-        : stream(os), node_ids(nids) {
-    }
-
-    // Make class non-copyable and non-moveable
-    HTMLVisualizationPrinter(const HTMLVisualizationPrinter &) = delete;
-    HTMLVisualizationPrinter &operator=(const HTMLVisualizationPrinter &) = delete;
-
-    void init_cost_info(IRCostModel cm) {
-        cost_model = std::move(cm);
-    }
-
-    void print(const Module &m, AssemblyInfo host_asm_info, AssemblyInfo device_asm_info) {
-        host_assembly_info = std::move(host_asm_info);
-        device_assembly_info = std::move(device_asm_info);
-        for (const auto &fn : m.functions()) {
-            print(fn);
-        }
-    }
-
-private:
-    // Handle to output file stream
-    std::ofstream &stream;
-
-    // Used to track the context within generated HTML
-    std::vector<std::string> context_stack_tags;
-
-    // Assembly line number info
-    AssemblyInfo host_assembly_info;
-    AssemblyInfo device_assembly_info;
-
-    // Holds cost information for visualized program
-    IRCostModel cost_model;
-
-    // Generate unique ids
-    int id = 0;
-    std::map<const IRNode *, int> &node_ids;
-
-    int gen_unique_id() {
-        return id++;
-    }
-
-    int gen_node_id(const IRNode *node) {
-        if (node_ids.count(node) == 0) {
-            node_ids[node] = gen_unique_id();
-        }
-        return node_ids[node];
-    }
-
-    /* Private print functions to handle various IR types */
-    void print(const LoweredFunc &fn) {
-        int id = gen_unique_id();
-
-        // Start a div to hold the function viz
-        print_opening_tag("div", "center fn-wrapper");
-
-        // Create the header bar
-        print_opening_tag("div", "fn-header");
-        print_collapse_expand_btn(id);
-        print_code_button("lowered-func-" + fn.name);
-        print_html_element("span", "fn-title", "Func: " + fn.name, "lowered-func-viz-" + fn.name);
-        print_closing_tag("div");
-
-        // Print function body
-        print_opening_tag("div", "fn-body", "viz-" + std::to_string(id));
-        fn.body.accept(this);
-        print_closing_tag("div");
-
-        // Close function div
-        print_closing_tag("div");
-    }
-
-    /* Methods used to emit common HTML patterns */
-
-    // Prints the opening tag for the specified html element.
-    void print_opening_tag(const std::string &tag, const std::string &cls) {
-        stream << "<" << tag << " class='" << cls << "'>";
-        context_stack_tags.push_back(tag);
-    }
-
-    void print_opening_tag(const std::string &tag, const std::string &cls, const std::string &id) {
-        stream << "<" << tag << " class='" << cls << "' id='" << id << "'>";
-        context_stack_tags.push_back(tag);
-    }
-
-    // Prints the closing tag for the specified html element.
-    void print_closing_tag(const std::string &tag) {
-        internal_assert(tag == context_stack_tags.back());
-        context_stack_tags.pop_back();
-        stream << "</" + tag + ">";
-    }
-
-    // Prints an html element: opening tag, body and closing tag
-    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body) {
-        print_opening_tag(tag, cls);
-        stream << body;
-        print_closing_tag(tag);
-    }
-
-    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body, const std::string &id) {
-        print_opening_tag(tag, cls, id);
-        stream << body;
-        print_closing_tag(tag);
-    }
-
-    // Prints text to stream
-    void print_text(const std::string &x) {
-        stream << x;
-    }
-
-    // Prints a button to sync visualization with code
-    void print_code_button(const std::string &id) {
-        stream << "<button class='icon-btn sync-btn' onclick='scrollToCode(\"" << id << "\")'>"
-               << "  <span class='bi bi-arrow-left-square' title='Jump to code'></span>"
-               << "</button>";
-    }
-
-    // Prints a button to sync visualization with assembly
-    void print_asm_button(const std::string &id) {
-        stream << "<button class='icon-btn sync-btn' onclick='scrollToAsm(\"" << id << "\")'>"
-               << "  <span class='bi bi-arrow-right-square' title='Jump to assembly'></span>"
-               << "</button>";
-    }
-
-    // Prints a function-call box
-    void print_fn_button(const std::string &name, int id) {
-        print_opening_tag("div", "fn-call");
-        print_code_button("fn-call-" + std::to_string(id));
-        print_text(get_as_var(name) + "(...)");
-        print_closing_tag("div");
-    }
-
-    // Prints a button to collapse or expand a visualization box
-    void print_collapse_expand_btn(int id) {
-        stream << "<button class='icon-btn' id='viz-" << id << "-hide' onclick='return toggleViz(\"viz-" << id << "\");'>"
-               << "  <span class='bi bi-dash-square' title='Collapse block'></span>"
-               << "</button>"
-               << "<button class='icon-btn' id='viz-" << id << "-show' style = 'display:none;' onclick='return toggleViz(\"viz-" << id << "\");'>"
-               << "  <span class='bi bi-plus-square' title='Expand block'></span>"
-               << "</button>";
-    }
-
-    // Prints the box title within the div.box-header
-    void print_box_title(const std::string &title, const std::string &anchor) {
-        print_opening_tag("div", "box-title");
-        print_html_element("span", "", title, anchor);
-        print_closing_tag("div");
-    }
-
-    // Prints the cost indicator buttons within div.box-header
-    void print_cost_buttons(int id, const IRNode *op) {
-        print_opening_tag("div", "viz-cost-btns");
-
-        // Print compute cost indicator
-        int max_line_ccost = cost_model.get_max_compute_cost(false);
-        int line_ccost = cost_model.get_compute_cost(op, false);
-        int block_ccost = cost_model.get_compute_cost(op, true);
-        print_cost_button(line_ccost, block_ccost, max_line_ccost, "vcc-" + std::to_string(id), "Op Count: ");
-
-        // Print data movement cost indicator
-        int max_line_dcost = cost_model.get_max_data_movement_cost(false);
-        int line_dcost = cost_model.get_data_movement_cost(op, false);
-        int block_dcost = cost_model.get_data_movement_cost(op, true);
-        // Special handling for Store nodes; since unlike the code view
-        // the viz view prints stores and loads seperately, therefore using
-        // inclusive cost is confusing.
-        if (op->node_type == IRNodeType::Store) {
-            const Store *st = static_cast<const Store *>(op);
-            line_dcost = st->value.type().bits() * st->value.type().lanes();
-            block_dcost = line_dcost;
-        }
-        print_cost_button(line_dcost, block_dcost, max_line_dcost, "vdc-" + std::to_string(id), "Bits Moved: ");
-
-        print_closing_tag("div");
-    }
-
-    void print_cost_button(int line_cost, int block_cost, int max_line_cost, const std::string &id, const std::string &prefix) {
-        const int num_cost_buckets = 20;
-
-        int line_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
-        int block_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
-
-        int line_costc = line_cost / line_cost_bin_size;
-        int block_costc = block_cost / block_cost_bin_size;
-
-        if (line_costc >= num_cost_buckets) {
-            line_costc = num_cost_buckets - 1;
-        }
-        if (block_costc >= num_cost_buckets) {
-            block_costc = num_cost_buckets - 1;
-        }
-
-        stream << "<div id='" << id << "' class='cost-btn CostColor" << line_costc << "'"
-               << "   line-cost='" << line_cost << "' block-cost='" << block_cost << "'"
-               << "   line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>";
-
-        stream << "<span id='tooltip-" << id << "' class='tooltip cond-tooltop' role='tooltip-" << id << "'>"
-               << prefix << line_cost
-               << "</span>";
-
-        stream << "</div>";
-    }
-
-    // Prints the box .box-header within div.box
-    void print_box_header(int id, const IRNode *op, const std::string &anchor, const std::string &code_anchor, const std::string &title) {
-        print_opening_tag("div", "box-header");
-        print_collapse_expand_btn(id);
-        print_code_button(code_anchor);
-        print_box_title(title, anchor);
-        print_cost_buttons(id, op);
-        print_closing_tag("div");
-    }
-
-    // Prints the box .box-header within div.box, contains the asm info button
-    void print_box_header_asm(int id, const IRNode *op, const std::string &anchor, const std::string &code_anchor, const std::string &asm_anchor, const std::string &title) {
-        print_opening_tag("div", "box-header");
-        print_collapse_expand_btn(id);
-        print_code_button(code_anchor);
-        print_asm_button(asm_anchor);
-        print_box_title(title, anchor);
-        print_cost_buttons(id, op);
-        print_closing_tag("div");
-    }
-
-    // Converts an expr to a string without printing to stream
-    std::string get_as_str(const Expr &e) {
-        return get_as_str(e, "");
-    }
-
-    std::string get_as_str(const Expr &e, const std::string &prefix) {
-        if (prefix == "Else") {
-            return "Else";
-        }
-
-        // TODO: this code copies the node_ids over every time...
-        std::ostringstream ss;
-        HTMLCodePrinter<std::ostringstream> printer(ss, node_ids, true, true);
-        e.accept(&printer);
-        std::string html_e = ss.str();
-
-        if (large_expr(e)) {
-            return prefix + truncate_html(html_e);
-        } else {
-            return prefix + html_e;
-        }
-    }
-
-    // Return variable name wrapped with html that enables matching
-    std::string get_as_var(const std::string &name) {
-        return "<b class='variable matched'>" + name + "</b>";
-    }
-
-    // Sometimes the expressions are too large to show within the viz. In
-    // such cases we use tooltips.
-    bool large_expr(const Expr &e) {
-        std::ostringstream ss;
-        ss << e;
-        return ss.str().size() > 50;
-    }
-
-    std::string truncate_html(const std::string &cond) {
-        int id = gen_unique_id();
-
-        std::ostringstream ss;
-
-        // Show condition expression button
-        ss << "<button title='Click to see path condition' id='cond-" << id << "' class='trunc-cond' role='button'>"
-           << "...";
-
-        // Tooltip that shows condition expression
-        ss << "<span id='cond-tooltip-" << id << "' class='tooltip cond-tooltop' role='cond-tooltip-" << id << "'>"
-           << cond
-           << "</span>";
-
-        ss << "</button>";
-
-        return ss.str();
-    }
-
-    // Prints a single node in an `if-elseif-...-else` chain
-    void print_if_tree_node(const Stmt &node, const Expr &cond, const std::string &prefix) {
-        // Assign unique id to this node
-        int box_id = gen_unique_id();
-        int node_id = gen_node_id(node.get());
-
-        // Start tree node
-        print_opening_tag("li", "");
-        print_opening_tag("span", "tf-nc if-node");
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box center IfBox");
-
-        // Create viz content
-        std::string aid = std::to_string(node_id);
-        print_box_header(box_id, node.get(), "cond-viz-" + aid, "cond-" + aid, get_as_str(cond, prefix));
-
-        // Print contents of node
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(box_id));
-        node.accept(this);
-        print_closing_tag("div");
-
-        // Close box holding viz
-        print_closing_tag("div");
-
-        // Close tree node
-        print_closing_tag("span");
-        print_closing_tag("li");
-    }
-
-    /* Visitor functions for each IR node */
-    using IRVisitor::visit;
-
-    /* Override key visit functions */
-
-    void visit(const Allocate *op) override {
-        // Assign unique id to this node
-        int id = gen_node_id(op);
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box center AllocateBox");
-
-        // Print box header
-        std::string aid = std::to_string(id);
-        print_box_header(id, op, "allocate-viz-" + aid, "allocate-" + aid, "Allocate: " + op->name);
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
-
-        // Generate a table with allocation details
-        print_opening_tag("table", "allocate-table");
-
-        // - Memory type
-        stream << "<tr><th scope='col'>Memory Type</th><td>" << op->memory_type << "</td></tr>";
-
-        // - Allocation condition
-        if (!is_const_one(op->condition)) {
-            stream << "<tr><th scope='col'>Condition</th><td>" << op->condition << "</td></tr>";
-        }
-
-        // - Data type
-        stream << "<tr><th scope='col'>Data Type</th><td>" << op->type << "</td></tr>";
-
-        // - Dimensions
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            stream << "<tr><th scope='col'>Dim-" << i << "</th><td>" << get_as_str(op->extents[i]) << "</td></tr>";
-        }
-
-        print_closing_tag("table");
-
-        op->body.accept(this);
-
-        print_closing_tag("div");
-
-        print_closing_tag("div");
-    }
-
-    void visit(const For *op) override {
-        // Assign unique id to this node
-        int id = gen_node_id(op);
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box center ForBox");
-
-        // Print box header
-        std::string aid = std::to_string(id);
-        int asm_lno = host_assembly_info.get_asm_lno((uint64_t)op);
-        if (asm_lno == -1) {
-            print_box_header(id, op, "loop-viz-" + aid, "loop-" + aid, "For: " + get_as_var(op->name));
-        } else {
-            print_box_header_asm(id, op, "loop-viz-" + aid, "loop-" + aid, std::to_string(asm_lno), "For: " + get_as_var(op->name));
-        }
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
-
-        // Generate a table with loop details
-        print_opening_tag("table", "allocate-table");
-
-        // - Loop type
-        if (op->for_type != ForType::Serial) {
-            stream << "<tr><th scope='col'>Loop Type</th><td>" << op->for_type << "</td></tr>";
-        }
-        // - Device API
-        if (op->device_api != DeviceAPI::None) {
-            stream << "<tr><th scope='col'>Device API</th><td>" << op->device_api << "</td></tr>";
-        }
-        // - Min
-        stream << "<tr><th scope='col'>Min</th><td>" << get_as_str(op->min) << "</td></tr>";
-        // - Extent
-        stream << "<tr><th scope='col'>Extent</th><td>" << get_as_str(op->extent) << "</td></tr>";
-
-        print_closing_tag("table");
-
-        op->body.accept(this);
-
-        print_closing_tag("div");
-
-        print_closing_tag("div");
-    }
-
-    void visit(const IfThenElse *op) override {
-        // Open If tree
-        print_opening_tag("div", "tf-tree tf-gap-sm tf-custom-ir-viz");
-
-        // Create root 'cond' node
-        if (op->else_case.defined()) {
-            print_opening_tag("ul", "");
-            print_opening_tag("li", "");
-            print_html_element("span", "tf-nc if-node if-root-node", "Control Flow Branching");
-        }
-
-        // Create children nodes ('then', 'else if' and 'else' cases)
-        print_opening_tag("ul", "");
-
-        // `then` case
-        print_if_tree_node(op->then_case, op->condition, "If: ");
-
-        // `else if` cases
-        const IfThenElse *nested_if = op;
-        while (nested_if->else_case.defined() && (nested_if->else_case.as<IfThenElse>())) {
-            nested_if = nested_if->else_case.as<IfThenElse>();
-            print_if_tree_node(nested_if->then_case, nested_if->condition, "Else If: ");
-        }
-
-        // `else` case
-        if (nested_if->else_case.defined()) {
-            print_if_tree_node(nested_if->else_case, UIntImm::make(UInt(1), 1), "Else");
-        }
-
-        print_closing_tag("ul");
-
-        // Close If tree
-        if (op->else_case.defined()) {
-            print_closing_tag("li");
-            print_closing_tag("ul");
-        }
-        print_closing_tag("div");
-    }
-
-    void visit(const ProducerConsumer *op) override {
-        // Assign unique id to this node
-        int id = gen_node_id(op);
-
-        // Start a box to hold viz
-        std::string box_name = op->is_producer ? "ProducerBox" : "ConsumerBox";
-        print_opening_tag("div", "box center " + box_name);
-
-        // Print box header
-        std::string aid = std::to_string(id);
-        std::string prefix = op->is_producer ? "Produce: " : "Consume: ";
-        int asm_lno = host_assembly_info.get_asm_lno((uint64_t)op);
-        if (asm_lno == -1) {
-            print_box_header(id, op, "prodcons-viz-" + aid, "prodcons-" + aid, prefix + get_as_var(op->name));
-        } else {
-            print_box_header_asm(id, op, "prodcons-viz-" + aid, "prodcons-" + aid, std::to_string(asm_lno), prefix + get_as_var(op->name));
-        }
-
-        // Print the body
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
-        op->body.accept(this);
-        print_closing_tag("div");
-
-        // Close div holding the producer/consumer
-        print_closing_tag("div");
-    }
-
-    void visit(const Store *op) override {
-        // Visit the value first. We want to show any loads
-        // that happen before the store operation
-        op->value.accept(this);
-
-        // Assign unique id to this node
-        int id = gen_node_id(op);
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box center StoreBox");
-
-        // Print box header
-        std::string aid = std::to_string(id);
-        print_box_header(id, op, "store-viz-" + aid, "store-" + aid, "Store: " + get_as_var(op->name));
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
-
-        // Generate a table with store details
-        print_opening_tag("table", "allocate-table");
-
-        // - Store predicate
-        if (!is_const_one(op->predicate)) {
-            stream << "<tr><th scope='col'>Predicate</th><td>" << get_as_str(op->predicate) << "</td></tr>";
-        }
-
-        // - Alignment
-        const bool show_alignment = op->value.type().is_vector() && op->alignment.modulus > 1;
-        if (show_alignment) {
-            stream << "<tr><th scope='col'>Alignment</th><td>"
-                   << "aligned(" << op->alignment.modulus << ", " << op->alignment.remainder << ")"
-                   << "</td></tr>";
-        }
-
-        // - Qualifiers
-        if (op->value.type().is_vector()) {
-            const Ramp *idx = op->index.as<Ramp>();
-            if (idx && is_const_one(idx->stride)) {
-                stream << "<tr><th scope='col'>Type</th><td>Dense Vector</td></tr>";
-            } else {
-                stream << "<tr><th scope='col'>Type</th><td>Strided Vector</td></tr>";
-            }
-            stream << "<tr><th scope='col'>Output Tile</th><td>" << op->value.type() << "</td></tr>";
-        } else {
-            stream << "<tr><th scope='col'>Type</th><td>Scalar</td></tr>";
-            stream << "<tr><th scope='col'>Output</th><td>" << op->value.type() << "</td></tr>";
-        }
-
-        print_closing_tag("table");
-
-        print_closing_tag("div");
-
-        print_closing_tag("div");
-    }
-
-    void visit(const Load *op) override {
-        // Assign unique id to this node
-        int id = gen_node_id(op);
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box center LoadBox");
-
-        // Print box header
-        std::string aid = std::to_string(id);
-        print_box_header(id, op, "load-viz-" + aid, "load-" + aid, "Load: " + get_as_var(op->name));
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
-
-        // Generate a table with load details
-        print_opening_tag("table", "allocate-table");
-
-        // - Load predicate
-        if (!is_const_one(op->predicate)) {
-            stream << "<tr><th scope='col'>Predicate</th><td>" << get_as_str(op->predicate) << "</td></tr>";
-        }
-
-        // - Alignment
-        const bool show_alignment = op->type.is_vector() && op->alignment.modulus > 1;
-        if (show_alignment) {
-            stream << "<tr><th scope='col'>Alignment</th><td>"
-                   << "aligned(" << op->alignment.modulus << ", " << op->alignment.remainder << ")"
-                   << "</td></tr>";
-        }
-
-        // - Qualifiers
-        if (op->type.is_vector()) {
-            const Ramp *idx = op->index.as<Ramp>();
-            if (idx && is_const_one(idx->stride)) {
-                stream << "<tr><th scope='col'>Type</th><td>Dense Vector</td></tr>";
-            } else {
-                stream << "<tr><th scope='col'>Type</th><td>Strided Vector</td></tr>";
-            }
-            stream << "<tr><th scope='col'>Output Tile</th><td>" << op->type << "</td></tr>";
-        } else {
-            stream << "<tr><th scope='col'>Type</th><td>Scalar</td></tr>";
-            stream << "<tr><th scope='col'>Output</th><td>" << op->type << "</td></tr>";
-        }
-
-        print_closing_tag("table");
-
-        print_closing_tag("div");
-
-        print_closing_tag("div");
-    }
-
-    void visit(const Call *op) override {
-        int id = gen_node_id(op);
-        // Add viz support for key functions/intrinsics
-        if (op->name == "halide_do_par_for") {
-            print_fn_button(op->name, id);
-        } else if (op->name == "halide_do_par_task") {
-            print_fn_button(op->name, id);
-        } else if (op->name == "_halide_buffer_init") {
-            print_fn_button(op->name, id);
-        } else if (op->name.rfind("_halide", 0) != 0) {
-            // Assumption: We want to ignore intrinsics starting with _halide
-            // but for everything else, generate a warning
-            debug(2) << "Function call ignored by IRVisualizer: " << op->name << "\n";
-        }
-    }
-};
-
-/** IRVisualizer Class
+/** PipelineHTMLInspector Class
  * Generates the output html page. Currently the html page has
  * three key tabs: IR code, Visualized pipeline and the generated
  * assembly.
  */
-class IRVisualizer {
+class PipelineHTMLInspector {
 public:
     // Construct the visualizer and point it to the output file
-    explicit IRVisualizer(const std::string &html_output_filename,
+    explicit PipelineHTMLInspector(const std::string &html_output_filename,
                           const Module &m,
                           const std::string &assembly_input_filename,
-                          bool use_conceptual_stmt_ir,
-                          bool include_viztree)
+                          bool use_conceptual_stmt_ir)
         : use_conceptual_stmt_ir(use_conceptual_stmt_ir),
-          html_code_printer(stream, node_ids, include_viztree, true),
-          include_viztree(include_viztree),
-          html_viz_printer(stream, node_ids) {
+          html_code_printer(stream, node_ids, true) {
         // Open output file
         stream.open(html_output_filename.c_str());
 
@@ -3017,9 +2374,6 @@ public:
         }
         cost_model.finalize_cost_computation();
         html_code_printer.init_cost_info(cost_model);
-        if (include_viztree) {
-            html_viz_printer.init_cost_info(cost_model);
-        }
 
         // Generate html page
         stream << "<!DOCTYPE html>\n";
@@ -3033,9 +2387,6 @@ private:
     // Handle to output file stream
     std::ofstream stream;
 
-    // Handle to assembly file stream
-    std::ifstream assembly;
-
     // Holds cost information for visualized program
     IRCostModel cost_model;
 
@@ -3046,10 +2397,6 @@ private:
     bool use_conceptual_stmt_ir;
     HTMLCodePrinter<std::ofstream> html_code_printer;
 
-    // Used to translate IR to visualization in HTML
-    bool include_viztree;
-    HTMLVisualizationPrinter html_viz_printer;
-
     /* Methods for generating the <head> section of the html file */
     void generate_head(const Module &m) {
         stream << "<head>\n";
@@ -3059,12 +2406,6 @@ private:
         stream << "<style type='text/css'>\n"
                << halide_html_template_StmtToHTML_css
                << "\n</style>\n";
-        if (include_viztree) {
-            stream << halide_html_template_StmtToViz_dependencies_html;
-            stream << "<style type='text/css'>\n"
-                   << halide_html_template_StmtToViz_css
-                   << "\n</style>\n";
-        }
 #else
         std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path() / "irvisualizer";
         debug(1) << "Will link CSS in directory: " << dir << "\n";
@@ -3089,19 +2430,11 @@ private:
         stream << "<script>\n"
                << halide_html_template_StmtToHTML_js
                << "</script>";
-        if (include_viztree) {
-            stream << "<script>\n"
-                   << halide_html_template_StmtToViz_js
-                   << "</script>";
-        }
 #else
         std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path() / "irvisualizer";
         debug(1) << "Will link Javascript in directory: " << dir << "\n";
         internal_assert(std::filesystem::exists(dir));
         stream << "<script src='file://" << (dir / "html_template_StmtToHTML.js").string() << "'></script>\n";
-        if (include_viztree) {
-            stream << "<script src='file://" << (dir / "html_template_StmtToViz.js").string() << "'></script>\n";
-        }
 #endif
     }
 
@@ -3111,10 +2444,6 @@ private:
         stream << "<div id='visualization-panes'>\n";
         stream << "<div id='resizer-preview'></div>\n";
         generate_ir_pane(m);
-        if (include_viztree) {
-            generate_resize_bar(pane_count++);
-            generate_visualization_pane(m);
-        }
         generate_resize_bar(pane_count++);
         generate_host_assembly_pane(m);
         const Buffer<> *device_assembly = m.get_device_code_buffer();
@@ -3137,13 +2466,6 @@ private:
             html_code_printer.print(m, host_asm_info, device_asm_info);
             stream << "</div>\n";
         }
-    }
-
-    // Generate pane: Lowered IR code with syntax highlighting in HTML
-    void generate_visualization_pane(const Module &m) {
-        stream << "<div id='ir-visualization-pane' class='pane'>\n";
-        html_viz_printer.print(m, host_asm_info, device_asm_info);
-        stream << "</div>\n";
     }
 
     // Generate pane: Generated host assembly code
@@ -3204,6 +2526,7 @@ private:
         user_assert(file_exists(asm_file)) << "Unable to open assembly file: " << asm_file << "\n";
 
         // Open assembly file
+        std::ifstream assembly;
         assembly.open(asm_file.c_str());
 
         // Slurp the code into asm_stream
@@ -3217,20 +2540,18 @@ private:
 // The external interface to this module
 void print_to_stmt_html(const std::string &html_output_filename,
                         const Module &m,
-                        const std::string &assembly_input_filename,
-                        bool include_viz) {
-    IRVisualizer visualizer(html_output_filename, m, assembly_input_filename, false, include_viz);
-    visualizer.generate_html(m);
-    debug(1) << "Done generating HTML IR Visualization - printed to: " << html_output_filename << "\n";
+                        const std::string &assembly_input_filename) {
+    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, false);
+    inspector.generate_html(m);
+    debug(1) << "Done generating HTML IR Inspector - printed to: " << html_output_filename << "\n";
 }
 
 void print_to_conceptual_stmt_html(const std::string &html_output_filename,
                                    const Module &m,
-                                   const std::string &assembly_input_filename,
-                                   bool include_viz) {
-    IRVisualizer visualizer(html_output_filename, m, assembly_input_filename, true, include_viz);
-    visualizer.generate_html(m);
-    debug(1) << "Done generating HTML Conceptual IR Visualization - printed to: " << html_output_filename << "\n";
+                                   const std::string &assembly_input_filename) {
+    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, true);
+    inspector.generate_html(m);
+    debug(1) << "Done generating HTML Conceptual IR Inspector - printed to: " << html_output_filename << "\n";
 }
 
 }  // namespace Internal

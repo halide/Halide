@@ -22,8 +22,7 @@ struct Stmt;
  * and will assert-fail if no such file is found. */
 void print_to_stmt_html(const std::string &html_output_filename,
                         const Module &m,
-                        const std::string &assembly_input_filename = "",
-                        bool include_viz = false);
+                        const std::string &assembly_input_filename = "");
 
 /** Dump an HTML-formatted visualization of a Module's conceptual Stmt code to filename.
  * If assembly_input_filename is not empty, it is expected to be the path
@@ -32,8 +31,7 @@ void print_to_stmt_html(const std::string &html_output_filename,
  * and will assert-fail if no such file is found. */
 void print_to_conceptual_stmt_html(const std::string &html_output_filename,
                                    const Module &m,
-                                   const std::string &assembly_input_filename = "",
-                                   bool include_viz = false);
+                                   const std::string &assembly_input_filename = "");
 
 }  // namespace Internal
 }  // namespace Halide
