@@ -49,7 +49,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::schedule, {"schedule", ".schedule.h", IsSingle}},
         {OutputFileType::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {OutputFileType::stmt, {"stmt", ".stmt", IsMulti}},
-        {OutputFileType::conceptual_stmt, {"coneptual_stmt", ".conceptual.stmt", IsMulti}},
+        {OutputFileType::conceptual_stmt, {"conceptual_stmt", ".conceptual.stmt", IsMulti}},
         {OutputFileType::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
         {OutputFileType::conceptual_stmt_html, {"conceptual_stmt_html", ".conceptual.stmt.html", IsMulti}},
         {OutputFileType::device_code, {"device_code", ".device_code", IsMulti}},
@@ -680,7 +680,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
         internal_assert(!assembly_path.empty());
         bool enable_viztree = get_env_variable("HL_HTML_VIZTREE") == "1";
-        debug(1) << "Module.compile(): conceptual_stmt_html " << output_files.at(OutputFileType::stmt_html)
+        debug(1) << "Module.compile(): conceptual_stmt_html " << output_files.at(OutputFileType::conceptual_stmt_html)
                  << " (viztree_enabled: " << enable_viztree << ")\n";
         Internal::print_to_conceptual_stmt_html(output_files.at(OutputFileType::conceptual_stmt_html),
                                                 *this, assembly_path, enable_viztree);
@@ -694,7 +694,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
             }
             std::string str((const char *)buf->data(), length);
             std::string device_code = std::string((const char *)buf->data(), buf->size_in_bytes());
-            while (!device_code.empty() && device_code.back() == 0) {
+            while (!device_code.empty() && device_code.back() == '\0') {
                 device_code = device_code.substr(0, device_code.length() - 1);
             }
             std::ofstream file(output_files.at(OutputFileType::device_code));
