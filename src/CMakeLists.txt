@@ -151,7 +151,7 @@ set(HEADER_FILES
     Solve.h
     SplitTuples.h
     StageStridedLoads.h
-    StmtToViz.h
+    StmtToHTML.h
     StorageFlattening.h
     StorageFolding.h
     StrictifyFloat.h
@@ -334,7 +334,7 @@ set(SOURCE_FILES
     SpirvIR.cpp
     SplitTuples.cpp
     StageStridedLoads.cpp
-    StmtToViz.cpp
+    StmtToHTML.cpp
     StorageFlattening.cpp
     StorageFolding.cpp
     StrictifyFloat.cpp

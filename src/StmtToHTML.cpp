@@ -1,4 +1,4 @@
-#include "StmtToViz.h"
+#include "StmtToHTML.h"
 #include "Debug.h"
 #include "Error.h"
 #include "IROperator.h"
@@ -740,7 +740,7 @@ public:
         // The implementation doesn't need to support submodules:
         // we only call this for Modules that have already had their submodules
         // resolved.
-        internal_assert(m.submodules().empty()) << "StmtToViz does not support submodules.";
+        internal_assert(m.submodules().empty()) << "StmtToHTML does not support submodules.";
 
         // Open div to hold this module
         print_opening_tag("div", "Module");
@@ -2411,10 +2411,6 @@ private:
         debug(1) << "Will link CSS in directory: " << dir << "\n";
         internal_assert(std::filesystem::exists(dir));
         stream << "<link rel='stylesheet' href='file://" << (dir / "html_template_StmtToHTML.css").string() << "'>\n";
-        if (include_viztree) {
-            stream << halide_html_template_StmtToViz_dependencies_html;
-            stream << "<link rel='stylesheet' href='file://" << (dir / "html_template_StmtToViz.css").string() << "'>\n";
-        }
 #endif
         stream << "</head>\n";
     }

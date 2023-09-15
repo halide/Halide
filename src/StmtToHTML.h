@@ -1,5 +1,5 @@
-#ifndef HALIDE_STMT_TO_VIZ
-#define HALIDE_STMT_TO_VIZ
+#ifndef HALIDE_STMT_TO_HTML
+#define HALIDE_STMT_TO_HTML
 
 /** \file
  * Defines a function to dump an HTML-formatted visualization to a file.

@@ -615,7 +615,7 @@ SOURCE_FILES = \
   SpirvIR.cpp \
   SplitTuples.cpp \
   StageStridedLoads.cpp \
-  StmtToViz.cpp \
+  StmtToHTML.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
   StrictifyFloat.cpp \
@@ -643,10 +643,7 @@ SOURCE_FILES = \
 HTML_TEMPLATE_FILES = \
    StmtToHTML_dependencies.html \
    StmtToHTML.js \
-   StmtToHTML.css \
-   StmtToViz_dependencies.html \
-   StmtToViz.js \
-   StmtToViz.css
+   StmtToHTML.css
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
@@ -799,7 +796,7 @@ HEADER_FILES = \
   Solve.h \
   SplitTuples.h \
   StageStridedLoads.h \
-  StmtToViz.h \
+  StmtToHTML.h \
   StorageFlattening.h \
   StorageFolding.h \
   StrictifyFloat.h \
