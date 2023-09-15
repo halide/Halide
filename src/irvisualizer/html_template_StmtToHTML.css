@@ -149,11 +149,6 @@ div.resize-bar:has(+ div.collapsed-pane) > div.collapse-btns button.collapse-rig
     content: "\21A4";
 }
 
-button.resize-btn {
-    margin: 10px 3px;
-    font-size: 18px;
-}
-
 /* Resizer Preview */
 div#resizer-preview {
     position: absolute;
@@ -401,7 +396,7 @@ input.show-hide-btn:checked + label > span:last-child:after {
     color: gray;
 }
 
-div.button.icon-btn {
+div.icon-btn {
     padding: 0 3px;
     margin-left: 2px;
     margin-right: 0px;
@@ -410,31 +405,31 @@ div.button.icon-btn {
     vertical-align: middle;
     background: transparent;
     font-size: 15px;
-    line-height: 12px;
     border: 1px solid black;
     border-radius: 4px;
-
+    display: inline-block;
+    text-align: center;
+    box-sizing: border-box;
 }
-div.button.icon-btn:before {
+div.icon-btn:before {
     margin: 0;
     padding: 0;
     border: 0;
-    color: black;
     display: inline-block;
 }
 
-div.button.jump-to-host-asm-btn {
+div.jump-to-host-asm-btn {
     background:   rgba(255,50,0,0.1);
     border-color: rgb( 255,50,0);
     color:        rgb( 255,50,0);
 }
-div.button.jump-to-device-code-btn {
+div.jump-to-device-code-btn {
     background:   rgba(70,170,50,0.1);
     border-color: rgb( 70,170,50);
     color:        rgb( 70,170,50);
 }
 
-div.button.jump-to-host-asm-btn span.tooltip span, div.button.jump-to-device-code-btn span.tooltip span {
+div.jump-to-host-asm-btn span.tooltip span, div.jump-to-device-code-btn span.tooltip span {
     display: block;
     margin-top: 0.6em;
     font-size: 10px;
@@ -442,15 +437,15 @@ div.button.jump-to-host-asm-btn span.tooltip span, div.button.jump-to-device-cod
     color: green;
 }
 
-div.button.jump-to-host-asm-btn:before, div.button.jump-to-device-code-btn:before, div.button.jump-to-viz-btn:before {
+div.jump-to-host-asm-btn:before, div.jump-to-device-code-btn:before, div.jump-to-viz-btn:before {
     content: "\279F";
 }
 
-div#ir-visualization-pane div.button.icon-btn {
+div#ir-visualization-pane div.icon-btn {
     margin-left: 1px;
 }
 
-div.button.icon-btn:hover {
+div.icon-btn:hover {
     border-width: 2px;
     line-height: 10px;
 }

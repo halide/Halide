@@ -22,7 +22,7 @@
 // causes you to be able to just edit the files without having to recompile Halide
 // and then rerun your generator.
 // For distribution purposes, they should be inlined, and this define should be on 1.
-#define INLINE_TEMPLATES 0
+#define INLINE_TEMPLATES 1
 
 #if !INLINE_TEMPLATES
 #include <filesystem>
@@ -1301,33 +1301,35 @@ private:
     // Prints the button/indicator for the compute cost of a line in the program
     void print_compute_cost(const IRNode *op, int id) {
         int max_line_cost = cost_model.get_max_compute_cost(false);
+        int max_block_cost = cost_model.get_max_compute_cost(true);
         int line_cost = cost_model.get_compute_cost(op, false);
         int block_cost = cost_model.get_compute_cost(op, true);
         if (dynamic_cast<const LetStmt *>(op) || dynamic_cast<const Allocate *>(op)) {
             block_cost = line_cost;
         }
         std::string _id = "cc-" + std::to_string(id);
-        print_cost_btn(line_cost, block_cost, max_line_cost, _id, "Op Count: ");
+        print_cost_btn(line_cost, block_cost, max_line_cost, max_block_cost, _id, "Op Count: ");
     }
 
     // Prints the button/indicator for the data movement cost of a line in the program
     void print_data_movement_cost(const IRNode *op, int id) {
         int max_line_cost = cost_model.get_max_data_movement_cost(false);
+        int max_block_cost = cost_model.get_max_data_movement_cost(true);
         int line_cost = cost_model.get_data_movement_cost(op, false);
         int block_cost = cost_model.get_data_movement_cost(op, true);
         if (dynamic_cast<const LetStmt *>(op) || dynamic_cast<const Allocate *>(op)) {
             block_cost = line_cost;
         }
         std::string _id = "dc-" + std::to_string(id);
-        print_cost_btn(line_cost, block_cost, max_line_cost, _id, "Bits Moved: ");
+        print_cost_btn(line_cost, block_cost, max_line_cost, max_block_cost, _id, "Bits Moved: ");
     }
 
     // Prints a cost button/indicator
-    void print_cost_btn(int line_cost, int block_cost, int max_line_cost, std::string id, std::string prefix) {
+    void print_cost_btn(int line_cost, int block_cost, int max_line_cost, int max_block_cost, std::string id, std::string prefix) {
         const int num_cost_buckets = 20;
 
         int line_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
-        int block_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
+        int block_cost_bin_size = (max_block_cost / num_cost_buckets) + 1;
 
         int line_costc = line_cost / line_cost_bin_size;
         int block_costc = block_cost / block_cost_bin_size;
