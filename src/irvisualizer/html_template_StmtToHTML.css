@@ -355,10 +355,16 @@ input.show-hide-btn:hover {
     color: #c30000;
 }
 
-/* The structure always has to be <button/><label/><div class=indent>...</div>.
+/* The structure always has to be <button/><label/><div class=op-btns>[...]</div><div class=indent>...</div>.
  * All the random buttons, should go in the label.
  */
-input.show-hide-btn + label + div.indent {
+div.op-btns {
+    display: inline-block;
+    vertical-align: top;
+    height: 1em;
+    margin-left: 0.5em;
+}
+input.show-hide-btn + label + div.op-btns + div.indent {
     max-height: 10000000000px;
     opacity: 1;
     transition: opacity 0.4s, max-height 0.4s;
@@ -366,14 +372,14 @@ input.show-hide-btn + label + div.indent {
 }
 
 /* TODO: add the same logic for hoving the closing brace. */
-input.show-hide-btn:hover + label + div.indent {
+input.show-hide-btn:hover + label + div.op-btns + div.indent {
     border-left: 2px dotted black;
 }
 input.show-hide-btn:hover + label > span:last-child,
-input.show-hide-btn:hover + label + div.indent + span.ClosingBrace {
+input.show-hide-btn:hover + label + div.op-btns + div.indent + span.ClosingBrace {
     font-weight: bold;
 }
-input.show-hide-btn:hover + label + div.indent + span.ClosingBrace:after {
+input.show-hide-btn:hover + label + div.op-btns + div.indent + span.ClosingBrace:after {
     height: 7px;
     width: 7px;
     display: inline-block;
@@ -384,12 +390,12 @@ input.show-hide-btn:hover + label + div.indent + span.ClosingBrace:after {
     content: " ";
 }
 
-input.show-hide-btn:checked + label + div.indent {
+input.show-hide-btn:checked + label + div.op-btns + div.indent {
     opacity: 0;
     max-height: 0px;
     overflow: hidden;
 }
-input.show-hide-btn:checked + label > span:last-child:after {
+input.show-hide-btn:checked + label + div.op-btns:after {
     content: "(collapsed)";
     margin-left: 1em;
     font-style: italic;

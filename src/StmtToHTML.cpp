@@ -707,7 +707,7 @@ public:
 
         // Open code block to hold module body
         print_opening_brace();
-        print_show_hide_btn_end();
+        print_show_hide_btn_end(nullptr);
 
         // Open indented div to hold body code
         print_opening_tag("div", "indent ModuleBody", id);
@@ -756,7 +756,7 @@ public:
 
         // Open code block to hold module body
         print_opening_brace();
-        print_show_hide_btn_end();
+        print_show_hide_btn_end(nullptr);
 
         // Open indented div to hold body code
         print_opening_tag("div", "indent ModuleBody", id);
@@ -958,7 +958,7 @@ public:
 
             // Indent-divs can only be opened after the line is finished.
             if (should_print_open_indent) {
-                print_show_hide_btn_end();
+                print_show_hide_btn_end(nullptr);
                 print_opening_tag("div", "indent", current_id);
             }
         }
@@ -1024,7 +1024,7 @@ private:
 
         // Open code block to hold function body
         print_opening_brace();
-        print_show_hide_btn_end();
+        print_show_hide_btn_end(nullptr);
 
         // Open indented div to hold body code
         print_opening_tag("div", "indent FunctionBody", id);
@@ -1116,8 +1116,12 @@ private:
         stream << "<label for='show-hide-btn-" << id << "'>";
     }
 
-    void print_show_hide_btn_end() {
-        stream << "</label>";
+    void print_show_hide_btn_end(const IRNode *op) {
+        stream << "</label><div class='op-btns'>";
+        if (op) {
+            print_assembly_button(op);
+        }
+        stream << "</div>";
     }
 
     // Prints newline to stream
@@ -1263,10 +1267,9 @@ private:
             // -- print text
             print_html_element("span", "keyword matched", "task");
 
-            print_show_hide_btn_end();
-
             // Open code block to hold task body
             print_opening_brace();
+            print_show_hide_btn_end(nullptr);
 
             // Open indented div to hold body code
             print_opening_tag("div", "indent ForkTask", id);
@@ -1617,11 +1620,9 @@ private:
         print_variable(op->name);
         print_closing_tag("span");
 
-        print_assembly_button(op);
-
         // Open code block to hold function body
         print_opening_brace();
-        print_show_hide_btn_end();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
         print_opening_tag("div", "indent ProducerConsumerBody", id);
@@ -1696,11 +1697,9 @@ private:
         print(op->extent);
         print_html_element("span", "matched", ")");
 
-        print_assembly_button(op);
-
         // Open code block to hold function body
         print_opening_brace();
-        print_show_hide_btn_end();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
         print_opening_tag("div", "indent ForBody", id);
@@ -1745,7 +1744,7 @@ private:
 
         // Open code block to hold function body
         print_opening_brace();
-        print_show_hide_btn_end();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
         print_opening_tag("div", "indent AcquireBody", id);
@@ -1938,7 +1937,7 @@ private:
 
         // Open code block to hold function body
         print_opening_brace();
-        print_show_hide_btn_end();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
         print_opening_tag("div", "indent RealizeBody", id);
@@ -1982,7 +1981,7 @@ private:
 
         // Open code block to hold fork body
         print_opening_brace();
-        print_show_hide_btn_end();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
         print_opening_tag("div", "indent ForkBody", id);
@@ -2032,7 +2031,7 @@ private:
 
             // Open code block to hold `then` case
             print_opening_brace();
-            print_show_hide_btn_end();
+            print_show_hide_btn_end(op);
 
             // Open indented div to hold code for the `then` case
             print_opening_tag("div", "indent ThenBody", then_block_id);
@@ -2101,7 +2100,7 @@ private:
 
                 // Open code block to hold `else` case
                 print_opening_brace();
-                print_show_hide_btn_end();
+                print_show_hide_btn_end(op);
 
                 // Open indented div to hold code for the `then` case
                 print_opening_tag("div", "indent ElseBody", else_block_id);
@@ -2251,7 +2250,7 @@ private:
 
         // Open code block to hold atomic body
         print_opening_brace();
-        print_show_hide_btn_end();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold atomic code
         print_opening_tag("div", "indent AtomicBody", id);
