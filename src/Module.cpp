@@ -18,7 +18,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
-#include "StmtToViz.h"
+#include "StmtToHTML.h"
 
 namespace Halide {
 namespace Internal {
