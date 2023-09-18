@@ -35,6 +35,7 @@ struct ParameterContents;
 /** A reference-counted handle to a parameter to a halide
  * pipeline. May be a scalar parameter or a buffer */
 class Parameter {
+    void check_data_ever_set() const;
     void check_defined() const;
     void check_is_buffer() const;
     void check_is_scalar() const;
@@ -54,8 +55,9 @@ protected:
 
     /** Get the pointer to the current value of the scalar
      * parameter. For a given parameter, this address will never
-     * change. Only relevant when jitting. */
-    void *scalar_address() const;
+     * change. Note that this can only be used to *read* from -- it must
+     * not be written to, so don't cast away the constness. Only relevant when jitting. */
+    const void *read_only_scalar_address() const;
 
     /** Get the raw data of the current value of the scalar
      * parameter. Only relevant when serializing. */
@@ -112,27 +114,30 @@ public:
     template<typename T>
     HALIDE_NO_USER_CODE_INLINE T scalar() const {
         check_type(type_of<T>());
-        return *((const T *)(scalar_address()));
+        check_data_ever_set();
+        return *((const T *)(read_only_scalar_address()));
     }
 
     /** This returns the current value of scalar<type()>()
-     * as an Expr. */
+     * as an Expr. If no value has ever been set, it will assert-fail */
     Expr scalar_expr() const;
+
+    /** This returns true if scalar_expr() would return a valid Expr,
+     * false if not. */
+    bool has_scalar_expr() const;
 
     /** If the parameter is a scalar parameter, set its current
      * value. Only relevant when jitting */
     template<typename T>
     HALIDE_NO_USER_CODE_INLINE void set_scalar(T val) {
-        check_type(type_of<T>());
-        *((T *)(scalar_address())) = val;
+        halide_scalar_value_t sv;
+        memcpy(&sv, &val, sizeof(val));
+        set_scalar(type_of<T>(), sv);
     }
 
     /** If the parameter is a scalar parameter, set its current
      * value. Only relevant when jitting */
-    HALIDE_NO_USER_CODE_INLINE void set_scalar(const Type &val_type, halide_scalar_value_t val) {
-        check_type(val_type);
-        memcpy(scalar_address(), &val, val_type.bytes());
-    }
+    void set_scalar(const Type &val_type, halide_scalar_value_t val);
 
     /** If the parameter is a buffer parameter, get its currently
      * bound buffer. Only relevant when jitting */

@@ -20,6 +20,7 @@ struct ParameterContents {
     std::vector<BufferConstraint> buffer_constraints;
     Expr scalar_default, scalar_min, scalar_max, scalar_estimate;
     const bool is_buffer;
+    bool data_ever_set = false;
     MemoryType memory_type = MemoryType::Auto;
 
     ParameterContents(Type t, bool b, int d, const std::string &n)
@@ -45,6 +46,10 @@ void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {
 }
 
 }  // namespace Internal
+
+void Parameter::check_data_ever_set() const {
+    user_assert(contents->data_ever_set) << "Parameter " << name() << " has never had a scalar value set.\n";
+}
 
 void Parameter::check_defined() const {
     user_assert(defined()) << "Parameter is undefined\n";
@@ -123,8 +128,14 @@ bool Parameter::is_buffer() const {
     return contents->is_buffer;
 }
 
+bool Parameter::has_scalar_expr() const {
+    return defined() && !contents->is_buffer && contents->data_ever_set;
+}
+
 Expr Parameter::scalar_expr() const {
     check_is_scalar();
+    // Redundant here, since every call to scalar<>() also checks this.
+    // check_data_ever_set();
     const Type t = type();
     if (t.is_float()) {
         switch (t.bits()) {
@@ -198,14 +209,29 @@ void Parameter::set_buffer(const Buffer<> &b) {
     contents->buffer = b;
 }
 
-void *Parameter::scalar_address() const {
+const void *Parameter::read_only_scalar_address() const {
     check_is_scalar();
+    // Code that calls this method is (presumably) going
+    // to read from the address, so complain if the scalar value
+    // has never been set.
+    check_data_ever_set();
     return &contents->data;
 }
 
 uint64_t Parameter::scalar_raw_value() const {
     check_is_scalar();
+    check_data_ever_set();
     return contents->data;
+}
+
+void Parameter::set_scalar(const Type &val_type, halide_scalar_value_t val) {
+    check_type(val_type);
+    // Setting this to zero isn't strictly necessary, but it does
+    // mean that the 'unused' bits of the field are never affected by what
+    // may have previously been there.
+    contents->data = 0;
+    memcpy(&contents->data, &val, val_type.bytes());
+    contents->data_ever_set = true;
 }
 
 /** Tests if this handle is the same as another handle */
