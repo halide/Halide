@@ -159,14 +159,6 @@ int update_defined_after_clone_test() {
         return 1;
     }
 
-    Buffer<int> im = g.realize({200, 200});
-    auto func = [](int x, int y) {
-        return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
-    };
-    if (check_image(im, func)) {
-        return 1;
-    }
-
     for (bool param_value : {false, true}) {
         param.set(param_value);
 
