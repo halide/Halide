@@ -336,7 +336,8 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         // handled differently.
         const int bytes_in_vector = get_target().natural_vector_size<uint8_t>();
         if (op->type.is_bool()) {
-            internal_assert((op->type.lanes() == bytes_in_vector && op->args[0].type().lanes() == bytes_in_vector / 2) || (op->type.lanes() == bytes_in_vector / 2 && op->args[0].type().lanes() == bytes_in_vector / 4) || (op->type.lanes() == bytes_in_vector && op->args[0].type().lanes() == bytes_in_vector / 4)) << Expr(op);
+            internal_assert(
+                ((op->type.lanes() == bytes_in_vector) || (op->type.lanes() == bytes_in_vector / 2) || (op->type.lanes() == bytes_in_vector / 4)) && ((op->args[0].type().lanes() == bytes_in_vector) || (op->args[0].type().lanes() == bytes_in_vector / 2) || (op->args[0].type().lanes() == bytes_in_vector / 4)));
         }
         rhs << op->name << "<" << print_type(op->args[0].type()) << ", "
             << print_type(op->type) << ", " << print_type(op->type.element_of())
@@ -510,7 +511,9 @@ void CodeGen_Xtensa::visit(const Max *op) {
         print_expr(Call::make(op->type, "::halide_cpp_max<" + print_type(op->type) + ">", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
-        if (is_native_xtensa_vector<int8_t>(op->type)) {
+        if (op->a.type().is_bool() && op->b.type().is_bool()) {
+            rhs << "bool_op_MAX(" + print_expr(op->a) + ", " + print_expr(op->b) + ")";
+        } else if (is_native_xtensa_vector<int8_t>(op->type)) {
             rhs << "IVP_MAX2NX8(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else if (is_native_xtensa_vector<uint8_t>(op->type)) {
             rhs << "IVP_MAXU2NX8(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
@@ -538,7 +541,9 @@ void CodeGen_Xtensa::visit(const Min *op) {
         print_expr(Call::make(op->type, "::halide_cpp_min<" + print_type(op->type) + ">", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
-        if (is_native_xtensa_vector<int8_t>(op->type)) {
+        if (op->a.type().is_bool() && op->b.type().is_bool()) {
+            rhs << "bool_op_MIN(" + print_expr(op->a) + ", " + print_expr(op->b) + ")";
+        } else if (is_native_xtensa_vector<int8_t>(op->type)) {
             rhs << "IVP_MIN2NX8(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else if (is_native_xtensa_vector<uint8_t>(op->type)) {
             rhs << "IVP_MINU2NX8(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
@@ -685,7 +690,9 @@ void CodeGen_Xtensa::visit_comparison_op(const ComparisonOp *op, const string &o
     string sa = print_expr(op->a);
     string sb = print_expr(op->b);
 
-    if (is_native_xtensa_vector<int8_t>(op->a.type())) {
+    if (op->a.type().is_bool() && op->b.type().is_bool()) {
+        print_assignment(op->type, "bool_op_" + op_name + "(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<int8_t>(op->a.type())) {
         print_assignment(op->type, "IVP_" + op_name + "2NX8(" + sa + ", " + sb + ")");
     } else if (is_native_xtensa_vector<uint8_t>(op->a.type())) {
         print_assignment(op->type, "IVP_" + op_name + "U2NX8U(" + sa + ", " + sb + ")");

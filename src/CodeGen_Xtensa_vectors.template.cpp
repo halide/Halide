@@ -992,8 +992,9 @@ HALIDE_ALWAYS_INLINE VectorTypeTo halide_xtensa_slice_from_padded(const VectorTy
 }
 
 template<>
-HALIDE_ALWAYS_INLINE native_vector_u16 halide_xtensa_slice_from_padded<native_vector_u16_x2, native_vector_u16, uint16_t, 2 * VECTOR_WIDTH_U16, VECTOR_WIDTH_U16>(const native_vector_u16_x2 &a, int lanes) {
-    return a.native_vector[0];
+HALIDE_ALWAYS_INLINE native_mask_i32 halide_xtensa_slice_from_padded<native_mask_i8, native_mask_i32, bool, VECTOR_WIDTH_I8, VECTOR_WIDTH_I32>(const native_mask_i8 &a, int lanes) {
+    native_mask_i16 a_half = IVP_EXTRACTBL2N(a);
+    return IVP_EXTRACTBLN(a_half);
 }
 
 template<>
@@ -2248,6 +2249,11 @@ convert<native_vector_i8, native_vector_u32_x4>(const native_vector_u32_x4 &src)
 }
 
 template<>
+HALIDE_ALWAYS_INLINE native_mask_i8 convert<native_mask_i8, native_vector_u8>(const native_vector_u8 &src) {
+    return IVP_GTU2NX8U(src, 0);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE native_vector_i8 convert<native_vector_i8, native_mask_i8>(const native_mask_i8 &src) {
     return IVP_MOV2NX8T(native_vector_i8(1), native_vector_i8(0), src);
 }
@@ -3058,3 +3064,13 @@ gather_load<native_vector_u8, native_vector_i16_x2, uint8_t, VECTOR_WIDTH_U8, tr
     return convert<native_vector_u8, native_vector_u16_x2>(native_vector_u16_x2(native_vector_u16_x2::from_native_vector, output1, output2));
 }
 #endif
+
+HALIDE_ALWAYS_INLINE native_mask_i32 bool_op_LT(const native_mask_i32 &a, const native_mask_i32 &b) {
+    native_vector_i32 a_i32 = convert<native_vector_i32, native_mask_i32>(a);
+    native_vector_i32 b_i32 = convert<native_vector_i32, native_mask_i32>(b);
+    return IVP_LTN_2X32(a_i32, b_i32);
+}
+
+HALIDE_ALWAYS_INLINE native_mask_i32 bool_op_MIN(const native_mask_i32 &a, const native_mask_i32 &b) {
+    return IVP_ANDBN_2(a, b);
+}
