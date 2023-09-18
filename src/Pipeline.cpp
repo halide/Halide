@@ -584,7 +584,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
 #ifdef WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
     // TODO(https://github.com/halide/Halide/pull/7760): replace file serialization with in-memory serialization
     std::string filename = generate_function_name() + ".hlpipe";
-    std::map<std::string, Internal::Parameter> external_params;
+    std::map<std::string, Parameter> external_params;
     serialize_pipeline(*this, filename, external_params);
     Pipeline deserialized_pipe = deserialize_pipeline(filename, external_params);
     std::vector<Function> outputs;
