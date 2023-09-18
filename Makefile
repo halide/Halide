@@ -1286,6 +1286,7 @@ test_correctness_multi_gpu: correctness_gpu_multi_device
 # 3) Externally-written JIT-based tests
 GENERATOR_AOT_TESTS = $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=generator_aot_%)
 GENERATOR_AOTCPP_TESTS = $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=generator_aotcpp_%)
+GENERATOR_AOTXTENSA_TESTS = $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=generator_aotcpp_xtensa_%)
 GENERATOR_JIT_TESTS = $(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=generator_jit_%)
 
 # multitarget test doesn't make any sense for the CPP backend; just skip it.
@@ -1315,6 +1316,60 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOT
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_multi_context_threaded,$(GENERATOR_AOTCPP_TESTS))
 
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
+
+# Tests below probably don't make much sense for Xtensa.
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_alias,$(GENERATOR_AOTXTENSA_TESTS))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_async_parallel,$(GENERATOR_AOTXTENSA_TESTS))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_autograd,$(GENERATOR_AOTXTENSA_TESTS))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_cxx_mangling,$(GENERATOR_AOTXTENSA_TESTS))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_cxx_mangling_define_extern,$(GENERATOR_AOTXTENSA_TESTS))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_metadata_tester,$(GENERATOR_AOTXTENSA_TESTS))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_string_param,$(GENERATOR_AOTXTENSA_TESTS))
+
+# Tests below work, but need to disable parallel in the schedule.
+# TODO(vksnk): figure out what's wrong with parallel in this case.
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_example,$(GENERATOR_AOTXTENSA_TESTS))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_mandelbrot,$(GENERATOR_AOTXTENSA_TESTS))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_pyramid,$(GENERATOR_AOTXTENSA_TESTS))
+
+# Xtensa doesn't have float64 vectors
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_templated,$(GENERATOR_AOTXTENSA_TESTS))
+
+# Needs define_extent
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_tiled_blur,$(GENERATOR_AOTXTENSA_TESTS))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_nested_externs,$(GENERATOR_AOTXTENSA_TESTS))
+
+# Segmentation fault, tests provide custom runtime and user context.
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_user_context,$(GENERATOR_AOTXTENSA_TESTS))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_user_context_insanity,$(GENERATOR_AOTXTENSA_TESTS))
+
+# multitarget test doesn't make any sense for the Xtensa backend; just skip it.
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_multitarget,$(GENERATOR_AOTXTENSA_TESTS))
+
+# Note that many of the AOT-CPP tests are broken right now;
+# remove AOT-CPP tests that don't (yet) work for C++ backend
+# (each tagged with the *known* blocking issue(s))
+
+# sanitizercoverage relies on LLVM-specific hooks, so it will never work with the C backend
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_sanitizercoverage,$(GENERATOR_AOTXTENSA_TESTS))
+
+# https://github.com/halide/Halide/issues/2084 (only if opencl enabled))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_cleanup_on_error,$(GENERATOR_AOTXTENSA_TESTS))
+
+# https://github.com/halide/Halide/issues/7273
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_msan,$(GENERATOR_AOTXTENSA_TESTS))
+
+# https://github.com/halide/Halide/issues/7272
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_memory_profiler_mandelbrot,$(GENERATOR_AOTXTENSA_TESTS))
+
+# https://github.com/halide/Halide/issues/4916
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_stubtest,$(GENERATOR_AOTXTENSA_TESTS))
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_stubuser,$(GENERATOR_AOTXTENSA_TESTS))
+
+# Build requirements are finicky, testing non-C++ backend is good enough here
+GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_gpu_multi_context_threaded,$(GENERATOR_AOTXTENSA_TESTS))
+
+test_aotcpp_xtensa_generator: $(GENERATOR_AOTXTENSA_TESTS)
 
 # This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
 # not all will work directly (e.g. due to missing define_externs at link time), so we disable
@@ -1500,6 +1555,7 @@ $(BIN_DIR)/%.generator: $(BUILD_DIR)/GenGen.o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 NAME_MANGLING_TARGET=$(NON_EMPTY_TARGET)-c_plus_plus_name_mangling
 
 GEN_AOT_OUTPUTS=-e static_library,c_header,c_source,registration
+GEN_AOT_XTENSA_OUTPUTS=-e c_source
 
 # By default, %.a/.h are produced by executing %.generator. Runtimes are not included in these.
 # (We explicitly also generate .cpp output here as well, as additional test surface for the C++ backend.)
@@ -1530,6 +1586,14 @@ $(FILTERS_DIR)/cxx_mangling.a: $(BIN_DIR)/cxx_mangling.generator $(FILTERS_DIR)/
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g cxx_mangling $(GEN_AOT_OUTPUTS),function_info_header -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-c_plus_plus_name_mangling -f "HalideTest::AnotherNamespace::cxx_mangling"
 	$(ROOT_DIR)/tools/makelib.sh $@ $@ $(FILTERS_DIR)/cxx_mangling_externs.o
+
+$(FILTERS_DIR)/pyramid_xtensa.halide_generated.cpp: $(BIN_DIR)/pyramid.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g pyramid $(GEN_AOT_XTENSA_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=xtensa-32-noos-no_runtime -n pyramid_xtensa levels=10
+
+$(FILTERS_DIR)/%_xtensa.halide_generated.cpp: $(BIN_DIR)/%.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g $* $(GEN_AOT_XTENSA_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=xtensa-32-noos-no_runtime -n $*_xtensa
 
 ifneq ($(TEST_CUDA), )
 # Also build with a gpu target to ensure that the GPU-Host generation
@@ -1741,6 +1805,11 @@ $(BIN_DIR)/$(TARGET)/generator_aot_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%.halide_generated.cpp $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(OPTIMIZE) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+# Also make AOT testing targets that depends on the .cpp output (rather than .a).
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_xtensa_%: $(ROOT_DIR)/test/generator/%_aottest.cpp $(FILTERS_DIR)/%_xtensa.halide_generated.cpp $(FILTERS_DIR)/%.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	clang++ $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(OPTIMIZE) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -Wno-error -I$(CSTUB_INCLUDE_PATH) -L$(CSTUB_LIB_PATH) -lcstub -D XCHAL_VISION_TYPE=7 -D XCHAL_VISION_SIMD16=32 -D XCHAL_DATA_WIDTH=64 -o $@
 
 # MSAN test doesn't use the standard runtime
 $(BIN_DIR)/$(TARGET)/generator_aot_msan: $(ROOT_DIR)/test/generator/msan_aottest.cpp $(FILTERS_DIR)/msan.a $(FILTERS_DIR)/msan.h $(RUNTIME_EXPORTED_INCLUDES)
@@ -2082,6 +2151,11 @@ generator_aot_%: $(BIN_DIR)/$(TARGET)/generator_aot_%
 	@-echo
 
 generator_aotcpp_%: $(BIN_DIR)/$(TARGET)/generator_aotcpp_%
+	@-mkdir -p $(TMP_DIR)
+	cd $(TMP_DIR) ; $(CURDIR)/$<
+	@-echo
+
+generator_aotcpp_xtensa_%: $(BIN_DIR)/$(TARGET)/generator_aotcpp_xtensa_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo

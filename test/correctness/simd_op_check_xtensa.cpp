@@ -111,13 +111,15 @@ public:
         // some of these could overflow that limit. (Omitting the spaces is
         // a bit of a band-aid here; a better solution would probably be
         // to allow arbitrary names that don't match, but for now, this will do.)
-        check("convert<float16x32_t,float32x32_t>", vector_width / 2, f16(f32_1));
-        check("convert<float32x32_t,float16x32_t>", vector_width / 2, f32(f16_1));
+        // TODO(vksnk): float16 doesnt't seem to be supported well by cstubs library.
+        // check("convert<float16x32_t,float32x32_t>", vector_width / 2, f16(f32_1));
+        // check("convert<float32x32_t,float16x32_t>", vector_width / 2, f32(f16_1));
         check("convert<float32x32_t,int16x32_t>", vector_width / 2, f32(i16_1));
         check("convert<float32x32_t,uint16x32_t>", vector_width / 2, f32(u16_1));
         check("convert<uint32x32_t,uint16x32_t>", vector_width / 2, u32(u16_1));
         check("convert<int32x32_t,uint16x32_t>", vector_width / 2, i32(u16_1));
         check("convert<int32x32_t,int16x32_t>", vector_width / 2, i32(i16_1));
+        check("convert<uint16x64_t,uint8x64_t>", vector_width, u16(u8_1));
         check("store_narrowing<int32x16_t,int16_t,16>", vector_width / 4, i16(i32_1));
         check("store_narrowing<uint32x16_t,uint16_t,16>", vector_width / 4, u16(u32_1));
         check("store_narrowing<int16x32_t,int8_t,32>", vector_width / 2, i8(i16_1));
@@ -201,6 +203,10 @@ int main(int argc, char **argv) {
     if (!success) {
         return 1;
     }
+
+    // Compile a runtime for this target, for use in the static test.
+    // This is going to be used with cstubs library, so it's fine to compile runtime for the host target.
+    compile_standalone_runtime(test_xtensa.output_directory + "simd_op_check_runtime.o", get_host_target());
 
     printf("Success!\n");
     return 0;
