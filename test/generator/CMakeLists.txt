@@ -633,7 +633,7 @@ function(_add_halide_jit_test NAME)
     set(SRCS "${NAME}_jittest.cpp")
 
     add_executable("${TARGET}" "${SRCS}")
-    target_link_libraries("${TARGET}" PRIVATE "${NAME}.generator_lib" Halide::Test Halide::TerminateHandler)
+    target_link_libraries("${TARGET}" PRIVATE "${NAME}.generator.objs" Halide::Test Halide::TerminateHandler)
 
     # Some of the jit tests require the cpp_stub file from the Generator, so ensure it's built first:
     add_dependencies("${TARGET}" "${NAME}")
