@@ -1932,7 +1932,7 @@ Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from
     return *this;
 }
 
-Stage &Stage::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+Stage &Stage::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     definition.schedule().touched() = true;
     PrefetchDirective prefetch = {param.name(), at.name(), from.name(), std::move(offset), strategy, param};
     definition.schedule().prefetches().push_back(prefetch);
@@ -2629,7 +2629,7 @@ Func &Func::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, 
     return *this;
 }
 
-Func &Func::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+Func &Func::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
     Stage(func, func.definition(), 0).prefetch(param, at, from, std::move(offset), strategy);
     return *this;

@@ -5,7 +5,7 @@
 
 namespace Halide {
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Internal::Parameter> &params);
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Parameter> &params);
 
 }  // namespace Halide
 
