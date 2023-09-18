@@ -40,7 +40,7 @@ private:
 
     // A lookup table for finding parameters via their names,
     // used for preventing the same parameter being serialized multiple times
-    std::map<std::string, Internal::Parameter> parameters_in_pipeline;
+    std::map<std::string, Parameter> parameters_in_pipeline;
 
     // A lookup table for finding buffers via their names,
     // used for preventing the same buffer being serialized multiple times
@@ -1464,7 +1464,7 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
 
 }  // namespace Internal
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Internal::Parameter> &params) {
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Parameter> &params) {
     Internal::Serializer serializer;
     serializer.serialize(pipeline, filename);
     params = serializer.get_external_parameters();
@@ -1476,7 +1476,7 @@ void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, s
 
 namespace Halide {
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Internal::Parameter> &params) {
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Parameter> &params) {
     user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
 }
 

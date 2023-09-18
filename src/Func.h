@@ -442,7 +442,7 @@ public:
 
     Stage &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
-    Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
+    Stage &prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
     Stage &prefetch(const T &image, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
@@ -1982,7 +1982,7 @@ public:
     // @{
     Func &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
-    Func &prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
+    Func &prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
     Func &prefetch(const T &image, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,

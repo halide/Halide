@@ -17,8 +17,8 @@
 namespace Halide {
 
 struct ExternFuncArgument;
+class Parameter;
 class Tuple;
-
 class Var;
 
 /** An enum to specify calling convention for extern stages. */
@@ -31,7 +31,6 @@ enum class NameMangling {
 namespace Internal {
 
 struct Call;
-class Parameter;
 
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
