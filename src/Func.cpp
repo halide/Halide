@@ -1090,6 +1090,34 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
             << "Use TailStrategy::GuardWithIf instead.";
     }
 
+    bool predicate_loads_ok = !exact;
+    if (predicate_loads_ok && tail == TailStrategy::PredicateLoads) {
+        // If it's the outermost split in this dimension, PredicateLoads
+        // is OK. Otherwise we can't prove it's safe.
+        std::set<string> inner_vars;
+        for (const Split &s : definition.schedule().splits()) {
+            if (s.is_split()) {
+                inner_vars.insert(s.inner);
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_rename() || s.is_purify()) {
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_fuse()) {
+                if (inner_vars.count(s.inner) || inner_vars.count(s.outer)) {
+                    inner_vars.insert(s.old_var);
+                }
+            }
+        }
+        predicate_loads_ok = !inner_vars.count(old_name);
+        user_assert(predicate_loads_ok || tail != TailStrategy::PredicateLoads)
+            << "Can't use TailStrategy::PredicateLoads for splitting " << old_name
+            << " in the definition of " << name() << ". "
+            << "PredicateLoads may not be used to split a Var stemming from the inner Var of a prior split.";
+    }
+
     if (tail == TailStrategy::Auto) {
         // Select a tail strategy
         if (exact) {
@@ -1904,7 +1932,7 @@ Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from
     return *this;
 }
 
-Stage &Stage::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+Stage &Stage::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     definition.schedule().touched() = true;
     PrefetchDirective prefetch = {param.name(), at.name(), from.name(), std::move(offset), strategy, param};
     definition.schedule().prefetches().push_back(prefetch);
@@ -2601,7 +2629,7 @@ Func &Func::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, 
     return *this;
 }
 
-Func &Func::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+Func &Func::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
     Stage(func, func.definition(), 0).prefetch(param, at, from, std::move(offset), strategy);
     return *this;

@@ -13,9 +13,9 @@ namespace Halide {
  * external_params is an optional map, all parameters in the map
  * will be treated as external parameters so won't be deserialized.
  */
-Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Internal::Parameter> &external_params);
+Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Parameter> &external_params);
 
-Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Internal::Parameter> &external_params);
+Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Parameter> &external_params);
 
 }  // namespace Halide
 

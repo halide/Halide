@@ -76,13 +76,23 @@ public:
      * definition. */
     void mutate(IRMutator *);
 
-    /** Get the default (no-specialization) arguments (left-hand-side) of the definition */
+    /** Get the default (no-specialization) arguments (left-hand-side) of the definition.
+     *
+     * Warning: Any Vars in the Exprs are not qualified with the Func name, so
+     * the Exprs may contain names which collide with names provided by
+     * unique_name.
+     */
     // @{
     const std::vector<Expr> &args() const;
     std::vector<Expr> &args();
     // @}
 
-    /** Get the default (no-specialization) right-hand-side of the definition */
+    /** Get the default (no-specialization) right-hand-side of the definition.
+     *
+     * Warning: Any Vars in the Exprs are not qualified with the Func name, so
+     * the Exprs may contain names which collide with names provided by
+     * unique_name.
+     */
     // @{
     const std::vector<Expr> &values() const;
     std::vector<Expr> &values();
