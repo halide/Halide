@@ -911,9 +911,11 @@ class OptimizePatterns : public IRMutator {
 
             // Saturating narrowing casts. These may interleave later with trunc_sat.
             {"halide.hexagon.pack_satub.vh", u8_sat(wild_i16x)},
+            {"halide.hexagon.pack_satub.vuh", u8_sat(wild_u16x)},
             {"halide.hexagon.pack_satuh.vw", u16_sat(wild_i32x)},
             {"halide.hexagon.pack_satb.vh", i8_sat(wild_i16x)},
             {"halide.hexagon.pack_sath.vw", i16_sat(wild_i32x)},
+            {"halide.hexagon.pack_satuh.vuw", u16_sat(wild_u32x)},
 
             // We don't have a vpack equivalent to this one, so we match it directly.
             {"halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0},
@@ -1702,8 +1704,10 @@ class EliminateInterleaves : public IRMutator {
             {"halide.hexagon.packhi.vh", "halide.hexagon.trunclo.vh"},
             {"halide.hexagon.packhi.vw", "halide.hexagon.trunclo.vw"},
             {"halide.hexagon.pack_satub.vh", "halide.hexagon.trunc_satub.vh"},
+            {"halide.hexagon.pack_satub.vuh", "halide.hexagon.trunc_satub.vuh"},
             {"halide.hexagon.pack_sath.vw", "halide.hexagon.trunc_sath.vw"},
             {"halide.hexagon.pack_satuh.vw", "halide.hexagon.trunc_satuh.vw"},
+            {"halide.hexagon.pack_satuh.vuw", "halide.hexagon.trunc_satuh.vuw"},
         };
 
         // The reverse mapping of the above.
@@ -2202,26 +2206,38 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
     // We need to redo intrinsic matching due to simplification that has
     // happened after the end of target independent lowering.
     s = find_intrinsics(s);
+    debug(4) << "Hexagon: Lowering after find_intrinsics\n"
+             << s << "\n";
 
     // Hexagon prefers widening shifts to be expressed as multiplies to
     // hopefully hit compound widening multiplies.
     s = distribute_shifts(s, /* multiply_adds */ false);
+    debug(4) << "Hexagon: Lowering after DistributeShiftsAsMuls\n"
+             << s << "\n";
 
     // Pattern match VectorReduce IR node. Handle vector reduce instructions
     // before OptimizePatterns to prevent being mutated by patterns like
     // (v0 + v1 * c) -> add_mpy
     s = VectorReducePatterns().mutate(s);
+    debug(4) << "Hexagon: Lowering after VectorReducePatterns\n"
+             << s << "\n";
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns(t).mutate(s);
+    debug(4) << "Hexagon: Lowering after OptimizePatterns\n"
+             << s << "\n";
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
     s = EliminateInterleaves(t.natural_vector_size(Int(8))).mutate(s);
+    debug(4) << "Hexagon: Lowering after EliminateInterleaves\n"
+             << s << "\n";
 
     // There may be interleaves left over that we can fuse with other
     // operations.
     s = FuseInterleaves().mutate(s);
+    debug(4) << "Hexagon: Lowering after FuseInterleaves\n"
+             << s << "\n";
     return s;
 }
 
