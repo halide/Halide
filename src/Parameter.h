@@ -131,7 +131,7 @@ public:
     template<typename T>
     HALIDE_NO_USER_CODE_INLINE void set_scalar(T val) {
         halide_scalar_value_t sv;
-        memcpy(&sv, &val, sizeof(val));
+        memcpy(&sv.u.u64, &val, sizeof(val));
         set_scalar(type_of<T>(), sv);
     }
 
