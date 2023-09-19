@@ -112,6 +112,7 @@ public:
         // a bit of a band-aid here; a better solution would probably be
         // to allow arbitrary names that don't match, but for now, this will do.)
         // TODO(vksnk): float16 doesnt't seem to be supported well by cstubs library.
+        // https://github.com/halide/Halide/issues/7858
         // check("convert<float16x32_t,float32x32_t>", vector_width / 2, f16(f32_1));
         // check("convert<float32x32_t,float16x32_t>", vector_width / 2, f32(f16_1));
         check("convert<float32x32_t,int16x32_t>", vector_width / 2, f32(i16_1));

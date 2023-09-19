@@ -1328,6 +1328,7 @@ GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_string_param,$
 
 # Tests below work, but need to disable parallel in the schedule.
 # TODO(vksnk): figure out what's wrong with parallel in this case.
+# https://github.com/halide/Halide/issues/7856
 GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_example,$(GENERATOR_AOTXTENSA_TESTS))
 GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_mandelbrot,$(GENERATOR_AOTXTENSA_TESTS))
 GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_pyramid,$(GENERATOR_AOTXTENSA_TESTS))
@@ -1340,6 +1341,7 @@ GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_tiled_blur,$(G
 GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_nested_externs,$(GENERATOR_AOTXTENSA_TESTS))
 
 # Segmentation fault, tests provide custom runtime and user context.
+# https://github.com/halide/Halide/issues/7857
 GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_user_context,$(GENERATOR_AOTXTENSA_TESTS))
 GENERATOR_AOTXTENSA_TESTS := $(filter-out generator_aotcpp_xtensa_user_context_insanity,$(GENERATOR_AOTXTENSA_TESTS))
 
