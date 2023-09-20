@@ -2187,17 +2187,26 @@ convert<native_vector_i16_x2, native_vector_i8>(const native_vector_i8 &src) {
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_u16_x2 convert<native_vector_u16_x2, native_vector_u8>(const native_vector_u8 &src) {
-    xb_vec2Nx24 wide = src * native_vector_u8(1);
-    return native_vector_u16_x2(native_vector_u16_x2::from_native_vector,
-                                xb_vecNx16_rtor_xb_vecNx16U(IVP_CVT16U2NX24L(wide)),
-                                xb_vecNx16_rtor_xb_vecNx16U(IVP_CVT16U2NX24H(wide)));
+    return native_vector_u16_x2(
+        native_vector_u16_x2::from_native_vector,
+        IVP_MOVNX16_FROM2NX8U(
+            IVP_SEL2NX8UI(
+                native_vector_u8(0), src, IVP_SELI_8B_INTERLEAVE_1_LO)),
+        IVP_MOVNX16_FROM2NX8U(
+            IVP_SEL2NX8UI(
+                native_vector_u8(0), src, IVP_SELI_8B_INTERLEAVE_1_HI)));
 }
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i16_x2 convert<native_vector_i16_x2, native_vector_u8>(const native_vector_u8 &src) {
-    xb_vec2Nx24 wide = src * native_vector_u8(1);
-    return native_vector_i16_x2(native_vector_i16_x2::from_native_vector,
-                                IVP_CVT16S2NX24L(wide), IVP_CVT16S2NX24H(wide));
+    return native_vector_i16_x2(
+        native_vector_i16_x2::from_native_vector,
+        IVP_MOVNX16_FROM2NX8(
+            IVP_SEL2NX8UI(
+                native_vector_u8(0), src, IVP_SELI_8B_INTERLEAVE_1_LO)),
+        IVP_MOVNX16_FROM2NX8(
+            IVP_SEL2NX8UI(
+                native_vector_u8(0), src, IVP_SELI_8B_INTERLEAVE_1_HI)));
 }
 
 template<>
@@ -2215,15 +2224,18 @@ HALIDE_ALWAYS_INLINE native_vector_u16_x2 convert<native_vector_u16_x2, native_v
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i8 convert<native_vector_i8, native_vector_i16_x2>(const native_vector_i16_x2 &src) {
-    xb_vec2Nx24 wide = IVP_CVT24S2NX16(src.native_vector[1], src.native_vector[0]);
-    return IVP_PACKL2NX24(wide);
+    return IVP_SEL2NX8I(
+        IVP_MOV2NX8_FROMNX16(src.native_vector[1]),
+        IVP_MOV2NX8_FROMNX16(src.native_vector[0]),
+        IVP_SELI_8B_EXTRACT_1_OF_2_OFF_0);
 }
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i8
 convert<native_vector_i8, native_vector_u16_x2>(const native_vector_u16_x2 &src) {
-    xb_vec2Nx24 wide = IVP_CVT24S2NX16(src.native_vector[1], src.native_vector[0]);
-    return IVP_PACKL2NX24(wide);
+    return IVP_SEL2NX8I(IVP_MOV2NX8U_FROMNX16(src.native_vector[1]),
+                        IVP_MOV2NX8U_FROMNX16(src.native_vector[0]),
+                        IVP_SELI_8B_EXTRACT_1_OF_2_OFF_0);
 }
 
 template<>
@@ -2235,22 +2247,36 @@ HALIDE_ALWAYS_INLINE native_vector_u8 convert<native_vector_u8, native_vector_i1
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i8 convert<native_vector_i8, native_vector_i32_x4>(const native_vector_i32_x4 &src) {
-    xb_vec2Nx24 wide = IVP_CVT24UNX32L(src.native_vector[1], src.native_vector[0]);
-    IVP_CVT24UNX32H(wide, src.native_vector[3], src.native_vector[2]);
-    return IVP_PACKL2NX24(wide);
+    native_vector_i8 x = IVP_SEL2NX8I(
+        IVP_MOV2NX8_FROMNX16(
+            IVP_SELNX16I(
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[3]),
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[2]),
+                IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0)),
+        IVP_MOV2NX8_FROMNX16(
+            IVP_SELNX16I(
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[1]),
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[0]),
+                IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0)),
+        IVP_SELI_8B_EXTRACT_1_OF_2_OFF_0);
+    return x;
 }
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i8
 convert<native_vector_i8, native_vector_u32_x4>(const native_vector_u32_x4 &src) {
-    xb_vec2Nx24 wide = IVP_CVT24UNX32L(src.native_vector[1], src.native_vector[0]);
-    IVP_CVT24UNX32H(wide, src.native_vector[3], src.native_vector[2]);
-    return IVP_PACKL2NX24(wide);
-}
-
-template<>
-HALIDE_ALWAYS_INLINE native_mask_i8 convert<native_mask_i8, native_vector_u8>(const native_vector_u8 &src) {
-    return IVP_GTU2NX8U(src, 0);
+    return IVP_SEL2NX8I(
+        IVP_MOV2NX8_FROMNX16(
+            IVP_SELNX16I(
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[3]),
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[2]),
+                IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0)),
+        IVP_MOV2NX8_FROMNX16(
+            IVP_SELNX16I(
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[1]),
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[0]),
+                IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0)),
+        IVP_SELI_8B_EXTRACT_1_OF_2_OFF_0);
 }
 
 template<>
@@ -2265,9 +2291,18 @@ HALIDE_ALWAYS_INLINE native_vector_u8 convert<native_vector_u8, native_mask_i8>(
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_u8 convert<native_vector_u8, native_vector_i32_x4>(const native_vector_i32_x4 &src) {
-    xb_vec2Nx24 wide = IVP_CVT24UNX32L(src.native_vector[1], src.native_vector[0]);
-    IVP_CVT24UNX32H(wide, src.native_vector[3], src.native_vector[2]);
-    return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));
+    return IVP_SEL2NX8UI(
+        IVP_MOV2NX8U_FROMNX16(
+            IVP_SELNX16I(
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[3]),
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[2]),
+                IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0)),
+        IVP_MOV2NX8U_FROMNX16(
+            IVP_SELNX16I(
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[1]),
+                IVP_MOVNX16_FROMN_2X32(src.native_vector[0]),
+                IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0)),
+        IVP_SELI_8B_EXTRACT_1_OF_2_OFF_0);
 }
 
 template<>
@@ -2368,16 +2403,44 @@ HALIDE_ALWAYS_INLINE native_vector_i32 convert<native_vector_i32, native_mask_i3
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i32_x4 convert<native_vector_i32_x4, native_vector_u8>(const native_vector_u8 &src) {
-    xb_vec2Nx24 wide = src * native_vector_u8(1);
-    return native_vector_i32_x4(native_vector_i32_x4::from_native_vector, IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide),
-                                IVP_CVT32S2NX24HL(wide), IVP_CVT32S2NX24HH(wide));
+    native_vector_i16 a = IVP_MOVNX16_FROM2NX8U(
+        IVP_SEL2NX8UI(
+            native_vector_u8(0), src, IVP_SELI_8B_INTERLEAVE_1_HI));
+    native_vector_i16 b = IVP_MOVNX16_FROM2NX8U(
+        IVP_SEL2NX8UI(
+            native_vector_u8(0), src, IVP_SELI_8B_INTERLEAVE_1_LO));
+
+    return native_vector_i32_x4(
+        native_vector_i32_x4::from_native_vector,
+        IVP_MOVN_2X32_FROMNX16(
+            IVP_SELNX16UI(native_vector_i16(0), b, IVP_SELI_16B_INTERLEAVE_1_LO)),
+        IVP_MOVN_2X32_FROMNX16(
+            IVP_SELNX16UI(native_vector_i16(0), b, IVP_SELI_16B_INTERLEAVE_1_HI)),
+        IVP_MOVN_2X32_FROMNX16(
+            IVP_SELNX16UI(native_vector_i16(0), a, IVP_SELI_16B_INTERLEAVE_1_LO)),
+        IVP_MOVN_2X32_FROMNX16(
+            IVP_SELNX16UI(native_vector_i16(0), a, IVP_SELI_16B_INTERLEAVE_1_HI)));
 }
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_u32_x4 convert<native_vector_u32_x4, native_vector_u8>(const native_vector_u8 &src) {
-    xb_vec2Nx24 wide = src * native_vector_u8(1);
-    return native_vector_u32_x4(native_vector_u32_x4::from_native_vector, IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide),
-                                IVP_CVT32S2NX24HL(wide), IVP_CVT32S2NX24HH(wide));
+    native_vector_i16 a = IVP_MOVNX16_FROM2NX8U(
+        IVP_SEL2NX8UI(
+            native_vector_u8(0), src, IVP_SELI_8B_INTERLEAVE_1_HI));
+    native_vector_i16 b = IVP_MOVNX16_FROM2NX8U(
+        IVP_SEL2NX8UI(
+            native_vector_u8(0), src, IVP_SELI_8B_INTERLEAVE_1_LO));
+
+    return native_vector_u32_x4(
+        native_vector_u32_x4::from_native_vector,
+        IVP_MOVN_2X32U_FROMNX16(
+            IVP_SELNX16UI(native_vector_i16(0), b, IVP_SELI_16B_INTERLEAVE_1_LO)),
+        IVP_MOVN_2X32U_FROMNX16(
+            IVP_SELNX16UI(native_vector_i16(0), b, IVP_SELI_16B_INTERLEAVE_1_HI)),
+        IVP_MOVN_2X32U_FROMNX16(
+            IVP_SELNX16UI(native_vector_i16(0), a, IVP_SELI_16B_INTERLEAVE_1_LO)),
+        IVP_MOVN_2X32U_FROMNX16(
+            IVP_SELNX16UI(native_vector_i16(0), a, IVP_SELI_16B_INTERLEAVE_1_HI)));
 }
 
 template<>
@@ -2455,10 +2518,11 @@ HALIDE_ALWAYS_INLINE native_vector_i32_x2 convert<native_vector_i32_x2, native_v
 
 template<>
 HALIDE_ALWAYS_INLINE native_vector_u32_x2 convert<native_vector_u32_x2, native_vector_u16>(const native_vector_u16 &src) {
-    xb_vec2Nx24 wide = IVP_CVT24U2NX16(0, xb_vecNx16U_rtor_xb_vecNx16(src));
     return native_vector_u32_x2(native_vector_u32_x2::from_native_vector,
-                                xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(IVP_CVT32S2NX24LL(wide)),
-                                xb_vecN_2x32v_rtor_xb_vecN_2x32Uv(IVP_CVT32S2NX24LH(wide)));
+                                IVP_MOVN_2X32_FROMNX16(
+                                    IVP_SELNX16UI(native_vector_u16(0), src, IVP_SELI_16B_INTERLEAVE_1_LO)),
+                                IVP_MOVN_2X32_FROMNX16(
+                                    IVP_SELNX16UI(native_vector_u16(0), src, IVP_SELI_16B_INTERLEAVE_1_HI)));
 }
 
 template<>
@@ -2663,13 +2727,15 @@ HALIDE_ALWAYS_INLINE native_vector_u32 halide_xtensa_convert_u16_high_u32(const 
 }
 
 HALIDE_ALWAYS_INLINE native_vector_u16 halide_xtensa_convert_i32_u16(const native_vector_i32 &src0, const native_vector_i32 &src1) {
-    xb_vecNx48 wide = IVP_CVT48SNX32(src1, src0);
-    return xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKLNX48(wide));
+    return IVP_SELNX16UI(IVP_MOVNX16_FROMN_2X32(src1),
+                         IVP_MOVNX16_FROMN_2X32(src0),
+                         IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0);
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i8 halide_xtensa_convert_concat_i16_to_i8(const native_vector_i16 &a, const native_vector_i16 &b) {
-    xb_vec2Nx24 wide = IVP_CVT24S2NX16(b, a);
-    return IVP_PACKL2NX24(wide);
+    return IVP_SEL2NX8I(IVP_MOV2NX8_FROMNX16(b),
+                        IVP_MOV2NX8_FROMNX16(a),
+                        IVP_SELI_8B_EXTRACT_1_OF_2_OFF_0);
 }
 
 HALIDE_ALWAYS_INLINE native_vector_u8 halide_xtensa_sat_narrow_u8(const native_vector_i16_x2 &a) {
