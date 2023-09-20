@@ -1013,6 +1013,7 @@ public:
 }  // namespace
 
 Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env) {
+    debug(0) << "Before storage folding: \n" << s << "\n";
     return StorageFolding(env).mutate(s);
 }
 
