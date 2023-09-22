@@ -1,4 +1,4 @@
-// Halide tutorial lesson 22: Serialization
+// Halide tutorial lesson 23: Serialization
 
 // This lesson describes how to serialize pipelines into a binary format 
 // which can be saved on disk, and later deserialized and loaded for 
@@ -12,16 +12,16 @@
 // change; we recommend that you avoid relying on it for production work at this time.
 
 // On linux, you can compile this tutorial and run it like so:
-// g++ lesson_22*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_22 -std=c++17
-// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_22
+// g++ lesson_23*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_23 -std=c++17
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_23
 
 // On os x:
-// g++ lesson_22*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -o lesson_22 -std=c++17
-// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_22
+// g++ lesson_23*.cpp -g -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide -o lesson_23 -std=c++17
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_23
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
-//    make tutorial_lesson_22_serialization
+//    make tutorial_lesson_23_serialization
 // in a shell with the current directory at the top of the halide
 // source tree.
 
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
 
         // Now lets serialize the pipeline to disk (must use the .hlpipe file extension)
         Pipeline blur_pipeline(output);
-        std::map<std::string, Internal::Parameter> params;
+        std::map<std::string, Parameter> params;
         serialize_pipeline(blur_pipeline, "blur.hlpipe", params);
 
         // The call to serialize_pipeline populates the params map with any input or output parameters
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
         input.set(rgb_image); 
 
         // Now lets populate the params map so we can override the input 
-        std::map<std::string, Internal::Parameter> params; 
+        std::map<std::string, Parameter> params; 
         params.insert({"input", input.parameter()});
 
         // Lets construct a new pipeline from scratch by deserializing the file we wrote to disk
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
         // Lets do the same thing again ... construct a new pipeline from scratch by deserializing the file we wrote to disk
 
         // FIXME: We shouldn't have to populate the params ... but passing an empty map triggers an error in deserialize?
-        std::map<std::string, Internal::Parameter> params; 
+        std::map<std::string, Parameter> params; 
         ImageParam input(UInt(8), 3, "input");
         params.insert({"input", input.parameter()});
 

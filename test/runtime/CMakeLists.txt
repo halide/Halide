@@ -34,10 +34,21 @@ if(NOT MSVC)
                 "${Halide_SOURCE_DIR}/src/runtime/to_string.cpp")
     _set_target_options(runtime_internal_common)
 
+    # block_allocator.cpp
     halide_define_runtime_internal_test(block_allocator)
+
+    # block_storage.cpp
     halide_define_runtime_internal_test(block_storage)
+
+    # linked_list.cpp
     halide_define_runtime_internal_test(linked_list)
+
+    # memory_arena.cpp
     halide_define_runtime_internal_test(memory_arena)
+
+    # string_storage.cpp
     halide_define_runtime_internal_test(string_storage)
+
+    # string_table.cpp
     halide_define_runtime_internal_test(string_table)
 endif()

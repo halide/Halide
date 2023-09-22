@@ -1373,17 +1373,17 @@ Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
 
 }  // namespace Internal
 
-Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Internal::Parameter> &external_params) {
+Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Parameter> &external_params) {
     Internal::Deserializer deserializer(external_params);
     return deserializer.deserialize(filename);
 }
 
-Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Internal::Parameter> &external_params) {
+Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Parameter> &external_params) {
     Internal::Deserializer deserializer(external_params);
     return deserializer.deserialize(in);
 }
 
-Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map<std::string, Internal::Parameter> &external_params) {
+Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map<std::string, Parameter> &external_params) {
     Internal::Deserializer deserializer(external_params);
     return deserializer.deserialize(buffer);
 }
@@ -1394,17 +1394,17 @@ Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map
 
 namespace Halide {
 
-Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Internal::Parameter> &external_params) {
+Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::string, Parameter> &external_params) {
     user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
     return Pipeline();
 }
 
-Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Internal::Parameter> &external_params) {
+Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Parameter> &external_params) {
     user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
     return Pipeline();
 }
 
-Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map<std::string, Internal::Parameter> &external_params) {
+Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map<std::string, Parameter> &external_params) {
     user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
     return Pipeline();
 }
