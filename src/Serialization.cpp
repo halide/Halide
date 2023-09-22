@@ -1481,10 +1481,20 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
 
 }  // namespace Internal
 
+void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data) {
+    Internal::Serializer serializer;
+    serializer.serialize(pipeline, data);
+}
+
 void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data, std::map<std::string, Parameter> &params) {
     Internal::Serializer serializer;
     serializer.serialize(pipeline, data);
     params = serializer.get_external_parameters();
+}
+
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename) {
+    Internal::Serializer serializer;
+    serializer.serialize(pipeline, filename);
 }
 
 void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Parameter> &params) {
@@ -1499,7 +1509,15 @@ void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, s
 
 namespace Halide {
 
+void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data) {
+    user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+}
+
 void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data, std::map<std::string, Parameter> &params) {
+    user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+}
+
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename) {
     user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
 }
 

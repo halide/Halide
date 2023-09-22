@@ -108,7 +108,8 @@ int main(int argc, char **argv) {
     {
         // Lets do the same thing again ... construct a new pipeline from scratch by deserializing the file we wrote to disk
 
-        // FIXME: We shouldn't have to populate the params ... but passing an empty map triggers an error in deserialize?
+        // FIXME: We shouldn't have to populate the params ... but passing an empty map triggers an error in deserialize
+        // for a missing input param
         std::map<std::string, Parameter> params; 
         ImageParam input(UInt(8), 3, "input");
         params.insert({"input", input.parameter()});

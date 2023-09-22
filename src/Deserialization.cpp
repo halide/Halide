@@ -450,6 +450,8 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
             output_buffer = it->second;
         } else if (auto it = parameters_in_pipeline.find(output_buffer_name); it != parameters_in_pipeline.end()) {
             output_buffer = it->second;
+        } else if (!output_buffer_name.empty()){
+            user_error << "unknown output buffer used in pipeline '" << output_buffer_name << "'\n";
         }
         output_buffers.push_back(output_buffer);
     }
@@ -519,6 +521,8 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
+        } else if (!param_name.empty()){
+            user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         const auto alignment = deserialize_modulus_remainder(store_stmt->alignment());
         return Store::make(name, value, index, param, predicate, alignment);
@@ -776,6 +780,8 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
+        } else if (!param_name.empty()){
+            user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         const auto alignment = deserialize_modulus_remainder(load_expr->alignment());
         const auto type = deserialize_type(load_expr->type());
@@ -825,6 +831,8 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
+        } else if (!param_name.empty()){
+            user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         const auto type = deserialize_type(call_expr->type());
         return Call::make(type, name, args, call_type, func_ptr, value_index, image, param);
@@ -839,6 +847,8 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
+        } else if (!param_name.empty()){
+            user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         auto image_name = deserialize_string(variable_expr->image_name());
         Buffer<> image;
@@ -1036,6 +1046,8 @@ PrefetchDirective Deserializer::deserialize_prefetch_directive(const Serialize::
     Parameter param;
     if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
         param = it->second;
+    } else if (!param_name.empty()){
+        user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
     }
     auto hl_prefetch_directive = PrefetchDirective();
     hl_prefetch_directive.name = name;
@@ -1204,6 +1216,8 @@ ExternFuncArgument Deserializer::deserialize_extern_func_argument(const Serializ
             image_param = it->second;
         } else if (auto it = parameters_in_pipeline.find(image_param_name); it != parameters_in_pipeline.end()) {
             image_param = it->second;
+        } else if (!image_param_name.empty()){
+            user_error << "unknown image parameter used in pipeline '" << image_param_name << "'\n";
         }
         return ExternFuncArgument(image_param);
     }
