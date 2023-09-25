@@ -204,8 +204,16 @@ void Parameter::set_buffer(const Buffer<> &b) {
 
 const void *Parameter::read_only_scalar_address() const {
     check_is_scalar();
-    user_assert(contents->scalar_data.has_value()) << "Parameter " << name() << " does not have a valid scalar value.\n";
-    return std::addressof(contents->scalar_data.value());
+    // Use explicit if here (rather than user_assert) so that we don't
+    // have to disable bugprone-unchecked-optional-access in clang-tidy,
+    // which is a useful check.
+    const auto &sv = contents->scalar_data;
+    if (sv.has_value()) {
+        return std::addressof(sv.value());
+    } else {
+        user_error << "Parameter " << name() << " does not have a valid scalar value.\n";
+        return nullptr;
+    }
 }
 
 std::optional<halide_scalar_value_t> Parameter::scalar_data() const {
@@ -214,8 +222,18 @@ std::optional<halide_scalar_value_t> Parameter::scalar_data() const {
 
 halide_scalar_value_t Parameter::scalar_data_checked() const {
     check_is_scalar();
-    user_assert(contents->scalar_data.has_value()) << "Parameter " << name() << " does not have a valid scalar value.\n";
-    return contents->scalar_data.value();
+    // Use explicit if here (rather than user_assert) so that we don't
+    // have to disable bugprone-unchecked-optional-access in clang-tidy,
+    // which is a useful check.
+    halide_scalar_value_t result;
+    const auto &sv = contents->scalar_data;
+    if (sv.has_value()) {
+        result = sv.value();
+    } else {
+        user_error << "Parameter " << name() << " does not have a valid scalar value.\n";
+        result.u.u64 = 0;  // silence "possibly uninitialized" compiler warning
+    }
+    return result;
 }
 
 halide_scalar_value_t Parameter::scalar_data_checked(const Type &val_type) const {
