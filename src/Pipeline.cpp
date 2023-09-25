@@ -75,7 +75,7 @@ class FindVariablesWithUnsetParams : public IRVisitor {
 
     void visit(const Variable *op) override {
         if (op->param.defined() && !op->param.is_buffer() && op->param.name() != "__user_context") {
-            user_assert(op->param.has_scalar_expr())
+            user_assert(op->param.has_scalar_value())
                 << "You cannot call realize() or compile_to_callable() on Halide code that references the scalar Generator Input " << op->param.name()
                 << ", as the value will never be defined at Generator compile time. "
                 << "Consider  scheduling the function as compute_root().memoize() instead.\n";
