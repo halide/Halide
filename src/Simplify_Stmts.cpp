@@ -328,6 +328,10 @@ Stmt Simplify::visit(const Store *op) {
 
     const Load *load = value.as<Load>();
     const Broadcast *scalar_pred = predicate.as<Broadcast>();
+    if (scalar_pred && !scalar_pred->value.type().is_scalar()) {
+        // Nested vectorization
+        scalar_pred = nullptr;
+    }
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
