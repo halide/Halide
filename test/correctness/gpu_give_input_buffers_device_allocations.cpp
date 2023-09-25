@@ -4,6 +4,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+#ifdef WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
+    printf("[SKIP] Serialization won't preserve GPU buffers, skipping.\n");
+    return 0;
+#endif
+
     Target t(get_jit_target_from_environment());
     if (!t.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
