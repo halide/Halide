@@ -1176,7 +1176,7 @@ Parameter Deserializer::deserialize_parameter(const Serialize::Parameter *parame
         const auto scalar_min = deserialize_expr(parameter->scalar_min_type(), parameter->scalar_min());
         const auto scalar_max = deserialize_expr(parameter->scalar_max_type(), parameter->scalar_max());
         const auto scalar_estimate = deserialize_expr(parameter->scalar_estimate_type(), parameter->scalar_estimate());
-        return Parameter(type, dimensions, name, std::move(scalar_data), scalar_default, scalar_min, scalar_max, scalar_estimate);
+        return Parameter(type, dimensions, name, scalar_data, scalar_default, scalar_min, scalar_max, scalar_estimate);
     }
 }
 

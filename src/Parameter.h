@@ -38,7 +38,6 @@ struct ParameterContents;
 /** A reference-counted handle to a parameter to a halide
  * pipeline. May be a scalar parameter or a buffer */
 class Parameter {
-    void check_has_scalar_data() const;
     void check_defined() const;
     void check_is_buffer() const;
     void check_is_scalar() const;
@@ -67,7 +66,11 @@ protected:
      * the scalar data. Otherwise, return nullopt. */
     std::optional<halide_scalar_value_t> scalar_data() const;
 
-    /** If the Parameter is a scalar of the given type and has a valid scalar value, return it.
+    /** If the Parameter is a scalar and has a valid scalar value, return it.
+     * Otherwise, assert-fail. */
+    halide_scalar_value_t scalar_data_checked() const;
+
+    /** If the Parameter is a scalar *of the given type* and has a valid scalar value, return it.
      * Otherwise, assert-fail. */
     halide_scalar_value_t scalar_data_checked(const Type &val_type) const;
 
@@ -78,7 +81,7 @@ protected:
 
     /** Construct a new scalar parameter via deserialization. */
     Parameter(const Type &t, int dimensions, const std::string &name,
-              std::optional<halide_scalar_value_t> scalar_data, const Expr &scalar_default, const Expr &scalar_min,
+              const std::optional<halide_scalar_value_t> &scalar_data, const Expr &scalar_default, const Expr &scalar_min,
               const Expr &scalar_max, const Expr &scalar_estimate);
 
 public:

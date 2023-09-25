@@ -46,10 +46,6 @@ void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {
 
 }  // namespace Internal
 
-void Parameter::check_has_scalar_data() const {
-    user_assert(contents->scalar_data.has_value()) << "Parameter " << name() << " has never had a scalar value set.\n";
-}
-
 void Parameter::check_defined() const {
     user_assert(defined()) << "Parameter is undefined\n";
 }
@@ -97,10 +93,10 @@ Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
 }
 
 Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
-                     std::optional<halide_scalar_value_t> scalar_data, const Expr &scalar_default, const Expr &scalar_min,
+                     const std::optional<halide_scalar_value_t> &scalar_data, const Expr &scalar_default, const Expr &scalar_min,
                      const Expr &scalar_max, const Expr &scalar_estimate)
     : contents(new Internal::ParameterContents(t, /*is_buffer*/ false, dimensions, name)) {
-    contents->scalar_data = std::move(scalar_data);
+    contents->scalar_data = scalar_data;
     contents->scalar_default = scalar_default;
     contents->scalar_min = scalar_min;
     contents->scalar_max = scalar_max;
@@ -132,9 +128,7 @@ bool Parameter::has_scalar_value() const {
 }
 
 Expr Parameter::scalar_expr() const {
-    check_is_scalar();
-    check_has_scalar_data();
-    const auto sv = contents->scalar_data.value();
+    const auto sv = scalar_data_checked();
     const Type t = type();
     if (t.is_float()) {
         switch (t.bits()) {
@@ -210,10 +204,7 @@ void Parameter::set_buffer(const Buffer<> &b) {
 
 const void *Parameter::read_only_scalar_address() const {
     check_is_scalar();
-    // Code that calls this method is (presumably) going
-    // to read from the address, so complain if the scalar value
-    // has never been set.
-    check_has_scalar_data();
+    user_assert(contents->scalar_data.has_value()) << "Parameter " << name() << " does not have a valid scalar value.\n";
     return std::addressof(contents->scalar_data.value());
 }
 
@@ -221,11 +212,15 @@ std::optional<halide_scalar_value_t> Parameter::scalar_data() const {
     return defined() ? contents->scalar_data : std::nullopt;
 }
 
-halide_scalar_value_t Parameter::scalar_data_checked(const Type &val_type) const {
+halide_scalar_value_t Parameter::scalar_data_checked() const {
     check_is_scalar();
-    check_type(val_type);
-    check_has_scalar_data();
+    user_assert(contents->scalar_data.has_value()) << "Parameter " << name() << " does not have a valid scalar value.\n";
     return contents->scalar_data.value();
+}
+
+halide_scalar_value_t Parameter::scalar_data_checked(const Type &val_type) const {
+    check_type(val_type);
+    return scalar_data_checked();
 }
 
 void Parameter::set_scalar(const Type &val_type, halide_scalar_value_t val) {
