@@ -70,23 +70,6 @@ std::string sanitize_function_name(const std::string &s) {
     return name;
 }
 
-class FindVariablesWithUnsetParams : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Variable *op) override {
-        if (op->param.defined() && !op->param.is_buffer() && op->param.name() != "__user_context") {
-            user_assert(op->param.has_scalar_value())
-                << "You cannot call realize() or compile_to_callable() on Halide code that references the scalar Generator Input " << op->param.name()
-                << ", as the value will never be defined at Generator compile time. "
-                << "Consider  scheduling the function as compute_root().memoize() instead.\n";
-        }
-        IRVisitor::visit(op);
-    }
-
-public:
-    FindVariablesWithUnsetParams() = default;
-};
-
 }  // namespace
 
 namespace Internal {
@@ -824,11 +807,6 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
                                           JITUserContext **user_context,
                                           bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
-
-    FindVariablesWithUnsetParams find_unset;
-    for (const LoweredFunc &f : contents->module.functions()) {
-        f.body.accept(&find_unset);
-    }
 
     size_t total_outputs = 0;
     for (const Func &out : this->outputs()) {
