@@ -2870,7 +2870,7 @@ private:
         if (is_const_zero(op->condition)) {
             in_unreachable = true;
         }
-        IRVisitor::visit(op);
+        IRGraphVisitor::visit(op);
     }
 
     void visit(const For *op) override {
