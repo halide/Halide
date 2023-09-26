@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     Callable c = f.compile_to_callable({im});
 
     Halide::Runtime::Buffer<uint8_t> in_buf(nullptr, {halide_dimension_t{0, 0, 0}});
-    Halide::Runtime::Buffer<uint8_t> out_buf({32});
+    Halide::Runtime::Buffer<uint8_t> out_buf(32);
 
     c(in_buf, out_buf);
 
