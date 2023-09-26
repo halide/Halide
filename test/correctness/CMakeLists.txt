@@ -29,6 +29,7 @@ tests(GROUPS correctness
       bounds_of_multiply.cpp
       bounds_of_split.cpp
       bounds_query.cpp
+      bounds_query_respects_specialize_fail.cpp
       buffer_t.cpp
       c_function.cpp
       callable.cpp
