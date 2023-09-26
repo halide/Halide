@@ -255,6 +255,7 @@ tests(GROUPS correctness
       reorder_storage.cpp
       require.cpp
       reschedule.cpp
+      respect_input_constraint_in_bounds_inference.cpp
       reuse_stack_alloc.cpp
       round.cpp
       saturating_casts.cpp
