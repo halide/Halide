@@ -1159,14 +1159,24 @@ Parameter Deserializer::deserialize_parameter(const Serialize::Parameter *parame
             deserialize_vector<Serialize::BufferConstraint, BufferConstraint>(parameter->buffer_constraints(),
                                                                               &Deserializer::deserialize_buffer_constraint);
         const auto memory_type = deserialize_memory_type(parameter->memory_type());
-        return Parameter(type, is_buffer, dimensions, name, Buffer<>(), host_alignment, buffer_constraints, memory_type);
+        return Parameter(type, dimensions, name, Buffer<>(), host_alignment, buffer_constraints, memory_type);
     } else {
-        const uint64_t data = parameter->data();
+        static_assert(FLATBUFFERS_USE_STD_OPTIONAL);
+        const auto make_optional_halide_scalar_value_t = [](const std::optional<uint64_t> &v) -> std::optional<halide_scalar_value_t> {
+            if (v.has_value()) {
+                halide_scalar_value_t scalar_data;
+                scalar_data.u.u64 = v.value();
+                return std::optional<halide_scalar_value_t>(scalar_data);
+            } else {
+                return std::nullopt;
+            }
+        };
+        const std::optional<halide_scalar_value_t> scalar_data = make_optional_halide_scalar_value_t(parameter->scalar_data());
         const auto scalar_default = deserialize_expr(parameter->scalar_default_type(), parameter->scalar_default());
         const auto scalar_min = deserialize_expr(parameter->scalar_min_type(), parameter->scalar_min());
         const auto scalar_max = deserialize_expr(parameter->scalar_max_type(), parameter->scalar_max());
         const auto scalar_estimate = deserialize_expr(parameter->scalar_estimate_type(), parameter->scalar_estimate());
-        return Parameter(type, is_buffer, dimensions, name, data, scalar_default, scalar_min, scalar_max, scalar_estimate);
+        return Parameter(type, dimensions, name, scalar_data, scalar_default, scalar_min, scalar_max, scalar_estimate);
     }
 }
 

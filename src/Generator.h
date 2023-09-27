@@ -2001,7 +2001,8 @@ protected:
 
     void set_def_min_max() override {
         for (Parameter &p : this->parameters_) {
-            p.set_scalar<TBase>(def_);
+            // No: we want to leave the Parameter unset here.
+            // p.set_scalar<TBase>(def_);
             p.set_default_value(def_expr_);
         }
     }

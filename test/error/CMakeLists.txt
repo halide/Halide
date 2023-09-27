@@ -107,6 +107,8 @@ tests(GROUPS error
       undefined_pipeline_compile.cpp
       undefined_pipeline_realize.cpp
       undefined_rdom_dimension.cpp
+      uninitialized_param.cpp
+      uninitialized_param_2.cpp
       unknown_target.cpp
       vector_tile.cpp
       vectorize_dynamic.cpp

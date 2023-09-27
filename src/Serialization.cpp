@@ -1298,13 +1298,19 @@ Offset<Serialize::Parameter> Serializer::serialize_parameter(FlatBufferBuilder &
         return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, host_alignment,
                                           builder.CreateVector(buffer_constraints_serialized), memory_type_serialized);
     } else {
-        const uint64_t data = parameter.scalar_raw_value();
+        static_assert(FLATBUFFERS_USE_STD_OPTIONAL);
+        const auto make_optional_u64 = [](const std::optional<halide_scalar_value_t> &v) -> std::optional<uint64_t> {
+            return v.has_value() ?
+                       std::optional<uint64_t>(v.value().u.u64) :
+                       std::nullopt;
+        };
+        const auto scalar_data = make_optional_u64(parameter.scalar_data());
         const auto scalar_default_serialized = serialize_expr(builder, parameter.default_value());
         const auto scalar_min_serialized = serialize_expr(builder, parameter.min_value());
         const auto scalar_max_serialized = serialize_expr(builder, parameter.max_value());
         const auto scalar_estimate_serialized = serialize_expr(builder, parameter.estimate());
         return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized,
-                                          dimensions, name_serialized, 0, 0, Serialize::MemoryType_Auto, data,
+                                          dimensions, name_serialized, 0, 0, Serialize::MemoryType_Auto, scalar_data,
                                           scalar_default_serialized.first, scalar_default_serialized.second,
                                           scalar_min_serialized.first, scalar_min_serialized.second,
                                           scalar_max_serialized.first, scalar_max_serialized.second,
