@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
 
         consumer.bound(x, 0, 16).bound(y, 0, 16);
 
-        Buffer<int> out = consumer.realize(16, 16);
+        Buffer<int> out = consumer.realize({16, 16});
 
         out.for_each_element([&](int x, int y) {
             int correct = 2 * (x + y);
@@ -42,13 +42,10 @@ int main(int argc, char **argv) {
 
         producer1.compute_root();
         producer2.store_root().compute_at(consumer, y).async();
-        // Correct
-        // producer1.compute_at(consumer, y);
-        // producer2.compute_at(consumer, y).async();
 
         consumer.bound(x, 0, 16).bound(y, 0, 16);
 
-        Buffer<int> out = consumer.realize(16, 16);
+        Buffer<int> out = consumer.realize({16, 16});
 
         out.for_each_element([&](int x, int y) {
             int correct = 2 * (x + y);
@@ -72,13 +69,10 @@ int main(int argc, char **argv) {
 
         producer1.store_root().compute_at(consumer, y).async();
         producer2.store_root().compute_at(consumer, y).async();
-        // Correct
-        // producer1.compute_at(consumer, y);
-        // producer2.compute_at(consumer, y).async();
 
         consumer.bound(x, 0, 16).bound(y, 0, 16);
 
-        Buffer<int> out = consumer.realize(16, 16);
+        Buffer<int> out = consumer.realize({16, 16});
 
         out.for_each_element([&](int x, int y) {
             int correct = 2 * (x + y);
