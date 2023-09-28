@@ -618,7 +618,7 @@ table Parameter {
     host_alignment: int32;
     buffer_constraints: [BufferConstraint];
     memory_type: MemoryType;
-    data: uint64;
+    scalar_data: uint64 = null;  // Note: it is valid for this to be omitted, even if is_buffer = false.
     scalar_default: Expr;
     scalar_min: Expr;
     scalar_max: Expr;

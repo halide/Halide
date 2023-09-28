@@ -263,7 +263,7 @@ class FindSimplifications : public IRVisitor {
         }
         condition = remove_likelies(condition);
         Simplification s = {condition, std::move(old), std::move(likely_val), std::move(unlikely_val), true};
-        if (s.condition.type().is_vector()) {
+        while (s.condition.type().is_vector()) {
             s.condition = simplify(s.condition);
             if (const Broadcast *b = s.condition.as<Broadcast>()) {
                 s.condition = b->value;
