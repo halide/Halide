@@ -28,7 +28,11 @@ class Serializer {
 public:
     Serializer() = default;
 
+    // Serialize the given pipeline into the given filename
     void serialize(const Pipeline &pipeline, const std::string &filename);
+
+    // Serialize the given pipeline into given the data buffer
+    void serialize(const Pipeline &pipeline, std::vector<uint8_t> &data);
 
     const std::map<std::string, Parameter> &get_external_parameters() const {
         return external_parameters;
@@ -1394,7 +1398,7 @@ void Serializer::build_function_mappings(const std::map<std::string, Function> &
     }
 }
 
-void Serializer::serialize(const Pipeline &pipeline, const std::string &filename) {
+void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &result) {
     FlatBufferBuilder builder(1024);
 
     // extract the DAG, unwrap function from Funcs
@@ -1459,16 +1463,45 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
 
     uint8_t *buf = builder.GetBufferPointer();
     int size = builder.GetSize();
+
+    if (buf != nullptr && size > 0) {
+        result.clear();
+        result.reserve(size);
+        result.insert(result.begin(), buf, buf + size);
+    } else {
+        user_error << "failed to serialize pipeline!\n";
+    }
+}
+
+void Serializer::serialize(const Pipeline &pipeline, const std::string &filename) {
+    std::vector<uint8_t> data;
+    serialize(pipeline, data);
     std::ofstream out(filename, std::ios::out | std::ios::binary);
     if (!out) {
         user_error << "failed to open file " << filename << "\n";
         exit(1);
     }
-    out.write((char *)(buf), size);
+    out.write((char *)(data.data()), data.size());
     out.close();
 }
 
 }  // namespace Internal
+
+void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data) {
+    Internal::Serializer serializer;
+    serializer.serialize(pipeline, data);
+}
+
+void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data, std::map<std::string, Parameter> &params) {
+    Internal::Serializer serializer;
+    serializer.serialize(pipeline, data);
+    params = serializer.get_external_parameters();
+}
+
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename) {
+    Internal::Serializer serializer;
+    serializer.serialize(pipeline, filename);
+}
 
 void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Parameter> &params) {
     Internal::Serializer serializer;
@@ -1481,6 +1514,18 @@ void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, s
 #else  // WITH_SERIALIZATION
 
 namespace Halide {
+
+void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data) {
+    user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+}
+
+void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data, std::map<std::string, Parameter> &params) {
+    user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+}
+
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename) {
+    user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+}
 
 void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Parameter> &params) {
     user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
