@@ -116,12 +116,11 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
 
     void bad_producer_nesting_error(const string &producer, const string &async_consumer) {
         user_error
-            << "The non-async Func " << producer << " is consumed by async Func " << async_consumer
-            << " and is compute_at a location in between the store_at "
+            << "The Func " << producer << " is consumed by async Func " << async_consumer
+            << " and has a compute_at location in between the store_at "
             << "location and the compute_at location of " << async_consumer
-            << ". This is unsupported. Either schedule " << producer
-            << " it outside the store_at location of " << async_consumer
-            << " or inside the compute_at location of " << async_consumer << ".";
+            << ". This is only legal when " << producer
+            << " is both async and has a store_at location outside the store_at location of the consumer.";
     }
 
     // Preserve produce nodes and add synchronization

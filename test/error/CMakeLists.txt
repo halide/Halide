@@ -10,6 +10,7 @@ tests(GROUPS error
       auto_schedule_no_reorder.cpp
       autodiff_unbounded.cpp
       bad_async_producer.cpp
+      bad_async_producer_2.cpp
       bad_bound.cpp
       bad_bound_storage.cpp
       bad_compute_at.cpp
