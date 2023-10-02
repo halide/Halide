@@ -2799,6 +2799,20 @@ Func &Func::store_root() {
     return store_at(LoopLevel::root());
 }
 
+Func &Func::hoist_storage(LoopLevel loop_level) {
+    invalidate_cache();
+    func.schedule().hoist_storage_level() = std::move(loop_level);
+    return *this;
+}
+
+Func &Func::hoist_storage(const Func &f, const RVar &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
+Func &Func::hoist_storage(const Func &f, const Var &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
 Func &Func::compute_inline() {
     return compute_at(LoopLevel::inlined());
 }

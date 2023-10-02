@@ -644,8 +644,10 @@ public:
     // @{
     const LoopLevel &store_level() const;
     const LoopLevel &compute_level() const;
+    const LoopLevel &hoist_storage_level() const;
     LoopLevel &store_level();
     LoopLevel &compute_level();
+    LoopLevel &hoist_storage_level();
     // @}
 
     /** Pass an IRVisitor through to all Exprs referenced in the

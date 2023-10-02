@@ -2335,6 +2335,17 @@ public:
      * outside the outermost loop. */
     Func &store_root();
 
+    Func &hoist_storage(const Func &f, const Var &var);
+
+    /** Equivalent to the version of store_at that takes a Var, but
+     * schedules storage within the loop over a dimension of a
+     * reduction domain */
+    Func &hoist_storage(const Func &f, const RVar &var);
+
+    /** Equivalent to the version of store_at that takes a Var, but
+     * schedules storage at a given LoopLevel. */
+    Func &hoist_storage(LoopLevel loop_level);
+
     /** Aggressively inline all uses of this function. This is the
      * default schedule, so you're unlikely to need to call this. For
      * a Func with an update definition, that means it gets computed

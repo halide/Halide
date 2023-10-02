@@ -233,7 +233,7 @@ typedef std::map<FunctionPtr, FunctionPtr> DeepCopyMap;
 struct FuncScheduleContents {
     mutable RefCount ref_count;
 
-    LoopLevel store_level, compute_level;
+    LoopLevel store_level, compute_level, hoist_storage_level;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
     std::vector<Bound> estimates;
@@ -244,7 +244,7 @@ struct FuncScheduleContents {
     Expr memoize_eviction_key;
 
     FuncScheduleContents()
-        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()) {
+        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()), hoist_storage_level(LoopLevel::inlined()) {
     }
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
@@ -354,6 +354,7 @@ FuncSchedule FuncSchedule::deep_copy(
     FuncSchedule copy;
     copy.contents->store_level = contents->store_level;
     copy.contents->compute_level = contents->compute_level;
+    copy.contents->hoist_storage_level = contents->hoist_storage_level;
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;
@@ -457,12 +458,20 @@ LoopLevel &FuncSchedule::compute_level() {
     return contents->compute_level;
 }
 
+LoopLevel &FuncSchedule::hoist_storage_level() {
+    return contents->hoist_storage_level;
+}
+
 const LoopLevel &FuncSchedule::store_level() const {
     return contents->store_level;
 }
 
 const LoopLevel &FuncSchedule::compute_level() const {
     return contents->compute_level;
+}
+
+const LoopLevel &FuncSchedule::hoist_storage_level() const {
+    return contents->hoist_storage_level;
 }
 
 void FuncSchedule::accept(IRVisitor *visitor) const {
