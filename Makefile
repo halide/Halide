@@ -2089,7 +2089,7 @@ tutorial_%: $(BIN_DIR)/tutorial_% $(TMP_DIR)/images/rgb.png $(TMP_DIR)/images/gr
 # Skip the serialization tutorial, if we didn't build -DWITH_SERIALIZATION
 ifeq (,$(shell which flatc))
 tutorial_lesson_23_serialization:
-	@echo "Skipping tutorial lesson 23 (serialization not enabled) ..."\
+	@echo "Skipping tutorial lesson 23 (serialization not enabled) ..."
 endif
 
 test_mullapudi2016: $(MULLAPUDI2016_TESTS:$(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp=mullapudi2016_%)
