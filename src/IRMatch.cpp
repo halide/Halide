@@ -543,6 +543,7 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::Evaluate:
     case IRNodeType::Prefetch:
     case IRNodeType::Atomic:
+    case IRNodeType::HoistedStorage:
         break;
     }
     return false;

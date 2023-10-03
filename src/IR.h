@@ -909,6 +909,16 @@ struct Prefetch : public StmtNode<Prefetch> {
     static const IRNodeType _node_type = IRNodeType::Prefetch;
 };
 
+struct HoistedStorage : public StmtNode<HoistedStorage> {
+    std::string name;
+    Stmt body;
+
+    static Stmt make(const std::string &name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::HoistedStorage;
+};
+
 /** Lock all the Store nodes in the body statement.
  *  Typically the lock is implemented by an atomic operation
  *  (e.g. atomic add or atomic compare-and-swap).

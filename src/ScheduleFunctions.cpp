@@ -1157,10 +1157,14 @@ public:
     bool found_store_level() const {
         return _found_store_levels_for_funcs.size() == funcs.size();
     }
+    bool found_hoist_storage_level() const {
+        return _found_hoist_storage_levels_for_funcs.size() == funcs.size();
+    }
 
 protected:
     bool _found_compute_level{};
     std::set<string> _found_store_levels_for_funcs;
+    std::set<string> _found_hoist_storage_levels_for_funcs;
 
     using IRMutator::visit;
 
@@ -1238,6 +1242,13 @@ protected:
                     debug(3) << "Found store level for " << funcs[i].name() << " at " << for_loop->name << "\n";
                     body = build_realize_function_from_group(body, i);
                     _found_store_levels_for_funcs.insert(funcs[i].name());
+                }
+            }
+            for (size_t i = 0; i < funcs.size(); i++) {
+                if (funcs[i].schedule().hoist_storage_level().match(for_loop->name)) {
+                    debug(0) << "Found hoist storage level for " << funcs[i].name() << " at " << for_loop->name << "\n";
+                    // body = HoistedStorage::make()
+                    _found_hoist_storage_levels_for_funcs.insert(funcs[i].name());
                 }
             }
         }
@@ -2521,7 +2532,8 @@ Stmt schedule_functions(const vector<Function> &outputs,
             debug(1) << "Injecting realization of " << funcs << "\n";
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
             s = injector.mutate(s);
-            internal_assert(injector.found_store_level() && injector.found_compute_level());
+            internal_assert(injector.found_store_level() && injector.found_compute_level() && injector.found_hoist_storage_level());
+            debug(0) << s << "\n";
         }
 
         debug(2) << s << "\n";

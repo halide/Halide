@@ -74,7 +74,8 @@ enum class IRNodeType {
     IfThenElse,
     Evaluate,
     Prefetch,
-    Atomic
+    Atomic,
+    HoistedStorage
 };
 
 constexpr IRNodeType StrongestExprNodeType = IRNodeType::VectorReduce;
