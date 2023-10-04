@@ -27,9 +27,14 @@ public:
         : external_params(external_params) {
     }
 
+    // Deserialize a pipeline from the given filename
     Pipeline deserialize(const std::string &filename);
 
+    // Deserialize a pipeline from the given input stream
     Pipeline deserialize(std::istream &in);
+
+    // Deserialize a pipeline from the given buffer of bytes
+    Pipeline deserialize(const std::vector<uint8_t> &data);
 
 private:
     // Helper function to deserialize a homogenous vector from a flatbuffer vector,
@@ -445,6 +450,8 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
             output_buffer = it->second;
         } else if (auto it = parameters_in_pipeline.find(output_buffer_name); it != parameters_in_pipeline.end()) {
             output_buffer = it->second;
+        } else if (!output_buffer_name.empty()) {
+            user_error << "unknown output buffer used in pipeline '" << output_buffer_name << "'\n";
         }
         output_buffers.push_back(output_buffer);
     }
@@ -514,6 +521,8 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
+        } else if (!param_name.empty()) {
+            user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         const auto alignment = deserialize_modulus_remainder(store_stmt->alignment());
         return Store::make(name, value, index, param, predicate, alignment);
@@ -771,6 +780,8 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
+        } else if (!param_name.empty()) {
+            user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         const auto alignment = deserialize_modulus_remainder(load_expr->alignment());
         const auto type = deserialize_type(load_expr->type());
@@ -820,6 +831,8 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
+        } else if (!param_name.empty()) {
+            user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         const auto type = deserialize_type(call_expr->type());
         return Call::make(type, name, args, call_type, func_ptr, value_index, image, param);
@@ -834,6 +847,8 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
             param = it->second;
         } else if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
             param = it->second;
+        } else if (!param_name.empty()) {
+            user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
         }
         auto image_name = deserialize_string(variable_expr->image_name());
         Buffer<> image;
@@ -1031,6 +1046,8 @@ PrefetchDirective Deserializer::deserialize_prefetch_directive(const Serialize::
     Parameter param;
     if (auto it = parameters_in_pipeline.find(param_name); it != parameters_in_pipeline.end()) {
         param = it->second;
+    } else if (!param_name.empty()) {
+        user_error << "unknown parameter used in pipeline '" << param_name << "'\n";
     }
     auto hl_prefetch_directive = PrefetchDirective();
     hl_prefetch_directive.name = name;
@@ -1159,14 +1176,24 @@ Parameter Deserializer::deserialize_parameter(const Serialize::Parameter *parame
             deserialize_vector<Serialize::BufferConstraint, BufferConstraint>(parameter->buffer_constraints(),
                                                                               &Deserializer::deserialize_buffer_constraint);
         const auto memory_type = deserialize_memory_type(parameter->memory_type());
-        return Parameter(type, is_buffer, dimensions, name, Buffer<>(), host_alignment, buffer_constraints, memory_type);
+        return Parameter(type, dimensions, name, Buffer<>(), host_alignment, buffer_constraints, memory_type);
     } else {
-        const uint64_t data = parameter->data();
+        static_assert(FLATBUFFERS_USE_STD_OPTIONAL);
+        const auto make_optional_halide_scalar_value_t = [](const std::optional<uint64_t> &v) -> std::optional<halide_scalar_value_t> {
+            if (v.has_value()) {
+                halide_scalar_value_t scalar_data;
+                scalar_data.u.u64 = v.value();
+                return std::optional<halide_scalar_value_t>(scalar_data);
+            } else {
+                return std::nullopt;
+            }
+        };
+        const std::optional<halide_scalar_value_t> scalar_data = make_optional_halide_scalar_value_t(parameter->scalar_data());
         const auto scalar_default = deserialize_expr(parameter->scalar_default_type(), parameter->scalar_default());
         const auto scalar_min = deserialize_expr(parameter->scalar_min_type(), parameter->scalar_min());
         const auto scalar_max = deserialize_expr(parameter->scalar_max_type(), parameter->scalar_max());
         const auto scalar_estimate = deserialize_expr(parameter->scalar_estimate_type(), parameter->scalar_estimate());
-        return Parameter(type, is_buffer, dimensions, name, data, scalar_default, scalar_min, scalar_max, scalar_estimate);
+        return Parameter(type, dimensions, name, scalar_data, scalar_default, scalar_min, scalar_max, scalar_estimate);
     }
 }
 
@@ -1199,6 +1226,8 @@ ExternFuncArgument Deserializer::deserialize_extern_func_argument(const Serializ
             image_param = it->second;
         } else if (auto it = parameters_in_pipeline.find(image_param_name); it != parameters_in_pipeline.end()) {
             image_param = it->second;
+        } else if (!image_param_name.empty()) {
+            user_error << "unknown image parameter used in pipeline '" << image_param_name << "'\n";
         }
         return ExternFuncArgument(image_param);
     }
@@ -1294,9 +1323,12 @@ Pipeline Deserializer::deserialize(std::istream &in) {
     in.seekg(0, std::ios::end);
     int size = in.tellg();
     in.seekg(0, std::ios::beg);
-    std::vector<char> data(size);
-    in.read(data.data(), size);
+    std::vector<uint8_t> data(size);
+    in.read((char *)data.data(), size);
+    return deserialize(data);
+}
 
+Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
     if (pipeline_obj == nullptr) {
         user_warning << "deserialized pipeline is empty\n";
@@ -1375,6 +1407,11 @@ Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Para
     return deserializer.deserialize(in);
 }
 
+Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map<std::string, Parameter> &external_params) {
+    Internal::Deserializer deserializer(external_params);
+    return deserializer.deserialize(buffer);
+}
+
 }  // namespace Halide
 
 #else  // WITH_SERIALIZATION
@@ -1387,6 +1424,11 @@ Pipeline deserialize_pipeline(const std::string &filename, const std::map<std::s
 }
 
 Pipeline deserialize_pipeline(std::istream &in, const std::map<std::string, Parameter> &external_params) {
+    user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+    return Pipeline();
+}
+
+Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map<std::string, Parameter> &external_params) {
     user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
     return Pipeline();
 }

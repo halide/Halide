@@ -15,7 +15,7 @@ struct ParameterContents {
     const int dimensions;
     const std::string name;
     Buffer<> buffer;
-    uint64_t data = 0;
+    std::optional<halide_scalar_value_t> scalar_data;
     int host_alignment;
     std::vector<BufferConstraint> buffer_constraints;
     Expr scalar_default, scalar_min, scalar_max, scalar_estimate;
@@ -82,21 +82,21 @@ Parameter::Parameter(const Type &t, bool is_buffer, int d, const std::string &na
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
 
-Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
+Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
                      const Buffer<void> &buffer, int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
                      MemoryType memory_type)
-    : contents(new Internal::ParameterContents(t, is_buffer, dimensions, name)) {
+    : contents(new Internal::ParameterContents(t, /*is_buffer*/ true, dimensions, name)) {
     contents->buffer = buffer;
     contents->host_alignment = host_alignment;
     contents->buffer_constraints = buffer_constraints;
     contents->memory_type = memory_type;
 }
 
-Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
-                     uint64_t data, const Expr &scalar_default, const Expr &scalar_min,
+Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
+                     const std::optional<halide_scalar_value_t> &scalar_data, const Expr &scalar_default, const Expr &scalar_min,
                      const Expr &scalar_max, const Expr &scalar_estimate)
-    : contents(new Internal::ParameterContents(t, is_buffer, dimensions, name)) {
-    contents->data = data;
+    : contents(new Internal::ParameterContents(t, /*is_buffer*/ false, dimensions, name)) {
+    contents->scalar_data = scalar_data;
     contents->scalar_default = scalar_default;
     contents->scalar_min = scalar_min;
     contents->scalar_max = scalar_max;
@@ -123,51 +123,55 @@ bool Parameter::is_buffer() const {
     return contents->is_buffer;
 }
 
+bool Parameter::has_scalar_value() const {
+    return defined() && !contents->is_buffer && contents->scalar_data.has_value();
+}
+
 Expr Parameter::scalar_expr() const {
-    check_is_scalar();
+    const auto sv = scalar_data_checked();
     const Type t = type();
     if (t.is_float()) {
         switch (t.bits()) {
         case 16:
             if (t.is_bfloat()) {
-                return Expr(scalar<bfloat16_t>());
+                return Expr(bfloat16_t::make_from_bits(sv.u.u16));
             } else {
-                return Expr(scalar<float16_t>());
+                return Expr(float16_t::make_from_bits(sv.u.u16));
             }
         case 32:
-            return Expr(scalar<float>());
+            return Expr(sv.u.f32);
         case 64:
-            return Expr(scalar<double>());
+            return Expr(sv.u.f64);
         }
     } else if (t.is_int()) {
         switch (t.bits()) {
         case 8:
-            return Expr(scalar<int8_t>());
+            return Expr(sv.u.i8);
         case 16:
-            return Expr(scalar<int16_t>());
+            return Expr(sv.u.i16);
         case 32:
-            return Expr(scalar<int32_t>());
+            return Expr(sv.u.i32);
         case 64:
-            return Expr(scalar<int64_t>());
+            return Expr(sv.u.i64);
         }
     } else if (t.is_uint()) {
         switch (t.bits()) {
         case 1:
-            return Internal::make_bool(scalar<bool>());
+            return Internal::make_bool(sv.u.b);
         case 8:
-            return Expr(scalar<uint8_t>());
+            return Expr(sv.u.u8);
         case 16:
-            return Expr(scalar<uint16_t>());
+            return Expr(sv.u.u16);
         case 32:
-            return Expr(scalar<uint32_t>());
+            return Expr(sv.u.u32);
         case 64:
-            return Expr(scalar<uint64_t>());
+            return Expr(sv.u.u64);
         }
     } else if (t.is_handle()) {
         // handles are always uint64 internally.
         switch (t.bits()) {
         case 64:
-            return Expr(scalar<uint64_t>());
+            return Expr(sv.u.u64);
         }
     }
     internal_error << "Unsupported type " << t << " in scalar_expr\n";
@@ -198,14 +202,48 @@ void Parameter::set_buffer(const Buffer<> &b) {
     contents->buffer = b;
 }
 
-void *Parameter::scalar_address() const {
+const void *Parameter::read_only_scalar_address() const {
     check_is_scalar();
-    return &contents->data;
+    // Use explicit if here (rather than user_assert) so that we don't
+    // have to disable bugprone-unchecked-optional-access in clang-tidy,
+    // which is a useful check.
+    const auto &sv = contents->scalar_data;
+    if (sv.has_value()) {
+        return std::addressof(sv.value());
+    } else {
+        user_error << "Parameter " << name() << " does not have a valid scalar value.\n";
+        return nullptr;
+    }
 }
 
-uint64_t Parameter::scalar_raw_value() const {
+std::optional<halide_scalar_value_t> Parameter::scalar_data() const {
+    return defined() ? contents->scalar_data : std::nullopt;
+}
+
+halide_scalar_value_t Parameter::scalar_data_checked() const {
     check_is_scalar();
-    return contents->data;
+    // Use explicit if here (rather than user_assert) so that we don't
+    // have to disable bugprone-unchecked-optional-access in clang-tidy,
+    // which is a useful check.
+    halide_scalar_value_t result;
+    const auto &sv = contents->scalar_data;
+    if (sv.has_value()) {
+        result = sv.value();
+    } else {
+        user_error << "Parameter " << name() << " does not have a valid scalar value.\n";
+        result.u.u64 = 0;  // silence "possibly uninitialized" compiler warning
+    }
+    return result;
+}
+
+halide_scalar_value_t Parameter::scalar_data_checked(const Type &val_type) const {
+    check_type(val_type);
+    return scalar_data_checked();
+}
+
+void Parameter::set_scalar(const Type &val_type, halide_scalar_value_t val) {
+    check_type(val_type);
+    contents->scalar_data = std::optional<halide_scalar_value_t>(val);
 }
 
 /** Tests if this handle is the same as another handle */

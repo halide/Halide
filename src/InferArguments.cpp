@@ -5,6 +5,7 @@
 
 #include "ExternFuncArgument.h"
 #include "Function.h"
+#include "IROperator.h"
 #include "IRVisitor.h"
 #include "InferArguments.h"
 
@@ -197,7 +198,9 @@ private:
 
         ArgumentEstimates argument_estimates = p.get_argument_estimates();
         if (!p.is_buffer()) {
-            argument_estimates.scalar_def = p.scalar_expr();
+            // We don't want to crater here if a scalar param isn't set;
+            // instead, default to a zero of the right type, like we used to.
+            argument_estimates.scalar_def = p.has_scalar_value() ? p.scalar_expr() : make_zero(p.type());
             argument_estimates.scalar_min = p.min_value();
             argument_estimates.scalar_max = p.max_value();
             argument_estimates.scalar_estimate = p.estimate();

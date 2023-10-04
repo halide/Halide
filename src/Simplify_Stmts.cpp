@@ -300,12 +300,13 @@ Stmt Simplify::visit(const Store *op) {
     ExprInfo index_info;
     Expr index = mutate(op->index, &index_info);
 
-    // If the store is fully out of bounds, drop it.
+    // If the store is fully unconditional and out of bounds, drop it.
     // This should only occur inside branches that make the store unreachable,
     // but perhaps the branch was hard to prove constant true or false. This
     // provides an alternative mechanism to simplify these unreachable stores.
     string alloc_extent_name = op->name + ".total_extent_bytes";
-    if (bounds_and_alignment_info.contains(alloc_extent_name)) {
+    if (is_const_one(op->predicate) &&
+        bounds_and_alignment_info.contains(alloc_extent_name)) {
         if (index_info.max_defined && index_info.max < 0) {
             in_unreachable = true;
             return Evaluate::make(unreachable());
