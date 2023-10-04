@@ -70,10 +70,14 @@ public:
         // Basic math operations.
         check("vadd.vv", lanes, i_1 + i_2);
         check("vadd.vv", lanes, u_1 + u_2);
-        check("vadd.vi", lanes, i_1 + 2);
-        check("vadd.vi", lanes, u_1 + 2);
-        check("vadd.vx", lanes, i_1 + 42);
-        check("vadd.vx", lanes, u_1 + 42);
+
+        // Vector + immediate / scalar form. Disabled because LLVM 18 broadcasts
+        // scalars to vectors registers outside the loop.
+        // check("vadd.vi", lanes, i_1 + 2);
+        // check("vadd.vi", lanes, u_1 + 2);
+        // check("vadd.vx", lanes, i_1 + 42);
+        // check("vadd.vx", lanes, u_1 + 42);
+
         check("vsub.vv", lanes, i_1 - i_2);
         check("vsub.vv", lanes, u_1 - u_2);
         // TODO: these seem to compile to a vector add
