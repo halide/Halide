@@ -330,9 +330,10 @@ struct ModuleContents {
     std::unique_ptr<AutoSchedulerResults> auto_scheduler_results;
 
     /** This is a copy of the code throughout the lowering process, which
-     * reflects best the actual pipeline, without introducing assembly generated
-     * from device-specific offloads (such as Cuda PTX). In other words, we'd
-     * like to keep this 3GL. */
+     * reflects best the actual pipeline, without introducing device-specific
+     * generated code from device-specific offloads (such as Cuda PTX,
+     * OpenGL Compute, etc...). In other words, we'd like to keep this
+     * conceptually relevant and human-readable. */
     Stmt conceptual_code;
 };
 
@@ -417,24 +418,24 @@ const std::vector<Module> &Module::submodules() const {
     return contents->submodules;
 }
 
-const Buffer<> *Module::get_cuda_ptx_assembly_buffer() const {
+Buffer<> Module::get_cuda_ptx_assembly_buffer() const {
     for (const Buffer<> &buf : buffers()) {
         if (ends_with(buf.name(), "_gpu_source_kernels")) {
             if (starts_with(buf.name(), "cuda_")) {
-                return &buf;
+                return buf;
             }
         }
     }
-    return nullptr;
+    return {};
 }
 
-const Buffer<> *Module::get_device_code_buffer() const {
+Buffer<> Module::get_device_code_buffer() const {
     for (const Buffer<> &buf : buffers()) {
         if (ends_with(buf.name(), "_gpu_source_kernels")) {
-            return &buf;
+            return buf;
         }
     }
-    return nullptr;
+    return {};
 }
 
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {

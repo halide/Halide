@@ -84,7 +84,6 @@ public:
             // nothing
         } else if (get_target().has_gpu_feature()) {
             // 0.50ms on an RTX 2060
-            std::printf("GPU SCHEDULING\n");
             Var xi("xi"), yi("yi"), zi("zi");
 
             // Schedule blurz in 8x8 tiles. This is a tile in

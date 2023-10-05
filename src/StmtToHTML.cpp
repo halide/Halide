@@ -1646,25 +1646,9 @@ private:
     }
 
     std::string ForType_to_string(ForType type) {
-        switch (type) {
-        case ForType::Serial:
-            return "serial";
-        case ForType::Parallel:
-            return "parallel";
-        case ForType::Unrolled:
-            return "unrolled";
-        case ForType::Vectorized:
-            return "vectorized";
-        case ForType::Extern:
-            return "extern";
-        case ForType::GPUBlock:
-            return "gpu_block";
-        case ForType::GPUThread:
-            return "gpu_thread";
-        case ForType::GPULane:
-            return "gpu_lane";
-        }
-        return "for";
+        std::ostringstream ss;
+        ss << type;
+        return ss.str();
     }
 
     void visit(const For *op) override {
@@ -2162,33 +2146,9 @@ private:
         print_text("(");
         print_type(op->type);
         print_text(")");
-        std::string op_str;
-        switch (op->op) {
-        case VectorReduce::Add:
-            op_str = "add";
-            break;
-        case VectorReduce::SaturatingAdd:
-            op_str = "saturating_add";
-            break;
-        case VectorReduce::Mul:
-            op_str = "mul";
-            break;
-        case VectorReduce::Min:
-            op_str = "min";
-            break;
-        case VectorReduce::Max:
-            op_str = "max";
-            break;
-        case VectorReduce::And:
-            op_str = "and";
-            break;
-        case VectorReduce::Or:
-            op_str = "or";
-            break;
-        default:
-            internal_assert(false) << "Not a valid VectorReduce::Operator";
-        }
-        print_function_call("vector_reduce_" + op_str, {op->value});
+        std::ostringstream op_ss;
+        op_ss << op->op;
+        print_function_call("vector_reduce_" + op_ss.str(), {op->value});
         print_closing_tag("span");
         print_ln();
     }

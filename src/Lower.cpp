@@ -432,7 +432,7 @@ void lower_impl(const vector<Function> &output_funcs,
         }
     }
 
-    // Make a copy of the Stmt code, before we lower anything to 2GL.
+    // Make a copy of the Stmt code, before we lower anything to less human-readable code.
     result_module.set_conceptual_code_stmt(s);
 
     if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
