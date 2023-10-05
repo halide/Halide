@@ -352,6 +352,7 @@ public:
     Stmt visit(const Acquire *op);
     Stmt visit(const Fork *op);
     Stmt visit(const Atomic *op);
+    Stmt visit(const HoistedStorage *op);
 
     std::pair<std::vector<Expr>, bool> mutate_with_changes(const std::vector<Expr> &old_exprs, ExprInfo *bounds);
 };
