@@ -574,6 +574,8 @@ Stmt IfThenElse::make(Expr condition, Stmt then_case, Stmt else_case) {
     internal_assert(condition.defined() && then_case.defined()) << "IfThenElse of undefined\n";
     // else_case may be null.
 
+    internal_assert(condition.type().is_scalar()) << "IfThenElse with vector condition\n";
+
     IfThenElse *node = new IfThenElse;
     node->condition = std::move(condition);
     node->then_case = std::move(then_case);

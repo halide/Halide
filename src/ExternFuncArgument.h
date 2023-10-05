@@ -24,7 +24,7 @@ struct ExternFuncArgument {
     Internal::FunctionPtr func;
     Buffer<> buffer;
     Expr expr;
-    Internal::Parameter image_param;
+    Parameter image_param;
 
     ExternFuncArgument(Internal::FunctionPtr f)
         : arg_type(FuncArg), func(std::move(f)) {
@@ -44,7 +44,7 @@ struct ExternFuncArgument {
         : arg_type(ExprArg), expr(e) {
     }
 
-    ExternFuncArgument(const Internal::Parameter &p)
+    ExternFuncArgument(const Parameter &p)
         : arg_type(ImageParamArg), image_param(p) {
         // Scalar params come in via the Expr constructor.
         internal_assert(p.is_buffer());

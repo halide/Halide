@@ -105,10 +105,12 @@ Box box_intersection(const Box &a, const Box &b);
 /** Test if box a provably contains box b */
 bool box_contains(const Box &a, const Box &b);
 
-/** Compute rectangular domains large enough to cover all the 'Call's
- * to each function that occurs within a given statement or
- * expression. This is useful for figuring out what regions of things
- * to evaluate. */
+/** Compute rectangular domains large enough to cover all the 'Call's to each
+ * function that occurs within a given statement or expression. This is useful
+ * for figuring out what regions of things to evaluate. Respects control flow
+ * (e.g. encodes if statement conditions), but assumes all encountered asserts
+ * pass. If it encounters an assert(false) in one if branch, assumes the
+ * opposite if branch runs unconditionally. */
 // @{
 std::map<std::string, Box> boxes_required(const Expr &e,
                                           const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
@@ -118,9 +120,9 @@ std::map<std::string, Box> boxes_required(Stmt s,
                                           const FuncValueBounds &func_bounds = empty_func_value_bounds());
 // @}
 
-/** Compute rectangular domains large enough to cover all the
- * 'Provides's to each function that occurs within a given statement
- * or expression. */
+/** Compute rectangular domains large enough to cover all the 'Provides's to
+ * each function that occurs within a given statement or expression. Handles
+ * asserts in the same way as boxes_required. */
 // @{
 std::map<std::string, Box> boxes_provided(const Expr &e,
                                           const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
@@ -130,9 +132,9 @@ std::map<std::string, Box> boxes_provided(Stmt s,
                                           const FuncValueBounds &func_bounds = empty_func_value_bounds());
 // @}
 
-/** Compute rectangular domains large enough to cover all the 'Call's
- * and 'Provides's to each function that occurs within a given
- * statement or expression. */
+/** Compute rectangular domains large enough to cover all the 'Call's and
+ * 'Provides's to each function that occurs within a given statement or
+ * expression. Handles asserts in the same way as boxes_required. */
 // @{
 std::map<std::string, Box> boxes_touched(const Expr &e,
                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),

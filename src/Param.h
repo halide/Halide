@@ -21,7 +21,7 @@ namespace Halide {
 template<typename T = void>
 class Param {
     /** A reference-counted handle on the internal parameter object */
-    Internal::Parameter param;
+    Parameter param;
 
     // This is a deliberately non-existent type that allows us to compile Param<>
     // but provide less-confusing error messages if you attempt to call get<> or set<>
@@ -314,11 +314,11 @@ public:
                         param.get_argument_estimates());
     }
 
-    const Internal::Parameter &parameter() const {
+    const Parameter &parameter() const {
         return param;
     }
 
-    Internal::Parameter &parameter() {
+    Parameter &parameter() {
         return param;
     }
 };
@@ -328,7 +328,7 @@ public:
  * (e.g. to pass the user context to an extern function written in C). */
 inline Expr user_context_value() {
     return Internal::Variable::make(Handle(), "__user_context",
-                                    Internal::Parameter(Handle(), false, 0, "__user_context"));
+                                    Parameter(Handle(), false, 0, "__user_context"));
 }
 
 }  // namespace Halide
