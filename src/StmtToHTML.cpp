@@ -2277,9 +2277,10 @@ public:
         host_asm_info.gather_nodes_from_functions(m);
         host_asm_info.generate(asm_stream.str());
 
-        if (const Buffer<> *device_assembly_buf = m.get_device_code_buffer()) {
-            std::string device_assembly((char *)device_assembly_buf->data(),
-                                        ((char *)device_assembly_buf->data() + device_assembly_buf->size_in_bytes()));
+        Buffer<> device_code_buf = m.get_device_code_buffer();
+        if (device_code_buf.defined()) {
+            std::string device_assembly((char *)device_code_buf.data(),
+                                        ((char *)device_code_buf.data() + device_code_buf.size_in_bytes()));
             debug(1) << "Generating device AssemblyInfo\n";
             // TODO(mcourteaux): This doesn't generate anything useful, as the
             // LLVM comments are only added later in the LLVM CodeGen IRVisitor.
@@ -2367,10 +2368,10 @@ private:
         generate_ir_pane(m);
         generate_resize_bar(pane_count++);
         generate_host_assembly_pane(m);
-        const Buffer<> *device_assembly = m.get_device_code_buffer();
-        if (device_assembly) {
+        Buffer<> device_code_buf = m.get_device_code_buffer();
+        if (device_code_buf.defined()) {
             generate_resize_bar(pane_count++);
-            generate_device_code_pane(*device_assembly);
+            generate_device_code_pane(device_code_buf);
         }
 
         stream << "</div>\n";

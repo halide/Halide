@@ -684,13 +684,14 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     }
     if (contains(output_files, OutputFileType::device_code)) {
         debug(1) << "Module.compile(): device_code " << output_files.at(OutputFileType::device_code) << "\n";
-        if (const Buffer<> *buf = get_device_code_buffer()) {
-            int length = buf->size_in_bytes();
-            while (length > 0 && ((const char *)buf->data())[length - 1] == '\0') {
+        Buffer<> buf = get_device_code_buffer();
+        if (buf.defined()) {
+            int length = buf.size_in_bytes();
+            while (length > 0 && ((const char *)buf.data())[length - 1] == '\0') {
                 length--;
             }
-            std::string str((const char *)buf->data(), length);
-            std::string device_code = std::string((const char *)buf->data(), buf->size_in_bytes());
+            std::string str((const char *)buf.data(), length);
+            std::string device_code = std::string((const char *)buf.data(), buf.size_in_bytes());
             while (!device_code.empty() && device_code.back() == '\0') {
                 device_code = device_code.substr(0, device_code.length() - 1);
             }
