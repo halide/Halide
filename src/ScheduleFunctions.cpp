@@ -1247,7 +1247,7 @@ protected:
             for (size_t i = 0; i < funcs.size(); i++) {
                 if (funcs[i].schedule().hoist_storage_level().match(for_loop->name)) {
                     debug(0) << "Found hoist storage level for " << funcs[i].name() << " at " << for_loop->name << "\n";
-                    // body = HoistedStorage::make()
+                    body = HoistedStorage::make(funcs[i].name(), body);
                     _found_hoist_storage_levels_for_funcs.insert(funcs[i].name());
                 }
             }
