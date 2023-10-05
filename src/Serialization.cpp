@@ -127,7 +127,7 @@ private:
 
     Offset<Serialize::ExternFuncArgument> serialize_extern_func_argument(FlatBufferBuilder &builder, const ExternFuncArgument &extern_func_argument);
 
-    Offset<Serialize::Buffer> serialize_buffer(FlatBufferBuilder &builder, Buffer<> &buffer);
+    Offset<Serialize::Buffer> serialize_buffer(FlatBufferBuilder &builder, Buffer<> buffer);
 
     std::vector<Offset<Serialize::WrapperRef>> serialize_wrapper_refs(FlatBufferBuilder &builder, const std::map<std::string, FunctionPtr> &wrappers);
 
@@ -1352,7 +1352,7 @@ Offset<Serialize::ExternFuncArgument> Serializer::serialize_extern_func_argument
     }
 }
 
-Offset<Serialize::Buffer> Serializer::serialize_buffer(FlatBufferBuilder &builder, Buffer<> &buffer) {
+Offset<Serialize::Buffer> Serializer::serialize_buffer(FlatBufferBuilder &builder, Buffer<> buffer) {
     if (!buffer.defined()) {
         return Serialize::CreateBuffer(builder, false);
     }
