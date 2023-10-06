@@ -1924,6 +1924,24 @@ Stage &Stage::gpu_tile(const VarOrRVar &x, const VarOrRVar &y, const VarOrRVar &
     return gpu_tile(x, y, z, x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
 }
 
+Stage &Stage::disallow_partitioning(const VarOrRVar &var) {
+    definition.schedule().touched() = true;
+    bool found = false;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
+            found = true;
+            dim.allow_partitioning = false;
+        }
+    }
+    user_assert(found)
+        << "In schedule for " << name()
+        << ", could not find var " << var.name()
+        << " to mark as disallow partitioning.\n"
+        << dump_argument_list();
+    return *this;
+}
+
 Stage &Stage::hexagon(const VarOrRVar &x) {
     set_dim_device_api(x, DeviceAPI::Hexagon);
     return *this;

@@ -371,6 +371,7 @@ public:
                 const std::vector<Expr> &factors,
                 TailStrategy tail = TailStrategy::Auto);
     Stage &reorder(const std::vector<VarOrRVar> &vars);
+    Stage &disallow_partitioning(const VarOrRVar &var);
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type

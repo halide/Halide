@@ -3725,7 +3725,8 @@ void bounds_test() {
                                         {Add::make(Call::make(in, input_site_1),
                                                    Call::make(in, input_site_2))},
                                         output_site,
-                                        const_true()));
+                                        const_true()),
+                          true);
 
     map<string, Box> r;
     r = boxes_required(loop);

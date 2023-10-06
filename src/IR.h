@@ -798,8 +798,9 @@ struct For : public StmtNode<For> {
     ForType for_type;
     DeviceAPI device_api;
     Stmt body;
+    bool allow_partitioning;
 
-    static Stmt make(const std::string &name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
+    static Stmt make(const std::string &name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body, bool allow_partitioning);
 
     bool is_unordered_parallel() const {
         return Halide::Internal::is_unordered_parallel(for_type);

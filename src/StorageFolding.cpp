@@ -867,7 +867,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 // for further folding opportunities
                 // recursively.
             } else if (!body.same_as(op->body)) {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body, op->allow_partitioning);
                 break;
             } else {
                 stmt = op;
@@ -888,7 +888,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         if (body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body, op->allow_partitioning);
         }
 
         if (func.schedule().async() && !dynamic_footprint.empty()) {

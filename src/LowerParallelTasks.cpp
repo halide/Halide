@@ -273,7 +273,8 @@ struct LowerParallelTasks : public IRMutator {
                                        Variable::make(Int(32), loop_extent_name),
                                        ForType::Serial,
                                        DeviceAPI::None,
-                                       t.body);
+                                       t.body,
+                                       true);
                 } else {
                     internal_assert(is_const_one(t.extent));
                 }

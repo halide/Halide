@@ -441,6 +441,10 @@ struct Dim {
      * loop (see the DimType enum above). */
     DimType dim_type;
 
+    /** Allows whether the PartitionLoops lowering pass is allowed
+     * to partition the for loop representing this dimension. */
+    bool allow_partitioning;
+
     /** Can this loop be evaluated in any order (including in
      * parallel)? Equivalently, are there no data hazards between
      * evaluations of the Func at distinct values of this var? */

@@ -397,7 +397,7 @@ Stmt build_loop_nest(
             const Dim &dim = stage_s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
-            stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.device_api, stmt);
+            stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.device_api, stmt, dim.allow_partitioning);
         }
     }
 
@@ -967,7 +967,8 @@ private:
                              for_loop->extent,
                              for_loop->for_type,
                              for_loop->device_api,
-                             body);
+                             body,
+                             for_loop->allow_partitioning);
         }
     }
 };
@@ -1065,7 +1066,7 @@ private:
 
             Stmt stmt = For::make(new_var, Variable::make(Int(32), new_var + ".loop_min"),
                                   Variable::make(Int(32), new_var + ".loop_extent"),
-                                  for_type, device_api, body);
+                                  for_type, device_api, body, op->allow_partitioning);
 
             // Add let stmts defining the bound of the renamed for-loop.
             stmt = LetStmt::make(new_var + ".loop_min", min_val, stmt);
@@ -1106,7 +1107,7 @@ class ShiftLoopNest : public IRMutator {
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + iter->second;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body, op->allow_partitioning);
         }
         return stmt;
     }
@@ -1271,7 +1272,8 @@ protected:
                              for_loop->extent,
                              for_loop->for_type,
                              for_loop->device_api,
-                             body);
+                             body,
+                             for_loop->allow_partitioning);
         }
     }
 
@@ -2478,7 +2480,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const Target &target,
                         bool &any_memoized) {
     string root_var = LoopLevel::root().lock().to_string();
-    Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
+    Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0), false);
 
     any_memoized = false;
 
