@@ -434,6 +434,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
                               Serialize::CreateFor(builder, name_serialized,
                                                    min_serialized.first, min_serialized.second,
                                                    extent_serialized.first, extent_serialized.second,
+                                                   for_stmt->allow_partitioning,
                                                    for_type, device_api,
                                                    body_serialized.first, body_serialized.second)
                                   .Union());

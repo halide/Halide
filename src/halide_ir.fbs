@@ -127,6 +127,7 @@ table For {
     min: Expr;
     extent: Expr;
     for_type: ForType;
+    allow_partitioning: bool;
     device_api: DeviceAPI;
     body: Stmt;
 }

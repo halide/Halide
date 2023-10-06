@@ -505,9 +505,10 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         const auto min = deserialize_expr(for_stmt->min_type(), for_stmt->min());
         const auto extent = deserialize_expr(for_stmt->extent_type(), for_stmt->extent());
         const ForType for_type = deserialize_for_type(for_stmt->for_type());
+        const auto allow_partitioning = for_stmt->allow_partitioning();
         const DeviceAPI device_api = deserialize_device_api(for_stmt->device_api());
         const auto body = deserialize_stmt(for_stmt->body_type(), for_stmt->body());
-        return For::make(name, min, extent, for_type, device_api, body);
+        return For::make(name, min, extent, for_type, device_api, body, allow_partitioning);
     }
     case Serialize::Stmt_Store: {
         const auto *store_stmt = (const Serialize::Store *)stmt;
