@@ -802,14 +802,14 @@ public:
             Type widest_type;
             for (const auto &alloc : cluster) {
                 if (name.empty()) {
-                    name = alloc.name;
+                    name = "allocgroup";
                     widest_type = alloc.widest_type;
                 } else {
-                    name += "__" + alloc.name;
                     if (alloc.widest_type.bytes() > widest_type.bytes()) {
                         widest_type = alloc.widest_type;
                     }
                 }
+                name += "__" + alloc.name;
                 int ratio = alloc.widest_type.bytes() / alloc_type.bytes();
                 internal_assert(ratio != 0)
                     << "alloc_type should have been at most as wide as the widest type in group\n";
