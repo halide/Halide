@@ -615,7 +615,7 @@ SOURCE_FILES = \
   SpirvIR.cpp \
   SplitTuples.cpp \
   StageStridedLoads.cpp \
-  StmtToViz.cpp \
+  StmtToHTML.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
   StrictifyFloat.cpp \
@@ -641,9 +641,9 @@ SOURCE_FILES = \
    CodeGen_C_vectors
 
 HTML_TEMPLATE_FILES = \
-   StmtToViz_dependencies \
-   StmtToViz_javascript \
-   StmtToViz_stylesheet
+   StmtToHTML_dependencies.html \
+   StmtToHTML.js \
+   StmtToHTML.css
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
@@ -796,7 +796,7 @@ HEADER_FILES = \
   Solve.h \
   SplitTuples.h \
   StageStridedLoads.h \
-  StmtToViz.h \
+  StmtToHTML.h \
   StorageFlattening.h \
   StorageFolding.h \
   StrictifyFloat.h \
@@ -1199,8 +1199,8 @@ $(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvid
 $(BUILD_DIR)/c_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/%.template.cpp
 	./$(BIN_DIR)/binary2cpp halide_c_template_$* < $(SRC_DIR)/$*.template.cpp > $@
 
-$(BUILD_DIR)/html_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/irvisualizer/%.template.html
-	./$(BIN_DIR)/binary2cpp halide_html_template_$* < $(SRC_DIR)/irvisualizer/$*.template.html > $@
+$(BUILD_DIR)/html_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/irvisualizer/html_template_%
+	./$(BIN_DIR)/binary2cpp halide_html_template_$(subst .,_,$*) < $(SRC_DIR)/irvisualizer/html_template_$* > $@
 
 $(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	@mkdir -p $(@D)

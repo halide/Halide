@@ -1,0 +1,791 @@
+/* General CSS Rules*/
+* {
+    font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    font-size: 12px;
+}
+
+body {
+    padding: 0;
+    margin: 0;
+    line-height: 14px;
+}
+
+.no-select {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+div#page-container {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+a,
+a:hover,
+a:visited,
+a:active {
+    color: inherit;
+    text-decoration: none;
+}
+
+b {
+    font-weight: normal;
+}
+
+table {
+    font-size: 12px;
+}
+
+/* Visualization panes */
+div#visualization-panes {
+    display: flex;
+    flex-grow: 1;
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+div.pane {
+    overflow: scroll;
+    position: relative;
+    flex-grow: 1;
+    flex-shrink: 1;
+    counter-reset: line;
+    min-width: 5vw;
+    width: 33vw;
+}
+div.pane.collapsed-pane {
+    display: none;
+}
+
+div#ir-code-pane {
+    padding-left: 50px;
+    padding-top: 20px;
+    width: 50vw;
+}
+
+div#host-assembly-pane {
+    width: 20vw;
+}
+
+div#device-code-pane {
+    padding-left: 6em;
+    width: 30vw;
+}
+
+span.line {
+    counter-increment: line;
+}
+span.line:before {
+    content: counter(line) ".";
+    color: rgb(175, 175, 175);
+    position: absolute;
+    left: 0px;
+    width: 4em;
+    text-align: right;
+}
+
+
+/* Resize bars */
+div.resize-bar {
+    background: rgb(201, 231, 190);
+    cursor: col-resize;
+    border-left: 1px solid rgb(0, 0, 0);
+    border-right: 1px solid rgb(0, 0, 0);
+}
+
+div.resize-bar > div.collapse-btns {
+    position: relative;
+    top: 50%;
+    margin: 0px;
+}
+
+div.resize-bar > div.collapse-btns button {
+    font-size: 11px;
+    height: 3em;
+    width: 1.5em;
+    border-radius: 0;
+    margin: 1em 0;
+    border: none;
+    padding: 0;
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+div.resize-bar > div.collapse-btns button:hover { background-color: rgba(255, 255, 255, 0.5); }
+/*div.resize-bar > div.collapse-btns button.collapse-left:before  { content: "\21E4"; }*/
+/*div.resize-bar > div.collapse-btns button.collapse-right:before { content: "\21E5"; }*/
+div.resize-bar > div.collapse-btns button.collapse-left:before  { content: "<"; }
+div.resize-bar > div.collapse-btns button.collapse-right:before { content: ">"; }
+
+/* Revert collapser button that points to the left. */
+div.resize-bar > div.collapse-btns button.collapse-left.active {
+    background-color: rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(0, 0, 0, 0.4);
+}
+div.resize-bar > div.collapse-btns button.collapse-left.active:before {
+    /*content: "\21A6";*/
+    content: ">>";
+}
+div.resize-bar > div.collapse-btns button.collapse-right.active {
+    background-color: rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(0, 0, 0, 0.4);
+}
+div.resize-bar > div.collapse-btns button.collapse-right.active:before {
+    /*content: "\21A4";*/
+    content: "<<";
+}
+
+/* Resizer Preview */
+div#resizer-preview {
+    position: absolute;
+    width: 4px;
+    height: 100%;
+    background-color: gray;
+    padding: 0;
+    margin: 0;
+    opacity: 50%;
+    z-index: 190000;
+}
+
+
+div#device-code-pane code {
+    line-height: 14px;
+    white-space: pre;
+}
+
+/* IR Code Section CSS */
+.ModuleBody {
+    padding-left: 70px !important;
+}
+
+div.Function {
+    margin: 0.2em 0.0em;
+    padding: 0.1em;
+    margin-right: 0.8em;
+    margin-left: calc(-0.2em - 16px);
+    padding-left: calc(0.2em + 16px);
+    border-width: 3px;
+    border-style: solid;
+    border-radius: 8px;
+    min-width: fit-content;
+}
+div.Function + div.Function {
+    margin-top: 1.5em; /* Leave space between two functions. */
+}
+
+/* Give functions a slightly different background color to visually help navigate quickly. */
+div.Function:nth-child(3n + 1) { background-color: rgba(200, 0, 0, 0.025); border-color: rgba(200, 0, 0, 0.03); }
+div.Function:nth-child(3n + 2) { background-color: rgba(0, 200, 0, 0.025); border-color: rgba(0, 200, 0, 0.03); }
+div.Function:nth-child(3n + 3) { background-color: rgba(0, 0, 200, 0.025); border-color: rgba(0, 0, 200, 0.03); }
+
+/* Give Parallel fors a different color */
+div.For { border-radius: 8px; }
+div.For.for-type-parallel,
+div.For.for-type-gpu_block {
+    min-width: fit-content;
+    background-color: rgba(240, 200, 0, 0.03);
+    border: 3px solid rgba(240, 200, 0, 0.10);
+    margin: 0.2em 0.0em;
+    padding: 0.1em;
+    margin-right: 0.8em;
+    margin-left: calc(-0.2em - 16px);
+    padding-left: calc(0.2em + 16px);
+}
+div.For.for-type-gpu_block div.For.for-type-gpu_block {
+    background-color: transparent;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+div.For.for-type-gpu_thread {
+    background-color: rgba(240, 100, 50, 0.03);
+    border: 3px solid rgba(240, 100, 50, 0.10);
+    margin: 0.2em 0.0em;
+    padding: 0.1em;
+    margin-right: 0.8em;
+    margin-left: calc(-0.2em - 16px);
+    padding-left: calc(0.2em + 16px);
+}
+div.For.for-type-gpu_thread div.For.for-type-gpu_thread {
+    background-color: transparent;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+
+b.Highlight {
+    font-weight: bold;
+    background-color: #DDD;
+}
+
+span.Highlight {
+    font-weight: bold;
+    background-color: #FF0;
+}
+
+span.OpF32 {
+    color: hsl(106deg 100% 40%);
+    font-weight: bold;
+}
+
+span.OpF64 {
+    color: hsl(106deg 100% 30%);
+    font-weight: bold;
+}
+
+span.OpB8 {
+    color: hsl(208deg 100% 80%);
+    font-weight: bold;
+}
+
+span.OpB16 {
+    color: hsl(208deg 100% 70%);
+    font-weight: bold;
+}
+
+span.OpB32 {
+    color: hsl(208deg 100% 60%);
+    font-weight: bold;
+}
+
+span.OpB64 {
+    color: hsl(208deg 100% 50%);
+    font-weight: bold;
+}
+
+span.OpI8 {
+    color: hsl(46deg 100% 45%);
+    font-weight: bold;
+}
+
+span.OpI16 {
+    color: hsl(46deg 100% 40%);
+    font-weight: bold;
+}
+
+span.OpI32 {
+    color: hsl(46deg 100% 34%);
+    font-weight: bold;
+}
+
+span.OpI64 {
+    color: hsl(46deg 100% 27%);
+    font-weight: bold;
+}
+
+span.OpVec2 {
+    background-color: hsl(100deg 100% 90%);
+    font-weight: bold;
+}
+
+span.OpVec4 {
+    background-color: hsl(100deg 100% 80%);
+    font-weight: bold;
+}
+
+span.Memory {
+    color: #d22;
+    font-weight: bold;
+}
+
+span.Pred {
+    background-color: #ffe8bd;
+    font-weight: bold;
+}
+
+span.Label {
+    background-color: #bde4ff;
+    font-weight: bold;
+}
+
+/* Collapse button and indent div logic */
+input.show-hide-btn {
+    appearance: none;
+    margin-left: -17px;
+    margin-top: 0px;
+    margin-bottom: 0px;
+    padding: 0;
+    height: 12px;
+    vertical-align: top;
+    width: 12px;
+    height: 12px;
+    border: 1px solid black;
+    border-radius: 4px;
+    transition: transform 0.2s;
+    transform: rotate(0deg);
+}
+input.show-hide-btn:checked {
+    transform: rotate(-90deg);
+}
+
+input.show-hide-btn:before {
+    content: "V";
+    font-size: 9px;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    display: inline-block;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+
+
+div.indent {
+    box-sizing: border-box;
+    border-left: 2px solid transparent;
+    padding-left: 25px;
+    margin-left: -11px;
+}
+
+input.show-hide-btn:hover {
+    color: #c30000;
+}
+
+/* The structure always has to be <button/><label/><div class=op-btns>[...]</div><div class=indent>...</div>.
+ * All the random buttons, should go in the label.
+ */
+div.op-btns {
+    display: inline-block;
+    vertical-align: top;
+    height: 1em;
+    margin-left: 0.5em;
+}
+input.show-hide-btn + label + div.op-btns + div.indent {
+    max-height: 10000000000px;
+    opacity: 1;
+    transition: opacity 0.4s, max-height 0.4s;
+    border-left: 2px solid transparent;
+}
+
+/* TODO: add the same logic for hoving the closing brace. */
+input.show-hide-btn:hover + label + div.op-btns + div.indent {
+    border-left: 2px dotted black;
+}
+input.show-hide-btn:hover + label > span:last-child,
+input.show-hide-btn:hover + label + div.op-btns + div.indent + span.ClosingBrace {
+    font-weight: bold;
+}
+input.show-hide-btn:hover + label + div.op-btns + div.indent + span.ClosingBrace:after {
+    height: 7px;
+    width: 7px;
+    display: inline-block;
+    border-bottom: 2px dotted black;
+    border-left: 2px dotted black;
+    position: relative;
+    left: -18px;
+    content: " ";
+}
+
+input.show-hide-btn:checked + label + div.op-btns + div.indent {
+    opacity: 0;
+    max-height: 0px;
+    overflow: hidden;
+}
+input.show-hide-btn:checked + label + div.op-btns:after {
+    content: "(collapsed)";
+    margin-left: 1em;
+    font-style: italic;
+    color: gray;
+}
+
+div.icon-btn {
+    padding: 0 3px;
+    margin-left: 2px;
+    margin-right: 0px;
+    width: 24px;
+    height: 12px;
+    line-height: 16px;
+    vertical-align: middle;
+    background: transparent;
+    font-size: 22px;
+    outline: 1px solid black;
+    top: -1px;
+    border-radius: 4px;
+    display: inline-block;
+    text-align: center;
+    box-sizing: border-box;
+}
+div.icon-btn:before {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    display: inline-block;
+}
+
+div.jump-to-host-asm-btn {
+    background:   rgba(255,50,0,0.1);
+    outline-color: rgb( 255,50,0);
+    color:        rgb( 255,50,0);
+}
+div.jump-to-device-code-btn {
+    background:   rgba(70,170,50,0.1);
+    outline-color: rgb( 70,170,50);
+    color:        rgb( 70,170,50);
+}
+
+div.jump-to-host-asm-btn span.tooltip span, div.jump-to-device-code-btn span.tooltip span {
+    display: block;
+    margin-top: 0.6em;
+    font-size: 10px;
+    font-family: monospace;
+    color: green;
+}
+
+div.jump-to-host-asm-btn:before, div.jump-to-device-code-btn:before, div.jump-to-viz-btn:before {
+    content: "\279F";
+}
+
+div#ir-visualization-pane div.icon-btn {
+    margin-left: 1px;
+}
+
+div.icon-btn:hover {
+    outline-width: 2px;
+}
+
+div.code {
+    white-space: pre;
+}
+div.code.ptx {
+    tab-size: 26;
+}
+
+span.comment {
+    color: #998;
+    font-style: italic;
+}
+
+span.keyword {
+    color: #333;
+    font-weight: bold;
+}
+
+span.IntImm {
+    color: #099;
+}
+
+span.UIntImm {
+    color: #099;
+}
+
+span.FloatImm {
+    color: #099;
+}
+
+span.StringImm {
+    color: #d14;
+}
+
+span.Type {
+    color: #445588;
+    font-weight: bold;
+}
+
+span.Symbol {
+    color: #990073;
+}
+
+span.Assign {
+    color: #d14;
+    font-weight: bold;
+}
+
+div.WrapLine {
+    margin-left: 30px;
+    text-indent: -30px;
+}
+
+span.OpeningBrace {
+    margin-left: 0.3em;
+}
+
+span.Comment {
+    color: green;
+    font-style: italic;
+}
+
+span.IfSpan,
+span.ClosingBrace,
+div.WrapLine,
+div.Consumer,
+div.Produce,
+div.For,
+div.Evaluate,
+div.Allocate,
+div.Function,
+div.Buffer,
+div.Evaluate {
+    counter-increment: line;
+}
+span.ClosingBrace + span span.IfSpan {
+    counter-increment: none;
+}
+span.IfSpan:before,
+span.ClosingBrace:before,
+div.WrapLine:before,
+div.Consumer:before,
+div.Produce:before,
+div.For:before,
+div.Evaluate:before,
+div.Allocate:before,
+div.Function:before,
+div.Buffer:before,
+div.Evaluat:before {
+    font-weight: normal;
+    content: counter(line) '. ';
+    display: inline-block;
+    position: absolute;
+    left: 0px;
+    width: 50px;
+    text-align: right;
+    color: rgb(175, 175, 175);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.tooltip-parent {
+    position: relative;
+    overflow: visible;
+}
+
+span.tooltip {
+    opacity: 1;
+    color: black;
+    font-weight: normal;
+    visibility: hidden;
+    left: 50px;
+    top: -10px;
+    width: max-content;
+    position: relative;
+    display: block;
+    padding: 8px;
+    background: #fff7e0;
+    font-size: 12px;
+    border-radius: 5px;
+    border: 1px solid #aaa;
+    z-index: 9999;
+    box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0;
+    text-indent: 0px;
+}
+
+.tooltip-parent:hover span.tooltip {
+    visibility: visible;
+}
+
+/* Cost model */
+
+div.node-cost {
+    position: absolute;
+    left: 52px; /* Enough for 4 digit line counter. */
+    width: 40px;
+}
+div.cost-btn {
+    width: 16px;
+    height: 10px;
+    margin-top: 0px;
+    /*border: 1px solid rgba(0,0,0,0.1);*/
+    position: relative;
+    float: left;
+    margin-right: 3px;
+    box-sizing: border-box;
+    outline: 1px solid rgba(0,0,0,0.1);
+}
+div.cost-btn:hover {
+    cursor: pointer;
+    /*border: 1px solid lightgray;*/
+}
+
+.block-CostColor0:first-child { border-left: 8px solid oklch(90.0% 0.05 140); }
+.block-CostColor1:first-child { border-left: 8px solid oklch(87.4% 0.06 140); }
+.block-CostColor2:first-child { border-left: 8px solid oklch(84.7% 0.06 140); }
+.block-CostColor3:first-child { border-left: 8px solid oklch(82.1% 0.07 140); }
+.block-CostColor4:first-child { border-left: 8px solid oklch(79.5% 0.07 140); }
+.block-CostColor5:first-child { border-left: 8px solid oklch(76.8% 0.08 140); }
+.block-CostColor6:first-child { border-left: 8px solid oklch(74.2% 0.08 140); }
+.block-CostColor7:first-child { border-left: 8px solid oklch(71.6% 0.09 140); }
+.block-CostColor8:first-child { border-left: 8px solid oklch(68.9% 0.09 140); }
+.block-CostColor9:first-child { border-left: 8px solid oklch(66.3% 0.10 140); }
+.block-CostColor10:first-child { border-left: 8px solid oklch(63.7% 0.10 140); }
+.block-CostColor11:first-child { border-left: 8px solid oklch(61.1% 0.11 140); }
+.block-CostColor12:first-child { border-left: 8px solid oklch(58.4% 0.11 140); }
+.block-CostColor13:first-child { border-left: 8px solid oklch(55.8% 0.12 140); }
+.block-CostColor14:first-child { border-left: 8px solid oklch(53.2% 0.12 140); }
+.block-CostColor15:first-child { border-left: 8px solid oklch(50.5% 0.13 140); }
+.block-CostColor16:first-child { border-left: 8px solid oklch(47.9% 0.13 140); }
+.block-CostColor17:first-child { border-left: 8px solid oklch(45.3% 0.14 140); }
+.block-CostColor18:first-child { border-left: 8px solid oklch(42.6% 0.14 140); }
+.block-CostColor19:first-child { border-left: 8px solid oklch(40.0% 0.15 140); }
+.block-CostColorNone:first-child { border-left: transparent; }
+
+.line-CostColor0:first-child { border-right: 8px solid oklch(90.0% 0.05 140); }
+.line-CostColor1:first-child { border-right: 8px solid oklch(87.4% 0.06 140); }
+.line-CostColor2:first-child { border-right: 8px solid oklch(84.7% 0.06 140); }
+.line-CostColor3:first-child { border-right: 8px solid oklch(82.1% 0.07 140); }
+.line-CostColor4:first-child { border-right: 8px solid oklch(79.5% 0.07 140); }
+.line-CostColor5:first-child { border-right: 8px solid oklch(76.8% 0.08 140); }
+.line-CostColor6:first-child { border-right: 8px solid oklch(74.2% 0.08 140); }
+.line-CostColor7:first-child { border-right: 8px solid oklch(71.6% 0.09 140); }
+.line-CostColor8:first-child { border-right: 8px solid oklch(68.9% 0.09 140); }
+.line-CostColor9:first-child { border-right: 8px solid oklch(66.3% 0.10 140); }
+.line-CostColor10:first-child { border-right: 8px solid oklch(63.7% 0.10 140); }
+.line-CostColor11:first-child { border-right: 8px solid oklch(61.1% 0.11 140); }
+.line-CostColor12:first-child { border-right: 8px solid oklch(58.4% 0.11 140); }
+.line-CostColor13:first-child { border-right: 8px solid oklch(55.8% 0.12 140); }
+.line-CostColor14:first-child { border-right: 8px solid oklch(53.2% 0.12 140); }
+.line-CostColor15:first-child { border-right: 8px solid oklch(50.5% 0.13 140); }
+.line-CostColor16:first-child { border-right: 8px solid oklch(47.9% 0.13 140); }
+.line-CostColor17:first-child { border-right: 8px solid oklch(45.3% 0.14 140); }
+.line-CostColor18:first-child { border-right: 8px solid oklch(42.6% 0.14 140); }
+.line-CostColor19:first-child { border-right: 8px solid oklch(40.0% 0.15 140); }
+.line-CostColorNone:first-child { border-right: transparent; }
+.block-CostColor0:last-child { border-left: 8px solid oklch(90.0% 0.05 300); }
+.block-CostColor1:last-child { border-left: 8px solid oklch(87.4% 0.06 300); }
+.block-CostColor2:last-child { border-left: 8px solid oklch(84.7% 0.06 300); }
+.block-CostColor3:last-child { border-left: 8px solid oklch(82.1% 0.07 300); }
+.block-CostColor4:last-child { border-left: 8px solid oklch(79.5% 0.07 300); }
+.block-CostColor5:last-child { border-left: 8px solid oklch(76.8% 0.08 300); }
+.block-CostColor6:last-child { border-left: 8px solid oklch(74.2% 0.08 300); }
+.block-CostColor7:last-child { border-left: 8px solid oklch(71.6% 0.09 300); }
+.block-CostColor8:last-child { border-left: 8px solid oklch(68.9% 0.09 300); }
+.block-CostColor9:last-child { border-left: 8px solid oklch(66.3% 0.10 300); }
+.block-CostColor10:last-child { border-left: 8px solid oklch(63.7% 0.10 300); }
+.block-CostColor11:last-child { border-left: 8px solid oklch(61.1% 0.11 300); }
+.block-CostColor12:last-child { border-left: 8px solid oklch(58.4% 0.11 300); }
+.block-CostColor13:last-child { border-left: 8px solid oklch(55.8% 0.12 300); }
+.block-CostColor14:last-child { border-left: 8px solid oklch(53.2% 0.12 300); }
+.block-CostColor15:last-child { border-left: 8px solid oklch(50.5% 0.13 300); }
+.block-CostColor16:last-child { border-left: 8px solid oklch(47.9% 0.13 300); }
+.block-CostColor17:last-child { border-left: 8px solid oklch(45.3% 0.14 300); }
+.block-CostColor18:last-child { border-left: 8px solid oklch(42.6% 0.14 300); }
+.block-CostColor19:last-child { border-left: 8px solid oklch(40.0% 0.15 300); }
+.block-CostColorNone:last-child { border-left: transparent; }
+
+.line-CostColor0:last-child { border-right: 8px solid oklch(90.0% 0.05 300); }
+.line-CostColor1:last-child { border-right: 8px solid oklch(87.4% 0.06 300); }
+.line-CostColor2:last-child { border-right: 8px solid oklch(84.7% 0.06 300); }
+.line-CostColor3:last-child { border-right: 8px solid oklch(82.1% 0.07 300); }
+.line-CostColor4:last-child { border-right: 8px solid oklch(79.5% 0.07 300); }
+.line-CostColor5:last-child { border-right: 8px solid oklch(76.8% 0.08 300); }
+.line-CostColor6:last-child { border-right: 8px solid oklch(74.2% 0.08 300); }
+.line-CostColor7:last-child { border-right: 8px solid oklch(71.6% 0.09 300); }
+.line-CostColor8:last-child { border-right: 8px solid oklch(68.9% 0.09 300); }
+.line-CostColor9:last-child { border-right: 8px solid oklch(66.3% 0.10 300); }
+.line-CostColor10:last-child { border-right: 8px solid oklch(63.7% 0.10 300); }
+.line-CostColor11:last-child { border-right: 8px solid oklch(61.1% 0.11 300); }
+.line-CostColor12:last-child { border-right: 8px solid oklch(58.4% 0.11 300); }
+.line-CostColor13:last-child { border-right: 8px solid oklch(55.8% 0.12 300); }
+.line-CostColor14:last-child { border-right: 8px solid oklch(53.2% 0.12 300); }
+.line-CostColor15:last-child { border-right: 8px solid oklch(50.5% 0.13 300); }
+.line-CostColor16:last-child { border-right: 8px solid oklch(47.9% 0.13 300); }
+.line-CostColor17:last-child { border-right: 8px solid oklch(45.3% 0.14 300); }
+.line-CostColor18:last-child { border-right: 8px solid oklch(42.6% 0.14 300); }
+.line-CostColor19:last-child { border-right: 8px solid oklch(40.0% 0.15 300); }
+.line-CostColorNone:last-child { border-right: transparent; }
+
+
+.NoChildCost { border-left: none !important; }
+
+.line-CostColorNone.block-CostColorNone { outline: none; }
+
+/* Below is the style for the Syntax Highlighting with speed-highlight.
+ * It's adapted from the default style from: https://unpkg.com/@speed-highlight/core@1.1.11/dist/themes/default.css
+ */
+[class*=shj-lang-]{
+    white-space:pre;
+    background:white;
+    color:#112;
+    box-shadow:0 0 5px #0001;
+    text-shadow:none;
+    font: 12px Consolas,Courier New,Monaco,Andale Mono,Ubuntu Mono,monospace;
+    line-height:14px;
+    box-sizing:border-box;
+    width: fit-content;
+}
+.shj-inline{
+    margin:0;
+    padding:2px 5px;
+    display:inline-block;
+    border-radius:5px
+}
+[class*=shj-lang-]::selection,[class*=shj-lang-] ::selection{
+    background:#bdf5
+}
+[class*=shj-lang-]>div{
+    display: block;
+    overflow: visible;
+    width: fit-content;
+}
+[class*=shj-lang-]>div :last-child{
+    flex:1;
+    outline:none
+}
+.shj-numbers{
+    padding-left:5px;
+    counter-reset:line
+}
+.shj-numbers div{
+    padding-right:5px;
+    width:0;
+}
+.shj-numbers div:before{
+    color:#999;
+    display:block;
+    content:counter(line);
+    opacity:.5;
+    text-align:right;
+    margin-right:5px;
+    counter-increment:line;
+    width:5em;
+}
+.shj-syn-cmnt{
+    font-style:italic
+}
+.shj-syn-err,.shj-syn-kwd{
+    color:#e16
+}
+.shj-syn-num,.shj-syn-class{
+    color:#f60
+}
+.shj-numbers,.shj-syn-cmnt{
+    color:#999
+}
+.shj-syn-insert,.shj-syn-str{
+    color:#7d8
+}
+.shj-syn-bool{
+    color:#3bf
+}
+.shj-syn-type,.shj-syn-oper{
+    color:#5af
+}
+.shj-syn-section,.shj-syn-func{
+    color:#84f
+}
+.shj-syn-deleted,.shj-syn-var{
+    color:#f44
+}
+.shj-oneline{
+    padding:12px 10px
+}
+.shj-lang-http.shj-oneline .shj-syn-kwd{
+    background:#25f;
+    color:#fff;
+    padding:5px 7px;
+    border-radius:5px
+}
+.shj-multiline.shj-mode-header{
+    padding:20px
+}
+.shj-multiline.shj-mode-header:before{
+    content:attr(data-lang);
+    color:#58f;
+    display:block;
+    padding:10px 20px;
+    background:#58f3;
+    border-radius:5px;
+    margin-bottom:20px
+}
+

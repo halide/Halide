@@ -18,7 +18,7 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
-#include "StmtToViz.h"
+#include "StmtToHTML.h"
 
 namespace Halide {
 namespace Internal {
@@ -49,7 +49,10 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::schedule, {"schedule", ".schedule.h", IsSingle}},
         {OutputFileType::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {OutputFileType::stmt, {"stmt", ".stmt", IsMulti}},
+        {OutputFileType::conceptual_stmt, {"conceptual_stmt", ".conceptual.stmt", IsMulti}},
         {OutputFileType::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
+        {OutputFileType::conceptual_stmt_html, {"conceptual_stmt_html", ".conceptual.stmt.html", IsMulti}},
+        {OutputFileType::device_code, {"device_code", ".device_code", IsMulti}},
     };
     return ext;
 }
@@ -325,6 +328,13 @@ struct ModuleContents {
     MetadataNameMap metadata_name_map;
     bool any_strict_float{false};
     std::unique_ptr<AutoSchedulerResults> auto_scheduler_results;
+
+    /** This is a copy of the code throughout the lowering process, which
+     * reflects best the actual pipeline, without introducing device-specific
+     * generated code from device-specific offloads (such as Cuda PTX,
+     * OpenGL Compute, etc...). In other words, we'd like to keep this
+     * conceptually relevant and human-readable. */
+    Stmt conceptual_code;
 };
 
 template<>
@@ -406,6 +416,26 @@ std::vector<Internal::LoweredFunc> &Module::functions() {
 
 const std::vector<Module> &Module::submodules() const {
     return contents->submodules;
+}
+
+Buffer<> Module::get_cuda_ptx_assembly_buffer() const {
+    for (const Buffer<> &buf : buffers()) {
+        if (ends_with(buf.name(), "_gpu_source_kernels")) {
+            if (starts_with(buf.name(), "cuda_")) {
+                return buf;
+            }
+        }
+    }
+    return {};
+}
+
+Buffer<> Module::get_device_code_buffer() const {
+    for (const Buffer<> &buf : buffers()) {
+        if (ends_with(buf.name(), "_gpu_source_kernels")) {
+            return buf;
+        }
+    }
+    return {};
 }
 
 Internal::LoweredFunc Module::get_function_by_name(const std::string &name) const {
@@ -519,6 +549,14 @@ MetadataNameMap Module::get_metadata_name_map() const {
     return contents->metadata_name_map;
 }
 
+void Module::set_conceptual_code_stmt(const Internal::Stmt &stmt) {
+    contents->conceptual_code = stmt;
+}
+
+const Internal::Stmt &Module::get_conceptual_stmt() const {
+    return contents->conceptual_code;
+}
+
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
 
@@ -551,7 +589,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     std::string assembly_path;
     if (contains(output_files, OutputFileType::assembly)) {
         assembly_path = output_files.at(OutputFileType::assembly);
-    } else if (contains(output_files, OutputFileType::stmt_html)) {
+    } else if (contains(output_files, OutputFileType::stmt_html) || contains(output_files, OutputFileType::conceptual_stmt_html)) {
         // We need assembly in order to generate stmt_html, but the user doesn't
         // want it on its own, so we will generate it to a temp directory, since some
         // build systems (e.g. Bazel) are strict about what you can generate to the 'expected'
@@ -627,10 +665,43 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::ofstream file(output_files.at(OutputFileType::stmt));
         file << *this;
     }
+    if (contains(output_files, OutputFileType::conceptual_stmt)) {
+        debug(1) << "Module.compile(): conceptual_stmt " << output_files.at(OutputFileType::conceptual_stmt) << "\n";
+        std::ofstream file(output_files.at(OutputFileType::conceptual_stmt));
+        file << get_conceptual_stmt();
+    }
     if (contains(output_files, OutputFileType::stmt_html)) {
         internal_assert(!assembly_path.empty());
         debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
-        Internal::print_to_viz(output_files.at(OutputFileType::stmt_html), *this, assembly_path);
+        Internal::print_to_stmt_html(output_files.at(OutputFileType::stmt_html),
+                                     *this, assembly_path);
+    }
+    if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
+        internal_assert(!assembly_path.empty());
+        debug(1) << "Module.compile(): conceptual_stmt_html " << output_files.at(OutputFileType::conceptual_stmt_html) << "\n";
+        Internal::print_to_conceptual_stmt_html(output_files.at(OutputFileType::conceptual_stmt_html),
+                                                *this, assembly_path);
+    }
+    if (contains(output_files, OutputFileType::device_code)) {
+        debug(1) << "Module.compile(): device_code " << output_files.at(OutputFileType::device_code) << "\n";
+        Buffer<> buf = get_device_code_buffer();
+        if (buf.defined()) {
+            int length = buf.size_in_bytes();
+            while (length > 0 && ((const char *)buf.data())[length - 1] == '\0') {
+                length--;
+            }
+            std::string str((const char *)buf.data(), length);
+            std::string device_code = std::string((const char *)buf.data(), buf.size_in_bytes());
+            while (!device_code.empty() && device_code.back() == '\0') {
+                device_code = device_code.substr(0, device_code.length() - 1);
+            }
+            std::ofstream file(output_files.at(OutputFileType::device_code));
+            file << device_code << "\n";
+            file.close();
+            debug(1) << "Saved GPU kernel sources (" << device_code.size() << " bytes).\n";
+        } else {
+            debug(1) << "No GPU kernel sources emitted.\n";
+        }
     }
     if (contains(output_files, OutputFileType::function_info_header)) {
         debug(1) << "Module.compile(): function_info_header " << output_files.at(OutputFileType::function_info_header) << "\n";
