@@ -1330,12 +1330,14 @@ private:
     // Prints a cost button/indicator
     void print_cost_btn(int line_cost, int block_cost, int max_line_cost, int max_block_cost, std::string id, std::string prefix) {
         const int num_cost_buckets = 20;
+        const auto compand = [](int v) -> int { return (int) std::sqrt(v * 10); };
 
-        int line_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
-        int block_cost_bin_size = (max_block_cost / num_cost_buckets) + 1;
+        int max_cost = std::max(max_line_cost, max_block_cost); // This should always be the block cost.
+        int line_cost_bin_size = (compand(max_cost) / num_cost_buckets) + 1;
+        int block_cost_bin_size = (compand(max_cost) / num_cost_buckets) + 1;
 
-        int line_costc = line_cost / line_cost_bin_size;
-        int block_costc = block_cost / block_cost_bin_size;
+        int line_costc = compand(line_cost) / line_cost_bin_size;
+        int block_costc = compand(block_cost) / block_cost_bin_size;
 
         if (line_costc >= num_cost_buckets) {
             line_costc = num_cost_buckets - 1;
@@ -1362,8 +1364,6 @@ private:
 
         stream << "<div id='" << id << "' "
                << "class='cost-btn tooltip-parent line-" << line_cost_class << " block-" << block_cost_class << "' "
-               //<< "line-cost='" << line_cost << "' block-cost='" << block_cost << "' "
-               //<< "line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'"
                << ">";
 
         stream << "<span class='tooltip' role='tooltip'>"

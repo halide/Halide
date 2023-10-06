@@ -120,6 +120,28 @@ function collapseTab(index) {  // eslint-disable-line no-unused-vars
     }
 
     pane.classList.toggle('collapsed-pane');
+    if (index > 0) { // left resizer
+        var resizer = panes.firstElementChild;
+        for (var i = 0; i < index; ++i) {
+            resizer = resizer.nextElementSibling.nextElementSibling;
+        }
+        if (resizer !== null) {
+            var colRightBtn = resizer.firstElementChild.firstElementChild.nextElementSibling.firstElementChild;
+            colRightBtn.classList.toggle('active');
+        }
+    }
+
+    { // right resizer
+        var resizer = panes.firstElementChild;
+        for (var i = 0; i <= index; ++i) {
+            if (resizer !== null) resizer = resizer.nextElementSibling;
+            if (resizer !== null) resizer = resizer.nextElementSibling;
+        }
+        if (resizer !== null) {
+            var colLeftBtn = resizer.firstElementChild.firstElementChild.firstElementChild;
+            colLeftBtn.classList.toggle('active');
+        }
+    }
 }
 
 function scrollToHostAsm(lno) {  // eslint-disable-line no-unused-vars
