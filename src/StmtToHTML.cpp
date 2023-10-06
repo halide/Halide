@@ -1330,9 +1330,9 @@ private:
     // Prints a cost button/indicator
     void print_cost_btn(int line_cost, int block_cost, int max_line_cost, int max_block_cost, std::string id, std::string prefix) {
         const int num_cost_buckets = 20;
-        const auto compand = [](int v) -> int { return (int) std::sqrt(v * 10); };
+        const auto compand = [](int v) -> int { return (int)std::sqrt(v * 10); };
 
-        int max_cost = std::max(max_line_cost, max_block_cost); // This should always be the block cost.
+        int max_cost = std::max(max_line_cost, max_block_cost);  // This should always be the block cost.
         int line_cost_bin_size = (compand(max_cost) / num_cost_buckets) + 1;
         int block_cost_bin_size = (compand(max_cost) / num_cost_buckets) + 1;
 
