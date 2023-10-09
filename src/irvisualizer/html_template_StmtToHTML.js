@@ -21,6 +21,37 @@ function addHighlight(selector) {
             });
         });
     });
+
+    // The number of classes defined in the CSS:
+    var highlightInUse = new Array(7).fill(false);
+
+    // Variables are in <b> tags.
+    var matchedElements = document.querySelectorAll(selector + ' b.matched');
+    matchedElements.forEach(function(element) {
+        element.addEventListener('click', function(event) {
+            var idPrefix = this.id.split('-')[0];
+            var matchingElements = document.querySelectorAll(selector + ' b.matched[id^="' + idPrefix + '-"]');
+
+            const classes = Array.from(element.classList).filter(className => className.startsWith("HighlightToggle"));
+            if (classes.length === 1) {
+                var className = classes[0];
+                var highlightIdx = parseInt(className.substr("HighlightToggle".length));
+                highlightInUse[highlightIdx] = false;
+                matchingElements.forEach(function(matchingElement) {
+                    matchingElement.classList.remove(className);
+                });
+            } else {
+                var highlightIdx = highlightInUse.indexOf(false);
+                if (highlightIdx != -1) {
+                    highlightInUse[highlightIdx] = true;
+                    matchingElements.forEach(function(matchingElement) {
+                        matchingElement.classList.add('HighlightToggle' + highlightIdx);
+                    });
+                }
+            }
+            event.preventDefault();
+        });
+    });
 }
 
 // Example usage:
