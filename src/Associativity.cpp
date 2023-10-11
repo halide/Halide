@@ -233,15 +233,12 @@ bool extract_associative_op(const vector<Expr> &exprs, const vector<string> &op_
     if (exprs.size() == 1) {
         Type t = exprs[0].type();
         if (!x_parts[0].defined()) {
-            // Update with no self-recurrence is associative and the identity
-            // can be anything since it's going to be replaced anyway, but it's
-            // not commutative
-            assoc_op.pattern.ops[0] = Variable::make(t, op_y_names[0]);
-            assoc_op.pattern.identities[0] = make_const(t, 0);
-            assoc_op.pattern.is_commutative = false;
-            assoc_op.xs[0] = {"", Expr()};
-            assoc_op.ys[0] = {op_y_names[0], exprs[0]};
-            return true;
+            // An update that just assigns some value is not associative,
+            // because there's no good identity. An identity is necessary
+            // because things like rfactor will combine the identity with
+            // partially-computed values and expect it to do nothing. For an
+            // example, see https://github.com/halide/Halide/issues/7893
+            return false;
         } else if (equal(exprs[0], Variable::make(t, op_x_names[0]))) {
             // Self assignment, f(x) = f(x), is both associative
             // and commutative. The identity can be anything since it's
