@@ -298,9 +298,9 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
 #if LLVM_VERSION >= 180
         if (target.bits == 32) {
             if (target.os == Target::OSX) {
-                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
+                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::IOS) {
-                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
+                return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:128-n8:16:32-S128");
             } else if (target.os == Target::Windows) {
                 // For 32-bit MSVC targets, alignment of f80 values is 16 bytes (see https://reviews.llvm.org/D115942)
                 if (!target.has_feature(Target::JIT)) {
@@ -310,7 +310,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
                 }
             } else {
                 // Linux/Android
-                return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:32-n8:16:32-S128");
+                return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i128:128-f64:32:64-f80:32-n8:16:32-S128");
             }
         } else {  // 64-bit
             if (target.os == Target::OSX) {
