@@ -1080,18 +1080,6 @@ private:
         context_stack_tags.push_back(tag);
     }
 
-    /*
-    void print_opening_tag(const std::string &tag, const std::string &cls, const std::string &tooltip, const std::string &id) {
-        stream << "<" << tag << " class='" << cls << "'";
-        if (!tooltip.empty()) {
-            stream << " title='" << tooltip << "'";
-        }
-        stream << " id='";
-        context_stack.push_back(gen_unique_id());
-        context_stack_tags.push_back(tag);
-    }
-    */
-
     // Prints the closing tag for the specified html element.
     void print_closing_tag(const std::string &tag) {
         internal_assert(!context_stack.empty() && tag == context_stack_tags.back())
@@ -1107,14 +1095,6 @@ private:
         stream << body;
         print_closing_tag(tag);
     }
-
-    /*
-    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body, const std::string &tooltip, const std::string &id) {
-        print_opening_tag(tag, cls, tooltip, id);
-        stream << body;
-        print_closing_tag(tag);
-    }
-    */
 
     void print_opening_brace() {
         print_html_element("span", "matched OpeningBrace", "{");
@@ -1241,14 +1221,6 @@ private:
         print_html_element("span", "matched", ")", result_type_str);
         print_closing_tag("span");
     }
-
-    /*
-    void print_function_call(std::string fn_name, const std::vector<Expr> &args, int id) {
-        print_opening_tag("span", "", "fn-call-" + std::to_string(id));
-        print_function_call(fn_name, args);
-        print_closing_tag("span");
-    }
-    */
 
     void print_function_call(std::string fn_name, const std::vector<Expr> &args, const std::string &tooltip) {
         print_opening_tag("span", "matched");
@@ -1574,12 +1546,6 @@ private:
     }
 
     void visit(const Call *op) override {
-        /*
-        int id = gen_node_id(op);
-        print_opening_tag("span", "Call");
-        print_function_call(op->name, op->args, id);
-        print_closing_tag("span");
-        */
         print_opening_tag("span", "Call");
         print_function_call(op->name, op->args, type_to_string(op->type));
         print_closing_tag("span");
