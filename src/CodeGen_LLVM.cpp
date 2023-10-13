@@ -4070,7 +4070,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             all_indices_the_same &= (i == op->indices[0]);
         }
         if (all_indices_the_same) {
-            value = codegen(op->vectors[0]);
+            value = vecs[0];
             if (value->getType()->isVectorTy()) {
                 value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, op->indices[0]));
             } else {
