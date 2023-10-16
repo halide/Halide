@@ -432,6 +432,9 @@ void lower_impl(const vector<Function> &output_funcs,
         }
     }
 
+    // Make a copy of the Stmt code, before we lower anything to less human-readable code.
+    result_module.set_conceptual_code_stmt(s);
+
     if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
         debug(1) << "Splitting off Hexagon offload...\n";
         s = inject_hexagon_rpc(s, t, result_module);
