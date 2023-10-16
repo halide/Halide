@@ -44,15 +44,16 @@ private:
         Expr condition;
         vector<Expr> extents;
 
-        HoistedRealize(string name, const std::vector<Type>& types, 
-                        MemoryType memory_type, Region bounds,
-                        Expr condition, const vector<Expr>& extents)
-         : name(name), 
-            types(types),
-            memory_type(memory_type),
-            bounds(bounds),
-            condition(condition),
-            extents(extents) {}
+        HoistedRealize(string name, const std::vector<Type> &types,
+                       MemoryType memory_type, Region bounds,
+                       Expr condition, const vector<Expr> &extents)
+            : name(name),
+              types(types),
+              memory_type(memory_type),
+              bounds(bounds),
+              condition(condition),
+              extents(extents) {
+        }
     };
 
     const map<string, pair<Function, int>> &env;
@@ -125,7 +126,7 @@ private:
         return idx;
     }
 
-    Stmt emit_allocate(string name, const vector<HoistedRealize>& realize_nodes, Stmt body) {
+    Stmt emit_allocate(string name, const vector<HoistedRealize> &realize_nodes, Stmt body) {
         HoistedRealize realize = realize_nodes.front();
         // The allocation extents of the function taken into account of
         // the align_storage directives. It is only used to determine the
@@ -232,10 +233,10 @@ private:
         }
         return stmt;
     }
-    
+
     using IRMutator::visit;
 
-    Stmt visit(const HoistedStorage* op) override {
+    Stmt visit(const HoistedStorage *op) override {
         debug(0) << "Found a hoisted storage - " << op->name << "\n";
         hoisted_storages.emplace(op->name, vector<HoistedRealize>());
         Stmt mutated = IRMutator::visit(op);
@@ -269,7 +270,7 @@ private:
         //     hoisted_storages[op->name].push_back(mutated_realize);
         //     return body;
         // } else {
-            return emit_allocate(op->name, {mutated_realize}, body);
+        return emit_allocate(op->name, {mutated_realize}, body);
         // }
     }
 
