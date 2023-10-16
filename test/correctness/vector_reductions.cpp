@@ -19,7 +19,11 @@ void add_tasks(const Target &target, std::vector<Task> &tasks) {
             const int src_lanes = dst_lanes * reduce_factor;
             for (Type src_type : types) {
                 for (int widen_factor : {1, 2, 4}) {
-                    Type dst_type = src_type.with_bits(src_type.bits() * widen_factor);
+                    int dst_bits = src_type.bits() * widen_factor;
+                    if (dst_bits > 64) {
+                        continue;
+                    }
+                    Type dst_type = src_type.with_bits(dst_bits);
                     if (std::find(types.begin(), types.end(), dst_type) == types.end()) {
                         continue;
                     }
