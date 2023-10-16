@@ -11,10 +11,16 @@ int main(int argc, char **argv) {
         f(x, y) = x + y;
         g(x, y) = f(x - 1, y - 1) + f(x + 1, y + 1);
         g.compute_root()
-            .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::GuardWithIf);
+            .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::RoundUp);
 
         f.compute_at(g, xo)
-            .hoist_storage(g, Var::outermost());
+            .hoist_storage(g, yo);
+
+        // g.compute_root()
+        //     .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::RoundUp);
+
+        // f.compute_at(g, xo)
+        //     .hoist_storage(g, Var::outermost());
 
         Buffer<int> out = g.realize({128, 128});
 

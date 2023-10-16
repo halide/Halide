@@ -127,6 +127,7 @@ private:
     }
 
     Stmt emit_allocate(string name, const vector<HoistedRealize> &realize_nodes, Stmt body) {
+        internal_assert(realize_nodes.size() == 1);
         HoistedRealize realize = realize_nodes.front();
         // The allocation extents of the function taken into account of
         // the align_storage directives. It is only used to determine the
@@ -239,7 +240,8 @@ private:
     Stmt visit(const HoistedStorage *op) override {
         debug(0) << "Found a hoisted storage - " << op->name << "\n";
         hoisted_storages.emplace(op->name, vector<HoistedRealize>());
-        Stmt mutated = IRMutator::visit(op);
+        Stmt mutated = mutate(op->body);
+        mutated = emit_allocate(op->name, hoisted_storages[op->name], mutated);
         hoisted_storages.erase(op->name);
         return mutated;
     }
@@ -265,13 +267,13 @@ private:
 
         HoistedRealize mutated_realize(op->name, op->types, op->memory_type, op->bounds, condition, extents);
 
-        // if (hoisted_storages.count(op->name) > 0) {
-        //     debug(0) << "Inside of the corresponding hoisted storage" << op->name << "\n";
-        //     hoisted_storages[op->name].push_back(mutated_realize);
-        //     return body;
-        // } else {
-        return emit_allocate(op->name, {mutated_realize}, body);
-        // }
+        if (hoisted_storages.count(op->name) > 0) {
+            debug(0) << "Inside of the corresponding hoisted storage" << op->name << "\n";
+            hoisted_storages[op->name].push_back(mutated_realize);
+            return body;
+        } else {
+            return emit_allocate(op->name, {mutated_realize}, body);
+        }
     }
 
     Stmt visit(const Provide *op) override {
