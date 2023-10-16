@@ -1247,7 +1247,12 @@ protected:
             for (size_t i = 0; i < funcs.size(); i++) {
                 if (funcs[i].schedule().hoist_storage_level().match(for_loop->name)) {
                     debug(0) << "Found hoist storage level for " << funcs[i].name() << " at " << for_loop->name << "\n";
-                    body = HoistedStorage::make(funcs[i].name(), body);
+                    if (funcs[i].schedule().hoist_storage_level() != funcs[i].schedule().store_level()) {
+                        debug(0) << "Hoisting storage\n";
+                        body = HoistedStorage::make(funcs[i].name(), body);
+                    } else {
+                        debug(0) << "Not hoisting the storage, because hoist_storage_level() and store_level() match\n";
+                    }
                     _found_hoist_storage_levels_for_funcs.insert(funcs[i].name());
                 }
             }
