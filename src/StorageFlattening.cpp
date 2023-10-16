@@ -461,17 +461,19 @@ class FindAndRemoveAllAllocates : public IRMutator {
     Stmt visit(const Allocate *op) override {
         if (op->name == name_) {
             debug(0) << "Found allocate with the name " << op->name << "\n";
-            allocates.push_back(Allocate::make(op->name, op->type, op->memory_type, op->extents, 
-                                                op->condition, op->body, op->new_expr, op->free_function, 
-                                                op->padding));
+            allocates.push_back(Allocate::make(op->name, op->type, op->memory_type, op->extents,
+                                               op->condition, op->body, op->new_expr, op->free_function,
+                                               op->padding));
             return mutate(op->body);
         }
         return IRMutator::visit(op);
     }
 
-    public:
+public:
     std::vector<Stmt> allocates;
-    FindAndRemoveAllAllocates(const string& name) : name_(name) {}
+    FindAndRemoveAllAllocates(const string &name)
+        : name_(name) {
+    }
 };
 
 class HoistStorage : public IRMutator {
@@ -483,13 +485,13 @@ class HoistStorage : public IRMutator {
         FindAndRemoveAllAllocates allocates_finder(op->name);
         body = allocates_finder.mutate(body);
         internal_assert(allocates_finder.allocates.size() == 1);
-        for (const auto& allocate: allocates_finder.allocates) {
+        for (const auto &allocate : allocates_finder.allocates) {
             debug(0) << allocate.as<Allocate>()->name << "\n";
         }
-        const auto* allocate = allocates_finder.allocates[0].as<Allocate>();
-        return Allocate::make(allocate->name, allocate->type, allocate->memory_type, allocate->extents, 
-                                                allocate->condition, body, allocate->new_expr, allocate->free_function, 
-                                                allocate->padding);
+        const auto *allocate = allocates_finder.allocates[0].as<Allocate>();
+        return Allocate::make(allocate->name, allocate->type, allocate->memory_type, allocate->extents,
+                              allocate->condition, body, allocate->new_expr, allocate->free_function,
+                              allocate->padding);
         // return body;
     }
 };
@@ -501,7 +503,6 @@ Stmt storage_flattening(Stmt s,
                         const Target &target) {
     // The OpenGL backend requires loop mins to be zero'd at this point.
     s = zero_gpu_loop_mins(s);
-
 
     // Make an environment that makes it easier to figure out which
     // Function corresponds to a tuple component. foo.0, foo.1, foo.2,

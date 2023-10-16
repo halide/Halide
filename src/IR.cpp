@@ -914,7 +914,7 @@ Stmt Atomic::make(const std::string &producer_name,
 }
 
 Stmt HoistedStorage::make(const std::string &name,
-                  Stmt body) {
+                          Stmt body) {
     HoistedStorage *node = new HoistedStorage;
     node->name = name;
     internal_assert(body.defined()) << "HoistedStorage must have a body statement.\n";
