@@ -1,3 +1,5 @@
+# Default to the adams 2019 autoscheduler
+AUTOSCHEDULER ?= adams2019
 include ../support/Makefile.inc
 
 ifneq (,$(findstring -m32,$(CXX) $(CC) $(CCFLAGS) $(CXXFLAGS)))
@@ -13,7 +15,7 @@ ifdef PROTOC
 CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -Wno-sign-compare -Wno-unused-but-set-variable
 CXXFLAGS += -I$(dir $(PROTOC))../include
 LDFLAGS += -L$(dir $(PROTOC))../lib
-LDFLAGS += -lprotobuf-lite
+LDFLAGS += $(shell pkg-config protobuf-lite --libs)
 
 # Copy onnx.proto to $(BIN)
 $(BIN)/%/onnx/onnx.proto:
@@ -83,18 +85,18 @@ test: build model_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
 PYTHON ?= python3
-PYBIND11_CFLAGS = $(shell $(PYTHON)-config --includes) -frtti
+PYBIND11_CFLAGS = $(shell pybind11-config --includes) -frtti -std=c++17
 ifeq ($(UNAME), Darwin)
     # Keep OS X builds from complaining about missing libpython symbols
     PYBIND11_CFLAGS += -undefined dynamic_lookup
 endif
 PY_EXT = $(shell $(PYTHON)-config --extension-suffix)
 PY_MODEL_EXT = model_cpp$(PY_EXT)
-PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) -Wno-deprecated-register
+PYCXXFLAGS = $(PYBIND11_CFLAGS) $(CXXFLAGS) -Wno-deprecated-register
 
 # Python extension for HalideModel
 $(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a
-	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $^ $(LIBHALIDE_LDFLAGS) -Wl,--no-as-needed -lautoschedule_adams2019 -Wl,--as-needed -o $@ $(LDFLAGS)
+	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $^ $(LIBHALIDE_LDFLAGS) -o $@ $(LDFLAGS)
 
 
 model_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)

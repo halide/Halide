@@ -710,7 +710,7 @@ WEAK int halide_hexagon_dma_power_mode_voting(void *user_context, halide_hexagon
         val = ~PW_SVS;
         break;
     default:
-        error(user_context) << "Hexagon: halide_hexagon_dma_power_voting power mode (", cornercase, ") not found\n";
+        error(user_context) << "Hexagon: halide_hexagon_dma_power_voting power mode (" << cornercase << ") not found\n";
         return halide_error_code_generic_error;
     }
     int nRet = nDmaWrapper_PowerVoting(val);

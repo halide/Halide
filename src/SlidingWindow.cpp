@@ -266,10 +266,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
             const std::vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
-                if (slid_dimensions.count(i)) {
-                    debug(3) << "Already slid over dimension " << i << ", so skipping it.\n";
-                    continue;
-                }
                 // Look up the region required of this function's last stage
                 string var = prefix + func_args[i];
                 internal_assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
@@ -304,6 +300,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 }
             }
 
+            if (!dim.empty() && slid_dimensions.count(dim_idx)) {
+                debug(1) << "Already slid over dimension " << dim_idx << ", so skipping it.\n";
+                dim = "";
+                min_required = Expr();
+                max_required = Expr();
+            }
             if (!min_required.defined()) {
                 debug(3) << "Could not perform sliding window optimization of "
                          << func.name() << " over " << loop_var << " because multiple "

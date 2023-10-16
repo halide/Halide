@@ -105,6 +105,15 @@ inline ComplexExpr operator*(Halide::Expr a, ComplexExpr b) {
 inline ComplexExpr operator/(ComplexExpr a, Halide::Expr b) {
     return ComplexExpr(re(a) / b, im(a) / b);
 }
+inline ComplexExpr
+operator/(ComplexExpr z1, ComplexExpr z2) {
+    const auto a = re(z1);
+    const auto b = im(z1);
+    const auto c = re(z2);
+    const auto d = im(z2);
+
+    return ComplexExpr{(a * c + b * d) / (c * c + d * d), (b * c - a * d) / (c * c + d * d)};
+}
 
 // Compute exp(j*x)
 inline ComplexExpr expj(Halide::Expr x) {
