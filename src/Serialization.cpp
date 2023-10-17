@@ -1468,8 +1468,7 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
                                                   builder.CreateVector(parameters_serialized),
                                                   builder.CreateVector(buffers_serialized),
                                                   serialize_string(builder, halide_version),
-                                                  serialize_string(builder, serialization_version)
-                                                  );
+                                                  serialize_string(builder, serialization_version));
     builder.Finish(pipeline_obj);
 
     uint8_t *buf = builder.GetBufferPointer();
