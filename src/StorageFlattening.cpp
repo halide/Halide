@@ -36,15 +36,17 @@ public:
 };
 
 class LiftDependantLets : public IRMutator {
-    using IRMutator::visit;
-
 public:
+    vector<pair<string, Expr>> lifted_lets;
+
     LiftDependantLets(CollectVars *collect_vars)
         : collect_vars_(collect_vars) {
     }
 
 private:
     CollectVars *collect_vars_;
+
+    using IRMutator::visit;
 
     // Expr visit(const Let *op) override {
     //     // if (op->value.as<Variable>()) {
@@ -56,14 +58,15 @@ private:
     // }
 
     Stmt visit(const LetStmt *op) override {
+        Stmt body = mutate(op->body);
+        Expr value = mutate(op->value);
         if (collect_vars_->vars.count(op->name)) {
             op->value.accept(collect_vars_);
+            lifted_lets.push_back({op->name, mutate(op->value)});
+            return body;
+        } else {
+            return LetStmt::make(op->name, value, body);
         }
-        // if (op->value.as<Variable>()) {
-        //     return mutate(substitute(op->name, op->value, op->body));
-        // } else {
-        return IRMutator::visit(op);
-        // }
     }
 };
 
@@ -79,23 +82,21 @@ public:
     }
 
 private:
-    struct HoistedRealize {
+    struct HoistedStorageInfo {
         string name;
-        std::vector<Type> types;
+        Type type;
         MemoryType memory_type;
-        Region bounds;
-        Expr condition;
         vector<Expr> extents;
+        Expr condition;
 
-        HoistedRealize(string name, const std::vector<Type> &types,
-                       MemoryType memory_type, Region bounds,
-                       Expr condition, const vector<Expr> &extents)
+        HoistedStorageInfo(string name, Type type,
+                       MemoryType memory_type,
+                       const vector<Expr> &extents, Expr condition)
             : name(name),
-              types(types),
+              type(type),
               memory_type(memory_type),
-              bounds(bounds),
-              condition(condition),
-              extents(extents) {
+              extents(extents), 
+              condition(condition) {
         }
     };
 
@@ -105,7 +106,7 @@ private:
     const Target &target;
     Scope<> realizations;
     bool in_gpu = false;
-    map<string, vector<HoistedRealize>> hoisted_storages;
+    map<string, vector<HoistedStorageInfo>> hoisted_storages;
 
     Expr make_shape_var(string name, const string &field, size_t dim,
                         const Buffer<> &buf, const Parameter &param) {
@@ -169,143 +170,32 @@ private:
         return idx;
     }
 
-    Stmt emit_allocate(string name, const vector<HoistedRealize> &realize_nodes, Stmt body, bool needs_lets_lifting) {
-        internal_assert(realize_nodes.size() == 1);
-        HoistedRealize realize = realize_nodes.front();
-        // The allocation extents of the function taken into account of
-        // the align_storage directives. It is only used to determine the
-        // host allocation size and the strides in halide_buffer_t objects (which
-        // also affects the device allocation in some backends).
-        vector<Expr> allocation_extents(realize.extents.size());
-        vector<int> storage_permutation;
-        vector<Stmt> bound_asserts;
-        {
-            auto iter = env.find(realize.name);
-            internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
-            Function f = iter->second.first;
-            const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
-            const vector<string> &args = f.args();
-            for (size_t i = 0; i < storage_dims.size(); i++) {
-                for (size_t j = 0; j < args.size(); j++) {
-                    if (args[j] == storage_dims[i].var) {
-                        storage_permutation.push_back((int)j);
-                        Expr bound = storage_dims[i].bound;
-                        if (bound.defined()) {
-                            if (can_prove(realize.extents[j] > bound)) {
-                                user_error << "Explicit storage bound (" << bound << ") for variable " << args[j] << " of function " << realize.name << " is smaller than required (" << realize.extents[j] << ")\n";
-                            }
-                            Expr bound_too_small_error =
-                                Call::make(Int(32),
-                                           "halide_error_storage_bound_too_small",
-                                           {StringImm::make(realize.name), StringImm::make(args[j]), bound, realize.extents[j]},
-                                           Call::Extern);
-                            Stmt size_to_small_check = AssertStmt::make(realize.extents[j] <= bound, bound_too_small_error);
-                            bound_asserts.push_back(size_to_small_check);
-                            realize.extents[j] = bound;
-                        }
-                        Expr alignment = storage_dims[i].alignment;
-                        if (alignment.defined()) {
-                            allocation_extents[j] = ((realize.extents[j] + alignment - 1) / alignment) * alignment;
-                        } else {
-                            allocation_extents[j] = realize.extents[j];
-                        }
-                    }
-                }
-                internal_assert(storage_permutation.size() == i + 1);
-            }
-        }
-
-        internal_assert(storage_permutation.size() == realize.bounds.size());
-
-        Stmt stmt = body;
-        internal_assert(realize.types.size() == 1);
-
-        // Make the names for the mins, extents, and strides
-        int dims = realize.bounds.size();
-        vector<string> min_name(dims), extent_name(dims), stride_name(dims);
-        for (int i = 0; i < dims; i++) {
-            string d = std::to_string(i);
-            min_name[i] = realize.name + ".min." + d;
-            stride_name[i] = realize.name + ".stride." + d;
-            extent_name[i] = realize.name + ".extent." + d;
-        }
-        vector<Expr> min_var(dims), extent_var(dims), stride_var(dims);
-        for (int i = 0; i < dims; i++) {
-            min_var[i] = Variable::make(Int(32), min_name[i]);
-            extent_var[i] = Variable::make(Int(32), extent_name[i]);
-            stride_var[i] = Variable::make(Int(32), stride_name[i]);
-        }
-
-        // Create a halide_buffer_t object for this allocation.
-        BufferBuilder builder;
-        builder.host = Variable::make(Handle(), realize.name);
-        builder.type = realize.types[0];
-        builder.dimensions = dims;
-        for (int i = 0; i < dims; i++) {
-            builder.mins.push_back(min_var[i]);
-            builder.extents.push_back(extent_var[i]);
-            builder.strides.push_back(stride_var[i]);
-        }
-        stmt = LetStmt::make(realize.name + ".buffer", builder.build(), stmt);
-
-        // Make the allocation node
-        stmt = Allocate::make(realize.name, realize.types[0], realize.memory_type, allocation_extents, realize.condition, stmt);
-
-        // Wrap it into storage bound asserts.
-        if (!bound_asserts.empty()) {
-            stmt = Block::make(Block::make(bound_asserts), stmt);
-        }
-
-        // Compute the strides
-        for (int i = (int)realize.bounds.size() - 1; i > 0; i--) {
-            int prev_j = storage_permutation[i - 1];
-            int j = storage_permutation[i];
-            Expr stride = stride_var[prev_j] * allocation_extents[prev_j];
-            stmt = LetStmt::make(stride_name[j], stride, stmt);
-        }
-
-        // Innermost stride is one
-        if (dims > 0) {
-            int innermost = storage_permutation.empty() ? 0 : storage_permutation[0];
-            stmt = LetStmt::make(stride_name[innermost], 1, stmt);
-        }
-
-        // Assign the mins and extents stored
-        for (size_t i = realize.bounds.size(); i > 0; i--) {
-            stmt = LetStmt::make(min_name[i - 1], realize.bounds[i - 1].min, stmt);
-            stmt = LetStmt::make(extent_name[i - 1], realize.extents[i - 1], stmt);
-        }
-
-        if (needs_lets_lifting) {
-            CollectVars collect_vars;
-            for (const auto &b : realize.bounds) {
-                b.min.accept(&collect_vars);
-            }
-            for (const auto &e : realize.extents) {
-                e.accept(&collect_vars);
-            }
-            realize.condition.accept(&collect_vars);
-
-            LiftDependantLets lift_lets(&collect_vars);
-            lift_lets.mutate(stmt);
-
-            for (const auto &v : collect_vars.vars) {
-                debug(0) << "Depends on: " << v << "\n";
-            }
-        }
-
-        return stmt;
-    }
-
     using IRMutator::visit;
 
     Stmt visit(const HoistedStorage *op) override {
         debug(0) << "Found a hoisted storage - " << op->name << "\n";
-        hoisted_storages.emplace(op->name, vector<HoistedRealize>());
-        Stmt mutated = mutate(op->body);
-        mutated = emit_allocate(op->name, hoisted_storages[op->name], mutated, true);
+        hoisted_storages.emplace(op->name, vector<HoistedStorageInfo>());
+        Stmt body = mutate(op->body);
+        internal_assert(hoisted_storages[op->name].size() == 1);
+        const auto& alloc_info = hoisted_storages[op->name].front();
+        body = Allocate::make(alloc_info.name, alloc_info.type, alloc_info.memory_type, alloc_info.extents, alloc_info.condition, body);
+        CollectVars collect_vars;
+        for (const auto &e : alloc_info.extents) {
+            e.accept(&collect_vars);
+        }
+        alloc_info.condition.accept(&collect_vars);
+
+        LiftDependantLets lift_lets(&collect_vars);
+        body = lift_lets.mutate(body);
+
+        for (const auto &v : collect_vars.vars) {
+            debug(0) << "Depends on: " << v << "\n";
+        }
+        for (int ix = lift_lets.lifted_lets.size() - 1; ix >= 0; ix--) {
+            body = LetStmt::make(lift_lets.lifted_lets[ix].first, lift_lets.lifted_lets[ix].second, body);
+        }
         hoisted_storages.erase(op->name);
-        return mutated;
+        return body;
     }
 
     Stmt visit(const Realize *op) override {
@@ -327,15 +217,117 @@ private:
 
         realizations.pop(op->name);
 
-        HoistedRealize mutated_realize(op->name, op->types, op->memory_type, op->bounds, condition, extents);
+        // The allocation extents of the function taken into account of
+        // the align_storage directives. It is only used to determine the
+        // host allocation size and the strides in halide_buffer_t objects (which
+        // also affects the device allocation in some backends).
+        vector<Expr> allocation_extents(extents.size());
+        vector<int> storage_permutation;
+        vector<Stmt> bound_asserts;
+        {
+            auto iter = env.find(op->name);
+            internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
+            Function f = iter->second.first;
+            const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
+            const vector<string> &args = f.args();
+            for (size_t i = 0; i < storage_dims.size(); i++) {
+                for (size_t j = 0; j < args.size(); j++) {
+                    if (args[j] == storage_dims[i].var) {
+                        storage_permutation.push_back((int)j);
+                        Expr bound = storage_dims[i].bound;
+                        if (bound.defined()) {
+                            if (can_prove(extents[j] > bound)) {
+                                user_error << "Explicit storage bound (" << bound << ") for variable " << args[j] << " of function " << op->name << " is smaller than required (" << extents[j] << ")\n";
+                            }
+                            Expr bound_too_small_error =
+                                Call::make(Int(32),
+                                           "halide_error_storage_bound_too_small",
+                                           {StringImm::make(op->name), StringImm::make(args[j]), bound, extents[j]},
+                                           Call::Extern);
+                            Stmt size_to_small_check = AssertStmt::make(extents[j] <= bound, bound_too_small_error);
+                            bound_asserts.push_back(size_to_small_check);
+                            extents[j] = bound;
+                        }
+                        Expr alignment = storage_dims[i].alignment;
+                        if (alignment.defined()) {
+                            allocation_extents[j] = ((extents[j] + alignment - 1) / alignment) * alignment;
+                        } else {
+                            allocation_extents[j] = extents[j];
+                        }
+                    }
+                }
+                internal_assert(storage_permutation.size() == i + 1);
+            }
+        }
+
+        internal_assert(storage_permutation.size() == op->bounds.size());
+
+        Stmt stmt = body;
+        internal_assert(op->types.size() == 1);
+
+        // Make the names for the mins, extents, and strides
+        int dims = op->bounds.size();
+        vector<string> min_name(dims), extent_name(dims), stride_name(dims);
+        for (int i = 0; i < dims; i++) {
+            string d = std::to_string(i);
+            min_name[i] = op->name + ".min." + d;
+            stride_name[i] = op->name + ".stride." + d;
+            extent_name[i] = op->name + ".extent." + d;
+        }
+        vector<Expr> min_var(dims), extent_var(dims), stride_var(dims);
+        for (int i = 0; i < dims; i++) {
+            min_var[i] = Variable::make(Int(32), min_name[i]);
+            extent_var[i] = Variable::make(Int(32), extent_name[i]);
+            stride_var[i] = Variable::make(Int(32), stride_name[i]);
+        }
+
+        // Create a halide_buffer_t object for this allocation.
+        BufferBuilder builder;
+        builder.host = Variable::make(Handle(), op->name);
+        builder.type = op->types[0];
+        builder.dimensions = dims;
+        for (int i = 0; i < dims; i++) {
+            builder.mins.push_back(min_var[i]);
+            builder.extents.push_back(extent_var[i]);
+            builder.strides.push_back(stride_var[i]);
+        }
+        stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
 
         if (hoisted_storages.count(op->name) > 0) {
+            HoistedStorageInfo hoisted_alloc(op->name, op->types[0], op->memory_type, allocation_extents, condition);
+
             debug(0) << "Inside of the corresponding hoisted storage" << op->name << "\n";
-            hoisted_storages[op->name].push_back(mutated_realize);
-            return body;
+            hoisted_storages[op->name].push_back(hoisted_alloc);
         } else {
-            return emit_allocate(op->name, {mutated_realize}, body, false);
+            // Make the allocation node
+            stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
         }
+
+        // Wrap it into storage bound asserts.
+        if (!bound_asserts.empty()) {
+            stmt = Block::make(Block::make(bound_asserts), stmt);
+        }
+
+        // Compute the strides
+        for (int i = (int)op->bounds.size() - 1; i > 0; i--) {
+            int prev_j = storage_permutation[i - 1];
+            int j = storage_permutation[i];
+            Expr stride = stride_var[prev_j] * allocation_extents[prev_j];
+            stmt = LetStmt::make(stride_name[j], stride, stmt);
+        }
+
+        // Innermost stride is one
+        if (dims > 0) {
+            int innermost = storage_permutation.empty() ? 0 : storage_permutation[0];
+            stmt = LetStmt::make(stride_name[innermost], 1, stmt);
+        }
+
+        // Assign the mins and extents stored
+        for (size_t i = op->bounds.size(); i > 0; i--) {
+            stmt = LetStmt::make(min_name[i - 1], op->bounds[i - 1].min, stmt);
+            stmt = LetStmt::make(extent_name[i - 1], extents[i - 1], stmt);
+        }
+        return stmt;
     }
 
     Stmt visit(const Provide *op) override {
