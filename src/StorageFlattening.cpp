@@ -24,6 +24,49 @@ using std::vector;
 
 namespace {
 
+// Track the set of variables used by the inner loop
+class CollectVars : public IRVisitor {
+    using IRVisitor::visit;
+    void visit(const Variable *op) override {
+        vars.insert(op->name);
+    }
+
+public:
+    set<string> vars;
+};
+
+class LiftDependantLets : public IRMutator {
+    using IRMutator::visit;
+
+public:
+    LiftDependantLets(CollectVars *collect_vars)
+        : collect_vars_(collect_vars) {
+    }
+
+private:
+    CollectVars *collect_vars_;
+
+    // Expr visit(const Let *op) override {
+    //     // if (op->value.as<Variable>()) {
+    //     //     return mutate(substitute(op->name, op->value, op->body));
+    //     // } else {
+    //     if (collect_vars_->vars.count(op->name))
+    //     return IRMutator::visit(op);
+    //     // }
+    // }
+
+    Stmt visit(const LetStmt *op) override {
+        if (collect_vars_->vars.count(op->name)) {
+            op->value.accept(collect_vars_);
+        }
+        // if (op->value.as<Variable>()) {
+        //     return mutate(substitute(op->name, op->value, op->body));
+        // } else {
+        return IRMutator::visit(op);
+        // }
+    }
+};
+
 class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const map<string, pair<Function, int>> &e,
@@ -126,7 +169,7 @@ private:
         return idx;
     }
 
-    Stmt emit_allocate(string name, const vector<HoistedRealize> &realize_nodes, Stmt body) {
+    Stmt emit_allocate(string name, const vector<HoistedRealize> &realize_nodes, Stmt body, bool needs_lets_lifting) {
         internal_assert(realize_nodes.size() == 1);
         HoistedRealize realize = realize_nodes.front();
         // The allocation extents of the function taken into account of
@@ -232,6 +275,25 @@ private:
             stmt = LetStmt::make(min_name[i - 1], realize.bounds[i - 1].min, stmt);
             stmt = LetStmt::make(extent_name[i - 1], realize.extents[i - 1], stmt);
         }
+
+        if (needs_lets_lifting) {
+            CollectVars collect_vars;
+            for (const auto &b : realize.bounds) {
+                b.min.accept(&collect_vars);
+            }
+            for (const auto &e : realize.extents) {
+                e.accept(&collect_vars);
+            }
+            realize.condition.accept(&collect_vars);
+
+            LiftDependantLets lift_lets(&collect_vars);
+            lift_lets.mutate(stmt);
+
+            for (const auto &v : collect_vars.vars) {
+                debug(0) << "Depends on: " << v << "\n";
+            }
+        }
+
         return stmt;
     }
 
@@ -241,7 +303,7 @@ private:
         debug(0) << "Found a hoisted storage - " << op->name << "\n";
         hoisted_storages.emplace(op->name, vector<HoistedRealize>());
         Stmt mutated = mutate(op->body);
-        mutated = emit_allocate(op->name, hoisted_storages[op->name], mutated);
+        mutated = emit_allocate(op->name, hoisted_storages[op->name], mutated, true);
         hoisted_storages.erase(op->name);
         return mutated;
     }
@@ -272,7 +334,7 @@ private:
             hoisted_storages[op->name].push_back(mutated_realize);
             return body;
         } else {
-            return emit_allocate(op->name, {mutated_realize}, body);
+            return emit_allocate(op->name, {mutated_realize}, body, false);
         }
     }
 
