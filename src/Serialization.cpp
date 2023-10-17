@@ -1455,6 +1455,10 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
                                  std::to_string(HALIDE_VERSION_MINOR) + "." +
                                  std::to_string(HALIDE_VERSION_PATCH);
 
+    std::string serialization_version = std::to_string(HALIDE_SERIALIZATION_VERSION_MAJOR) + "." +
+                                        std::to_string(HALIDE_SERIALIZATION_VERSION_MINOR) + "." +
+                                        std::to_string(HALIDE_SERIALIZATION_VERSION_PATCH);
+
     auto pipeline_obj = Serialize::CreatePipeline(builder,
                                                   builder.CreateVector(funcs_serialized),
                                                   builder.CreateVector(output_names_serialized),
@@ -1463,7 +1467,8 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
                                                   builder.CreateVector(func_names_in_order_serialized),
                                                   builder.CreateVector(parameters_serialized),
                                                   builder.CreateVector(buffers_serialized),
-                                                  serialize_string(builder, halide_version)
+                                                  serialize_string(builder, halide_version),
+                                                  serialize_string(builder, serialization_version)
                                                   );
     builder.Finish(pipeline_obj);
 

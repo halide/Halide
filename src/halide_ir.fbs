@@ -688,6 +688,7 @@ table Pipeline {
     parameters: [Parameter];
     buffers: [Buffer];
     halide_version: string;
+    serialization_version: string;
 }
 
 root_type Pipeline;
