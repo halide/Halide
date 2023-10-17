@@ -1334,6 +1334,15 @@ Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
         user_warning << "deserialized pipeline is empty\n";
         return Pipeline();
     }
+
+    std::string deserialize_halide_version = deserialize_string(pipeline_obj->halide_version());
+    std::string halide_version = std::to_string(HALIDE_VERSION_MAJOR) + "." +
+                                 std::to_string(HALIDE_VERSION_MINOR) + "." +
+                                 std::to_string(HALIDE_VERSION_PATCH);
+    if (deserialize_halide_version != halide_version) {
+        user_warning << "deserialized pipeline is built with Halide version " << deserialize_halide_version
+                     << ", but current Halide version is " << halide_version << "\n";
+    }
     const std::vector<std::string> func_names_in_order =
         deserialize_vector<flatbuffers::String, std::string>(pipeline_obj->func_names_in_order(),
                                                              &Deserializer::deserialize_string);
