@@ -46,7 +46,7 @@ struct device_copy {
 
 WEAK void copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
     if ((d < -1) || (d >= MAX_COPY_DIMS)) {
-        return; // TODO(marcos): we should probably flag an error somehow here
+        return;  // TODO(marcos): we should probably flag an error somehow here
     }
 
     // Skip size-1 dimensions
