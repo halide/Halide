@@ -25,52 +25,6 @@ using std::vector;
 
 namespace {
 
-// Track the set of variables used by the inner loop
-class CollectVars : public IRVisitor {
-    using IRVisitor::visit;
-    void visit(const Variable *op) override {
-        vars.insert(op->name);
-    }
-
-public:
-    set<string> vars;
-};
-
-class LiftDependantLets : public IRMutator {
-public:
-    vector<pair<string, Expr>> lifted_lets;
-
-    LiftDependantLets(CollectVars *collect_vars)
-        : collect_vars_(collect_vars) {
-    }
-
-private:
-    CollectVars *collect_vars_;
-
-    using IRMutator::visit;
-
-    // Expr visit(const Let *op) override {
-    //     // if (op->value.as<Variable>()) {
-    //     //     return mutate(substitute(op->name, op->value, op->body));
-    //     // } else {
-    //     if (collect_vars_->vars.count(op->name))
-    //     return IRMutator::visit(op);
-    //     // }
-    // }
-
-    Stmt visit(const LetStmt *op) override {
-        Stmt body = mutate(op->body);
-        Expr value = mutate(op->value);
-        if (collect_vars_->vars.count(op->name)) {
-            op->value.accept(collect_vars_);
-            lifted_lets.push_back({op->name, mutate(op->value)});
-            return body;
-        } else {
-            return LetStmt::make(op->name, value, body);
-        }
-    }
-};
-
 class ExpandExpr : public IRMutator {
     using IRMutator::visit;
     const Scope<Expr> &scope;
@@ -111,16 +65,16 @@ public:
     }
 
 private:
-    struct HoistedStorageInfo {
+    struct HoistedAllocationInfo {
         string name;
         Type type;
         MemoryType memory_type;
         vector<Expr> extents;
         Expr condition;
 
-        HoistedStorageInfo(string name, Type type,
-                           MemoryType memory_type,
-                           const vector<Expr> &extents, Expr condition)
+        HoistedAllocationInfo(string name, Type type,
+                              MemoryType memory_type,
+                              const vector<Expr> &extents, Expr condition)
             : name(name),
               type(type),
               memory_type(memory_type),
@@ -129,13 +83,18 @@ private:
         }
     };
 
+    struct HoistedStorageData {
+        vector<HoistedAllocationInfo> hoisted_allocations;
+        Scope<Interval> loop_vars;
+    };
+
     const map<string, pair<Function, int>> &env;
     set<string> outputs;
     set<string> textures;
     const Target &target;
     Scope<> realizations;
     bool in_gpu = false;
-    map<string, vector<HoistedStorageInfo>> hoisted_storages;
+    map<string, HoistedStorageData> hoisted_storages;
     Scope<Expr> scope;
 
     Expr make_shape_var(string name, const string &field, size_t dim,
@@ -204,26 +163,11 @@ private:
 
     Stmt visit(const HoistedStorage *op) override {
         debug(0) << "Found a hoisted storage - " << op->name << "\n";
-        hoisted_storages.emplace(op->name, vector<HoistedStorageInfo>());
+        hoisted_storages.emplace(op->name, HoistedStorageData());
         Stmt body = mutate(op->body);
-        internal_assert(hoisted_storages[op->name].size() == 1);
-        const auto &alloc_info = hoisted_storages[op->name].front();
+        internal_assert(hoisted_storages[op->name].hoisted_allocations.size() == 1);
+        const auto &alloc_info = hoisted_storages[op->name].hoisted_allocations.front();
         body = Allocate::make(alloc_info.name, alloc_info.type, alloc_info.memory_type, alloc_info.extents, alloc_info.condition, body);
-        // CollectVars collect_vars;
-        // for (const auto &e : alloc_info.extents) {
-        //     e.accept(&collect_vars);
-        // }
-        // alloc_info.condition.accept(&collect_vars);
-
-        // LiftDependantLets lift_lets(&collect_vars);
-        // body = lift_lets.mutate(body);
-
-        // for (const auto &v : collect_vars.vars) {
-        //     debug(0) << "Depends on: " << v << "\n";
-        // }
-        // for (int ix = lift_lets.lifted_lets.size() - 1; ix >= 0; ix--) {
-        //     body = LetStmt::make(lift_lets.lifted_lets[ix].first, lift_lets.lifted_lets[ix].second, body);
-        // }
         hoisted_storages.erase(op->name);
         return body;
     }
@@ -324,14 +268,21 @@ private:
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
 
         if (hoisted_storages.count(op->name) > 0) {
-            vector<Expr> expanded_extents;
+            vector<Expr> bounded_extents;
             for (const auto &e : allocation_extents) {
-                expanded_extents.push_back(simplify(substitute_in_all_lets(expand_expr(e, scope))));
+                Expr expanded_extent = simplify(substitute_in_all_lets(expand_expr(e, scope)));
+                Interval bounds = bounds_of_expr_in_scope(expanded_extent, hoisted_storages[op->name].loop_vars);
+                debug(0) << "Trying to bound expression - \n"
+                         << bounds.min << "\n"
+                         << bounds.max << "\n";
+                // user_error(b.max.defined()) << "Undefined bound for storage size, consider using bound_storage\n";
+                bounded_extents.push_back(bounds.max);
             }
-            HoistedStorageInfo hoisted_alloc(op->name, op->types[0], op->memory_type, expanded_extents, condition);
+
+            HoistedAllocationInfo hoisted_alloc(op->name, op->types[0], op->memory_type, bounded_extents, condition);
 
             debug(0) << "Inside of the corresponding hoisted storage" << op->name << "\n";
-            hoisted_storages[op->name].push_back(hoisted_alloc);
+            hoisted_storages[op->name].hoisted_allocations.push_back(hoisted_alloc);
         } else {
             // Make the allocation node
             stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
@@ -532,6 +483,13 @@ private:
     }
 
     Stmt visit(const For *op) override {
+        for (auto &p : hoisted_storages) {
+            Expr expanded_min = simplify(expand_expr(op->min, scope));
+            Expr expanded_extent = simplify(expand_expr(op->extent, scope));
+            Interval loop_bounds = Interval(expanded_min, expanded_min + expanded_extent - 1);
+            p.second.loop_vars.push(op->name, loop_bounds);
+        }
+
         bool old_in_gpu = in_gpu;
         if (op->for_type == ForType::GPUBlock ||
             op->for_type == ForType::GPUThread) {
@@ -539,12 +497,18 @@ private:
         }
         Stmt stmt = IRMutator::visit(op);
         in_gpu = old_in_gpu;
+
+        for (auto &p : hoisted_storages) {
+            p.second.loop_vars.pop(op->name);
+        }
+
         return stmt;
     }
 
     Stmt visit(const LetStmt *op) override {
         ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
-        return IRMutator::visit(op);
+        Stmt stmt = IRMutator::visit(op);
+        return stmt;
     }
 };
 
