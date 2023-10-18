@@ -19,7 +19,9 @@ int main(int argc, char **argv) {
         //     .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::RoundUp);
 
         f.compute_at(g, xo)
-            .hoist_storage(g, Var::outermost());
+            .hoist_storage(g, Var::outermost())
+            .bound_storage(x, 18)
+            .bound_storage(y, 18);
 
         Buffer<int> out = g.realize({128, 128});
 
