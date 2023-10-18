@@ -9,6 +9,7 @@
 #include "Parameter.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Substitute.h"
 
 #include <sstream>
 
@@ -70,6 +71,34 @@ private:
     }
 };
 
+class ExpandExpr : public IRMutator {
+    using IRMutator::visit;
+    const Scope<Expr> &scope;
+
+    Expr visit(const Variable *var) override {
+        if (scope.contains(var->name)) {
+            Expr expr = scope.get(var->name);
+            debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
+            return expr;
+        } else {
+            return var;
+        }
+    }
+
+public:
+    ExpandExpr(const Scope<Expr> &s)
+        : scope(s) {
+    }
+};
+
+// Perform all the substitutions in a scope
+Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
+    ExpandExpr ee(scope);
+    Expr result = ee.mutate(e);
+    debug(4) << "Expanded " << e << " into " << result << "\n";
+    return result;
+}
+
 class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const map<string, pair<Function, int>> &e,
@@ -90,12 +119,12 @@ private:
         Expr condition;
 
         HoistedStorageInfo(string name, Type type,
-                       MemoryType memory_type,
-                       const vector<Expr> &extents, Expr condition)
+                           MemoryType memory_type,
+                           const vector<Expr> &extents, Expr condition)
             : name(name),
               type(type),
               memory_type(memory_type),
-              extents(extents), 
+              extents(extents),
               condition(condition) {
         }
     };
@@ -107,6 +136,7 @@ private:
     Scope<> realizations;
     bool in_gpu = false;
     map<string, vector<HoistedStorageInfo>> hoisted_storages;
+    Scope<Expr> scope;
 
     Expr make_shape_var(string name, const string &field, size_t dim,
                         const Buffer<> &buf, const Parameter &param) {
@@ -177,23 +207,23 @@ private:
         hoisted_storages.emplace(op->name, vector<HoistedStorageInfo>());
         Stmt body = mutate(op->body);
         internal_assert(hoisted_storages[op->name].size() == 1);
-        const auto& alloc_info = hoisted_storages[op->name].front();
+        const auto &alloc_info = hoisted_storages[op->name].front();
         body = Allocate::make(alloc_info.name, alloc_info.type, alloc_info.memory_type, alloc_info.extents, alloc_info.condition, body);
-        CollectVars collect_vars;
-        for (const auto &e : alloc_info.extents) {
-            e.accept(&collect_vars);
-        }
-        alloc_info.condition.accept(&collect_vars);
+        // CollectVars collect_vars;
+        // for (const auto &e : alloc_info.extents) {
+        //     e.accept(&collect_vars);
+        // }
+        // alloc_info.condition.accept(&collect_vars);
 
-        LiftDependantLets lift_lets(&collect_vars);
-        body = lift_lets.mutate(body);
+        // LiftDependantLets lift_lets(&collect_vars);
+        // body = lift_lets.mutate(body);
 
-        for (const auto &v : collect_vars.vars) {
-            debug(0) << "Depends on: " << v << "\n";
-        }
-        for (int ix = lift_lets.lifted_lets.size() - 1; ix >= 0; ix--) {
-            body = LetStmt::make(lift_lets.lifted_lets[ix].first, lift_lets.lifted_lets[ix].second, body);
-        }
+        // for (const auto &v : collect_vars.vars) {
+        //     debug(0) << "Depends on: " << v << "\n";
+        // }
+        // for (int ix = lift_lets.lifted_lets.size() - 1; ix >= 0; ix--) {
+        //     body = LetStmt::make(lift_lets.lifted_lets[ix].first, lift_lets.lifted_lets[ix].second, body);
+        // }
         hoisted_storages.erase(op->name);
         return body;
     }
@@ -294,7 +324,11 @@ private:
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
 
         if (hoisted_storages.count(op->name) > 0) {
-            HoistedStorageInfo hoisted_alloc(op->name, op->types[0], op->memory_type, allocation_extents, condition);
+            vector<Expr> expanded_extents;
+            for (const auto &e : allocation_extents) {
+                expanded_extents.push_back(simplify(substitute_in_all_lets(expand_expr(e, scope))));
+            }
+            HoistedStorageInfo hoisted_alloc(op->name, op->types[0], op->memory_type, expanded_extents, condition);
 
             debug(0) << "Inside of the corresponding hoisted storage" << op->name << "\n";
             hoisted_storages[op->name].push_back(hoisted_alloc);
@@ -506,6 +540,11 @@ private:
         Stmt stmt = IRMutator::visit(op);
         in_gpu = old_in_gpu;
         return stmt;
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
+        return IRMutator::visit(op);
     }
 };
 

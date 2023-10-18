@@ -20,8 +20,9 @@ int main(int argc, char **argv) {
 
         f.compute_at(g, xo)
             .hoist_storage(g, Var::outermost())
-            .bound_storage(x, 18)
-            .bound_storage(y, 18);
+            // .bound_storage(x, 18)
+            // .bound_storage(y, 18)
+            ;
 
         Buffer<int> out = g.realize({128, 128});
 
