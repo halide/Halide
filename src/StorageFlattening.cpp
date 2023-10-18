@@ -554,28 +554,6 @@ class PromoteToMemoryType : public IRMutator {
     }
 };
 
-class FindAndRemoveAllAllocates : public IRMutator {
-    using IRMutator::visit;
-
-    std::string name_;
-
-    Stmt visit(const Allocate *op) override {
-        if (op->name == name_) {
-            debug(0) << "Found allocate with the name " << op->name << "\n";
-            allocates.push_back(Allocate::make(op->name, op->type, op->memory_type, op->extents,
-                                               op->condition, op->body, op->new_expr, op->free_function,
-                                               op->padding));
-            return mutate(op->body);
-        }
-        return IRMutator::visit(op);
-    }
-
-public:
-    std::vector<Stmt> allocates;
-    FindAndRemoveAllAllocates(const string &name)
-        : name_(name) {
-    }
-};
 }  // namespace
 
 Stmt storage_flattening(Stmt s,
