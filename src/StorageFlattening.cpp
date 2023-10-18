@@ -576,26 +576,6 @@ public:
         : name_(name) {
     }
 };
-
-class HoistStorage : public IRMutator {
-    using IRMutator::visit;
-
-    Stmt visit(const HoistedStorage *op) override {
-        debug(0) << "Found hoisted storage " << op->name << "\n";
-        Stmt body = mutate(op->body);
-        FindAndRemoveAllAllocates allocates_finder(op->name);
-        body = allocates_finder.mutate(body);
-        internal_assert(allocates_finder.allocates.size() == 1);
-        for (const auto &allocate : allocates_finder.allocates) {
-            debug(0) << allocate.as<Allocate>()->name << "\n";
-        }
-        const auto *allocate = allocates_finder.allocates[0].as<Allocate>();
-        return Allocate::make(allocate->name, allocate->type, allocate->memory_type, allocate->extents,
-                              allocate->condition, body, allocate->new_expr, allocate->free_function,
-                              allocate->padding);
-        // return body;
-    }
-};
 }  // namespace
 
 Stmt storage_flattening(Stmt s,
@@ -621,7 +601,6 @@ Stmt storage_flattening(Stmt s,
     debug(0) << s << "\n";
     s = FlattenDimensions(tuple_env, outputs, target).mutate(s);
     s = PromoteToMemoryType().mutate(s);
-    // s = HoistStorage().mutate(s);
     debug(0) << s << "\n";
     return s;
 }
