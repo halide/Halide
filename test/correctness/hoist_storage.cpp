@@ -3,6 +3,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    // Constant bound for allocation extents.
     {
         Func f("f"), g("g");
         Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
@@ -12,14 +13,31 @@ int main(int argc, char **argv) {
         g.compute_root()
             .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::RoundUp);
 
-        // f.compute_at(g, xo)
-        //     .hoist_storage(g, yo);
+        f.compute_at(g, xo)
+            .hoist_storage(g, Var::outermost());
 
-        // g.compute_root()
-        //     .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::RoundUp);
+        Buffer<int> out = g.realize({128, 128});
 
-        // f.compute_at(g, xo)
-        //     .hoist_storage(g, Var::outermost());
+        out.for_each_element([&](int x, int y) {
+            int correct = 2 * (x + y);
+            if (out(x, y) != correct) {
+                printf("out(%d, %d) = %d instead of %d\n",
+                       x, y, out(x, y), correct);
+                exit(1);
+            }
+        });
+    }
+
+    // Allocation extents depend on the loop variables.
+    {
+        Func f("f"), g("g");
+        Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
+
+        f(x, y) = x + y;
+        g(x, y) = f(x - 1, y - 1) + f(x + 1, y + 1);
+        g.compute_root()
+            .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::RoundUp);
+
         f.compute_at(g, xo)
             .hoist_storage(g, Var::outermost());
 
@@ -44,10 +62,10 @@ int main(int argc, char **argv) {
     //     f = BoundaryConditions::repeat_edge(input);
     //     g(x, y) = f(x - 1, y - 1) + f(x + 1, y + 1);
     //     g.compute_root()
-    //         .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::RoundUp);
+    //         .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::GuardWithIf);
 
-    //     f.compute_at(g, xo)
-    //         .hoist_storage(g, yo);
+    //     // f.compute_at(g, xo)
+    //     //     .hoist_storage(g, yo);
 
     //     // g.compute_root()
     //     //     .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::RoundUp);
