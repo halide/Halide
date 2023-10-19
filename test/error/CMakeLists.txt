@@ -58,6 +58,7 @@ tests(GROUPS error
       func_tuple_dim_mismatch.cpp
       func_tuple_types_mismatch.cpp
       func_tuple_update_types_mismatch.cpp
+      fuse_vectorized_var_with_rvar.cpp
       implicit_args.cpp
       impossible_constraints.cpp
       incomplete_target.cpp
@@ -107,6 +108,8 @@ tests(GROUPS error
       undefined_pipeline_compile.cpp
       undefined_pipeline_realize.cpp
       undefined_rdom_dimension.cpp
+      uninitialized_param.cpp
+      uninitialized_param_2.cpp
       unknown_target.cpp
       vector_tile.cpp
       vectorize_dynamic.cpp

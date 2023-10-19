@@ -843,7 +843,7 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
                     }
                     debug(2) << "JIT input ImageParam argument ";
                 } else {
-                    args_result.store[arg_index++] = p.scalar_address();
+                    args_result.store[arg_index++] = p.read_only_scalar_address();
                     debug(2) << "JIT input scalar argument ";
                 }
             }

@@ -225,6 +225,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     set<int> &slid_dimensions;
     Scope<Expr> scope;
 
+    // Loops between the loop being slid over and the produce node
+    Scope<> enclosing_loops;
+
     map<string, Expr> replacements;
 
     using IRMutator::visit;
@@ -266,10 +269,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
             const std::vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
-                if (slid_dimensions.count(i)) {
-                    debug(3) << "Already slid over dimension " << i << ", so skipping it.\n";
-                    continue;
-                }
                 // Look up the region required of this function's last stage
                 string var = prefix + func_args[i];
                 internal_assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
@@ -304,6 +303,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 }
             }
 
+            if (!dim.empty() && slid_dimensions.count(dim_idx)) {
+                debug(1) << "Already slid over dimension " << dim_idx << ", so skipping it.\n";
+                dim = "";
+                min_required = Expr();
+                max_required = Expr();
+            }
             if (!min_required.defined()) {
                 debug(3) << "Could not perform sliding window optimization of "
                          << func.name() << " over " << loop_var << " because multiple "
@@ -431,7 +436,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             new_loop_min_eq = simplify(new_loop_min_eq);
             Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
             internal_assert(!new_loop_min.defined());
-            if (solve_result.has_upper_bound() && !equal(solve_result.max, loop_min)) {
+            if (solve_result.has_upper_bound() &&
+                !equal(solve_result.max, loop_min) &&
+                !expr_uses_vars(solve_result.max, enclosing_loops)) {
                 new_loop_min = simplify(solve_result.max);
 
                 // We have a new loop min, so we an assume every iteration has
@@ -556,6 +563,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         // the var we're sliding over.
         Expr min = expand_expr(op->min, scope);
         Expr extent = expand_expr(op->extent, scope);
+        ScopedBinding<> bind(enclosing_loops, op->name);
         if (is_const_one(extent)) {
             // Just treat it like a let
             Stmt s = LetStmt::make(op->name, min, op->body);

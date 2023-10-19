@@ -623,12 +623,17 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
 
+#if LLVM_VERSION >= 180
+    const auto opt_level = CodeGenOptLevel::Aggressive;
+#else
+    const auto opt_level = CodeGenOpt::Aggressive;
+#endif
     std::unique_ptr<TargetMachine>
         target_machine(llvm_target->createTargetMachine(triple.str(),
                                                         mcpu_target(), mattrs(), options,
                                                         llvm::Reloc::PIC_,
                                                         llvm::CodeModel::Small,
-                                                        CodeGenOpt::Aggressive));
+                                                        opt_level));
 
     internal_assert(target_machine.get()) << "Could not allocate target machine!";
 
@@ -724,10 +729,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     // Output string stream
 
+#if LLVM_VERSION >= 180
+    const auto file_type = ::llvm::CodeGenFileType::AssemblyFile;
+#else
+    const auto file_type = ::llvm::CGFT_AssemblyFile;
+#endif
     // Ask the target to add backend passes as necessary.
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
-                                                    ::llvm::CGFT_AssemblyFile,
-                                                    true);
+                                                    file_type, true);
     internal_assert(!fail) << "Failed to set up passes to emit PTX source\n";
     module_pass_manager.run(*module);
 

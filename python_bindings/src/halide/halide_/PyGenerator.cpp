@@ -11,9 +11,9 @@ using Halide::Internal::AbstractGenerator;
 using Halide::Internal::AbstractGeneratorPtr;
 using Halide::Internal::GeneratorFactoryProvider;
 using ArgInfo = Halide::Internal::AbstractGenerator::ArgInfo;
+using Halide::Parameter;
 using Halide::Internal::ArgInfoDirection;
 using Halide::Internal::ArgInfoKind;
-using Halide::Internal::Parameter;
 
 template<typename T>
 std::map<std::string, T> dict_to_map(const py::dict &dict) {

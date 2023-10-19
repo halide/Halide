@@ -29,6 +29,7 @@ tests(GROUPS correctness
       bounds_of_multiply.cpp
       bounds_of_split.cpp
       bounds_query.cpp
+      bounds_query_respects_specialize_fail.cpp
       buffer_t.cpp
       c_function.cpp
       callable.cpp
@@ -115,6 +116,7 @@ tests(GROUPS correctness
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
       fuzz_float_stores.cpp
+      fuzz_schedule.cpp
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
@@ -254,6 +256,7 @@ tests(GROUPS correctness
       reorder_storage.cpp
       require.cpp
       reschedule.cpp
+      respect_input_constraint_in_bounds_inference.cpp
       reuse_stack_alloc.cpp
       round.cpp
       saturating_casts.cpp
