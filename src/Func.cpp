@@ -418,7 +418,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                     << " condition resulting in incorrect output."
                     << " It is possible to parallelize this by using the"
                     << " atomic() method if the operation is associative,"
-                    << " or set override_associativity_test to true in the atomic method "
+                    << " or set override_associativity_test to true in the atomic method"
                     << " if you are certain that the operation is associative."
                     << " It is also possible to override this error using"
                     << " the allow_race_conditions() method. Use allow_race_conditions()"
@@ -1253,6 +1253,10 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
             } else {
                 dims[i].dim_type = DimType::PureVar;
             }
+            // We just changed the dim_type without checking the
+            // for_type. Redundantly re-set the for type on the fused var just
+            // to trigger validation of the existing for_type.
+            set_dim_type(fused, dims[i].for_type);
         }
     }
 

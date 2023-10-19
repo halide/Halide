@@ -54,6 +54,94 @@ int main(int argc, char **argv) {
         check_blur_output(buf, correct);
     }
 
+    // https://github.com/halide/Halide/issues/7873
+    {
+        Func input("input");
+        Func local_sum("local_sum");
+        Func blurry("blurry");
+        Var x("x"), y("y");
+        RVar yryf;
+        input(x, y) = 2 * x + 5 * y;
+        RDom r(-2, 5, -2, 5, "rdom_r");
+        local_sum(x, y) = 0;
+        local_sum(x, y) += input(x + r.x, y + r.y);
+        blurry(x, y) = cast<int32_t>(local_sum(x, y) / 25);
+        Var xo, xi;
+        local_sum.split(x, xo, xi, 4, TailStrategy::PredicateStores);
+        local_sum.update(0).unscheduled();
+        Pipeline p({blurry});
+        Buffer<int> buf = p.realize({32, 32});
+        check_blur_output(buf, correct);
+    }
+
+    // https://github.com/halide/Halide/issues/7872
+    {
+        Func input("input");
+        Func local_sum("local_sum");
+        Func blurry("blurry");
+        Var x("x"), y("y");
+        RVar yryf;
+        input(x, y) = 2 * x + 5 * y;
+        RDom r(-2, 5, -2, 5, "rdom_r");
+        local_sum(x, y) = 0;
+        local_sum(x, y) += input(x + r.x, y + r.y);
+        blurry(x, y) = cast<int32_t>(local_sum(x, y) / 25);
+        Var xo, xi;
+        blurry.split(x, xo, xi, 2, TailStrategy::GuardWithIf);
+        local_sum.store_at(blurry, y).compute_at(blurry, xi);
+        // local_sum.store_root();
+        blurry.bound(y, 0, 1);
+        Pipeline p({blurry});
+        Buffer<int> buf = p.realize({4, 1});
+        check_blur_output(buf, correct);
+    }
+
+    // https://github.com/halide/Halide/issues/7891
+    {
+        Func input("input");
+        Func local_sum("local_sum");
+        Func blurry("blurry");
+        Var x("x"), y("y");
+        input(x, y) = 2 * x + 5 * y;
+        RDom r(-2, 5, -2, 5);
+        local_sum(x, y) = 0;
+        local_sum(x, y) += input(x + r.x, y + r.y);
+        blurry(x, y) = cast<int32_t>(local_sum(x, y) / 25);
+        Var yo, yi, xo, xi, xio, xii, xiio, xiii;
+        blurry.split(y, yo, yi, 4, TailStrategy::Auto)
+            .split(x, xo, xi, 1, TailStrategy::Auto)
+            .split(xi, xio, xii, 4, TailStrategy::GuardWithIf)
+            .split(xii, xiio, xiii, 1, TailStrategy::RoundUp);
+        local_sum.compute_at(blurry, xiio);
+        input.compute_at(blurry, xiio);
+        input.store_root();
+        Pipeline p({blurry});
+        Buffer<int> buf = p.realize({32, 32});
+        check_blur_output(buf, correct);
+    }
+
+    // https://github.com/halide/Halide/issues/7892
+    {
+        Func input("input");
+        Func local_sum("local_sum");
+        Func blurry("blurry");
+        Var x("x"), y("y");
+        RVar yryf;
+        input(x, y) = 2 * x + 5 * y;
+        RDom r(-2, 5, -2, 5, "rdom_r");
+        local_sum(x, y) = 0;
+        local_sum(x, y) += input(x + r.x, y + r.y);
+        blurry(x, y) = cast<int32_t>(local_sum(x, y) / 25);
+        Var xo, xi, xoo, xoi, yo, yi;
+        local_sum.vectorize(x)
+            .split(x, xo, xi, 2, TailStrategy::PredicateStores)
+            .split(xo, xoo, xoi, 4, TailStrategy::RoundUp)
+            .unroll(xoi);
+        local_sum.update(0).unscheduled();
+        Pipeline p({blurry});
+        Buffer<int> buf = p.realize({32, 32});
+    }
+
     printf("Success!\n");
 
     return 0;

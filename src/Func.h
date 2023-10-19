@@ -1395,9 +1395,10 @@ public:
      * factor does not provably divide the extent. */
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
-    /** Join two dimensions into a single fused dimension. The fused
-     * dimension covers the product of the extents of the inner and
-     * outer dimensions given. */
+    /** Join two dimensions into a single fused dimension. The fused dimension
+     * covers the product of the extents of the inner and outer dimensions
+     * given. The loop type (e.g. parallel, vectorized) of the resulting fused
+     * dimension is inherited from the first argument. */
     Func &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);
 
     /** Mark a dimension to be traversed serially. This is the default. */

@@ -800,15 +800,23 @@ public:
             string name;
             Expr total_size = 0;
             Type widest_type;
+            int number_of_allocs = 0;
+            for (const auto &alloc : cluster) {
+                number_of_allocs += alloc.group.size();
+            }
             for (const auto &alloc : cluster) {
                 if (name.empty()) {
-                    name = alloc.name;
                     widest_type = alloc.widest_type;
+                    if (number_of_allocs > 1) {
+                        name = "allocgroup__" + alloc.name;
+                    } else {
+                        name = alloc.name;
+                    }
                 } else {
-                    name += "__" + alloc.name;
                     if (alloc.widest_type.bytes() > widest_type.bytes()) {
                         widest_type = alloc.widest_type;
                     }
+                    name += "__" + alloc.name;
                 }
                 int ratio = alloc.widest_type.bytes() / alloc_type.bytes();
                 internal_assert(ratio != 0)

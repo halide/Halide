@@ -304,25 +304,25 @@ ostream &operator<<(ostream &out, const ForType &type) {
 ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
     switch (op) {
     case VectorReduce::Add:
-        out << "Add";
+        out << "add";
         break;
     case VectorReduce::SaturatingAdd:
-        out << "SaturatingAdd";
+        out << "saturating_add";
         break;
     case VectorReduce::Mul:
-        out << "Mul";
+        out << "mul";
         break;
     case VectorReduce::Min:
-        out << "Min";
+        out << "min";
         break;
     case VectorReduce::Max:
-        out << "Max";
+        out << "max";
         break;
     case VectorReduce::And:
-        out << "And";
+        out << "and";
         break;
     case VectorReduce::Or:
-        out << "Or";
+        out << "or";
         break;
     }
     return out;
@@ -1087,8 +1087,7 @@ void IRPrinter::visit(const Shuffle *op) {
 void IRPrinter::visit(const VectorReduce *op) {
     stream << "("
            << op->type
-           << ")vector_reduce("
-           << op->op
+           << ")vector_reduce_" << op->op << "("
            << ", "
            << op->value
            << ")";

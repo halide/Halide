@@ -138,7 +138,7 @@ Then build it like so:
 ```
 % cmake -DCMAKE_BUILD_TYPE=Release \
         -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
-        -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly" \
+        -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Hexagon;WebAssembly;RISCV" \
         -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_ASSERTIONS=ON \
         -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_BUILD_32_BITS=OFF \
         -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
@@ -300,7 +300,7 @@ D:\> cmake -G Ninja ^
            -DCMAKE_BUILD_TYPE=Release ^
            -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
            -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon ^
+           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;RISCV ^
            -DLLVM_ENABLE_ASSERTIONS=ON ^
            -DLLVM_ENABLE_EH=ON ^
            -DLLVM_ENABLE_RTTI=ON ^
@@ -315,7 +315,7 @@ D:\> cmake -G Ninja ^
            -DCMAKE_BUILD_TYPE=Release ^
            -DLLVM_ENABLE_PROJECTS=clang;lld;clang-tools-extra ^
            -DLLVM_ENABLE_TERMINFO=OFF ^
-           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon ^
+           -DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;RISCV ^
            -DLLVM_ENABLE_ASSERTIONS=ON ^
            -DLLVM_ENABLE_EH=ON ^
            -DLLVM_ENABLE_RTTI=ON ^

@@ -652,7 +652,8 @@ gengen
  -e  A comma separated list of files to emit. Accepted values are:
      [assembly, bitcode, c_header, c_source, cpp_stub, featurization,
       llvm_assembly, object, python_extension, pytorch_wrapper, registration,
-      schedule, static_library, stmt, stmt_html, compiler_log, hlpipe].
+      schedule, static_library, stmt, stmt_html, conceptual_stmt,
+      conceptual_stmt_html, compiler_log, hlpipe, device_code].
      If omitted, default value is [c_header, static_library, registration].
 
  -p  A comma-separated list of shared libraries that will be loaded before the
@@ -662,7 +663,7 @@ gengen
      (Note that this does not change the default autoscheduler; use the -s flag
      to set that value.)"
 
- -r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'
+ -r  The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'
      and 'static_library'. When multiple targets are specified, it picks a
      runtime that is compatible with all of the targets, or fails if it cannot
      find one. Flags across all of the targets that do not affect runtime code
@@ -773,6 +774,12 @@ gengen
         std::set<OutputFileType> output_types;
 
         std::string emit_flags_string = flags_info["-e"];
+
+        // If omitted or empty, assume .a and .h and registration.cpp
+        if (emit_flags_string.empty()) {
+            emit_flags_string = "c_header,registration,static_library";
+        }
+
         // If HL_EXTRA_OUTPUTS is defined, assume it's extra outputs we want to generate
         // (usually for temporary debugging purposes) and just tack it on to the -e contents.
         std::string extra_outputs = get_env_variable("HL_EXTRA_OUTPUTS");
@@ -784,50 +791,45 @@ gengen
         }
 
         const std::vector<std::string> emit_flags = split_string(emit_flags_string, ",");
+        internal_assert(!emit_flags.empty()) << "Empty emit flags.\n";
 
-        if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
-            // If omitted or empty, assume .a and .h and registration.cpp
-            output_types.insert(OutputFileType::c_header);
-            output_types.insert(OutputFileType::registration);
-            output_types.insert(OutputFileType::static_library);
-        } else {
-            // Build a reverse lookup table. Allow some legacy aliases on the command line,
-            // to allow legacy build systems to work more easily.
-            std::map<std::string, OutputFileType> output_name_to_enum = {
-                {"cpp", OutputFileType::c_source},
-                {"h", OutputFileType::c_header},
-                {"hlpipe", OutputFileType::hlpipe},
-                {"html", OutputFileType::stmt_html},
-                {"o", OutputFileType::object},
-                {"py.c", OutputFileType::python_extension},
-            };
-            // extensions won't vary across multitarget output
-            const Target t = args.targets.empty() ? Target() : args.targets[0];
-            const std::map<OutputFileType, const OutputInfo> output_info = get_output_info(t);
-            for (const auto &it : output_info) {
-                output_name_to_enum[it.second.name] = it.first;
-            }
-
-            for (const std::string &opt : emit_flags) {
-                auto it = output_name_to_enum.find(opt);
-                if (it == output_name_to_enum.end()) {
-                    std::ostringstream o;
-                    o << "Unrecognized emit option: " << opt << " is not one of [";
-                    auto end = output_info.cend();
-                    auto last = std::prev(end);
-                    for (auto iter = output_info.cbegin(); iter != end; ++iter) {
-                        o << iter->second.name;
-                        if (iter != last) {
-                            o << " ";
-                        }
-                    }
-                    o << "], ignoring.\n";
-                    o << kUsage;
-                    user_error << o.str();
-                }
-                output_types.insert(it->second);
-            }
+        // Build a reverse lookup table. Allow some legacy aliases on the command line,
+        // to allow legacy build systems to work more easily.
+        std::map<std::string, OutputFileType> output_name_to_enum = {
+            {"cpp", OutputFileType::c_source},
+            {"h", OutputFileType::c_header},
+            {"hlpipe", OutputFileType::hlpipe},
+            {"html", OutputFileType::stmt_html},
+            {"o", OutputFileType::object},
+            {"py.c", OutputFileType::python_extension},
+        };
+        // extensions won't vary across multitarget output
+        const Target t = args.targets.empty() ? Target() : args.targets[0];
+        const std::map<OutputFileType, const OutputInfo> output_info = get_output_info(t);
+        for (const auto &it : output_info) {
+            output_name_to_enum[it.second.name] = it.first;
         }
+
+        for (const std::string &opt : emit_flags) {
+            auto it = output_name_to_enum.find(opt);
+            if (it == output_name_to_enum.end()) {
+                std::ostringstream o;
+                o << "Unrecognized emit option: " << opt << " is not one of [";
+                auto end = output_info.cend();
+                auto last = std::prev(end);
+                for (auto iter = output_info.cbegin(); iter != end; ++iter) {
+                    o << iter->second.name;
+                    if (iter != last) {
+                        o << " ";
+                    }
+                }
+                o << "], ignoring.\n";
+                o << kUsage;
+                user_error << o.str();
+            }
+            output_types.insert(it->second);
+        }
+
         return output_types;
     };
 
