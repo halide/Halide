@@ -93,7 +93,7 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
     // Offset the src base pointer to the right point in its buffer.
     c.src_begin = 0;
     for (int i = 0; i < src->dimensions; i++) {
-        c.src_begin += (uint64_t)src->dim[i].stride * (uint64_t)(dst->dim[i].min - src->dim[i].min);
+        c.src_begin += (int64_t)src->dim[i].stride * (int64_t)(dst->dim[i].min - src->dim[i].min);
     }
     c.src_begin *= c.chunk_size;
 
