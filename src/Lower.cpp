@@ -420,7 +420,7 @@ void lower_impl(const vector<Function> &output_funcs,
     s = hoist_prefetches(s);
     log("Lowering after hoisting prefetches:", s);
 
-    debug(1) << "Lowering after final simplification:\n"
+    debug(0) << "Lowering after final simplification:\n"
              << s << "\n\n";
 
     if (!custom_passes.empty()) {
