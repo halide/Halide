@@ -593,6 +593,15 @@ struct Call : public ExprNode<Call> {
         signed_integer_overflow,
         size_of_halide_buffer_t,
 
+        // Takes a realization name and a loop variable. Declares that values of
+        // the realization that were stored on earlier loop iterations of the
+        // given loop are potentially loaded in this loop iteration somewhere
+        // after this point. Must occur inside a Realize node and For node of
+        // the given names but outside any corresponding ProducerConsumer
+        // nodes. Communicates to storage folding that sliding window took
+        // place.
+        sliding_window_marker,
+
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
         strict_float,
