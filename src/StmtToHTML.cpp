@@ -1425,9 +1425,9 @@ private:
         std::string type_str = type_to_string(op->type);
         print_opening_tag("span", "Reinterpret");
         print_opening_tag("span", "matched Symbol", type_str);
-        print_text("reinterpret<");
+        print_text("reinterpret&lt;");
         print_type(op->type);
-        print_text(">");
+        print_text("&gt;");
         print_closing_tag("span");
         print_html_element("span", "matched", "(", type_str);
         print(op->value);
