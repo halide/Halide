@@ -117,15 +117,27 @@ public:
         // check("convert<float32x32_t,float16x32_t>", vector_width / 2, f32(f16_1));
         check("convert<float32x32_t,int16x32_t>", vector_width / 2, f32(i16_1));
         check("convert<float32x32_t,uint16x32_t>", vector_width / 2, f32(u16_1));
-        check("convert<uint32x32_t,uint16x32_t>", vector_width / 2, u32(u16_1));
-        check("convert<int32x32_t,uint16x32_t>", vector_width / 2, i32(u16_1));
-        check("convert<int32x32_t,int16x32_t>", vector_width / 2, i32(i16_1));
+        check("convert<int8x64_t,int16x64_t>", vector_width / 2, i8(i16_1) + i8(i16_2));
+        check("convert<int8x64_t,uint16x64_t>", vector_width / 2, i8(u16_1) + i8(u16_2));
+        check("convert<int8x64_t,int32x64_t>", vector_width, i8(i32_1));
+        check("convert<int8x64_t,uint32x64_t>", vector_width, i8(u32_1));
+        check("convert<uint8x64_t,int32x64_t>", vector_width, u8(u32_1));
+        check("convert<int16x64_t,uint8x64_t>", vector_width, i16(u8_1));
         check("convert<uint16x64_t,uint8x64_t>", vector_width, u16(u8_1));
+        check("convert<int32x64_t,uint8x64_t>", vector_width, i32(u8_1));
+        check("convert<int32x32_t,int16x32_t>", vector_width / 2, i32(i16_1));
+        check("convert<int32x32_t,uint16x32_t>", vector_width / 2, i32(u16_1));
+        check("convert<uint32x64_t,uint8x64_t>", vector_width, u32(u8_1));
+        check("convert<uint32x32_t,uint16x32_t>", vector_width / 2, u32(u16_1));
         check("store_narrowing<int32x16_t,int16_t,16>", vector_width / 4, i16(i32_1));
         check("store_narrowing<uint32x16_t,uint16_t,16>", vector_width / 4, u16(u32_1));
         check("store_narrowing<int16x32_t,int8_t,32>", vector_width / 2, i8(i16_1));
         check("store_narrowing<int16x32_t,uint8_t,32>", vector_width / 2, u8(i16_1));
         check("store_narrowing<uint16x32_t,uint8_t,32>", vector_width / 2, u8(u16_1));
+        check("halide_xtensa_sat_narrow_u8", vector_width, u8_sat(i16_1 + i16_2));
+        check("halide_xtensa_convert_concat_i16_to_i8", vector_width, i8(i16_1 + i16_2));
+        check("halide_xtensa_convert_concat_i32_to_u16", vector_width, u16(i32_1 + i32_2));
+        check("halide_xtensa_convert_i32_u16", vector_width / 2, u16(i32_1 + i32_2));
 
         // Averaging instructions.
         check("IVP_AVGUNX16", vector_width / 2, u16((u32(u16_1) + u32(u16_2)) / 2));
