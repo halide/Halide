@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint8_t> out_buf(32);
 
     int result = c(in_buf, out_buf);
-    
+
     if (result != 0) {
         printf("Callable failed: %d\n", result);
         return 1;
