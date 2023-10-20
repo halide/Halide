@@ -1,11 +1,11 @@
 // Highlighting 'matched' elements in IR code
 function addHighlight(selector) {
-    var matchedElements = document.querySelectorAll(selector + ' .matched');
+    let matchedElements = document.querySelectorAll(selector + ' .matched');
 
     matchedElements.forEach(function(element) {
         element.addEventListener('mouseover', function() {
-            var idPrefix = this.id.split('-')[0];
-            var matchingElements = document.querySelectorAll(selector + ' .matched[id^="' + idPrefix + '-"]');
+            let idPrefix = this.id.split('-')[0];
+            let matchingElements = document.querySelectorAll(selector + ' .matched[id^="' + idPrefix + '-"]');
 
             matchingElements.forEach(function(matchingElement) {
                 matchingElement.classList.add('Highlight');
@@ -13,12 +13,43 @@ function addHighlight(selector) {
         });
 
         element.addEventListener('mouseout', function() {
-            var idPrefix = this.id.split('-')[0];
-            var matchingElements = document.querySelectorAll(selector + ' .matched[id^="' + idPrefix + '-"]');
+            let idPrefix = this.id.split('-')[0];
+            let matchingElements = document.querySelectorAll(selector + ' .matched[id^="' + idPrefix + '-"]');
 
             matchingElements.forEach(function(matchingElement) {
                 matchingElement.classList.remove('Highlight');
             });
+        });
+    });
+
+    // The number of classes defined in the CSS:
+    let highlightInUse = new Array(7).fill(false);
+
+    // Variables are in <b> tags.
+    matchedElements = document.querySelectorAll(selector + ' b.matched');
+    matchedElements.forEach(function(element) {
+        element.addEventListener('click', function(event) {
+            let idPrefix = this.id.split('-')[0];
+            let matchingElements = document.querySelectorAll(selector + ' b.matched[id^="' + idPrefix + '-"]');
+
+            const classes = Array.from(element.classList).filter(className => className.startsWith("HighlightToggle"));
+            if (classes.length === 1) {
+                let className = classes[0];
+                let highlightIdx = parseInt(className.substr("HighlightToggle".length));
+                highlightInUse[highlightIdx] = false;
+                matchingElements.forEach(function(matchingElement) {
+                    matchingElement.classList.remove(className);
+                });
+            } else {
+                let highlightIdx = highlightInUse.indexOf(false);
+                if (highlightIdx != -1) {
+                    highlightInUse[highlightIdx] = true;
+                    matchingElements.forEach(function(matchingElement) {
+                        matchingElement.classList.add('HighlightToggle' + highlightIdx);
+                    });
+                }
+            }
+            event.preventDefault();
         });
     });
 }
@@ -27,11 +58,11 @@ function addHighlight(selector) {
 addHighlight('#ir-code-pane');
 addHighlight('#device-code-pane');
 
-/* Scroll to code from visualization */
+/* Scroll to code programmatically. Unusued at the moment, but could be great for jumping back from assembly/device code to the stmt. */
 function scrollToCode(id) {  // eslint-disable-line no-unused-vars
-    var container = document.getElementById('ir-code-pane');
-    var scrollToObject = document.getElementById(id);
-    makeCodeVisible(scrollToObject);
+    let container = document.getElementById('ir-code-pane');
+    let scrollToObject = document.getElementById(id);
+    // makeCodeVisible(scrollToObject);
     container.scrollTo({
         top : scrollToObject.offsetTop,
         behavior : 'smooth'
@@ -66,7 +97,7 @@ for (var i = 0; i < resizeBars.length; i++) {
     });
 }
 
-document.addEventListener('mouseup', (event) => {
+document.addEventListener('mouseup', () => {
     if (mousedown) {
         currentResizer = null;
         mousedown = false;
@@ -121,32 +152,32 @@ function collapseTab(index) {  // eslint-disable-line no-unused-vars
 
     pane.classList.toggle('collapsed-pane');
     if (index > 0) { // left resizer
-        var resizer = panes.firstElementChild;
-        for (var i = 0; i < index; ++i) {
+        let resizer = panes.firstElementChild;
+        for (let i = 0; i < index; ++i) {
             resizer = resizer.nextElementSibling.nextElementSibling;
         }
         if (resizer !== null) {
-            var colRightBtn = resizer.firstElementChild.firstElementChild.nextElementSibling.firstElementChild;
+            let colRightBtn = resizer.firstElementChild.firstElementChild.nextElementSibling.firstElementChild;
             colRightBtn.classList.toggle('active');
         }
     }
 
     { // right resizer
-        var resizer = panes.firstElementChild;
-        for (var i = 0; i <= index; ++i) {
+        let resizer = panes.firstElementChild;
+        for (let i = 0; i <= index; ++i) {
             if (resizer !== null) resizer = resizer.nextElementSibling;
             if (resizer !== null) resizer = resizer.nextElementSibling;
         }
         if (resizer !== null) {
-            var colLeftBtn = resizer.firstElementChild.firstElementChild.firstElementChild;
+            let colLeftBtn = resizer.firstElementChild.firstElementChild.firstElementChild;
             colLeftBtn.classList.toggle('active');
         }
     }
 }
 
 function scrollToHostAsm(lno) {  // eslint-disable-line no-unused-vars
-    var asmContent = document.getElementById("assemblyContent");
-    var line_height = window.getComputedStyle(asmContent).getPropertyValue("line-height");
+    let asmContent = document.getElementById("assemblyContent");
+    let line_height = window.getComputedStyle(asmContent).getPropertyValue("line-height");
     line_height = parseInt(line_height, 10);
     document.getElementById("host-assembly-pane").scrollTo({
         behavior : "smooth",
@@ -155,21 +186,19 @@ function scrollToHostAsm(lno) {  // eslint-disable-line no-unused-vars
 }
 
 function scrollToDeviceCode(lno) {  // eslint-disable-line no-unused-vars
-    var device_code_pane = document.getElementById("device-code-pane");
-    const lineSpans = device_code_pane.querySelectorAll('span.line');
+    let device_code_pane = document.getElementById("device-code-pane");
+    let lineSpans = device_code_pane.querySelectorAll('span.line');
     if (lno - 1 < lineSpans.length) {
-        var line = lineSpans[lno - 1]
+        let line = lineSpans[lno - 1]
         line.scrollIntoView({
             behavior : "smooth"
         });
+
+        line.style.backgroundColor = 'lightgray';
+        setTimeout(function() {
+            line.style.backgroundColor = 'transparent';
+        }, 1000);
     } else {
-        // Non-syntax highlighted code does not have the line-spans.
-        // We will have to calculate based on the line height.
-        var line_height = window.getComputedStyle(device_code_Tab.firstElementChild).getPropertyValue("line-height");
-        line_height = parseInt(line_height, 10);
-        device_code_pane.scrollTo({
-            behavior : "smooth",
-            top : lno * line_height
-        });
+        console.error("Jump to device code references line number " + lno + ", which is out or range of the " + lineSpans.length + " lines.");
     }
 }
