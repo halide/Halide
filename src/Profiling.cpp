@@ -422,6 +422,32 @@ private:
         }
         return IfThenElse::make(std::move(condition), std::move(then_case), std::move(else_case));
     }
+
+    Stmt visit(const LetStmt *op) override {
+        if (const Call *call = op->value.as<Call>()) {
+            Stmt start_profiler;
+            // Lazily create the func-ids here, to avoid cluttering the profile log
+            // with these two functions when they are not even present in the pipeline.
+            if (call->name == "halide_copy_to_host") {
+                int copy_to_host_id = get_func_id("copy_to_host");
+                start_profiler = set_current_func(copy_to_host_id);
+            } else if (call->name == "halide_copy_to_device") {
+                int copy_to_device_id = get_func_id("copy_to_device");
+                start_profiler = set_current_func(copy_to_device_id);
+            }
+            if (start_profiler.defined()) {
+                Stmt stop_profiler = set_current_func(stack.back());
+                return Block::make(start_profiler, LetStmt::make(op->name, mutate(op->value), Block::make(stop_profiler, mutate(op->body))));
+            }
+        }
+
+        Stmt body = mutate(op->body);
+        Expr value = mutate(op->value);
+        if (body.same_as(op->body) && value.same_as(op->value)) {
+            return op;
+        }
+        return LetStmt::make(op->name, value, body);
+    }
 };
 
 }  // namespace
