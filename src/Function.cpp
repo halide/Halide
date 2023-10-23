@@ -1154,7 +1154,7 @@ void Function::lock_loop_levels() {
         schedule.store_level() = schedule.compute_level();
     }
     if (schedule.hoist_storage_level().is_inlined()) {
-        schedule.hoist_storage_level() = schedule.compute_level();
+        schedule.hoist_storage_level() = schedule.store_level();
     }
     if (contents->init_def.defined()) {
         contents->init_def.schedule().fuse_level().level.lock();
