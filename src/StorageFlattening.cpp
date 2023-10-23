@@ -164,7 +164,7 @@ private:
     Stmt visit(const HoistedStorage *op) override {
         hoisted_storages.emplace(op->name, HoistedStorageData());
         Stmt body = mutate(op->body);
-        internal_assert(hoisted_storages[op->name].hoisted_allocations.size() == 1);
+        internal_assert(hoisted_storages[op->name].hoisted_allocations.size() == 1) << "Multiple realization nodes to lift.";
         const auto &alloc_info = hoisted_storages[op->name].hoisted_allocations.front();
         body = Allocate::make(alloc_info.name, alloc_info.type, alloc_info.memory_type, alloc_info.extents, alloc_info.condition, body);
         hoisted_storages.erase(op->name);
@@ -271,7 +271,7 @@ private:
             for (const auto &e : allocation_extents) {
                 Expr expanded_extent = simplify(substitute_in_all_lets(expand_expr(e, scope)));
                 Interval bounds = bounds_of_expr_in_scope(expanded_extent, hoisted_storages[op->name].loop_vars);
-                // user_error(b.max.defined()) << "Undefined bound for storage size, consider using bound_storage\n";
+                user_assert(bounds.max.defined()) << "Couldn't infer the upper bound for the storage size, consider using bound_storage.\n";
                 bounded_extents.push_back(bounds.max);
             }
 
