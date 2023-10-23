@@ -1246,12 +1246,10 @@ protected:
             }
             for (size_t i = 0; i < funcs.size(); i++) {
                 if (funcs[i].schedule().hoist_storage_level().match(for_loop->name)) {
-                    debug(0) << "Found hoist storage level for " << funcs[i].name() << " at " << for_loop->name << "\n";
+                    debug(3) << "Found hoist storage level for " << funcs[i].name() << " at " << for_loop->name << "\n";
                     if (funcs[i].schedule().hoist_storage_level() != funcs[i].schedule().store_level()) {
-                        debug(0) << "Hoisting storage\n";
                         body = HoistedStorage::make(funcs[i].name(), body);
                     } else {
-                        debug(0) << "Not hoisting the storage, because hoist_storage_level() and store_level() match\n";
                     }
                     _found_hoist_storage_levels_for_funcs.insert(funcs[i].name());
                 }
@@ -2555,7 +2553,6 @@ Stmt schedule_functions(const vector<Function> &outputs,
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
             s = injector.mutate(s);
             internal_assert(injector.found_store_level() && injector.found_compute_level() && injector.found_hoist_storage_level());
-            debug(0) << s << "\n";
         }
 
         debug(2) << s << "\n";

@@ -162,7 +162,6 @@ private:
     using IRMutator::visit;
 
     Stmt visit(const HoistedStorage *op) override {
-        debug(0) << "Found a hoisted storage - " << op->name << "\n";
         hoisted_storages.emplace(op->name, HoistedStorageData());
         Stmt body = mutate(op->body);
         internal_assert(hoisted_storages[op->name].hoisted_allocations.size() == 1);
@@ -272,16 +271,12 @@ private:
             for (const auto &e : allocation_extents) {
                 Expr expanded_extent = simplify(substitute_in_all_lets(expand_expr(e, scope)));
                 Interval bounds = bounds_of_expr_in_scope(expanded_extent, hoisted_storages[op->name].loop_vars);
-                debug(0) << "Trying to bound expression - \n"
-                         << bounds.min << "\n"
-                         << bounds.max << "\n";
                 // user_error(b.max.defined()) << "Undefined bound for storage size, consider using bound_storage\n";
                 bounded_extents.push_back(bounds.max);
             }
 
             HoistedAllocationInfo hoisted_alloc(op->name, op->types[0], op->memory_type, bounded_extents, condition);
 
-            debug(0) << "Inside of the corresponding hoisted storage" << op->name << "\n";
             hoisted_storages[op->name].hoisted_allocations.push_back(hoisted_alloc);
         } else {
             // Make the allocation node
@@ -576,10 +571,8 @@ Stmt storage_flattening(Stmt s,
             tuple_env[p.first] = {p.second, 0};
         }
     }
-    debug(0) << s << "\n";
     s = FlattenDimensions(tuple_env, outputs, target).mutate(s);
     s = PromoteToMemoryType().mutate(s);
-    debug(0) << s << "\n";
     return s;
 }
 
