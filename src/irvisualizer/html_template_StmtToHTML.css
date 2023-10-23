@@ -224,6 +224,14 @@ span.Highlight {
     background-color: #FF0;
 }
 
+b.HighlightToggle0 { font-weight: bold; background-color: oklch(80% 0.18 0); }
+b.HighlightToggle1 { font-weight: bold; background-color: oklch(80% 0.18 50); }
+b.HighlightToggle2 { font-weight: bold; background-color: oklch(80% 0.18 100); }
+b.HighlightToggle3 { font-weight: bold; background-color: oklch(80% 0.18 150); }
+b.HighlightToggle4 { font-weight: bold; background-color: oklch(80% 0.18 200); }
+b.HighlightToggle5 { font-weight: bold; background-color: oklch(80% 0.18 260); }
+b.HighlightToggle6 { font-weight: bold; background-color: oklch(80% 0.18 310); }
+
 span.OpF32 {
     color: hsl(106deg 100% 40%);
     font-weight: bold;

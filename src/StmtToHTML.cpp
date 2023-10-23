@@ -710,7 +710,7 @@ public:
         print_show_hide_btn_end(nullptr);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent ModuleBody", id);
+        print_opening_tag("div", "indent ModuleBody", "", id);
 
         print(m.get_conceptual_stmt());
 
@@ -759,7 +759,7 @@ public:
         print_show_hide_btn_end(nullptr);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent ModuleBody", id);
+        print_opening_tag("div", "indent ModuleBody", "", id);
 
         // Print module buffers
         for (const auto &buf : m.buffers()) {
@@ -823,7 +823,7 @@ public:
                     print_show_hide_btn_begin(current_id);
                     std::string kernel_name = parts[2].substr(0, parts[2].length() - 1);
                     line = "<span class='keyword'>.visible</span> <span class='keyword'>.entry</span> ";
-                    line += variable(kernel_name) + " <span class='matched'>(</span>";
+                    line += kernel_name + " <span class='matched'>(</span>";
                     current_kernel = kernel_name;
                 }
             } else if (starts_with(line, ")") && in_func_signature) {
@@ -886,13 +886,13 @@ public:
             if (line.front() == '@' && indent) {
                 idx = line.find(' ');
                 std::string pred = line.substr(1, idx - 1);
-                line = "<span class='Pred'>@" + variable(pred) + "</span>" + line.substr(idx);
+                line = "<span class='Pred'>@" + variable(pred, Bool()) + "</span>" + line.substr(idx);
             }
 
             // Labels (depending on the LLVM version we get L with or without a dollar)
             if (starts_with(line, "$L_") && !indent && (idx = line.find(':')) != std::string::npos) {
                 std::string label = line.substr(0, idx);
-                line = "<span class='Label'>" + variable(label) + "</span>:" + line.substr(idx + 1);
+                line = "<span class='Label'>" + variable(label, "Label") + "</span>:" + line.substr(idx + 1);
             }
 
             // Highlight operands
@@ -909,9 +909,9 @@ public:
                     }
                     if (op.back() == '}') {
                         std::string reg = op.substr(0, op.size() - 1);
-                        operands_str += variable(reg) + '}';
+                        operands_str += variable(reg, "reg") + '}';
                     } else if (op.front() == '%') {
-                        operands_str += variable(op);
+                        operands_str += variable(op, "");
                     } else if (op.find_first_not_of("-0123456789") == std::string::npos) {
                         operands_str += "<span class='IntImm Imm'>";
                         operands_str += op;
@@ -925,12 +925,12 @@ public:
                         size_t idx = op.find('+');
                         if (idx == std::string::npos) {
                             std::string reg = op.substr(1, op.size() - 2);
-                            operands_str += '[' + variable(reg) + ']';
+                            operands_str += '[' + variable(reg, "reg") + ']';
                         } else {
                             std::string reg = op.substr(1, idx - 1);
                             std::string offset = op.substr(idx + 1);
                             offset = offset.substr(0, offset.size() - 1);
-                            operands_str += '[' + variable(reg) + "+";
+                            operands_str += '[' + variable(reg, "reg") + "+";
                             operands_str += "<span class='IntImm Imm'>";
                             operands_str += offset;
                             operands_str += "</span>";
@@ -938,10 +938,10 @@ public:
                         }
                     } else if (op.front() == '{') {
                         std::string reg = op.substr(1);
-                        operands_str += '{' + variable(reg);
+                        operands_str += '{' + variable(reg, "reg");
                     } else if (starts_with(op, "$L_")) {
                         // Labels
-                        operands_str += "<span class='Label'>" + variable(op) + "</span>";
+                        operands_str += "<span class='Label'>" + variable(op, "Label") + "</span>";
                     } else {
                         operands_str += op;
                     }
@@ -959,7 +959,7 @@ public:
             // Indent-divs can only be opened after the line is finished.
             if (should_print_open_indent) {
                 print_show_hide_btn_end(nullptr);
-                print_opening_tag("div", "indent", current_id);
+                print_opening_tag("div", "indent", "", current_id);
             }
         }
         print_closing_tag("div");
@@ -995,7 +995,7 @@ private:
 
         // Print buffer name and move on
         print_html_element("span", "keyword", "buffer ");
-        print_variable(buf.name());
+        print_variable(buf.name(), buf.type());
 
         // Close div holding this buffer
         print_closing_tag("div");
@@ -1027,7 +1027,7 @@ private:
         print_show_hide_btn_end(nullptr);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent FunctionBody", id);
+        print_opening_tag("div", "indent FunctionBody", "", id);
 
         // Print function body
         print(fn.body);
@@ -1053,12 +1053,22 @@ private:
         ir.accept(this);
     }
 
+    std::string type_to_string(Type t) {
+        std::ostringstream ss;
+        ss << t;
+        return ss.str();
+    }
+
     /* Methods used to emit common HTML patterns */
 
     // Prints the opening tag for the specified html element. A unique ID is
     // auto-generated unless provided.
-    void print_opening_tag(const std::string &tag, const std::string &cls, int id = -1) {
-        stream << "<" << tag << " class='" << cls << "' id='";
+    void print_opening_tag(const std::string &tag, const std::string &cls, const std::string &tooltip = "", int id = -1) {
+        stream << "<" << tag << " class='" << cls << "'";
+        if (!tooltip.empty()) {
+            stream << " title='" << tooltip << "'";
+        }
+        stream << " id='";
         if (id == -1) {
             stream << context_stack.back() << "-";
             stream << gen_unique_id();
@@ -1066,12 +1076,6 @@ private:
             stream << id;
         }
         stream << "'>";
-        context_stack.push_back(gen_unique_id());
-        context_stack_tags.push_back(tag);
-    }
-
-    void print_opening_tag(const std::string &tag, const std::string &cls, std::string id) {
-        stream << "<" << tag << " class='" << cls << "' id='" << id << "'>";
         context_stack.push_back(gen_unique_id());
         context_stack_tags.push_back(tag);
     }
@@ -1086,14 +1090,8 @@ private:
     }
 
     // Prints an html element: opening tag, body and closing tag
-    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body, int id = -1) {
-        print_opening_tag(tag, cls, id);
-        stream << body;
-        print_closing_tag(tag);
-    }
-
-    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body, std::string id) {
-        print_opening_tag(tag, cls, id);
+    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body, const std::string &tooltip = "", int id = -1) {
+        print_opening_tag(tag, cls, tooltip, id);
         stream << body;
         print_closing_tag(tag);
     }
@@ -1130,11 +1128,11 @@ private:
     }
 
     // Prints a variable to stream
-    void print_variable(const std::string &x) {
-        stream << variable(x);
+    void print_variable(const std::string &x, Type type) {
+        stream << variable(x, type);
     }
 
-    std::string variable(const std::string &x) {
+    std::string variable(const std::string &x, const std::string &tooltip) {
         int id;
         if (scope.contains(x)) {
             id = scope.get(x);
@@ -1143,10 +1141,16 @@ private:
             scope.push(x, id);
         }
         std::ostringstream s;
-        s << "<b class='variable matched' id='" << id << "-" << gen_unique_id() << "'>";
-        s << x;
-        s << "</b>";
+        s << "<b class='variable matched' id='" << id << "-" << gen_unique_id() << "'";
+        if (!tooltip.empty()) {
+            s << " title='" << tooltip << "'";
+        }
+        s << ">" << x << "</b>";
         return s.str();
+    }
+
+    std::string variable(const std::string &x, Type type) {
+        return variable(x, type_to_string(type));
     }
 
     // Prints text to stream
@@ -1187,14 +1191,14 @@ private:
                 print_html_element("span", "matched", ",");
                 print_text(" ");
             }
-            print_variable(arg.name);
+            print_variable(arg.name, arg.type);
             print_delim = true;
         }
     }
 
     /* Helper functions for printing IR nodes */
     void print_constant(std::string cls, Expr c) {
-        print_opening_tag("span", cls);
+        print_opening_tag("span", cls, type_to_string(c.type()));
         stream << c;
         print_closing_tag("span");
     }
@@ -1205,27 +1209,22 @@ private:
         print_closing_tag("span");
     }
 
-    void print_binary_op(const Expr &a, const Expr &b, std::string op) {
+    void print_binary_op(const Expr &a, const Expr &b, std::string op, Type result_type) {
+        std::string result_type_str = type_to_string(result_type);
         print_opening_tag("span", "BinaryOp");
-        print_html_element("span", "matched", "(");
+        print_html_element("span", "matched", "(", result_type_str);
         print(a);
         print_text(" ");
-        print_html_element("span", "matched Operator", op);
+        print_html_element("span", "matched Operator", op, result_type_str);
         print_text(" ");
         print(b);
-        print_html_element("span", "matched", ")");
+        print_html_element("span", "matched", ")", result_type_str);
         print_closing_tag("span");
     }
 
-    void print_function_call(std::string fn_name, const std::vector<Expr> &args, int id) {
-        print_opening_tag("span", "", "fn-call-" + std::to_string(id));
-        print_function_call(fn_name, args);
-        print_closing_tag("span");
-    }
-
-    void print_function_call(std::string fn_name, const std::vector<Expr> &args) {
+    void print_function_call(std::string fn_name, const std::vector<Expr> &args, const std::string &tooltip) {
         print_opening_tag("span", "matched");
-        print_html_element("span", "Symbol matched", fn_name);
+        print_html_element("span", "Symbol matched", fn_name, tooltip);
         print_text("(");
         print_closing_tag("span");
         bool print_delim = false;
@@ -1236,7 +1235,7 @@ private:
             print(arg);
             print_delim = true;
         }
-        print_html_element("span", "matched", ")");
+        print_html_element("span", "matched", ")", tooltip);
     }
 
     // To avoid generating ridiculously deep DOMs, we flatten blocks here.
@@ -1272,7 +1271,7 @@ private:
             print_show_hide_btn_end(nullptr);
 
             // Open indented div to hold body code
-            print_opening_tag("div", "indent ForkTask", id);
+            print_opening_tag("div", "indent ForkTask", "", id);
 
             // Print task body
             print(stmt);
@@ -1407,10 +1406,11 @@ private:
     }
 
     void visit(const Variable *op) override {
-        print_variable(op->name);
+        print_variable(op->name, op->type);
     }
 
     void visit(const Cast *op) override {
+        std::string type_str = type_to_string(op->type);
         print_opening_tag("span", "Cast");
         print_opening_tag("span", "matched");
         print_type(op->type);
@@ -1422,78 +1422,81 @@ private:
     }
 
     void visit(const Reinterpret *op) override {
+        std::string type_str = type_to_string(op->type);
         print_opening_tag("span", "Reinterpret");
-        print_opening_tag("span", "matched");
+        print_opening_tag("span", "matched Symbol", type_str);
+        print_text("reinterpret&lt;");
         print_type(op->type);
-        print_text("(");
+        print_text("&gt;");
         print_closing_tag("span");
+        print_html_element("span", "matched", "(", type_str);
         print(op->value);
-        print_html_element("span", "matched", ")");
+        print_html_element("span", "matched", ")", type_str);
         print_closing_tag("span");
     }
 
     void visit(const Add *op) override {
-        print_binary_op(op->a, op->b, "+");
+        print_binary_op(op->a, op->b, "+", op->type);
     }
 
     void visit(const Sub *op) override {
-        print_binary_op(op->a, op->b, "-");
+        print_binary_op(op->a, op->b, "-", op->type);
     }
 
     void visit(const Mul *op) override {
-        print_binary_op(op->a, op->b, "*");
+        print_binary_op(op->a, op->b, "*", op->type);
     }
 
     void visit(const Div *op) override {
-        print_binary_op(op->a, op->b, "/");
+        print_binary_op(op->a, op->b, "/", op->type);
     }
 
     void visit(const Mod *op) override {
-        print_binary_op(op->a, op->b, "%");
+        print_binary_op(op->a, op->b, "%", op->type);
     }
 
     void visit(const Min *op) override {
         print_opening_tag("span", "Min");
-        print_function_call("min", {op->a, op->b});
+        print_function_call("min", {op->a, op->b}, type_to_string(op->type));
         print_closing_tag("span");
     }
 
     void visit(const Max *op) override {
         print_opening_tag("span", "Max");
-        print_function_call("max", {op->a, op->b});
+        print_function_call("max", {op->a, op->b}, type_to_string(op->type));
         print_closing_tag("span");
     }
 
     void visit(const EQ *op) override {
-        print_binary_op(op->a, op->b, "==");
+        print_binary_op(op->a, op->b, "==", op->type);
     }
 
     void visit(const NE *op) override {
-        print_binary_op(op->a, op->b, "!=");
+        print_binary_op(op->a, op->b, "!=", op->type);
     }
 
     void visit(const LT *op) override {
-        print_binary_op(op->a, op->b, "&lt;");
+        print_binary_op(op->a, op->b, "&lt;", op->type);
     }
 
     void visit(const LE *op) override {
-        print_binary_op(op->a, op->b, "&lt;=");
+        print_binary_op(op->a, op->b, "&lt;=", op->type);
     }
 
     void visit(const GT *op) override {
-        print_binary_op(op->a, op->b, "&gt;");
+        print_binary_op(op->a, op->b, "&gt;", op->type);
     }
 
     void visit(const GE *op) override {
-        print_binary_op(op->a, op->b, "&gt;=");
+        print_binary_op(op->a, op->b, "&gt;=", op->type);
     }
 
     void visit(const And *op) override {
-        print_binary_op(op->a, op->b, "&amp;&amp;");
+        print_binary_op(op->a, op->b, "&amp;&amp;", op->type);
     }
 
     void visit(const Or *op) override {
-        print_binary_op(op->a, op->b, "||");
+        print_binary_op(op->a, op->b, "||", op->type);
     }
 
     void visit(const Not *op) override {
@@ -1505,19 +1508,20 @@ private:
 
     void visit(const Select *op) override {
         print_opening_tag("span", "Select");
-        print_function_call("select", {op->condition, op->true_value, op->false_value});
+        print_function_call("select", {op->condition, op->true_value, op->false_value}, type_to_string(op->type));
         print_closing_tag("span");
     }
 
     void visit(const Load *op) override {
+        std::string type_str = type_to_string(op->type);
         int id = gen_node_id(op);
         print_opening_tag("span", "Load", "load-" + std::to_string(id));
-        print_opening_tag("span", "matched");
-        print_variable(op->name);
+        print_opening_tag("span", "matched", type_str);
+        stream << variable(op->name, type_to_string(op->type) + "*");
         print_text("[");
         print_closing_tag("span");
         print(op->index);
-        print_html_element("span", "matched", "]");
+        print_html_element("span", "matched", "]", type_str);
         if (!is_const_one(op->predicate)) {
             print_html_element("span", "keyword", " if ");
             print(op->predicate);
@@ -1527,7 +1531,7 @@ private:
 
     void visit(const Ramp *op) override {
         print_opening_tag("span", "Ramp");
-        print_function_call("ramp", {op->base, op->stride, Expr(op->lanes)});
+        print_function_call("ramp", {op->base, op->stride, Expr(op->lanes)}, type_to_string(op->type));
         print_closing_tag("span");
     }
 
@@ -1542,9 +1546,8 @@ private:
     }
 
     void visit(const Call *op) override {
-        int id = gen_node_id(op);
         print_opening_tag("span", "Call");
-        print_function_call(op->name, op->args, id);
+        print_function_call(op->name, op->args, type_to_string(op->type));
         print_closing_tag("span");
     }
 
@@ -1554,7 +1557,7 @@ private:
         print_opening_tag("span", "matched");
         print_text("(");
         print_html_element("span", "keyword", "let ");
-        print_variable(op->name);
+        print_variable(op->name, op->type);
         print_html_element("span", "Operator Assign", " = ");
         print_closing_tag("span");
         print(op->value);
@@ -1566,20 +1569,17 @@ private:
     }
 
     void visit(const LetStmt *op) override {
-        int id = gen_node_id(op);
         scope.push(op->name, gen_unique_id());
         print_opening_tag("div", "LetStmt");
         print_cost_buttons(op);
         print_opening_tag("div", "WrapLine");
-        print_opening_tag("span", "cost-highlight", "cost-bg-" + std::to_string(id));
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "let ");
-        print_variable(op->name);
+        print_variable(op->name, op->value.type());
         print_html_element("span", "Operator Assign", " = ");
         print_closing_tag("span");  // matched
         print(op->value);
-        print_closing_tag("span");  // Cost-Highlight
-        print_closing_tag("div");   // WrapLine
+        print_closing_tag("div");  // WrapLine
         print_closing_tag("div");
         print_ln();
         // Technically, the body of the LetStmt is a child node in the IR
@@ -1592,7 +1592,7 @@ private:
     void visit(const AssertStmt *op) override {
         print_opening_tag("div", "AssertStmt WrapLine");
         print_cost_buttons(op);
-        print_function_call("assert", {op->condition, op->message});
+        print_function_call("assert", {op->condition, op->message}, "(void)");
         print_closing_tag("div");
         print_ln();
     }
@@ -1615,9 +1615,8 @@ private:
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword", op->is_producer ? "produce " : "consume ",
-                           "prodcons-" + std::to_string(id));
-        print_variable(op->name);
+        print_html_element("span", "keyword", op->is_producer ? "produce " : "consume ");
+        stream << variable(op->name, "");
         print_closing_tag("span");
 
         // Open code block to hold function body
@@ -1625,7 +1624,7 @@ private:
         print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent ProducerConsumerBody", id);
+        print_opening_tag("div", "indent ProducerConsumerBody", "", id);
 
         // Print producer/consumer body
         print(op->body);
@@ -1669,12 +1668,12 @@ private:
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_opening_tag("span", "keyword", "loop-" + std::to_string(id));
+        print_opening_tag("span", "keyword");
         stream << op->for_type << op->device_api;
         print_closing_tag("span");
         print_text(" (");
         print_closing_tag("span");
-        print_variable(op->name);
+        stream << variable(op->name, "");
         print_html_element("span", "matched", ", ");
         print(op->min);
         print_html_element("span", "matched", ", ");
@@ -1686,7 +1685,7 @@ private:
         print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent ForBody", id);
+        print_opening_tag("div", "indent ForBody", "", id);
 
         // Print loop body
         print(op->body);
@@ -1718,7 +1717,7 @@ private:
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword", "acquire", "acquire-" + std::to_string(id));
+        print_html_element("span", "keyword", "acquire");
         print_text(" (");
         print_closing_tag("span");
         print(op->semaphore);
@@ -1731,7 +1730,7 @@ private:
         print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent AcquireBody", id);
+        print_opening_tag("div", "indent AcquireBody", "", id);
 
         // Print aquire body
         print(op->body);
@@ -1749,24 +1748,22 @@ private:
     }
 
     void visit(const Store *op) override {
-        int id = gen_node_id(op);
-
         // Start a dive to hold code for this acquire
         print_opening_tag("div", "Store WrapLine");
 
         // Print cost buttons
         print_cost_buttons(op);
 
+        std::string type_str = type_to_string(op->value.type());
+
         // Print store target
-        print_opening_tag("span", "matched");
-        print_opening_tag("span", "", "store-" + std::to_string(id));
-        print_variable(op->name);
+        print_opening_tag("span", "matched", type_str);
+        stream << variable(op->name, type_str + "*");
         print_text("[");
         print_closing_tag("span");
-        print_closing_tag("span");
         print(op->index);
-        print_html_element("span", "matched", "]");
-        print_html_element("span", "Operator Assign Matched", " = ");
+        print_html_element("span", "matched", "]", type_str);
+        print_html_element("span", "Operator Assign Matched", " = ", type_str);
 
         // Print store value
         print_opening_tag("span", "StoreValue");
@@ -1785,14 +1782,14 @@ private:
 
     void visit(const Provide *op) override {
         print_opening_tag("div", "Provide WrapLine");
-        print_function_call(op->name, op->args);
+        print_function_call(op->name, op->args, "");
         if (op->values.size() > 1) {
             print_html_element("span", "matched", " = {");
-            for (size_t i = 0; i < op->args.size(); i++) {
+            for (size_t i = 0; i < op->values.size(); i++) {
                 if (i > 0) {
                     print_html_element("span", "matched", ", ");
                 }
-                print(op->args[i]);
+                print(op->values[i]);
             }
             print_html_element("span", "matched", "}");
         } else {
@@ -1804,8 +1801,6 @@ private:
     }
 
     void visit(const Allocate *op) override {
-        int id = gen_node_id(op);
-
         // Push scope
         scope.push(op->name, gen_unique_id());
 
@@ -1817,8 +1812,8 @@ private:
 
         //  Print allocation name, type and extents
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword", "allocate ", "allocate-" + std::to_string(id));
-        print_variable(op->name);
+        print_html_element("span", "keyword", "allocate ");
+        print_variable(op->name, op->type);
         print_text("[");
         print_closing_tag("span");
         print_type(op->type);
@@ -1843,7 +1838,7 @@ private:
         // Print custom new and free expressions
         if (op->new_expr.defined()) {
             print_opening_tag("span", "matched");
-            print_html_element("span", "keyword", "custom_new");
+            print_html_element("span", "keyword", " custom_new");
             print_text(" {");
             print_closing_tag("span");
             print(op->new_expr);
@@ -1852,7 +1847,7 @@ private:
 
         if (!op->free_function.empty()) {
             print_opening_tag("span", "matched");
-            print_html_element("span", "keyword", "custom_free");
+            print_html_element("span", "keyword", " custom_free");
             print_text(" {");
             print_closing_tag("span");
             print_text(" " + op->free_function + "(); ");
@@ -1878,7 +1873,7 @@ private:
         print_opening_tag("div", "Free WrapLine");
         print_cost_buttons(op);
         print_html_element("span", "keyword", "free ");
-        print_variable(op->name);
+        stream << variable(op->name, "");
         print_closing_tag("div");
         print_ln();
     }
@@ -1898,8 +1893,8 @@ private:
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword", "realize", "realize-" + std::to_string(id));
-        print_variable(op->name);
+        print_html_element("span", "keyword", "realize");
+        stream << variable(op->name, "");  // TODO there is "types" in plural?
         print_text(" (");
         for (size_t i = 0; i < op->bounds.size(); i++) {
             print_html_element("span", "matched", "[");
@@ -1924,7 +1919,7 @@ private:
         print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent RealizeBody", id);
+        print_opening_tag("div", "indent RealizeBody", "", id);
 
         // Print realization body
         print(op->body);
@@ -1968,7 +1963,7 @@ private:
         print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent ForkBody", id);
+        print_opening_tag("div", "indent ForkBody", "", id);
 
         // Print fork body
         visit_fork_stmt(op->first);
@@ -1988,7 +1983,6 @@ private:
     void visit(const IfThenElse *op) override {
         // Give this acquire a unique id
         int then_block_id = gen_unique_id();
-        int then_node_id = gen_node_id(op->then_case.get());
         int last_then_block_id = -1;
 
         // Start a div to hold code for this conditional
@@ -2002,7 +1996,7 @@ private:
 
         // Print the actual "if (...) {"
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword IfSpan", "if", "cond-" + std::to_string(then_node_id));
+        print_html_element("span", "keyword IfSpan", "if");
         print_text(" (");
         print_closing_tag("span");
         print(op->condition);
@@ -2018,7 +2012,7 @@ private:
             print_show_hide_btn_end(op);
 
             // Open indented div to hold code for the `then` case
-            print_opening_tag("div", "indent ThenBody", then_block_id);
+            print_opening_tag("div", "indent ThenBody", "", then_block_id);
             print(op->then_case);
             print_closing_tag("div");
             print_ln();
@@ -2039,7 +2033,6 @@ private:
             if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
                 // Generate a new id for the `else-if` case
                 then_block_id = gen_unique_id();
-                then_node_id = gen_node_id(nested_if->then_case.get());
 
                 // Print cost buttons
                 print_cost_buttons(op, then_block_id);
@@ -2053,7 +2046,7 @@ private:
 
                 // Print the actual "} else if (...) {" condition statement
                 print_opening_tag("span", "matched");
-                print_html_element("span", "keyword IfSpan", " else if", "cond-" + std::to_string(then_node_id));
+                print_html_element("span", "keyword IfSpan", " else if");
                 print_text(" (");
                 print_closing_tag("span");
                 print(nested_if->condition);
@@ -2063,9 +2056,7 @@ private:
                 op = nested_if;
                 last_then_block_id = then_block_id;
             } else {  // Otherwise, print it and we are done!
-
                 int else_block_id = gen_unique_id();
-                int else_node_id = gen_node_id(op->else_case.get());
 
                 // Print cost buttons
                 print_cost_buttons(op, else_block_id);
@@ -2079,7 +2070,7 @@ private:
 
                 // -- print text
                 print_opening_tag("span", "matched");
-                print_html_element("span", "keyword IfSpan", " else", "cond-" + std::to_string(else_node_id));
+                print_html_element("span", "keyword IfSpan", " else");
                 print_closing_tag("span");
 
                 // Open code block to hold `else` case
@@ -2087,7 +2078,7 @@ private:
                 print_show_hide_btn_end(op);
 
                 // Open indented div to hold code for the `then` case
-                print_opening_tag("div", "indent ElseBody", else_block_id);
+                print_opening_tag("div", "indent ElseBody", "", else_block_id);
 
                 // Print `else` case body
                 print(op->else_case);
@@ -2118,26 +2109,27 @@ private:
     }
 
     void visit(const Shuffle *op) override {
+        std::string type_str = type_to_string(op->type);
         if (op->is_concat()) {
-            print_function_call("concat_vectors", op->vectors);
+            print_function_call("concat_vectors", op->vectors, type_str);
         } else if (op->is_interleave()) {
-            print_function_call("interleave_vectors", op->vectors);
+            print_function_call("interleave_vectors", op->vectors, type_str);
         } else if (op->is_extract_element()) {
             std::vector<Expr> args = op->vectors;
             args.emplace_back(op->slice_begin());
-            print_function_call("extract_element", args);
+            print_function_call("extract_element", args, type_str);
         } else if (op->is_slice()) {
             std::vector<Expr> args = op->vectors;
             args.emplace_back(op->slice_begin());
             args.emplace_back(op->slice_stride());
             args.emplace_back(static_cast<int>(op->indices.size()));
-            print_function_call("slice_vectors", args);
+            print_function_call("slice_vectors", args, type_str);
         } else {
             std::vector<Expr> args = op->vectors;
             for (int i : op->indices) {
                 args.emplace_back(i);
             }
-            print_function_call("shuffle", args);
+            print_function_call("shuffle", args, type_str);
         }
     }
 
@@ -2148,7 +2140,7 @@ private:
         print_text(")");
         std::ostringstream op_ss;
         op_ss << op->op;
-        print_function_call("vector_reduce_" + op_ss.str(), {op->value});
+        print_function_call("vector_reduce_" + op_ss.str(), {op->value}, type_to_string(op->type));
         print_closing_tag("span");
         print_ln();
     }
@@ -2161,7 +2153,7 @@ private:
 
         // Print prefetch
         print_html_element("span", "matched keyword", "prefetch ");
-        print_variable(op->name);
+        stream << variable(op->name, "");  // TODO there is "types"? Plural?
         print_html_element("span", "matched", "(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
             print_html_element("span", "matched", "[");
@@ -2213,7 +2205,7 @@ private:
         print_show_hide_btn_end(op);
 
         // Open indented div to hold atomic code
-        print_opening_tag("div", "indent AtomicBody", id);
+        print_opening_tag("div", "indent AtomicBody", "", id);
 
         // Print atomic body
         print(op->body);
