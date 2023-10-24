@@ -71,6 +71,8 @@ private:
 
     DeviceAPI deserialize_device_api(Serialize::DeviceAPI device_api);
 
+    LoopPartitionPolicy deserialize_loop_partition_policy(Serialize::LoopPartitionPolicy loop_partition_policy);
+
     Call::CallType deserialize_call_type(Serialize::CallType call_type);
 
     VectorReduce::Operator deserialize_vector_reduce_op(Serialize::VectorReduceOp vector_reduce_op);
@@ -198,6 +200,20 @@ ForType Deserializer::deserialize_for_type(Serialize::ForType for_type) {
     default:
         user_error << "unknown for type " << for_type << "\n";
         return ForType::Serial;
+    }
+}
+
+LoopPartitionPolicy Deserializer::deserialize_loop_partition_policy(Serialize::LoopPartitionPolicy loop_partition_policy) {
+    switch (loop_partition_policy) {
+    case Serialize::LoopPartitionPolicy::LoopPartitionPolicy_Auto:
+        return Halide::LoopPartitionPolicy::Auto;
+    case Serialize::LoopPartitionPolicy::LoopPartitionPolicy_Never:
+        return Halide::LoopPartitionPolicy::Never;
+    case Serialize::LoopPartitionPolicy::LoopPartitionPolicy_Always:
+        return Halide::LoopPartitionPolicy::Always;
+    default:
+        user_error << "unknown loop partition policy " << loop_partition_policy << "\n";
+        return Halide::LoopPartitionPolicy::Auto;
     }
 }
 
@@ -505,9 +521,10 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         const auto min = deserialize_expr(for_stmt->min_type(), for_stmt->min());
         const auto extent = deserialize_expr(for_stmt->extent_type(), for_stmt->extent());
         const ForType for_type = deserialize_for_type(for_stmt->for_type());
+        const LoopPartitionPolicy loop_partition_policy = deserialize_loop_partition_policy(for_stmt->loop_partition_policy());
         const DeviceAPI device_api = deserialize_device_api(for_stmt->device_api());
         const auto body = deserialize_stmt(for_stmt->body_type(), for_stmt->body());
-        return For::make(name, min, extent, for_type, device_api, body);
+        return For::make(name, min, extent, for_type, loop_partition_policy, device_api, body);
     }
     case Serialize::Stmt_Store: {
         const auto *store_stmt = (const Serialize::Store *)stmt;

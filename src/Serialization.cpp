@@ -60,6 +60,8 @@ private:
 
     Serialize::DeviceAPI serialize_device_api(const DeviceAPI &device_api);
 
+    Serialize::LoopPartitionPolicy serialize_loop_partition_policy(const LoopPartitionPolicy &loop_partition_policy);
+
     Serialize::CallType serialize_call_type(const Call::CallType &call_type);
 
     Serialize::VectorReduceOp serialize_vector_reduce_op(const VectorReduce::Operator &vector_reduce_op);
@@ -181,6 +183,20 @@ Serialize::ForType Serializer::serialize_for_type(const ForType &for_type) {
     default:
         user_error << "Unsupported for type\n";
         return Serialize::ForType_Serial;
+    }
+}
+
+Serialize::LoopPartitionPolicy Serializer::serialize_loop_partition_policy(const LoopPartitionPolicy &loop_partition_policy) {
+    switch (loop_partition_policy) {
+    case Halide::LoopPartitionPolicy::Auto:
+        return Serialize::LoopPartitionPolicy::LoopPartitionPolicy_Auto;
+    case Halide::LoopPartitionPolicy::Never:
+        return Serialize::LoopPartitionPolicy::LoopPartitionPolicy_Never;
+    case Halide::LoopPartitionPolicy::Always:
+        return Serialize::LoopPartitionPolicy::LoopPartitionPolicy_Always;
+    default:
+        user_error << "Unsupported loop partition policy\n";
+        return Serialize::LoopPartitionPolicy::LoopPartitionPolicy_Auto;
     }
 }
 
@@ -428,13 +444,14 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto min_serialized = serialize_expr(builder, for_stmt->min);
         const auto extent_serialized = serialize_expr(builder, for_stmt->extent);
         const Serialize::ForType for_type = serialize_for_type(for_stmt->for_type);
+        const Serialize::LoopPartitionPolicy loop_partition_policy = serialize_loop_partition_policy(for_stmt->partition_policy);
         const Serialize::DeviceAPI device_api = serialize_device_api(for_stmt->device_api);
         const auto body_serialized = serialize_stmt(builder, for_stmt->body);
         return std::make_pair(Serialize::Stmt::Stmt_For,
                               Serialize::CreateFor(builder, name_serialized,
                                                    min_serialized.first, min_serialized.second,
                                                    extent_serialized.first, extent_serialized.second,
-                                                   for_type, device_api,
+                                                   for_type, loop_partition_policy, device_api,
                                                    body_serialized.first, body_serialized.second)
                                   .Union());
     }
