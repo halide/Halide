@@ -647,7 +647,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto body_serialized = serialize_stmt(builder, hoisted_storage_stmt->body);
         return std::make_pair(Serialize::Stmt::Stmt_HoistedStorage,
                               Serialize::CreateHoistedStorage(builder, name_serialized,
-                                                      body_serialized.first, body_serialized.second)
+                                                              body_serialized.first, body_serialized.second)
                                   .Union());
     }
     default:
