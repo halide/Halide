@@ -279,7 +279,7 @@ private:
             for (const auto &e : allocation_extents) {
                 Expr expanded_extent = simplify(substitute_in_all_lets(expand_expr(e, scope)));
                 Interval bounds = bounds_of_expr_in_scope(expanded_extent, hoisted_storages[op->name].loop_vars);
-                user_assert(bounds.max.defined()) << "Couldn't infer the upper bound for the storage size, consider using bound_storage.\n";
+                user_assert(bounds.max.defined()) << "Couldn't infer the upper bound for the storage size of " << op->name << ", consider using bound_storage.\n";
                 bounded_extents.push_back(bounds.max);
             }
 
