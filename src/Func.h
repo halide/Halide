@@ -2337,11 +2337,11 @@ public:
     Func &store_root();
 
     /** Hoist storage for this function within f's loop over
-     * var. This is different from \ref Funcstore_at, because hoist_storage 
+     * var. This is different from \ref Funcstore_at, because hoist_storage
      * simply moves an actual allocation to a given loop level and
-     * doesn't trigger any of the optimizations such as sliding window. 
+     * doesn't trigger any of the optimizations such as sliding window.
      * Hoisting storage is optional and can be used as an optimization
-     * to avoid unnecessary allocations by moving it out from an inner 
+     * to avoid unnecessary allocations by moving it out from an inner
      * loop.
      *
      * Consider again the pipeline from \ref Func::compute_at :
@@ -2380,9 +2380,9 @@ public:
      * can happen for each iteration of the inner loop (in total height * width times).
      * In some cases allocation can be expensive, so it might be better to do it once
      * and reuse allocated memory across all iterations of the loop.
-     * 
+     *
      * This can be done by scheduling g like so:
-     * 
+     *
      \code
      g.compute_at(f, x).hoist_storage(f, Var::outermost());
      \endcode
@@ -2405,7 +2405,7 @@ public:
 
      \endcode
      *
-     * hoist_storage can be used together with \ref Func::store_at and 
+     * hoist_storage can be used together with \ref Func::store_at and
      * \ref Func::fold_storage (for example, to hoist the storage allocated
      * after sliding window optimization).
      *
