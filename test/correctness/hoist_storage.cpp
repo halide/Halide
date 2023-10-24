@@ -549,6 +549,53 @@ int main(int argc, char **argv) {
         });
     }
 
+    {
+        Func f("f"), g("g");
+        Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
+
+        f(x, y) = x + y;
+        g(x, y) = f(x - 1, y - 1) + f(x + 1, y + 1);
+
+        g.compute_root();
+        g.specialize(g.output_buffer().width() > 64).vectorize(x, 4);
+        f.compute_at(g, x)
+            .hoist_storage(LoopLevel::root())
+            // Store in heap to make sure that custom malloc is called.
+            .store_in(MemoryType::Heap);
+
+        g.jit_handlers().custom_malloc = custom_malloc;
+        g.jit_handlers().custom_free = custom_free;
+
+        malloc_count = 0;
+        malloc_total_size = 0;
+
+        Buffer<int> out(128, 128);
+        g.realize(out);
+
+        const int expected_malloc_count = 1;
+        if (malloc_count != expected_malloc_count) {
+            std::cerr << "Wrong number of mallocs. "
+                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            exit(1);
+        }
+
+        const int expected_malloc_total_size = (4 + 3 - 1) * 3 * sizeof(int32_t);
+        if (malloc_total_size != expected_malloc_total_size) {
+            std::cerr << "Wrong allocation size "
+                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            exit(1);
+        }
+
+        out.for_each_element([&](int x, int y) {
+            int correct = 2 * (x + y);
+            if (out(x, y) != correct) {
+                printf("out(%d, %d) = %d instead of %d\n",
+                       x, y, out(x, y), correct);
+                exit(1);
+            }
+        });
+    }
+
     printf("Success!\n");
     return 0;
 }

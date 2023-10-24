@@ -165,9 +165,16 @@ private:
         hoisted_storages.emplace(op->name, HoistedStorageData());
         Stmt body = mutate(op->body);
         internal_assert(!hoisted_storages[op->name].hoisted_allocations.empty()) << "Couldn't find a matching Realize node for Hoisted storage " << op->name << "\n";
-        internal_assert(hoisted_storages[op->name].hoisted_allocations.size() == 1) << "Multiple realization nodes to lift.";
         const auto &alloc_info = hoisted_storages[op->name].hoisted_allocations.front();
-        body = Allocate::make(alloc_info.name, alloc_info.type, alloc_info.memory_type, alloc_info.extents, alloc_info.condition, body);
+        vector<Expr> extents = alloc_info.extents;
+        for (int i = 1; i < (int)hoisted_storages[op->name].hoisted_allocations.size(); i++) {
+            const auto &ai = hoisted_storages[op->name].hoisted_allocations[i];
+            internal_assert(ai.extents.size() == alloc_info.extents.size());
+            for (int j = 0; j < (int)extents.size(); j++) {
+                extents[j] = Max::make(extents[j], ai.extents[j]);
+            }
+        }
+        body = Allocate::make(alloc_info.name, alloc_info.type, alloc_info.memory_type, extents, alloc_info.condition, body);
         hoisted_storages.erase(op->name);
         return body;
     }
@@ -574,6 +581,7 @@ Stmt storage_flattening(Stmt s,
     }
     s = FlattenDimensions(tuple_env, outputs, target).mutate(s);
     s = PromoteToMemoryType().mutate(s);
+
     return s;
 }
 
