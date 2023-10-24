@@ -397,7 +397,7 @@ Stmt build_loop_nest(
             const Dim &dim = stage_s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
-            stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.loop_partition_policy, dim.device_api, stmt);
+            stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.partition_policy, dim.device_api, stmt);
         }
     }
 
@@ -2480,7 +2480,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const Target &target,
                         bool &any_memoized) {
     string root_var = LoopLevel::root().lock().to_string();
-    Stmt s = For::make(root_var, 0, 1, ForType::Serial, LoopPartitionPolicy::Never, DeviceAPI::Host, Evaluate::make(0));
+    Stmt s = For::make(root_var, 0, 1, ForType::Serial, Partition::Never, DeviceAPI::Host, Evaluate::make(0));
 
     any_memoized = false;
 

@@ -348,7 +348,7 @@ public:
     Stage &parallel(const VarOrRVar &var, const Expr &task_size, TailStrategy tail = TailStrategy::Auto);
     Stage &vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
     Stage &unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
-    Stage &partition(const VarOrRVar &var, LoopPartitionPolicy partition_policy);
+    Stage &partition(const VarOrRVar &var, Partition partition_policy);
     Stage &tile(const VarOrRVar &x, const VarOrRVar &y,
                 const VarOrRVar &xo, const VarOrRVar &yo,
                 const VarOrRVar &xi, const VarOrRVar &yi, const Expr &xfactor, const Expr &yfactor,
@@ -1448,7 +1448,7 @@ public:
      * splits a for loop into three for loops: a prologue, a steady-state,
      * and an epilogue.
      * The default policy is Auto. */
-    Func &partition(const VarOrRVar &var, LoopPartitionPolicy partition_policy);
+    Func &partition(const VarOrRVar &var, Partition partition_policy);
 
     /** Statically declare that the range over which a function should
      * be evaluated is given by the second and third arguments. This

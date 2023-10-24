@@ -44,7 +44,7 @@ std::ostream &operator<<(std::ostream &stream, const MemoryType &);
 std::ostream &operator<<(std::ostream &stream, const TailStrategy &);
 
 /** Emit a halide loop partitioning policy in human-readable form */
-std::ostream &operator<<(std::ostream &stream, const LoopPartitionPolicy &);
+std::ostream &operator<<(std::ostream &stream, const Partition &);
 
 /** Emit a halide LoopLevel in human-readable form */
 std::ostream &operator<<(std::ostream &stream, const LoopLevel &);

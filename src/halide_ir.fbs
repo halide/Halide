@@ -73,7 +73,7 @@ enum ForType: byte {
     GPULane,
 }
 
-enum LoopPartitionPolicy: byte {
+enum Partition: byte {
     Auto,
     Never,
     Always,
@@ -133,7 +133,7 @@ table For {
     min: Expr;
     extent: Expr;
     for_type: ForType;
-    loop_partition_policy: LoopPartitionPolicy;
+    partition_policy: Partition;
     device_api: DeviceAPI;
     body: Stmt;
 }

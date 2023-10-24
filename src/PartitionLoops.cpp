@@ -520,8 +520,8 @@ class PartitionLoops : public IRMutator {
 
     Stmt visit(const For *op) override {
         // Do not partition if the schedule explicitly forbids.
-        if (op->partition_policy == LoopPartitionPolicy::Never) {
-            return op;
+        if (op->partition_policy == Partition::Never) {
+            return IRMutator::visit(op);
         }
 
         Stmt body = op->body;
@@ -541,7 +541,7 @@ class PartitionLoops : public IRMutator {
                                << " for " << op->name << ", but no loop partitioning was performed.";
                 }
             }
-        } mutation_checker{op, op->partition_policy == LoopPartitionPolicy::Always};
+        } mutation_checker{op, op->partition_policy == Partition::Always};
 
         ScopedValue<bool> old_in_gpu_loop(in_gpu_loop, in_gpu_loop ||
                                                            CodeGen_GPU_Dev::is_gpu_var(op->name));

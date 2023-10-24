@@ -71,7 +71,7 @@ private:
 
     DeviceAPI deserialize_device_api(Serialize::DeviceAPI device_api);
 
-    LoopPartitionPolicy deserialize_loop_partition_policy(Serialize::LoopPartitionPolicy loop_partition_policy);
+    Partition deserialize_partition(Serialize::Partition partition);
 
     Call::CallType deserialize_call_type(Serialize::CallType call_type);
 
@@ -203,17 +203,17 @@ ForType Deserializer::deserialize_for_type(Serialize::ForType for_type) {
     }
 }
 
-LoopPartitionPolicy Deserializer::deserialize_loop_partition_policy(Serialize::LoopPartitionPolicy loop_partition_policy) {
-    switch (loop_partition_policy) {
-    case Serialize::LoopPartitionPolicy::LoopPartitionPolicy_Auto:
-        return Halide::LoopPartitionPolicy::Auto;
-    case Serialize::LoopPartitionPolicy::LoopPartitionPolicy_Never:
-        return Halide::LoopPartitionPolicy::Never;
-    case Serialize::LoopPartitionPolicy::LoopPartitionPolicy_Always:
-        return Halide::LoopPartitionPolicy::Always;
+Partition Deserializer::deserialize_partition(Serialize::Partition partition) {
+    switch (partition) {
+    case Serialize::Partition::Partition_Auto:
+        return Halide::Partition::Auto;
+    case Serialize::Partition::Partition_Never:
+        return Halide::Partition::Never;
+    case Serialize::Partition::Partition_Always:
+        return Halide::Partition::Always;
     default:
-        user_error << "unknown loop partition policy " << loop_partition_policy << "\n";
-        return Halide::LoopPartitionPolicy::Auto;
+        user_error << "unknown loop partition policy " << partition << "\n";
+        return Halide::Partition::Auto;
     }
 }
 
@@ -521,10 +521,10 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         const auto min = deserialize_expr(for_stmt->min_type(), for_stmt->min());
         const auto extent = deserialize_expr(for_stmt->extent_type(), for_stmt->extent());
         const ForType for_type = deserialize_for_type(for_stmt->for_type());
-        const LoopPartitionPolicy loop_partition_policy = deserialize_loop_partition_policy(for_stmt->loop_partition_policy());
+        const Partition partition_policy = deserialize_partition(for_stmt->partition_policy());
         const DeviceAPI device_api = deserialize_device_api(for_stmt->device_api());
         const auto body = deserialize_stmt(for_stmt->body_type(), for_stmt->body());
-        return For::make(name, min, extent, for_type, loop_partition_policy, device_api, body);
+        return For::make(name, min, extent, for_type, partition_policy, device_api, body);
     }
     case Serialize::Stmt_Store: {
         const auto *store_stmt = (const Serialize::Store *)stmt;

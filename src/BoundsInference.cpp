@@ -1389,7 +1389,7 @@ Stmt bounds_inference(Stmt s,
     s = Block::make(Evaluate::make(marker), s);
 
     // Add a synthetic outermost loop to act as 'root'.
-    s = For::make("<outermost>", 0, 1, ForType::Serial, LoopPartitionPolicy::Never, DeviceAPI::None, s);
+    s = For::make("<outermost>", 0, 1, ForType::Serial, Partition::Never, DeviceAPI::None, s);
 
     s = BoundsInference(funcs, fused_func_groups, fused_pairs_in_groups,
                         outputs, func_bounds, target)

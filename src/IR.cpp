@@ -344,7 +344,7 @@ Stmt ProducerConsumer::make_consume(const std::string &name, Stmt body) {
 
 Stmt For::make(const std::string &name,
                Expr min, Expr extent,
-               ForType for_type, LoopPartitionPolicy partition_policy,
+               ForType for_type, Partition partition_policy,
                DeviceAPI device_api,
                Stmt body) {
     internal_assert(min.defined()) << "For of undefined\n";

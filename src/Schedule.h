@@ -443,7 +443,7 @@ struct Dim {
     DimType dim_type;
 
     /** The strategy for loop partitioning. */
-    LoopPartitionPolicy loop_partition_policy;
+    Partition partition_policy;
 
     /** Can this loop be evaluated in any order (including in
      * parallel)? Equivalently, are there no data hazards between

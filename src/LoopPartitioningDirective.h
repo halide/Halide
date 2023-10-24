@@ -2,7 +2,7 @@
 #define HALIDE_LOOP_PARTITIONING_DIRECTIVE_H
 
 /** \file
- * Defines the LoopPartitionPolicy enum.
+ * Defines the Partition enum.
  */
 
 #include <string>
@@ -13,7 +13,7 @@
 namespace Halide {
 
 /** Different ways to handle loops with a potentially optimizable boundary conditions. */
-enum class LoopPartitionPolicy {
+enum class Partition {
     /** Automatically let Halide decide on Loop Parititioning. */
     Auto,
 

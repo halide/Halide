@@ -143,7 +143,7 @@ class NormalizeDimensionality : public IRMutator {
         }
         while (max_depth < block_size.threads_dimensions()) {
             string name = thread_names[max_depth];
-            s = For::make("." + name, 0, 1, ForType::GPUThread, LoopPartitionPolicy::Never, device_api, s);
+            s = For::make("." + name, 0, 1, ForType::GPUThread, Partition::Never, device_api, s);
             max_depth++;
         }
         return s;
@@ -398,7 +398,7 @@ private:
             Expr v = Variable::make(Int(32), loop_name);
             host_side_preamble = substitute(op->name, v, host_side_preamble);
             host_side_preamble = For::make(loop_name, new_min, new_extent,
-                                           ForType::Serial, LoopPartitionPolicy::Never, DeviceAPI::None, host_side_preamble);
+                                           ForType::Serial, Partition::Never, DeviceAPI::None, host_side_preamble);
             if (old_preamble.defined()) {
                 host_side_preamble = Block::make(old_preamble, host_side_preamble);
             }

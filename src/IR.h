@@ -799,11 +799,11 @@ struct For : public StmtNode<For> {
     ForType for_type;
     DeviceAPI device_api;
     Stmt body;
-    LoopPartitionPolicy partition_policy;
+    Partition partition_policy;
 
     static Stmt make(const std::string &name,
                      Expr min, Expr extent,
-                     ForType for_type, LoopPartitionPolicy partition_policy,
+                     ForType for_type, Partition partition_policy,
                      DeviceAPI device_api,
                      Stmt body);
 

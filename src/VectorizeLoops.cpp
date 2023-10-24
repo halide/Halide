@@ -1292,7 +1292,7 @@ class VectorSubs : public IRMutator {
 
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
             s = For::make(vectorized_vars[ix].name, vectorized_vars[ix].min,
-                          vectorized_vars[ix].lanes, ForType::Serial, LoopPartitionPolicy::Auto, DeviceAPI::None, s);
+                          vectorized_vars[ix].lanes, ForType::Serial, Partition::Auto, DeviceAPI::None, s);
         }
 
         return s;

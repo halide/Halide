@@ -941,7 +941,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         const auto &iter = std::find_if(dims.begin(), dims.end(),
                                         [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
         if (iter == dims.end()) {
-            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, LoopPartitionPolicy::Auto};
+            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
             dims.insert(dims.end() - 1, d);
         }
     }
@@ -1631,20 +1631,20 @@ Stage &Stage::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail
     return *this;
 }
 
-Stage &Stage::partition(const VarOrRVar &var, LoopPartitionPolicy policy) {
+Stage &Stage::partition(const VarOrRVar &var, Partition policy) {
     definition.schedule().touched() = true;
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
     for (auto &dim : dims) {
         if (var_name_match(dim.var, var.name())) {
             found = true;
-            dim.loop_partition_policy = policy;
+            dim.partition_policy = policy;
         }
     }
     user_assert(found)
         << "In schedule for " << name()
         << ", could not find var " << var.name()
-        << " to set as loop partition policy.\n"
+        << " to set loop partition policy.\n"
         << dump_argument_list();
     return *this;
 }
@@ -2336,7 +2336,7 @@ Func &Func::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail) 
     return *this;
 }
 
-Func &Func::partition(const VarOrRVar &var, LoopPartitionPolicy policy) {
+Func &Func::partition(const VarOrRVar &var, Partition policy) {
     invalidate_cache();
     Stage(func, func.definition(), 0).partition(var, policy);
     return *this;

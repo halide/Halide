@@ -170,7 +170,7 @@ struct LowerParallelTasks : public IRMutator {
         Expr min, extent;
         Expr serial;
         std::string name;
-        LoopPartitionPolicy partition_policy;
+        Partition partition_policy;
     };
 
     using IRMutator::visit;
@@ -374,7 +374,7 @@ struct LowerParallelTasks : public IRMutator {
             const Variable *v = acquire->semaphore.as<Variable>();
             internal_assert(v);
             add_suffix(prefix, "." + v->name);
-            ParallelTask t{s, {}, "", 0, 1, const_false(), task_debug_name(prefix), LoopPartitionPolicy::Never};
+            ParallelTask t{s, {}, "", 0, 1, const_false(), task_debug_name(prefix), Partition::Never};
             while (acquire) {
                 t.semaphores.push_back({acquire->semaphore, acquire->count});
                 t.body = acquire->body;
@@ -401,7 +401,7 @@ struct LowerParallelTasks : public IRMutator {
             result.emplace_back(std::move(t));
         } else {
             add_suffix(prefix, "." + std::to_string(result.size()));
-            ParallelTask t{s, {}, "", 0, 1, const_false(), task_debug_name(prefix), LoopPartitionPolicy::Never};
+            ParallelTask t{s, {}, "", 0, 1, const_false(), task_debug_name(prefix), Partition::Never};
             result.emplace_back(std::move(t));
         }
     }

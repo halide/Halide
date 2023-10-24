@@ -18,7 +18,7 @@ bool expect_eq(T actual, T expected) {
     return true;
 }
 
-void schedule_test(Func f, int vector_width, const Target &t) {
+void schedule_test(Func f, int vector_width, Partition partition_policy, const Target &t) {
     if (vector_width != 1) {
         if (t.has_feature(Target::OpenGLCompute)) {
             // Vector stores not yet supported in OpenGLCompute backend
@@ -27,6 +27,8 @@ void schedule_test(Func f, int vector_width, const Target &t) {
             f.vectorize(x, vector_width);
         }
     }
+    f.partition(x, partition_policy);
+    f.partition(y, partition_policy);
     if (t.has_gpu_feature() && vector_width <= 16) {
         f.gpu_tile(x, y, xo, yo, xi, yi, 2, 2);
     } else if (t.has_feature(Target::HVX)) {
@@ -38,14 +40,14 @@ void schedule_test(Func f, int vector_width, const Target &t) {
 template<typename T>
 bool check_constant_exterior(const Buffer<T> &input, T exterior, Func f,
                              int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
-                             int vector_width,
+                             int vector_width, Partition partition_policy,
                              Target t) {
     bool success = true;
 
     Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
-    schedule_test(f, vector_width, t);
+    schedule_test(f, vector_width, partition_policy, t);
     f.realize(result, t);
     result.copy_to_host();
 
@@ -64,14 +66,14 @@ bool check_constant_exterior(const Buffer<T> &input, T exterior, Func f,
 template<typename T>
 bool check_repeat_edge(const Buffer<T> &input, Func f,
                        int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
-                       int vector_width,
+                       int vector_width, Partition partition_policy,
                        Target t) {
     bool success = true;
 
     Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
-    schedule_test(f, vector_width, t);
+    schedule_test(f, vector_width, partition_policy, t);
     f.realize(result, t);
     result.copy_to_host();
 
@@ -88,14 +90,14 @@ bool check_repeat_edge(const Buffer<T> &input, Func f,
 template<typename T>
 bool check_repeat_image(const Buffer<T> &input, Func f,
                         int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
-                        int vector_width,
+                        int vector_width, Partition partition_policy,
                         Target t) {
     bool success = true;
 
     Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
-    schedule_test(f, vector_width, t);
+    schedule_test(f, vector_width, partition_policy, t);
     f.realize(result, t);
     result.copy_to_host();
 
@@ -120,14 +122,14 @@ bool check_repeat_image(const Buffer<T> &input, Func f,
 template<typename T>
 bool check_mirror_image(const Buffer<T> &input, Func f,
                         int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
-                        int vector_width,
+                        int vector_width, Partition partition_policy,
                         Target t) {
     bool success = true;
 
     Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
-    schedule_test(f, vector_width, t);
+    schedule_test(f, vector_width, partition_policy, t);
     f.realize(result, t);
     result.copy_to_host();
 
@@ -152,14 +154,14 @@ bool check_mirror_image(const Buffer<T> &input, Func f,
 template<typename T>
 bool check_mirror_interior(const Buffer<T> &input, Func f,
                            int test_min_x, int test_extent_x, int test_min_y, int test_extent_y,
-                           int vector_width,
+                           int vector_width, Partition partition_policy,
                            Target t) {
     bool success = true;
 
     Buffer<T> result(test_extent_x, test_extent_y);
     result.set_min(test_min_x, test_min_y);
     f = lambda(x, y, f(x, y));
-    schedule_test(f, vector_width, t);
+    schedule_test(f, vector_width, partition_policy, t);
     f.realize(result, t);
     result.copy_to_host();
 
@@ -184,7 +186,7 @@ struct Task {
     std::function<bool()> fn;
 };
 
-void add_all(int vector_width, Target t, std::vector<Task> &tasks) {
+void add_all(int vector_width, Partition partition_policy, Target t, std::vector<Task> &tasks) {
     const int W = 32;
     const int H = 32;
     Buffer<uint8_t> input(W, H);
@@ -207,30 +209,30 @@ void add_all(int vector_width, Target t, std::vector<Task> &tasks) {
                                      input,
                                      repeat_edge(input_f, {{0, W}, {0, H}}),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Image input.
         tasks.push_back({[=]() { return check_repeat_edge(
                                      input,
                                      repeat_edge(input, {{0, W}, {0, H}}),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Undefined bounds.
         tasks.push_back({[=]() { return check_repeat_edge(
                                      input,
                                      repeat_edge(input, {{Expr(), Expr()}, {0, H}}),
                                      0, W, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         tasks.push_back({[=]() { return check_repeat_edge(
                                      input,
                                      repeat_edge(input, {{0, W}, {Expr(), Expr()}}),
                                      test_min, test_extent, 0, H,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Implicitly determined bounds.
         tasks.push_back({[=]() { return check_repeat_edge(
                                      input,
                                      repeat_edge(input),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
     }
 
     // constant_exterior:
@@ -245,30 +247,30 @@ void add_all(int vector_width, Target t, std::vector<Task> &tasks) {
                                      input, exterior,
                                      constant_exterior(input_f, exterior, {{0, W}, {0, H}}),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Image input.
         tasks.push_back({[=]() { return check_constant_exterior(
                                      input, exterior,
                                      constant_exterior(input, exterior, {{0, W}, {0, H}}),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Undefined bounds.
         tasks.push_back({[=]() { return check_constant_exterior(
                                      input, exterior,
                                      constant_exterior(input, exterior, {{Expr(), Expr()}, {0, H}}),
                                      0, W, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         tasks.push_back({[=]() { return check_constant_exterior(
                                      input, exterior,
                                      constant_exterior(input, exterior, {{0, W}, {Expr(), Expr()}}),
                                      test_min, test_extent, 0, H,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Implicitly determined bounds.
         tasks.push_back({[=]() { return check_constant_exterior(
                                      input, exterior,
                                      constant_exterior(input, exterior),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
     }
 
     // repeat_image:
@@ -281,30 +283,30 @@ void add_all(int vector_width, Target t, std::vector<Task> &tasks) {
                                      input,
                                      repeat_image(input_f, {{0, W}, {0, H}}),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Image input.
         tasks.push_back({[=]() { return check_repeat_image(
                                      input,
                                      repeat_image(input, {{0, W}, {0, H}}),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Undefined bounds.
         tasks.push_back({[=]() { return check_repeat_image(
                                      input,
                                      repeat_image(input, {{Expr(), Expr()}, {0, H}}),
                                      0, W, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         tasks.push_back({[=]() { return check_repeat_image(
                                      input,
                                      repeat_image(input, {{0, W}, {Expr(), Expr()}}),
                                      test_min, test_extent, 0, H,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Implicitly determined bounds.
         tasks.push_back({[=]() { return check_repeat_image(
                                      input,
                                      repeat_image(input),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
     }
 
     // mirror_image:
@@ -317,30 +319,30 @@ void add_all(int vector_width, Target t, std::vector<Task> &tasks) {
                                      input,
                                      mirror_image(input_f, {{0, W}, {0, H}}),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Image input.
         tasks.push_back({[=]() { return check_mirror_image(
                                      input,
                                      mirror_image(input, {{0, W}, {0, H}}),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Undefined bounds.
         tasks.push_back({[=]() { return check_mirror_image(
                                      input,
                                      mirror_image(input, {{Expr(), Expr()}, {0, H}}),
                                      0, W, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         tasks.push_back({[=]() { return check_mirror_image(
                                      input,
                                      mirror_image(input, {{0, W}, {Expr(), Expr()}}),
                                      test_min, test_extent, 0, H,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Implicitly determined bounds.
         tasks.push_back({[=]() { return check_mirror_image(
                                      input,
                                      mirror_image(input),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
     }
 
     // mirror_interior:
@@ -353,30 +355,30 @@ void add_all(int vector_width, Target t, std::vector<Task> &tasks) {
                                      input,
                                      mirror_interior(input_f, {{0, W}, {0, H}}),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Image input.
         tasks.push_back({[=]() { return check_mirror_interior(
                                      input,
                                      mirror_interior(input, {{0, W}, {0, H}}),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Undefined bounds.
         tasks.push_back({[=]() { return check_mirror_interior(
                                      input,
                                      mirror_interior(input, {{Expr(), Expr()}, {0, H}}),
                                      0, W, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         tasks.push_back({[=]() { return check_mirror_interior(
                                      input,
                                      mirror_interior(input, {{0, W}, {Expr(), Expr()}}),
                                      test_min, test_extent, 0, H,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
         // Implicitly determined bounds.
         tasks.push_back({[=]() { return check_mirror_interior(
                                      input,
                                      mirror_interior(input),
                                      test_min, test_extent, test_min, test_extent,
-                                     vector_width, t); }});
+                                     vector_width, partition_policy, t); }});
     }
 }
 
@@ -399,7 +401,8 @@ int main(int argc, char **argv) {
 
     std::vector<Task> tasks;
     for (int vector_width = 1; vector_width <= vector_width_max; vector_width *= 2) {
-        add_all(vector_width, target, tasks);
+        add_all(vector_width, Partition::Auto, target, tasks);
+        add_all(vector_width, Partition::Never, target, tasks);
     }
 
     using Sharder = Halide::Internal::Test::Sharder;
