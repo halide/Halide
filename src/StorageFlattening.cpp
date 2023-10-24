@@ -488,8 +488,8 @@ private:
     Stmt visit(const For *op) override {
         for (auto &p : hoisted_storages) {
             Expr expanded_min = simplify(expand_expr(op->min, scope));
-            Expr expanded_extent = simplify(expand_expr(op->extent, scope));
-            Interval loop_bounds = Interval(expanded_min, expanded_min + expanded_extent - 1);
+            Expr expanded_extent = expand_expr(op->extent, scope);
+            Interval loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
             p.second.loop_vars.push(op->name, loop_bounds);
         }
 
