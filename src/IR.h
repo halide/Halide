@@ -909,6 +909,11 @@ struct Prefetch : public StmtNode<Prefetch> {
     static const IRNodeType _node_type = IRNodeType::Prefetch;
 };
 
+/**
+ * Represents a location where storage will be hoisted to for a Func / Realize
+ * node with a given name.
+ *
+ */
 struct HoistedStorage : public StmtNode<HoistedStorage> {
     std::string name;
     Stmt body;
