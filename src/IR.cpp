@@ -669,6 +669,7 @@ const char *const intrinsic_op_names[] = {
     "shift_right",
     "signed_integer_overflow",
     "size_of_halide_buffer_t",
+    "sliding_window_marker",
     "sorted_avg",
     "strict_float",
     "stringify",

@@ -816,7 +816,9 @@ class SlidingWindow : public IRMutator {
                 }
             }
 
-            SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dimensions[func.name()]);
+            set<int> &slid_dims = slid_dimensions[func.name()];
+            size_t old_slid_dims_size = slid_dims.size();
+            SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dims);
             body = slider.mutate(body);
 
             if (func.schedule().memory_type() == MemoryType::Register &&
@@ -855,6 +857,15 @@ class SlidingWindow : public IRMutator {
                 new_lets.emplace_front(name + ".loop_min", new_loop_min);
                 new_lets.emplace_front(name + ".loop_min.orig", loop_min);
                 new_lets.emplace_front(name + ".loop_extent", (loop_max - loop_min) + 1);
+            }
+
+            if (slid_dims.size() > old_slid_dims_size) {
+                // Let storage folding know there's now a read-after-write hazard here
+                Expr marker = Call::make(Int(32),
+                                         Call::sliding_window_marker,
+                                         {func.name(), Variable::make(Int(32), op->name)},
+                                         Call::Intrinsic);
+                body = Block::make(Evaluate::make(marker), body);
             }
         }
 
