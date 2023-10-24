@@ -2337,7 +2337,7 @@ public:
     Func &store_root();
 
     /** Hoist storage for this function within f's loop over
-     * var. This is different from \ref Funcstore_at, because hoist_storage
+     * var. This is different from \ref Func::store_at, because hoist_storage
      * simply moves an actual allocation to a given loop level and
      * doesn't trigger any of the optimizations such as sliding window.
      * Hoisting storage is optional and can be used as an optimization
