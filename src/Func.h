@@ -2421,6 +2421,10 @@ public:
      * schedules storage at a given LoopLevel. */
     Func &hoist_storage(LoopLevel loop_level);
 
+    /** Equivalent to \ref Func::hoist_storage_root, but schedules storage
+     * outside the outermost loop. */
+    Func &hoist_storage_root();
+
     /** Aggressively inline all uses of this function. This is the
      * default schedule, so you're unlikely to need to call this. For
      * a Func with an update definition, that means it gets computed

@@ -2817,6 +2817,10 @@ Func &Func::hoist_storage(const Func &f, const Var &var) {
     return hoist_storage(LoopLevel(f, var));
 }
 
+Func &Func::hoist_storage_root() {
+    return hoist_storage(LoopLevel::root());
+}
+
 Func &Func::compute_inline() {
     return compute_at(LoopLevel::inlined());
 }
