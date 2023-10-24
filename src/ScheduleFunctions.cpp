@@ -1225,6 +1225,7 @@ protected:
             Stmt stmt = build_realize(build_pipeline_group(for_loop), funcs[0], is_output_list[0]);
             _found_compute_level = true;
             _found_store_levels_for_funcs.insert(funcs[0].name());
+            _found_hoist_storage_levels_for_funcs.insert(funcs[0].name());
             return stmt;
         }
 
@@ -1303,6 +1304,7 @@ protected:
             Stmt stmt = build_realize(build_pipeline_group(provide_op), funcs[0], is_output_list[0]);
             _found_compute_level = true;
             _found_store_levels_for_funcs.insert(funcs[0].name());
+            _found_hoist_storage_levels_for_funcs.insert(funcs[0].name());
             return stmt;
         }
 
