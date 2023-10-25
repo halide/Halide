@@ -150,7 +150,10 @@ public:
                     .fold_storage(y, 4)
                     .vectorize(x, 8);
             }
-            outGPyramid[0].compute_at(output, y).vectorize(x, 8);
+            outGPyramid[0]
+                .compute_at(output, y)
+                .hoist_storage(output, yo)
+                .vectorize(x, 8);
             for (int j = 5; j < J; j++) {
                 inGPyramid[j].compute_root();
                 gPyramid[j].compute_root().parallel(k);
