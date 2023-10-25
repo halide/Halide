@@ -89,6 +89,7 @@ private:
         string name;
         vector<HoistedAllocationInfo> hoisted_allocations;
         Scope<Interval> loop_vars;
+        Scope<Expr> scope;
 
         HoistedStorageData(const string &n)
             : name(n) {
@@ -103,7 +104,6 @@ private:
     bool in_gpu = false;
     vector<HoistedStorageData> hoisted_storages;
     map<string, int> hoisted_storages_map;
-    Scope<Expr> scope;
 
     Expr make_shape_var(string name, const string &field, size_t dim,
                         const Buffer<> &buf, const Parameter &param) {
@@ -289,7 +289,12 @@ private:
             HoistedStorageData &hoisted_storage_data = hoisted_storages[hoisted_storages_map[op->name]];
             vector<Expr> bounded_extents;
             for (const auto &e : allocation_extents) {
-                Expr expanded_extent = simplify(substitute_in_all_lets(expand_expr(e, scope)));
+                Expr expanded_extent = e;
+                // Iterate from innermost outwards
+                for (auto it = hoisted_storages.rbegin(); it != hoisted_storages.rend(); it++) {
+                    expanded_extent = expand_expr(expanded_extent, it->scope);
+                }
+                expanded_extent = simplify(substitute_in_all_lets(expanded_extent));
                 Interval bounds = bounds_of_expr_in_scope(expanded_extent, hoisted_storage_data.loop_vars);
                 user_assert(bounds.max.defined()) << "Couldn't infer the upper bound for the storage size of " << op->name << ", consider using bound_storage.\n";
                 bounded_extents.push_back(bounds.max);
@@ -499,8 +504,14 @@ private:
 
     Stmt visit(const For *op) override {
         for (auto &p : hoisted_storages) {
-            Expr expanded_min = simplify(expand_expr(op->min, scope));
-            Expr expanded_extent = expand_expr(op->extent, scope);
+            Expr expanded_min = op->min;
+            Expr expanded_extent = op->extent;
+            // Iterate from innermost outwards
+            for (auto it = hoisted_storages.rbegin(); it != hoisted_storages.rend(); it++) {
+                expanded_min = expand_expr(expanded_min, it->scope);
+                expanded_extent = expand_expr(expanded_extent, it->scope);
+            }
+            expanded_min = simplify(expanded_min);
             Interval loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
             p.loop_vars.push(op->name, loop_bounds);
         }
@@ -521,8 +532,15 @@ private:
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<Expr> bind(scope, op->name, op->value);
+        if (!hoisted_storages.empty()) {
+            hoisted_storages.back().scope.push(op->name, op->value);
+        }
+
         Stmt stmt = IRMutator::visit(op);
+
+        if (!hoisted_storages.empty()) {
+            hoisted_storages.back().scope.pop(op->name);
+        }
         return stmt;
     }
 };
