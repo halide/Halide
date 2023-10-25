@@ -72,7 +72,7 @@ private:
         vector<Expr> extents;
         Expr condition;
 
-        HoistedAllocationInfo(const string& name, Type type,
+        HoistedAllocationInfo(const string &name, Type type,
                               MemoryType memory_type,
                               const vector<Expr> &extents, Expr condition)
             : name(name),
