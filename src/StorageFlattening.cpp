@@ -86,8 +86,13 @@ private:
     };
 
     struct HoistedStorageData {
+        string name;
         vector<HoistedAllocationInfo> hoisted_allocations;
         Scope<Interval> loop_vars;
+
+        HoistedStorageData(const string &n)
+            : name(n) {
+        }
     };
 
     const map<string, pair<Function, int>> &env;
@@ -96,7 +101,8 @@ private:
     const Target &target;
     Scope<> realizations;
     bool in_gpu = false;
-    map<string, HoistedStorageData> hoisted_storages;
+    vector<HoistedStorageData> hoisted_storages;
+    map<string, int> hoisted_storages_map;
     Scope<Expr> scope;
 
     Expr make_shape_var(string name, const string &field, size_t dim,
@@ -164,20 +170,23 @@ private:
     using IRMutator::visit;
 
     Stmt visit(const HoistedStorage *op) override {
-        hoisted_storages.emplace(op->name, HoistedStorageData());
+        hoisted_storages.emplace_back(op->name);
+        // Record index in the stack.
+        hoisted_storages_map[op->name] = hoisted_storages.size() - 1;
         Stmt body = mutate(op->body);
-        internal_assert(!hoisted_storages[op->name].hoisted_allocations.empty()) << "Couldn't find a matching Realize node for Hoisted storage " << op->name << "\n";
-        const auto &alloc_info = hoisted_storages[op->name].hoisted_allocations.front();
+        internal_assert(!hoisted_storages.back().hoisted_allocations.empty()) << "Couldn't find a matching Realize node for Hoisted storage " << op->name << "\n";
+        const auto &alloc_info = hoisted_storages.back().hoisted_allocations.front();
         vector<Expr> extents = alloc_info.extents;
-        for (int i = 1; i < (int)hoisted_storages[op->name].hoisted_allocations.size(); i++) {
-            const auto &ai = hoisted_storages[op->name].hoisted_allocations[i];
+        for (int i = 1; i < (int)hoisted_storages.back().hoisted_allocations.size(); i++) {
+            const auto &ai = hoisted_storages.back().hoisted_allocations[i];
             internal_assert(ai.extents.size() == alloc_info.extents.size());
             for (int j = 0; j < (int)extents.size(); j++) {
                 extents[j] = Max::make(extents[j], ai.extents[j]);
             }
         }
         body = Allocate::make(alloc_info.name, alloc_info.type, alloc_info.memory_type, extents, alloc_info.condition, body);
-        hoisted_storages.erase(op->name);
+        hoisted_storages_map.erase(op->name);
+        hoisted_storages.pop_back();
         return body;
     }
 
@@ -276,18 +285,19 @@ private:
         }
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
 
-        if (hoisted_storages.count(op->name) > 0) {
+        if (hoisted_storages_map.count(op->name) > 0) {
+            HoistedStorageData &hoisted_storage_data = hoisted_storages[hoisted_storages_map[op->name]];
             vector<Expr> bounded_extents;
             for (const auto &e : allocation_extents) {
                 Expr expanded_extent = simplify(substitute_in_all_lets(expand_expr(e, scope)));
-                Interval bounds = bounds_of_expr_in_scope(expanded_extent, hoisted_storages[op->name].loop_vars);
+                Interval bounds = bounds_of_expr_in_scope(expanded_extent, hoisted_storage_data.loop_vars);
                 user_assert(bounds.max.defined()) << "Couldn't infer the upper bound for the storage size of " << op->name << ", consider using bound_storage.\n";
                 bounded_extents.push_back(bounds.max);
             }
 
             HoistedAllocationInfo hoisted_alloc(op->name, op->types[0], op->memory_type, bounded_extents, condition);
 
-            hoisted_storages[op->name].hoisted_allocations.push_back(hoisted_alloc);
+            hoisted_storage_data.hoisted_allocations.push_back(hoisted_alloc);
         } else {
             // Make the allocation node
             stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
@@ -492,7 +502,7 @@ private:
             Expr expanded_min = simplify(expand_expr(op->min, scope));
             Expr expanded_extent = expand_expr(op->extent, scope);
             Interval loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
-            p.second.loop_vars.push(op->name, loop_bounds);
+            p.loop_vars.push(op->name, loop_bounds);
         }
 
         bool old_in_gpu = in_gpu;
@@ -504,7 +514,7 @@ private:
         in_gpu = old_in_gpu;
 
         for (auto &p : hoisted_storages) {
-            p.second.loop_vars.pop(op->name);
+            p.loop_vars.pop(op->name);
         }
 
         return stmt;
