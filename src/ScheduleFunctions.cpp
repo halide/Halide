@@ -2292,7 +2292,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         for (int i = store_idx + 1; i <= compute_idx; i++) {
             if (sites[i].is_parallel) {
                 err << "Func \"" << f.name()
-                    << "\" is stored outside the parallel loop over "
+                    << "\" is stored outside the parallel/vectorized/gpu_block loop over "
                     << sites[i].loop_level.to_string()
                     << " but computed within it. This is a potential race condition.\n";
                 store_idx = compute_idx = hoist_storage_idx = -1;
@@ -2305,7 +2305,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         for (int i = hoist_storage_idx + 1; i <= compute_idx; i++) {
             if (sites[i].is_parallel) {
                 err << "Func \"" << f.name()
-                    << "\" storage is hoisted outside the parallel loop over "
+                    << "\" storage is hoisted outside the parallel/vectorized/gpu_block loop over "
                     << sites[i].loop_level.to_string()
                     << " but computed within it. This is a potential race condition.\n";
                 store_idx = compute_idx = hoist_storage_idx = -1;
