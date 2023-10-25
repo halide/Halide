@@ -293,6 +293,9 @@ private:
                 // Iterate from innermost outwards
                 for (auto it = hoisted_storages.rbegin(); it != hoisted_storages.rend(); it++) {
                     expanded_extent = expand_expr(expanded_extent, it->scope);
+                    if (it->name == op->name) {
+                        break;
+                    }
                 }
                 expanded_extent = simplify(substitute_in_all_lets(expanded_extent));
                 Interval bounds = bounds_of_expr_in_scope(expanded_extent, hoisted_storage_data.loop_vars);
