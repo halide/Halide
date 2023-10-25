@@ -32,6 +32,8 @@ class ExpandExpr : public IRMutator {
     Expr visit(const Variable *var) override {
         if (scope.contains(var->name)) {
             Expr expr = scope.get(var->name);
+            // Mutate the expression, so lets can get replaced recursively.
+            expr = mutate(expr);
             debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
             return expr;
         } else {
@@ -509,7 +511,7 @@ private:
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
+        ScopedBinding<Expr> bind(scope, op->name, op->value);
         Stmt stmt = IRMutator::visit(op);
         return stmt;
     }
