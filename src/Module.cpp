@@ -594,7 +594,15 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         // want it on its own, so we will generate it to a temp directory, since some
         // build systems (e.g. Bazel) are strict about what you can generate to the 'expected'
         // build-products directory (but grant exemptions for /tmp).
-        assembly_path = temp_assembly_dir.add_temp_file(output_files.at(OutputFileType::stmt_html),
+        std::string path;
+        if (contains(output_files, OutputFileType::stmt_html)) {
+            path = output_files.at(OutputFileType::stmt_html);
+        } else if (contains(output_files, OutputFileType::conceptual_stmt_html)) {
+            path = output_files.at(OutputFileType::conceptual_stmt_html);
+        } else {
+            internal_error << "A html file path is required to determine the output of the temporary assembly file.\n";
+        }
+        assembly_path = temp_assembly_dir.add_temp_file(path,
                                                         get_output_info(target()).at(OutputFileType::assembly).extension,
                                                         target());
         debug(1) << "Module.compile(): creating temp file for assembly output at " << assembly_path << "\n";
