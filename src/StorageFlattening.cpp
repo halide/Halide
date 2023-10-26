@@ -507,19 +507,15 @@ private:
     }
 
     Stmt visit(const For *op) override {
-        for (auto &p : hoisted_storages) {
-            Expr expanded_min = op->min;
-            Expr expanded_extent = op->extent;
-            // Iterate from innermost outwards
-            for (auto it = hoisted_storages.rbegin(); it != hoisted_storages.rend(); it++) {
-                expanded_min = expand_expr(expanded_min, it->scope);
-                expanded_extent = expand_expr(expanded_extent, it->scope);
-            }
-            expanded_min = simplify(expanded_min);
+        Expr expanded_min = op->min;
+        Expr expanded_extent = op->extent;
+        // Iterate from innermost outwards
+        for (auto it = hoisted_storages.rbegin(); it != hoisted_storages.rend(); it++) {
+            expanded_min = simplify(expand_expr(expanded_min, it->scope));
+            expanded_extent = expand_expr(expanded_extent, it->scope);
             Interval loop_bounds = Interval(expanded_min, simplify(expanded_min + expanded_extent - 1));
-            p.loop_vars.push(op->name, loop_bounds);
+            it->loop_vars.push(op->name, loop_bounds);
         }
-
         bool old_in_gpu = in_gpu;
         if (op->for_type == ForType::GPUBlock ||
             op->for_type == ForType::GPUThread) {
