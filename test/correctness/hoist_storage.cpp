@@ -40,20 +40,19 @@ int main(int argc, char **argv) {
 
         malloc_count = 0;
         malloc_total_size = 0;
-
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out = g.realize({128, 128});
-
+        printf("Realized\n");
         const int expected_malloc_count = 1;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = 3 * 3 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
@@ -87,19 +86,20 @@ int main(int argc, char **argv) {
         malloc_count = 0;
         malloc_total_size = 0;
 
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out = g.realize({128, 128});
+        printf("Realized\n");
 
         const int expected_malloc_count = 1;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = 3 * 3 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
@@ -134,19 +134,20 @@ int main(int argc, char **argv) {
         malloc_count = 0;
         malloc_total_size = 0;
 
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out = g.realize({128, 128});
+        printf("Realized\n");
 
         const int expected_malloc_count = 1;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = 18 * 18 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
@@ -181,19 +182,20 @@ int main(int argc, char **argv) {
         malloc_count = 0;
         malloc_total_size = 0;
 
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out = g.realize({128, 128});
+        printf("Realized\n");
 
         const int expected_malloc_count = 1;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = 18 * 18 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
@@ -228,19 +230,20 @@ int main(int argc, char **argv) {
         malloc_count = 0;
         malloc_total_size = 0;
 
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out = g.realize({128, 128});
+        printf("Realized\n");
 
         const int expected_malloc_count = 8;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = expected_malloc_count * 18 * 18 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
@@ -281,19 +284,20 @@ int main(int argc, char **argv) {
         malloc_count = 0;
         malloc_total_size = 0;
 
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out = g.realize({128, 128});
+        printf("Realized\n");
 
         const int expected_malloc_count = 2;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = 16 * 16 * sizeof(int32_t) + 18 * 18 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
@@ -334,19 +338,20 @@ int main(int argc, char **argv) {
         malloc_count = 0;
         malloc_total_size = 0;
 
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out = g.realize({128, 128});
+        printf("Realized\n");
 
         const int expected_malloc_count = 1 + 8;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = 8 * 16 * 16 * sizeof(int32_t) + 18 * 18 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
@@ -386,19 +391,20 @@ int main(int argc, char **argv) {
         malloc_count = 0;
         malloc_total_size = 0;
 
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out = g.realize({128, 128});
+        printf("Realized\n");
 
         const int expected_malloc_count = 64 + 8;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = 8 * 16 * 16 * sizeof(int32_t) + 64 * 18 * 18 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
@@ -433,20 +439,21 @@ int main(int argc, char **argv) {
         malloc_count = 0;
         malloc_total_size = 0;
 
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out(128, 128);
         g.realize(out);
+        printf("Realized\n");
 
         const int expected_malloc_count = 1;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = (4 + 3 - 1) * 3 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
@@ -481,19 +488,20 @@ int main(int argc, char **argv) {
         malloc_count = 0;
         malloc_total_size = 0;
 
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out = g.realize({128, 128});
+        printf("Realized\n");
 
         const int expected_malloc_count = 1;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = 4 * 3 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
@@ -527,20 +535,21 @@ int main(int argc, char **argv) {
         malloc_count = 0;
         malloc_total_size = 0;
 
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out(128, 128);
         g.realize(out);
+        printf("Realized\n");
 
         const int expected_malloc_count = 2;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = 2 * 3 * 3 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
@@ -574,20 +583,21 @@ int main(int argc, char **argv) {
         malloc_count = 0;
         malloc_total_size = 0;
 
+        g.compile_jit();
+        printf("Compiled\n");
         Buffer<int> out(128, 128);
         g.realize(out);
+        printf("Realized\n");
 
         const int expected_malloc_count = 1;
         if (malloc_count != expected_malloc_count) {
-            std::cerr << "Wrong number of mallocs. "
-                      << "Expected " << expected_malloc_count << " got " << malloc_count << "\n";
+            printf("Wrong number of mallocs. Expected %d, but got %d\n", expected_malloc_count, malloc_count);
             exit(1);
         }
 
         const int expected_malloc_total_size = (4 + 3 - 1) * 3 * sizeof(int32_t);
         if (malloc_total_size != expected_malloc_total_size) {
-            std::cerr << "Wrong allocation size "
-                      << "Expected " << expected_malloc_total_size << " got " << malloc_total_size << "\n";
+            printf("Wrong allocation size. Expected %d, but got %d\n", expected_malloc_total_size, malloc_total_size);
             exit(1);
         }
 
