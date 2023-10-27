@@ -13,9 +13,6 @@ int main(int argc, char **argv) {
 
     g.hoist_storage(h, y);
 
-    // This makes no sense, because the compute_at level is higher than the hoist_storage level
-    f.compute_root();
-
     h.realize({10, 10});
 
     printf("Success!\n");
