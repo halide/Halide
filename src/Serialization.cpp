@@ -641,6 +641,15 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
                                                       body_serialized.first, body_serialized.second)
                                   .Union());
     }
+    case IRNodeType::HoistedStorage: {
+        const auto *const hoisted_storage_stmt = stmt.as<HoistedStorage>();
+        const auto name_serialized = serialize_string(builder, hoisted_storage_stmt->name);
+        const auto body_serialized = serialize_stmt(builder, hoisted_storage_stmt->body);
+        return std::make_pair(Serialize::Stmt::Stmt_HoistedStorage,
+                              Serialize::CreateHoistedStorage(builder, name_serialized,
+                                                              body_serialized.first, body_serialized.second)
+                                  .Union());
+    }
     default:
         user_error << "Unsupported stmt type\n";
         return std::make_pair(Serialize::Stmt::Stmt_UndefinedStmt, Serialize::CreateUndefinedStmt(builder).Union());
@@ -1068,6 +1077,7 @@ Offset<Serialize::LoopLevel> Serializer::serialize_loop_level(FlatBufferBuilder 
 Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBuilder &builder, const FuncSchedule &func_schedule) {
     const auto store_level_serialized = serialize_loop_level(builder, func_schedule.store_level());
     const auto compute_level_serialized = serialize_loop_level(builder, func_schedule.compute_level());
+    const auto hoist_storage_level_serialized = serialize_loop_level(builder, func_schedule.hoist_storage_level());
     std::vector<Offset<Serialize::StorageDim>> storage_dims_serialized;
     for (const auto &storage_dim : func_schedule.storage_dims()) {
         storage_dims_serialized.push_back(serialize_storage_dim(builder, storage_dim));
@@ -1086,6 +1096,7 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
     const auto async = func_schedule.async();
     const auto memoize_eviction_key_serialized = serialize_expr(builder, func_schedule.memoize_eviction_key());
     return Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized,
+                                         hoist_storage_level_serialized,
                                          builder.CreateVector(storage_dims_serialized),
                                          builder.CreateVector(bounds_serialized),
                                          builder.CreateVector(estimates_serialized),

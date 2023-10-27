@@ -914,6 +914,15 @@ Stmt Atomic::make(const std::string &producer_name,
     return node;
 }
 
+Stmt HoistedStorage::make(const std::string &name,
+                          Stmt body) {
+    internal_assert(body.defined()) << "HoistedStorage must have a body statement.\n";
+    HoistedStorage *node = new HoistedStorage;
+    node->name = name;
+    node->body = std::move(body);
+    return node;
+}
+
 Expr VectorReduce::make(VectorReduce::Operator op,
                         Expr vec,
                         int lanes) {
@@ -1165,6 +1174,10 @@ template<>
 void StmtNode<Atomic>::accept(IRVisitor *v) const {
     v->visit((const Atomic *)this);
 }
+template<>
+void StmtNode<HoistedStorage>::accept(IRVisitor *v) const {
+    v->visit((const HoistedStorage *)this);
+}
 
 template<>
 Expr ExprNode<IntImm>::mutate_expr(IRMutator *v) const {
@@ -1354,6 +1367,10 @@ Stmt StmtNode<Fork>::mutate_stmt(IRMutator *v) const {
 template<>
 Stmt StmtNode<Atomic>::mutate_stmt(IRMutator *v) const {
     return v->visit((const Atomic *)this);
+}
+template<>
+Stmt StmtNode<HoistedStorage>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const HoistedStorage *)this);
 }
 
 Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";

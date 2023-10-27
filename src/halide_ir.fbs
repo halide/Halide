@@ -24,6 +24,7 @@ union Stmt {
     Acquire,
     Fork,
     Atomic,
+    HoistedStorage,
     UndefinedStmt,
 }
 
@@ -230,6 +231,11 @@ table Fork {
 table Atomic {
     producer_name: string;
     mutex_name: string;
+    body: Stmt;
+}
+
+table HoistedStorage {
+    name: string;
     body: Stmt;
 }
 
@@ -490,6 +496,7 @@ table WrapperRef {
 table FuncSchedule {
     store_level: LoopLevel;
     compute_level: LoopLevel;
+    hoist_storage_level: LoopLevel;
     storage_dims: [StorageDim];
     bounds: [Bound];
     estimates: [Bound];

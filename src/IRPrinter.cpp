@@ -1107,5 +1107,19 @@ void IRPrinter::visit(const Atomic *op) {
     stream << get_indent() << "}\n";
 }
 
+void IRPrinter::visit(const HoistedStorage *op) {
+    if (op->name.empty()) {
+        stream << get_indent() << "hoisted_storage {\n";
+    } else {
+        stream << get_indent() << "hoisted_storage (";
+        stream << op->name;
+        stream << ") {\n";
+    }
+    indent += 2;
+    print(op->body);
+    indent -= 2;
+    stream << get_indent() << "}\n";
+}
+
 }  // namespace Internal
 }  // namespace Halide

@@ -1157,10 +1157,14 @@ public:
     bool found_store_level() const {
         return _found_store_levels_for_funcs.size() == funcs.size();
     }
+    bool found_hoist_storage_level() const {
+        return _found_hoist_storage_levels_for_funcs.size() == funcs.size();
+    }
 
 protected:
     bool _found_compute_level{};
     std::set<string> _found_store_levels_for_funcs;
+    std::set<string> _found_hoist_storage_levels_for_funcs;
 
     using IRMutator::visit;
 
@@ -1221,6 +1225,7 @@ protected:
             Stmt stmt = build_realize(build_pipeline_group(for_loop), funcs[0], is_output_list[0]);
             _found_compute_level = true;
             _found_store_levels_for_funcs.insert(funcs[0].name());
+            _found_hoist_storage_levels_for_funcs.insert(funcs[0].name());
             return stmt;
         }
 
@@ -1238,6 +1243,16 @@ protected:
                     debug(3) << "Found store level for " << funcs[i].name() << " at " << for_loop->name << "\n";
                     body = build_realize_function_from_group(body, i);
                     _found_store_levels_for_funcs.insert(funcs[i].name());
+                }
+            }
+            for (size_t i = 0; i < funcs.size(); i++) {
+                if (funcs[i].schedule().hoist_storage_level().match(for_loop->name)) {
+                    debug(3) << "Found hoist storage level for " << funcs[i].name() << " at " << for_loop->name << "\n";
+                    if (funcs[i].schedule().hoist_storage_level() != funcs[i].schedule().store_level()) {
+                        body = HoistedStorage::make(funcs[i].name(), body);
+                    } else {
+                    }
+                    _found_hoist_storage_levels_for_funcs.insert(funcs[i].name());
                 }
             }
         }
@@ -1289,6 +1304,7 @@ protected:
             Stmt stmt = build_realize(build_pipeline_group(provide_op), funcs[0], is_output_list[0]);
             _found_compute_level = true;
             _found_store_levels_for_funcs.insert(funcs[0].name());
+            _found_hoist_storage_levels_for_funcs.insert(funcs[0].name());
             return stmt;
         }
 
@@ -2178,6 +2194,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
 
     LoopLevel store_at = f.schedule().store_level();
     LoopLevel compute_at = f.schedule().compute_level();
+    LoopLevel hoist_storage_at = f.schedule().hoist_storage_level();
 
     // Outputs must be compute_root and store_root. They're really
     // store_in_user_code, but store_root is close enough.
@@ -2199,12 +2216,20 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         return false;
     }
 
+    if (compute_at.is_inlined()) {
+        if (!(hoist_storage_at.is_inlined() && store_at.is_inlined())) {
+            user_error
+                << "Functions that are compute_inline() must also have store_at and hoist_storage set to inlined, "
+                << "but Func \"" << f.name() << "\" is store_at() \"" << store_at
+                << "\" and hoist_storage() \"" << hoist_storage_at << "\"\n";
+        }
+    }
     // Check if the schedule of the inlined function is legal. Since only
     // pure function can be inlined, we only need to call the validator on
     // pure function. An inlined Halide Func with multiple stages technically
     // will get lowered into compute_at innermost and thus can be treated
     // similarly as a non-inlined Func.
-    if (store_at.is_inlined() && compute_at.is_inlined()) {
+    if (store_at.is_inlined() && compute_at.is_inlined() && hoist_storage_at.is_inlined()) {
         if (f.is_pure()) {
             validate_schedule_inlined_function(f);
         }
@@ -2212,12 +2237,15 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     }
 
     vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
-    int store_idx = -1, compute_idx = -1;
+    int store_idx = -1, compute_idx = -1, hoist_storage_idx = -1;
     for (size_t i = 0; i < sites.size(); i++) {
-        if (sites[i].loop_level.match(store_at)) {
+        if (sites[i].loop_level.match(hoist_storage_at)) {
+            hoist_storage_idx = i;
+        }
+        if (sites[i].loop_level.match(store_at) && hoist_storage_idx >= 0) {
             store_idx = i;
         }
-        if (sites[i].loop_level.match(compute_at) && store_idx >= 0) {
+        if (sites[i].loop_level.match(compute_at) && store_idx >= 0 && hoist_storage_idx >= 0) {
             compute_idx = i;
         }
     }
@@ -2234,11 +2262,11 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         return false;
     };
 
-    const auto both_ok = [&]() {
-        return store_idx >= 0 && compute_idx >= 0;
+    const auto all_ok = [&]() {
+        return store_idx >= 0 && compute_idx >= 0 && hoist_storage_idx >= 0;
     };
 
-    if (both_ok() && has_gpu_blocks()) {
+    if (all_ok() && has_gpu_blocks()) {
         for (int i = 0; i <= compute_idx; i++) {
             if (sites[i].is_gpu_block) {
                 string site_fname = sites[i].loop_level.func();
@@ -2249,7 +2277,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     }
 
     // If you're compute_at() a var marked as a gpu block var, it must be the innermost one
-    if (both_ok() && sites[compute_idx].is_gpu_block) {
+    if (all_ok() && sites[compute_idx].is_gpu_block) {
         string compute_at_fname = sites[compute_idx].loop_level.func();
         int possibly_invalid_idx = compute_idx;
         for (int i = compute_idx + 1; i < (int)sites.size(); i++) {
@@ -2262,25 +2290,38 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
                 sites.erase(sites.begin() + possibly_invalid_idx);
                 // This one will also be invalid if we find a subsequent loop from the same func
                 possibly_invalid_idx = i;
-                store_idx = compute_idx = -1;
+                store_idx = compute_idx = hoist_storage_idx = -1;
             }
         }
     }
 
     // Check there isn't a parallel loop between the compute_at and the store_at
-    if (both_ok()) {
+    if (all_ok()) {
         for (int i = store_idx + 1; i <= compute_idx; i++) {
             if (sites[i].is_parallel) {
                 err << "Func \"" << f.name()
-                    << "\" is stored outside the parallel loop over "
+                    << "\" is stored outside the parallel/vectorized/gpu_block loop over "
                     << sites[i].loop_level.to_string()
                     << " but computed within it. This is a potential race condition.\n";
-                store_idx = compute_idx = -1;
+                store_idx = compute_idx = hoist_storage_idx = -1;
             }
         }
     }
 
-    if (!both_ok()) {
+    // Check there isn't a parallel loop between the compute_at and the hoist_storage_at
+    if (all_ok()) {
+        for (int i = hoist_storage_idx + 1; i <= compute_idx; i++) {
+            if (sites[i].is_parallel) {
+                err << "Func \"" << f.name()
+                    << "\" storage is hoisted outside the parallel/vectorized/gpu_block loop over "
+                    << sites[i].loop_level.to_string()
+                    << " but computed within it. This is a potential race condition.\n";
+                store_idx = compute_idx = hoist_storage_idx = -1;
+            }
+        }
+    }
+
+    if (!all_ok()) {
         err << "Func \"" << f.name() << "\" is computed at the following invalid location:\n"
             << "  " << schedule_to_source(f, store_at, compute_at) << "\n"
             << "Legal locations for this function are:\n";
@@ -2521,7 +2562,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
             debug(1) << "Injecting realization of " << funcs << "\n";
             InjectFunctionRealization injector(funcs, is_output_list, target, env);
             s = injector.mutate(s);
-            internal_assert(injector.found_store_level() && injector.found_compute_level());
+            internal_assert(injector.found_store_level() && injector.found_compute_level() && injector.found_hoist_storage_level());
         }
 
         debug(2) << s << "\n";
