@@ -5,14 +5,17 @@ using namespace Halide;
 int malloc_count = 0;
 int malloc_total_size = 0;
 
-void *custom_malloc(JITUserContext *, size_t size) {
+void *custom_malloc(JITUserContext *user_context, size_t x) {
     malloc_count++;
-    malloc_total_size += size;
-    return (uint8_t *)malloc(size);
+    malloc_total_size += x;
+    void *orig = malloc(x + 32);
+    void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
+    ((void **)ptr)[-1] = orig;
+    return ptr;
 }
 
-void custom_free(JITUserContext *, void *ptr) {
-    free(ptr);
+void custom_free(JITUserContext *user_context, void *ptr) {
+    free(((void **)ptr)[-1]);
 }
 
 int main(int argc, char **argv) {
