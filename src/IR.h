@@ -594,6 +594,15 @@ struct Call : public ExprNode<Call> {
         signed_integer_overflow,
         size_of_halide_buffer_t,
 
+        // Takes a realization name and a loop variable. Declares that values of
+        // the realization that were stored on earlier loop iterations of the
+        // given loop are potentially loaded in this loop iteration somewhere
+        // after this point. Must occur inside a Realize node and For node of
+        // the given names but outside any corresponding ProducerConsumer
+        // nodes. Communicates to storage folding that sliding window took
+        // place.
+        sliding_window_marker,
+
         // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
         sorted_avg,
         strict_float,
@@ -913,6 +922,21 @@ struct Prefetch : public StmtNode<Prefetch> {
                      Expr condition, Stmt body);
 
     static const IRNodeType _node_type = IRNodeType::Prefetch;
+};
+
+/**
+ * Represents a location where storage will be hoisted to for a Func / Realize
+ * node with a given name.
+ *
+ */
+struct HoistedStorage : public StmtNode<HoistedStorage> {
+    std::string name;
+    Stmt body;
+
+    static Stmt make(const std::string &name,
+                     Stmt body);
+
+    static const IRNodeType _node_type = IRNodeType::HoistedStorage;
 };
 
 /** Lock all the Store nodes in the body statement.

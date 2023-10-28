@@ -370,6 +370,16 @@ Stmt IRMutator::visit(const Atomic *op) {
     }
 }
 
+Stmt IRMutator::visit(const HoistedStorage *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return HoistedStorage::make(op->name,
+                                    std::move(body));
+    }
+}
+
 Stmt IRGraphMutator::mutate(const Stmt &s) {
     auto p = stmt_replacements.emplace(s, Stmt());
     if (p.second) {

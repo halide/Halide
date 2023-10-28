@@ -21,6 +21,7 @@ tests(GROUPS error
       bad_extern_split.cpp
       bad_fold.cpp
       bad_host_alignment.cpp
+      bad_hoist_storage.cpp
       bad_partition_always.cpp
       bad_prefetch.cpp
       bad_reorder.cpp

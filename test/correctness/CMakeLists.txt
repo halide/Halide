@@ -163,6 +163,7 @@ tests(GROUPS correctness
       histogram.cpp
       histogram_equalize.cpp
       hoist_loop_invariant_if_statements.cpp
+      hoist_storage.cpp
       host_alignment.cpp
       image_io.cpp
       image_of_lists.cpp

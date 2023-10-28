@@ -496,6 +496,28 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         }
     }
 
+    bool found_sliding_marker = false;
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::sliding_window_marker)) {
+            internal_assert(op->args.size() == 2);
+            const StringImm *name = op->args[0].as<StringImm>();
+            internal_assert(name);
+            if (name->value == func.name()) {
+                found_sliding_marker = true;
+            }
+        }
+        return op;
+    }
+
+    Stmt visit(const Block *op) override {
+        Stmt first = mutate(op->first);
+        if (found_sliding_marker) {
+            return Block::make(first, op->rest);
+        } else {
+            return Block::make(first, mutate(op->rest));
+        }
+    }
+
     Stmt visit(const For *op) override {
         if (op->for_type != ForType::Serial && op->for_type != ForType::Unrolled) {
             // We can't proceed into a parallel for loop.
@@ -878,12 +900,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             }
         }
 
-        // If there's no communication of values from one loop
-        // iteration to the next (which may happen due to sliding),
-        // then we're safe to fold an inner loop.
-        if (box_contains(provided, required)) {
-            body = mutate(body);
-        }
+        // Attempt to fold an inner loop. This will bail out if it encounters a
+        // ProducerConsumer node for the func, or if it hits a sliding window
+        // marker.
+        body = mutate(body);
 
         if (body.same_as(op->body)) {
             stmt = op;
@@ -1010,10 +1030,23 @@ public:
     }
 };
 
+class RemoveSlidingWindowMarkers : public IRMutator {
+    using IRMutator::visit;
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::sliding_window_marker)) {
+            return make_zero(op->type);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
 }  // namespace
 
 Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env) {
-    return StorageFolding(env).mutate(s);
+    Stmt stmt = StorageFolding(env).mutate(s);
+    stmt = RemoveSlidingWindowMarkers().mutate(stmt);
+    return stmt;
 }
 
 }  // namespace Internal

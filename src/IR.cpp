@@ -674,6 +674,7 @@ const char *const intrinsic_op_names[] = {
     "shift_right",
     "signed_integer_overflow",
     "size_of_halide_buffer_t",
+    "sliding_window_marker",
     "sorted_avg",
     "strict_float",
     "stringify",
@@ -914,6 +915,15 @@ Stmt Atomic::make(const std::string &producer_name,
     node->producer_name = producer_name;
     node->mutex_name = mutex_name;
     internal_assert(body.defined()) << "Atomic must have a body statement.\n";
+    node->body = std::move(body);
+    return node;
+}
+
+Stmt HoistedStorage::make(const std::string &name,
+                          Stmt body) {
+    internal_assert(body.defined()) << "HoistedStorage must have a body statement.\n";
+    HoistedStorage *node = new HoistedStorage;
+    node->name = name;
     node->body = std::move(body);
     return node;
 }
@@ -1169,6 +1179,10 @@ template<>
 void StmtNode<Atomic>::accept(IRVisitor *v) const {
     v->visit((const Atomic *)this);
 }
+template<>
+void StmtNode<HoistedStorage>::accept(IRVisitor *v) const {
+    v->visit((const HoistedStorage *)this);
+}
 
 template<>
 Expr ExprNode<IntImm>::mutate_expr(IRMutator *v) const {
@@ -1358,6 +1372,10 @@ Stmt StmtNode<Fork>::mutate_stmt(IRMutator *v) const {
 template<>
 Stmt StmtNode<Atomic>::mutate_stmt(IRMutator *v) const {
     return v->visit((const Atomic *)this);
+}
+template<>
+Stmt StmtNode<HoistedStorage>::mutate_stmt(IRMutator *v) const {
+    return v->visit((const HoistedStorage *)this);
 }
 
 Call::ConstString Call::buffer_get_dimensions = "_halide_buffer_get_dimensions";

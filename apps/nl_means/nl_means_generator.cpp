@@ -136,9 +136,11 @@ public:
                 .parallel(ty)
                 .vectorize(x, vec);
             blur_d_y.compute_at(non_local_means, tx)
+                .hoist_storage(non_local_means, ty)
                 .reorder(y, x)
                 .vectorize(x, vec);
             d.compute_at(non_local_means, tx)
+                .hoist_storage(non_local_means, ty)
                 .vectorize(x, vec);
             non_local_means_sum.compute_at(non_local_means, x)
                 .reorder(c, x, y)

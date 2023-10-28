@@ -68,6 +68,8 @@ protected:
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
 
+    bool use_slp_vectorization() const override;
+
     int vector_lanes_for_slice(const Type &t) const;
 
     using CodeGen_Posix::visit;
@@ -1026,6 +1028,20 @@ int CodeGen_X86::vector_lanes_for_slice(const Type &t) const {
                                                                    128);
     // clang-format on
     return slice_bits / t.bits();
+}
+
+bool CodeGen_X86::use_slp_vectorization() const {
+    if (target.has_feature(Target::AVX512)) {
+        // LLVM's SLP vectorizer emits avx512 gather intrinsics for LUTs and
+        // boundary conditions, even though they're slower than just
+        // scalarizing. See https://github.com/llvm/llvm-project/issues/70259
+        //
+        // TODO: Once that issue is fixed, we should conditionalize this based on the
+        // LLVM version.
+        return false;
+    } else {
+        return true;
+    }
 }
 
 }  // namespace

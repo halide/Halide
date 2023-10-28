@@ -702,5 +702,14 @@ Stmt Simplify::visit(const Atomic *op) {
     }
 }
 
+Stmt Simplify::visit(const HoistedStorage *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return HoistedStorage::make(op->name, body);
+    }
+}
+
 }  // namespace Internal
 }  // namespace Halide
