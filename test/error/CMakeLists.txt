@@ -60,6 +60,7 @@ tests(GROUPS error
       func_tuple_types_mismatch.cpp
       func_tuple_update_types_mismatch.cpp
       fuse_vectorized_var_with_rvar.cpp
+      hoist_storage_without_compute_at.cpp
       implicit_args.cpp
       impossible_constraints.cpp
       incomplete_target.cpp
@@ -95,6 +96,7 @@ tests(GROUPS error
       split_inner_wrong_tail_strategy.cpp
       split_non_innermost_predicated.cpp
       split_same_var_names.cpp
+      store_at_without_compute_at.cpp
       thread_id_outside_block_id.cpp
       too_many_args.cpp
       tuple_arg_select_undef.cpp
