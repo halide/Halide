@@ -2218,13 +2218,13 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
 
     if (compute_at.is_inlined()) {
         if (store_at.is_root()) {
-            user_error << "Func \"" << f.name() << "\" is scheduled store_root(), but is inlined. Funcs that use store_root must also call compute_root.\n";
+            user_error << "Func \"" << f.name() << "\" is scheduled store_root(), but is inlined. Funcs that use store_root must also call compute_root or compute_at.\n";
         } else if (!store_at.is_inlined()) {
             user_error << "Func \"" << f.name() << "\" is scheduled store_at(), but is inlined. Funcs that use store_at must also call compute_at.\n";
         }
 
         if (hoist_storage_at.is_root()) {
-            user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage_root(), but is inlined. Funcs that use hoist_storage_root must also call compute_root.\n";
+            user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage_root(), but is inlined. Funcs that use hoist_storage_root must also call compute_root or compute_at.\n";
         } else if (!hoist_storage_at.is_inlined()) {
             user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage(), but is inlined. Funcs that use hoist_storage_root must also call compute_at.\n";
         }
