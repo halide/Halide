@@ -1412,7 +1412,7 @@ Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
 
     const std::vector<Parameter> parameters_external =
         deserialize_vector<Serialize::ExternalParameter, Parameter>(pipeline_obj->external_parameters(),
-                                                            &Deserializer::deserialize_external_parameter);
+                                                                    &Deserializer::deserialize_external_parameter);
     for (const auto &param : parameters_external) {
         external_params[param.name()] = param;
     }
@@ -1487,7 +1487,7 @@ std::map<std::string, Parameter> Deserializer::deserialize_parameters(const std:
 
     const std::vector<Parameter> external_parameters =
         deserialize_vector<Serialize::ExternalParameter, Parameter>(pipeline_obj->external_parameters(),
-                                                            &Deserializer::deserialize_external_parameter);
+                                                                    &Deserializer::deserialize_external_parameter);
 
     for (const auto &param : external_parameters) {
         external_parameters_by_name[param.name()] = param;
