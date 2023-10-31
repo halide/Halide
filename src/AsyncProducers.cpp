@@ -706,7 +706,9 @@ class TightenForkNodes : public IRMutator {
 }  // namespace
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
+    debug(0) << "Before async producer\n" << s << "\n";
     s = TightenProducerConsumerNodes(env).mutate(s);
+    debug(0) << "Before ForkAsyncProducers\n" << s << "\n";
     s = ForkAsyncProducers(env).mutate(s);
     s = ExpandAcquireNodes().mutate(s);
     s = TightenForkNodes().mutate(s);
