@@ -645,9 +645,11 @@ public:
     const LoopLevel &store_level() const;
     const LoopLevel &compute_level() const;
     const LoopLevel &hoist_storage_level() const;
+    const LoopLevel &rotate_with() const;
     LoopLevel &store_level();
     LoopLevel &compute_level();
     LoopLevel &hoist_storage_level();
+    LoopLevel &rotate_with();
     // @}
 
     /** Pass an IRVisitor through to all Exprs referenced in the

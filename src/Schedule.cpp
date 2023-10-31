@@ -233,7 +233,7 @@ typedef std::map<FunctionPtr, FunctionPtr> DeepCopyMap;
 struct FuncScheduleContents {
     mutable RefCount ref_count;
 
-    LoopLevel store_level, compute_level, hoist_storage_level;
+    LoopLevel store_level, compute_level, hoist_storage_level, rotate_with_level;
     std::vector<StorageDim> storage_dims;
     std::vector<Bound> bounds;
     std::vector<Bound> estimates;
