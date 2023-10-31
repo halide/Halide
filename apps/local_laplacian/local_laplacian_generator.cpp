@@ -102,10 +102,16 @@ public:
             // Nothing.
         } else if (get_target().has_gpu_feature()) {
             // GPU schedule.
-            // 3.19ms on an RTX 2060.
+            // 2.9ms on an RTX 2060.
+
+            // All loop partitioning disabled, which has no effect on runtime,
+            // but saves 15% compile time and 45% ptx shader code size.
             remap.compute_root();
             Var xi, yi;
-            output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
+            output.compute_root()
+                .partition(x, Partition::Never)
+                .partition(y, Partition::Never)
+                .gpu_tile(x, y, xi, yi, 16, 8);
             for (int j = 0; j < J; j++) {
                 int blockw = 16, blockh = 8;
                 if (j > 3) {
@@ -113,10 +119,23 @@ public:
                     blockh = 2;
                 }
                 if (j > 0) {
-                    inGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
-                    gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, xi, yi, blockw, blockh);
+                    inGPyramid[j]
+                        .compute_root()
+                        .partition(x, Partition::Never)
+                        .partition(y, Partition::Never)
+                        .gpu_tile(x, y, xi, yi, blockw, blockh);
+                    gPyramid[j]
+                        .compute_root()
+                        .reorder(k, x, y)
+                        .partition(x, Partition::Never)
+                        .partition(y, Partition::Never)
+                        .gpu_tile(x, y, xi, yi, blockw, blockh);
                 }
-                outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
+                outGPyramid[j]
+                    .compute_root()
+                    .partition(x, Partition::Never)
+                    .partition(y, Partition::Never)
+                    .gpu_tile(x, y, xi, yi, blockw, blockh);
             }
         } else {
             // CPU schedule.
