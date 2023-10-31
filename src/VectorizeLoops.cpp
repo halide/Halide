@@ -342,7 +342,7 @@ class SerializeLoops : public IRMutator {
     Stmt visit(const For *op) override {
         if (op->for_type == ForType::Vectorized) {
             return For::make(op->name, op->min, op->extent,
-                             ForType::Serial, op->device_api, mutate(op->body));
+                             ForType::Serial, op->partition_policy, op->device_api, mutate(op->body));
         }
 
         return IRMutator::visit(op);
@@ -935,7 +935,7 @@ class VectorSubs : public IRMutator {
             // Rebase the loop to zero and try again
             Expr var = Variable::make(Int(32), op->name);
             Stmt body = substitute(op->name, var + op->min, op->body);
-            Stmt transformed = For::make(op->name, 0, op->extent, for_type, op->device_api, body);
+            Stmt transformed = For::make(op->name, 0, op->extent, for_type, op->partition_policy, op->device_api, body);
             return mutate(transformed);
         }
 
@@ -1002,7 +1002,7 @@ class VectorSubs : public IRMutator {
                 for_type == op->for_type) {
                 return op;
             } else {
-                return For::make(op->name, min, extent, for_type, op->device_api, body);
+                return For::make(op->name, min, extent, for_type, op->partition_policy, op->device_api, body);
             }
         }
     }
@@ -1292,7 +1292,7 @@ class VectorSubs : public IRMutator {
 
         for (int ix = vectorized_vars.size() - 1; ix >= 0; ix--) {
             s = For::make(vectorized_vars[ix].name, vectorized_vars[ix].min,
-                          vectorized_vars[ix].lanes, ForType::Serial, DeviceAPI::None, s);
+                          vectorized_vars[ix].lanes, ForType::Serial, Partition::Auto, DeviceAPI::None, s);
         }
 
         return s;

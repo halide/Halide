@@ -99,7 +99,7 @@ class UniquifyVariableNames : public IRMutator {
             extent.same_as(op->extent)) {
             return op;
         } else {
-            return For::make(new_name, min, extent, op->for_type, op->device_api, body);
+            return For::make(new_name, min, extent, op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 

@@ -74,6 +74,12 @@ enum ForType: byte {
     GPULane,
 }
 
+enum Partition: byte {
+    Auto,
+    Never,
+    Always,
+}
+
 enum DeviceAPI: byte {
     None,
     Host,
@@ -128,6 +134,7 @@ table For {
     min: Expr;
     extent: Expr;
     for_type: ForType;
+    partition_policy: Partition;
     device_api: DeviceAPI;
     body: Stmt;
 }

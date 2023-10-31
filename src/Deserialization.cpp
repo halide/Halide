@@ -71,6 +71,8 @@ private:
 
     DeviceAPI deserialize_device_api(Serialize::DeviceAPI device_api);
 
+    Partition deserialize_partition(Serialize::Partition partition);
+
     Call::CallType deserialize_call_type(Serialize::CallType call_type);
 
     VectorReduce::Operator deserialize_vector_reduce_op(Serialize::VectorReduceOp vector_reduce_op);
@@ -198,6 +200,20 @@ ForType Deserializer::deserialize_for_type(Serialize::ForType for_type) {
     default:
         user_error << "unknown for type " << for_type << "\n";
         return ForType::Serial;
+    }
+}
+
+Partition Deserializer::deserialize_partition(Serialize::Partition partition) {
+    switch (partition) {
+    case Serialize::Partition::Partition_Auto:
+        return Halide::Partition::Auto;
+    case Serialize::Partition::Partition_Never:
+        return Halide::Partition::Never;
+    case Serialize::Partition::Partition_Always:
+        return Halide::Partition::Always;
+    default:
+        user_error << "unknown loop partition policy " << partition << "\n";
+        return Halide::Partition::Auto;
     }
 }
 
@@ -505,9 +521,10 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         const auto min = deserialize_expr(for_stmt->min_type(), for_stmt->min());
         const auto extent = deserialize_expr(for_stmt->extent_type(), for_stmt->extent());
         const ForType for_type = deserialize_for_type(for_stmt->for_type());
+        const Partition partition_policy = deserialize_partition(for_stmt->partition_policy());
         const DeviceAPI device_api = deserialize_device_api(for_stmt->device_api());
         const auto body = deserialize_stmt(for_stmt->body_type(), for_stmt->body());
-        return For::make(name, min, extent, for_type, device_api, body);
+        return For::make(name, min, extent, for_type, partition_policy, device_api, body);
     }
     case Serialize::Stmt_Store: {
         const auto *store_stmt = (const Serialize::Store *)stmt;
