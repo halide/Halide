@@ -138,6 +138,7 @@ public:
                 .vectorize(x, 8);
             gray
                 .compute_root()
+                .partition(y, Partition::Never)
                 .parallel(y, 32)
                 .vectorize(x, 8);
             for (int j = 1; j < 5; j++) {
