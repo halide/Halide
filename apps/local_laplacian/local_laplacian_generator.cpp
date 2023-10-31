@@ -81,10 +81,10 @@ public:
         // Reintroduce color (Connelly: use eps to avoid scaling up noise w/ apollo3.png input)
         Func color;
         float eps = 0.01f;
-        color(x, y, c) = outGPyramid[0](x, y) * (floating(x, y, c) + eps) / (gray(x, y) + eps);
+        color(x, y, c) = input(x, y, c) * (outGPyramid[0](x, y) + eps) / (gray(x, y) + eps);
 
         // Convert back to 16-bit
-        output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 1.0f) * 65535.0f);
+        output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 65535.0f));
 
         /* ESTIMATES */
         // (This can be useful in conjunction with RunGen and benchmarks as well
@@ -131,8 +131,15 @@ public:
 
             remap.compute_root();
             Var yo;
-            output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
-            gray.compute_root().parallel(y, 32).vectorize(x, 8);
+            output
+                .reorder(c, x, y)
+                .split(y, yo, y, 64)
+                .parallel(yo)
+                .vectorize(x, 8);
+            gray
+                .compute_root()
+                .parallel(y, 32)
+                .vectorize(x, 8);
             for (int j = 1; j < 5; j++) {
                 inGPyramid[j]
                     .compute_root()
@@ -148,12 +155,19 @@ public:
                     .store_at(output, yo)
                     .compute_at(output, y)
                     .fold_storage(y, 4)
-                    .vectorize(x, 8);
+                    .vectorize(x, 8, TailStrategy::RoundUp);
+                if (j > 1) {
+                    // Turn off loop partitioning at higher pyramid levels. This
+                    // shaves about 3% off code size and compile time without
+                    // affecting performance.
+                    inGPyramid[j].partition(x, Partition::Never);
+                    gPyramid[j].partition(x, Partition::Never);
+                }
             }
             outGPyramid[0]
                 .compute_at(output, y)
                 .hoist_storage(output, yo)
-                .vectorize(x, 8);
+                .vectorize(x, 8, TailStrategy::RoundUp);
             for (int j = 5; j < J; j++) {
                 inGPyramid[j].compute_root();
                 gPyramid[j].compute_root().parallel(k);

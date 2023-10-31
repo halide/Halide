@@ -3052,6 +3052,7 @@ protected:
     using LoopLevel = Halide::LoopLevel;
     using MemoryType = Halide::MemoryType;
     using NameMangling = Halide::NameMangling;
+    using Partition = Halide::Partition;
     using Pipeline = Halide::Pipeline;
     using PrefetchBoundStrategy = Halide::PrefetchBoundStrategy;
     using RDom = Halide::RDom;
