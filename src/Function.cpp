@@ -1146,11 +1146,15 @@ void Function::lock_loop_levels() {
     auto &schedule = contents->func_schedule;
     schedule.compute_level().lock();
     schedule.store_level().lock();
+    schedule.hoist_storage_level().lock();
     // If store_level is inlined, use the compute_level instead.
     // (Note that we deliberately do *not* do the same if store_level
     // is undefined.)
     if (schedule.store_level().is_inlined()) {
         schedule.store_level() = schedule.compute_level();
+    }
+    if (schedule.hoist_storage_level().is_inlined()) {
+        schedule.hoist_storage_level() = schedule.store_level();
     }
     if (contents->init_def.defined()) {
         contents->init_def.schedule().fuse_level().level.lock();

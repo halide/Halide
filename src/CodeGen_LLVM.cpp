@@ -1122,7 +1122,7 @@ void CodeGen_LLVM::optimize_module() {
     PipelineTuningOptions pto;
     pto.LoopInterleaving = do_loop_opt;
     pto.LoopVectorization = do_loop_opt;
-    pto.SLPVectorization = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
+    pto.SLPVectorization = use_slp_vectorization();
     pto.LoopUnrolling = do_loop_opt;
     // Clear ScEv info for all loops. Certain Halide applications spend a very
     // long time compiling in forgetLoop, and prefer to forget everything

@@ -266,13 +266,13 @@ Stmt Simplify::visit(const For *op) {
         }
         return mutate(s);
     } else if (!stmt_uses_var(new_body, op->name) && !is_const_zero(op->min)) {
-        return For::make(op->name, make_zero(Int(32)), new_extent, op->for_type, op->device_api, new_body);
+        return For::make(op->name, make_zero(Int(32)), new_extent, op->for_type, op->partition_policy, op->device_api, new_body);
     } else if (op->min.same_as(new_min) &&
                op->extent.same_as(new_extent) &&
                op->body.same_as(new_body)) {
         return op;
     } else {
-        return For::make(op->name, new_min, new_extent, op->for_type, op->device_api, new_body);
+        return For::make(op->name, new_min, new_extent, op->for_type, op->partition_policy, op->device_api, new_body);
     }
 }
 
@@ -699,6 +699,15 @@ Stmt Simplify::visit(const Atomic *op) {
         return Atomic::make(op->producer_name,
                             op->mutex_name,
                             std::move(body));
+    }
+}
+
+Stmt Simplify::visit(const HoistedStorage *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return HoistedStorage::make(op->name, body);
     }
 }
 
