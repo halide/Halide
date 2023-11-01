@@ -8,16 +8,17 @@
  */
 
 #include "Expr.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
 
 /** Return true if an expression uses a likely tag that isn't captured
  * by an enclosing Select, Min, or Max. */
-bool has_uncaptured_likely_tag(const Expr &e);
+bool has_uncaptured_likely_tag(const Expr &e, const Scope<> &scope);
 
 /** Return true if an expression uses a likely tag. */
-bool has_likely_tag(const Expr &e);
+bool has_likely_tag(const Expr &e, const Scope<> &scope);
 
 /** Partitions loop bodies into a prologue, a steady state, and an
  * epilogue. Finds the steady state by hunting for use of clamped

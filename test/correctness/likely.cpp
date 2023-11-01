@@ -287,6 +287,26 @@ int main(int argc, char **argv) {
         result = g.realize({10});
     }
 
+    // Test for the bug described in https://github.com/halide/Halide/issues/7929
+    {
+        Func f, g, h;
+        Var x, y;
+
+        f(x, y) = x;
+        f.compute_root();
+
+        Param<int> p;
+        g = BoundaryConditions::repeat_edge(f, {{0, p}, {Expr(), Expr()}});
+
+        h(x, y) = g(x, y) + g(x, y + 1) + g(x, y + 2);
+
+        count_partitions(h, 3);
+
+        // Same thing with vectorization too.
+        h.vectorize(x, 8);
+        count_partitions(h, 3);
+    }
+
     // The performance of this behavior is tested in
     // test/performance/boundary_conditions.cpp
 
