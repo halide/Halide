@@ -66,11 +66,11 @@ Func constant_exterior(const Func &source, const Tuple &value,
     if (value.as_vector().size() > 1) {
         std::vector<Expr> def;
         for (size_t i = 0; i < value.as_vector().size(); i++) {
-            def.push_back(select(out_of_bounds, value[i], repeat_edge(source, bounds)(args)[i]));
+            def.push_back(select(out_of_bounds, value[i], likely(repeat_edge(source, bounds)(args)[i])));
         }
         bounded(args) = Tuple(def);
     } else {
-        bounded(args) = select(out_of_bounds, value[0], repeat_edge(source, bounds)(args));
+        bounded(args) = select(out_of_bounds, value[0], likely(repeat_edge(source, bounds)(args)));
     }
 
     return bounded;
@@ -99,9 +99,11 @@ Func repeat_image(const Func &source,
             Expr coord = arg_var - min;  // Enforce zero origin.
             coord = coord % extent;      // Range is 0 to w-1
             coord = coord + min;         // Restore correct min
-
             coord = select(arg_var < min || arg_var >= min + extent, coord,
-                           clamp(likely(arg_var), min, min + extent - 1));
+                           likely(clamp(likely(arg_var), min, min + extent - 1)));
+
+            // We want loop partitioning to both cause the clamp to go away, and
+            // also cause the select to go away, so we use two likely tags.
 
             actuals.push_back(coord);
         } else if (!min.defined() && !extent.defined()) {
@@ -143,7 +145,7 @@ Func mirror_image(const Func &source,
             coord = coord + min;                                             // Restore correct min
             coord = clamp(coord, min, min + extent - 1);
             coord = select(arg_var < min || arg_var >= min + extent, coord,
-                           clamp(likely(arg_var), min, min + extent - 1));
+                           likely(clamp(likely(arg_var), min, min + extent - 1)));
             actuals.push_back(coord);
         } else if (!min.defined() && !extent.defined()) {
             actuals.push_back(arg_var);
@@ -188,7 +190,7 @@ Func mirror_interior(const Func &source,
 
             // The boundary condition probably doesn't apply
             coord = select(arg_var < min || arg_var >= min + extent, coord,
-                           clamp(likely(arg_var), min, min + extent - 1));
+                           likely(clamp(likely(arg_var), min, min + extent - 1)));
 
             actuals.push_back(coord);
         } else if (!min.defined() && !extent.defined()) {

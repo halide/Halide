@@ -1023,24 +1023,44 @@ class ExpandSelects : public IRMutator {
 
     Expr visit(const Select *op) override {
         Expr condition = mutate(op->condition);
+
+        const Call *true_likely = Call::as_intrinsic(op->true_value, {Call::likely});
+        const Call *false_likely = Call::as_intrinsic(op->false_value, {Call::likely});
+
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
         if (const Or *o = condition.as<Or>()) {
             if (is_trivial(true_value)) {
-                return mutate(Select::make(o->a, true_value, Select::make(o->b, true_value, false_value)));
+                Expr expr = Select::make(o->b, true_value, false_value);
+                if (false_likely) {
+                    expr = likely(expr);
+                }
+                return mutate(Select::make(o->a, true_value, expr));
             } else {
                 string var_name = unique_name('t');
                 Expr var = Variable::make(true_value.type(), var_name);
-                Expr expr = mutate(Select::make(o->a, var, Select::make(o->b, var, false_value)));
+                Expr expr = Select::make(o->b, var, false_value);
+                if (false_likely) {
+                    expr = likely(expr);
+                }
+                expr = mutate(Select::make(o->a, var, expr));
                 return Let::make(var_name, true_value, expr);
             }
         } else if (const And *a = condition.as<And>()) {
             if (is_trivial(false_value)) {
-                return mutate(Select::make(a->a, Select::make(a->b, true_value, false_value), false_value));
+                Expr expr = Select::make(a->b, true_value, false_value);
+                if (true_likely) {
+                    expr = likely(expr);
+                }
+                return mutate(Select::make(a->a, expr, false_value));
             } else {
                 string var_name = unique_name('t');
                 Expr var = Variable::make(false_value.type(), var_name);
-                Expr expr = mutate(Select::make(a->a, Select::make(a->b, true_value, var), var));
+                Expr expr = Select::make(a->b, true_value, var);
+                if (true_likely) {
+                    expr = likely(expr);
+                }
+                expr = mutate(Select::make(a->a, expr, var));
                 return Let::make(var_name, false_value, expr);
             }
         } else if (const Not *n = condition.as<Not>()) {
