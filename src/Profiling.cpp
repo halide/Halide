@@ -428,16 +428,30 @@ private:
             Stmt start_profiler;
             // Lazily create the func-ids here, to avoid cluttering the profile log
             // with these two functions when they are not even present in the pipeline.
-            if (call->name == "halide_copy_to_host") {
-                int copy_to_host_id = get_func_id("copy_to_host");
-                start_profiler = set_current_func(copy_to_host_id);
-            } else if (call->name == "halide_copy_to_device") {
-                int copy_to_device_id = get_func_id("copy_to_device");
-                start_profiler = set_current_func(copy_to_device_id);
-            }
-            if (start_profiler.defined()) {
-                Stmt stop_profiler = set_current_func(stack.back());
-                return Block::make(start_profiler, LetStmt::make(op->name, mutate(op->value), Block::make(stop_profiler, mutate(op->body))));
+
+            if (call->name == "halide_copy_to_host" || call->name == "halide_copy_to_device") {
+                std::string buffer_name;
+                if (const Variable *var = call->args.front().as<Variable>()) {
+                    buffer_name = var->name;
+                    if (ends_with(buffer_name, ".buffer")) {
+                        buffer_name = buffer_name.substr(0, buffer_name.size() - 7);
+                    } else {
+                        internal_error << "Expected to find a variable ending in .buffer as first argument to function call " << call->name << "\n";
+                    }
+                } else {
+                    internal_error << "Expected to find a variable as first argument of the function call " << call->name << ".\n";
+                }
+                if (call->name == "halide_copy_to_host") {
+                    int copy_to_host_id = get_func_id("copy_to_host__" + buffer_name);
+                    start_profiler = set_current_func(copy_to_host_id);
+                } else if (call->name == "halide_copy_to_device") {
+                    int copy_to_device_id = get_func_id("copy_to_device__" + buffer_name);
+                    start_profiler = set_current_func(copy_to_device_id);
+                }
+                if (start_profiler.defined()) {
+                    Stmt stop_profiler = set_current_func(stack.back());
+                    return Block::make(start_profiler, LetStmt::make(op->name, mutate(op->value), Block::make(stop_profiler, mutate(op->body))));
+                }
             }
         }
 
