@@ -50,6 +50,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_device_malloc,
     (void *)&halide_device_release,
     (void *)&halide_device_sync,
+    (void *)&halide_device_sync_global,
     (void *)&halide_disable_timer_interrupt,
     (void *)&halide_do_par_for,
     (void *)&halide_do_parallel_tasks,
