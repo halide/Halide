@@ -6,6 +6,7 @@
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "InjectHostDevBufferCopies.h"
 #include "Profiling.h"
 #include "Scope.h"
 #include "Simplify.h"
@@ -449,8 +450,35 @@ private:
                     start_profiler = set_current_func(copy_to_device_id);
                 }
                 if (start_profiler.defined()) {
-                    Stmt stop_profiler = set_current_func(stack.back());
-                    return Block::make(start_profiler, LetStmt::make(op->name, mutate(op->value), Block::make(stop_profiler, mutate(op->body))));
+                    // The copy functions are followed by an assert, which we will wrap in the timed body.
+                    const AssertStmt *copy_assert = nullptr;
+                    Stmt other;
+                    if (const Block *block = op->body.as<Block>()) {
+                        if (const AssertStmt *assert = block->first.as<AssertStmt>()) {
+                            copy_assert = assert;
+                            other = block->rest;
+                        }
+                    } else if (const AssertStmt *assert = op->body.as<AssertStmt>()) {
+                        copy_assert = assert;
+                    }
+                    if (copy_assert) {
+                        Expr device_interface = call->args.back();  // The last argument to the copy calls is the device_interface.
+                        Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
+
+                        std::vector<Stmt> steps{
+                            AssertStmt::make(copy_assert->condition, copy_assert->message),
+                            sync_and_assert,
+                            set_current_func(stack.back()),
+                        };
+                        if (other.defined()) {
+                            steps.push_back(mutate(other));
+                        }
+                        return Block::make(start_profiler,
+                                           LetStmt::make(op->name, mutate(op->value),
+                                                         Block::make(steps)));
+                    } else {
+                        internal_error << "No assert found after buffer copy.\n";
+                    }
                 }
             }
         }
