@@ -2786,8 +2786,12 @@ WEAK int halide_d3d12compute_device_sync(void *user_context, struct halide_buffe
         return d3d12_context.error();
     }
 
-    d3d12_buffer *dbuffer = peel_buffer(buffer);
-    d3d12compute_device_sync_internal(d3d12_context.device, dbuffer);
+    if (buffer != nullptr) {
+        d3d12_buffer *dbuffer = peel_buffer(buffer);
+        d3d12compute_device_sync_internal(d3d12_context.device, dbuffer);
+    } else {
+        d3d12compute_device_sync_internal(d3d12_context.device, nullptr);
+    }
 
     return halide_error_code_success;
 }
