@@ -47,7 +47,7 @@ JIT compilation is not supported when using WebGPU with WASM.
 
 ## Running natively: `HL_TARGET=host-webgpu`
 
-> _Tested with top-of-tree Dawn as of 2023-03-14._
+> _Tested with top-of-tree Dawn as of 2023-11-03._
 
 For testing purposes, Halide can also target native WebGPU libraries, such as
 [Dawn](dawn.googlesource.com/dawn/) or [wgpu](github.com/gfx-rs/wgpu).
@@ -108,3 +108,16 @@ This will produce the following artifacts:
 
 These paths can then be used for the `HL_WEBGPU_NODE_BINDINGS` and
 `HL_WEBGPU_NATIVE_LIB` environment variables when using Halide.
+
+## Updating mini_webgpu.h
+
+The recommended method for updating `mini_webgpu.h` is to copy the
+`gen/include/dawn/webgpu.h` file from the Dawn build directory, then:
+- Restore the `// clang-format {off,on}` lines.
+- Comment out the `#include <std*>` lines.
+- Remove the `void` parameter from the `WGPUProc` declaration.
+
+This guarantees a version of the WebGPU header that is compatible with Dawn.
+When the native API eventually stabilizes, it should be possible to obtain a
+header from the `webgpu-native` GitHub organization that will be compatible
+with Dawn, wgpu, and Emscripten.
