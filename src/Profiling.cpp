@@ -427,9 +427,6 @@ private:
     Stmt visit(const LetStmt *op) override {
         if (const Call *call = op->value.as<Call>()) {
             Stmt start_profiler;
-            // Lazily create the func-ids here, to avoid cluttering the profile log
-            // with these two functions when they are not even present in the pipeline.
-
             if (call->name == "halide_copy_to_host" || call->name == "halide_copy_to_device") {
                 std::string buffer_name;
                 if (const Variable *var = call->args.front().as<Variable>()) {
