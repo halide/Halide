@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.24)
 
 set(Halide_HOST_TARGET @Halide_HOST_TARGET@)
 

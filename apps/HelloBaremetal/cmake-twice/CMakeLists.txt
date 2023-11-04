@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.24)
 
 # Enable assembly language (.s) support additionally
 project(HelloBaremetal LANGUAGES C CXX ASM)

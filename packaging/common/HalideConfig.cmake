@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.24)
 
 macro(Halide_fail message)
     set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE "${message}")
