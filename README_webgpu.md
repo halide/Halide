@@ -36,7 +36,7 @@ When invoking `emcc` to link Halide-generated objects, include these flags:
 `-s USE_WEBGPU=1 -s ASYNCIFY`.
 
 Tests that use AOT compilation can be run using a native WebGPU implementation
-that has Node.js bindings, such as [Dawn](dawn.googlesource.com/dawn/).
+that has Node.js bindings, such as [Dawn](https://dawn.googlesource.com/dawn/).
 You must set an environment variable named `HL_WEBGPU_NODE_BINDINGS` that
 has an absolute path to the bindings to run these tests, e.g. `HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node`.
 
@@ -50,7 +50,8 @@ JIT compilation is not supported when using WebGPU with WASM.
 > _Tested with top-of-tree Dawn as of 2023-11-03._
 
 For testing purposes, Halide can also target native WebGPU libraries, such as
-[Dawn](dawn.googlesource.com/dawn/) or [wgpu](github.com/gfx-rs/wgpu).
+[Dawn](https://dawn.googlesource.com/dawn/) or
+[wgpu](https://github.com/gfx-rs/wgpu).
 This is currently the only path that can run the JIT correctness tests.
 See [below](#setting-up-dawn) for instructions on building Dawn.
 
@@ -75,7 +76,7 @@ will be selected based on the Halide target specified.
 
 Building Dawn's Node.js bindings currently requires using CMake.
 
-First, [install `depot_tools`](commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up) and add it to the
+First, [install `depot_tools`](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up) and add it to the
 `PATH` environment variable.
 
 Next, get Dawn and its dependencies:
