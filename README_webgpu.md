@@ -54,6 +54,10 @@ For testing purposes, Halide can also target native WebGPU libraries, such as
 This is currently the only path that can run the JIT correctness tests.
 See [below](#setting-up-dawn) for instructions on building Dawn.
 
+> Note that as of 2023-11-03, wgpu is not supported due to
+> [lacking `override` support for WGSL](https://github.com/gfx-rs/wgpu/issues/1762)
+> which we require > in order to set GPU block sizes.
+
 When targeting WebGPU with a native target, Halide defaults to looking for a
 build of Dawn (with several common names and suffixes); you can override this
 by setting the `HL_WEBGPU_NATIVE_LIB` environment variable to the absolute path
