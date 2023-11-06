@@ -20,9 +20,9 @@ public:
 
     void generate() {
         Var x;
-        output(x) = cast<double>(input_i8(x) + input_i16(x)  + input_i32(x) + input_i64(x)) +
-                    cast<double>(input_u8(x) + input_u16(x)  + input_u32(x) + input_u64(x)) +
-                    input_f16(x) + input_f32(x)  + input_f64(x) + input_bf16(x);
+        output(x) = cast<double>(input_i8(x) + input_i16(x) + input_i32(x) + input_i64(x)) +
+                    cast<double>(input_u8(x) + input_u16(x) + input_u32(x) + input_u64(x)) +
+                    input_f16(x) + input_f32(x) + input_f64(x) + input_bf16(x);
 
         // set estimates for the autoschedulers
         input_i8.set_estimates({{0, 32}});
@@ -48,8 +48,4 @@ public:
 }  // namespace
 
 HALIDE_REGISTER_GENERATOR(AllTypeNamesGeneric, all_type_names_generic)
-HALIDE_REGISTER_GENERATOR_ALIAS(all_type_names, all_type_names_generic, {
-    {"input_i8.type", "int8"}, {"input_i16.type", "int16"}, {"input_i32.type", "int32"}, {"input_i64.type", "int64"},
-    {"input_u8.type", "uint8"}, {"input_u16.type", "uint16"},{"input_u32.type", "uint32"}, {"input_u64.type", "uint64"},
-    {"input_f16.type", "float16"}, {"input_f32.type", "float32"}, {"input_f64.type", "float64"}, {"input_bf16.type", "bfloat16"},
-    {"output.type", "float64"}})
+HALIDE_REGISTER_GENERATOR_ALIAS(all_type_names, all_type_names_generic, {{"input_i8.type", "int8"}, {"input_i16.type", "int16"}, {"input_i32.type", "int32"}, {"input_i64.type", "int64"}, {"input_u8.type", "uint8"}, {"input_u16.type", "uint16"}, {"input_u32.type", "uint32"}, {"input_u64.type", "uint64"}, {"input_f16.type", "float16"}, {"input_f32.type", "float32"}, {"input_f64.type", "float64"}, {"input_bf16.type", "bfloat16"}, {"output.type", "float64"}})
