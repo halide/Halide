@@ -306,6 +306,8 @@ using native_vector_u32_x4 = MultipleOfNativeVector<native_vector_u32, 4>;
 
 using native_vector_i48_x2 = MultipleOfNativeVector<native_vector_i48, 2>;
 
+using native_vector_f16_x2 = MultipleOfNativeVector<native_vector_f16, 2>;
+
 using native_vector_f32_x2 = MultipleOfNativeVector<native_vector_f32, 2>;
 using native_vector_f32_x4 = MultipleOfNativeVector<native_vector_f32, 4>;
 
@@ -1763,6 +1765,10 @@ HALIDE_ALWAYS_INLINE native_vector_u8 halide_xtensa_deinterleave_odd_u8(const na
     return IVP_SEL2NX8UI(a.native_vector[1], a.native_vector[0], IVP_SELI_8B_EXTRACT_1_OF_2_OFF_1);
 }
 
+HALIDE_ALWAYS_INLINE native_vector_f16 halide_xtensa_slice_f16(const native_vector_f16_x2 &a, int start) {
+    return IVP_SELNXF16(a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + native_vector_i16(start));
+}
+
 HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_slice_f32(const native_vector_f32_x2 &a, int start) {
     return IVP_SELN_2XF32(a.native_vector[1], a.native_vector[0], IVP_ADDN_2X32(IVP_SEQN_2X32(), native_vector_i32(start)));
 }
@@ -1793,6 +1799,10 @@ HALIDE_ALWAYS_INLINE native_vector_u16_x2 halide_xtensa_dynamic_shuffle(const na
 
 HALIDE_ALWAYS_INLINE native_vector_f32 halide_xtensa_dynamic_shuffle(const native_vector_f32_x2 &a, const native_vector_i32 &b) {
     return IVP_SELN_2XF32(a.native_vector[1], a.native_vector[0], b);
+}
+
+HALIDE_ALWAYS_INLINE native_vector_f16 halide_xtensa_dynamic_shuffle(const native_vector_f16_x2 &a, const native_vector_i16 &b) {
+    return IVP_SELNXF16(a.native_vector[1], a.native_vector[0], b);
 }
 
 HALIDE_ALWAYS_INLINE native_vector_i32 halide_xtensa_sat_add_i32(const native_vector_i32 &a,

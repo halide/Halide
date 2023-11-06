@@ -1358,12 +1358,26 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
         string type_suffix = suffix_for_type(op->type);
         string function_name = "halide_xtensa_slice";
         int slice_begin = op->slice_begin();
-        if (op->slice_begin() < 5 || (op->slice_begin() == 6) || (op->slice_begin() == 8)) {
+
+        std::map<int, std::set<int>> supported_right_slices = {
+            {8, {1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 64}},
+            {16, {1, 2, 3, 4, 6, 8, 10, 12, 16, 32}},
+            {32, {1, 2, 3, 4, 5, 6, 8, 16}}
+        };
+
+        if (supported_right_slices[op->type.bits()].count(op->slice_begin()) > 0) {
             function_name += "_right";
         }
-        if ((op->type.lanes() - op->slice_begin() < 5) && (op->type.lanes() > op->slice_begin())) {
+        std::map<int, std::set<int>> supported_left_slices = {
+            {8, {1, 2, 3, 4, 5, 6, 7, 8, 16, 24, 32, 64}},
+            {16, {1, 2, 3, 4, 8, 12, 16, 32}},
+            {32, {1, 2, 4, 6, 8, 16}}
+        };
+
+        int slice_from_the_end = op->type.lanes() - op->slice_begin();
+        if ((supported_left_slices[op->type.bits()].count(slice_from_the_end) > 0) && (op->type.lanes() > op->slice_begin())) {
             function_name += "_left";
-            slice_begin = op->type.lanes() - op->slice_begin();
+            slice_begin = slice_from_the_end;
         }
         Expr call = Call::make(op->type, function_name + type_suffix,
                                {op->vectors[0], slice_begin}, Call::PureExtern);
