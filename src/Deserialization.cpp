@@ -1321,7 +1321,12 @@ void Deserializer::build_reverse_function_mappings(const std::vector<Function> &
     }
     int count = 0;
     for (const auto &f : functions) {
-        this->reverse_function_mappings[count++] = f.get_contents();
+        // The reverse function mappings are used in places where only weak references are needed.
+        FunctionPtr ptr;
+        ptr.strong = nullptr;
+        ptr.weak = f.get_contents().group();
+        ptr.idx = f.get_contents().idx;
+        this->reverse_function_mappings[count++] = ptr;
     }
 }
 

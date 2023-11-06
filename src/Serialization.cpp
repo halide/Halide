@@ -129,7 +129,7 @@ private:
 
     Offset<Serialize::ExternFuncArgument> serialize_extern_func_argument(FlatBufferBuilder &builder, const ExternFuncArgument &extern_func_argument);
 
-    Offset<Serialize::Buffer> serialize_buffer(FlatBufferBuilder &builder, const Buffer<> &buffer);
+    Offset<Serialize::Buffer> serialize_buffer(FlatBufferBuilder &builder, Buffer<> buffer);
 
     std::vector<Offset<Serialize::WrapperRef>> serialize_wrapper_refs(FlatBufferBuilder &builder, const std::map<std::string, FunctionPtr> &wrappers);
 
@@ -1380,10 +1380,14 @@ Offset<Serialize::ExternFuncArgument> Serializer::serialize_extern_func_argument
     }
 }
 
-Offset<Serialize::Buffer> Serializer::serialize_buffer(FlatBufferBuilder &builder, const Buffer<> &buffer) {
+Offset<Serialize::Buffer> Serializer::serialize_buffer(FlatBufferBuilder &builder, Buffer<> buffer) {
     if (!buffer.defined()) {
         return Serialize::CreateBuffer(builder, false);
     }
+    if (buffer.device_dirty()) {
+        user_error << "Cannot serialize on-device buffer: " << buffer.name() << "\n";
+    }
+    buffer.copy_to_host();
     const auto name_serialized = serialize_string(builder, buffer.name());
     const auto type_serialized = serialize_type(builder, buffer.type());
     const int32_t dimensions = buffer.dimensions();
@@ -1475,7 +1479,7 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
 
     std::vector<Offset<Serialize::Buffer>> buffers_serialized;
     buffers_serialized.reserve(buffers_in_pipeline.size());
-    for (const auto &buffer : buffers_in_pipeline) {
+    for (auto &buffer : buffers_in_pipeline) {
         buffers_serialized.push_back(serialize_buffer(builder, buffer.second));
     }
 
