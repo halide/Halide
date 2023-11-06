@@ -4,19 +4,19 @@ namespace {
 
 class AllTypeNamesGeneric : public Halide::Generator<AllTypeNamesGeneric> {
 public:
-  Input<Func> input_i8{"input_i8", 1};
-  Input<Func> input_i16{"input_i16", 1};
-  Input<Func> input_i32{"input_i32", 1};
-  Input<Func> input_i64{"input_i64", 1};
-  Input<Func> input_u8{"input_u8", 1};
-  Input<Func> input_u16{"input_u16", 1};
-  Input<Func> input_u32{"input_u32", 1};
-  Input<Func> input_u64{"input_u64", 1};
-  Input<Func> input_f16{"input_f16", 1};
-  Input<Func> input_f32{"input_f32", 1};
-  Input<Func> input_f64{"input_f64", 1};
-  Input<Func> input_bf16{"input_bf16", 1};
-  Output<Func> output{"output", 1};
+    Input<Func> input_i8{"input_i8", 1};
+    Input<Func> input_i16{"input_i16", 1};
+    Input<Func> input_i32{"input_i32", 1};
+    Input<Func> input_i64{"input_i64", 1};
+    Input<Func> input_u8{"input_u8", 1};
+    Input<Func> input_u16{"input_u16", 1};
+    Input<Func> input_u32{"input_u32", 1};
+    Input<Func> input_u64{"input_u64", 1};
+    Input<Func> input_f16{"input_f16", 1};
+    Input<Func> input_f32{"input_f32", 1};
+    Input<Func> input_f64{"input_f64", 1};
+    Input<Func> input_bf16{"input_bf16", 1};
+    Output<Func> output{"output", 1};
 
     void generate() {
         Var x;
