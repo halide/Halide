@@ -1452,6 +1452,44 @@ public:
     }
 };
 
+class ConvertGatherLoadIndex : public IRMutator {
+    using IRMutator::visit;
+    Scope<void> allocations;
+
+    Stmt visit(const Allocate *op) {
+        if (op->memory_type == MemoryType::VTCM || op->memory_type == MemoryType::Stack) {
+            allocations.push(op->name);
+        }
+        Stmt s = IRMutator::visit(op);
+        if (op->memory_type == MemoryType::VTCM || op->memory_type == MemoryType::Stack) {
+            allocations.pop(op->name);
+        }
+        return s;
+    }
+    Expr visit(const Load *op) override {
+        if (op->type.bits() > 16) {
+            return IRMutator::visit(op);
+        }
+        if (!is_const_one(op->predicate)) {
+            return IRMutator::visit(op);
+        }
+        if (!op->type.is_vector() || op->index.as<Ramp>()) {
+            // Don't handle scalar or simple vector loads.
+            return IRMutator::visit(op);
+        }
+
+        Expr mutated;
+        if (allocations.contains(op->name)) {
+            Expr index = simplify(Cast::make(UInt(16, op->index.type().lanes()), op->index));
+            index = mutate(index);
+            mutated = Load::make(op->type, op->name, index, op->image, op->param, mutate(op->predicate), op->alignment);
+        } else {
+            mutated = IRMutator::visit(op);
+        }
+        return mutated;
+    }
+};
+
 class SplitVectorsToNativeSizes : public IRMutator {
 private:
     std::vector<Type> native_vector_types;
@@ -2123,6 +2161,9 @@ Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     const int alignment = target.natural_vector_size<uint8_t>();
     const int lut_size_in_bytes = 2 * target.natural_vector_size<uint8_t>();
     Stmt s = OptimizeShuffles(alignment, lut_size_in_bytes).mutate(stmt);
+    if (target.has_feature(Target::Feature::XtensaQ8)) {
+        s = ConvertGatherLoadIndex().mutate(s);
+    }
     s = align_loads(s, alignment, 1);
 
     // Use at most 16 vector registers for carrying values.

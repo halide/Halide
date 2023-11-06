@@ -826,8 +826,9 @@ void CodeGen_Xtensa::visit(const Load *op) {
         bool is_tcm = !(heap_allocations.contains(name) || external_buffers.count(op->name) > 0);
 
         rhs << "gather_load<" << print_type(t) << ", "
-            << print_type(Int(32, t.lanes())) << ", "
+            << print_type(op->index.type()) << ", "
             << print_type(t.element_of()) << ", "
+            << print_type(op->index.type().element_of()) << ", "
             << t.lanes() << ", " << is_tcm << ">("
             << name << ", " << id_index << ")";
         // }
