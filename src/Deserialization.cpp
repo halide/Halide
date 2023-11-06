@@ -1110,11 +1110,13 @@ Dim Deserializer::deserialize_dim(const Serialize::Dim *dim) {
     const auto for_type = deserialize_for_type(dim->for_type());
     const auto device_api = deserialize_device_api(dim->device_api());
     const auto dim_type = deserialize_dim_type(dim->dim_type());
+    const auto partition_policy = deserialize_partition(dim->partition_policy());
     auto hl_dim = Dim();
     hl_dim.var = var;
     hl_dim.for_type = for_type;
     hl_dim.device_api = device_api;
     hl_dim.dim_type = dim_type;
+    hl_dim.partition_policy = partition_policy;
     return hl_dim;
 }
 
