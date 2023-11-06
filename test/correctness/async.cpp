@@ -46,14 +46,19 @@ int main(int argc, char **argv) {
         Var x, y;
 
         producer(x) = expensive(x);
-        consumer(x) = expensive(producer(x) + producer(x - 1));
+        consumer(x) =  expensive(producer(x + 1) + producer(x) + producer(x - 1));
         consumer.compute_root();
-        producer.store_root().fold_storage(x, 8).compute_at(consumer, x).async();
+        producer
+            .store_root()
+            .fold_storage(x, 8)
+            .compute_at(consumer, x)
+            .async()
+            ;
 
         Buffer<int> out = consumer.realize({16});
 
         out.for_each_element([&](int x) {
-            int correct = 2 * x - 1;
+            int correct = 3 * x;
             if (out(x) != correct) {
                 printf("out(%d) = %d instead of %d\n",
                        x, out(x), correct);
