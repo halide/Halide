@@ -1227,7 +1227,8 @@ Offset<Serialize::Dim> Serializer::serialize_dim(FlatBufferBuilder &builder, con
     const auto for_type_serialized = serialize_for_type(dim.for_type);
     const auto device_api_serialized = serialize_device_api(dim.device_api);
     const auto dim_type_serialized = serialize_dim_type(dim.dim_type);
-    return Serialize::CreateDim(builder, var_serialized, for_type_serialized, device_api_serialized, dim_type_serialized);
+    const auto partition_policy_serialized = serialize_partition(dim.partition_policy);
+    return Serialize::CreateDim(builder, var_serialized, for_type_serialized, device_api_serialized, dim_type_serialized, partition_policy_serialized);
 }
 
 Offset<Serialize::FuseLoopLevel> Serializer::serialize_fuse_loop_level(FlatBufferBuilder &builder, const FuseLoopLevel &fuse_loop_level) {
