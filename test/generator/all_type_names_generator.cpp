@@ -20,9 +20,11 @@ public:
 
     void generate() {
         Var x;
+
+        // Don't use float16 and bfloat16 arguments as they do not compile with C++ code generation.
         output(x) = cast<double>(input_i8(x) + input_i16(x) + input_i32(x) + input_i64(x)) +
                     cast<double>(input_u8(x) + input_u16(x) + input_u32(x) + input_u64(x)) +
-                    input_f16(x) + input_f32(x) + input_f64(x) + input_bf16(x);
+                    input_f32(x) + input_f64(x);
 
         // set estimates for the autoschedulers
         input_i8.set_estimates({{0, 32}});

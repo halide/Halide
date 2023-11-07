@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
                             output);
     assert(result == 0);
     output.for_each_element([=](int x) {
-        assert(output(x) == 12.0);
+        assert(output(x) == 10.0);
     });
 
     printf("Success!\n");
