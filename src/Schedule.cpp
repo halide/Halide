@@ -241,6 +241,7 @@ struct FuncScheduleContents {
     MemoryType memory_type = MemoryType::Auto;
     bool memoized = false;
     bool async = false;
+    bool double_buffer = false;
     Expr memoize_eviction_key;
 
     FuncScheduleContents()
@@ -403,6 +404,14 @@ bool &FuncSchedule::async() {
 
 bool FuncSchedule::async() const {
     return contents->async;
+}
+
+bool &FuncSchedule::double_buffer() {
+    return contents->double_buffer;
+}
+
+bool FuncSchedule::double_buffer() const {
+    return contents->double_buffer;
 }
 
 std::vector<StorageDim> &FuncSchedule::storage_dims() {

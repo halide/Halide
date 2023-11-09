@@ -2228,6 +2228,8 @@ public:
      */
     Func &async();
 
+    Func &double_buffer();
+
     /** Bound the extent of a Func's storage, but not extent of its
      * compute. This can be useful for forcing a function's allocation
      * to be a fixed size, which often means it can go on the stack.

@@ -2284,6 +2284,12 @@ Func &Func::async() {
     return *this;
 }
 
+Func &Func::double_buffer() {
+    invalidate_cache();
+    func.schedule().double_buffer() = true;
+    return *this;
+}
+
 Stage Func::specialize(const Expr &c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0).specialize(c);
