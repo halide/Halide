@@ -2433,10 +2433,6 @@ public:
      * outside the outermost loop. */
     Func &hoist_storage_root();
 
-    Func &rotate_with(const Func &f, const Var &var);
-    Func &rotate_with(const Func &f, const RVar &var);
-    Func &rotate_with(LoopLevel loop_level);
-
     /** Aggressively inline all uses of this function. This is the
      * default schedule, so you're unlikely to need to call this. For
      * a Func with an update definition, that means it gets computed

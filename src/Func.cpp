@@ -2781,20 +2781,6 @@ Func &Func::compute_at(const Func &f, const Var &var) {
     return compute_at(LoopLevel(f, var));
 }
 
-Func &Func::rotate_with(LoopLevel loop_level) {
-    invalidate_cache();
-    func.schedule().rotate_with() = std::move(loop_level);
-    return *this;
-}
-
-Func &Func::rotate_with(const Func &f, const RVar &var) {
-    return rotate_with(LoopLevel(f, var));
-}
-
-Func &Func::rotate_with(const Func &f, const Var &var) {
-    return rotate_with(LoopLevel(f, var));
-}
-
 Func &Func::compute_with(const Stage &s, const VarOrRVar &var, const vector<pair<VarOrRVar, LoopAlignStrategy>> &align) {
     invalidate_cache();
     Stage(func, func.definition(), 0).compute_with(s, var, align);
