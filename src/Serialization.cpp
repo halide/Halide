@@ -60,6 +60,8 @@ private:
 
     Serialize::DeviceAPI serialize_device_api(const DeviceAPI &device_api);
 
+    Serialize::Partition serialize_partition(const Partition &partition);
+
     Serialize::CallType serialize_call_type(const Call::CallType &call_type);
 
     Serialize::VectorReduceOp serialize_vector_reduce_op(const VectorReduce::Operator &vector_reduce_op);
@@ -127,7 +129,7 @@ private:
 
     Offset<Serialize::ExternFuncArgument> serialize_extern_func_argument(FlatBufferBuilder &builder, const ExternFuncArgument &extern_func_argument);
 
-    Offset<Serialize::Buffer> serialize_buffer(FlatBufferBuilder &builder, const Buffer<> &buffer);
+    Offset<Serialize::Buffer> serialize_buffer(FlatBufferBuilder &builder, Buffer<> buffer);
 
     std::vector<Offset<Serialize::WrapperRef>> serialize_wrapper_refs(FlatBufferBuilder &builder, const std::map<std::string, FunctionPtr> &wrappers);
 
@@ -181,6 +183,20 @@ Serialize::ForType Serializer::serialize_for_type(const ForType &for_type) {
     default:
         user_error << "Unsupported for type\n";
         return Serialize::ForType_Serial;
+    }
+}
+
+Serialize::Partition Serializer::serialize_partition(const Partition &partition) {
+    switch (partition) {
+    case Halide::Partition::Auto:
+        return Serialize::Partition::Partition_Auto;
+    case Halide::Partition::Never:
+        return Serialize::Partition::Partition_Never;
+    case Halide::Partition::Always:
+        return Serialize::Partition::Partition_Always;
+    default:
+        user_error << "Unsupported loop partition policy\n";
+        return Serialize::Partition::Partition_Auto;
     }
 }
 
@@ -428,13 +444,14 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto min_serialized = serialize_expr(builder, for_stmt->min);
         const auto extent_serialized = serialize_expr(builder, for_stmt->extent);
         const Serialize::ForType for_type = serialize_for_type(for_stmt->for_type);
+        const Serialize::Partition partition_policy = serialize_partition(for_stmt->partition_policy);
         const Serialize::DeviceAPI device_api = serialize_device_api(for_stmt->device_api);
         const auto body_serialized = serialize_stmt(builder, for_stmt->body);
         return std::make_pair(Serialize::Stmt::Stmt_For,
                               Serialize::CreateFor(builder, name_serialized,
                                                    min_serialized.first, min_serialized.second,
                                                    extent_serialized.first, extent_serialized.second,
-                                                   for_type, device_api,
+                                                   for_type, partition_policy, device_api,
                                                    body_serialized.first, body_serialized.second)
                                   .Union());
     }
@@ -1210,7 +1227,8 @@ Offset<Serialize::Dim> Serializer::serialize_dim(FlatBufferBuilder &builder, con
     const auto for_type_serialized = serialize_for_type(dim.for_type);
     const auto device_api_serialized = serialize_device_api(dim.device_api);
     const auto dim_type_serialized = serialize_dim_type(dim.dim_type);
-    return Serialize::CreateDim(builder, var_serialized, for_type_serialized, device_api_serialized, dim_type_serialized);
+    const auto partition_policy_serialized = serialize_partition(dim.partition_policy);
+    return Serialize::CreateDim(builder, var_serialized, for_type_serialized, device_api_serialized, dim_type_serialized, partition_policy_serialized);
 }
 
 Offset<Serialize::FuseLoopLevel> Serializer::serialize_fuse_loop_level(FlatBufferBuilder &builder, const FuseLoopLevel &fuse_loop_level) {
@@ -1363,10 +1381,14 @@ Offset<Serialize::ExternFuncArgument> Serializer::serialize_extern_func_argument
     }
 }
 
-Offset<Serialize::Buffer> Serializer::serialize_buffer(FlatBufferBuilder &builder, const Buffer<> &buffer) {
+Offset<Serialize::Buffer> Serializer::serialize_buffer(FlatBufferBuilder &builder, Buffer<> buffer) {
     if (!buffer.defined()) {
         return Serialize::CreateBuffer(builder, false);
     }
+    if (buffer.device_dirty()) {
+        user_error << "Cannot serialize on-device buffer: " << buffer.name() << "\n";
+    }
+    buffer.copy_to_host();
     const auto name_serialized = serialize_string(builder, buffer.name());
     const auto type_serialized = serialize_type(builder, buffer.type());
     const int32_t dimensions = buffer.dimensions();
@@ -1458,7 +1480,7 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
 
     std::vector<Offset<Serialize::Buffer>> buffers_serialized;
     buffers_serialized.reserve(buffers_in_pipeline.size());
-    for (const auto &buffer : buffers_in_pipeline) {
+    for (auto &buffer : buffers_in_pipeline) {
         buffers_serialized.push_back(serialize_buffer(builder, buffer.second));
     }
 

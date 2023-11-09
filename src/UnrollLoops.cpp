@@ -69,7 +69,7 @@ class UnrollLoops : public IRMutator {
                 user_warning << "HL_PERMIT_FAILED_UNROLL is allowing us to unroll a non-constant loop into a serial loop. Did you mean to do this?\n";
                 body = mutate(body);
                 return For::make(for_loop->name, for_loop->min, for_loop->extent,
-                                 ForType::Serial, for_loop->device_api, std::move(body));
+                                 ForType::Serial, for_loop->partition_policy, for_loop->device_api, std::move(body));
             }
 
             user_assert(e)

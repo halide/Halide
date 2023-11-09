@@ -2083,6 +2083,12 @@ tutorial_%: $(BIN_DIR)/tutorial_% $(TMP_DIR)/images/rgb.png $(TMP_DIR)/images/gr
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
+# Skip the serialization tutorial, if we didn't build -DWITH_SERIALIZATION
+ifeq (,$(shell which flatc))
+tutorial_lesson_23_serialization:
+	@echo "Skipping tutorial lesson 23 (serialization not enabled) ..."
+endif
+
 test_mullapudi2016: $(MULLAPUDI2016_TESTS:$(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp=mullapudi2016_%)
 
 mullapudi2016_%: $(BIN_DIR)/mullapudi2016_% $(BIN_MULLAPUDI2016)
@@ -2467,7 +2473,7 @@ $(DISTRIB_DIR)/bin/featurization_to_sample $(DISTRIB_DIR)/bin/get_host_target: $
 	@mkdir -p $(@D)
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/common/Makefile $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	for TOOL in featurization_to_sample get_host_target; do \
-    		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
 	done
 
 # Adams2019 also includes autotuning tools
@@ -2476,7 +2482,7 @@ $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT): $(BIN_DIR)/libautosc
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/adams2019_retrain_cost_model $(BIN_DIR)/adams2019_weightsdir_to_weightsfile HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	cp $< $(DISTRIB_DIR)/lib/
 	for TOOL in adams2019_retrain_cost_model adams2019_weightsdir_to_weightsfile; do \
-    		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
 	done
 	cp $(SRC_DIR)/autoschedulers/adams2019/adams2019_autotune_loop.sh $(DISTRIB_DIR)/tools/
 ifeq ($(UNAME), Darwin)

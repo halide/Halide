@@ -590,12 +590,15 @@ const std::map<std::string, Type> &get_halide_type_enum_map() {
         {"int8", Int(8)},
         {"int16", Int(16)},
         {"int32", Int(32)},
+        {"int64", Int(64)},
         {"uint8", UInt(8)},
         {"uint16", UInt(16)},
         {"uint32", UInt(32)},
+        {"uint64", UInt(64)},
         {"float16", Float(16)},
         {"float32", Float(32)},
-        {"float64", Float(64)}};
+        {"float64", Float(64)},
+        {"bfloat16", BFloat(16)}};
     return halide_type_enum_map;
 }
 

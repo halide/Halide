@@ -348,6 +348,7 @@ public:
     Stage &parallel(const VarOrRVar &var, const Expr &task_size, TailStrategy tail = TailStrategy::Auto);
     Stage &vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
     Stage &unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+    Stage &partition(const VarOrRVar &var, Partition partition_policy);
     Stage &tile(const VarOrRVar &x, const VarOrRVar &y,
                 const VarOrRVar &xo, const VarOrRVar &yo,
                 const VarOrRVar &xi, const VarOrRVar &yi, const Expr &xfactor, const Expr &yfactor,
@@ -1441,6 +1442,13 @@ public:
      * some constant factor. After this call, var refers to the outer
      * dimension of the split. 'factor' must be an integer. */
     Func &unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+
+    /** Set the loop partition policy. Loop partitioning can be useful to
+     * optimize boundary conditions (such as clamp_edge). Loop partitioning
+     * splits a for loop into three for loops: a prologue, a steady-state,
+     * and an epilogue.
+     * The default policy is Auto. */
+    Func &partition(const VarOrRVar &var, Partition partition_policy);
 
     /** Statically declare that the range over which a function should
      * be evaluated is given by the second and third arguments. This

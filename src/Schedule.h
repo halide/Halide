@@ -13,6 +13,7 @@
 #include "DeviceAPI.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
+#include "LoopPartitioningDirective.h"
 #include "Parameter.h"
 #include "PrefetchDirective.h"
 
@@ -440,6 +441,9 @@ struct Dim {
     /** The DimType tells us what transformations are legal on this
      * loop (see the DimType enum above). */
     DimType dim_type;
+
+    /** The strategy for loop partitioning. */
+    Partition partition_policy;
 
     /** Can this loop be evaluated in any order (including in
      * parallel)? Equivalently, are there no data hazards between

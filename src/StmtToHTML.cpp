@@ -1306,7 +1306,8 @@ private:
         int max_block_cost = cost_model.get_max_compute_cost(true);
         int line_cost = cost_model.get_compute_cost(op, false);
         int block_cost = cost_model.get_compute_cost(op, true);
-        if (dynamic_cast<const LetStmt *>(op) || dynamic_cast<const Allocate *>(op)) {
+        if ((op != nullptr) &&
+            ((op->node_type == IRNodeType::LetStmt) || op->node_type == IRNodeType::Allocate)) {
             block_cost = line_cost;
         }
         std::string _id = "cc-" + std::to_string(id);
@@ -1319,7 +1320,8 @@ private:
         int max_block_cost = cost_model.get_max_data_movement_cost(true);
         int line_cost = cost_model.get_data_movement_cost(op, false);
         int block_cost = cost_model.get_data_movement_cost(op, true);
-        if (dynamic_cast<const LetStmt *>(op) || dynamic_cast<const Allocate *>(op)) {
+        if ((op != nullptr) &&
+            ((op->node_type == IRNodeType::LetStmt) || op->node_type == IRNodeType::Allocate)) {
             block_cost = line_cost;
         }
         std::string _id = "dc-" + std::to_string(id);
