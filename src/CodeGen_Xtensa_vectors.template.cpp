@@ -556,6 +556,26 @@ HALIDE_ALWAYS_INLINE native_vector_u16 load_predicated<native_vector_u16, native
 }
 
 template<>
+HALIDE_ALWAYS_INLINE native_vector_f32 load_predicated<native_vector_f32, native_vector_i32, native_mask_i32, float, VECTOR_WIDTH_F32>(const void *base, const native_vector_i32 &offset, const native_mask_i32 &predicate) {
+    int __attribute__((aligned(XCHAL_VISION_SIMD8))) offsets[VECTOR_WIDTH_F32];
+    aligned_store<native_vector_i32, int32_t, VECTOR_WIDTH_F32>(offset, &offsets[0], 0);
+    native_vector_i32 vmask = IVP_MOVN_2X32T(native_vector_i32(1), native_vector_i32(0), predicate);
+    int32_t __attribute__((aligned(XCHAL_VISION_SIMD8))) mask[VECTOR_WIDTH_F32];
+    aligned_store<native_vector_i32, int32_t, VECTOR_WIDTH_F32>(vmask, &mask[0], 0);
+
+    float __attribute__((aligned(XCHAL_VISION_SIMD8))) output[VECTOR_WIDTH_F32];
+    for (int i = 0; i < VECTOR_WIDTH_F32; i++) {
+        if (mask[i] == 1) {
+            output[i] = ((const float *)base)[offsets[i]];
+        } else {
+            output[i] = 0;
+        }
+    }
+
+    return *((native_vector_f32 *)output);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE native_vector_i32_x2 load_predicated<native_vector_i32_x2, native_vector_i32_x2, native_mask_i16, int32_t, 2 * VECTOR_WIDTH_I32>(const void *base, const native_vector_i32_x2 &offset, const native_mask_i16 &predicate) {
     int __attribute__((aligned(XCHAL_VISION_SIMD8))) offsets[2 * VECTOR_WIDTH_I32];
     aligned_store<native_vector_i32_x2, int32_t, 2 * VECTOR_WIDTH_I32>(offset, &offsets[0], 0);
@@ -579,9 +599,9 @@ template<>
 HALIDE_ALWAYS_INLINE native_vector_f32_x2 load_predicated<native_vector_f32_x2, native_vector_i32_x2, native_mask_i16, float, 2 * VECTOR_WIDTH_F32>(const void *base, const native_vector_i32_x2 &offset, const native_mask_i16 &predicate) {
     int __attribute__((aligned(XCHAL_VISION_SIMD8))) offsets[2 * VECTOR_WIDTH_F32];
     aligned_store<native_vector_i32_x2, int32_t, 2 * VECTOR_WIDTH_F32>(offset, &offsets[0], 0);
-    native_vector_u16 vmask = IVP_MOVNX16T(native_vector_u16(1), native_vector_u16(0), predicate);
-    uint8_t __attribute__((aligned(XCHAL_VISION_SIMD8))) mask[2 * VECTOR_WIDTH_F32];
-    aligned_store<native_vector_u16, uint16_t, 2 * VECTOR_WIDTH_F32>(vmask, &mask[0], 0);
+    native_vector_i16 vmask = IVP_MOVNX16T(native_vector_i16(1), native_vector_i16(0), predicate);
+    int16_t __attribute__((aligned(XCHAL_VISION_SIMD8))) mask[2 * VECTOR_WIDTH_F32];
+    aligned_store<native_vector_i16, int16_t, 2 * VECTOR_WIDTH_F32>(vmask, &mask[0], 0);
 
     float __attribute__((aligned(XCHAL_VISION_SIMD8))) output[2 * VECTOR_WIDTH_F32];
     for (int i = 0; i < 2 * VECTOR_WIDTH_F32; i++) {
@@ -599,9 +619,9 @@ template<>
 HALIDE_ALWAYS_INLINE native_vector_f32_x4 load_predicated<native_vector_f32_x4, native_vector_i32_x4, native_mask_i8, float, 4 * VECTOR_WIDTH_F32>(const void *base, const native_vector_i32_x4 &offset, const native_mask_i8 &predicate) {
     int __attribute__((aligned(XCHAL_VISION_SIMD8))) offsets[4 * VECTOR_WIDTH_F32];
     aligned_store<native_vector_i32_x4, int32_t, 4 * VECTOR_WIDTH_F32>(offset, &offsets[0], 0);
-    native_vector_u8 vmask = IVP_MOV2NX8T(native_vector_u8(1), native_vector_u8(0), predicate);
-    uint8_t __attribute__((aligned(XCHAL_VISION_SIMD8))) mask[4 * VECTOR_WIDTH_F32];
-    aligned_store<native_vector_u8, uint8_t, 4 * VECTOR_WIDTH_F32>(vmask, &mask[0], 0);
+    native_vector_i8 vmask = IVP_MOV2NX8T(native_vector_i8(1), native_vector_i8(0), predicate);
+    int8_t __attribute__((aligned(XCHAL_VISION_SIMD8))) mask[4 * VECTOR_WIDTH_F32];
+    aligned_store<native_vector_i8, int8_t, 4 * VECTOR_WIDTH_F32>(vmask, &mask[0], 0);
 
     float __attribute__((aligned(XCHAL_VISION_SIMD8))) output[4 * VECTOR_WIDTH_F32];
     for (int i = 0; i < 4 * VECTOR_WIDTH_F32; i++) {
@@ -614,7 +634,6 @@ HALIDE_ALWAYS_INLINE native_vector_f32_x4 load_predicated<native_vector_f32_x4, 
 
     return *((native_vector_f32_x4 *)output);
 }
-
 template<>
 HALIDE_ALWAYS_INLINE native_vector_i32_x4 load_predicated<native_vector_i32_x4, native_vector_i32_x4, native_mask_i8, int32_t, 4 * VECTOR_WIDTH_I32>(const void *base, const native_vector_i32_x4 &offset, const native_mask_i8 &predicate) {
     int __attribute__((aligned(XCHAL_VISION_SIMD8))) offsets[4 * VECTOR_WIDTH_I32];
