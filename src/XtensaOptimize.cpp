@@ -1456,7 +1456,7 @@ class ConvertGatherLoadIndex : public IRMutator {
     using IRMutator::visit;
     Scope<void> allocations;
 
-    Stmt visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         if (op->memory_type == MemoryType::VTCM || op->memory_type == MemoryType::Stack) {
             allocations.push(op->name);
         }
