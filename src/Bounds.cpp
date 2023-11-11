@@ -3720,7 +3720,7 @@ void bounds_test() {
     Buffer<int32_t> in(10);
     in.set_name("input");
 
-    Stmt loop = For::make("x", 3, 10, ForType::Serial, DeviceAPI::Host,
+    Stmt loop = For::make("x", 3, 10, ForType::Serial, Partition::Auto, DeviceAPI::Host,
                           Provide::make("output",
                                         {Add::make(Call::make(in, input_site_1),
                                                    Call::make(in, input_site_2))},

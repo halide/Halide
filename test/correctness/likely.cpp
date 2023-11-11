@@ -69,6 +69,7 @@ public:
         s.accept(&c);
         if (c.store_count != correct) {
             printf("There were %d stores to %s instead of %d\n", c.store_count, func.c_str(), correct);
+            debug(1) << s << "\n";
             exit(1);
         }
         return s;
@@ -105,6 +106,10 @@ int main(int argc, char **argv) {
     {
         Func g = BoundaryConditions::repeat_edge(f, {{0, 100}});
         count_partitions(g, 3);
+
+        // check that disabling works.
+        g.partition(x, Partition::Never);
+        count_partitions(g, 1);
     }
 
     // If you vectorize or otherwise split, then the last vector
@@ -116,6 +121,10 @@ int main(int argc, char **argv) {
         g(x) = f(x);
         g.vectorize(x, 8);
         count_partitions(g, 2);
+
+        // check that disabling works.
+        g.partition(x, Partition::Never);
+        count_partitions(g, 1);
     }
 
     // The slicing applies to every loop level starting from the
@@ -131,6 +140,42 @@ int main(int argc, char **argv) {
         g.compute_root();
         Func h = BoundaryConditions::mirror_image(g, {{0, 10}, {0, 10}});
         count_partitions(h, 5);
+
+        {
+            debug(1) << "Never partition y, always partition x:\n";
+            Func h2 = h;
+            // check that disabling works.
+            h2.partition(x, Partition::Always);
+            h2.partition(y, Partition::Never);
+            count_partitions(h2, 3);  // We expect left-center-right
+        }
+
+        {
+            debug(1) << "Never partition x, always partition y:\n";
+            Func h2 = h;
+            // check that disabling works.
+            h2.partition(x, Partition::Never);
+            h2.partition(y, Partition::Always);
+            count_partitions(h2, 3);  // We expect top-middle-bottom
+        }
+
+        {
+            debug(1) << "Never partition x and y.\n";
+            Func h2 = h;
+            // check that disabling works.
+            h2.partition(x, Partition::Never);
+            h2.partition(y, Partition::Never);
+            count_partitions(h2, 1);
+        }
+
+        {
+            debug(1) << "Always partition x and y.\n";
+            Func h2 = h;
+            // check that disabling works.
+            h2.partition(x, Partition::Always);
+            h2.partition(y, Partition::Always);
+            count_partitions(h2, 5);
+        }
     }
 
     // If you split and also have a boundary condition, or have
@@ -184,6 +229,10 @@ int main(int argc, char **argv) {
         g(x) = f(clamp(x, 0, 10));  // treated as clamp(likely(x), 0, 10)
         g.vectorize(x, 8);
         count_partitions(g, 3);
+
+        // check that disabling works.
+        g.partition(x, Partition::Never);
+        count_partitions(g, 1);
     }
 
     // Using the likely intrinsic pulls some IR relating to the

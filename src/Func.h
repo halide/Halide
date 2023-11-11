@@ -348,6 +348,7 @@ public:
     Stage &parallel(const VarOrRVar &var, const Expr &task_size, TailStrategy tail = TailStrategy::Auto);
     Stage &vectorize(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
     Stage &unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
+    Stage &partition(const VarOrRVar &var, Partition partition_policy);
     Stage &tile(const VarOrRVar &x, const VarOrRVar &y,
                 const VarOrRVar &xo, const VarOrRVar &yo,
                 const VarOrRVar &xi, const VarOrRVar &yi, const Expr &xfactor, const Expr &yfactor,
@@ -1442,6 +1443,13 @@ public:
      * dimension of the split. 'factor' must be an integer. */
     Func &unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
+    /** Set the loop partition policy. Loop partitioning can be useful to
+     * optimize boundary conditions (such as clamp_edge). Loop partitioning
+     * splits a for loop into three for loops: a prologue, a steady-state,
+     * and an epilogue.
+     * The default policy is Auto. */
+    Func &partition(const VarOrRVar &var, Partition partition_policy);
+
     /** Statically declare that the range over which a function should
      * be evaluated is given by the second and third arguments. This
      * can let Halide perform some optimizations. E.g. if you know
@@ -2335,6 +2343,95 @@ public:
     /** Equivalent to \ref Func::store_at, but schedules storage
      * outside the outermost loop. */
     Func &store_root();
+
+    /** Hoist storage for this function within f's loop over
+     * var. This is different from \ref Func::store_at, because hoist_storage
+     * simply moves an actual allocation to a given loop level and
+     * doesn't trigger any of the optimizations such as sliding window.
+     * Hoisting storage is optional and can be used as an optimization
+     * to avoid unnecessary allocations by moving it out from an inner
+     * loop.
+     *
+     * Consider again the pipeline from \ref Func::compute_at :
+     \code
+     Func f, g;
+     Var x, y;
+     g(x, y) = x*y;
+     f(x, y) = g(x, y) + g(x, y+1) + g(x+1, y) + g(x+1, y+1);
+     \endcode
+     *
+     * If we schedule f like so:
+     *
+     \code
+     g.compute_at(f, x);
+     \endcode
+     *
+     * Then the C code equivalent to this pipeline will look like this
+     *
+     \code
+
+     int f[height][width];
+     for (int y = 0; y < height; y++) {
+         for (int x = 0; x < width; x++) {
+             int g[2][2];
+             g[0][0] = x*y;
+             g[0][1] = (x+1)*y;
+             g[1][0] = x*(y+1);
+             g[1][1] = (x+1)*(y+1);
+             f[y][x] = g[0][0] + g[1][0] + g[0][1] + g[1][1];
+         }
+     }
+
+     \endcode
+     *
+     * Note the allocation for g inside of the loop over variable x which
+     * can happen for each iteration of the inner loop (in total height * width times).
+     * In some cases allocation can be expensive, so it might be better to do it once
+     * and reuse allocated memory across all iterations of the loop.
+     *
+     * This can be done by scheduling g like so:
+     *
+     \code
+     g.compute_at(f, x).hoist_storage(f, Var::outermost());
+     \endcode
+     *
+     * Then the C code equivalent to this pipeline will look like this
+     *
+     \code
+
+     int f[height][width];
+     int g[2][2];
+     for (int y = 0; y < height; y++) {
+         for (int x = 0; x < width; x++) {
+             g[0][0] = x*y;
+             g[0][1] = (x+1)*y;
+             g[1][0] = x*(y+1);
+             g[1][1] = (x+1)*(y+1);
+             f[y][x] = g[0][0] + g[1][0] + g[0][1] + g[1][1];
+         }
+     }
+
+     \endcode
+     *
+     * hoist_storage can be used together with \ref Func::store_at and
+     * \ref Func::fold_storage (for example, to hoist the storage allocated
+     * after sliding window optimization).
+     *
+     */
+    Func &hoist_storage(const Func &f, const Var &var);
+
+    /** Equivalent to the version of hoist_storage that takes a Var, but
+     * schedules storage within the loop over a dimension of a
+     * reduction domain */
+    Func &hoist_storage(const Func &f, const RVar &var);
+
+    /** Equivalent to the version of hoist_storage that takes a Var, but
+     * schedules storage at a given LoopLevel. */
+    Func &hoist_storage(LoopLevel loop_level);
+
+    /** Equivalent to \ref Func::hoist_storage_root, but schedules storage
+     * outside the outermost loop. */
+    Func &hoist_storage_root();
 
     /** Aggressively inline all uses of this function. This is the
      * default schedule, so you're unlikely to need to call this. For

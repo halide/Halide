@@ -941,7 +941,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         const auto &iter = std::find_if(dims.begin(), dims.end(),
                                         [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
         if (iter == dims.end()) {
-            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
+            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
             dims.insert(dims.end() - 1, d);
         }
     }
@@ -1628,6 +1628,24 @@ Stage &Stage::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail
         unroll(tmp);
     }
 
+    return *this;
+}
+
+Stage &Stage::partition(const VarOrRVar &var, Partition policy) {
+    definition.schedule().touched() = true;
+    bool found = false;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
+            found = true;
+            dim.partition_policy = policy;
+        }
+    }
+    user_assert(found)
+        << "In schedule for " << name()
+        << ", could not find var " << var.name()
+        << " to set loop partition policy.\n"
+        << dump_argument_list();
     return *this;
 }
 
@@ -2318,6 +2336,12 @@ Func &Func::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail) 
     return *this;
 }
 
+Func &Func::partition(const VarOrRVar &var, Partition policy) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).partition(var, policy);
+    return *this;
+}
+
 Func &Func::bound(const Var &var, Expr min, Expr extent) {
     user_assert(!min.defined() || Int(32).can_represent(min.type())) << "Can't represent min bound in int32\n";
     user_assert(extent.defined()) << "Extent bound of a Func can't be undefined\n";
@@ -2801,6 +2825,24 @@ Func &Func::store_at(const Func &f, const Var &var) {
 
 Func &Func::store_root() {
     return store_at(LoopLevel::root());
+}
+
+Func &Func::hoist_storage(LoopLevel loop_level) {
+    invalidate_cache();
+    func.schedule().hoist_storage_level() = std::move(loop_level);
+    return *this;
+}
+
+Func &Func::hoist_storage(const Func &f, const RVar &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
+Func &Func::hoist_storage(const Func &f, const Var &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
+Func &Func::hoist_storage_root() {
+    return hoist_storage(LoopLevel::root());
 }
 
 Func &Func::compute_inline() {

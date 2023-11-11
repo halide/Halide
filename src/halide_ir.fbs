@@ -24,6 +24,7 @@ union Stmt {
     Acquire,
     Fork,
     Atomic,
+    HoistedStorage,
     UndefinedStmt,
 }
 
@@ -71,6 +72,12 @@ enum ForType: byte {
     GPUBlock,
     GPUThread,
     GPULane,
+}
+
+enum Partition: byte {
+    Auto,
+    Never,
+    Always,
 }
 
 enum DeviceAPI: byte {
@@ -127,6 +134,7 @@ table For {
     min: Expr;
     extent: Expr;
     for_type: ForType;
+    partition_policy: Partition;
     device_api: DeviceAPI;
     body: Stmt;
 }
@@ -230,6 +238,11 @@ table Fork {
 table Atomic {
     producer_name: string;
     mutex_name: string;
+    body: Stmt;
+}
+
+table HoistedStorage {
+    name: string;
     body: Stmt;
 }
 
@@ -490,6 +503,7 @@ table WrapperRef {
 table FuncSchedule {
     store_level: LoopLevel;
     compute_level: LoopLevel;
+    hoist_storage_level: LoopLevel;
     storage_dims: [StorageDim];
     bounds: [Bound];
     estimates: [Bound];
@@ -544,6 +558,7 @@ table Dim {
     for_type: ForType;
     device_api: DeviceAPI;
     dim_type: DimType;
+    partition_policy: Partition;
 }
 
 enum LoopAlignStrategy: ubyte {

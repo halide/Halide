@@ -581,6 +581,24 @@ void Pipeline::compile_jit(const Target &target_arg) {
     // Clear all cached info in case there is an error.
     contents->invalidate_cache();
 
+#ifdef WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
+    std::map<std::string, Parameter> external_params;
+    std::vector<uint8_t> data;
+    serialize_pipeline(*this, data, external_params);
+    Pipeline deserialized_pipe = deserialize_pipeline(data, external_params);
+    std::vector<Function> outputs;
+    for (const Func &f : deserialized_pipe.outputs()) {
+        outputs.push_back(f.function());
+    }
+    // We save the original output functions and requirements,
+    // and restore them once all lowering is done,
+    // so that reschedule/reorder storage can be properly handled.
+    std::vector<Function> origin_outputs = contents->outputs;
+    std::vector<Internal::Stmt> origin_requirements = contents->requirements;
+    contents->outputs = outputs;
+    contents->requirements = deserialized_pipe.requirements();
+#endif
+
     // Infer an arguments vector
     infer_arguments();
 
@@ -596,6 +614,11 @@ void Pipeline::compile_jit(const Target &target_arg) {
     Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
     contents->jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, contents->jit_externs, target);
+#ifdef WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING
+    // Restore the original outputs and requirements.
+    contents->outputs = origin_outputs;
+    contents->requirements = origin_requirements;
+#endif
 }
 
 Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, const Target &target_arg) {
