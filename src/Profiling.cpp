@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <limits>
 #include <map>
 #include <string>
 
@@ -397,7 +396,7 @@ private:
             most_recently_set_func = -1;
         }
 
-        Stmt stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+        Stmt stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
 
         if (update_active_threads) {
             stmt = suspend_thread(stmt, profiler_state);

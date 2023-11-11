@@ -11,6 +11,8 @@ struct filter {
     const char *name;
     int (*fn)(halide_buffer_t *,   // float32
               halide_buffer_t *,   // float64
+              halide_buffer_t *,   // float16
+              halide_buffer_t *,   // bfloat16
               halide_buffer_t *,   // int8
               halide_buffer_t *,   // uint8
               halide_buffer_t *,   // int16
@@ -33,7 +35,7 @@ extern "C" void halide_print(void *, const char *msg) {
 }
 
 template<typename T>
-halide_buffer_t make_buffer(int w, int h) {
+halide_buffer_t make_buffer(int w, int h, halide_type_t halide_type) {
     T *mem = NULL;
 #ifdef __APPLE__
     // memalign() isn't present on OSX, but posix_memalign is
@@ -53,7 +55,7 @@ halide_buffer_t make_buffer(int w, int h) {
     buf.host = (uint8_t *)mem;
     buf.dim[0].extent = w;
     buf.dim[1].extent = h;
-    buf.type = halide_type_of<T>();
+    buf.type = halide_type;
     buf.dim[0].stride = 1;
     buf.dim[1].stride = w;
     buf.dim[0].min = -128;
@@ -73,18 +75,20 @@ int main(int argc, char **argv) {
     bool error = false;
     // Make some input buffers
     halide_buffer_t bufs[] = {
-        make_buffer<float>(W, H),
-        make_buffer<double>(W, H),
-        make_buffer<int8_t>(W, H),
-        make_buffer<uint8_t>(W, H),
-        make_buffer<int16_t>(W, H),
-        make_buffer<uint16_t>(W, H),
-        make_buffer<int32_t>(W, H),
-        make_buffer<uint32_t>(W, H),
-        make_buffer<int64_t>(W, H),
-        make_buffer<uint64_t>(W, H)};
+        make_buffer<float>(W, H, halide_type_of<float>()),
+        make_buffer<double>(W, H, halide_type_of<double>()),
+        make_buffer<uint16_t>(W, H, halide_type_t(halide_type_float, 16)),
+        make_buffer<uint16_t>(W, H, halide_type_t(halide_type_bfloat, 16)),
+        make_buffer<int8_t>(W, H, halide_type_of<int8_t>()),
+        make_buffer<uint8_t>(W, H, halide_type_of<uint8_t>()),
+        make_buffer<int16_t>(W, H, halide_type_of<int16_t>()),
+        make_buffer<uint16_t>(W, H, halide_type_of<uint16_t>()),
+        make_buffer<int32_t>(W, H, halide_type_of<int32_t>()),
+        make_buffer<uint32_t>(W, H, halide_type_of<uint32_t>()),
+        make_buffer<int64_t>(W, H, halide_type_of<int64_t>()),
+        make_buffer<uint64_t>(W, H, halide_type_of<uint64_t>())};
 
-    halide_buffer_t out = make_buffer<double>(1, 1);
+    halide_buffer_t out = make_buffer<double>(1, 1, halide_type_of<double>());
 
     double *out_value = (double *)(out.host);
 
@@ -101,6 +105,8 @@ int main(int argc, char **argv) {
              bufs + 7,
              bufs + 8,
              bufs + 9,
+             bufs + 10,
+             bufs + 11,
              &out);
         if (*out_value) {
             printf("Error: %f\n", *out_value);

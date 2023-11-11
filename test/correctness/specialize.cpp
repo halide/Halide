@@ -447,6 +447,8 @@ int main(int argc, char **argv) {
         Buffer<int> input(3, 3), output(3, 3);
         // Shouldn't throw a bounds error:
         im.set(input);
+        cond1.set(false);
+        cond2.set(false);
         out.realize(output);
 
         if (if_then_else_count != 1) {
@@ -476,6 +478,8 @@ int main(int argc, char **argv) {
         Buffer<int> input(3, 3), output(3, 3);
         // Shouldn't throw a bounds error:
         im.set(input);
+        cond1.set(false);
+        cond2.set(false);
         out.realize(output);
 
         // There should have been 2 Ifs total: They are the

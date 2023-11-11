@@ -314,22 +314,25 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     ExprInfo index_info;
     Expr index = mutate(op->index, &index_info);
 
-    // If the load is fully out of bounds, replace it with undef.
-    // This should only occur inside branches that make the load unreachable,
-    // but perhaps the branch was hard to prove constant true or false. This
-    // provides an alternative mechanism to simplify these unreachable loads.
-    string alloc_extent_name = op->name + ".total_extent_bytes";
-    if (bounds_and_alignment_info.contains(alloc_extent_name)) {
-        if (index_info.max_defined && index_info.max < 0) {
-            in_unreachable = true;
-            return unreachable(op->type);
-        }
-        const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
-        if (alloc_info.max_defined && index_info.min_defined) {
-            int index_min_bytes = index_info.min * op->type.bytes();
-            if (index_min_bytes > alloc_info.max) {
+    // If an unpredicated load is fully out of bounds, replace it with an
+    // unreachable intrinsic.  This should only occur inside branches that make
+    // the load unreachable, but perhaps the branch was hard to prove constant
+    // true or false. This provides an alternative mechanism to simplify these
+    // unreachable loads.
+    if (is_const_one(op->predicate)) {
+        string alloc_extent_name = op->name + ".total_extent_bytes";
+        if (bounds_and_alignment_info.contains(alloc_extent_name)) {
+            if (index_info.max_defined && index_info.max < 0) {
                 in_unreachable = true;
                 return unreachable(op->type);
+            }
+            const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
+            if (alloc_info.max_defined && index_info.min_defined) {
+                int index_min_bytes = index_info.min * op->type.bytes();
+                if (index_min_bytes > alloc_info.max) {
+                    in_unreachable = true;
+                    return unreachable(op->type);
+                }
             }
         }
     }
@@ -347,7 +350,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     const Shuffle *s_index = index.as<Shuffle>();
     if (is_const_zero(predicate)) {
         // Predicate is always false
-        return undef(op->type);
+        return make_zero(op->type);
     } else if (b_index && is_const_one(predicate)) {
         // Load of a broadcast should be broadcast of the load
         Expr new_index = b_index->value;

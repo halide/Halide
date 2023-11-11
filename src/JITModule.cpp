@@ -334,7 +334,11 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     // Build TargetMachine
     llvm::orc::JITTargetMachineBuilder tm_builder(llvm::Triple(m->getTargetTriple()));
     tm_builder.setOptions(options);
+#if LLVM_VERSION >= 180
+    tm_builder.setCodeGenOptLevel(CodeGenOptLevel::Aggressive);
+#else
     tm_builder.setCodeGenOptLevel(CodeGenOpt::Aggressive);
+#endif
     if (target.arch == Target::Arch::RISCV) {
         tm_builder.setCodeModel(llvm::CodeModel::Medium);
     }

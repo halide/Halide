@@ -13,6 +13,7 @@
 #include "DeviceAPI.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
+#include "LoopPartitioningDirective.h"
 #include "Parameter.h"
 #include "PrefetchDirective.h"
 
@@ -441,6 +442,9 @@ struct Dim {
      * loop (see the DimType enum above). */
     DimType dim_type;
 
+    /** The strategy for loop partitioning. */
+    Partition partition_policy;
+
     /** Can this loop be evaluated in any order (including in
      * parallel)? Equivalently, are there no data hazards between
      * evaluations of the Func at distinct values of this var? */
@@ -644,8 +648,10 @@ public:
     // @{
     const LoopLevel &store_level() const;
     const LoopLevel &compute_level() const;
+    const LoopLevel &hoist_storage_level() const;
     LoopLevel &store_level();
     LoopLevel &compute_level();
+    LoopLevel &hoist_storage_level();
     // @}
 
     /** Pass an IRVisitor through to all Exprs referenced in the

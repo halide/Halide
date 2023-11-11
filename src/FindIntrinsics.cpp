@@ -203,6 +203,7 @@ protected:
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
+    IRMatcher::Wild<3> w;
     IRMatcher::WildConst<0> c0;
     IRMatcher::WildConst<1> c1;
 
@@ -255,7 +256,7 @@ protected:
                         result = widen_right_add(b, narrow_a);
                     }
                     internal_assert(result.type() == op->type);
-                    return result;
+                    return mutate(result);
                 } else if (narrow_b.defined()) {
                     Expr result;
                     if (a.type().code() != narrow_b.type().code()) {
@@ -420,7 +421,7 @@ protected:
                         result = widen_right_mul(b, narrow_a);
                     }
                     internal_assert(result.type() == op->type);
-                    return result;
+                    return mutate(result);
                 } else if (narrow_b.defined()) {
                     Expr result;
                     if (a.type().code() != narrow_b.type().code()) {
@@ -771,6 +772,12 @@ protected:
             rewrite(widen_right_add(widen_right_sub(x, y), z),
                     x + cast(op->type, widening_sub(z, y)),
                     is_x_same_uint) ||
+
+            // (x + y + widen(z)) + widen(w) = x + y + widening_add(z, w)
+            rewrite(widen_right_add(x + widen_right_add(y, z), w),
+                    x + (y + widening_add(z, w)),
+                    // We only care about integers, this should be trivially true.
+                    is_x_same_int_or_uint) ||
 
             // Saturating patterns.
             rewrite(saturating_cast(op->type, widening_add(x, y)),

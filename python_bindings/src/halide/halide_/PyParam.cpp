@@ -6,8 +6,6 @@
 namespace Halide {
 namespace PythonBindings {
 
-using Halide::Internal::Parameter;
-
 namespace {
 
 template<typename TYPE>
@@ -40,29 +38,6 @@ void add_param_methods(py::class_<Param<>> &param_class) {
 }  // namespace
 
 void define_param(py::module &m) {
-    // This is a "just-enough" wrapper around Parameter to let us pass it back
-    // and forth between Py and C++. It deliberately exposes very few methods,
-    // and we should keep it that way.
-    auto parameter_class =
-        py::class_<Parameter>(m, "InternalParameter")
-            .def(py::init<const Parameter &>(), py::arg("p"))
-            .def("defined", &Parameter::defined)
-            .def("type", &Parameter::type)
-            .def("dimensions", &Parameter::dimensions)
-            .def("_to_argument", [](const Parameter &p) -> Argument {
-                return Argument(p.name(),
-                                p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                                p.type(),
-                                p.dimensions(),
-                                p.get_argument_estimates());
-            })
-            .def("__repr__", [](const Parameter &p) -> std::string {
-                std::ostringstream o;
-                // Don't leak any info but the name into the repr string.
-                o << "<halide.InternalParameter '" << p.name() << "'>";
-                return o.str();
-            });
-
     auto param_class =
         py::class_<Param<>>(m, "Param")
             .def(py::init<Type>(), py::arg("type"))

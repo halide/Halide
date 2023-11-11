@@ -1,11 +1,11 @@
+
 declare void @llvm.trap() noreturn nounwind
 
 declare <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32>)
 declare <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32>)
 declare <64 x i32> @llvm.hexagon.V6.vshuffvdd.128B(<32 x i32>, <32 x i32>, i32)
 declare <64 x i32> @llvm.hexagon.V6.vdealvdd.128B(<32 x i32>, <32 x i32>, i32)
-declare <32 x i32> @llvm.hexagon.V6.vasrwhsat.128B(<32 x i32>, <32 x i32>, i32)
-declare <32 x i32> @llvm.hexagon.V6.vsathub.128B(<32 x i32>, <32 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vsatuwuh.128B(<32 x i32>, <32 x i32>)
 
 define weak_odr <64 x i32> @halide.hexagon.interleave.vw(<64 x i32> %arg) nounwind uwtable readnone alwaysinline {
   %e = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %arg)
@@ -352,6 +352,52 @@ define weak_odr <64 x i16> @halide.hexagon.trunc_satuh.vw(<64 x i32> %arg) nounw
   %r_32 = call <32 x i32> @llvm.hexagon.V6.vasrwuhsat.128B(<32 x i32> %o, <32 x i32> %e, i32 0)
   %r = bitcast <32 x i32> %r_32 to <64 x i16>
   ret <64 x i16> %r
+}
+
+declare <32 x i32> @llvm.hexagon.V6.vpackeb.128B(<32 x i32>, <32 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.vminuh.128B(<32 x i32>, <32 x i32>)
+declare <32 x i32> @llvm.hexagon.V6.lvsplath.128B(i32)
+
+; We do not have saturating downcasts of unsigned 16bit types. So, we expand these
+; in bitcode here.
+; Note: pack_satub.vuh doesnt interleave its input.
+define weak_odr <128 x i8> @halide.hexagon.pack_satub.vuh(<64 x i32> %arg) nounwind uwtable readnone alwaysinline {
+  %max = call <32 x i32> @llvm.hexagon.V6.lvsplath.128B(i32 255)
+  %lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %arg)
+  %hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %arg)
+  %lo_sat = call <32 x i32> @llvm.hexagon.V6.vminuh.128B(<32 x i32> %lo, <32 x i32> %max)
+  %hi_sat = call <32 x i32> @llvm.hexagon.V6.vminuh.128B(<32 x i32> %hi, <32 x i32> %max)
+  %r_32 = call <32 x i32> @llvm.hexagon.V6.vpackeb.128B(<32 x i32> %hi_sat, <32 x i32> %lo_sat)
+  %r = bitcast <32 x i32> %r_32 to <128 x i8>
+  ret <128 x i8> %r
+}
+
+; We cannot use the same strategy for halide.hexagon.pack_satuh.vuw as we did for halide.hexagon.pack_satub.vuh
+; because HVX doesn't have a native min intrinsic for unsigned words like it does for unsigned half-words.
+; Doing a signed min of an unsigned word with 65535 will make unsigned words > INT32_MAX become negative
+; numbers does yielding the wrong result of 0 on subsequent saturation instead of 65535.
+; Instead, we deinterleave the input double vector first and then use trunc_satuh.vuw. The latter is natively
+; supported by the vsat instruction (vsatuwuh intrinsic). This is also the reason we don't have to
+; provide halide.hexagon.trunc_satuh.vuw in the way that we had to provide halide.hexagon.trunc_satub.vuh below.
+define weak_odr <64 x i16> @halide.hexagon.pack_satuh.vuw(<64 x i32> %arg) nounwind uwtable readnone alwaysinline {
+  %lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %arg)
+  %hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %arg)
+  %deal_dv = call <64 x i32> @llvm.hexagon.V6.vdealvdd.128B(<32 x i32> %hi, <32 x i32> %lo, i32 -4)
+  %e = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %deal_dv)
+  %o = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %deal_dv)
+  %r_32 = call <32 x i32> @llvm.hexagon.V6.vsatuwuh.128B(<32 x i32> %o, <32 x i32> %e)
+  %r = bitcast <32 x i32> %r_32 to <64 x i16>
+  ret <64 x i16> %r
+}
+
+declare <32 x i32> @llvm.hexagon.V6.vasruhubsat.128B(<32 x i32>, <32 x i32>, i32)
+; This is the same as halide.hexagon.pack_satub.vuh except it interleaves its input.
+define weak_odr <128 x i8> @halide.hexagon.trunc_satub.vuh(<64 x i32> %arg) nounwind uwtable readnone alwaysinline {
+  %e = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %arg)
+  %o = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %arg)
+  %r_32 = call <32 x i32> @llvm.hexagon.V6.vasruhubsat.128B(<32 x i32> %o, <32 x i32> %e, i32 0)
+  %r = bitcast <32 x i32> %r_32 to <128 x i8>
+  ret <128 x i8> %r
 }
 
 declare void @llvm.hexagon.V6.vgathermh.128B(i8*, i32, i32, <32 x i32>)

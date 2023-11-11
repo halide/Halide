@@ -35,6 +35,9 @@ int main(int argc, char **argv) {
 #elif defined(TEST_METAL)
     printf("TEST_METAL enabled for gpu_object_lifetime testing...\n");
 #else
+    // TODO: we can't support WebGPU here (yet) because our WebGPU runtime doesn't
+    // (yet) support halide_webgpu_wrap_native(); when it does, we should be able
+    // to add it here.
     printf("[SKIP] No GPU features enabled for gpu_object_lifetime testing!\n");
     return 0;
 #endif

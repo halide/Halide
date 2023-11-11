@@ -535,7 +535,7 @@ public:
                 // within the outer loops of the matrix solve.
                 blury
                     .compute_at(line, z)
-                    .store_in(MemoryType::Stack)
+                    .hoist_storage(line, y)
                     .vectorize(x, vec);
 
                 blurx

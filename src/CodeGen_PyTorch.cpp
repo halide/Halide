@@ -2,9 +2,7 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen_PyTorch.h"
-#include "IROperator.h"
 #include "Module.h"
-#include "Param.h"
 #include "Util.h"
 #include "Var.h"
 

@@ -143,7 +143,7 @@ class NormalizeDimensionality : public IRMutator {
         }
         while (max_depth < block_size.threads_dimensions()) {
             string name = thread_names[max_depth];
-            s = For::make("." + name, 0, 1, ForType::GPUThread, device_api, s);
+            s = For::make("." + name, 0, 1, ForType::GPUThread, Partition::Never, device_api, s);
             max_depth++;
         }
         return s;
@@ -398,7 +398,7 @@ private:
             Expr v = Variable::make(Int(32), loop_name);
             host_side_preamble = substitute(op->name, v, host_side_preamble);
             host_side_preamble = For::make(loop_name, new_min, new_extent,
-                                           ForType::Serial, DeviceAPI::None, host_side_preamble);
+                                           ForType::Serial, Partition::Never, DeviceAPI::None, host_side_preamble);
             if (old_preamble.defined()) {
                 host_side_preamble = Block::make(old_preamble, host_side_preamble);
             }
@@ -407,7 +407,8 @@ private:
         }
 
         return For::make(op->name, new_min, new_extent,
-                         op->for_type, op->device_api, body);
+                         op->for_type, op->partition_policy,
+                         op->device_api, body);
     }
 
     Stmt visit(const Block *op) override {
@@ -800,15 +801,23 @@ public:
             string name;
             Expr total_size = 0;
             Type widest_type;
+            int number_of_allocs = 0;
+            for (const auto &alloc : cluster) {
+                number_of_allocs += alloc.group.size();
+            }
             for (const auto &alloc : cluster) {
                 if (name.empty()) {
-                    name = alloc.name;
                     widest_type = alloc.widest_type;
+                    if (number_of_allocs > 1) {
+                        name = "allocgroup__" + alloc.name;
+                    } else {
+                        name = alloc.name;
+                    }
                 } else {
-                    name += "__" + alloc.name;
                     if (alloc.widest_type.bytes() > widest_type.bytes()) {
                         widest_type = alloc.widest_type;
                     }
+                    name += "__" + alloc.name;
                 }
                 int ratio = alloc.widest_type.bytes() / alloc_type.bytes();
                 internal_assert(ratio != 0)
@@ -1093,7 +1102,7 @@ class ExtractRegisterAllocations : public IRMutator {
                 allocations.swap(old);
             }
 
-            return For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->device_api, body);
+            return For::make(op->name, mutate(op->min), mutate(op->extent), op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 
@@ -1254,7 +1263,7 @@ class InjectThreadBarriers : public IRMutator {
                 body = Block::make(body, make_barrier(0));
             }
             return For::make(op->name, op->min, op->extent,
-                             op->for_type, op->device_api, body);
+                             op->for_type, op->partition_policy, op->device_api, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -1405,14 +1414,14 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             string thread_id = "." + thread_names[0];
             // Add back in any register-level allocations
             body = register_allocs.rewrap(body, thread_id);
-            body = For::make(thread_id, 0, block_size_x, innermost_loop_type, op->device_api, body);
+            body = For::make(thread_id, 0, block_size_x, innermost_loop_type, op->partition_policy, op->device_api, body);
 
             // Rewrap the whole thing in other loops over threads
             for (int i = 1; i < block_size.threads_dimensions(); i++) {
                 thread_id = "." + thread_names[i];
                 body = register_allocs.rewrap(body, thread_id);
                 body = For::make("." + thread_names[i], 0, block_size.num_threads(i),
-                                 ForType::GPUThread, op->device_api, body);
+                                 ForType::GPUThread, op->partition_policy, op->device_api, body);
             }
             thread_id.clear();
             body = register_allocs.rewrap(body, thread_id);
@@ -1428,7 +1437,7 @@ class FuseGPUThreadLoopsSingleKernel : public IRMutator {
             if (body.same_as(op->body)) {
                 return op;
             } else {
-                return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+                return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
             }
         } else {
             return IRMutator::visit(op);
@@ -1497,7 +1506,7 @@ class ZeroGPULoopMins : public IRMutator {
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, 0, op->extent, op->for_type, op->device_api, body);
+            stmt = For::make(op->name, 0, op->extent, op->for_type, op->partition_policy, op->device_api, body);
         }
         return stmt;
     }
@@ -1579,7 +1588,7 @@ class AddConditionToALoop : public IRMutator {
             return IRMutator::visit(op);
         }
 
-        return For::make(op->name, op->min, op->extent, op->for_type, op->device_api,
+        return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api,
                          IfThenElse::make(condition, op->body, Stmt()));
     }
 

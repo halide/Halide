@@ -14,7 +14,6 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include <unordered_map>
 #include <utility>
 
 namespace Halide {

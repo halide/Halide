@@ -41,6 +41,7 @@ endfunction()
 
 # =================================================================
 
+# demo_generator.cpp
 add_halide_generator(anderson2021_demo.generator
                      SOURCES demo_generator.cpp)
 
@@ -59,6 +60,7 @@ add_anderson2021_test(anderson2021_demo_apps_autoscheduler
 
 # =================================================================
 
+# included_schedule_file_generator.cpp
 add_halide_generator(anderson2021_included_schedule_file.generator
                      SOURCES included_schedule_file_generator.cpp)
 
@@ -78,6 +80,7 @@ add_anderson2021_test(anderson2021_demo_included_schedule_file
 # =================================================================
 # Smaller tests
 
+# test.cpp
 add_executable(anderson2021_test_apps_autoscheduler test.cpp)
 target_link_libraries(anderson2021_test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 add_dependencies(anderson2021_test_apps_autoscheduler Halide::Anderson2021)

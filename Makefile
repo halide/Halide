@@ -208,7 +208,7 @@ WITH_RTTI ?= $(if $(LLVM_HAS_NO_RTTI),, not-empty)
 RTTI_CXX_FLAGS=$(if $(WITH_RTTI), , -fno-rtti )
 
 CXX_VERSION = $(shell $(CXX) --version | head -n1)
-CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
+CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi -Wno-mismatched-new-delete
 ifneq (,$(findstring g++,$(CXX_VERSION)))
 GCC_MAJOR_VERSION := $(shell $(CXX) -dumpfullversion -dumpversion | cut -f1 -d.)
 GCC_MINOR_VERSION := $(shell $(CXX) -dumpfullversion -dumpversion | cut -f2 -d.)
@@ -242,6 +242,12 @@ CXX_FLAGS += $(RISCV_CXX_FLAGS)
 CXX_FLAGS += $(SPIRV_CXX_FLAGS)
 CXX_FLAGS += $(VULKAN_CXX_FLAGS)
 CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
+
+# Serialization requires flatc and flatbuffers.h
+# On ubuntu, this requires packages flatbuffers-compiler and libflatbuffers-dev
+ifneq (,$(shell which flatc))
+CXX_FLAGS += -DWITH_SERIALIZATION -I $(BUILD_DIR) -I $(shell which flatc | sed 's/bin.flatc/include/')
+endif
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
 # everything with -fno-exceptions.  Without -funwind-tables, libHalide.so fails
@@ -499,9 +505,11 @@ SOURCE_FILES = \
   Deinterleave.cpp \
   Derivative.cpp \
   DerivativeUtils.cpp \
+  Deserialization.cpp \
   DeviceArgument.cpp \
   DeviceInterface.cpp \
   Dimension.cpp \
+  DistributeShifts.cpp \
   EarlyFree.cpp \
   Elf.cpp \
   EliminateBoolVectors.cpp \
@@ -577,6 +585,7 @@ SOURCE_FILES = \
   Schedule.cpp \
   ScheduleFunctions.cpp \
   SelectGPUAPI.cpp \
+  Serialization.cpp \
   Simplify.cpp \
   Simplify_Add.cpp \
   Simplify_And.cpp \
@@ -606,7 +615,7 @@ SOURCE_FILES = \
   SpirvIR.cpp \
   SplitTuples.cpp \
   StageStridedLoads.cpp \
-  StmtToViz.cpp \
+  StmtToHTML.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
   StrictifyFloat.cpp \
@@ -632,9 +641,9 @@ SOURCE_FILES = \
    CodeGen_C_vectors
 
 HTML_TEMPLATE_FILES = \
-   StmtToViz_dependencies \
-   StmtToViz_javascript \
-   StmtToViz_stylesheet
+   StmtToHTML_dependencies.html \
+   StmtToHTML.js \
+   StmtToHTML.css
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
@@ -687,10 +696,12 @@ HEADER_FILES = \
   Deinterleave.h \
   Derivative.h \
   DerivativeUtils.h \
+  Deserialization.h \
   DeviceAPI.h \
   DeviceArgument.h \
   DeviceInterface.h \
   Dimension.h \
+  DistributeShifts.h \
   EarlyFree.h \
   Elf.h \
   EliminateBoolVectors.h \
@@ -776,6 +787,7 @@ HEADER_FILES = \
   ScheduleFunctions.h \
   Scope.h \
   SelectGPUAPI.h \
+  Serialization.h \
   Simplify.h \
   SimplifyCorrelatedDifferences.h \
   SimplifySpecializations.h \
@@ -784,7 +796,7 @@ HEADER_FILES = \
   Solve.h \
   SplitTuples.h \
   StageStridedLoads.h \
-  StmtToViz.h \
+  StmtToHTML.h \
   StorageFlattening.h \
   StorageFolding.h \
   StrictifyFloat.h \
@@ -1187,8 +1199,8 @@ $(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/runtime/nvid
 $(BUILD_DIR)/c_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/%.template.cpp
 	./$(BIN_DIR)/binary2cpp halide_c_template_$* < $(SRC_DIR)/$*.template.cpp > $@
 
-$(BUILD_DIR)/html_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/irvisualizer/%.template.html
-	./$(BIN_DIR)/binary2cpp halide_html_template_$* < $(SRC_DIR)/irvisualizer/$*.template.html > $@
+$(BUILD_DIR)/html_template.%.cpp: $(BIN_DIR)/binary2cpp $(SRC_DIR)/irvisualizer/html_template_%
+	./$(BIN_DIR)/binary2cpp halide_html_template_$(subst .,_,$*) < $(SRC_DIR)/irvisualizer/html_template_$* > $@
 
 $(BIN_DIR)/binary2cpp: $(ROOT_DIR)/tools/binary2cpp.cpp
 	@mkdir -p $(@D)
@@ -1381,6 +1393,16 @@ $(BIN_DIR)/%/runtime.a: $(BIN_DIR)/runtime.generator
 $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT)
 	@mkdir -p $(@D)
 	$(CXX) $(TEST_CXX_FLAGS) $< -I$(SRC_DIR) $(TEST_LD_FLAGS) -o $@
+
+ifneq (,$(shell which flatc))
+$(BUILD_DIR)/Deserialization.o : $(BUILD_DIR)/halide_ir_generated.h
+$(BUILD_DIR)/Serialization.o : $(BUILD_DIR)/halide_ir_generated.h
+endif
+
+# Generated header for serialization/deserialization
+$(BUILD_DIR)/halide_ir_generated.h: $(SRC_DIR)/halide_ir.fbs
+	@mkdir -p $(@D)
+	flatc -o $(BUILD_DIR) -c $^  
 
 # Correctness test that link against libHalide
 $(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
@@ -2061,6 +2083,12 @@ tutorial_%: $(BIN_DIR)/tutorial_% $(TMP_DIR)/images/rgb.png $(TMP_DIR)/images/gr
 	cd $(TMP_DIR) ; $(CURDIR)/$<
 	@-echo
 
+# Skip the serialization tutorial, if we didn't build -DWITH_SERIALIZATION
+ifeq (,$(shell which flatc))
+tutorial_lesson_23_serialization:
+	@echo "Skipping tutorial lesson 23 (serialization not enabled) ..."
+endif
+
 test_mullapudi2016: $(MULLAPUDI2016_TESTS:$(ROOT_DIR)/test/autoschedulers/mullapudi2016/%.cpp=mullapudi2016_%)
 
 mullapudi2016_%: $(BIN_DIR)/mullapudi2016_% $(BIN_MULLAPUDI2016)
@@ -2445,7 +2473,7 @@ $(DISTRIB_DIR)/bin/featurization_to_sample $(DISTRIB_DIR)/bin/get_host_target: $
 	@mkdir -p $(@D)
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/common/Makefile $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	for TOOL in featurization_to_sample get_host_target; do \
-    		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
 	done
 
 # Adams2019 also includes autotuning tools
@@ -2454,7 +2482,7 @@ $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT): $(BIN_DIR)/libautosc
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/adams2019_retrain_cost_model $(BIN_DIR)/adams2019_weightsdir_to_weightsfile HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	cp $< $(DISTRIB_DIR)/lib/
 	for TOOL in adams2019_retrain_cost_model adams2019_weightsdir_to_weightsfile; do \
-    		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
+		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
 	done
 	cp $(SRC_DIR)/autoschedulers/adams2019/adams2019_autotune_loop.sh $(DISTRIB_DIR)/tools/
 ifeq ($(UNAME), Darwin)

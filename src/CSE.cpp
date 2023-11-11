@@ -283,6 +283,39 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
 
     debug(4) << "After removing lets: " << e << "\n";
 
+    // CSE is run on unsanitized Exprs from the user, and may contain Vars with
+    // the same name as the temporaries we intend to introduce. Find any such
+    // Vars so that we know not to use those names.
+    class UniqueNameProvider : public IRGraphVisitor {
+        using IRGraphVisitor::visit;
+
+        const char prefix = 't';  // Annoyingly, this can't be static because this is a local class.
+
+        void visit(const Variable *op) override {
+            // It would be legal to just add all names found to the tracked set,
+            // but because we know the form of the new names we're going to
+            // introduce, we can save some time by only adding names that could
+            // plausibly collide. In the vast majority of cases, this check will
+            // result in the set being empty.
+            if (op->name.size() > 1 &&
+                op->name[0] == prefix &&
+                isdigit(op->name[1])) {
+                vars.insert(op->name);
+            }
+        }
+        std::set<string> vars;
+
+    public:
+        string make_unique_name() {
+            string name;
+            do {
+                name = unique_name(prefix);
+            } while (vars.count(name));
+            return name;
+        }
+    } namer;
+    e.accept(&namer);
+
     GVN gvn;
     e = gvn.mutate(e);
 
@@ -298,7 +331,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     for (size_t i = 0; i < gvn.entries.size(); i++) {
         const auto &e = gvn.entries[i];
         if (e->use_count > 1) {
-            string name = unique_name('t');
+            string name = namer.make_unique_name();
             lets.emplace_back(name, e->expr);
             // Point references to this expr to the variable instead.
             replacements[e->expr] = Variable::make(e->expr.type(), name);

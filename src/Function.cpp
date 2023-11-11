@@ -299,10 +299,11 @@ public:
     }
 };
 
-// A counter to use in tagging random variables
-std::atomic<int> rand_counter{0};
-
 }  // namespace
+
+// A counter to use in tagging random variables.
+// Note that this will be reset by Internal::reset_random_counters().
+std::atomic<int> random_variable_counter = 0;
 
 Function::Function(const FunctionPtr &ptr)
     : contents(ptr) {
@@ -586,7 +587,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     // Tag calls to random() with the free vars
-    int tag = rand_counter++;
+    int tag = random_variable_counter++;
     vector<VarOrRVar> free_vars;
     free_vars.reserve(args.size());
     for (const auto &arg : args) {
@@ -796,7 +797,7 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
             free_vars.emplace_back(RVar(check.reduction_domain, i));
         }
     }
-    int tag = rand_counter++;
+    int tag = random_variable_counter++;
     for (auto &arg : args) {
         arg = lower_random(arg, free_vars, tag);
     }
@@ -1145,11 +1146,15 @@ void Function::lock_loop_levels() {
     auto &schedule = contents->func_schedule;
     schedule.compute_level().lock();
     schedule.store_level().lock();
+    schedule.hoist_storage_level().lock();
     // If store_level is inlined, use the compute_level instead.
     // (Note that we deliberately do *not* do the same if store_level
     // is undefined.)
     if (schedule.store_level().is_inlined()) {
         schedule.store_level() = schedule.compute_level();
+    }
+    if (schedule.hoist_storage_level().is_inlined()) {
+        schedule.hoist_storage_level() = schedule.store_level();
     }
     if (contents->init_def.defined()) {
         contents->init_def.schedule().fuse_level().level.lock();

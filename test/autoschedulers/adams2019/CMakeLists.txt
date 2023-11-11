@@ -22,7 +22,6 @@ function(add_adams2019_test NAME)
     endif()
     list(APPEND ARGS_LABELS adams2019)
     list(APPEND ARGS_LABELS autoschedulers_cpu)
-    list(APPEND ARGS_LABELS auto_schedule)
 
     add_test(NAME ${NAME}
              COMMAND ${ARGS_COMMAND})
@@ -40,6 +39,7 @@ endfunction()
 
 # =================================================================
 
+# demo_generator.cpp
 add_halide_generator(adams2019_demo.generator
                      SOURCES demo_generator.cpp)
 
@@ -57,6 +57,7 @@ add_adams2019_test(adams2019_demo_apps_autoscheduler
 
 # =================================================================
 
+# included_schedule_file_generator.cpp
 add_halide_generator(adams2019_included_schedule_file.generator
                      SOURCES included_schedule_file_generator.cpp)
 
@@ -75,6 +76,7 @@ add_adams2019_test(adams2019_demo_included_schedule_file
 # =================================================================
 # Smaller tests
 
+# test.cpp
 add_executable(adams2019_test_apps_autoscheduler test.cpp)
 target_link_libraries(adams2019_test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 add_dependencies(adams2019_test_apps_autoscheduler Halide_Adams2019)

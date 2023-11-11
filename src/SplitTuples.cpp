@@ -63,10 +63,29 @@ class SplitTuples : public IRMutator {
     using IRMutator::visit;
 
     map<string, set<int>> func_value_indices;
+    map<string, int> hoisted_tuple_count;
+
+    Stmt visit(const HoistedStorage *op) override {
+        hoisted_tuple_count[op->name] = 0;
+        Stmt body = mutate(op->body);
+        if (hoisted_tuple_count[op->name] > 1) {
+            for (int ix = 0; ix < hoisted_tuple_count[op->name]; ix++) {
+                body = HoistedStorage::make(op->name + "." + std::to_string(ix), body);
+            }
+            return body;
+        } else {
+            return HoistedStorage::make(op->name, body);
+        }
+    }
 
     Stmt visit(const Realize *op) override {
         ScopedBinding<int> bind(realizations, op->name, 0);
         if (op->types.size() > 1) {
+            // If there is a corresponding HoistedStorage node record the new number of
+            // realizes.
+            if (hoisted_tuple_count.count(op->name)) {
+                hoisted_tuple_count[op->name] = op->types.size();
+            }
             // Make a nested set of realize nodes for each tuple element
             Stmt body = mutate(op->body);
             Expr condition = mutate(op->condition);

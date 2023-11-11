@@ -192,6 +192,29 @@ int vectorize_all_d() {
     return 0;
 }
 
+int vectorize_lets_order() {
+    const int width = 128;
+    const int height = 128;
+
+    Var x("x"), y("y"), yo("yo"), yi("yi"), yoi("yoi"), yoio("yoio"), yoii("yoii");
+    Func f("f");
+    f(x, y) = x + y;
+    f.split(y, yo, yi, 8, TailStrategy::Auto)
+        .split(yo, yo, yoi, 4, TailStrategy::RoundUp)
+        .vectorize(yoi)
+        .vectorize(yi)
+        .split(yoi, yoio, yoii, 2, TailStrategy::Auto);
+    Buffer<int> result = f.realize({width, height});
+
+    auto cmp_func = [](int x, int y) {
+        return x + y;
+    };
+    if (check_image(result, cmp_func)) {
+        return 1;
+    }
+
+    return 0;
+}
 int vectorize_inner_of_scalarization() {
     ImageParam in(UInt(8), 2);
 
@@ -286,6 +309,11 @@ int main(int argc, char **argv) {
 
     if (vectorize_all_d()) {
         printf("vectorize_all_d failed\n");
+        return 1;
+    }
+
+    if (vectorize_lets_order()) {
+        printf("vectorize_lets_order failed\n");
         return 1;
     }
 
