@@ -6,7 +6,7 @@ namespace Halide {
 
 ImageParam::ImageParam(Type t, int d)
     : OutputImageParam(
-          Internal::Parameter(t, true, d, Internal::make_entity_name(this, "Halide:.*:ImageParam", 'p')),
+          Parameter(t, true, d, Internal::make_entity_name(this, "Halide:.*:ImageParam", 'p')),
           Argument::InputBuffer,
           Func()) {
     // We must call create_func() after the super-ctor has completed.
@@ -15,7 +15,7 @@ ImageParam::ImageParam(Type t, int d)
 
 ImageParam::ImageParam(Type t, int d, const std::string &n)
     : OutputImageParam(
-          Internal::Parameter(t, true, d, n),
+          Parameter(t, true, d, n),
           Argument::InputBuffer,
           Func()) {
     // We must call create_func() after the super-ctor has completed.

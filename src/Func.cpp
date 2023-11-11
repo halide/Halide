@@ -418,7 +418,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                     << " condition resulting in incorrect output."
                     << " It is possible to parallelize this by using the"
                     << " atomic() method if the operation is associative,"
-                    << " or set override_associativity_test to true in the atomic method "
+                    << " or set override_associativity_test to true in the atomic method"
                     << " if you are certain that the operation is associative."
                     << " It is also possible to override this error using"
                     << " the allow_race_conditions() method. Use allow_race_conditions()"
@@ -941,7 +941,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         const auto &iter = std::find_if(dims.begin(), dims.end(),
                                         [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
         if (iter == dims.end()) {
-            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
+            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
             dims.insert(dims.end() - 1, d);
         }
     }
@@ -1090,6 +1090,34 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
             << "Use TailStrategy::GuardWithIf instead.";
     }
 
+    bool predicate_loads_ok = !exact;
+    if (predicate_loads_ok && tail == TailStrategy::PredicateLoads) {
+        // If it's the outermost split in this dimension, PredicateLoads
+        // is OK. Otherwise we can't prove it's safe.
+        std::set<string> inner_vars;
+        for (const Split &s : definition.schedule().splits()) {
+            if (s.is_split()) {
+                inner_vars.insert(s.inner);
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_rename() || s.is_purify()) {
+                if (inner_vars.count(s.old_var)) {
+                    inner_vars.insert(s.outer);
+                }
+            } else if (s.is_fuse()) {
+                if (inner_vars.count(s.inner) || inner_vars.count(s.outer)) {
+                    inner_vars.insert(s.old_var);
+                }
+            }
+        }
+        predicate_loads_ok = !inner_vars.count(old_name);
+        user_assert(predicate_loads_ok || tail != TailStrategy::PredicateLoads)
+            << "Can't use TailStrategy::PredicateLoads for splitting " << old_name
+            << " in the definition of " << name() << ". "
+            << "PredicateLoads may not be used to split a Var stemming from the inner Var of a prior split.";
+    }
+
     if (tail == TailStrategy::Auto) {
         // Select a tail strategy
         if (exact) {
@@ -1225,6 +1253,10 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
             } else {
                 dims[i].dim_type = DimType::PureVar;
             }
+            // We just changed the dim_type without checking the
+            // for_type. Redundantly re-set the for type on the fused var just
+            // to trigger validation of the existing for_type.
+            set_dim_type(fused, dims[i].for_type);
         }
     }
 
@@ -1599,6 +1631,24 @@ Stage &Stage::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail
     return *this;
 }
 
+Stage &Stage::partition(const VarOrRVar &var, Partition policy) {
+    definition.schedule().touched() = true;
+    bool found = false;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
+            found = true;
+            dim.partition_policy = policy;
+        }
+    }
+    user_assert(found)
+        << "In schedule for " << name()
+        << ", could not find var " << var.name()
+        << " to set loop partition policy.\n"
+        << dump_argument_list();
+    return *this;
+}
+
 Stage &Stage::tile(const VarOrRVar &x, const VarOrRVar &y,
                    const VarOrRVar &xo, const VarOrRVar &yo,
                    const VarOrRVar &xi, const VarOrRVar &yi,
@@ -1904,7 +1954,7 @@ Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from
     return *this;
 }
 
-Stage &Stage::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+Stage &Stage::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     definition.schedule().touched() = true;
     PrefetchDirective prefetch = {param.name(), at.name(), from.name(), std::move(offset), strategy, param};
     definition.schedule().prefetches().push_back(prefetch);
@@ -2286,6 +2336,12 @@ Func &Func::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail) 
     return *this;
 }
 
+Func &Func::partition(const VarOrRVar &var, Partition policy) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).partition(var, policy);
+    return *this;
+}
+
 Func &Func::bound(const Var &var, Expr min, Expr extent) {
     user_assert(!min.defined() || Int(32).can_represent(min.type())) << "Can't represent min bound in int32\n";
     user_assert(extent.defined()) << "Extent bound of a Func can't be undefined\n";
@@ -2601,7 +2657,7 @@ Func &Func::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, 
     return *this;
 }
 
-Func &Func::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+Func &Func::prefetch(const Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
     Stage(func, func.definition(), 0).prefetch(param, at, from, std::move(offset), strategy);
     return *this;
@@ -2769,6 +2825,24 @@ Func &Func::store_at(const Func &f, const Var &var) {
 
 Func &Func::store_root() {
     return store_at(LoopLevel::root());
+}
+
+Func &Func::hoist_storage(LoopLevel loop_level) {
+    invalidate_cache();
+    func.schedule().hoist_storage_level() = std::move(loop_level);
+    return *this;
+}
+
+Func &Func::hoist_storage(const Func &f, const RVar &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
+Func &Func::hoist_storage(const Func &f, const Var &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
+Func &Func::hoist_storage_root() {
+    return hoist_storage(LoopLevel::root());
 }
 
 Func &Func::compute_inline() {

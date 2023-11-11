@@ -425,11 +425,19 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
 }
 
 void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
+#if LLVM_VERSION >= 180
+    emit_file(module, out, llvm::CodeGenFileType::ObjectFile);
+#else
     emit_file(module, out, llvm::CGFT_ObjectFile);
+#endif
 }
 
 void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
+#if LLVM_VERSION >= 180
+    emit_file(module, out, llvm::CodeGenFileType::AssemblyFile);
+#else
     emit_file(module, out, llvm::CGFT_AssemblyFile);
+#endif
 }
 
 void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream &out) {

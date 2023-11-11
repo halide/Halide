@@ -28,7 +28,11 @@ class Serializer {
 public:
     Serializer() = default;
 
+    // Serialize the given pipeline into the given filename
     void serialize(const Pipeline &pipeline, const std::string &filename);
+
+    // Serialize the given pipeline into given the data buffer
+    void serialize(const Pipeline &pipeline, std::vector<uint8_t> &data);
 
     const std::map<std::string, Parameter> &get_external_parameters() const {
         return external_parameters;
@@ -40,7 +44,7 @@ private:
 
     // A lookup table for finding parameters via their names,
     // used for preventing the same parameter being serialized multiple times
-    std::map<std::string, Internal::Parameter> parameters_in_pipeline;
+    std::map<std::string, Parameter> parameters_in_pipeline;
 
     // A lookup table for finding buffers via their names,
     // used for preventing the same buffer being serialized multiple times
@@ -55,6 +59,8 @@ private:
     Serialize::ForType serialize_for_type(const ForType &for_type);
 
     Serialize::DeviceAPI serialize_device_api(const DeviceAPI &device_api);
+
+    Serialize::Partition serialize_partition(const Partition &partition);
 
     Serialize::CallType serialize_call_type(const Call::CallType &call_type);
 
@@ -123,7 +129,7 @@ private:
 
     Offset<Serialize::ExternFuncArgument> serialize_extern_func_argument(FlatBufferBuilder &builder, const ExternFuncArgument &extern_func_argument);
 
-    Offset<Serialize::Buffer> serialize_buffer(FlatBufferBuilder &builder, const Buffer<> &buffer);
+    Offset<Serialize::Buffer> serialize_buffer(FlatBufferBuilder &builder, Buffer<> buffer);
 
     std::vector<Offset<Serialize::WrapperRef>> serialize_wrapper_refs(FlatBufferBuilder &builder, const std::map<std::string, FunctionPtr> &wrappers);
 
@@ -177,6 +183,20 @@ Serialize::ForType Serializer::serialize_for_type(const ForType &for_type) {
     default:
         user_error << "Unsupported for type\n";
         return Serialize::ForType_Serial;
+    }
+}
+
+Serialize::Partition Serializer::serialize_partition(const Partition &partition) {
+    switch (partition) {
+    case Halide::Partition::Auto:
+        return Serialize::Partition::Partition_Auto;
+    case Halide::Partition::Never:
+        return Serialize::Partition::Partition_Never;
+    case Halide::Partition::Always:
+        return Serialize::Partition::Partition_Always;
+    default:
+        user_error << "Unsupported loop partition policy\n";
+        return Serialize::Partition::Partition_Auto;
     }
 }
 
@@ -424,13 +444,14 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto min_serialized = serialize_expr(builder, for_stmt->min);
         const auto extent_serialized = serialize_expr(builder, for_stmt->extent);
         const Serialize::ForType for_type = serialize_for_type(for_stmt->for_type);
+        const Serialize::Partition partition_policy = serialize_partition(for_stmt->partition_policy);
         const Serialize::DeviceAPI device_api = serialize_device_api(for_stmt->device_api);
         const auto body_serialized = serialize_stmt(builder, for_stmt->body);
         return std::make_pair(Serialize::Stmt::Stmt_For,
                               Serialize::CreateFor(builder, name_serialized,
                                                    min_serialized.first, min_serialized.second,
                                                    extent_serialized.first, extent_serialized.second,
-                                                   for_type, device_api,
+                                                   for_type, partition_policy, device_api,
                                                    body_serialized.first, body_serialized.second)
                                   .Union());
     }
@@ -635,6 +656,15 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         return std::make_pair(Serialize::Stmt::Stmt_Atomic,
                               Serialize::CreateAtomic(builder, producer_name_serialized, mutex_name_serialized,
                                                       body_serialized.first, body_serialized.second)
+                                  .Union());
+    }
+    case IRNodeType::HoistedStorage: {
+        const auto *const hoisted_storage_stmt = stmt.as<HoistedStorage>();
+        const auto name_serialized = serialize_string(builder, hoisted_storage_stmt->name);
+        const auto body_serialized = serialize_stmt(builder, hoisted_storage_stmt->body);
+        return std::make_pair(Serialize::Stmt::Stmt_HoistedStorage,
+                              Serialize::CreateHoistedStorage(builder, name_serialized,
+                                                              body_serialized.first, body_serialized.second)
                                   .Union());
     }
     default:
@@ -1064,6 +1094,7 @@ Offset<Serialize::LoopLevel> Serializer::serialize_loop_level(FlatBufferBuilder 
 Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBuilder &builder, const FuncSchedule &func_schedule) {
     const auto store_level_serialized = serialize_loop_level(builder, func_schedule.store_level());
     const auto compute_level_serialized = serialize_loop_level(builder, func_schedule.compute_level());
+    const auto hoist_storage_level_serialized = serialize_loop_level(builder, func_schedule.hoist_storage_level());
     std::vector<Offset<Serialize::StorageDim>> storage_dims_serialized;
     for (const auto &storage_dim : func_schedule.storage_dims()) {
         storage_dims_serialized.push_back(serialize_storage_dim(builder, storage_dim));
@@ -1082,6 +1113,7 @@ Offset<Serialize::FuncSchedule> Serializer::serialize_func_schedule(FlatBufferBu
     const auto async = func_schedule.async();
     const auto memoize_eviction_key_serialized = serialize_expr(builder, func_schedule.memoize_eviction_key());
     return Serialize::CreateFuncSchedule(builder, store_level_serialized, compute_level_serialized,
+                                         hoist_storage_level_serialized,
                                          builder.CreateVector(storage_dims_serialized),
                                          builder.CreateVector(bounds_serialized),
                                          builder.CreateVector(estimates_serialized),
@@ -1195,7 +1227,8 @@ Offset<Serialize::Dim> Serializer::serialize_dim(FlatBufferBuilder &builder, con
     const auto for_type_serialized = serialize_for_type(dim.for_type);
     const auto device_api_serialized = serialize_device_api(dim.device_api);
     const auto dim_type_serialized = serialize_dim_type(dim.dim_type);
-    return Serialize::CreateDim(builder, var_serialized, for_type_serialized, device_api_serialized, dim_type_serialized);
+    const auto partition_policy_serialized = serialize_partition(dim.partition_policy);
+    return Serialize::CreateDim(builder, var_serialized, for_type_serialized, device_api_serialized, dim_type_serialized, partition_policy_serialized);
 }
 
 Offset<Serialize::FuseLoopLevel> Serializer::serialize_fuse_loop_level(FlatBufferBuilder &builder, const FuseLoopLevel &fuse_loop_level) {
@@ -1298,13 +1331,19 @@ Offset<Serialize::Parameter> Serializer::serialize_parameter(FlatBufferBuilder &
         return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized, dimensions, name_serialized, host_alignment,
                                           builder.CreateVector(buffer_constraints_serialized), memory_type_serialized);
     } else {
-        const uint64_t data = parameter.scalar_raw_value();
+        static_assert(FLATBUFFERS_USE_STD_OPTIONAL);
+        const auto make_optional_u64 = [](const std::optional<halide_scalar_value_t> &v) -> std::optional<uint64_t> {
+            return v.has_value() ?
+                       std::optional<uint64_t>(v.value().u.u64) :
+                       std::nullopt;
+        };
+        const auto scalar_data = make_optional_u64(parameter.scalar_data());
         const auto scalar_default_serialized = serialize_expr(builder, parameter.default_value());
         const auto scalar_min_serialized = serialize_expr(builder, parameter.min_value());
         const auto scalar_max_serialized = serialize_expr(builder, parameter.max_value());
         const auto scalar_estimate_serialized = serialize_expr(builder, parameter.estimate());
         return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized,
-                                          dimensions, name_serialized, 0, 0, Serialize::MemoryType_Auto, data,
+                                          dimensions, name_serialized, 0, 0, Serialize::MemoryType_Auto, scalar_data,
                                           scalar_default_serialized.first, scalar_default_serialized.second,
                                           scalar_min_serialized.first, scalar_min_serialized.second,
                                           scalar_max_serialized.first, scalar_max_serialized.second,
@@ -1342,10 +1381,14 @@ Offset<Serialize::ExternFuncArgument> Serializer::serialize_extern_func_argument
     }
 }
 
-Offset<Serialize::Buffer> Serializer::serialize_buffer(FlatBufferBuilder &builder, const Buffer<> &buffer) {
+Offset<Serialize::Buffer> Serializer::serialize_buffer(FlatBufferBuilder &builder, Buffer<> buffer) {
     if (!buffer.defined()) {
         return Serialize::CreateBuffer(builder, false);
     }
+    if (buffer.device_dirty()) {
+        user_error << "Cannot serialize on-device buffer: " << buffer.name() << "\n";
+    }
+    buffer.copy_to_host();
     const auto name_serialized = serialize_string(builder, buffer.name());
     const auto type_serialized = serialize_type(builder, buffer.type());
     const int32_t dimensions = buffer.dimensions();
@@ -1388,7 +1431,7 @@ void Serializer::build_function_mappings(const std::map<std::string, Function> &
     }
 }
 
-void Serializer::serialize(const Pipeline &pipeline, const std::string &filename) {
+void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &result) {
     FlatBufferBuilder builder(1024);
 
     // extract the DAG, unwrap function from Funcs
@@ -1437,7 +1480,7 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
 
     std::vector<Offset<Serialize::Buffer>> buffers_serialized;
     buffers_serialized.reserve(buffers_in_pipeline.size());
-    for (const auto &buffer : buffers_in_pipeline) {
+    for (auto &buffer : buffers_in_pipeline) {
         buffers_serialized.push_back(serialize_buffer(builder, buffer.second));
     }
 
@@ -1453,18 +1496,47 @@ void Serializer::serialize(const Pipeline &pipeline, const std::string &filename
 
     uint8_t *buf = builder.GetBufferPointer();
     int size = builder.GetSize();
+
+    if (buf != nullptr && size > 0) {
+        result.clear();
+        result.reserve(size);
+        result.insert(result.begin(), buf, buf + size);
+    } else {
+        user_error << "failed to serialize pipeline!\n";
+    }
+}
+
+void Serializer::serialize(const Pipeline &pipeline, const std::string &filename) {
+    std::vector<uint8_t> data;
+    serialize(pipeline, data);
     std::ofstream out(filename, std::ios::out | std::ios::binary);
     if (!out) {
         user_error << "failed to open file " << filename << "\n";
         exit(1);
     }
-    out.write((char *)(buf), size);
+    out.write((char *)(data.data()), data.size());
     out.close();
 }
 
 }  // namespace Internal
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Internal::Parameter> &params) {
+void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data) {
+    Internal::Serializer serializer;
+    serializer.serialize(pipeline, data);
+}
+
+void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data, std::map<std::string, Parameter> &params) {
+    Internal::Serializer serializer;
+    serializer.serialize(pipeline, data);
+    params = serializer.get_external_parameters();
+}
+
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename) {
+    Internal::Serializer serializer;
+    serializer.serialize(pipeline, filename);
+}
+
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Parameter> &params) {
     Internal::Serializer serializer;
     serializer.serialize(pipeline, filename);
     params = serializer.get_external_parameters();
@@ -1476,7 +1548,19 @@ void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, s
 
 namespace Halide {
 
-void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Internal::Parameter> &params) {
+void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data) {
+    user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+}
+
+void serialize_pipeline(const Pipeline &pipeline, std::vector<uint8_t> &data, std::map<std::string, Parameter> &params) {
+    user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+}
+
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename) {
+    user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+}
+
+void serialize_pipeline(const Pipeline &pipeline, const std::string &filename, std::map<std::string, Parameter> &params) {
     user_error << "Serialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
 }
 

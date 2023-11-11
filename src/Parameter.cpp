@@ -15,7 +15,7 @@ struct ParameterContents {
     const int dimensions;
     const std::string name;
     Buffer<> buffer;
-    uint64_t data = 0;
+    std::optional<halide_scalar_value_t> scalar_data;
     int host_alignment;
     std::vector<BufferConstraint> buffer_constraints;
     Expr scalar_default, scalar_min, scalar_max, scalar_estimate;
@@ -44,6 +44,8 @@ void destroy<Halide::Internal::ParameterContents>(const ParameterContents *p) {
     delete p;
 }
 
+}  // namespace Internal
+
 void Parameter::check_defined() const {
     user_assert(defined()) << "Parameter is undefined\n";
 }
@@ -71,30 +73,30 @@ void Parameter::check_type(const Type &t) const {
 }
 
 Parameter::Parameter(const Type &t, bool is_buffer, int d)
-    : contents(new ParameterContents(t, is_buffer, d, unique_name('p'))) {
+    : contents(new Internal::ParameterContents(t, is_buffer, d, Internal::unique_name('p'))) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
 
 Parameter::Parameter(const Type &t, bool is_buffer, int d, const std::string &name)
-    : contents(new ParameterContents(t, is_buffer, d, name)) {
+    : contents(new Internal::ParameterContents(t, is_buffer, d, name)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
 }
 
-Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
+Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
                      const Buffer<void> &buffer, int host_alignment, const std::vector<BufferConstraint> &buffer_constraints,
                      MemoryType memory_type)
-    : contents(new ParameterContents(t, is_buffer, dimensions, name)) {
+    : contents(new Internal::ParameterContents(t, /*is_buffer*/ true, dimensions, name)) {
     contents->buffer = buffer;
     contents->host_alignment = host_alignment;
     contents->buffer_constraints = buffer_constraints;
     contents->memory_type = memory_type;
 }
 
-Parameter::Parameter(const Type &t, bool is_buffer, int dimensions, const std::string &name,
-                     uint64_t data, const Expr &scalar_default, const Expr &scalar_min,
+Parameter::Parameter(const Type &t, int dimensions, const std::string &name,
+                     const std::optional<halide_scalar_value_t> &scalar_data, const Expr &scalar_default, const Expr &scalar_min,
                      const Expr &scalar_max, const Expr &scalar_estimate)
-    : contents(new ParameterContents(t, is_buffer, dimensions, name)) {
-    contents->data = data;
+    : contents(new Internal::ParameterContents(t, /*is_buffer*/ false, dimensions, name)) {
+    contents->scalar_data = scalar_data;
     contents->scalar_default = scalar_default;
     contents->scalar_min = scalar_min;
     contents->scalar_max = scalar_max;
@@ -121,51 +123,55 @@ bool Parameter::is_buffer() const {
     return contents->is_buffer;
 }
 
+bool Parameter::has_scalar_value() const {
+    return defined() && !contents->is_buffer && contents->scalar_data.has_value();
+}
+
 Expr Parameter::scalar_expr() const {
-    check_is_scalar();
+    const auto sv = scalar_data_checked();
     const Type t = type();
     if (t.is_float()) {
         switch (t.bits()) {
         case 16:
             if (t.is_bfloat()) {
-                return Expr(scalar<bfloat16_t>());
+                return Expr(bfloat16_t::make_from_bits(sv.u.u16));
             } else {
-                return Expr(scalar<float16_t>());
+                return Expr(float16_t::make_from_bits(sv.u.u16));
             }
         case 32:
-            return Expr(scalar<float>());
+            return Expr(sv.u.f32);
         case 64:
-            return Expr(scalar<double>());
+            return Expr(sv.u.f64);
         }
     } else if (t.is_int()) {
         switch (t.bits()) {
         case 8:
-            return Expr(scalar<int8_t>());
+            return Expr(sv.u.i8);
         case 16:
-            return Expr(scalar<int16_t>());
+            return Expr(sv.u.i16);
         case 32:
-            return Expr(scalar<int32_t>());
+            return Expr(sv.u.i32);
         case 64:
-            return Expr(scalar<int64_t>());
+            return Expr(sv.u.i64);
         }
     } else if (t.is_uint()) {
         switch (t.bits()) {
         case 1:
-            return make_bool(scalar<bool>());
+            return Internal::make_bool(sv.u.b);
         case 8:
-            return Expr(scalar<uint8_t>());
+            return Expr(sv.u.u8);
         case 16:
-            return Expr(scalar<uint16_t>());
+            return Expr(sv.u.u16);
         case 32:
-            return Expr(scalar<uint32_t>());
+            return Expr(sv.u.u32);
         case 64:
-            return Expr(scalar<uint64_t>());
+            return Expr(sv.u.u64);
         }
     } else if (t.is_handle()) {
         // handles are always uint64 internally.
         switch (t.bits()) {
         case 64:
-            return Expr(scalar<uint64_t>());
+            return Expr(sv.u.u64);
         }
     }
     internal_error << "Unsupported type " << t << " in scalar_expr\n";
@@ -196,14 +202,48 @@ void Parameter::set_buffer(const Buffer<> &b) {
     contents->buffer = b;
 }
 
-void *Parameter::scalar_address() const {
+const void *Parameter::read_only_scalar_address() const {
     check_is_scalar();
-    return &contents->data;
+    // Use explicit if here (rather than user_assert) so that we don't
+    // have to disable bugprone-unchecked-optional-access in clang-tidy,
+    // which is a useful check.
+    const auto &sv = contents->scalar_data;
+    if (sv.has_value()) {
+        return std::addressof(sv.value());
+    } else {
+        user_error << "Parameter " << name() << " does not have a valid scalar value.\n";
+        return nullptr;
+    }
 }
 
-uint64_t Parameter::scalar_raw_value() const {
+std::optional<halide_scalar_value_t> Parameter::scalar_data() const {
+    return defined() ? contents->scalar_data : std::nullopt;
+}
+
+halide_scalar_value_t Parameter::scalar_data_checked() const {
     check_is_scalar();
-    return contents->data;
+    // Use explicit if here (rather than user_assert) so that we don't
+    // have to disable bugprone-unchecked-optional-access in clang-tidy,
+    // which is a useful check.
+    halide_scalar_value_t result;
+    const auto &sv = contents->scalar_data;
+    if (sv.has_value()) {
+        result = sv.value();
+    } else {
+        user_error << "Parameter " << name() << " does not have a valid scalar value.\n";
+        result.u.u64 = 0;  // silence "possibly uninitialized" compiler warning
+    }
+    return result;
+}
+
+halide_scalar_value_t Parameter::scalar_data_checked(const Type &val_type) const {
+    check_type(val_type);
+    return scalar_data_checked();
+}
+
+void Parameter::set_scalar(const Type &val_type, halide_scalar_value_t val) {
+    check_type(val_type);
+    contents->scalar_data = std::optional<halide_scalar_value_t>(val);
 }
 
 /** Tests if this handle is the same as another handle */
@@ -220,6 +260,8 @@ bool Parameter::defined() const {
 // parameter itself, to avoid creating a reference count cycle and causing a
 // leak. Note that it's still possible to create a cycle by having two different
 // Parameters each have constraints that reference the other.
+namespace Internal {
+
 Expr remove_self_references(const Parameter &p, const Expr &e) {
     class RemoveSelfReferences : public IRMutator {
         using IRMutator::visit;
@@ -251,8 +293,8 @@ Expr restore_self_references(const Parameter &p, const Expr &e) {
             if (!var->image.defined() &&
                 !var->param.defined() &&
                 !var->reduction_domain.defined() &&
-                starts_with(var->name, p.name() + ".")) {
-                return Variable::make(var->type, var->name, p);
+                Internal::starts_with(var->name, p.name() + ".")) {
+                return Internal::Variable::make(var->type, var->name, p);
             }
             return var;
         }
@@ -266,34 +308,36 @@ Expr restore_self_references(const Parameter &p, const Expr &e) {
     return mutator.mutate(e);
 }
 
+}  // namespace Internal
+
 void Parameter::set_min_constraint(int dim, const Expr &e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].min = remove_self_references(*this, e);
+    contents->buffer_constraints[dim].min = Internal::remove_self_references(*this, e);
 }
 
 void Parameter::set_extent_constraint(int dim, const Expr &e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].extent = remove_self_references(*this, e);
+    contents->buffer_constraints[dim].extent = Internal::remove_self_references(*this, e);
 }
 
 void Parameter::set_stride_constraint(int dim, const Expr &e) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].stride = remove_self_references(*this, e);
+    contents->buffer_constraints[dim].stride = Internal::remove_self_references(*this, e);
 }
 
 void Parameter::set_min_constraint_estimate(int dim, const Expr &min) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].min_estimate = remove_self_references(*this, min);
+    contents->buffer_constraints[dim].min_estimate = Internal::remove_self_references(*this, min);
 }
 
 void Parameter::set_extent_constraint_estimate(int dim, const Expr &extent) {
     check_is_buffer();
     check_dim_ok(dim);
-    contents->buffer_constraints[dim].extent_estimate = remove_self_references(*this, extent);
+    contents->buffer_constraints[dim].extent_estimate = Internal::remove_self_references(*this, extent);
 }
 
 void Parameter::set_host_alignment(int bytes) {
@@ -304,31 +348,31 @@ void Parameter::set_host_alignment(int bytes) {
 Expr Parameter::min_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return restore_self_references(*this, contents->buffer_constraints[dim].min);
+    return Internal::restore_self_references(*this, contents->buffer_constraints[dim].min);
 }
 
 Expr Parameter::extent_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return restore_self_references(*this, contents->buffer_constraints[dim].extent);
+    return Internal::restore_self_references(*this, contents->buffer_constraints[dim].extent);
 }
 
 Expr Parameter::stride_constraint(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return restore_self_references(*this, contents->buffer_constraints[dim].stride);
+    return Internal::restore_self_references(*this, contents->buffer_constraints[dim].stride);
 }
 
 Expr Parameter::min_constraint_estimate(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return restore_self_references(*this, contents->buffer_constraints[dim].min_estimate);
+    return Internal::restore_self_references(*this, contents->buffer_constraints[dim].min_estimate);
 }
 
 Expr Parameter::extent_constraint_estimate(int dim) const {
     check_is_buffer();
     check_dim_ok(dim);
-    return restore_self_references(*this, contents->buffer_constraints[dim].extent_estimate);
+    return Internal::restore_self_references(*this, contents->buffer_constraints[dim].extent_estimate);
 }
 
 int Parameter::host_alignment() const {
@@ -431,6 +475,18 @@ ArgumentEstimates Parameter::get_argument_estimates() const {
     return argument_estimates;
 }
 
+void Parameter::store_in(MemoryType memory_type) {
+    check_is_buffer();
+    contents->memory_type = memory_type;
+}
+
+MemoryType Parameter::memory_type() const {
+    // check_is_buffer();
+    return contents->memory_type;
+}
+
+namespace Internal {
+
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {
     user_assert(args->size() == (size_t)dims)
         << args->size() << "-argument call to \""
@@ -449,16 +505,6 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
             (*args)[i] = Cast::make(Int(32), (*args)[i]);
         }
     }
-}
-
-void Parameter::store_in(MemoryType memory_type) {
-    check_is_buffer();
-    contents->memory_type = memory_type;
-}
-
-MemoryType Parameter::memory_type() const {
-    // check_is_buffer();
-    return contents->memory_type;
 }
 
 }  // namespace Internal

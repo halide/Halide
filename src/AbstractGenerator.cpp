@@ -8,7 +8,7 @@ namespace Internal {
 
 namespace {
 
-Argument to_argument(const Internal::Parameter &param) {
+Argument to_argument(const Parameter &param) {
     return Argument(param.name(),
                     param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
                     param.type(),

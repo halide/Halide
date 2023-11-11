@@ -666,12 +666,17 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     bool use_large_code_model = false;
     get_md_bool(module.getModuleFlag("halide_use_large_code_model"), use_large_code_model);
 
+#if LLVM_VERSION >= 180
+    const auto opt_level = llvm::CodeGenOptLevel::Aggressive;
+#else
+    const auto opt_level = llvm::CodeGenOpt::Aggressive;
+#endif
     auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 /*CPU target=*/"", /*Features=*/"",
                                                 options,
                                                 use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
                                                 use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
-                                                llvm::CodeGenOpt::Aggressive);
+                                                opt_level);
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
 

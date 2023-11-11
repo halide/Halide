@@ -19,7 +19,6 @@ namespace py = pybind11;
 namespace Halide {
 namespace PythonBindings {
 
-using Parameter = Internal::Parameter;
 using ArgInfoKind = Internal::ArgInfoKind;
 using ArgInfo = Internal::AbstractGenerator::ArgInfo;
 using GeneratorFactory = Internal::GeneratorFactory;

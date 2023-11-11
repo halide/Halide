@@ -2338,7 +2338,7 @@ private:
     // Map variable name to all other vars which values depend on that variable.
     map<VarInstance, set<VarInstance>> children;
 
-    bool in_producer{false};
+    bool in_producer{false}, in_unreachable{false};
     map<std::string, Expr> buffer_lets;
 
     using IRGraphVisitor::visit;
@@ -2957,15 +2957,22 @@ private:
 
             // Fork the boxes touched and go down each path
             map<string, Box> then_boxes, else_boxes;
+            bool then_unreachable = false, else_unreachable = false;
             then_boxes.swap(boxes);
+            std::swap(then_unreachable, in_unreachable);
             op->then_case.accept(this);
             then_boxes.swap(boxes);
+            std::swap(then_unreachable, in_unreachable);
 
             if (op->else_case.defined()) {
                 else_boxes.swap(boxes);
+                std::swap(else_unreachable, in_unreachable);
                 op->else_case.accept(this);
                 else_boxes.swap(boxes);
+                std::swap(else_unreachable, in_unreachable);
             }
+
+            in_unreachable = then_unreachable && else_unreachable;
 
             // Make sure all the then boxes have an entry on the else
             // side so that the merge doesn't skip them.
@@ -2979,13 +2986,22 @@ private:
                 Box &then_box = then_boxes[i.first];
                 Box &orig_box = boxes[i.first];
 
-                if (then_box.maybe_unused()) {
+                if (else_unreachable) {
+                    // Don't incorporate the condition into
+                    // then.used. boxes_touched assumes that asserts pass, so if
+                    // the else case contains an assert(false), conservatively
+                    // assume the then case will unconditionally run. This
+                    // provides more useful bounds for bounds queries on
+                    // pipelines that use specialize_fail.
+                } else if (then_box.maybe_unused()) {
                     then_box.used = then_box.used && op->condition;
                 } else {
                     then_box.used = op->condition;
                 }
 
-                if (else_box.maybe_unused()) {
+                if (then_unreachable) {
+                    // Conservatively assume the else case will run.
+                } else if (else_box.maybe_unused()) {
                     else_box.used = else_box.used && !op->condition;
                 } else {
                     else_box.used = !op->condition;
@@ -2995,6 +3011,13 @@ private:
                 merge_boxes(orig_box, then_box);
             }
         }
+    }
+
+    void visit(const AssertStmt *op) override {
+        if (is_const_zero(op->condition)) {
+            in_unreachable = true;
+        }
+        IRGraphVisitor::visit(op);
     }
 
     void visit(const For *op) override {
@@ -3844,7 +3867,7 @@ void bounds_test() {
     Buffer<int32_t> in(10);
     in.set_name("input");
 
-    Stmt loop = For::make("x", 3, 10, ForType::Serial, DeviceAPI::Host,
+    Stmt loop = For::make("x", 3, 10, ForType::Serial, Partition::Auto, DeviceAPI::Host,
                           Provide::make("output",
                                         {Add::make(Call::make(in, input_site_1),
                                                    Call::make(in, input_site_2))},

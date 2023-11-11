@@ -20,6 +20,7 @@ set(native_sources
     PyLoopLevel.cpp
     PyModule.cpp
     PyParam.cpp
+    PyParameter.cpp
     PyPipeline.cpp
     PyRDom.cpp
     PyStage.cpp
