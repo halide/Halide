@@ -52,6 +52,7 @@ int main(int argc, char **argv) {
     output.fill(0);
     output.copy_to_host();
     alias_Mullapudi2016(input, output);
+    output.copy_to_host();
     input.for_each_element([=](int x) {
         assert(output(x) == input(x) + 2016);
     });
