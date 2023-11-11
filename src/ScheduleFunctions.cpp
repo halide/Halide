@@ -397,7 +397,7 @@ Stmt build_loop_nest(
             const Dim &dim = stage_s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
-            stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.device_api, stmt);
+            stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.partition_policy, dim.device_api, stmt);
         }
     }
 
@@ -966,6 +966,7 @@ private:
                              for_loop->min,
                              for_loop->extent,
                              for_loop->for_type,
+                             for_loop->partition_policy,
                              for_loop->device_api,
                              body);
         }
@@ -1065,7 +1066,7 @@ private:
 
             Stmt stmt = For::make(new_var, Variable::make(Int(32), new_var + ".loop_min"),
                                   Variable::make(Int(32), new_var + ".loop_extent"),
-                                  for_type, device_api, body);
+                                  for_type, op->partition_policy, device_api, body);
 
             // Add let stmts defining the bound of the renamed for-loop.
             stmt = LetStmt::make(new_var + ".loop_min", min_val, stmt);
@@ -1106,7 +1107,7 @@ class ShiftLoopNest : public IRMutator {
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + iter->second;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
         }
         return stmt;
     }
@@ -1285,6 +1286,7 @@ protected:
                              for_loop->min,
                              for_loop->extent,
                              for_loop->for_type,
+                             for_loop->partition_policy,
                              for_loop->device_api,
                              body);
         }
@@ -2217,11 +2219,16 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     }
 
     if (compute_at.is_inlined()) {
-        if (!(hoist_storage_at.is_inlined() && store_at.is_inlined())) {
-            user_error
-                << "Functions that are compute_inline() must also have store_at and hoist_storage set to inlined, "
-                << "but Func \"" << f.name() << "\" is store_at() \"" << store_at
-                << "\" and hoist_storage() \"" << hoist_storage_at << "\"\n";
+        if (store_at.is_root()) {
+            user_error << "Func \"" << f.name() << "\" is scheduled store_root(), but is inlined. Funcs that use store_root must also call compute_root or compute_at.\n";
+        } else if (!store_at.is_inlined()) {
+            user_error << "Func \"" << f.name() << "\" is scheduled store_at(), but is inlined. Funcs that use store_at must also call compute_at.\n";
+        }
+
+        if (hoist_storage_at.is_root()) {
+            user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage_root(), but is inlined. Funcs that use hoist_storage_root must also call compute_root or compute_at.\n";
+        } else if (!hoist_storage_at.is_inlined()) {
+            user_error << "Func \"" << f.name() << "\" is scheduled hoist_storage(), but is inlined. Funcs that use hoist_storage_root must also call compute_at.\n";
         }
     }
     // Check if the schedule of the inlined function is legal. Since only
@@ -2519,7 +2526,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
                         const Target &target,
                         bool &any_memoized) {
     string root_var = LoopLevel::root().lock().to_string();
-    Stmt s = For::make(root_var, 0, 1, ForType::Serial, DeviceAPI::Host, Evaluate::make(0));
+    Stmt s = For::make(root_var, 0, 1, ForType::Serial, Partition::Never, DeviceAPI::Host, Evaluate::make(0));
 
     any_memoized = false;
 

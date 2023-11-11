@@ -5161,7 +5161,7 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
                 return nullptr;
             }
         } else if (t.is_handle()) {
-            return llvm::Type::getInt8PtrTy(*c);
+            return llvm::PointerType::getUnqual(*c);
         } else {
             return llvm::Type::getIntNTy(*c, t.bits());
         }
