@@ -23,7 +23,12 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint8_t> in_buf(nullptr, {halide_dimension_t{0, 0, 0}});
     Halide::Runtime::Buffer<uint8_t> out_buf(32);
 
-    c(in_buf, out_buf);
+    int result = c(in_buf, out_buf);
+
+    if (result != 0) {
+        printf("Callable failed: %d\n", result);
+        return 1;
+    }
 
     if (in_buf.dim(0).stride() != 1 ||
         in_buf.dim(0).extent() != 32) {

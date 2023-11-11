@@ -248,6 +248,11 @@ endforeach ()
 _add_halide_aot_tests(alias
                       HALIDE_LIBRARIES alias ${EXTRA_ALIAS_LIBS})
 
+# all_type_names_aottest.cpp
+# all_type_names_generator.cpp
+_add_halide_libraries(all_type_names)
+_add_halide_aot_tests(all_type_names)
+
 # argvcall_aottest.cpp
 # argvcall_generator.cpp
 _add_halide_libraries(argvcall)

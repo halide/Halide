@@ -39,7 +39,7 @@ class RebaseLoopsToZero : public IRMutator {
         if (body.same_as(op->body)) {
             return op;
         } else {
-            return For::make(name, 0, op->extent, op->for_type, op->device_api, body);
+            return For::make(name, 0, op->extent, op->for_type, op->partition_policy, op->device_api, body);
         }
     }
 };

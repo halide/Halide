@@ -533,7 +533,7 @@ class LoopCarry : public IRMutator {
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, op->device_api, body);
             }
 
             // Inject the scratch buffer allocations.

@@ -35,7 +35,7 @@ class SelectGPUAPI : public IRMutator {
         internal_assert(op);
 
         if (op->device_api != selected_api) {
-            return For::make(op->name, op->min, op->extent, op->for_type, selected_api, op->body);
+            return For::make(op->name, op->min, op->extent, op->for_type, op->partition_policy, selected_api, op->body);
         }
         return stmt;
     }

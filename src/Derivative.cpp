@@ -139,6 +139,9 @@ protected:
     void visit(const Atomic *op) override {
         internal_error << "Encounter unexpected statement \"Atomic\" when differentiating.";
     }
+    void visit(const HoistedStorage *op) override {
+        internal_error << "Encounter unexpected statement \"HoistedStorage\" when differentiating.";
+    }
 
 private:
     void accumulate(const Expr &stub, Expr adjoint);
