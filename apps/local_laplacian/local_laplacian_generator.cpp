@@ -109,8 +109,7 @@ public:
             remap.compute_root();
             Var xi, yi;
             output.compute_root()
-                .partition(x, Partition::Never)
-                .partition(y, Partition::Never)
+                .never_partition_all()
                 .gpu_tile(x, y, xi, yi, 16, 8);
             for (int j = 0; j < J; j++) {
                 int blockw = 16, blockh = 8;
@@ -121,20 +120,17 @@ public:
                 if (j > 0) {
                     inGPyramid[j]
                         .compute_root()
-                        .partition(x, Partition::Never)
-                        .partition(y, Partition::Never)
+                        .never_partition_all()
                         .gpu_tile(x, y, xi, yi, blockw, blockh);
                     gPyramid[j]
                         .compute_root()
                         .reorder(k, x, y)
-                        .partition(x, Partition::Never)
-                        .partition(y, Partition::Never)
+                        .never_partition_all()
                         .gpu_tile(x, y, xi, yi, blockw, blockh);
                 }
                 outGPyramid[j]
                     .compute_root()
-                    .partition(x, Partition::Never)
-                    .partition(y, Partition::Never)
+                    .never_partition_all()
                     .gpu_tile(x, y, xi, yi, blockw, blockh);
             }
         } else {
@@ -157,7 +153,7 @@ public:
                 .vectorize(x, 8);
             gray
                 .compute_root()
-                .partition(y, Partition::Never)
+                .never_partition(y)
                 .parallel(y, 32)
                 .vectorize(x, 8);
             for (int j = 1; j < 5; j++) {
@@ -180,8 +176,8 @@ public:
                     // Turn off loop partitioning at higher pyramid levels. This
                     // shaves about 3% off code size and compile time without
                     // affecting performance.
-                    inGPyramid[j].partition(x, Partition::Never);
-                    gPyramid[j].partition(x, Partition::Never);
+                    inGPyramid[j].never_partition_all();
+                    gPyramid[j].never_partition_all();
                 }
             }
             outGPyramid[0]
