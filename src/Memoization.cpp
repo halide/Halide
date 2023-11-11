@@ -30,9 +30,9 @@ public:
             for (const auto &extern_arg : extern_args) {
                 if (extern_arg.is_buffer()) {
                     // Function with an extern definition
-                    record(Halide::Internal::Parameter(extern_arg.buffer.type(), true,
-                                                       extern_arg.buffer.dimensions(),
-                                                       extern_arg.buffer.name()));
+                    record(Halide::Parameter(extern_arg.buffer.type(), true,
+                                             extern_arg.buffer.dimensions(),
+                                             extern_arg.buffer.name()));
                 } else if (extern_arg.is_image_param()) {
                     record(extern_arg.image_param);
                 }

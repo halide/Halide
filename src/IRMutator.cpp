@@ -210,7 +210,7 @@ Stmt IRMutator::visit(const For *op) {
         return op;
     }
     return For::make(op->name, std::move(min), std::move(extent),
-                     op->for_type, op->device_api, std::move(body));
+                     op->for_type, op->partition_policy, op->device_api, std::move(body));
 }
 
 Stmt IRMutator::visit(const Store *op) {
@@ -367,6 +367,16 @@ Stmt IRMutator::visit(const Atomic *op) {
         return Atomic::make(op->producer_name,
                             op->mutex_name,
                             std::move(body));
+    }
+}
+
+Stmt IRMutator::visit(const HoistedStorage *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        return op;
+    } else {
+        return HoistedStorage::make(op->name,
+                                    std::move(body));
     }
 }
 

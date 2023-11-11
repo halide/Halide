@@ -973,11 +973,15 @@ using GeneratorParamImplBase =
  *   "int8"     Halide::Int(8)
  *   "int16"    Halide::Int(16)
  *   "int32"    Halide::Int(32)
+ *   "int64"    Halide::Int(64)
  *   "uint8"    Halide::UInt(8)
  *   "uint16"   Halide::UInt(16)
  *   "uint32"   Halide::UInt(32)
+ *   "uint64"   Halide::UInt(64)
+ *   "float16"  Halide::Float(16)
  *   "float32"  Halide::Float(32)
  *   "float64"  Halide::Float(64)
+ *   "bfloat16"  Halide::BFloat(16)
  *
  * No vector Types are currently supported by this mapping.
  *
@@ -2001,7 +2005,8 @@ protected:
 
     void set_def_min_max() override {
         for (Parameter &p : this->parameters_) {
-            p.set_scalar<TBase>(def_);
+            // No: we want to leave the Parameter unset here.
+            // p.set_scalar<TBase>(def_);
             p.set_default_value(def_expr_);
         }
     }
@@ -3689,6 +3694,7 @@ public:
     void bind_input(const std::string &name, const std::vector<Expr> &v) override;
 
     bool emit_cpp_stub(const std::string &stub_file_path) override;
+    bool emit_hlpipe(const std::string &hlpipe_file_path) override;
 
     GeneratorBase(const GeneratorBase &) = delete;
     GeneratorBase &operator=(const GeneratorBase &) = delete;
@@ -3921,7 +3927,7 @@ struct ExecuteGeneratorArgs {
         Default,
 
         // Build a version suitable for using for gradient descent calculation.
-        Gradient
+        Gradient,
     } build_mode = Default;
 
     // The fn that will produce Generator(s) from the name specified.

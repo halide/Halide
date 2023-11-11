@@ -1,4 +1,4 @@
-#include "StmtToViz.h"
+#include "StmtToHTML.h"
 #include "Debug.h"
 #include "Error.h"
 #include "IROperator.h"
@@ -17,20 +17,30 @@
 #include <sstream>
 #include <utility>
 
+// Setting this to 0 is meant to speed up the development iteration cycle.
+// Not inlining these template files, but just linking them by an absolute path
+// causes you to be able to just edit the files without having to recompile Halide
+// and then rerun your generator.
+// For distribution purposes, they should be inlined, and this define should be on 1.
+#define INLINE_TEMPLATES 1
+
+#if !INLINE_TEMPLATES
+#include <filesystem>
+#endif
+
 namespace Halide {
 namespace Internal {
 
-extern "C" unsigned char halide_html_template_StmtToViz_dependencies[];
-extern "C" unsigned char halide_html_template_StmtToViz_stylesheet[];
-extern "C" unsigned char halide_html_template_StmtToViz_javascript[];
+extern "C" unsigned char halide_html_template_StmtToHTML_dependencies_html[];
+extern "C" unsigned char halide_html_template_StmtToHTML_css[];
+extern "C" unsigned char halide_html_template_StmtToHTML_js[];
 
 // Classes defined within this file
 class CostModel;
 class AssemblyInfo;
 template<typename T>
 class HTMLCodePrinter;
-class HTMLVisualizationPrinter;
-class IRVisualizer;
+class PipelineHTMLInspector;
 
 /** IRCostModel
  * A basic cost model for Halide IR. Estimates computation
@@ -39,9 +49,7 @@ class IRVisualizer;
  */
 class IRCostModel : public IRVisitor {
 public:
-    IRCostModel()
-
-        = default;
+    IRCostModel() = default;
 
     // Pre-compute all costs to avoid repeated work
     void compute_all_costs(const Module &m) {
@@ -49,7 +57,13 @@ public:
         for (const auto &fn : m.functions()) {
             fn.body.accept(this);
         }
+    }
 
+    void compute_conceptual_costs(const Module &m) {
+        m.get_conceptual_stmt().accept(this);
+    }
+
+    void finalize_cost_computation() {
         // Compute the max cost for each category
         max_compute_cost = -1;
         for (auto const &entry : compute_cost) {
@@ -521,15 +535,27 @@ class AssemblyInfo : public IRVisitor {
 public:
     AssemblyInfo() = default;
 
-    void generate(const std::string &code, const Module &m) {
+    void gather_nodes_from_functions(const Module &m) {
         // Traverse the module to populate the list of
         // nodes we need to map and generate their assembly
         // markers (comments that appear in the assembly code
         // associating the code with this node)
+        ids_are_known = true;
         for (const auto &fn : m.functions()) {
             fn.body.accept(this);
         }
+    }
 
+    void gather_nodes_from_conceptual_stmt(const Module &m) {
+        // Traverse the module's conceptual Stmt to populate the list of
+        // nodes we need to map and generate their assembly
+        // markers (comments that appear in the assembly code
+        // associating the code with this node)
+        ids_are_known = false;
+        m.get_conceptual_stmt().accept(this);
+    }
+
+    void generate(const std::string &code) {
         // Find markers in asm code
         std::istringstream asm_stream(code);
         std::string line;
@@ -537,8 +563,8 @@ public:
         while (getline(asm_stream, line)) {
             // Try all markers
             std::vector<uint64_t> matched_nodes;
-            for (auto const &[node, regex] : markers) {
-                if (std::regex_search(line, regex)) {
+            for (auto const &[node, marker] : markers) {
+                if (std::regex_search(line, marker)) {
                     // Save line number
                     lnos[node] = lno;
                     // Save this node's id
@@ -562,18 +588,32 @@ public:
         return -1;
     }
 
+    std::string get_label(uint64_t node_id) {
+        if (labels.count(node_id)) {
+            return labels[node_id];
+        }
+        return "(label not found)";
+    }
+
 private:
     // Generate asm markers for Halide loops
+    bool ids_are_known{true};
     int loop_id = 0;
     int gen_loop_id() {
         return ++loop_id;
     }
 
-    std::regex gen_loop_asm_marker(int id, const std::string &loop_var) {
+    std::string gen_loop_asm_marker(int id, const std::string &loop_var) {
         std::regex dollar("\\$");
-        std::string marker = "%\"" + std::to_string(id) + "_for_" + loop_var;
+        std::string marker = "%\"";
+        if (ids_are_known) {
+            marker += std::to_string(id);
+        } else {
+            marker += "\\d+";
+        }
+        marker += "_for_" + loop_var;
         marker = std::regex_replace(marker, dollar, "\\$");
-        return std::regex(marker);
+        return marker;
     }
 
     // Generate asm markers for Halide producer/consumer ndoes
@@ -582,15 +622,22 @@ private:
         return ++prodcons_id;
     }
 
-    std::regex gen_prodcons_asm_marker(int id, const std::string &var, bool is_producer) {
+    std::string gen_prodcons_asm_marker(int id, const std::string &var, bool is_producer) {
         std::regex dollar("\\$");
-        std::string marker = "%\"" + std::to_string(id) + (is_producer ? "_produce_" : "_consume_") + var;
+        std::string marker = "%\"";
+        if (ids_are_known) {
+            marker += std::to_string(id);
+        } else {
+            marker += "\\d+";
+        }
+        marker += (is_producer ? "_produce_" : "_consume_") + var;
         marker = std::regex_replace(marker, dollar, "\\$");
-        return std::regex(marker);
+        return marker;
     }
 
     // Mapping of IR nodes to their asm markers
     std::map<uint64_t, std::regex> markers;
+    std::map<uint64_t, std::string> labels;
 
     // Mapping of IR nodes to their asm line numbers
     std::map<uint64_t, int> lnos;
@@ -599,14 +646,18 @@ private:
 
     void visit(const ProducerConsumer *op) override {
         // Generate asm marker
-        markers[(uint64_t)op] = gen_prodcons_asm_marker(gen_prodcons_id(), op->name, op->is_producer);
+        std::string marker = gen_prodcons_asm_marker(gen_prodcons_id(), op->name, op->is_producer);
+        markers[(uint64_t)op] = std::regex(marker);
+        labels[(uint64_t)op] = marker;
         // Continue traversal
         IRVisitor::visit(op);
     }
 
     void visit(const For *op) override {
         // Generate asm marker
-        markers[(uint64_t)op] = gen_loop_asm_marker(gen_loop_id(), op->name);
+        std::string marker = gen_loop_asm_marker(gen_loop_id(), op->name);
+        markers[(uint64_t)op] = std::regex(marker);
+        labels[(uint64_t)op] = marker;
         // Continue traversal
         IRVisitor::visit(op);
     }
@@ -619,8 +670,9 @@ private:
 template<typename T>
 class HTMLCodePrinter : public IRVisitor {
 public:
-    HTMLCodePrinter(T &os, std::map<const IRNode *, int> &nids)
-        : stream(os), node_ids(nids), context_stack(1, 0) {
+    HTMLCodePrinter(T &os, std::map<const IRNode *, int> &nids, bool enable_assembly_features)
+        : stream(os), node_ids(nids), context_stack(1, 0),
+          enable_assembly_features(enable_assembly_features) {
     }
 
     // Make class non-copyable and non-moveable
@@ -631,7 +683,54 @@ public:
         cost_model = std::move(cm);
     }
 
-    void print(const Module &m) {
+    void print_conceptual_stmt(const Module &m, AssemblyInfo host_asm_info, AssemblyInfo device_asm_info) {
+        host_assembly_info = std::move(host_asm_info);
+        device_assembly_info = std::move(device_asm_info);
+
+        // Generate a unique ID for this module
+        int id = gen_unique_id();
+
+        // Enter new scope for this module
+        scope.push(m.name(), id);
+
+        // Open div to hold this module
+        print_opening_tag("div", "Module");
+
+        // Generate the show hide icon/text buttons
+        print_show_hide_btn_begin(id);
+
+        // -- print text
+        print_opening_tag("span", "matched");
+        print_html_element("span", "keyword", "module");
+        print_text(" name=" + m.name() + ", target=" + m.target().to_string());
+        print_closing_tag("span");
+
+        // Open code block to hold module body
+        print_opening_brace();
+        print_show_hide_btn_end(nullptr);
+
+        // Open indented div to hold body code
+        print_opening_tag("div", "indent ModuleBody", "", id);
+
+        print(m.get_conceptual_stmt());
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding module body
+        print_html_element("span", "matched ClosingBrace cb-" + std::to_string(id), "}");
+
+        // Close div holding this module
+        print_closing_tag("div");
+
+        // Pop out to outer scope
+        scope.pop(m.name());
+    }
+
+    void print(const Module &m, AssemblyInfo host_asm_info, AssemblyInfo device_asm_info) {
+        host_assembly_info = std::move(host_asm_info);
+        device_assembly_info = std::move(device_asm_info);
+
         // Generate a unique ID for this module
         int id = gen_unique_id();
 
@@ -641,16 +740,13 @@ public:
         // The implementation doesn't need to support submodules:
         // we only call this for Modules that have already had their submodules
         // resolved.
-        internal_assert(m.submodules().empty()) << "StmtToViz does not support submodules.";
+        internal_assert(m.submodules().empty()) << "StmtToHTML does not support submodules.";
 
         // Open div to hold this module
         print_opening_tag("div", "Module");
 
         // Generate the show hide icon/text buttons
-        print_toggle_anchor_opening_tag(id);
-
-        // -- print icon
-        print_show_hide_icon(id);
+        print_show_hide_btn_begin(id);
 
         // -- print text
         print_opening_tag("span", "matched");
@@ -658,13 +754,12 @@ public:
         print_text(" name=" + m.name() + ", target=" + m.target().to_string());
         print_closing_tag("span");
 
-        print_toggle_anchor_closing_tag();
-
         // Open code block to hold module body
-        print_html_element("span", "matched", " {");
+        print_opening_brace();
+        print_show_hide_btn_end(nullptr);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent ModuleBody", id);
+        print_opening_tag("div", "indent ModuleBody", "", id);
 
         // Print module buffers
         for (const auto &buf : m.buffers()) {
@@ -689,249 +784,20 @@ public:
         scope.pop(m.name());
     }
 
-private:
-    // Handle to output file stream
-    T &stream;
-
-    // Used to generate unique ids
-    int id = 0;
-    std::map<const IRNode *, int> &node_ids;
-
-    // Used to track scope during IR traversal
-    Scope<int> scope;
-
-    /* All spans and divs will have an id of the form "x-y", where x
-     * is shared among all spans/divs in the same context, and y is unique.
-     * These variables are used to track the context within generated HTML */
-    std::vector<int> context_stack;
-    std::vector<std::string> context_stack_tags;
-
-    // Holds cost information for visualized program
-    IRCostModel cost_model;
-
-    /* Private print functions to handle various IR types */
-    void print(const Buffer<> &buf) {
-        // Generate a unique ID for this module
-        int id = gen_unique_id();
-
-        // Determine whether to print buffer data
-        bool print_data = ends_with(buf.name(), "_gpu_source_kernels");
-
-        // Open div to hold this buffer
-        print_opening_tag("div", "Buffer");
-
-        if (print_data) {
-            // Generate the show hide icon/text buttons
-            print_toggle_anchor_opening_tag(id);
-
-            // -- print icon
-            print_show_hide_icon(id);
-
-            // -- print text
-            print_html_element("span", "keyword", "buffer ");
-            print_variable(buf.name());
-
-            print_toggle_anchor_closing_tag();
-
-            // Print data
-            print_text(" = ");
-
-            // Open code block to hold module body
-            print_html_element("span", "matched", " {");
-
-            // Open indented div to hold buffer data
-            print_opening_tag("div", "indent BufferData", id);
-
-            std::string str((const char *)buf.data(), buf.size_in_bytes());
-            if (starts_with(buf.name(), "cuda_")) {
-                print_cuda_gpu_source_kernels(str);
-            } else {
-                stream << "<pre>\n"
-                       << str << "</pre>\n";
-            }
-
-            print_closing_tag("div");
-
-            // Close code block holding buffer body
-            print_html_element("span", "matched ClosingBrace cb-" + std::to_string(id), " }");
-        } else {
-            // Print buffer name and move on
-            print_html_element("span", "keyword", "buffer ");
-            print_variable(buf.name());
-        }
-
-        // Close div holding this buffer
-        print_closing_tag("div");
-    }
-
-    void print(const LoweredFunc &fn) {
-        // Generate a unique ID for this function
-        int id = gen_unique_id();
-
-        // Enter new scope for this function
-        scope.push(fn.name, id);
-
-        // Open div to hold this buffer
-        print_opening_tag("div", "Function");
-
-        // Generate the show hide icon/text buttons
-        print_toggle_anchor_opening_tag(id);
-
-        // -- print icon
-        print_show_hide_icon(id);
-
-        // -- print text (fn name and args)
-        //    Note: We wrap the show/hide buttons in a navigation anchor
-        //    that lets us sync text and visualization tabs.
-        print_opening_tag("span", "matched");
-        print_html_element("span", "keyword nav-anchor", "func ", "lowered-func-" + fn.name);
-        print_text(fn.name + "(");
-        print_closing_tag("span");
-        print_fndecl_args(fn.args);
-        print_html_element("span", "matched", ")");
-
-        print_toggle_anchor_closing_tag();
-
-        // Add a button to jump to this function in the viz
-        print_visualization_button("lowered-func-viz-" + std::to_string(id));
-
-        // Open code block to hold function body
-        print_html_element("span", "matched", "{");
-
-        // Open indented div to hold body code
-        print_opening_tag("div", "indent FunctionBody", id);
-
-        // Print function body
-        print(fn.body);
-
-        // Close indented div holding body code
-        print_closing_tag("div");
-
-        // Close code block holding func body
-        print_html_element("span", "matched ClosingBrace cb-" + std::to_string(id), "}");
-
-        // Close div holding this function
-        print_closing_tag("div");
-
-        // Pop out to outer scope
-        scope.pop(fn.name);
-    }
-
-    void print(const Expr &ir) {
-        ir.accept(this);
-    }
-
-    void print(const Stmt &ir) {
-        ir.accept(this);
-    }
-
-    /* Methods used to emit common HTML patterns */
-
-    // Prints the opening tag for the specified html element. A unique ID is
-    // auto-generated unless provided.
-    void print_opening_tag(const std::string &tag, const std::string &cls, int id = -1) {
-        stream << "<" << tag << " class='" << cls << "' id='";
-        if (id == -1) {
-            stream << context_stack.back() << "-";
-            stream << gen_unique_id();
-        } else {
-            stream << id;
-        }
-        stream << "'>";
-        context_stack.push_back(gen_unique_id());
-        context_stack_tags.push_back(tag);
-    }
-
-    void print_opening_tag(const std::string &tag, const std::string &cls, std::string id) {
-        stream << "<" << tag << " class='" << cls << "' id='" << id << "'>";
-        context_stack.push_back(gen_unique_id());
-        context_stack_tags.push_back(tag);
-    }
-
-    // Prints the closing tag for the specified html element.
-    void print_closing_tag(const std::string &tag) {
-        internal_assert(!context_stack.empty() && tag == context_stack_tags.back())
-            << tag << " " << context_stack.empty() << " " << context_stack_tags.back();
-        context_stack.pop_back();
-        context_stack_tags.pop_back();
-        stream << "</" + tag + ">";
-    }
-
-    // Prints an html element: opening tag, body and closing tag
-    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body, int id = -1) {
-        print_opening_tag(tag, cls, id);
-        stream << body;
-        print_closing_tag(tag);
-    }
-
-    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body, std::string id) {
-        print_opening_tag(tag, cls, id);
-        stream << body;
-        print_closing_tag(tag);
-    }
-
-    // Prints the opening/closing tags for an anchor that toggles code block view
-    void print_toggle_anchor_opening_tag(int id) {
-        stream << "<a onclick='return toggle(" << id << ");' href=_blank>";
-    }
-
-    void print_toggle_anchor_closing_tag() {
-        stream << "</a>";
-    }
-
-    // Prints newline to stream
-    void print_ln() {
-        stream << '\n';
-    }
-
-    // Prints a variable to stream
-    void print_variable(const std::string &x) {
-        stream << variable(x);
-    }
-
-    std::string variable(const std::string &x) {
-        int id;
-        if (scope.contains(x)) {
-            id = scope.get(x);
-        } else {
-            id = gen_unique_id();
-            scope.push(x, id);
-        }
-        std::ostringstream s;
-        s << "<b class='variable matched' id='" << id << "-" << gen_unique_id() << "'>";
-        s << x;
-        s << "</b>";
-        return s.str();
-    }
-
-    // Prints text to stream
-    void print_text(const std::string &x) {
-        stream << x;
-    }
-
-    // Prints the button to show or hide a code scope
-    void print_show_hide_icon(int id) {
-        stream << "<div class='show-hide-btn-wrapper'>"
-               << "  <div class='show-hide-btn' style='display:none;' id=" << id << "-show>"
-               << "    <i class='bi bi-plus-square' title='Expand code block'></i>"
-               << "  </div>"
-               << "  <div class='show-hide-btn' id=" << id << "-hide>"
-               << "    <i class='bi bi-dash-square' title='Collapse code block'></i>"
-               << "  </div>"
-               << "</div>";
-    }
-
-    // Prints a button to sync text with visualization
-    void print_visualization_button(std::string id) {
-        stream << "<button class='icon-btn sync-btn' onclick='scrollToViz(\"" << id << "\")'>"
-               << "  <i class='bi bi-arrow-right-square' title='Jump to visualization'></i>"
-               << "</button>";
+    inline std::string escape_html(std::string src) {
+        src = replace_all(src, "&", "&amp;");
+        src = replace_all(src, "<", "&lt;");
+        src = replace_all(src, ">", "&gt;");
+        src = replace_all(src, "\"", "&quot;");
+        src = replace_all(src, "/", "&#x2F;");
+        src = replace_all(src, "'", "&#39;");
+        return src;
     }
 
     // CUDA kernels are embedded into modules as PTX assembly. This
     // routine pretty - prints that assembly format.
     void print_cuda_gpu_source_kernels(const std::string &str) {
-        print_opening_tag("code", "ptx");
+        print_opening_tag("div", "code ptx");
 
         int current_id = -1;
         bool in_braces = false;
@@ -942,38 +808,32 @@ private:
 
         for (std::string line; std::getline(ss, line);) {
             if (line.empty()) {
-                stream << "\n";
+                stream << "<span class='line'></span>\n";
                 continue;
             }
-            line = replace_all(line, "&", "&amp;");
-            line = replace_all(line, "<", "&lt;");
-            line = replace_all(line, ">", "&gt;");
-            line = replace_all(line, "\"", "&quot;");
-            line = replace_all(line, "/", "&#x2F;");
-            line = replace_all(line, "'", "&#39;");
+            line = escape_html(line);
+
+            bool should_print_open_indent = false;
 
             if (starts_with(line, ".visible .entry")) {
                 std::vector<std::string> parts = split_string(line, " ");
                 if (parts.size() == 3) {
                     in_func_signature = true;
                     current_id = gen_unique_id();
-                    print_toggle_anchor_opening_tag(current_id);
-                    print_show_hide_icon(current_id);
+                    print_show_hide_btn_begin(current_id);
                     std::string kernel_name = parts[2].substr(0, parts[2].length() - 1);
                     line = "<span class='keyword'>.visible</span> <span class='keyword'>.entry</span> ";
-                    line += variable(kernel_name) + " <span class='matched'>(</span>";
+                    line += kernel_name + " <span class='matched'>(</span>";
                     current_kernel = kernel_name;
                 }
             } else if (starts_with(line, ")") && in_func_signature) {
-                print_toggle_anchor_closing_tag();
                 in_func_signature = false;
                 line = "<span class='matched'>)</span>" + line.substr(1);
             } else if (starts_with(line, "{") && !in_braces) {
+                print_opening_brace();
                 in_braces = true;
-                print_toggle_anchor_closing_tag();
-                print_html_element("span", "matched", "{");
                 internal_assert(current_id != -1);
-                print_opening_tag("div", "indent", current_id);
+                should_print_open_indent = true;
                 current_id = -1;
                 line = line.substr(1);
                 scope.push(current_kernel, gen_unique_id());
@@ -1026,13 +886,13 @@ private:
             if (line.front() == '@' && indent) {
                 idx = line.find(' ');
                 std::string pred = line.substr(1, idx - 1);
-                line = "<span class='Pred'>@" + variable(pred) + "</span>" + line.substr(idx);
+                line = "<span class='Pred'>@" + variable(pred, Bool()) + "</span>" + line.substr(idx);
             }
 
-            // Labels
-            if (line.front() == 'L' && !indent && (idx = line.find(':')) != std::string::npos) {
+            // Labels (depending on the LLVM version we get L with or without a dollar)
+            if (starts_with(line, "$L_") && !indent && (idx = line.find(':')) != std::string::npos) {
                 std::string label = line.substr(0, idx);
-                line = "<span class='Label'>" + variable(label) + "</span>:" + line.substr(idx + 1);
+                line = "<span class='Label'>" + variable(label, "Label") + "</span>:" + line.substr(idx + 1);
             }
 
             // Highlight operands
@@ -1049,9 +909,9 @@ private:
                     }
                     if (op.back() == '}') {
                         std::string reg = op.substr(0, op.size() - 1);
-                        operands_str += variable(reg) + '}';
+                        operands_str += variable(reg, "reg") + '}';
                     } else if (op.front() == '%') {
-                        operands_str += variable(op);
+                        operands_str += variable(op, "");
                     } else if (op.find_first_not_of("-0123456789") == std::string::npos) {
                         operands_str += "<span class='IntImm Imm'>";
                         operands_str += op;
@@ -1065,12 +925,12 @@ private:
                         size_t idx = op.find('+');
                         if (idx == std::string::npos) {
                             std::string reg = op.substr(1, op.size() - 2);
-                            operands_str += '[' + variable(reg) + ']';
+                            operands_str += '[' + variable(reg, "reg") + ']';
                         } else {
                             std::string reg = op.substr(1, idx - 1);
                             std::string offset = op.substr(idx + 1);
                             offset = offset.substr(0, offset.size() - 1);
-                            operands_str += '[' + variable(reg) + "+";
+                            operands_str += '[' + variable(reg, "reg") + "+";
                             operands_str += "<span class='IntImm Imm'>";
                             operands_str += offset;
                             operands_str += "</span>";
@@ -1078,10 +938,10 @@ private:
                         }
                     } else if (op.front() == '{') {
                         std::string reg = op.substr(1);
-                        operands_str += '{' + variable(reg);
-                    } else if (op.front() == 'L') {
+                        operands_str += '{' + variable(reg, "reg");
+                    } else if (starts_with(op, "$L_")) {
                         // Labels
-                        operands_str += "<span class='Label'>" + variable(op) + "</span>";
+                        operands_str += "<span class='Label'>" + variable(op, "Label") + "</span>";
                     } else {
                         operands_str += op;
                     }
@@ -1090,12 +950,237 @@ private:
                 line = line.substr(0, idx + 2) + operands_str;
             }
 
+            stream << "<span class='line'>";
             if (indent) {
                 stream << "    ";
             }
-            stream << line << "\n";
+            stream << line << "</span>\n";
+
+            // Indent-divs can only be opened after the line is finished.
+            if (should_print_open_indent) {
+                print_show_hide_btn_end(nullptr);
+                print_opening_tag("div", "indent", "", current_id);
+            }
         }
-        print_closing_tag("code");
+        print_closing_tag("div");
+    }
+
+private:
+    // Handle to output file stream
+    T &stream;
+
+    // Used to generate unique ids
+    int id = 0;
+    std::map<const IRNode *, int> &node_ids;
+
+    // Used to track scope during IR traversal
+    Scope<int> scope;
+
+    /* All spans and divs will have an id of the form "x-y", where x
+     * is shared among all spans/divs in the same context, and y is unique.
+     * These variables are used to track the context within generated HTML */
+    std::vector<int> context_stack;
+    std::vector<std::string> context_stack_tags;
+
+    // Holds cost information for visualized program
+    IRCostModel cost_model;
+    AssemblyInfo host_assembly_info;
+    AssemblyInfo device_assembly_info;
+    bool enable_assembly_features;
+
+    /* Private print functions to handle various IR types */
+    void print(const Buffer<> &buf) {
+        // Open div to hold this buffer
+        print_opening_tag("div", "Buffer");
+
+        // Print buffer name and move on
+        print_html_element("span", "keyword", "buffer ");
+        print_variable(buf.name(), buf.type());
+
+        // Close div holding this buffer
+        print_closing_tag("div");
+    }
+
+    void print(const LoweredFunc &fn) {
+        // Generate a unique ID for this function
+        int id = gen_unique_id();
+
+        // Enter new scope for this function
+        scope.push(fn.name, id);
+
+        // Open div to hold this buffer
+        print_opening_tag("div", "Function");
+
+        // Generate the show hide icon/text buttons
+        print_show_hide_btn_begin(id);
+
+        // -- print text (fn name and args)
+        print_opening_tag("span", "matched");
+        print_html_element("span", "keyword ", "func ", "lowered-func-" + fn.name);
+        print_text(fn.name + "(");
+        print_closing_tag("span");
+        print_fndecl_args(fn.args);
+        print_html_element("span", "matched", ")");
+
+        // Open code block to hold function body
+        print_opening_brace();
+        print_show_hide_btn_end(nullptr);
+
+        // Open indented div to hold body code
+        print_opening_tag("div", "indent FunctionBody", "", id);
+
+        // Print function body
+        print(fn.body);
+
+        // Close indented div holding body code
+        print_closing_tag("div");
+
+        // Close code block holding func body
+        print_html_element("span", "matched ClosingBrace cb-" + std::to_string(id), "}");
+
+        // Close div holding this function
+        print_closing_tag("div");
+
+        // Pop out to outer scope
+        scope.pop(fn.name);
+    }
+
+    void print(const Expr &ir) {
+        ir.accept(this);
+    }
+
+    void print(const Stmt &ir) {
+        ir.accept(this);
+    }
+
+    std::string type_to_string(Type t) {
+        std::ostringstream ss;
+        ss << t;
+        return ss.str();
+    }
+
+    /* Methods used to emit common HTML patterns */
+
+    // Prints the opening tag for the specified html element. A unique ID is
+    // auto-generated unless provided.
+    void print_opening_tag(const std::string &tag, const std::string &cls, const std::string &tooltip = "", int id = -1) {
+        stream << "<" << tag << " class='" << cls << "'";
+        if (!tooltip.empty()) {
+            stream << " title='" << tooltip << "'";
+        }
+        stream << " id='";
+        if (id == -1) {
+            stream << context_stack.back() << "-";
+            stream << gen_unique_id();
+        } else {
+            stream << id;
+        }
+        stream << "'>";
+        context_stack.push_back(gen_unique_id());
+        context_stack_tags.push_back(tag);
+    }
+
+    // Prints the closing tag for the specified html element.
+    void print_closing_tag(const std::string &tag) {
+        internal_assert(!context_stack.empty() && tag == context_stack_tags.back())
+            << tag << " " << context_stack.empty() << " " << context_stack_tags.back();
+        context_stack.pop_back();
+        context_stack_tags.pop_back();
+        stream << "</" + tag + ">";
+    }
+
+    // Prints an html element: opening tag, body and closing tag
+    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body, const std::string &tooltip = "", int id = -1) {
+        print_opening_tag(tag, cls, tooltip, id);
+        stream << body;
+        print_closing_tag(tag);
+    }
+
+    void print_opening_brace() {
+        print_html_element("span", "matched OpeningBrace", "{");
+    }
+
+    void print_closing_brace() {
+        print_html_element("span", "matched ClosingBrace", "}");
+    }
+
+    // Prints the opening/closing tags for an anchor that toggles code block view
+    void print_show_hide_btn_begin(int id, bool collapsed = false) {
+        stream << "<input type=checkbox id='show-hide-btn-" << id << "' class='show-hide-btn'";
+        if (collapsed) {
+            stream << " checked";
+        }
+        stream << "/>";
+        stream << "<label for='show-hide-btn-" << id << "'>";
+    }
+
+    void print_show_hide_btn_end(const IRNode *op) {
+        stream << "</label><div class='op-btns'>";
+        if (op) {
+            print_assembly_button(op);
+        }
+        stream << "</div>";
+    }
+
+    // Prints newline to stream
+    void print_ln() {
+        stream << '\n';
+    }
+
+    // Prints a variable to stream
+    void print_variable(const std::string &x, Type type) {
+        stream << variable(x, type);
+    }
+
+    std::string variable(const std::string &x, const std::string &tooltip) {
+        int id;
+        if (scope.contains(x)) {
+            id = scope.get(x);
+        } else {
+            id = gen_unique_id();
+            scope.push(x, id);
+        }
+        std::ostringstream s;
+        s << "<b class='variable matched' id='" << id << "-" << gen_unique_id() << "'";
+        if (!tooltip.empty()) {
+            s << " title='" << tooltip << "'";
+        }
+        s << ">" << x << "</b>";
+        return s.str();
+    }
+
+    std::string variable(const std::string &x, Type type) {
+        return variable(x, type_to_string(type));
+    }
+
+    // Prints text to stream
+    void print_text(const std::string &x) {
+        stream << x;
+    }
+
+    // Prints a button to sync text with visualization
+    void print_assembly_button(const void *op) {
+        if (!enable_assembly_features) {
+            return;
+        }
+        {
+            int asm_lno = host_assembly_info.get_asm_lno((uint64_t)op);
+            if (asm_lno != -1) {
+                stream << "<div class='icon-btn jump-to-host-asm-btn tooltip-parent' onclick='scrollToHostAsm(" << asm_lno << ")'>"
+                       << "<span class='tooltip'>Jump to Host Assembly"
+                       << "<span>" << host_assembly_info.get_label((uint64_t)op) << "</span></span>"
+                       << "</div>";
+            }
+        }
+        {
+            int asm_lno = device_assembly_info.get_asm_lno((uint64_t)op);
+            if (asm_lno != -1) {
+                stream << "<div class='icon-btn jump-to-device-code-btn tooltip-parent' onclick='scrollToDeviceCode(" << asm_lno << ")'>"
+                       << "<span class='tooltip'>Jump to Device Code"
+                       << "<span>" << device_assembly_info.get_label((uint64_t)op) << "</span></span>"
+                       << "</div>";
+            }
+        }
     }
 
     // Prints the args in a function declaration
@@ -1106,14 +1191,14 @@ private:
                 print_html_element("span", "matched", ",");
                 print_text(" ");
             }
-            print_variable(arg.name);
+            print_variable(arg.name, arg.type);
             print_delim = true;
         }
     }
 
     /* Helper functions for printing IR nodes */
     void print_constant(std::string cls, Expr c) {
-        print_opening_tag("span", cls);
+        print_opening_tag("span", cls, type_to_string(c.type()));
         stream << c;
         print_closing_tag("span");
     }
@@ -1124,27 +1209,22 @@ private:
         print_closing_tag("span");
     }
 
-    void print_binary_op(const Expr &a, const Expr &b, std::string op) {
+    void print_binary_op(const Expr &a, const Expr &b, std::string op, Type result_type) {
+        std::string result_type_str = type_to_string(result_type);
         print_opening_tag("span", "BinaryOp");
-        print_html_element("span", "matched", "(");
+        print_html_element("span", "matched", "(", result_type_str);
         print(a);
         print_text(" ");
-        print_html_element("span", "matched Operator", op);
+        print_html_element("span", "matched Operator", op, result_type_str);
         print_text(" ");
         print(b);
-        print_html_element("span", "matched", ")");
+        print_html_element("span", "matched", ")", result_type_str);
         print_closing_tag("span");
     }
 
-    void print_function_call(std::string fn_name, const std::vector<Expr> &args, int id) {
-        print_opening_tag("span", "nav-anchor", "fn-call-" + std::to_string(id));
-        print_function_call(fn_name, args);
-        print_closing_tag("span");
-    }
-
-    void print_function_call(std::string fn_name, const std::vector<Expr> &args) {
+    void print_function_call(std::string fn_name, const std::vector<Expr> &args, const std::string &tooltip) {
         print_opening_tag("span", "matched");
-        print_html_element("span", "Symbol matched", fn_name);
+        print_html_element("span", "Symbol matched", fn_name, tooltip);
         print_text("(");
         print_closing_tag("span");
         bool print_delim = false;
@@ -1155,7 +1235,7 @@ private:
             print(arg);
             print_delim = true;
         }
-        print_html_element("span", "matched", ")");
+        print_html_element("span", "matched", ")", tooltip);
     }
 
     // To avoid generating ridiculously deep DOMs, we flatten blocks here.
@@ -1181,21 +1261,17 @@ private:
             print_opening_tag("div", "ForkTask");
 
             // Generate the show hide icon/text buttons
-            print_toggle_anchor_opening_tag(id);
-
-            // -- print icon
-            print_show_hide_icon(id);
+            print_show_hide_btn_begin(id);
 
             // -- print text
             print_html_element("span", "keyword matched", "task");
 
-            print_toggle_anchor_closing_tag();
-
             // Open code block to hold task body
-            print_html_element("span", "matched", " {");
+            print_opening_brace();
+            print_show_hide_btn_end(nullptr);
 
             // Open indented div to hold body code
-            print_opening_tag("div", "indent ForkTask", id);
+            print_opening_tag("div", "indent ForkTask", "", id);
 
             // Print task body
             print(stmt);
@@ -1227,30 +1303,42 @@ private:
     // Prints the button/indicator for the compute cost of a line in the program
     void print_compute_cost(const IRNode *op, int id) {
         int max_line_cost = cost_model.get_max_compute_cost(false);
+        int max_block_cost = cost_model.get_max_compute_cost(true);
         int line_cost = cost_model.get_compute_cost(op, false);
         int block_cost = cost_model.get_compute_cost(op, true);
+        if ((op != nullptr) &&
+            ((op->node_type == IRNodeType::LetStmt) || op->node_type == IRNodeType::Allocate)) {
+            block_cost = line_cost;
+        }
         std::string _id = "cc-" + std::to_string(id);
-        print_cost_btn(line_cost, block_cost, max_line_cost, _id, "Op Count: ");
+        print_cost_btn(line_cost, block_cost, max_line_cost, max_block_cost, _id, "Op Count: ");
     }
 
     // Prints the button/indicator for the data movement cost of a line in the program
     void print_data_movement_cost(const IRNode *op, int id) {
         int max_line_cost = cost_model.get_max_data_movement_cost(false);
+        int max_block_cost = cost_model.get_max_data_movement_cost(true);
         int line_cost = cost_model.get_data_movement_cost(op, false);
         int block_cost = cost_model.get_data_movement_cost(op, true);
+        if ((op != nullptr) &&
+            ((op->node_type == IRNodeType::LetStmt) || op->node_type == IRNodeType::Allocate)) {
+            block_cost = line_cost;
+        }
         std::string _id = "dc-" + std::to_string(id);
-        print_cost_btn(line_cost, block_cost, max_line_cost, _id, "Bits Moved: ");
+        print_cost_btn(line_cost, block_cost, max_line_cost, max_block_cost, _id, "Bits Moved: ");
     }
 
     // Prints a cost button/indicator
-    void print_cost_btn(int line_cost, int block_cost, int max_line_cost, std::string id, std::string prefix) {
+    void print_cost_btn(int line_cost, int block_cost, int max_line_cost, int max_block_cost, std::string id, std::string prefix) {
         const int num_cost_buckets = 20;
+        const auto compand = [](int v) -> int { return (int)std::sqrt(v * 10); };
 
-        int line_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
-        int block_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
+        int max_cost = std::max(max_line_cost, max_block_cost);  // This should always be the block cost.
+        int line_cost_bin_size = (compand(max_cost) / num_cost_buckets) + 1;
+        int block_cost_bin_size = (compand(max_cost) / num_cost_buckets) + 1;
 
-        int line_costc = line_cost / line_cost_bin_size;
-        int block_costc = block_cost / block_cost_bin_size;
+        int line_costc = compand(line_cost) / line_cost_bin_size;
+        int block_costc = compand(block_cost) / block_cost_bin_size;
 
         if (line_costc >= num_cost_buckets) {
             line_costc = num_cost_buckets - 1;
@@ -1259,13 +1347,32 @@ private:
             block_costc = num_cost_buckets - 1;
         }
 
-        stream << "<div id='" << id << "' class='cost-btn CostColor" << line_costc << "'"
-               << "   line-cost='" << line_cost << "' block-cost='" << block_cost << "'"
-               << "   line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>";
+        std::string line_cost_class;
+        std::string block_cost_class;
+        if (line_cost == 0) {
+            line_cost_class = "CostColorNone";
+        } else {
+            line_cost_class = "CostColor" + std::to_string(line_costc);
+        }
+        if (block_cost == 0) {
+            block_cost_class = "CostColorNone";
+        } else {
+            block_cost_class = "CostColor" + std::to_string(block_costc);
+        }
+        if (block_cost == line_cost) {
+            block_cost_class += " NoChildCost";
+        }
 
-        stream << "<span id='tooltip-" << id << "' class='tooltip cond-tooltop' role='tooltip-" << id << "'>"
-               << prefix << line_cost
-               << "</span>";
+        stream << "<div id='" << id << "' "
+               << "class='cost-btn tooltip-parent line-" << line_cost_class << " block-" << block_cost_class << "' "
+               << ">";
+
+        stream << "<span class='tooltip' role='tooltip'>"
+               << prefix << line_cost;
+        if (line_cost != block_cost) {
+            stream << "<br/>Total " << prefix << block_cost;
+        }
+        stream << "</span>";
 
         stream << "</div>";
     }
@@ -1301,10 +1408,11 @@ private:
     }
 
     void visit(const Variable *op) override {
-        print_variable(op->name);
+        print_variable(op->name, op->type);
     }
 
     void visit(const Cast *op) override {
+        std::string type_str = type_to_string(op->type);
         print_opening_tag("span", "Cast");
         print_opening_tag("span", "matched");
         print_type(op->type);
@@ -1316,78 +1424,81 @@ private:
     }
 
     void visit(const Reinterpret *op) override {
+        std::string type_str = type_to_string(op->type);
         print_opening_tag("span", "Reinterpret");
-        print_opening_tag("span", "matched");
+        print_opening_tag("span", "matched Symbol", type_str);
+        print_text("reinterpret&lt;");
         print_type(op->type);
-        print_text("(");
+        print_text("&gt;");
         print_closing_tag("span");
+        print_html_element("span", "matched", "(", type_str);
         print(op->value);
-        print_html_element("span", "matched", ")");
+        print_html_element("span", "matched", ")", type_str);
         print_closing_tag("span");
     }
 
     void visit(const Add *op) override {
-        print_binary_op(op->a, op->b, "+");
+        print_binary_op(op->a, op->b, "+", op->type);
     }
 
     void visit(const Sub *op) override {
-        print_binary_op(op->a, op->b, "-");
+        print_binary_op(op->a, op->b, "-", op->type);
     }
 
     void visit(const Mul *op) override {
-        print_binary_op(op->a, op->b, "*");
+        print_binary_op(op->a, op->b, "*", op->type);
     }
 
     void visit(const Div *op) override {
-        print_binary_op(op->a, op->b, "/");
+        print_binary_op(op->a, op->b, "/", op->type);
     }
 
     void visit(const Mod *op) override {
-        print_binary_op(op->a, op->b, "%");
+        print_binary_op(op->a, op->b, "%", op->type);
     }
 
     void visit(const Min *op) override {
         print_opening_tag("span", "Min");
-        print_function_call("min", {op->a, op->b});
+        print_function_call("min", {op->a, op->b}, type_to_string(op->type));
         print_closing_tag("span");
     }
 
     void visit(const Max *op) override {
         print_opening_tag("span", "Max");
-        print_function_call("max", {op->a, op->b});
+        print_function_call("max", {op->a, op->b}, type_to_string(op->type));
         print_closing_tag("span");
     }
 
     void visit(const EQ *op) override {
-        print_binary_op(op->a, op->b, "==");
+        print_binary_op(op->a, op->b, "==", op->type);
     }
 
     void visit(const NE *op) override {
-        print_binary_op(op->a, op->b, "!=");
+        print_binary_op(op->a, op->b, "!=", op->type);
     }
 
     void visit(const LT *op) override {
-        print_binary_op(op->a, op->b, "&lt;");
+        print_binary_op(op->a, op->b, "&lt;", op->type);
     }
 
     void visit(const LE *op) override {
-        print_binary_op(op->a, op->b, "&lt=");
+        print_binary_op(op->a, op->b, "&lt;=", op->type);
     }
 
     void visit(const GT *op) override {
-        print_binary_op(op->a, op->b, "&gt;");
+        print_binary_op(op->a, op->b, "&gt;", op->type);
     }
 
     void visit(const GE *op) override {
-        print_binary_op(op->a, op->b, "&gt;=");
+        print_binary_op(op->a, op->b, "&gt;=", op->type);
     }
 
     void visit(const And *op) override {
-        print_binary_op(op->a, op->b, "&amp;&amp;");
+        print_binary_op(op->a, op->b, "&amp;&amp;", op->type);
     }
 
     void visit(const Or *op) override {
-        print_binary_op(op->a, op->b, "||");
+        print_binary_op(op->a, op->b, "||", op->type);
     }
 
     void visit(const Not *op) override {
@@ -1399,19 +1510,20 @@ private:
 
     void visit(const Select *op) override {
         print_opening_tag("span", "Select");
-        print_function_call("select", {op->condition, op->true_value, op->false_value});
+        print_function_call("select", {op->condition, op->true_value, op->false_value}, type_to_string(op->type));
         print_closing_tag("span");
     }
 
     void visit(const Load *op) override {
+        std::string type_str = type_to_string(op->type);
         int id = gen_node_id(op);
-        print_opening_tag("span", "Load nav-anchor", "load-" + std::to_string(id));
-        print_opening_tag("span", "matched");
-        print_variable(op->name);
+        print_opening_tag("span", "Load", "load-" + std::to_string(id));
+        print_opening_tag("span", "matched", type_str);
+        stream << variable(op->name, type_to_string(op->type) + "*");
         print_text("[");
         print_closing_tag("span");
         print(op->index);
-        print_html_element("span", "matched", "]");
+        print_html_element("span", "matched", "]", type_str);
         if (!is_const_one(op->predicate)) {
             print_html_element("span", "keyword", " if ");
             print(op->predicate);
@@ -1421,7 +1533,7 @@ private:
 
     void visit(const Ramp *op) override {
         print_opening_tag("span", "Ramp");
-        print_function_call("ramp", {op->base, op->stride, Expr(op->lanes)});
+        print_function_call("ramp", {op->base, op->stride, Expr(op->lanes)}, type_to_string(op->type));
         print_closing_tag("span");
     }
 
@@ -1436,9 +1548,8 @@ private:
     }
 
     void visit(const Call *op) override {
-        int id = gen_node_id(op);
         print_opening_tag("span", "Call");
-        print_function_call(op->name, op->args, id);
+        print_function_call(op->name, op->args, type_to_string(op->type));
         print_closing_tag("span");
     }
 
@@ -1448,7 +1559,7 @@ private:
         print_opening_tag("span", "matched");
         print_text("(");
         print_html_element("span", "keyword", "let ");
-        print_variable(op->name);
+        print_variable(op->name, op->type);
         print_html_element("span", "Operator Assign", " = ");
         print_closing_tag("span");
         print(op->value);
@@ -1460,20 +1571,17 @@ private:
     }
 
     void visit(const LetStmt *op) override {
-        int id = gen_node_id(op);
         scope.push(op->name, gen_unique_id());
         print_opening_tag("div", "LetStmt");
         print_cost_buttons(op);
         print_opening_tag("div", "WrapLine");
-        print_opening_tag("span", "cost-highlight", "cost-bg-" + std::to_string(id));
         print_opening_tag("span", "matched");
         print_html_element("span", "keyword", "let ");
-        print_variable(op->name);
+        print_variable(op->name, op->value.type());
         print_html_element("span", "Operator Assign", " = ");
         print_closing_tag("span");  // matched
         print(op->value);
-        print_closing_tag("span");  // Cost-Highlight
-        print_closing_tag("div");   // WrapLine
+        print_closing_tag("div");  // WrapLine
         print_closing_tag("div");
         print_ln();
         // Technically, the body of the LetStmt is a child node in the IR
@@ -1486,7 +1594,7 @@ private:
     void visit(const AssertStmt *op) override {
         print_opening_tag("div", "AssertStmt WrapLine");
         print_cost_buttons(op);
-        print_function_call("assert", {op->condition, op->message});
+        print_function_call("assert", {op->condition, op->message}, "(void)");
         print_closing_tag("div");
         print_ln();
     }
@@ -1505,28 +1613,20 @@ private:
         print_cost_buttons(op, id);
 
         // Generate the show hide icon/text buttons
-        print_toggle_anchor_opening_tag(id);
-
-        // -- print icon
-        print_show_hide_icon(id);
+        print_show_hide_btn_begin(id);
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword nav-anchor", op->is_producer ? "produce " : "consume ",
-                           "prodcons-" + std::to_string(id));
-        print_variable(op->name);
+        print_html_element("span", "keyword", op->is_producer ? "produce " : "consume ");
+        stream << variable(op->name, "");
         print_closing_tag("span");
 
-        print_toggle_anchor_closing_tag();
-
-        // Add a button to jump to this producer/consumer in the viz
-        print_visualization_button("prodcons-viz-" + std::to_string(id));
-
         // Open code block to hold function body
-        print_html_element("span", "matched", "{");
+        print_opening_brace();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent ProducerConsumerBody", id);
+        print_opening_tag("div", "indent ProducerConsumerBody", "", id);
 
         // Print producer/consumer body
         print(op->body);
@@ -1546,6 +1646,12 @@ private:
         scope.pop(op->name);
     }
 
+    std::string ForType_to_string(ForType type) {
+        std::ostringstream ss;
+        ss << type;
+        return ss.str();
+    }
+
     void visit(const For *op) override {
         // Give this loop a unique id
         int id = gen_node_id(op);
@@ -1554,41 +1660,34 @@ private:
         scope.push(op->name, id);
 
         // Start a dive to hold code for this allocate
-        print_opening_tag("div", "For");
+        print_opening_tag("div", "For for-type-" + ForType_to_string(op->for_type));
 
         // Print cost buttons
         print_cost_buttons(op, id);
 
         // Generate the show hide icon/text buttons
-        print_toggle_anchor_opening_tag(id);
-
-        // -- print icon
-        print_show_hide_icon(id);
+        print_show_hide_btn_begin(id);
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_opening_tag("span", "keyword nav-anchor", "loop-" + std::to_string(id));
+        print_opening_tag("span", "keyword");
         stream << op->for_type << op->device_api;
         print_closing_tag("span");
         print_text(" (");
         print_closing_tag("span");
-        print_variable(op->name);
+        stream << variable(op->name, "");
         print_html_element("span", "matched", ", ");
         print(op->min);
         print_html_element("span", "matched", ", ");
         print(op->extent);
         print_html_element("span", "matched", ")");
 
-        print_toggle_anchor_closing_tag();
-
-        // Add a button to jump to this loop in the viz
-        print_visualization_button("loop-viz-" + std::to_string(id));
-
         // Open code block to hold function body
-        print_html_element("span", "matched", "{");
+        print_opening_brace();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent ForBody", id);
+        print_opening_tag("div", "indent ForBody", "", id);
 
         // Print loop body
         print(op->body);
@@ -1616,14 +1715,11 @@ private:
         print_opening_tag("div", "Acquire");
 
         // Generate the show hide icon/text buttons
-        print_toggle_anchor_opening_tag(id);
-
-        // -- print icon
-        print_show_hide_icon(id);
+        print_show_hide_btn_begin(id);
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword", "acquire", "acquire-" + std::to_string(id));
+        print_html_element("span", "keyword", "acquire");
         print_text(" (");
         print_closing_tag("span");
         print(op->semaphore);
@@ -1631,16 +1727,12 @@ private:
         print(op->count);
         print_html_element("span", "matched", ")");
 
-        print_toggle_anchor_closing_tag();
-
-        // Add a button to jump to this acquire in the viz
-        print_visualization_button("acquire-viz-" + std::to_string(id));
-
         // Open code block to hold function body
-        print_html_element("span", "matched", "{");
+        print_opening_brace();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent AcquireBody", id);
+        print_opening_tag("div", "indent AcquireBody", "", id);
 
         // Print aquire body
         print(op->body);
@@ -1658,24 +1750,22 @@ private:
     }
 
     void visit(const Store *op) override {
-        int id = gen_node_id(op);
-
         // Start a dive to hold code for this acquire
         print_opening_tag("div", "Store WrapLine");
 
         // Print cost buttons
         print_cost_buttons(op);
 
+        std::string type_str = type_to_string(op->value.type());
+
         // Print store target
-        print_opening_tag("span", "matched");
-        print_opening_tag("span", "nav-anchor", "store-" + std::to_string(id));
-        print_variable(op->name);
+        print_opening_tag("span", "matched", type_str);
+        stream << variable(op->name, type_str + "*");
         print_text("[");
         print_closing_tag("span");
-        print_closing_tag("span");
         print(op->index);
-        print_html_element("span", "matched", "]");
-        print_html_element("span", "Operator Assign Matched", " = ");
+        print_html_element("span", "matched", "]", type_str);
+        print_html_element("span", "Operator Assign Matched", " = ", type_str);
 
         // Print store value
         print_opening_tag("span", "StoreValue");
@@ -1694,14 +1784,14 @@ private:
 
     void visit(const Provide *op) override {
         print_opening_tag("div", "Provide WrapLine");
-        print_function_call(op->name, op->args);
+        print_function_call(op->name, op->args, "");
         if (op->values.size() > 1) {
             print_html_element("span", "matched", " = {");
-            for (size_t i = 0; i < op->args.size(); i++) {
+            for (size_t i = 0; i < op->values.size(); i++) {
                 if (i > 0) {
                     print_html_element("span", "matched", ", ");
                 }
-                print(op->args[i]);
+                print(op->values[i]);
             }
             print_html_element("span", "matched", "}");
         } else {
@@ -1713,8 +1803,6 @@ private:
     }
 
     void visit(const Allocate *op) override {
-        int id = gen_node_id(op);
-
         // Push scope
         scope.push(op->name, gen_unique_id());
 
@@ -1726,8 +1814,8 @@ private:
 
         //  Print allocation name, type and extents
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword nav-anchor", "allocate ", "allocate-" + std::to_string(id));
-        print_variable(op->name);
+        print_html_element("span", "keyword", "allocate ");
+        print_variable(op->name, op->type);
         print_text("[");
         print_closing_tag("span");
         print_type(op->type);
@@ -1752,7 +1840,7 @@ private:
         // Print custom new and free expressions
         if (op->new_expr.defined()) {
             print_opening_tag("span", "matched");
-            print_html_element("span", "keyword", "custom_new");
+            print_html_element("span", "keyword", " custom_new");
             print_text(" {");
             print_closing_tag("span");
             print(op->new_expr);
@@ -1761,15 +1849,12 @@ private:
 
         if (!op->free_function.empty()) {
             print_opening_tag("span", "matched");
-            print_html_element("span", "keyword", "custom_free");
+            print_html_element("span", "keyword", " custom_free");
             print_text(" {");
             print_closing_tag("span");
             print_text(" " + op->free_function + "(); ");
             print_html_element("span", "matched", "}");
         }
-
-        // Add a button to jump to this allocation in the viz
-        print_visualization_button("allocate-viz-" + std::to_string(id));
 
         // Print allocation body
         print_ln();
@@ -1790,7 +1875,7 @@ private:
         print_opening_tag("div", "Free WrapLine");
         print_cost_buttons(op);
         print_html_element("span", "keyword", "free ");
-        print_variable(op->name);
+        stream << variable(op->name, "");
         print_closing_tag("div");
         print_ln();
     }
@@ -1806,15 +1891,12 @@ private:
         print_opening_tag("div", "Realize");
 
         // Generate the show hide icon/text buttons
-        print_toggle_anchor_opening_tag(id);
-
-        // -- print icon
-        print_show_hide_icon(id);
+        print_show_hide_btn_begin(id);
 
         // -- print text
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword", "realize", "realize-" + std::to_string(id));
-        print_variable(op->name);
+        print_html_element("span", "keyword", "realize");
+        stream << variable(op->name, "");  // TODO there is "types" in plural?
         print_text(" (");
         for (size_t i = 0; i < op->bounds.size(); i++) {
             print_html_element("span", "matched", "[");
@@ -1834,16 +1916,12 @@ private:
             print(op->condition);
         }
 
-        print_toggle_anchor_closing_tag();
-
-        // Add a button to jump to this realize in the viz
-        print_visualization_button("realize-viz-" + std::to_string(id));
-
         // Open code block to hold function body
-        print_html_element("span", "matched", " {");
+        print_opening_brace();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent RealizeBody", id);
+        print_opening_tag("div", "indent RealizeBody", "", id);
 
         // Print realization body
         print(op->body);
@@ -1877,21 +1955,17 @@ private:
         print_opening_tag("div", "Fork");
 
         // Generate the show hide icon/text buttons
-        print_toggle_anchor_opening_tag(id);
-
-        // -- print icon
-        print_show_hide_icon(id);
+        print_show_hide_btn_begin(id);
 
         // -- print text
         print_html_element("span", "keyword matched", "fork");
 
-        print_toggle_anchor_closing_tag();
-
         // Open code block to hold fork body
-        print_html_element("span", "matched", " {");
+        print_opening_brace();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold body code
-        print_opening_tag("div", "indent ForkBody", id);
+        print_opening_tag("div", "indent ForkBody", "", id);
 
         // Print fork body
         visit_fork_stmt(op->first);
@@ -1911,32 +1985,24 @@ private:
     void visit(const IfThenElse *op) override {
         // Give this acquire a unique id
         int then_block_id = gen_unique_id();
-        int then_node_id = gen_node_id(op->then_case.get());
+        int last_then_block_id = -1;
 
-        // Start a dive to hold code for this conditional
+        // Start a div to hold code for this conditional
         print_opening_tag("div", "IfThenElse");
 
         // Print cost buttons
         print_cost_buttons(op, then_block_id);
 
         // Generate the show hide icon/text buttons
-        print_toggle_anchor_opening_tag(then_block_id);
+        print_show_hide_btn_begin(then_block_id);
 
-        // -- print icon
-        print_show_hide_icon(then_block_id);
-
-        // -- print text
+        // Print the actual "if (...) {"
         print_opening_tag("span", "matched");
-        print_html_element("span", "keyword nav-anchor IfSpan", "if", "cond-" + std::to_string(then_node_id));
+        print_html_element("span", "keyword IfSpan", "if");
         print_text(" (");
         print_closing_tag("span");
         print(op->condition);
         print_html_element("span", "matched", ")");
-
-        print_toggle_anchor_closing_tag();
-
-        // Add a button to jump to this conditional in the viz
-        print_visualization_button("cond-viz-" + std::to_string(then_node_id));
 
         // Flatten nested if's in the else case as an
         // `if-then-else_if-else` sequence
@@ -1944,23 +2010,22 @@ private:
             /* Handle the `then` case */
 
             // Open code block to hold `then` case
-            print_html_element("span", "matched", " {");
+            print_opening_brace();
+            print_show_hide_btn_end(op);
 
             // Open indented div to hold code for the `then` case
-            print_opening_tag("div", "indent ThenBody", then_block_id);
-
-            // Print then case body
+            print_opening_tag("div", "indent ThenBody", "", then_block_id);
             print(op->then_case);
-
-            // Close indented div holding `then` case
             print_closing_tag("div");
             print_ln();
-
-            // Close code block holding `then` case
-            print_html_element("span", "matched ClosingBrace cb-" + std::to_string(then_block_id), "}");
+            last_then_block_id = then_block_id;
 
             // If there is no `else` case, we are done!
             if (!op->else_case.defined()) {
+
+                // Close code block holding `then` case
+                print_html_element("span", "matched ClosingBrace cb-" + std::to_string(then_block_id), "}");
+
                 break;
             }
 
@@ -1970,62 +2035,52 @@ private:
             if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
                 // Generate a new id for the `else-if` case
                 then_block_id = gen_unique_id();
-                then_node_id = gen_node_id(nested_if->then_case.get());
 
                 // Print cost buttons
                 print_cost_buttons(op, then_block_id);
 
                 // Generate the show hide icon/text buttons
-                print_toggle_anchor_opening_tag(then_block_id);
+                print_show_hide_btn_begin(then_block_id);
 
-                // -- print icon
-                print_show_hide_icon(then_block_id);
+                // Close code block with a "}" from the previous block, *after* we have printed the new collapser button.
+                internal_assert(last_then_block_id != -1);
+                print_html_element("span", "matched ClosingBrace cb-" + std::to_string(last_then_block_id), "}");
 
-                // -- print text
+                // Print the actual "} else if (...) {" condition statement
                 print_opening_tag("span", "matched");
-                print_html_element("span", "keyword nav-anchor IfSpan", "else if", "cond-" + std::to_string(then_node_id));
+                print_html_element("span", "keyword IfSpan", " else if");
                 print_text(" (");
                 print_closing_tag("span");
                 print(nested_if->condition);
                 print_html_element("span", "matched", ")");
 
-                print_toggle_anchor_closing_tag();
-
-                // Add a button to jump to this conditional branch in the viz
-                print_visualization_button("cond-viz-" + std::to_string(then_node_id));
-
                 // Update op to the nested if for next loop iteration
                 op = nested_if;
-
+                last_then_block_id = then_block_id;
             } else {  // Otherwise, print it and we are done!
-
                 int else_block_id = gen_unique_id();
-                int else_node_id = gen_node_id(op->else_case.get());
 
                 // Print cost buttons
                 print_cost_buttons(op, else_block_id);
 
                 // Generate the show hide icon/text buttons
-                print_toggle_anchor_opening_tag(else_block_id);
+                print_show_hide_btn_begin(else_block_id);
 
-                // -- print icon
-                print_show_hide_icon(else_block_id);
+                // Close code block with a "}" from the previous block, *after* we have printed the new collapser button.
+                internal_assert(last_then_block_id != -1);
+                print_html_element("span", "matched ClosingBrace cb-" + std::to_string(last_then_block_id), "}");
 
                 // -- print text
                 print_opening_tag("span", "matched");
-                print_html_element("span", "keyword nav-anchor IfSpan", "else", "cond-" + std::to_string(else_node_id));
+                print_html_element("span", "keyword IfSpan", " else");
                 print_closing_tag("span");
 
-                print_toggle_anchor_closing_tag();
-
-                // Add a button to jump to this conditional branch in the viz
-                print_visualization_button("cond-viz-" + std::to_string(else_node_id));
-
                 // Open code block to hold `else` case
-                print_html_element("span", "matched", " {");
+                print_opening_brace();
+                print_show_hide_btn_end(op);
 
                 // Open indented div to hold code for the `then` case
-                print_opening_tag("div", "indent ElseBody", else_block_id);
+                print_opening_tag("div", "indent ElseBody", "", else_block_id);
 
                 // Print `else` case body
                 print(op->else_case);
@@ -2047,7 +2102,7 @@ private:
     }
 
     void visit(const Evaluate *op) override {
-        print_opening_tag("div", "Block");
+        print_opening_tag("div", "Block Evaluate");
         // Print cost buttons
         print_cost_buttons(op);
         print(op->value);
@@ -2056,26 +2111,27 @@ private:
     }
 
     void visit(const Shuffle *op) override {
+        std::string type_str = type_to_string(op->type);
         if (op->is_concat()) {
-            print_function_call("concat_vectors", op->vectors);
+            print_function_call("concat_vectors", op->vectors, type_str);
         } else if (op->is_interleave()) {
-            print_function_call("interleave_vectors", op->vectors);
+            print_function_call("interleave_vectors", op->vectors, type_str);
         } else if (op->is_extract_element()) {
             std::vector<Expr> args = op->vectors;
             args.emplace_back(op->slice_begin());
-            print_function_call("extract_element", args);
+            print_function_call("extract_element", args, type_str);
         } else if (op->is_slice()) {
             std::vector<Expr> args = op->vectors;
             args.emplace_back(op->slice_begin());
             args.emplace_back(op->slice_stride());
             args.emplace_back(static_cast<int>(op->indices.size()));
-            print_function_call("slice_vectors", args);
+            print_function_call("slice_vectors", args, type_str);
         } else {
             std::vector<Expr> args = op->vectors;
             for (int i : op->indices) {
                 args.emplace_back(i);
             }
-            print_function_call("shuffle", args);
+            print_function_call("shuffle", args, type_str);
         }
     }
 
@@ -2084,7 +2140,9 @@ private:
         print_text("(");
         print_type(op->type);
         print_text(")");
-        print_function_call("vector_reduce", {op->op, op->value});
+        std::ostringstream op_ss;
+        op_ss << op->op;
+        print_function_call("vector_reduce_" + op_ss.str(), {op->value}, type_to_string(op->type));
         print_closing_tag("span");
         print_ln();
     }
@@ -2097,7 +2155,7 @@ private:
 
         // Print prefetch
         print_html_element("span", "matched keyword", "prefetch ");
-        print_variable(op->name);
+        stream << variable(op->name, "");  // TODO there is "types"? Plural?
         print_html_element("span", "matched", "(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
             print_html_element("span", "matched", "[");
@@ -2134,10 +2192,7 @@ private:
         print_opening_tag("div", "Atomic");
 
         // Generate the show hide icon/text buttons
-        print_toggle_anchor_opening_tag(id);
-
-        // -- print icon
-        print_show_hide_icon(id);
+        print_show_hide_btn_begin(id);
 
         // -- print text
         print_html_element("span", "matched keyword", "atomic");
@@ -2147,13 +2202,12 @@ private:
             print_html_element("span", "matched", ")");
         }
 
-        print_toggle_anchor_closing_tag();
-
         // Open code block to hold atomic body
-        print_html_element("span", "matched", " {");
+        print_opening_brace();
+        print_show_hide_btn_end(op);
 
         // Open indented div to hold atomic code
-        print_opening_tag("div", "indent AtomicBody", id);
+        print_opening_tag("div", "indent AtomicBody", "", id);
 
         // Print atomic body
         print(op->body);
@@ -2168,614 +2222,61 @@ private:
         print_closing_tag("div");
         print_ln();
     }
-};
 
-/** HTMLVisualizationPrinter
- * Visualizes the IR in HTML. The visualization is essentially
- * an abstracted version of the code, highlighting the higher
- * level execution pipeline along with key properties of the
- * computation performed at each stage.
- */
-class HTMLVisualizationPrinter : public IRVisitor {
-public:
-    HTMLVisualizationPrinter(std::ofstream &os, std::map<const IRNode *, int> &nids)
-        : stream(os), node_ids(nids) {
-    }
-
-    // Make class non-copyable and non-moveable
-    HTMLVisualizationPrinter(const HTMLVisualizationPrinter &) = delete;
-    HTMLVisualizationPrinter &operator=(const HTMLVisualizationPrinter &) = delete;
-
-    void init_cost_info(IRCostModel cm) {
-        cost_model = std::move(cm);
-    }
-
-    void print(const Module &m, AssemblyInfo asm_info) {
-        assembly_info = std::move(asm_info);
-        for (const auto &fn : m.functions()) {
-            print(fn);
-        }
-    }
-
-private:
-    // Handle to output file stream
-    std::ofstream &stream;
-
-    // Used to track the context within generated HTML
-    std::vector<std::string> context_stack_tags;
-
-    // Assembly line number info
-    AssemblyInfo assembly_info;
-
-    // Holds cost information for visualized program
-    IRCostModel cost_model;
-
-    // Generate unique ids
-    int id = 0;
-    std::map<const IRNode *, int> &node_ids;
-
-    int gen_unique_id() {
-        return id++;
-    }
-
-    int gen_node_id(const IRNode *node) {
-        if (node_ids.count(node) == 0) {
-            node_ids[node] = gen_unique_id();
-        }
-        return node_ids[node];
-    }
-
-    /* Private print functions to handle various IR types */
-    void print(const LoweredFunc &fn) {
+    void visit(const HoistedStorage *op) override {
+        // Give this node a unique id
         int id = gen_unique_id();
 
-        // Start a div to hold the function viz
-        print_opening_tag("div", "center fn-wrapper");
+        // Start a dive to hold code for this hoisted storage
+        print_opening_tag("div", "HoistedStorage");
 
-        // Create the header bar
-        print_opening_tag("div", "fn-header");
-        print_collapse_expand_btn(id);
-        print_code_button("lowered-func-" + fn.name);
-        print_html_element("span", "fn-title", "Func: " + fn.name, "lowered-func-viz-" + fn.name);
+        // Generate the show hide icon/text buttons
+        print_show_hide_btn_begin(id);
+
+        // -- print text
+        print_html_element("span", "matched keyword", "hoisted_storage");
+        if (!op->name.empty()) {
+            print_html_element("span", "matched", "(");
+            print_html_element("span", "Symbol", op->name);
+            print_html_element("span", "matched", ")");
+        }
+
+        // Open code block to hold hoisted storage body
+        print_opening_brace();
+        print_show_hide_btn_end(op);
+
+        // Open indented div to hold hoisted storage code
+        print_opening_tag("div", "indent HoistedStorageBody", "", id);
+
+        // Print hoisted storage body
+        print(op->body);
+
+        // Close indented div holding body code
         print_closing_tag("div");
 
-        // Print function body
-        print_opening_tag("div", "fn-body", "viz-" + std::to_string(id));
-        fn.body.accept(this);
+        // Close code block holding fork body
+        print_html_element("span", "matched ClosingBrace cb-" + std::to_string(id), "}");
+
+        // Close div holding this hoisted storage
         print_closing_tag("div");
-
-        // Close function div
-        print_closing_tag("div");
-    }
-
-    /* Methods used to emit common HTML patterns */
-
-    // Prints the opening tag for the specified html element.
-    void print_opening_tag(const std::string &tag, const std::string &cls) {
-        stream << "<" << tag << " class='" << cls << "'>";
-        context_stack_tags.push_back(tag);
-    }
-
-    void print_opening_tag(const std::string &tag, const std::string &cls, const std::string &id) {
-        stream << "<" << tag << " class='" << cls << "' id='" << id << "'>";
-        context_stack_tags.push_back(tag);
-    }
-
-    // Prints the closing tag for the specified html element.
-    void print_closing_tag(const std::string &tag) {
-        internal_assert(tag == context_stack_tags.back());
-        context_stack_tags.pop_back();
-        stream << "</" + tag + ">";
-    }
-
-    // Prints an html element: opening tag, body and closing tag
-    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body) {
-        print_opening_tag(tag, cls);
-        stream << body;
-        print_closing_tag(tag);
-    }
-
-    void print_html_element(const std::string &tag, const std::string &cls, const std::string &body, const std::string &id) {
-        print_opening_tag(tag, cls, id);
-        stream << body;
-        print_closing_tag(tag);
-    }
-
-    // Prints text to stream
-    void print_text(const std::string &x) {
-        stream << x;
-    }
-
-    // Prints a button to sync visualization with code
-    void print_code_button(const std::string &id) {
-        stream << "<button class='icon-btn sync-btn' onclick='scrollToCode(\"" << id << "\")'>"
-               << "  <i class='bi bi-arrow-left-square' title='Jump to code'></i>"
-               << "</button>";
-    }
-
-    // Prints a button to sync visualization with assembly
-    void print_asm_button(const std::string &id) {
-        stream << "<button class='icon-btn sync-btn' onclick='scrollToAsm(\"" << id << "\")'>"
-               << "  <i class='bi bi-arrow-right-square' title='Jump to assembly'></i>"
-               << "</button>";
-    }
-
-    // Prints a function-call box
-    void print_fn_button(const std::string &name, int id) {
-        print_opening_tag("div", "fn-call");
-        print_code_button("fn-call-" + std::to_string(id));
-        print_text(get_as_var(name) + "(...)");
-        print_closing_tag("div");
-    }
-
-    // Prints a button to collapse or expand a visualization box
-    void print_collapse_expand_btn(int id) {
-        stream << "<button class='icon-btn' id='viz-" << id << "-hide' onclick='return toggleViz(\"viz-" << id << "\");'>"
-               << "  <i class='bi bi-dash-square' title='Collapse block'></i>"
-               << "</button>"
-               << "<button class='icon-btn' id='viz-" << id << "-show' style = 'display:none;' onclick='return toggleViz(\"viz-" << id << "\");'>"
-               << "  <i class='bi bi-plus-square' title='Expand block'></i>"
-               << "</button>";
-    }
-
-    // Prints the box title within the div.box-header
-    void print_box_title(const std::string &title, const std::string &anchor) {
-        print_opening_tag("div", "box-title");
-        print_html_element("span", "", title, anchor);
-        print_closing_tag("div");
-    }
-
-    // Prints the cost indicator buttons within div.box-header
-    void print_cost_buttons(int id, const IRNode *op) {
-        print_opening_tag("div", "viz-cost-btns");
-
-        // Print compute cost indicator
-        int max_line_ccost = cost_model.get_max_compute_cost(false);
-        int line_ccost = cost_model.get_compute_cost(op, false);
-        int block_ccost = cost_model.get_compute_cost(op, true);
-        print_cost_button(line_ccost, block_ccost, max_line_ccost, "vcc-" + std::to_string(id), "Op Count: ");
-
-        // Print data movement cost indicator
-        int max_line_dcost = cost_model.get_max_data_movement_cost(false);
-        int line_dcost = cost_model.get_data_movement_cost(op, false);
-        int block_dcost = cost_model.get_data_movement_cost(op, true);
-        // Special handling for Store nodes; since unlike the code view
-        // the viz view prints stores and loads seperately, therefore using
-        // inclusive cost is confusing.
-        if (op->node_type == IRNodeType::Store) {
-            const Store *st = static_cast<const Store *>(op);
-            line_dcost = st->value.type().bits() * st->value.type().lanes();
-            block_dcost = line_dcost;
-        }
-        print_cost_button(line_dcost, block_dcost, max_line_dcost, "vdc-" + std::to_string(id), "Bits Moved: ");
-
-        print_closing_tag("div");
-    }
-
-    void print_cost_button(int line_cost, int block_cost, int max_line_cost, const std::string &id, const std::string &prefix) {
-        const int num_cost_buckets = 20;
-
-        int line_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
-        int block_cost_bin_size = (max_line_cost / num_cost_buckets) + 1;
-
-        int line_costc = line_cost / line_cost_bin_size;
-        int block_costc = block_cost / block_cost_bin_size;
-
-        if (line_costc >= num_cost_buckets) {
-            line_costc = num_cost_buckets - 1;
-        }
-        if (block_costc >= num_cost_buckets) {
-            block_costc = num_cost_buckets - 1;
-        }
-
-        stream << "<div id='" << id << "' class='cost-btn CostColor" << line_costc << "'"
-               << "   line-cost='" << line_cost << "' block-cost='" << block_cost << "'"
-               << "   line-cost-color='" << line_costc << "' block-cost-color='" << block_costc << "'>";
-
-        stream << "<span id='tooltip-" << id << "' class='tooltip cond-tooltop' role='tooltip-" << id << "'>"
-               << prefix << line_cost
-               << "</span>";
-
-        stream << "</div>";
-    }
-
-    // Prints the box .box-header within div.box
-    void print_box_header(int id, const IRNode *op, const std::string &anchor, const std::string &code_anchor, const std::string &title) {
-        print_opening_tag("div", "box-header");
-        print_collapse_expand_btn(id);
-        print_code_button(code_anchor);
-        print_box_title(title, anchor);
-        print_cost_buttons(id, op);
-        print_closing_tag("div");
-    }
-
-    // Prints the box .box-header within div.box, contains the asm info button
-    void print_box_header_asm(int id, const IRNode *op, const std::string &anchor, const std::string &code_anchor, const std::string &asm_anchor, const std::string &title) {
-        print_opening_tag("div", "box-header");
-        print_collapse_expand_btn(id);
-        print_code_button(code_anchor);
-        print_asm_button(asm_anchor);
-        print_box_title(title, anchor);
-        print_cost_buttons(id, op);
-        print_closing_tag("div");
-    }
-
-    // Converts an expr to a string without printing to stream
-    std::string get_as_str(const Expr &e) {
-        return get_as_str(e, "");
-    }
-
-    std::string get_as_str(const Expr &e, const std::string &prefix) {
-        if (prefix == "Else") {
-            return "Else";
-        }
-
-        std::ostringstream ss;
-        HTMLCodePrinter<std::ostringstream> printer(ss, node_ids);
-        e.accept(&printer);
-        std::string html_e = ss.str();
-
-        if (large_expr(e)) {
-            return prefix + truncate_html(html_e);
-        } else {
-            return prefix + html_e;
-        }
-    }
-
-    // Return variable name wrapped with html that enables matching
-    std::string get_as_var(const std::string &name) {
-        return "<b class='variable matched'>" + name + "</b>";
-    }
-
-    // Sometimes the expressions are too large to show within the viz. In
-    // such cases we use tooltips.
-    bool large_expr(const Expr &e) {
-        std::ostringstream ss;
-        ss << e;
-        return ss.str().size() > 50;
-    }
-
-    std::string truncate_html(const std::string &cond) {
-        int id = gen_unique_id();
-
-        std::ostringstream ss;
-
-        // Show condition expression button
-        ss << "<button title='Click to see path condition' id='cond-" << id << "' class='trunc-cond' role='button'>"
-           << "...";
-
-        // Tooltip that shows condition expression
-        ss << "<span id='cond-tooltip-" << id << "' class='tooltip cond-tooltop' role='cond-tooltip-" << id << "'>"
-           << cond
-           << "</span>";
-
-        ss << "</button>";
-
-        return ss.str();
-    }
-
-    // Prints a single node in an `if-elseif-...-else` chain
-    void print_if_tree_node(const Stmt &node, const Expr &cond, const std::string &prefix) {
-        // Assign unique id to this node
-        int box_id = gen_unique_id();
-        int node_id = gen_node_id(node.get());
-
-        // Start tree node
-        print_opening_tag("li", "");
-        print_opening_tag("span", "tf-nc if-node");
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box center IfBox");
-
-        // Create viz content
-        std::string aid = std::to_string(node_id);
-        print_box_header(box_id, node.get(), "cond-viz-" + aid, "cond-" + aid, get_as_str(cond, prefix));
-
-        // Print contents of node
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(box_id));
-        node.accept(this);
-        print_closing_tag("div");
-
-        // Close box holding viz
-        print_closing_tag("div");
-
-        // Close tree node
-        print_closing_tag("span");
-        print_closing_tag("li");
-    }
-
-    /* Visitor functions for each IR node */
-    using IRVisitor::visit;
-
-    /* Override key visit functions */
-
-    void visit(const Allocate *op) override {
-        // Assign unique id to this node
-        int id = gen_node_id(op);
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box center AllocateBox");
-
-        // Print box header
-        std::string aid = std::to_string(id);
-        print_box_header(id, op, "allocate-viz-" + aid, "allocate-" + aid, "Allocate: " + op->name);
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
-
-        // Generate a table with allocation details
-        print_opening_tag("table", "allocate-table");
-
-        // - Memory type
-        stream << "<tr><th scope='col'>Memory Type</th><td>" << op->memory_type << "</td></tr>";
-
-        // - Allocation condition
-        if (!is_const_one(op->condition)) {
-            stream << "<tr><th scope='col'>Condition</th><td>" << op->condition << "</td></tr>";
-        }
-
-        // - Data type
-        stream << "<tr><th scope='col'>Data Type</th><td>" << op->type << "</td></tr>";
-
-        // - Dimensions
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            stream << "<tr><th scope='col'>Dim-" << i << "</th><td>" << get_as_str(op->extents[i]) << "</td></tr>";
-        }
-
-        print_closing_tag("table");
-
-        op->body.accept(this);
-
-        print_closing_tag("div");
-
-        print_closing_tag("div");
-    }
-
-    void visit(const For *op) override {
-        // Assign unique id to this node
-        int id = gen_node_id(op);
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box center ForBox");
-
-        // Print box header
-        std::string aid = std::to_string(id);
-        int asm_lno = assembly_info.get_asm_lno((uint64_t)op);
-        if (asm_lno == -1) {
-            print_box_header(id, op, "loop-viz-" + aid, "loop-" + aid, "For: " + get_as_var(op->name));
-        } else {
-            print_box_header_asm(id, op, "loop-viz-" + aid, "loop-" + aid, std::to_string(asm_lno), "For: " + get_as_var(op->name));
-        }
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
-
-        // Generate a table with loop details
-        print_opening_tag("table", "allocate-table");
-
-        // - Loop type
-        if (op->for_type != ForType::Serial) {
-            stream << "<tr><th scope='col'>Loop Type</th><td>" << op->for_type << "</td></tr>";
-        }
-        // - Device API
-        if (op->device_api != DeviceAPI::None) {
-            stream << "<tr><th scope='col'>Device API</th><td>" << op->device_api << "</td></tr>";
-        }
-        // - Min
-        stream << "<tr><th scope='col'>Min</th><td>" << get_as_str(op->min) << "</td></tr>";
-        // - Extent
-        stream << "<tr><th scope='col'>Extent</th><td>" << get_as_str(op->extent) << "</td></tr>";
-
-        print_closing_tag("table");
-
-        op->body.accept(this);
-
-        print_closing_tag("div");
-
-        print_closing_tag("div");
-    }
-
-    void visit(const IfThenElse *op) override {
-        // Open If tree
-        print_opening_tag("div", "tf-tree tf-gap-sm tf-custom-ir-viz");
-
-        // Create root 'cond' node
-        if (op->else_case.defined()) {
-            print_opening_tag("ul", "");
-            print_opening_tag("li", "");
-            print_html_element("span", "tf-nc if-node if-root-node", "Control Flow Branching");
-        }
-
-        // Create children nodes ('then', 'else if' and 'else' cases)
-        print_opening_tag("ul", "");
-
-        // `then` case
-        print_if_tree_node(op->then_case, op->condition, "If: ");
-
-        // `else if` cases
-        const IfThenElse *nested_if = op;
-        while (nested_if->else_case.defined() && (nested_if->else_case.as<IfThenElse>())) {
-            nested_if = nested_if->else_case.as<IfThenElse>();
-            print_if_tree_node(nested_if->then_case, nested_if->condition, "Else If: ");
-        }
-
-        // `else` case
-        if (nested_if->else_case.defined()) {
-            print_if_tree_node(nested_if->else_case, UIntImm::make(UInt(1), 1), "Else");
-        }
-
-        print_closing_tag("ul");
-
-        // Close If tree
-        if (op->else_case.defined()) {
-            print_closing_tag("li");
-            print_closing_tag("ul");
-        }
-        print_closing_tag("div");
-    }
-
-    void visit(const ProducerConsumer *op) override {
-        // Assign unique id to this node
-        int id = gen_node_id(op);
-
-        // Start a box to hold viz
-        std::string box_name = op->is_producer ? "ProducerBox" : "ConsumerBox";
-        print_opening_tag("div", "box center " + box_name);
-
-        // Print box header
-        std::string aid = std::to_string(id);
-        std::string prefix = op->is_producer ? "Produce: " : "Consume: ";
-        int asm_lno = assembly_info.get_asm_lno((uint64_t)op);
-        if (asm_lno == -1) {
-            print_box_header(id, op, "prodcons-viz-" + aid, "prodcons-" + aid, prefix + get_as_var(op->name));
-        } else {
-            print_box_header_asm(id, op, "prodcons-viz-" + aid, "prodcons-" + aid, std::to_string(asm_lno), prefix + get_as_var(op->name));
-        }
-
-        // Print the body
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
-        op->body.accept(this);
-        print_closing_tag("div");
-
-        // Close div holding the producer/consumer
-        print_closing_tag("div");
-    }
-
-    void visit(const Store *op) override {
-        // Visit the value first. We want to show any loads
-        // that happen before the store operation
-        op->value.accept(this);
-
-        // Assign unique id to this node
-        int id = gen_node_id(op);
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box center StoreBox");
-
-        // Print box header
-        std::string aid = std::to_string(id);
-        print_box_header(id, op, "store-viz-" + aid, "store-" + aid, "Store: " + get_as_var(op->name));
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
-
-        // Generate a table with store details
-        print_opening_tag("table", "allocate-table");
-
-        // - Store predicate
-        if (!is_const_one(op->predicate)) {
-            stream << "<tr><th scope='col'>Predicate</th><td>" << get_as_str(op->predicate) << "</td></tr>";
-        }
-
-        // - Alignment
-        const bool show_alignment = op->value.type().is_vector() && op->alignment.modulus > 1;
-        if (show_alignment) {
-            stream << "<tr><th scope='col'>Alignment</th><td>"
-                   << "aligned(" << op->alignment.modulus << ", " << op->alignment.remainder << ")"
-                   << "</td></tr>";
-        }
-
-        // - Qualifiers
-        if (op->value.type().is_vector()) {
-            const Ramp *idx = op->index.as<Ramp>();
-            if (idx && is_const_one(idx->stride)) {
-                stream << "<tr><th scope='col'>Type</th><td>Dense Vector</td></tr>";
-            } else {
-                stream << "<tr><th scope='col'>Type</th><td>Strided Vector</td></tr>";
-            }
-            stream << "<tr><th scope='col'>Output Tile</th><td>" << op->value.type() << "</td></tr>";
-        } else {
-            stream << "<tr><th scope='col'>Type</th><td>Scalar</td></tr>";
-            stream << "<tr><th scope='col'>Output</th><td>" << op->value.type() << "</td></tr>";
-        }
-
-        print_closing_tag("table");
-
-        print_closing_tag("div");
-
-        print_closing_tag("div");
-    }
-
-    void visit(const Load *op) override {
-        // Assign unique id to this node
-        int id = gen_node_id(op);
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box center LoadBox");
-
-        // Print box header
-        std::string aid = std::to_string(id);
-        print_box_header(id, op, "load-viz-" + aid, "load-" + aid, "Load: " + get_as_var(op->name));
-
-        // Start a box to hold viz
-        print_opening_tag("div", "box-body", "viz-" + std::to_string(id));
-
-        // Generate a table with load details
-        print_opening_tag("table", "allocate-table");
-
-        // - Load predicate
-        if (!is_const_one(op->predicate)) {
-            stream << "<tr><th scope='col'>Predicate</th><td>" << get_as_str(op->predicate) << "</td></tr>";
-        }
-
-        // - Alignment
-        const bool show_alignment = op->type.is_vector() && op->alignment.modulus > 1;
-        if (show_alignment) {
-            stream << "<tr><th scope='col'>Alignment</th><td>"
-                   << "aligned(" << op->alignment.modulus << ", " << op->alignment.remainder << ")"
-                   << "</td></tr>";
-        }
-
-        // - Qualifiers
-        if (op->type.is_vector()) {
-            const Ramp *idx = op->index.as<Ramp>();
-            if (idx && is_const_one(idx->stride)) {
-                stream << "<tr><th scope='col'>Type</th><td>Dense Vector</td></tr>";
-            } else {
-                stream << "<tr><th scope='col'>Type</th><td>Strided Vector</td></tr>";
-            }
-            stream << "<tr><th scope='col'>Output Tile</th><td>" << op->type << "</td></tr>";
-        } else {
-            stream << "<tr><th scope='col'>Type</th><td>Scalar</td></tr>";
-            stream << "<tr><th scope='col'>Output</th><td>" << op->type << "</td></tr>";
-        }
-
-        print_closing_tag("table");
-
-        print_closing_tag("div");
-
-        print_closing_tag("div");
-    }
-
-    void visit(const Call *op) override {
-        int id = gen_node_id(op);
-        // Add viz support for key functions/intrinsics
-        if (op->name == "halide_do_par_for") {
-            print_fn_button(op->name, id);
-        } else if (op->name == "halide_do_par_task") {
-            print_fn_button(op->name, id);
-        } else if (op->name == "_halide_buffer_init") {
-            print_fn_button(op->name, id);
-        } else if (op->name.rfind("_halide", 0) != 0) {
-            // Assumption: We want to ignore intrinsics starting with _halide
-            // but for everything else, generate a warning
-            debug(2) << "Function call ignored by IRVisualizer: " << op->name << "\n";
-        }
+        print_ln();
     }
 };
 
-/** IRVisualizer Class
+/** PipelineHTMLInspector Class
  * Generates the output html page. Currently the html page has
  * three key tabs: IR code, Visualized pipeline and the generated
  * assembly.
  */
-class IRVisualizer {
+class PipelineHTMLInspector {
 public:
     // Construct the visualizer and point it to the output file
-    explicit IRVisualizer(const std::string &html_output_filename,
-                          const Module &m,
-                          const std::string &assembly_input_filename)
-        : html_code_printer(stream, node_ids), html_viz_printer(stream, node_ids) {
+    explicit PipelineHTMLInspector(const std::string &html_output_filename,
+                                   const Module &m,
+                                   const std::string &assembly_input_filename,
+                                   bool use_conceptual_stmt_ir)
+        : use_conceptual_stmt_ir(use_conceptual_stmt_ir),
+          html_code_printer(stream, node_ids, true) {
         // Open output file
         stream.open(html_output_filename.c_str());
 
@@ -2806,17 +2307,36 @@ public:
         // code is based on darya-ver's original implementation. We
         // use comments in the generated assembly to infer association
         // between Halide IR and assembly -- unclear how reliable this is.
-        asm_info.generate(asm_stream.str(), m);
+        host_asm_info.gather_nodes_from_functions(m);
+        host_asm_info.generate(asm_stream.str());
+
+        Buffer<> device_code_buf = m.get_device_code_buffer();
+        if (device_code_buf.defined()) {
+            std::string device_assembly((char *)device_code_buf.data(),
+                                        ((char *)device_code_buf.data() + device_code_buf.size_in_bytes()));
+            debug(1) << "Generating device AssemblyInfo\n";
+            // TODO(mcourteaux): This doesn't generate anything useful, as the
+            // LLVM comments are only added later in the LLVM CodeGen IRVisitor.
+            // This conceptual Stmt hasn't seen this seen this
+            device_asm_info.gather_nodes_from_conceptual_stmt(m);
+            device_asm_info.generate(device_assembly);
+        } else {
+            debug(1) << "No device code buffer found.\n";
+        }
 
         // Run the cost model over this module to pre-compute all
         // node costs
-        cost_model.compute_all_costs(m);
+        if (use_conceptual_stmt_ir) {
+            cost_model.compute_conceptual_costs(m);
+        } else {
+            cost_model.compute_all_costs(m);
+        }
+        cost_model.finalize_cost_computation();
         html_code_printer.init_cost_info(cost_model);
-        html_viz_printer.init_cost_info(cost_model);
 
         // Generate html page
         stream << "<!DOCTYPE html>\n";
-        stream << "<html>\n";
+        stream << "<html lang='en'>\n";
         generate_head(m);
         generate_body(m);
         stream << "</html>";
@@ -2826,9 +2346,6 @@ private:
     // Handle to output file stream
     std::ofstream stream;
 
-    // Handle to assembly file stream
-    std::ifstream assembly;
-
     // Holds cost information for visualized program
     IRCostModel cost_model;
 
@@ -2836,128 +2353,147 @@ private:
     std::map<const IRNode *, int> node_ids;
 
     // Used to translate IR to code in HTML
+    bool use_conceptual_stmt_ir;
     HTMLCodePrinter<std::ofstream> html_code_printer;
-
-    // Used to translate IR to visualization in HTML
-    HTMLVisualizationPrinter html_viz_printer;
 
     /* Methods for generating the <head> section of the html file */
     void generate_head(const Module &m) {
         stream << "<head>\n";
-        stream << "<title>Visualizing Module: " << m.name() << "</title>\n";
-        generate_dependency_links();
-        generate_stylesheet();
+        stream << "<title>Halide Module: " << m.name() << "</title>\n";
+        stream << halide_html_template_StmtToHTML_dependencies_html;
+#if INLINE_TEMPLATES
+        stream << "<style type='text/css'>\n"
+               << halide_html_template_StmtToHTML_css
+               << "\n</style>\n";
+#else
+        std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path() / "irvisualizer";
+        debug(1) << "Will link CSS in directory: " << dir << "\n";
+        internal_assert(std::filesystem::exists(dir));
+        stream << "<link rel='stylesheet' href='file://" << (dir / "html_template_StmtToHTML.css").string() << "'>\n";
+#endif
         stream << "</head>\n";
-    }
-
-    // Loads the html code responsible for linking with various js/css libraries from
-    // `ir_visualizer/dependencies.html`
-    void generate_dependency_links() {
-        stream << halide_html_template_StmtToViz_dependencies;
-    }
-
-    // Loads the stylesheet code from `ir_visualizer/stylesheet.html`
-    void generate_stylesheet() {
-        stream << halide_html_template_StmtToViz_stylesheet;
     }
 
     /* Methods for generating the <body> section of the html file */
     void generate_body(const Module &m) {
         stream << "<body>\n";
         stream << "  <div id='page-container'>\n";
-        generate_visualization_tabs(m);
+        generate_visualization_panes(m);
         stream << "  </div>\n";
+#if INLINE_TEMPLATES
+        stream << "<script>\n"
+               << halide_html_template_StmtToHTML_js
+               << "</script>";
+#else
+        std::filesystem::path dir = std::filesystem::path(__FILE__).parent_path() / "irvisualizer";
+        debug(1) << "Will link Javascript in directory: " << dir << "\n";
+        internal_assert(std::filesystem::exists(dir));
+        stream << "<script src='file://" << (dir / "html_template_StmtToHTML.js").string() << "'></script>\n";
+#endif
         stream << "</body>";
-        generate_javascript();
     }
 
-    // Generate the three visualization tabs
-    void generate_visualization_tabs(const Module &m) {
-        stream << "<div id='visualization-tabs'>\n";
-        generate_ir_tab(m);
-        generate_resize_bar_1();
-        generate_visualization_tab(m);
-        generate_resize_bar_2();
-        generate_assembly_tab(m);
+    // Generate the three visualization panes
+    void generate_visualization_panes(const Module &m) {
+        int pane_count = 0;
+        stream << "<div id='visualization-panes'>\n";
+        stream << "<div id='resizer-preview' style='display:none;'></div>\n";
+        generate_ir_pane(m);
+        generate_resize_bar(pane_count++);
+        generate_host_assembly_pane(m);
+        Buffer<> device_code_buf = m.get_device_code_buffer();
+        if (device_code_buf.defined()) {
+            generate_resize_bar(pane_count++);
+            generate_device_code_pane(device_code_buf);
+        }
+
         stream << "</div>\n";
     }
 
-    // Generate tab 1/3: Lowered IR code with syntax highlighting in HTML
-    void generate_ir_tab(const Module &m) {
-        stream << "<div id='ir-code-tab'>\n";
-        html_code_printer.print(m);
-        stream << "</div>\n";
+    // Generate pane: Lowered IR code with syntax highlighting in HTML
+    void generate_ir_pane(const Module &m) {
+        if (use_conceptual_stmt_ir) {
+            stream << "<div id='ir-code-pane' class='pane conceptual'>\n";
+            html_code_printer.print_conceptual_stmt(m, host_asm_info, device_asm_info);
+            stream << "</div>\n";
+        } else {
+            stream << "<div id='ir-code-pane' class='pane'>\n";
+            html_code_printer.print(m, host_asm_info, device_asm_info);
+            stream << "</div>\n";
+        }
     }
 
-    // Generate tab 2/3: Lowered IR code with syntax highlighting in HTML
-    void generate_visualization_tab(const Module &m) {
-        stream << "<div id='ir-visualization-tab'>\n";
-        html_viz_printer.print(m, asm_info);
-        stream << "</div>\n";
-    }
-
-    // Generate tab 3/3: Generated assembly code
-    void generate_assembly_tab(const Module &m) {
-        stream << "<div id='assembly-tab'>\n";
+    // Generate pane: Generated host assembly code
+    void generate_host_assembly_pane(const Module &m) {
+        stream << "<div id='host-assembly-pane' class='pane'>\n";
         stream << "<div id='assemblyContent' class='shj-lang-asm'>\n";
         stream << "<pre>\n";
-        stream << asm_stream.str();
+        std::istringstream ss{asm_stream.str()};
+        for (std::string line; std::getline(ss, line);) {
+            if (line.length() > 500) {
+                // Very long lines in the assembly are typically the _gpu_kernel_sources
+                // as a raw ASCII block in the assembly. Let's chop that off to make
+                // browsers faster when dealing with this.
+                line = line.substr(0, 100) + "\" # omitted the remainder of the ASCII buffer";
+            }
+            stream << html_code_printer.escape_html(line) << "\n";
+        }
+        stream << "\n";
         stream << "</pre>\n";
         stream << "</div>\n";
         stream << "</div>\n";
     }
 
-    // Generate a resizing bar to control the width of code and visualization tabs
-    void generate_resize_bar_1() {
-        stream << R"(<div class='resize-bar' id='resize-bar-1'>
-                       <div class='collapse-btns'>
-                         <div>
-                           <button class='icon-btn resize-btn' onclick='collapse_code_tab()'>
-                             <i class='bi bi-arrow-bar-left' title='Collapse code tab'></i>
-                           </button>
-                         </div>
-                         <div>
-                           <button class='icon-btn resize-btn' onclick='collapseR_visualization_tab()'>
-                             <i class='bi bi-arrow-bar-right' title='Collapse visualization tab'></i>
-                           </button>
-                         </div>
-                       </div>
-                     </div>)";
+    // Generate pane: Generated device code
+    void generate_device_code_pane(const Buffer<> &buf) {
+        stream << "<div id='device-code-pane' class='pane'>\n";
+        int length = buf.size_in_bytes();
+        while (length > 0 && ((const char *)buf.data())[length - 1] == '\0') {
+            length--;
+        }
+        std::string str((const char *)buf.data(), length);
+        if (starts_with(buf.name(), "cuda_")) {
+            html_code_printer.print_cuda_gpu_source_kernels(str);
+        } else {
+            std::istringstream ss{str};
+            stream << "<div class='code'>\n";
+            for (std::string line; std::getline(ss, line);) {
+                stream << "<span class='line'>" << html_code_printer.escape_html(line) << "</span>\n";
+                // stream << html_code_printer.escape_html(line) << "\n";
+            }
+            stream << "\n</div>\n";
+        }
+        stream << "</div>\n";
     }
 
-    // Generate a resizing bar to control the width of visualization and assembly tabs
-    void generate_resize_bar_2() {
-        stream << R"(<div class='resize-bar' id='resize-bar-2'>
-                       <div class='collapse-btns'>
-                         <div>
-                           <button class='icon-btn resize-btn' onclick='collapseL_visualization_tab()'>
-                             <i class='bi bi-arrow-bar-left' title='Collapse visualization tab'></i>
-                           </button>
-                         </div>
-                         <div>
-                           <button class='icon-btn resize-btn' onclick='collapse_assembly_tab()'>
-                             <i class='bi bi-arrow-bar-right' title='Collapse assembly tab'></i>
-                           </button>
-                         </div>
-                       </div>
-                     </div>)";
-    }
-
-    // Loads and initializes the javascript template from `ir_visualizer / javascript_template.html`
-    void generate_javascript() {
-        stream << halide_html_template_StmtToViz_javascript;
+    // Generate a resizing bar to control the width of code and visualization panes
+    void generate_resize_bar(int num) {
+        stream << "<div class='resize-bar' id='resize-bar-" << num << "'>\n";
+        stream << " <div class='collapse-btns'>\n";
+        stream << "  <div>\n";
+        stream << "   <button class='collapse-left' onclick='collapseTab(" << num << ")' title='Collapse pane on the left'>\n";
+        stream << "   </button>\n";
+        stream << "  </div>\n";
+        stream << "  <div>\n";
+        stream << "    <button class='collapse-right' onclick='collapseTab(" << (num + 1) << ")' title='Collapse pane on the right'>\n";
+        stream << "    </button>\n";
+        stream << "  </div>\n";
+        stream << " </div>\n";
+        stream << "</div>\n";
     }
 
     /* Misc helper methods */
 
     // Load assembly code from file
     std::ostringstream asm_stream;
-    AssemblyInfo asm_info;
+    AssemblyInfo host_asm_info;
+    AssemblyInfo device_asm_info;
 
     void load_asm_code(const std::string &asm_file) {
         user_assert(file_exists(asm_file)) << "Unable to open assembly file: " << asm_file << "\n";
 
         // Open assembly file
+        std::ifstream assembly;
         assembly.open(asm_file.c_str());
 
         // Slurp the code into asm_stream
@@ -2969,12 +2505,20 @@ private:
 };
 
 // The external interface to this module
-void print_to_viz(const std::string &html_output_filename,
-                  const Module &m,
-                  const std::string &assembly_input_filename) {
-    IRVisualizer visualizer(html_output_filename, m, assembly_input_filename);
-    visualizer.generate_html(m);
-    debug(1) << "Done generating HTML IR Visualization - printed to: " << html_output_filename << "\n";
+void print_to_stmt_html(const std::string &html_output_filename,
+                        const Module &m,
+                        const std::string &assembly_input_filename) {
+    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, false);
+    inspector.generate_html(m);
+    debug(1) << "Done generating HTML IR Inspector - printed to: " << html_output_filename << "\n";
+}
+
+void print_to_conceptual_stmt_html(const std::string &html_output_filename,
+                                   const Module &m,
+                                   const std::string &assembly_input_filename) {
+    PipelineHTMLInspector inspector(html_output_filename, m, assembly_input_filename, true);
+    inspector.generate_html(m);
+    debug(1) << "Done generating HTML Conceptual IR Inspector - printed to: " << html_output_filename << "\n";
 }
 
 }  // namespace Internal

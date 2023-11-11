@@ -2101,6 +2101,7 @@ struct SliceOp {
         }
         const Shuffle &v = (const Shuffle &)e;
         return v.vectors.size() == 1 &&
+               v.is_slice() &&
                vec.template match<bound>(*v.vectors[0].get(), state) &&
                base.template match<bound | bindings<Vec>::mask>(v.slice_begin(), state) &&
                stride.template match<bound | bindings<Vec>::mask | bindings<Base>::mask>(v.slice_stride(), state) &&

@@ -3,6 +3,7 @@
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
+#include "DistributeShifts.h"
 #include "ExprUsesVar.h"
 #include "FindIntrinsics.h"
 #include "HexagonAlignment.h"
@@ -910,9 +911,11 @@ class OptimizePatterns : public IRMutator {
 
             // Saturating narrowing casts. These may interleave later with trunc_sat.
             {"halide.hexagon.pack_satub.vh", u8_sat(wild_i16x)},
+            {"halide.hexagon.pack_satub.vuh", u8_sat(wild_u16x)},
             {"halide.hexagon.pack_satuh.vw", u16_sat(wild_i32x)},
             {"halide.hexagon.pack_satb.vh", i8_sat(wild_i16x)},
             {"halide.hexagon.pack_sath.vw", i16_sat(wild_i32x)},
+            {"halide.hexagon.pack_satuh.vuw", u16_sat(wild_u32x)},
 
             // We don't have a vpack equivalent to this one, so we match it directly.
             {"halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0},
@@ -1701,8 +1704,10 @@ class EliminateInterleaves : public IRMutator {
             {"halide.hexagon.packhi.vh", "halide.hexagon.trunclo.vh"},
             {"halide.hexagon.packhi.vw", "halide.hexagon.trunclo.vw"},
             {"halide.hexagon.pack_satub.vh", "halide.hexagon.trunc_satub.vh"},
+            {"halide.hexagon.pack_satub.vuh", "halide.hexagon.trunc_satub.vuh"},
             {"halide.hexagon.pack_sath.vw", "halide.hexagon.trunc_sath.vw"},
             {"halide.hexagon.pack_satuh.vw", "halide.hexagon.trunc_satuh.vw"},
+            {"halide.hexagon.pack_satuh.vuw", "halide.hexagon.trunc_satuh.vuw"},
         };
 
         // The reverse mapping of the above.
@@ -1927,135 +1932,6 @@ class FuseInterleaves : public IRMutator {
     }
 
     using IRMutator::visit;
-};
-
-// Distribute constant RHS widening shift lefts as multiplies.
-// TODO: This is an extremely unfortunate mess. I think the better
-// solution is for the simplifier to distribute constant multiplications
-// instead of factoring them, and then this logic is unnecessary (find_mpy_ops
-// would need to handle shifts, but that's easy).
-// Another possibility would be adding a widening_mul_add intrinsic that takes
-// a list of pairs of operands, and computes a widening sum of widening multiplies
-// of these pairs. FindIntrinsics could aggressively rewrite shifts as
-// widening_mul_add operands.
-class DistributeShiftsAsMuls : public IRMutator {
-private:
-    static bool is_cast(const Expr &e, Type value_t) {
-        if (const Cast *cast = e.as<Cast>()) {
-            return cast->value.type() == value_t;
-        }
-        return false;
-    }
-
-    static Expr distribute(const Expr &a, const Expr &b) {
-        if (const Add *add = a.as<Add>()) {
-            return Add::make(distribute(add->a, b), distribute(add->b, b));
-        } else if (const Sub *sub = a.as<Sub>()) {
-            Expr sub_a = distribute(sub->a, b);
-            Expr sub_b = distribute(sub->b, b);
-            Expr negative_sub_b = lossless_negate(sub_b);
-            if (negative_sub_b.defined()) {
-                return Add::make(sub_a, negative_sub_b);
-            } else {
-                return Sub::make(sub_a, sub_b);
-            }
-        } else if (const Cast *cast = a.as<Cast>()) {
-            Expr cast_b = lossless_cast(b.type().with_bits(cast->value.type().bits()), b);
-            if (cast_b.defined()) {
-                Expr mul = widening_mul(cast->value, cast_b);
-                if (mul.type().bits() <= cast->type.bits()) {
-                    if (mul.type() != cast->type) {
-                        mul = Cast::make(cast->type, mul);
-                    }
-                    return mul;
-                }
-            }
-        } else if (const Call *add = Call::as_intrinsic(a, {Call::widening_add})) {
-            Expr add_a = Cast::make(add->type, add->args[0]);
-            Expr add_b = Cast::make(add->type, add->args[1]);
-            add_a = distribute(add_a, b);
-            add_b = distribute(add_b, b);
-            // If add_a and add_b are the same kind of cast, we should remake a widening add.
-            const Cast *add_a_cast = add_a.as<Cast>();
-            const Cast *add_b_cast = add_b.as<Cast>();
-            if (add_a_cast && add_b_cast &&
-                add_a_cast->value.type() == add->args[0].type() &&
-                add_b_cast->value.type() == add->args[1].type()) {
-                return widening_add(add_a_cast->value, add_b_cast->value);
-            } else {
-                return Add::make(add_a, add_b);
-            }
-        } else if (const Call *sub = Call::as_intrinsic(a, {Call::widening_sub})) {
-            Expr sub_a = Cast::make(sub->type, sub->args[0]);
-            Expr sub_b = Cast::make(sub->type, sub->args[1]);
-            sub_a = distribute(sub_a, b);
-            sub_b = distribute(sub_b, b);
-            Expr negative_sub_b = lossless_negate(sub_b);
-            if (negative_sub_b.defined()) {
-                sub_b = negative_sub_b;
-            }
-            // If sub_a and sub_b are the same kind of cast, we should remake a widening sub.
-            const Cast *sub_a_cast = sub_a.as<Cast>();
-            const Cast *sub_b_cast = sub_b.as<Cast>();
-            if (sub_a_cast && sub_b_cast &&
-                sub_a_cast->value.type() == sub->args[0].type() &&
-                sub_b_cast->value.type() == sub->args[1].type()) {
-                if (negative_sub_b.defined()) {
-                    return widening_add(sub_a_cast->value, sub_b_cast->value);
-                } else {
-                    return widening_sub(sub_a_cast->value, sub_b_cast->value);
-                }
-            } else {
-                if (negative_sub_b.defined()) {
-                    return Add::make(sub_a, sub_b);
-                } else {
-                    return Sub::make(sub_a, sub_b);
-                }
-            }
-        } else if (const Call *mul = Call::as_intrinsic(a, {Call::widening_mul})) {
-            Expr mul_a = Cast::make(mul->type, mul->args[0]);
-            Expr mul_b = Cast::make(mul->type, mul->args[1]);
-            mul_a = distribute(mul_a, b);
-            if (const Cast *mul_a_cast = mul_a.as<Cast>()) {
-                if (mul_a_cast->value.type() == mul->args[0].type()) {
-                    return widening_mul(mul_a_cast->value, mul->args[1]);
-                }
-            }
-            mul_b = distribute(mul_b, b);
-            if (const Cast *mul_b_cast = mul_b.as<Cast>()) {
-                if (mul_b_cast->value.type() == mul->args[1].type()) {
-                    return widening_mul(mul->args[0], mul_b_cast->value);
-                }
-            }
-        }
-        return simplify(Mul::make(a, b));
-    }
-
-    using IRMutator::visit;
-
-    Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::shift_left)) {
-            if (const uint64_t *const_b = as_const_uint(op->args[1])) {
-                Expr a = op->args[0];
-                // Only rewrite widening shifts.
-                const Cast *cast_a = a.as<Cast>();
-                bool is_widening_cast = cast_a && cast_a->type.bits() >= cast_a->value.type().bits() * 2;
-                if (is_widening_cast || Call::as_intrinsic(a, {Call::widening_add, Call::widening_mul, Call::widening_sub})) {
-                    const uint64_t const_m = 1ull << *const_b;
-                    Expr b = make_const(a.type(), const_m);
-                    return mutate(distribute(a, b));
-                }
-            }
-        } else if (op->is_intrinsic(Call::widening_shift_left)) {
-            if (const uint64_t *const_b = as_const_uint(op->args[1])) {
-                const uint64_t const_m = 1ull << *const_b;
-                Expr b = make_const(op->type, const_m);
-                Expr a = Cast::make(op->type, op->args[0]);
-                return mutate(distribute(a, b));
-            }
-        }
-        return IRMutator::visit(op);
-    }
 };
 
 // Try generating vgathers instead of shuffles.
@@ -2330,26 +2206,38 @@ Stmt optimize_hexagon_instructions(Stmt s, const Target &t) {
     // We need to redo intrinsic matching due to simplification that has
     // happened after the end of target independent lowering.
     s = find_intrinsics(s);
+    debug(4) << "Hexagon: Lowering after find_intrinsics\n"
+             << s << "\n";
 
     // Hexagon prefers widening shifts to be expressed as multiplies to
     // hopefully hit compound widening multiplies.
-    s = DistributeShiftsAsMuls().mutate(s);
+    s = distribute_shifts(s, /* multiply_adds */ false);
+    debug(4) << "Hexagon: Lowering after DistributeShiftsAsMuls\n"
+             << s << "\n";
 
     // Pattern match VectorReduce IR node. Handle vector reduce instructions
     // before OptimizePatterns to prevent being mutated by patterns like
     // (v0 + v1 * c) -> add_mpy
     s = VectorReducePatterns().mutate(s);
+    debug(4) << "Hexagon: Lowering after VectorReducePatterns\n"
+             << s << "\n";
 
     // Peephole optimize for Hexagon instructions. These can generate
     // interleaves and deinterleaves alongside the HVX intrinsics.
     s = OptimizePatterns(t).mutate(s);
+    debug(4) << "Hexagon: Lowering after OptimizePatterns\n"
+             << s << "\n";
 
     // Try to eliminate any redundant interleave/deinterleave pairs.
     s = EliminateInterleaves(t.natural_vector_size(Int(8))).mutate(s);
+    debug(4) << "Hexagon: Lowering after EliminateInterleaves\n"
+             << s << "\n";
 
     // There may be interleaves left over that we can fuse with other
     // operations.
     s = FuseInterleaves().mutate(s);
+    debug(4) << "Hexagon: Lowering after FuseInterleaves\n"
+             << s << "\n";
     return s;
 }
 

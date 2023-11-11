@@ -301,8 +301,14 @@ public:
         check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u32(clamp(u16_1, 0, 15)));
 
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width / 1, u8_sat(i16_1));
+        check("v*.b = vpacke(v*.h,v*.h)", hvx_width / 1, u8_sat(u16_1));
         check("v*.b = vpack(v*.h,v*.h):sat", hvx_width / 1, i8_sat(i16_1));
         check("v*.uh = vpack(v*.w,v*.w):sat", hvx_width / 2, u16_sat(i32_1));
+        // Due to the unavailability of an unsigned word "min" operation in HVX,
+        // we deinterlave a vector pair and then do a saturating downcast that interleaves
+        // (intrinsic:vsatuwuh). See halide.hexagon.pack_satuh.vuw in hvx_128.ll
+        // for a more detailed explanation.
+        check("v*.uh = vsat(v*.uw,v*.uw)", hvx_width / 2, u16_sat(u32_1));
         check("v*.h = vpack(v*.w,v*.w):sat", hvx_width / 2, i16_sat(i32_1));
 
         // vpack doesn't interleave its inputs, which means it doesn't

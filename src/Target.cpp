@@ -128,8 +128,10 @@ Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_s
         }
         break;
     case 0x19:  // AMD Family 19h
-        if (model <= 0x0f || model == 0x21) {
+        if ((model & 0xf0) == 0 || model == 0x21) {
             return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
+        } else if (model == 0x61) {
+            return Target::Processor::ZnVer4;  // 61h: Zen4
         }
         break;
     default:
@@ -215,7 +217,21 @@ Target calculate_host_target() {
 
     if (vendor_signature == VendorSignatures::AuthenticAMD) {
         processor = get_amd_processor(family, model, have_sse3);
+
+        if (processor == Target::Processor::ZnVer4) {
+            Target t{os, arch, bits, processor, initial_features, vector_bits};
+            t.set_features({Target::SSE41, Target::AVX,
+                            Target::F16C, Target::FMA,
+                            Target::AVX2, Target::AVX512,
+                            Target::AVX512_Skylake, Target::AVX512_Cannonlake,
+                            Target::AVX512_Zen4});
+            return t;
+        }
     }
+
+    // Processors not specifically detected by model number above use the cpuid
+    // feature bits to determine what flags are supported. For future models,
+    // detect them explicitly above rather than extending the code below.
 
     if (have_sse41) {
         initial_features.push_back(Target::SSE41);
@@ -265,12 +281,12 @@ Target calculate_host_target() {
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
 
-                const uint32_t avx512vnni = 1U << 11;  // vnni result in ecx
-                const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
+                const uint32_t avxvnni = 1U << 4;     // avxvnni (note, not avx512vnni) result in eax
+                const uint32_t avx512bf16 = 1U << 5;  // bf16 result in eax, with cpuid(eax=7, ecx=1)
                 int info3[4];
                 cpuid(info3, 7, 1);
                 // TODO: port to family/model -based detection.
-                if ((info2[2] & avx512vnni) == avx512vnni &&
+                if ((info3[0] & avxvnni) == avxvnni &&
                     (info3[0] & avx512bf16) == avx512bf16) {
                     initial_features.push_back(Target::AVX512_SapphireRapids);
                 }
@@ -441,6 +457,7 @@ const std::map<std::string, Target::Processor> processor_name_map = {
     {"tune_znver1", Target::Processor::ZnVer1},
     {"tune_znver2", Target::Processor::ZnVer2},
     {"tune_znver3", Target::Processor::ZnVer3},
+    {"tune_znver4", Target::Processor::ZnVer4},
 };
 
 bool lookup_processor(const std::string &tok, Target::Processor &result) {
@@ -502,6 +519,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_skylake", Target::AVX512_Skylake},
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
     {"avx512_sapphirerapids", Target::AVX512_SapphireRapids},
+    {"avx512_zen4", Target::AVX512_Zen4},
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
@@ -1258,7 +1276,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 14> intersection_features = {{
+    const std::array<Feature, 15> intersection_features = {{
         ARMv7s,
         ARMv81a,
         AVX,
@@ -1268,6 +1286,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         AVX512_KNL,
         AVX512_SapphireRapids,
         AVX512_Skylake,
+        AVX512_Zen4,
         F16C,
         FMA,
         FMA4,

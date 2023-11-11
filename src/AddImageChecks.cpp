@@ -750,6 +750,36 @@ Stmt add_image_checks(const Stmt &s,
     class Injector : public IRMutator {
         using IRMutator::visit;
 
+        Expr visit(const Variable *op) override {
+            // In the bounds inference lets we skip over, respect any buffer
+            // constraints.
+
+            // Note that in the case where the constraint doesn't hold, this
+            // changes the value of this Expr! This is safe because these lets
+            // are internal names, and no user-provided constraints can depend
+            // on them, so changing their value to use the constraint value
+            // instead of the actual buffer value can't possibly change whether
+            // or not the constraint check is going to pass.
+            const Parameter &p = op->param;
+            if (p.defined() && p.is_buffer()) {
+                for (int i = 0; i < p.dimensions(); i++) {
+                    if (p.min_constraint(i).defined() &&
+                        op->name == p.name() + ".min." + std::to_string(i)) {
+                        return p.min_constraint(i);
+                    }
+                    if (p.extent_constraint(i).defined() &&
+                        op->name == p.name() + ".extent." + std::to_string(i)) {
+                        return p.extent_constraint(i);
+                    }
+                    if (p.stride_constraint(i).defined() &&
+                        op->name == p.name() + ".stride." + std::to_string(i)) {
+                        return p.stride_constraint(i);
+                    }
+                }
+            }
+            return op;
+        }
+
         Stmt visit(const Block *op) override {
             const Evaluate *e = op->first.as<Evaluate>();
             if (e && Call::as_intrinsic(e->value, {Call::add_image_checks_marker})) {

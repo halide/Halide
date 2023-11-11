@@ -7,7 +7,6 @@
 #include "Simplify.h"
 #include "Substitute.h"
 
-#include <set>
 #include <utility>
 
 namespace Halide {

@@ -84,9 +84,9 @@ private:
     friend class ::Halide::OutputImageParam;
 
     /** Construct a Dimension representing dimension d of some
-     * Internal::Parameter p. Only friends may construct
+     * Parameter p. Only friends may construct
      * these. */
-    Dimension(const Internal::Parameter &p, int d, Func f);
+    Dimension(const Parameter &p, int d, Func f);
 
     Parameter param;
     int d;

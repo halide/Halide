@@ -234,6 +234,9 @@ xcuserdata
 # Vim
 .clang_complete
 
+# NeoVim + clangd
+.cache
+
 # Emacs
 tags
 TAGS

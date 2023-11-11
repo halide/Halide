@@ -76,6 +76,20 @@ Expr slice(const Expr &e, int begin, int stride, int w) {
     return Shuffle::make_slice(e, begin, stride, w);
 }
 
+// An arbitrary fixed permutation of the lanes of a single vector that isn't one
+// of the classes above. Requires a power of two number of lanes.
+Expr permute_lanes(const Expr &e) {
+    std::vector<int> mask(e.type().lanes());
+    for (int i = 0; i < e.type().lanes(); i++) {
+        mask[i] = i;
+        // Some arbitrary permutation
+        if (i & 1) {
+            std::swap(mask[i], mask[i / 2]);
+        }
+    }
+    return Shuffle::make({e}, std::move(mask));
+}
+
 Expr ramp(const Expr &base, const Expr &stride, int w) {
     return Ramp::make(base, stride, w);
 }
@@ -158,6 +172,11 @@ void check_casts() {
     Expr some_vector = ramp(y, 2, 8) * ramp(x, 1, 8);
     check(slice(cast(UInt(64, 8), some_vector), 2, 1, 3),
           cast(UInt(64, 3), slice(some_vector, 2, 1, 3)));
+
+    // But we currently have no logic for pulling things outside of shuffles
+    // other than slices.
+    check(permute_lanes(some_vector) + permute_lanes(some_vector + 1),
+          permute_lanes(some_vector) + permute_lanes(some_vector + 1));
 
     std::vector<int> indices(18);
     for (int i = 0; i < 18; i++) {
@@ -1681,7 +1700,7 @@ void check_boolean() {
 
     // A for loop is also an if statement that the extent is greater than zero
     Stmt body = AssertStmt::make(y == z, y);
-    Stmt loop = For::make("t", 0, x, ForType::Serial, DeviceAPI::None, body);
+    Stmt loop = For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body);
     check(IfThenElse::make(0 < x, loop), loop);
 
     // A for loop where the extent is exactly one is just the body
@@ -2127,9 +2146,9 @@ void check_unreachable() {
     check(Call::make(Int(32), Call::if_then_else, {x != 0, y, unreachable()}, Call::PureIntrinsic), y);
     check(Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), y}, Call::PureIntrinsic), y);
 
-    check(Block::make(not_no_op(y), For::make("i", 0, 1, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable()))),
+    check(Block::make(not_no_op(y), For::make("i", 0, 1, ForType::Serial, Partition::Auto, DeviceAPI::None, Evaluate::make(unreachable()))),
           Evaluate::make(unreachable()));
-    check(For::make("i", 0, x, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())),
+    check(For::make("i", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, Evaluate::make(unreachable())),
           Evaluate::make(0));
 }
 
@@ -2364,7 +2383,7 @@ int main(int argc, char **argv) {
 
     {
         Stmt body = AssertStmt::make(x > 0, y);
-        check(For::make("t", 0, x, ForType::Serial, DeviceAPI::None, body),
+        check(For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body),
               Evaluate::make(0));
     }
 

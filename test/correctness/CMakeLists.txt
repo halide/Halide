@@ -29,6 +29,7 @@ tests(GROUPS correctness
       bounds_of_multiply.cpp
       bounds_of_split.cpp
       bounds_query.cpp
+      bounds_query_respects_specialize_fail.cpp
       buffer_t.cpp
       c_function.cpp
       callable.cpp
@@ -59,6 +60,7 @@ tests(GROUPS correctness
       constraints.cpp
       convolution_multiple_kernels.cpp
       cross_compilation.cpp
+      cse_name_collision.cpp
       cse_nan.cpp
       cuda_8_bit_dot_product.cpp
       custom_allocator.cpp
@@ -114,6 +116,7 @@ tests(GROUPS correctness
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
       fuzz_float_stores.cpp
+      fuzz_schedule.cpp
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
@@ -160,6 +163,7 @@ tests(GROUPS correctness
       histogram.cpp
       histogram_equalize.cpp
       hoist_loop_invariant_if_statements.cpp
+      hoist_storage.cpp
       host_alignment.cpp
       image_io.cpp
       image_of_lists.cpp
@@ -253,6 +257,7 @@ tests(GROUPS correctness
       reorder_storage.cpp
       require.cpp
       reschedule.cpp
+      respect_input_constraint_in_bounds_inference.cpp
       reuse_stack_alloc.cpp
       round.cpp
       saturating_casts.cpp

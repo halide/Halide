@@ -29,8 +29,8 @@ public:
         Expr f64_1 = in_f64(x), f64_2 = in_f64(x + 16), f64_3 = in_f64(x + 32);
         Expr f32_1 = in_f32(x), f32_2 = in_f32(x + 16), f32_3 = in_f32(x + 32);
         Expr f16_1 = in_f16(x), f16_2 = in_f16(x + 16), f16_3 = in_f16(x + 32);
-        Expr i8_1 = in_i8(x), i8_2 = in_i8(x + 16), i8_3 = in_i8(x + 32);
-        Expr u8_1 = in_u8(x), u8_2 = in_u8(x + 16), u8_3 = in_u8(x + 32);
+        Expr i8_1 = in_i8(x), i8_2 = in_i8(x + 16), i8_3 = in_i8(x + 32), i8_4 = in_i8(x + 48);
+        Expr u8_1 = in_u8(x), u8_2 = in_u8(x + 16), u8_3 = in_u8(x + 32), u8_4 = in_u8(x + 48);
         Expr i16_1 = in_i16(x), i16_2 = in_i16(x + 16), i16_3 = in_i16(x + 32);
         Expr u16_1 = in_u16(x), u16_2 = in_u16(x + 16), u16_3 = in_u16(x + 32);
         Expr i32_1 = in_i32(x), i32_2 = in_i32(x + 16), i32_3 = in_i32(x + 32);
@@ -401,19 +401,31 @@ public:
 
             // VMLAL    I       -       Multiply Accumulate Long
             check(arm32 ? "vmlal.s8" : "smlal", 8 * w, i16_1 + i16(i8_2) * i8_3);
+            check(arm32 ? "vmlal.s8" : "smlal", 8 * w, i16_1 + i16(i8_2) * 2);
             check(arm32 ? "vmlal.u8" : "umlal", 8 * w, u16_1 + u16(u8_2) * u8_3);
+            check(arm32 ? "vmlal.u8" : "umlal", 8 * w, u16_1 + u16(u8_2) * 2);
             check(arm32 ? "vmlal.s16" : "smlal", 4 * w, i32_1 + i32(i16_2) * i16_3);
+            check(arm32 ? "vmlal.s16" : "smlal", 4 * w, i32_1 + i32(i16_2) * 2);
             check(arm32 ? "vmlal.u16" : "umlal", 4 * w, u32_1 + u32(u16_2) * u16_3);
+            check(arm32 ? "vmlal.u16" : "umlal", 4 * w, u32_1 + u32(u16_2) * 2);
             check(arm32 ? "vmlal.s32" : "smlal", 2 * w, i64_1 + i64(i32_2) * i32_3);
+            check(arm32 ? "vmlal.s32" : "smlal", 2 * w, i64_1 + i64(i32_2) * 2);
             check(arm32 ? "vmlal.u32" : "umlal", 2 * w, u64_1 + u64(u32_2) * u32_3);
+            check(arm32 ? "vmlal.u32" : "umlal", 2 * w, u64_1 + u64(u32_2) * 2);
 
             // VMLSL    I       -       Multiply Subtract Long
             check(arm32 ? "vmlsl.s8" : "smlsl", 8 * w, i16_1 - i16(i8_2) * i8_3);
+            check(arm32 ? "vmlsl.s8" : "smlsl", 8 * w, i16_1 - i16(i8_2) * 2);
             check(arm32 ? "vmlsl.u8" : "umlsl", 8 * w, u16_1 - u16(u8_2) * u8_3);
+            check(arm32 ? "vmlsl.u8" : "umlsl", 8 * w, u16_1 - u16(u8_2) * 2);
             check(arm32 ? "vmlsl.s16" : "smlsl", 4 * w, i32_1 - i32(i16_2) * i16_3);
+            check(arm32 ? "vmlsl.s16" : "smlsl", 4 * w, i32_1 - i32(i16_2) * 2);
             check(arm32 ? "vmlsl.u16" : "umlsl", 4 * w, u32_1 - u32(u16_2) * u16_3);
+            check(arm32 ? "vmlsl.u16" : "umlsl", 4 * w, u32_1 - u32(u16_2) * 2);
             check(arm32 ? "vmlsl.s32" : "smlsl", 2 * w, i64_1 - i64(i32_2) * i32_3);
+            check(arm32 ? "vmlsl.s32" : "smlsl", 2 * w, i64_1 - i64(i32_2) * 2);
             check(arm32 ? "vmlsl.u32" : "umlsl", 2 * w, u64_1 - u64(u32_2) * u32_3);
+            check(arm32 ? "vmlsl.u32" : "umlsl", 2 * w, u64_1 - u64(u32_2) * 2);
 
             // VMOV     X       F, D    Move Register or Immediate
             // This is for loading immediates, which we won't do in the inner loop anyway
@@ -575,6 +587,19 @@ public:
                             check(arm32 ? "vpaddl.s8" : "sdot", 8, sum_(i32(in_i8(f * x + r))));
                             check(arm32 ? "vpaddl.u8" : "udot", 8, sum_(i32(in_u8(f * x + r))));
                             check(arm32 ? "vpaddl.u8" : "udot", 8, sum_(u32(in_u8(f * x + r))));
+                            if (!arm32) {
+                                check("sdot", 8, i32_1 + i32(i8_1) * 3 + i32(i8_2) * 6 + i32(i8_3) * 9 + i32(i8_4) * 12);
+                                check("sdot", 8, i32_1 + i32(i8_1) * 3 + i32(i8_2) * 6 + i32(i8_3) * 9 + i32(i8_4));
+                                check("sdot", 8, i32_1 + i32(i8_1) * 3 + i32(i8_2) * 6 + i32(i8_3) + i32(i8_4) * 12);
+                                check("sdot", 8, i32_1 + i32(i8_1) * 3 + i32(i8_2) + i32(i8_3) * 9 + i32(i8_4) * 12);
+                                check("sdot", 8, i32_1 + i32(i8_1) + i32(i8_2) * 6 + i32(i8_3) * 9 + i32(i8_4) * 12);
+
+                                check("udot", 8, u32_1 + u32(u8_1) * 3 + u32(u8_2) * 6 + u32(u8_3) * 9 + u32(u8_4) * 12);
+                                check("udot", 8, u32_1 + u32(u8_1) * 3 + u32(u8_2) * 6 + u32(u8_3) * 9 + u32(u8_4));
+                                check("udot", 8, u32_1 + u32(u8_1) * 3 + u32(u8_2) * 6 + u32(u8_3) + u32(u8_4) * 12);
+                                check("udot", 8, u32_1 + u32(u8_1) * 3 + u32(u8_2) + u32(u8_3) * 9 + u32(u8_4) * 12);
+                                check("udot", 8, u32_1 + u32(u8_1) + u32(u8_2) * 6 + u32(u8_3) * 9 + u32(u8_4) * 12);
+                            }
                         } else {
                             check(arm32 ? "vpaddl.s8" : "saddlp", 8, sum_(i32(in_i8(f * x + r))));
                             check(arm32 ? "vpaddl.u8" : "uaddlp", 8, sum_(i32(in_u8(f * x + r))));
