@@ -191,7 +191,7 @@ public:
                     interpolated[l]
                         .store_at(normalize, yo)
                         .compute_at(normalize, yi)
-                        .never_partition(x)
+                        .never_partition_all()
                         .vectorize(x, vec);
                 }
 
