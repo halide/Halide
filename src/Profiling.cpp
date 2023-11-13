@@ -440,10 +440,10 @@ private:
                     internal_error << "Expected to find a variable as first argument of the function call " << call->name << ".\n";
                 }
                 if (call->name == "halide_copy_to_host") {
-                    int copy_to_host_id = get_func_id("copy_to_host__" + buffer_name);
+                    int copy_to_host_id = get_func_id(buffer_name + " (copy to host)");
                     start_profiler = set_current_func(copy_to_host_id);
                 } else if (call->name == "halide_copy_to_device") {
-                    int copy_to_device_id = get_func_id("copy_to_device__" + buffer_name);
+                    int copy_to_device_id = get_func_id(buffer_name + " (copy to device)");
                     start_profiler = set_current_func(copy_to_device_id);
                 }
                 if (start_profiler.defined()) {
