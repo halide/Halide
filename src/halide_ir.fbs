@@ -558,6 +558,7 @@ table Dim {
     for_type: ForType;
     device_api: DeviceAPI;
     dim_type: DimType;
+    partition_policy: Partition;
 }
 
 enum LoopAlignStrategy: ubyte {
