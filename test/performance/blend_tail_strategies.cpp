@@ -52,7 +52,8 @@ int main(int argc, char **argv) {
         }
 
         g.compile_jit();
-        g.compile_to_assembly("/dev/stdout", {}, "f", t);
+        // Uncomment to see the assembly
+        // g.compile_to_assembly("/dev/stdout", {}, "f", t);
         double t = benchmark([&]() {
             g.realize(output_buf);
         });
