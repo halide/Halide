@@ -107,6 +107,21 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             // non-trivial loop.
             base = likely_if_innermost(base);
             base = Min::make(base, old_max + (1 - split.factor));
+        } else if (tail == TailStrategy::ShiftInwardsAndBlend) {
+            Expr old_base = base;
+            base = likely(base);
+            base = Min::make(base, old_max + (1 - split.factor));
+            // Make a mask which will be a loop invariant if inner gets
+            // vectorized, and apply it if we're in the tail.
+            Expr unwanted_elems = (-old_extent) % split.factor;
+            Expr mask = inner >= unwanted_elems;
+            mask = select(base == old_base, likely(const_true()), mask);
+            result.emplace_back(mask, ApplySplitResult::BlendProvides);
+        } else if (tail == TailStrategy::RoundUpAndBlend) {
+            Expr unwanted_elems = (-old_extent) % split.factor;
+            Expr mask = inner < split.factor - unwanted_elems;
+            mask = select(outer < outer_max, likely(const_true()), mask);
+            result.emplace_back(mask, ApplySplitResult::BlendProvides);
         } else {
             internal_assert(tail == TailStrategy::RoundUp);
         }

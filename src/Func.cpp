@@ -375,6 +375,64 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
              rhs_checker.has_self_reference ||
              rhs_checker.has_rvar);
 }
+
+void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
+    if (sched.allow_race_conditions()) {
+        return;
+    }
+
+    std::set<std::string> parallel;
+    for (const auto &dim : sched.dims()) {
+        if (is_unordered_parallel(dim.for_type)) {
+            parallel.insert(dim.var);
+        }
+    }
+
+    // Process the splits in reverse order to figure out which root vars have a
+    // parallel child.
+    for (auto it = sched.splits().rbegin(); it != sched.splits().rend(); it++) {
+        if (it->is_fuse()) {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->inner);
+                parallel.insert(it->old_var);
+            }
+        } else if (it->is_rename() || it->is_purify()) {
+            if (parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        } else {
+            if (parallel.count(it->inner) || parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        }
+    }
+
+    for (auto it = sched.splits().begin(); it != sched.splits().end(); it++) {
+        if (it->is_fuse()) {
+            if (parallel.count(it->inner) || parallel.count(it->outer)) {
+                parallel.insert(it->old_var);
+            }
+        } else if (it->is_rename() || it->is_purify()) {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->outer);
+            }
+        } else {
+            if (parallel.count(it->old_var)) {
+                parallel.insert(it->inner);
+                parallel.insert(it->old_var);
+                if (it->tail == TailStrategy::ShiftInwardsAndBlend ||
+                    it->tail == TailStrategy::RoundUpAndBlend) {
+                    user_error << "Tail strategy " << it->tail
+                               << " may not be used to split " << it->old_var
+                               << " because other vars stemming from the same original "
+                               << "Var or RVar are marked as parallel."
+                               << "This could cause a race condition.\n";
+                }
+            }
+        }
+    }
+}
+
 }  // namespace
 
 void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
@@ -438,6 +496,10 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                    << " to mark as " << t
                    << " in vars for function\n"
                    << dump_argument_list();
+    }
+
+    if (is_unordered_parallel(t)) {
+        check_for_race_conditions_in_split_with_blend(definition.schedule());
     }
 }
 
@@ -1169,6 +1231,11 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
                 tail = TailStrategy::ShiftInwards;
             }
         }
+    }
+
+    if (tail == TailStrategy::ShiftInwardsAndBlend ||
+        tail == TailStrategy::RoundUpAndBlend) {
+        check_for_race_conditions_in_split_with_blend(definition.schedule());
     }
 
     if (!definition.is_init()) {
