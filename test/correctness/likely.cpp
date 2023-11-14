@@ -170,7 +170,16 @@ int main(int argc, char **argv) {
             Func h2 = h;
             h2.partition(x, Partition::Always);
             h2.partition(y, Partition::Always);
-            // All loops get partitioned, including the tails of outer loops, so we expect 9 zones.
+            // All loops get partitioned, including the tails of outer loops, so we expect 9 zones:
+            /*
+               ----------------------------------------------
+               | top left    | top middle    | top right    |
+               | ------------------------------------------ |
+               | left        | middle        | right        |
+               | ------------------------------------------ |
+               | bottom left | bottom middle | bottom right |
+               ----------------------------------------------
+            */
             count_partitions(h2, 9);
         }
     }
