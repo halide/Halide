@@ -1650,7 +1650,7 @@ Stage &Stage::partition(const VarOrRVar &var, Partition policy) {
 }
 
 Stage &Stage::never_partition(const std::vector<VarOrRVar> &vars) {
-    for (auto v : vars) {
+    for (const auto &v : vars) {
         partition(v, Partition::Never);
     }
     return *this;
@@ -1661,6 +1661,22 @@ Stage &Stage::never_partition_all() {
     vector<Dim> &dims = definition.schedule().dims();
     for (auto &dim : dims) {
         dim.partition_policy = Partition::Never;
+    }
+    return *this;
+}
+
+Stage &Stage::always_partition(const std::vector<VarOrRVar> &vars) {
+    for (const auto &v : vars) {
+        partition(v, Partition::Always);
+    }
+    return *this;
+}
+
+Stage &Stage::always_partition_all() {
+    definition.schedule().touched() = true;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        dim.partition_policy = Partition::Always;
     }
     return *this;
 }
@@ -2367,6 +2383,18 @@ Func &Func::never_partition(const std::vector<VarOrRVar> &vars) {
 Func &Func::never_partition_all() {
     invalidate_cache();
     Stage(func, func.definition(), 0).never_partition_all();
+    return *this;
+}
+
+Func &Func::always_partition(const std::vector<VarOrRVar> &vars) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).always_partition(vars);
+    return *this;
+}
+
+Func &Func::always_partition_all() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).always_partition_all();
     return *this;
 }
 

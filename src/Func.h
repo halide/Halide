@@ -351,6 +351,9 @@ public:
     Stage &partition(const VarOrRVar &var, Partition partition_policy);
     Stage &never_partition_all();
     Stage &never_partition(const std::vector<VarOrRVar> &vars);
+    Stage &always_partition_all();
+    Stage &always_partition(const std::vector<VarOrRVar> &vars);
+
     Stage &tile(const VarOrRVar &x, const VarOrRVar &y,
                 const VarOrRVar &xo, const VarOrRVar &yo,
                 const VarOrRVar &xi, const VarOrRVar &yi, const Expr &xfactor, const Expr &yfactor,
@@ -387,6 +390,13 @@ public:
     never_partition(const VarOrRVar &x, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
         return never_partition(collected_args);
+    }
+
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
+    always_partition(const VarOrRVar &x, Args &&...args) {
+        std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
+        return always_partition(collected_args);
     }
 
     Stage &rename(const VarOrRVar &old_name, const VarOrRVar &new_name);
@@ -1475,6 +1485,23 @@ public:
      * initial definition of the Func. It must be called separately on any
      * update definitions. */
     Func &never_partition_all();
+
+    /** Set the loop partition policy to Always for a vector of Vars and
+     * RVars. */
+    Func &always_partition(const std::vector<VarOrRVar> &vars);
+
+    /** Set the loop partition policy to Always for some number of Vars and RVars. */
+    template<typename... Args>
+    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
+    always_partition(const VarOrRVar &x, Args &&...args) {
+        std::vector<VarOrRVar> collected_args{x, std::forward<Args>(args)...};
+        return always_partition(collected_args);
+    }
+
+    /** Set the loop partition policy to Always for all Vars and RVar of the
+     * initial definition of the Func. It must be called separately on any
+     * update definitions. */
+    Func &always_partition_all();
 
     /** Statically declare that the range over which a function should
      * be evaluated is given by the second and third arguments. This
