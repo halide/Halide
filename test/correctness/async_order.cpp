@@ -4,6 +4,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] WebAssembly does not support async() yet.\n");
+        return 0;
+    }
+
     {
         Func producer1, producer2, consumer;
         Var x, y;
