@@ -174,7 +174,7 @@ int main(int argc, char **argv) {
             // check that disabling works.
             h2.partition(x, Partition::Always);
             h2.partition(y, Partition::Always);
-            count_partitions(h2, 5);
+            count_partitions(h2, 9);
         }
     }
 
