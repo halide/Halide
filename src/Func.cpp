@@ -377,6 +377,19 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
 }
 
 void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
+    // Splits with a 'blend' tail strategy do a load and then a store of values
+    // outside of the region to be computed, so for each split using a 'blend'
+    // tail strategy, verify that there aren't any parallel vars that stem from
+    // the same original dimension, so that this load and store doesn't race
+    // with a true computation of that value happening in some other thread.
+
+    // Note that we only need to check vars in the same dimension, because
+    // allocation bounds inference is done per-dimension and allocates padding
+    // based on the values actually accessed by the lowered code (i.e. it covers
+    // the blend region). So for example, an access beyond the end of a scanline
+    // can't overflow onto the next scanline. Halide will allocate padding, or
+    // throw a bounds error if it's an input or output.
+
     if (sched.allow_race_conditions()) {
         return;
     }
