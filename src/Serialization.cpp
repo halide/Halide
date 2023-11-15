@@ -318,6 +318,10 @@ Serialize::TailStrategy Serializer::serialize_tail_strategy(const TailStrategy &
         return Serialize::TailStrategy::TailStrategy_PredicateStores;
     case TailStrategy::ShiftInwards:
         return Serialize::TailStrategy::TailStrategy_ShiftInwards;
+    case TailStrategy::ShiftInwardsAndBlend:
+        return Serialize::TailStrategy::TailStrategy_ShiftInwardsAndBlend;
+    case TailStrategy::RoundUpAndBlend:
+        return Serialize::TailStrategy::TailStrategy_RoundUpAndBlend;
     case TailStrategy::Auto:
         return Serialize::TailStrategy::TailStrategy_Auto;
     default:
