@@ -2286,6 +2286,9 @@ Func &Func::async() {
 
 Func &Func::double_buffer() {
     invalidate_cache();
+    // if (!func.schedule().double_buffer()) {
+    //     func.schedule().storage_dims().push_back({"double_buffer"});
+    // }
     func.schedule().double_buffer() = true;
     return *this;
 }

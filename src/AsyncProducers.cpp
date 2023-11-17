@@ -541,6 +541,85 @@ public:
     }
 };
 
+// Inject double buffering.
+class UpdateProvides : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const Provide *op) override {
+        if (op->name == func_name) {
+            debug(0) << "@@@ found Provide for: " << op->name << "\n";
+            for (const auto &a : op->args) {
+                debug(0) << a.type() << " " << a << "\n";
+            }
+            std::vector<Expr> args = op->args;
+            args.push_back(Variable::make(Int(32), loop_var) % 2);
+            return Provide::make(op->name, op->values, args, op->predicate);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->call_type == Call::Halide && op->name == func_name) {
+            debug(0) << "@@@ found Call for: " << op->name << " " << op->args.size() << "\n";
+            for (const auto &a : op->args) {
+                debug(0) << a << "\n";
+            }
+            std::vector<Expr> args = op->args;
+            args.push_back(Variable::make(Int(32), loop_var) % 2);
+            return Call::make(op->type, op->name, args, op->call_type, op->func, op->value_index, op->image, op->param);
+        }
+        return IRMutator::visit(op);
+    }
+
+    std::string func_name;
+    std::string loop_var;
+
+public:
+    UpdateProvides(const string &fn, const string &lv)
+        : func_name(fn), loop_var(lv) {
+    }
+};
+
+// Inject double buffering.
+class InjectDoubleBuffering : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const Realize *op) override {
+        debug(0) << "@@@Realize - " << op->name << "\n";
+        Stmt body = mutate(op->body);
+        Function f = env.find(op->name)->second;
+        Region bounds = op->bounds;
+        if (f.schedule().double_buffer()) {
+            debug(0) << "@@@Found Realize with double buffering: " << op->name << "\n";
+            std::string enclosing_loop_var = loop_names.back();
+            debug(0) << "@@@Enclosing loop variable: " << enclosing_loop_var << "\n";
+
+            bounds.emplace_back(0, 2);
+            body = UpdateProvides(op->name, enclosing_loop_var).mutate(body);
+        }
+
+        return Realize::make(op->name, op->types, op->memory_type, bounds, op->condition, body);
+    }
+
+    Stmt visit(const HoistedStorage *op) override {
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const For *op) override {
+        loop_names.push_back(op->name);
+        Stmt mutated = IRMutator::visit(op);
+        loop_names.pop_back();
+        return mutated;
+    }
+    const map<string, Function> &env;
+    std::vector<std::string> loop_names;
+
+public:
+    InjectDoubleBuffering(const map<string, Function> &e)
+        : env(e) {
+    }
+};
+
 // Broaden the scope of acquire nodes to pack trailing work into the
 // same task and to potentially reduce the nesting depth of tasks.
 class ExpandAcquireNodes : public IRMutator {
@@ -707,6 +786,7 @@ class TightenForkNodes : public IRMutator {
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     s = TightenProducerConsumerNodes(env).mutate(s);
+    s = InjectDoubleBuffering(env).mutate(s);
     s = ForkAsyncProducers(env).mutate(s);
     s = ExpandAcquireNodes().mutate(s);
     s = TightenForkNodes().mutate(s);

@@ -115,6 +115,7 @@ private:
 
     Expr flatten_args(const string &name, vector<Expr> args,
                       const Buffer<> &buf, const Parameter &param) {
+        debug(0) << "[begin] flatten_args\n";
         bool internal = realizations.contains(name);
         Expr idx = target.has_large_buffers() ? make_zero(Int(64)) : 0;
         vector<Expr> mins(args.size()), strides(args.size());
@@ -165,6 +166,7 @@ private:
             idx += constant_term;
         }
 
+        debug(0) << "[end] flatten_args\n";
         return idx;
     }
 
@@ -217,10 +219,12 @@ private:
         vector<Expr> allocation_extents(extents.size());
         vector<int> storage_permutation;
         vector<Stmt> bound_asserts;
+        bool is_double_buffered = false;
         {
             auto iter = env.find(op->name);
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
             Function f = iter->second.first;
+            is_double_buffered = f.schedule().double_buffer();
             const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
             const vector<string> &args = f.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
@@ -251,13 +255,19 @@ private:
                 }
                 internal_assert(storage_permutation.size() == i + 1);
             }
+            if (is_double_buffered) {
+                debug(0) << "Func f: " << f.name() << " is double buffered.\n";
+                storage_permutation.push_back(storage_dims.size());
+                allocation_extents[storage_dims.size()] = extents[storage_dims.size()];
+            }
         }
 
         internal_assert(storage_permutation.size() == op->bounds.size());
 
         Stmt stmt = body;
         internal_assert(op->types.size() == 1);
-
+        debug(0) << "@@@ Sizes: " << extents.size() << " "
+                 << storage_permutation.size() << " " << allocation_extents.size() << " " << op->bounds.size() << "\n";
         // Make the names for the mins, extents, and strides
         int dims = op->bounds.size();
         vector<string> min_name(dims), extent_name(dims), stride_name(dims);
@@ -274,6 +284,7 @@ private:
             stride_var[i] = Variable::make(Int(32), stride_name[i]);
         }
 
+        debug(0) << "1\n";
         // Create a halide_buffer_t object for this allocation.
         BufferBuilder builder;
         builder.host = Variable::make(Handle(), op->name);
@@ -285,8 +296,9 @@ private:
             builder.strides.push_back(stride_var[i]);
         }
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
-
+        debug(0) << "1.5\n";
         if (hoisted_storages_map.count(op->name) > 0) {
+            debug(0) << "1.5.1\n";
             HoistedStorageData &hoisted_storage_data = hoisted_storages[hoisted_storages_map[op->name]];
             vector<Expr> bounded_extents;
             for (const auto &e : allocation_extents) {
@@ -303,27 +315,33 @@ private:
                 user_assert(bounds.max.defined()) << "Couldn't infer the upper bound for the storage size of " << op->name << ", consider using bound_storage.\n";
                 bounded_extents.push_back(bounds.max);
             }
+            debug(0) << "1.5.2\n";
 
             HoistedAllocationInfo hoisted_alloc(op->name, op->types[0], op->memory_type, bounded_extents, condition);
 
             hoisted_storage_data.hoisted_allocations.push_back(hoisted_alloc);
         } else {
+            debug(0) << "1.5.2\n";
             // Make the allocation node
             stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
         }
-
+        debug(0) << "2\n";
         // Wrap it into storage bound asserts.
         if (!bound_asserts.empty()) {
             stmt = Block::make(Block::make(bound_asserts), stmt);
         }
-
+        debug(0) << "2.1\n";
         // Compute the strides
         for (int i = (int)op->bounds.size() - 1; i > 0; i--) {
+            debug(0) << "2.1.1\n";
             int prev_j = storage_permutation[i - 1];
             int j = storage_permutation[i];
             Expr stride = stride_var[prev_j] * allocation_extents[prev_j];
             stmt = LetStmt::make(stride_name[j], stride, stmt);
+            debug(0) << "2.1.2\n";
         }
+
+        debug(0) << "2.5\n";
 
         // Innermost stride is one
         if (dims > 0) {
@@ -336,6 +354,7 @@ private:
             stmt = LetStmt::make(min_name[i - 1], op->bounds[i - 1].min, stmt);
             stmt = LetStmt::make(extent_name[i - 1], extents[i - 1], stmt);
         }
+        debug(0) << "3\n";
         return stmt;
     }
 

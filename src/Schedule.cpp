@@ -363,6 +363,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memoized = contents->memoized;
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
+    copy.contents->double_buffer = contents->double_buffer;
 
     // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {

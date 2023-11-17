@@ -181,6 +181,7 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
     log("Lowering after computation bounds inference:", s);
 
+    // debug(0) << "After bounds inference: \n" << s << "\n";
     debug(1) << "Removing extern loops...\n";
     s = remove_extern_loops(s);
     log("Lowering after removing extern loops:", s);
@@ -265,6 +266,8 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log("Lowering after bounding small realizations:", s);
 
+    debug(0) << "Before storage flattening:\n"
+             << s << "\n";
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     log("Lowering after storage flattening:", s);
