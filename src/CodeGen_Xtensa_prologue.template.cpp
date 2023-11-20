@@ -1,9 +1,6 @@
 
 #define XCHAL_VISION_SIMD8 (XCHAL_VISION_SIMD16 * 2)
 
-// TODO(vksnk): this is disabled by default, because iDMA is not part of cstub
-// so we need to get git repo compiling with xt-tools first (b/173159625)
-
 #ifdef __cplusplus
 extern "C" {
 #endif
