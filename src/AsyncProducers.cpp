@@ -314,54 +314,54 @@ class ForkAsyncProducers : public IRMutator {
     map<string, vector<string>> cloned_acquires;
     std::set<string> hoisted_storages;
 
-    Stmt process_body(const string& name, Stmt body) {
-            // Make two copies of the body, one which only does the
-            // producer, and one which only does the consumer. Inject
-            // synchronization to preserve dependencies. Put them in a
-            // task-parallel block.
+    Stmt process_body(const string &name, Stmt body) {
+        // Make two copies of the body, one which only does the
+        // producer, and one which only does the consumer. Inject
+        // synchronization to preserve dependencies. Put them in a
+        // task-parallel block.
 
-            // Make a semaphore per consume node
-            CountConsumeNodes consumes(name);
-            body.accept(&consumes);
+        // Make a semaphore per consume node
+        CountConsumeNodes consumes(name);
+        body.accept(&consumes);
 
-            vector<string> sema_names;
-            vector<Expr> sema_vars;
-            for (int i = 0; i < consumes.count; i++) {
-                sema_names.push_back(name + ".semaphore_" + std::to_string(i));
-                sema_vars.push_back(Variable::make(type_of<halide_semaphore_t *>(), sema_names.back()));
+        vector<string> sema_names;
+        vector<Expr> sema_vars;
+        for (int i = 0; i < consumes.count; i++) {
+            sema_names.push_back(name + ".semaphore_" + std::to_string(i));
+            sema_vars.push_back(Variable::make(type_of<halide_semaphore_t *>(), sema_names.back()));
+        }
+
+        Stmt producer = GenerateProducerBody(name, sema_vars, cloned_acquires).mutate(body);
+        Stmt consumer = GenerateConsumerBody(name, sema_vars).mutate(body);
+
+        // Recurse on both sides
+        producer = mutate(producer);
+        consumer = mutate(consumer);
+
+        // Run them concurrently
+        body = Fork::make(producer, consumer);
+
+        for (const string &sema_name : sema_names) {
+            // Make a semaphore on the stack
+            Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
+                                         {0}, Call::Extern);
+
+            // If there's a nested async producer, we may have
+            // recursively cloned this semaphore inside the mutation
+            // of the producer and consumer.
+            const vector<string> &clones = cloned_acquires[sema_name];
+            for (const auto &i : clones) {
+                body = CloneAcquire(sema_name, i).mutate(body);
+                body = LetStmt::make(i, sema_space, body);
             }
 
-            Stmt producer = GenerateProducerBody(name, sema_vars, cloned_acquires).mutate(body);
-            Stmt consumer = GenerateConsumerBody(name, sema_vars).mutate(body);
+            body = LetStmt::make(sema_name, sema_space, body);
+        }
 
-            // Recurse on both sides
-            producer = mutate(producer);
-            consumer = mutate(consumer);
-
-            // Run them concurrently
-            body = Fork::make(producer, consumer);
-
-            for (const string &sema_name : sema_names) {
-                // Make a semaphore on the stack
-                Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
-                                             {0}, Call::Extern);
-
-                // If there's a nested async producer, we may have
-                // recursively cloned this semaphore inside the mutation
-                // of the producer and consumer.
-                const vector<string> &clones = cloned_acquires[sema_name];
-                for (const auto &i : clones) {
-                    body = CloneAcquire(sema_name, i).mutate(body);
-                    body = LetStmt::make(i, sema_space, body);
-                }
-
-                body = LetStmt::make(sema_name, sema_space, body);
-            }
-
-            return body;
+        return body;
     }
 
-    Stmt visit(const HoistedStorage* op) override {
+    Stmt visit(const HoistedStorage *op) override {
         hoisted_storages.insert(op->name);
         Stmt body = op->body;
 
@@ -371,7 +371,7 @@ class ForkAsyncProducers : public IRMutator {
         if (f.schedule().async() && f.schedule().double_buffer()) {
             body = process_body(op->name, body);
         } else {
-            body = mutate(body); 
+            body = mutate(body);
         }
         hoisted_storages.erase(op->name);
         return HoistedStorage::make(op->name, body);
@@ -385,7 +385,7 @@ class ForkAsyncProducers : public IRMutator {
         internal_assert(it != env.end());
         Function f = it->second;
         if (f.schedule().async() && hoisted_storages.count(op->name) == 0) {
-            Stmt body = op->body; 
+            Stmt body = op->body;
             body = process_body(op->name, body);
             return Realize::make(op->name, op->types, op->memory_type,
                                  op->bounds, op->condition, body);
@@ -632,12 +632,14 @@ class InjectDoubleBuffering : public IRMutator {
 
     Stmt visit(const HoistedStorage *op) override {
         Stmt body = mutate(op->body);
-        // Make a semaphore on the stack
-        Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
-                                    {10}, Call::Extern);
+        Function f = env.find(op->name)->second;
+        if (f.schedule().async() && f.schedule().double_buffer()) {
+            // Make a semaphore on the stack
+            Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
+                                         {2}, Call::Extern);
 
-        body = LetStmt::make("producer" + std::string(".folding_semaphore.double_buffer"), sema_space, body);
-
+            body = LetStmt::make(f.name() + std::string(".folding_semaphore.double_buffer"), sema_space, body);
+        }
         return HoistedStorage::make(op->name, body);
     }
 
@@ -823,7 +825,8 @@ class TightenForkNodes : public IRMutator {
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     s = TightenProducerConsumerNodes(env).mutate(s);
     s = InjectDoubleBuffering(env).mutate(s);
-    debug(0) << "After InjectDoubleBuffering\n" << s << "\n";
+    debug(0) << "After InjectDoubleBuffering\n"
+             << s << "\n";
     s = ForkAsyncProducers(env).mutate(s);
     s = ExpandAcquireNodes().mutate(s);
     s = TightenForkNodes().mutate(s);
