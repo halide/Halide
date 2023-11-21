@@ -20,8 +20,9 @@ enum class Partition {
     /** Disallow loop partitioning. */
     Never,
 
-    /** Force partitioning of the loop. If Halide can't find a way to partition this loop,
-     * it will raise an error. */
+    /** Force partitioning of the loop, even in the tail cases of outer
+     * partitioned loops. If Halide can't find a way to partition this loop, it
+     * will raise an error. */
     Always
 };
 
