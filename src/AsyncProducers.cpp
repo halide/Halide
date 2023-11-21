@@ -576,7 +576,7 @@ class UpdateIndices : public IRMutator {
                 debug(0) << a.type() << " " << a << "\n";
             }
             std::vector<Expr> args = op->args;
-            args.push_back(Variable::make(Int(32), loop_var) % 2);
+            args.push_back(double_buffer_index);
             return Provide::make(op->name, op->values, args, op->predicate);
         }
         return IRMutator::visit(op);
@@ -589,18 +589,18 @@ class UpdateIndices : public IRMutator {
                 debug(0) << a << "\n";
             }
             std::vector<Expr> args = op->args;
-            args.push_back(Variable::make(Int(32), loop_var) % 2);
+            args.push_back(double_buffer_index);
             return Call::make(op->type, op->name, args, op->call_type, op->func, op->value_index, op->image, op->param);
         }
         return IRMutator::visit(op);
     }
 
     std::string func_name;
-    std::string loop_var;
+    Expr double_buffer_index;
 
 public:
-    UpdateIndices(const string &fn, const string &lv)
-        : func_name(fn), loop_var(lv) {
+    UpdateIndices(const string &fn, Expr di)
+        : func_name(fn), double_buffer_index(std::move(di)) {
     }
 };
 
@@ -619,7 +619,9 @@ class InjectDoubleBuffering : public IRMutator {
             debug(0) << "@@@Enclosing loop variable: " << enclosing_loop_var << "\n";
 
             bounds.emplace_back(0, 2);
-            body = UpdateIndices(op->name, enclosing_loop_var).mutate(body);
+            Expr double_buffer_index = Variable::make(Int(32), enclosing_loop_var) % 2;
+            body = UpdateIndices(op->name, double_buffer_index).mutate(body);
+
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.double_buffer");
             Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
             Stmt release = Evaluate::make(release_producer);
