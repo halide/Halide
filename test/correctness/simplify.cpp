@@ -1644,6 +1644,24 @@ void check_boolean() {
                            Block::make(not_no_op(x + 1), not_no_op(x + 2)),
                            not_no_op(x + 3)));
 
+    check(x < y && y < x, const_false());
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y < x, not_no_op(x + 3))),
+          IfThenElse::make(x < y, not_no_op(x + 1),
+                           Block::make(not_no_op(x + 2),
+                                       IfThenElse::make(y < x, not_no_op(x + 3)))));
+
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y <= x, not_no_op(x + 3))),
+          IfThenElse::make(x < y, not_no_op(x + 1),
+                           Block::make(not_no_op(x + 2),
+                                       not_no_op(x + 3))));
+
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y <= x, not_no_op(x + 3), not_no_op(x + 4))),
+          Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y <= x, not_no_op(x + 3), not_no_op(x + 4))));
+
     // The construct
     //     if (var == expr) then a else b;
     // was being simplified incorrectly, but *only* if var was of type Bool.
