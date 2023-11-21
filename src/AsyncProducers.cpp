@@ -566,7 +566,7 @@ public:
 };
 
 // Inject double buffering.
-class UpdateProvides : public IRMutator {
+class UpdateIndices : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Provide *op) override {
@@ -599,7 +599,7 @@ class UpdateProvides : public IRMutator {
     std::string loop_var;
 
 public:
-    UpdateProvides(const string &fn, const string &lv)
+    UpdateIndices(const string &fn, const string &lv)
         : func_name(fn), loop_var(lv) {
     }
 };
@@ -619,7 +619,7 @@ class InjectDoubleBuffering : public IRMutator {
             debug(0) << "@@@Enclosing loop variable: " << enclosing_loop_var << "\n";
 
             bounds.emplace_back(0, 2);
-            body = UpdateProvides(op->name, enclosing_loop_var).mutate(body);
+            body = UpdateIndices(op->name, enclosing_loop_var).mutate(body);
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.double_buffer");
             Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
             Stmt release = Evaluate::make(release_producer);
