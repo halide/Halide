@@ -56,6 +56,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
          rewrite(x && !x, false) ||
          rewrite(!x && x, false) ||
          rewrite(y <= x && x < y, false) ||
+         rewrite(y < x && x < y, false) ||
          rewrite(x != c0 && x == c1, b, c0 != c1) ||
          rewrite(x == c0 && x == c1, false, c0 != c1) ||
          // Note: In the predicate below, if undefined overflow
