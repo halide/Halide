@@ -312,32 +312,27 @@ class ForkAsyncProducers : public IRMutator {
     const map<string, Function> &env;
 
     map<string, vector<string>> cloned_acquires;
+    std::set<string> hoisted_storages;
 
-    Stmt visit(const Realize *op) override {
-        auto it = env.find(op->name);
-        internal_assert(it != env.end());
-        Function f = it->second;
-        if (f.schedule().async()) {
-            Stmt body = op->body;
-
+    Stmt process_body(const string& name, Stmt body) {
             // Make two copies of the body, one which only does the
             // producer, and one which only does the consumer. Inject
             // synchronization to preserve dependencies. Put them in a
             // task-parallel block.
 
             // Make a semaphore per consume node
-            CountConsumeNodes consumes(op->name);
+            CountConsumeNodes consumes(name);
             body.accept(&consumes);
 
             vector<string> sema_names;
             vector<Expr> sema_vars;
             for (int i = 0; i < consumes.count; i++) {
-                sema_names.push_back(op->name + ".semaphore_" + std::to_string(i));
+                sema_names.push_back(name + ".semaphore_" + std::to_string(i));
                 sema_vars.push_back(Variable::make(type_of<halide_semaphore_t *>(), sema_names.back()));
             }
 
-            Stmt producer = GenerateProducerBody(op->name, sema_vars, cloned_acquires).mutate(body);
-            Stmt consumer = GenerateConsumerBody(op->name, sema_vars).mutate(body);
+            Stmt producer = GenerateProducerBody(name, sema_vars, cloned_acquires).mutate(body);
+            Stmt consumer = GenerateConsumerBody(name, sema_vars).mutate(body);
 
             // Recurse on both sides
             producer = mutate(producer);
@@ -363,6 +358,35 @@ class ForkAsyncProducers : public IRMutator {
                 body = LetStmt::make(sema_name, sema_space, body);
             }
 
+            return body;
+    }
+
+    Stmt visit(const HoistedStorage* op) override {
+        hoisted_storages.insert(op->name);
+        Stmt body = op->body;
+
+        auto it = env.find(op->name);
+        internal_assert(it != env.end());
+        Function f = it->second;
+        if (f.schedule().async() && f.schedule().double_buffer()) {
+            body = process_body(op->name, body);
+        } else {
+            body = mutate(body); 
+        }
+        hoisted_storages.erase(op->name);
+        return HoistedStorage::make(op->name, body);
+    }
+
+    Stmt visit(const Realize *op) override {
+        if (hoisted_storages.count(op->name) > 0) {
+            debug(0) << "+++Found Realize node with separate hoisted storage" << op->name << "\n";
+        }
+        auto it = env.find(op->name);
+        internal_assert(it != env.end());
+        Function f = it->second;
+        if (f.schedule().async() && hoisted_storages.count(op->name) == 0) {
+            Stmt body = op->body; 
+            body = process_body(op->name, body);
             return Realize::make(op->name, op->types, op->memory_type,
                                  op->bounds, op->condition, body);
         } else {
@@ -589,20 +613,32 @@ class InjectDoubleBuffering : public IRMutator {
         Stmt body = mutate(op->body);
         Function f = env.find(op->name)->second;
         Region bounds = op->bounds;
-        if (f.schedule().double_buffer()) {
+        if (f.schedule().async() && f.schedule().double_buffer()) {
             debug(0) << "@@@Found Realize with double buffering: " << op->name << "\n";
             std::string enclosing_loop_var = loop_names.back();
             debug(0) << "@@@Enclosing loop variable: " << enclosing_loop_var << "\n";
 
             bounds.emplace_back(0, 2);
             body = UpdateProvides(op->name, enclosing_loop_var).mutate(body);
+            Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.double_buffer");
+            Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
+            Stmt release = Evaluate::make(release_producer);
+            body = Block::make(body, release);
+            body = Acquire::make(sema_var, 1, body);
         }
 
         return Realize::make(op->name, op->types, op->memory_type, bounds, op->condition, body);
     }
 
     Stmt visit(const HoistedStorage *op) override {
-        return IRMutator::visit(op);
+        Stmt body = mutate(op->body);
+        // Make a semaphore on the stack
+        Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
+                                    {10}, Call::Extern);
+
+        body = LetStmt::make("producer" + std::string(".folding_semaphore.double_buffer"), sema_space, body);
+
+        return HoistedStorage::make(op->name, body);
     }
 
     Stmt visit(const For *op) override {
@@ -787,6 +823,7 @@ class TightenForkNodes : public IRMutator {
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     s = TightenProducerConsumerNodes(env).mutate(s);
     s = InjectDoubleBuffering(env).mutate(s);
+    debug(0) << "After InjectDoubleBuffering\n" << s << "\n";
     s = ForkAsyncProducers(env).mutate(s);
     s = ExpandAcquireNodes().mutate(s);
     s = TightenForkNodes().mutate(s);

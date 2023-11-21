@@ -22,7 +22,9 @@ int main(int argc, char **argv) {
         producer
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer();
+            // .hoist_storage_root()
+            .double_buffer()
+            .async();
 
         Buffer<int> out = consumer.realize({128, 128});
 
