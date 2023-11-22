@@ -147,6 +147,8 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             // This is a counter associated with the producer side of a storage-folding semaphore. Keep it.
             return op;
+        } else if (starts_with(op->name, func + ".double_buffer.")) {
+            return op;
         } else {
             return Evaluate::make(0);
         }
@@ -619,14 +621,16 @@ class InjectDoubleBuffering : public IRMutator {
             debug(0) << "@@@Enclosing loop variable: " << enclosing_loop_var << "\n";
 
             bounds.emplace_back(0, 2);
-            Expr double_buffer_index = Variable::make(Int(32), enclosing_loop_var) % 2;
-            body = UpdateIndices(op->name, double_buffer_index).mutate(body);
+            Expr current_index = Load::make(Int(32), f.name() + ".double_buffer.index", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+            body = UpdateIndices(op->name, current_index).mutate(body);
             // TODO(vksnk): logically this semaphore needs to be around the realize node.
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.double_buffer");
             Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
             Stmt release = Evaluate::make(release_producer);
             body = Block::make(body, release);
             body = Acquire::make(sema_var, 1, body);
+            Stmt advance_index = Store::make(f.name() + ".double_buffer.index", 1 - current_index, 0, Parameter(), const_true(), ModulusRemainder());
+            body = Block::make({body, advance_index});
         }
 
         return Realize::make(op->name, op->types, op->memory_type, bounds, op->condition, body);
