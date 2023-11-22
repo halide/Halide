@@ -621,7 +621,7 @@ class InjectDoubleBuffering : public IRMutator {
             bounds.emplace_back(0, 2);
             Expr double_buffer_index = Variable::make(Int(32), enclosing_loop_var) % 2;
             body = UpdateIndices(op->name, double_buffer_index).mutate(body);
-
+            // TODO(vksnk): logically this semaphore needs to be around the realize node.
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.double_buffer");
             Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
             Stmt release = Evaluate::make(release_producer);
@@ -639,6 +639,8 @@ class InjectDoubleBuffering : public IRMutator {
             // Make a semaphore on the stack
             Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
                                          {2}, Call::Extern);
+            body = Block::make(Store::make(f.name() + ".double_buffer.index", 0, 0, Parameter(), const_true(), ModulusRemainder()), body);
+            body = Allocate::make(f.name() + ".double_buffer.index", Int(32), MemoryType::Stack, {}, const_true(), body);
 
             body = LetStmt::make(f.name() + std::string(".folding_semaphore.double_buffer"), sema_space, body);
         }
