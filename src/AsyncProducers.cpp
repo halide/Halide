@@ -336,9 +336,18 @@ class ForkAsyncProducers : public IRMutator {
         Stmt producer = GenerateProducerBody(name, sema_vars, cloned_acquires).mutate(body);
         Stmt consumer = GenerateConsumerBody(name, sema_vars).mutate(body);
 
+        debug(0) << "Producer: \n"
+                 << producer << "\n";
+        debug(0) << "Consumer: \n"
+                 << consumer << "\n";
         // Recurse on both sides
         producer = mutate(producer);
         consumer = mutate(consumer);
+
+        debug(0) << "Producer (after mutation): \n"
+                 << producer << "\n";
+        debug(0) << "Consumer (after mutation): \n"
+                 << consumer << "\n";
 
         // Run them concurrently
         body = Fork::make(producer, consumer);
@@ -836,6 +845,8 @@ Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     debug(0) << "After InjectDoubleBuffering\n"
              << s << "\n";
     s = ForkAsyncProducers(env).mutate(s);
+    debug(0) << "After ForkAsyncProducers\n"
+             << s << "\n";
     s = ExpandAcquireNodes().mutate(s);
     s = TightenForkNodes().mutate(s);
     s = InitializeSemaphores().mutate(s);
