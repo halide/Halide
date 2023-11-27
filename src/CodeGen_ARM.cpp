@@ -1354,8 +1354,7 @@ void CodeGen_ARM::visit(const Call *op) {
             if (value) {
                 return;
             }
-        } else if (target.os != Target::Linux) {
-            // Furthermore, roundevenf isn't always in the standard library on arm-32
+        } else {
             value = codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
             return;
         }

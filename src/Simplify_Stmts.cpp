@@ -596,6 +596,7 @@ Stmt Simplify::visit(const Block *op) {
         return mutate(result);
     } else if (if_first &&
                if_next &&
+               !if_next->else_case.defined() &&
                is_pure(if_first->condition) &&
                is_pure(if_next->condition) &&
                is_const_one(mutate(!(if_first->condition && if_next->condition), nullptr))) {
