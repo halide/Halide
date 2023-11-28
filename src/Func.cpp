@@ -1649,6 +1649,38 @@ Stage &Stage::partition(const VarOrRVar &var, Partition policy) {
     return *this;
 }
 
+Stage &Stage::never_partition(const std::vector<VarOrRVar> &vars) {
+    for (const auto &v : vars) {
+        partition(v, Partition::Never);
+    }
+    return *this;
+}
+
+Stage &Stage::never_partition_all() {
+    definition.schedule().touched() = true;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        dim.partition_policy = Partition::Never;
+    }
+    return *this;
+}
+
+Stage &Stage::always_partition(const std::vector<VarOrRVar> &vars) {
+    for (const auto &v : vars) {
+        partition(v, Partition::Always);
+    }
+    return *this;
+}
+
+Stage &Stage::always_partition_all() {
+    definition.schedule().touched() = true;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        dim.partition_policy = Partition::Always;
+    }
+    return *this;
+}
+
 Stage &Stage::tile(const VarOrRVar &x, const VarOrRVar &y,
                    const VarOrRVar &xo, const VarOrRVar &yo,
                    const VarOrRVar &xi, const VarOrRVar &yi,
@@ -2339,6 +2371,30 @@ Func &Func::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail) 
 Func &Func::partition(const VarOrRVar &var, Partition policy) {
     invalidate_cache();
     Stage(func, func.definition(), 0).partition(var, policy);
+    return *this;
+}
+
+Func &Func::never_partition(const std::vector<VarOrRVar> &vars) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).never_partition(vars);
+    return *this;
+}
+
+Func &Func::never_partition_all() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).never_partition_all();
+    return *this;
+}
+
+Func &Func::always_partition(const std::vector<VarOrRVar> &vars) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).always_partition(vars);
+    return *this;
+}
+
+Func &Func::always_partition_all() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).always_partition_all();
     return *this;
 }
 
