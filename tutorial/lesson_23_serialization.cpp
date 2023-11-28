@@ -108,11 +108,9 @@ int main(int argc, char **argv) {
     {
         // Lets do the same thing again ... construct a new pipeline from scratch by deserializing the file we wrote to disk
 
-        // FIXME: We shouldn't have to populate the params ... but passing an empty map triggers an error in deserialize
-        // for a missing input param
-        std::map<std::string, Parameter> params; 
-        ImageParam input(UInt(8), 3, "input");
-        params.insert({"input", input.parameter()});
+        // First we can deserialize the external parameters (useful in the event we want to remap them 
+        // and replace the definitions with our own user parameter definitions)
+        std::map<std::string, Parameter> params = deserialize_parameters("blur.hlpipe");
 
         // Now deserialize the pipeline from file
         Pipeline blur_pipeline = deserialize_pipeline("blur.hlpipe", params);

@@ -127,12 +127,12 @@ int main(int argc, char **argv) {
         count_partitions(g, 1);
     }
 
-    // The slicing applies to every loop level starting from the
-    // outermost one, but only recursively simplifies the clean steady
-    // state. It either splits things three (start, middle, end). So
-    // adding a boundary condition to a 2D computation will produce 5
-    // code paths for the top, bottom, left, right, and center of the
-    // image.
+    // The slicing applies to every loop level starting from the outermost one,
+    // but only recursively simplifies the clean steady state. It either splits
+    // things three (start, middle, end). So adding a boundary condition to a 2D
+    // computation will produce 5 code paths for the top, bottom, left, right,
+    // and center of the image. With explicit control over loop partitioning, we
+    // might produce more or fewer.
     {
         Var y;
         Func g;
@@ -144,7 +144,6 @@ int main(int argc, char **argv) {
         {
             debug(1) << "Never partition y, always partition x:\n";
             Func h2 = h;
-            // check that disabling works.
             h2.partition(x, Partition::Always);
             h2.partition(y, Partition::Never);
             count_partitions(h2, 3);  // We expect left-center-right
@@ -153,7 +152,6 @@ int main(int argc, char **argv) {
         {
             debug(1) << "Never partition x, always partition y:\n";
             Func h2 = h;
-            // check that disabling works.
             h2.partition(x, Partition::Never);
             h2.partition(y, Partition::Always);
             count_partitions(h2, 3);  // We expect top-middle-bottom
@@ -162,7 +160,6 @@ int main(int argc, char **argv) {
         {
             debug(1) << "Never partition x and y.\n";
             Func h2 = h;
-            // check that disabling works.
             h2.partition(x, Partition::Never);
             h2.partition(y, Partition::Never);
             count_partitions(h2, 1);
@@ -171,10 +168,19 @@ int main(int argc, char **argv) {
         {
             debug(1) << "Always partition x and y.\n";
             Func h2 = h;
-            // check that disabling works.
             h2.partition(x, Partition::Always);
             h2.partition(y, Partition::Always);
-            count_partitions(h2, 5);
+            // All loops get partitioned, including the tails of outer loops, so we expect 9 zones:
+            /*
+               ----------------------------------------------
+               | top left    | top middle    | top right    |
+               | ------------------------------------------ |
+               | left        | middle        | right        |
+               | ------------------------------------------ |
+               | bottom left | bottom middle | bottom right |
+               ----------------------------------------------
+            */
+            count_partitions(h2, 9);
         }
     }
 
@@ -285,6 +291,26 @@ int main(int argc, char **argv) {
 
         limit.set(-10000000);
         result = g.realize({10});
+    }
+
+    // Test for the bug described in https://github.com/halide/Halide/issues/7929
+    {
+        Func f, g, h;
+        Var x, y;
+
+        f(x, y) = x;
+        f.compute_root();
+
+        Param<int> p;
+        g = BoundaryConditions::repeat_edge(f, {{0, p}, {Expr(), Expr()}});
+
+        h(x, y) = g(x, y) + g(x, y + 1) + g(x, y + 2);
+
+        count_partitions(h, 3);
+
+        // Same thing with vectorization too.
+        h.vectorize(x, 8);
+        count_partitions(h, 3);
     }
 
     // The performance of this behavior is tested in

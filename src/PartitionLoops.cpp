@@ -88,19 +88,33 @@ protected:
         }
     }
 
+    void visit(const Variable *op) override {
+        result |= scope.contains(op->name);
+    }
+
+    const Scope<> &scope;
+
 public:
+    HasLikelyTag(const Scope<> &s)
+        : scope(s) {
+    }
+
     bool result = false;
 };
 
 class HasUncapturedLikelyTag : public HasLikelyTag {
     using HasLikelyTag::visit;
-
     // Any likelies buried inside the following ops are captured the by respective ops
     void visit(const Select *op) override {
     }
     void visit(const Min *op) override {
     }
     void visit(const Max *op) override {
+    }
+
+public:
+    HasUncapturedLikelyTag(const Scope<> &s)
+        : HasLikelyTag(s) {
     }
 };
 
@@ -243,6 +257,7 @@ class FindSimplifications : public IRVisitor {
     using IRVisitor::visit;
 
     Scope<> depends_on_loop_var, depends_on_invalid_buffers;
+    Scope<> vars_with_uncaptured_likely, vars_with_likely;
     Scope<> buffers;
 
     void visit(const Allocate *op) override {
@@ -263,23 +278,20 @@ class FindSimplifications : public IRVisitor {
         }
         condition = remove_likelies(condition);
         Simplification s = {condition, std::move(old), std::move(likely_val), std::move(unlikely_val), true};
-        while (s.condition.type().is_vector()) {
-            s.condition = simplify(s.condition);
-            if (const Broadcast *b = s.condition.as<Broadcast>()) {
-                s.condition = b->value;
-            } else {
-                // Devectorize the condition
-                s.condition = and_condition_over_domain(s.condition, Scope<Interval>::empty_scope());
-                s.tight = false;
-            }
-        }
-        internal_assert(s.condition.type().is_scalar()) << s.condition << "\n";
         simplifications.push_back(s);
     }
 
+    bool has_uncaptured_likely(const Expr &e) const {
+        return has_uncaptured_likely_tag(e, vars_with_uncaptured_likely);
+    }
+
+    bool has_likely(const Expr &e) const {
+        return has_likely_tag(e, vars_with_likely);
+    }
+
     void visit(const Min *op) override {
-        bool likely_a = has_uncaptured_likely_tag(op->a);
-        bool likely_b = has_uncaptured_likely_tag(op->b);
+        bool likely_a = has_uncaptured_likely(op->a);
+        bool likely_b = has_uncaptured_likely(op->b);
 
         // If one side has an uncaptured likely, don't hunt for
         // simplifications in the other side.
@@ -294,20 +306,23 @@ class FindSimplifications : public IRVisitor {
         // call. If neither does, prefer the side that contains any
         // likely call at all.
         if (!likely_a && !likely_b) {
-            likely_a = has_likely_tag(op->a);
-            likely_b = has_likely_tag(op->b);
+            likely_a = has_likely(op->a);
+            likely_b = has_likely(op->b);
         }
 
         if (likely_b && !likely_a) {
             new_simplification(op->b <= op->a, op, op->b, op->a);
         } else if (likely_a && !likely_b) {
             new_simplification(op->a <= op->b, op, op->a, op->b);
+        } else if (likely_a && likely_b) {
+            // Likelies on both sides, continue inwards.
+            IRVisitor::visit(op);
         }
     }
 
     void visit(const Max *op) override {
-        bool likely_a = has_uncaptured_likely_tag(op->a);
-        bool likely_b = has_uncaptured_likely_tag(op->b);
+        bool likely_a = has_uncaptured_likely(op->a);
+        bool likely_b = has_uncaptured_likely(op->b);
 
         if (!likely_a) {
             op->b.accept(this);
@@ -317,8 +332,8 @@ class FindSimplifications : public IRVisitor {
         }
 
         if (!likely_a && !likely_b) {
-            likely_a = has_likely_tag(op->a);
-            likely_b = has_likely_tag(op->b);
+            likely_a = has_likely(op->a);
+            likely_b = has_likely(op->b);
         }
 
         if (likely_b && !likely_a) {
@@ -331,19 +346,19 @@ class FindSimplifications : public IRVisitor {
     void visit_select(const Expr &condition, const Expr &old, const Expr &true_value, const Expr &false_value) {
         condition.accept(this);
 
-        bool likely_t = has_uncaptured_likely_tag(true_value);
-        bool likely_f = has_uncaptured_likely_tag(false_value);
-
-        if (!likely_t && !likely_f) {
-            likely_t = has_likely_tag(true_value);
-            likely_f = has_likely_tag(false_value);
-        }
+        bool likely_t = has_uncaptured_likely(true_value);
+        bool likely_f = has_uncaptured_likely(false_value);
 
         if (!likely_t) {
             false_value.accept(this);
         }
         if (!likely_f) {
             true_value.accept(this);
+        }
+
+        if (!likely_t && !likely_f) {
+            likely_t = has_likely(true_value);
+            likely_f = has_likely(false_value);
         }
 
         if (likely_t && !likely_f) {
@@ -376,7 +391,7 @@ class FindSimplifications : public IRVisitor {
         // statement is marked as likely, treat it as likely true and
         // partition accordingly.
         IRVisitor::visit(op);
-        if (has_uncaptured_likely_tag(op->condition)) {
+        if (has_uncaptured_likely(op->condition)) {
             new_simplification(op->condition, op->condition, const_true(), const_false());
         }
     }
@@ -408,7 +423,7 @@ class FindSimplifications : public IRVisitor {
 
     void visit(const Store *op) override {
         IRVisitor::visit(op);
-        if (has_uncaptured_likely_tag(op->predicate)) {
+        if (has_uncaptured_likely(op->predicate)) {
             const int lanes = op->predicate.type().lanes();
             new_simplification(op->predicate, op->predicate, const_true(lanes), remove_likelies(op->predicate));
         }
@@ -416,7 +431,7 @@ class FindSimplifications : public IRVisitor {
 
     void visit(const Load *op) override {
         IRVisitor::visit(op);
-        if (has_uncaptured_likely_tag(op->predicate)) {
+        if (has_uncaptured_likely(op->predicate)) {
             const int lanes = op->predicate.type().lanes();
             new_simplification(op->predicate, op->predicate, const_true(lanes), remove_likelies(op->predicate));
         }
@@ -429,6 +444,11 @@ class FindSimplifications : public IRVisitor {
         ScopedBinding<> bind_invalid(expr_uses_invalid_buffers(op->value, buffers) ||
                                          expr_uses_vars(op->value, depends_on_invalid_buffers),
                                      depends_on_invalid_buffers, op->name);
+        ScopedBinding<> bind_uncaptured_likely(has_uncaptured_likely(op->value),
+                                               vars_with_uncaptured_likely, op->name);
+        ScopedBinding<> bind_likely(has_likely(op->value),
+                                    vars_with_likely, op->name);
+
         vector<Simplification> old;
         old.swap(simplifications);
         IRVisitor::visit(op);
@@ -517,10 +537,13 @@ class PartitionLoops : public IRMutator {
     using IRMutator::visit;
 
     bool in_gpu_loop = false;
+    bool in_tail = false;
 
     Stmt visit(const For *op) override {
-        // Do not partition if the schedule explicitly forbids.
-        if (op->partition_policy == Partition::Never) {
+        // Do not partition if the schedule explicitly forbids, or if it's set
+        // to automatic and we're in a loop tail.
+        if (op->partition_policy == Partition::Never ||
+            (op->partition_policy == Partition::Auto && in_tail)) {
             return IRMutator::visit(op);
         }
 
@@ -566,6 +589,18 @@ class PartitionLoops : public IRMutator {
         vector<Simplification> middle_simps, prologue_simps, epilogue_simps;
         bool lower_bound_is_tight = true, upper_bound_is_tight = true;
         for (auto &s : finder.simplifications) {
+
+            // Devectorize the condition
+            while (s.condition.type().is_vector()) {
+                s.condition = simplify(s.condition);
+                if (const Broadcast *b = s.condition.as<Broadcast>()) {
+                    s.condition = b->value;
+                } else {
+                    s.condition = and_condition_over_domain(s.condition, Scope<Interval>::empty_scope());
+                    s.tight = false;
+                }
+            }
+
             // Solve for the interval over which this simplification is true.
             s.interval = solve_for_inner_interval(s.condition, op->name);
             if (s.tight) {
@@ -686,6 +721,13 @@ class PartitionLoops : public IRMutator {
 
         // Recurse on the middle section.
         simpler_body = mutate(simpler_body);
+
+        // Recurse on the prologue and epilogue, just for loops set to Partition::Always
+        {
+            ScopedValue<bool> s(in_tail, true);
+            epilogue = mutate(epilogue);
+            prologue = mutate(prologue);
+        }
 
         // Construct variables for the bounds of the simplified middle section
         Expr min_steady = op->min, max_steady = op->extent + op->min;
@@ -991,24 +1033,44 @@ class ExpandSelects : public IRMutator {
 
     Expr visit(const Select *op) override {
         Expr condition = mutate(op->condition);
+
+        const Call *true_likely = Call::as_intrinsic(op->true_value, {Call::likely});
+        const Call *false_likely = Call::as_intrinsic(op->false_value, {Call::likely});
+
         Expr true_value = mutate(op->true_value);
         Expr false_value = mutate(op->false_value);
         if (const Or *o = condition.as<Or>()) {
             if (is_trivial(true_value)) {
-                return mutate(Select::make(o->a, true_value, Select::make(o->b, true_value, false_value)));
+                Expr expr = Select::make(o->b, true_value, false_value);
+                if (false_likely) {
+                    expr = likely(expr);
+                }
+                return mutate(Select::make(o->a, true_value, expr));
             } else {
                 string var_name = unique_name('t');
                 Expr var = Variable::make(true_value.type(), var_name);
-                Expr expr = mutate(Select::make(o->a, var, Select::make(o->b, var, false_value)));
+                Expr expr = Select::make(o->b, var, false_value);
+                if (false_likely) {
+                    expr = likely(expr);
+                }
+                expr = mutate(Select::make(o->a, var, expr));
                 return Let::make(var_name, true_value, expr);
             }
         } else if (const And *a = condition.as<And>()) {
             if (is_trivial(false_value)) {
-                return mutate(Select::make(a->a, Select::make(a->b, true_value, false_value), false_value));
+                Expr expr = Select::make(a->b, true_value, false_value);
+                if (true_likely) {
+                    expr = likely(expr);
+                }
+                return mutate(Select::make(a->a, expr, false_value));
             } else {
                 string var_name = unique_name('t');
                 Expr var = Variable::make(false_value.type(), var_name);
-                Expr expr = mutate(Select::make(a->a, Select::make(a->b, true_value, var), var));
+                Expr expr = Select::make(a->b, true_value, var);
+                if (true_likely) {
+                    expr = likely(expr);
+                }
+                expr = mutate(Select::make(a->a, expr, var));
                 return Let::make(var_name, false_value, expr);
             }
         } else if (const Not *n = condition.as<Not>()) {
@@ -1098,14 +1160,14 @@ class LowerLikelyIfInnermost : public IRMutator {
 
 }  // namespace
 
-bool has_uncaptured_likely_tag(const Expr &e) {
-    HasUncapturedLikelyTag h;
+bool has_uncaptured_likely_tag(const Expr &e, const Scope<> &scope) {
+    HasUncapturedLikelyTag h(scope);
     e.accept(&h);
     return h.result;
 }
 
-bool has_likely_tag(const Expr &e) {
-    HasLikelyTag h;
+bool has_likely_tag(const Expr &e, const Scope<> &scope) {
+    HasLikelyTag h(scope);
     e.accept(&h);
     return h.result;
 }
