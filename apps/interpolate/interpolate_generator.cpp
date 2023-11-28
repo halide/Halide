@@ -79,6 +79,7 @@ public:
             Var yo, yi, xo, xi, ci, xii, yii;
             if (get_target().has_gpu_feature()) {
                 normalize
+                    .never_partition_all()
                     .bound(x, 0, input.width())
                     .bound(y, 0, input.height())
                     .bound(c, 0, 3)
@@ -94,6 +95,7 @@ public:
                 for (int l = 1; l < levels; l++) {
                     downsampled[l]
                         .compute_root()
+                        .never_partition_all()
                         .reorder(c, x, y)
                         .unroll(c)
                         .gpu_tile(x, y, xi, yi, 16, 16);
@@ -102,6 +104,7 @@ public:
                 for (int l = 3; l < levels; l += 2) {
                     interpolated[l]
                         .compute_root()
+                        .never_partition_all()
                         .reorder(c, x, y)
                         .tile(x, y, xi, yi, 32, 32, TailStrategy::RoundUp)
                         .tile(xi, yi, xii, yii, 2, 2)
@@ -114,6 +117,7 @@ public:
 
                 upsampledx[1]
                     .compute_at(normalize, x)
+                    .never_partition_all()
                     .reorder(c, x, y)
                     .tile(x, y, xi, yi, 2, 1)
                     .unroll(xi)
@@ -123,6 +127,7 @@ public:
 
                 interpolated[1]
                     .compute_at(normalize, x)
+                    .never_partition_all()
                     .reorder(c, x, y)
                     .tile(x, y, xi, yi, 2, 2)
                     .unroll(xi)
@@ -132,6 +137,7 @@ public:
 
                 interpolated[2]
                     .compute_at(normalize, x)
+                    .never_partition_all()
                     .reorder(c, x, y)
                     .unroll(c)
                     .gpu_threads(x, y);
@@ -148,6 +154,7 @@ public:
                     // the local_laplacian app.
                     downsampled[l]
                         .compute_root()
+                        .never_partition(x)
                         .reorder(x, c, y)
                         .split(y, yo, yi, 8)
                         .parallel(yo)
@@ -165,12 +172,14 @@ public:
                     .compute_at(downsampled[1], yi)
                     .reorder(c, x, y)
                     .unroll(c)
-                    .vectorize(x, vec);
+                    .vectorize(x, vec)
+                    .never_partition(y);
 
                 normalize
                     .bound(x, 0, input.width())
                     .bound(y, 0, input.height())
                     .bound(c, 0, 3)
+                    .never_partition(y)
                     .split(x, xo, xi, vec)
                     .split(y, yo, yi, 32)
                     .reorder(xi, c, xo, yi, yo)
@@ -182,6 +191,7 @@ public:
                     interpolated[l]
                         .store_at(normalize, yo)
                         .compute_at(normalize, yi)
+                        .never_partition_all()
                         .vectorize(x, vec);
                 }
 
