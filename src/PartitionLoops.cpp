@@ -537,10 +537,13 @@ class PartitionLoops : public IRMutator {
     using IRMutator::visit;
 
     bool in_gpu_loop = false;
+    bool in_tail = false;
 
     Stmt visit(const For *op) override {
-        // Do not partition if the schedule explicitly forbids.
-        if (op->partition_policy == Partition::Never) {
+        // Do not partition if the schedule explicitly forbids, or if it's set
+        // to automatic and we're in a loop tail.
+        if (op->partition_policy == Partition::Never ||
+            (op->partition_policy == Partition::Auto && in_tail)) {
             return IRMutator::visit(op);
         }
 
@@ -718,6 +721,13 @@ class PartitionLoops : public IRMutator {
 
         // Recurse on the middle section.
         simpler_body = mutate(simpler_body);
+
+        // Recurse on the prologue and epilogue, just for loops set to Partition::Always
+        {
+            ScopedValue<bool> s(in_tail, true);
+            epilogue = mutate(epilogue);
+            prologue = mutate(prologue);
+        }
 
         // Construct variables for the bounds of the simplified middle section
         Expr min_steady = op->min, max_steady = op->extent + op->min;
