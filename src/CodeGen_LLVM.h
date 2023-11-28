@@ -127,13 +127,6 @@ protected:
     virtual bool use_pic() const;
     // @}
 
-    /** Should SLP vectorization be turned on in LLVM? SLP vectorization has no
-     * analogue in the Halide scheduling model so this is decided heuristically
-     * depending on the target. */
-    virtual bool use_slp_vectorization() const {
-        return true;
-    }
-
     /** Should indexing math be promoted to 64-bit on platforms with
      * 64-bit pointers? */
     virtual bool promote_indices() const {
@@ -401,11 +394,6 @@ protected:
     void visit(const Provide *) override;
     void visit(const Realize *) override;
     // @}
-
-    /** If we have to bail out of a pipeline midway, this should
-     * inject the appropriate target-specific cleanup code. */
-    virtual void prepare_for_early_exit() {
-    }
 
     /** Get the llvm type equivalent to the given halide type in the
      * current context. */

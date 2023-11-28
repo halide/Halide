@@ -127,6 +127,8 @@ private:
 
     Offset<Serialize::Parameter> serialize_parameter(FlatBufferBuilder &builder, const Parameter &parameter);
 
+    Offset<Serialize::ExternalParameter> serialize_external_parameter(FlatBufferBuilder &builder, const Parameter &parameter);
+
     Offset<Serialize::ExternFuncArgument> serialize_extern_func_argument(FlatBufferBuilder &builder, const ExternFuncArgument &extern_func_argument);
 
     Offset<Serialize::Buffer> serialize_buffer(FlatBufferBuilder &builder, Buffer<> buffer);
@@ -1351,6 +1353,14 @@ Offset<Serialize::Parameter> Serializer::serialize_parameter(FlatBufferBuilder &
     }
 }
 
+Offset<Serialize::ExternalParameter> Serializer::serialize_external_parameter(FlatBufferBuilder &builder, const Parameter &parameter) {
+    const auto type_serialized = serialize_type(builder, parameter.type());
+    const int dimensions = parameter.dimensions();
+    const auto name_serialized = serialize_string(builder, parameter.name());
+    const bool is_buffer = parameter.is_buffer();
+    return Serialize::CreateExternalParameter(builder, is_buffer, type_serialized, dimensions, name_serialized);
+}
+
 Offset<Serialize::ExternFuncArgument> Serializer::serialize_extern_func_argument(FlatBufferBuilder &builder, const ExternFuncArgument &extern_func_argument) {
     const auto arg_type_serialized = serialize_extern_func_argument_type(extern_func_argument.arg_type);
     if (extern_func_argument.arg_type == ExternFuncArgument::ArgType::UndefinedArg) {
@@ -1472,10 +1482,17 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
     std::vector<Offset<Serialize::Parameter>> parameters_serialized;
     parameters_serialized.reserve(parameters_in_pipeline.size());
     for (const auto &param : parameters_in_pipeline) {
-        // we only serialize internal parameters with the pipeline
+        // we only serialize the definitions of internal parameters with the pipeline
         if (external_parameters.find(param.first) == external_parameters.end()) {
             parameters_serialized.push_back(serialize_parameter(builder, param.second));
         }
+    }
+
+    // Serialize only the metadata describing external parameters (to allow the to be created with defaults upon deserialization)
+    std::vector<Offset<Serialize::ExternalParameter>> external_parameters_serialized;
+    external_parameters_serialized.reserve(external_parameters.size());
+    for (const auto &param : external_parameters) {
+        external_parameters_serialized.push_back(serialize_external_parameter(builder, param.second));
     }
 
     std::vector<Offset<Serialize::Buffer>> buffers_serialized;
@@ -1491,6 +1508,7 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
                                                   builder.CreateVector(requirements_serialized),
                                                   builder.CreateVector(func_names_in_order_serialized),
                                                   builder.CreateVector(parameters_serialized),
+                                                  builder.CreateVector(external_parameters_serialized),
                                                   builder.CreateVector(buffers_serialized));
     builder.Finish(pipeline_obj);
 
