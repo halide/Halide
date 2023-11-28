@@ -18,27 +18,27 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // // Basic compute-root async producer
-    // {
-    //     Func producer, consumer;
-    //     Var x, y;
+    // Basic compute-root async producer
+    {
+        Func producer, consumer;
+        Var x, y;
 
-    //     producer(x, y) = x + y;
-    //     consumer(x, y) = expensive(producer(x - 1, y - 1) + producer(x + 1, y + 1));
-    //     consumer.compute_root();
-    //     producer.compute_root().async();
+        producer(x, y) = x + y;
+        consumer(x, y) = expensive(producer(x - 1, y - 1) + producer(x + 1, y + 1));
+        consumer.compute_root();
+        producer.compute_root().async();
 
-    //     Buffer<int> out = consumer.realize({16, 16});
+        Buffer<int> out = consumer.realize({16, 16});
 
-    //     out.for_each_element([&](int x, int y) {
-    //         int correct = 2 * (x + y);
-    //         if (out(x, y) != correct) {
-    //             printf("out(%d, %d) = %d instead of %d\n",
-    //                    x, y, out(x, y), correct);
-    //             exit(1);
-    //         }
-    //     });
-    // }
+        out.for_each_element([&](int x, int y) {
+            int correct = 2 * (x + y);
+            if (out(x, y) != correct) {
+                printf("out(%d, %d) = %d instead of %d\n",
+                       x, y, out(x, y), correct);
+                exit(1);
+            }
+        });
+    }
 
     // Sliding and folding over a single variable
     {
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
             }
         });
     }
-    return 0;
+
     // Sliding and folding over a single variable, but flipped
     {
         Func producer, consumer;

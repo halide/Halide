@@ -73,6 +73,15 @@ protected:
         }
     }
 
+    Stmt visit(const HoistedStorage *op) override {
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return body;
+        } else {
+            return HoistedStorage::make(op->name, body);
+        }
+    }
+
     Stmt visit(const Allocate *op) override {
         Stmt body = mutate(op->body);
         if (is_no_op(body)) {
@@ -194,8 +203,31 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         return op;
     }
 
+    Stmt visit(const Realize *op) override {
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return body;
+        } else {
+            inner_realizes.insert(op->name);
+            return Realize::make(op->name, op->types, op->memory_type,
+                                 op->bounds, op->condition, body);
+        }
+    }
+
+    Stmt visit(const HoistedStorage *op) override {
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return body;
+        } else if (inner_realizes.count(op->name) == 0) {
+            return body;
+        } else {
+            return HoistedStorage::make(op->name, body);
+        }
+    }
+
     map<string, vector<string>> &cloned_acquires;
     set<string> inner_semaphores;
+    set<string> inner_realizes;
 
 public:
     GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, vector<string>> &a)
@@ -336,18 +368,19 @@ class ForkAsyncProducers : public IRMutator {
         Stmt producer = GenerateProducerBody(name, sema_vars, cloned_acquires).mutate(body);
         Stmt consumer = GenerateConsumerBody(name, sema_vars).mutate(body);
 
-        debug(0) << "Producer: \n"
-                 << producer << "\n";
-        debug(0) << "Consumer: \n"
-                 << consumer << "\n";
+        // debug(0) << "Producer: \n" << producer << "\n";
+        // debug(0) << "Consumer: \n" << consumer << "\n";
+        // debug(0) << "Mutating for producer of " << name << "\n";
         // Recurse on both sides
         producer = mutate(producer);
+        // debug(0) << "Ended mutating for producer of " << name << "\n";
+        // debug(0) << "Mutating for consumer of " << name << "\n";
         consumer = mutate(consumer);
-
-        debug(0) << "Producer (after mutation): \n"
-                 << producer << "\n";
-        debug(0) << "Consumer (after mutation): \n"
-                 << consumer << "\n";
+        // debug(0) << "Ended mutating for consumer for " << name << "\n";
+        // debug(0) << "Producer (after mutation): \n"
+        //          << producer << "\n";
+        // debug(0) << "Consumer (after mutation): \n"
+        //          << consumer << "\n";
 
         // Run them concurrently
         body = Fork::make(producer, consumer);
@@ -722,6 +755,18 @@ class ExpandAcquireNodes : public IRMutator {
         }
     }
 
+    Stmt visit(const HoistedStorage *op) override {
+        Stmt body = mutate(op->body);
+        if (const Acquire *a = body.as<Acquire>()) {
+            // Don't do the allocation until we have the
+            // semaphore. Reduces peak memory use.
+            return Acquire::make(a->semaphore, a->count,
+                                 mutate(HoistedStorage::make(op->name, a->body)));
+        } else {
+            return HoistedStorage::make(op->name, body);
+        }
+    }
+
     Stmt visit(const LetStmt *op) override {
         Stmt orig = op;
         Stmt body;
@@ -776,6 +821,9 @@ class TightenForkNodes : public IRMutator {
         const LetStmt *lr = rest.as<LetStmt>();
         const Realize *rf = first.as<Realize>();
         const Realize *rr = rest.as<Realize>();
+        const HoistedStorage *hf = first.as<HoistedStorage>();
+        const HoistedStorage *hr = rest.as<HoistedStorage>();
+
         if (lf && lr &&
             lf->name == lr->name &&
             equal(lf->value, lr->value)) {
@@ -790,6 +838,10 @@ class TightenForkNodes : public IRMutator {
         } else if (rr && !stmt_uses_var(first, rr->name)) {
             return Realize::make(rr->name, rr->types, rr->memory_type,
                                  rr->bounds, rr->condition, make_fork(first, rr->body));
+        } else if (hf && !stmt_uses_var(rest, hf->name)) {
+            return HoistedStorage::make(hf->name, make_fork(rf->body, rest));
+        } else if (hr && !stmt_uses_var(first, hr->name)) {
+            return HoistedStorage::make(hr->name, make_fork(first, hr->body));
         } else {
             return Fork::make(first, rest);
         }
@@ -820,6 +872,15 @@ class TightenForkNodes : public IRMutator {
         } else {
             return Realize::make(op->name, op->types, op->memory_type,
                                  op->bounds, op->condition, body);
+        }
+    }
+
+    Stmt visit(const HoistedStorage *op) override {
+        Stmt body = mutate(op->body);
+        if (in_fork && !stmt_uses_var(body, op->name)) {
+            return body;
+        } else {
+            return HoistedStorage::make(op->name, body);
         }
     }
 
