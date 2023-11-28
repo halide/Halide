@@ -495,7 +495,7 @@ if (WITH_SERIALIZATION)
     set(fb_dir "${Halide_BINARY_DIR}/flatc/include")
 
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
-    set(fb_header "${fb_dir}/halide_ir_generated.h")
+    set(fb_header "${fb_dir}/halide_ir.fbs.h")
     add_custom_command(
         OUTPUT "${fb_header}"
         COMMAND flatbuffers::flatc --cpp -o "${fb_dir}" "${fb_def}"

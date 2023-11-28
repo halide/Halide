@@ -7,7 +7,7 @@
 #include "Function.h"
 #include "IR.h"
 #include "Schedule.h"
-#include "halide_ir_generated.h"
+#include "halide_ir.fbs.h"
 
 #include <fstream>
 #include <functional>

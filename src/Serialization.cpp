@@ -8,7 +8,7 @@
 #include "IR.h"
 #include "RealizationOrder.h"
 #include "Schedule.h"
-#include "halide_ir_generated.h"
+#include "halide_ir.fbs.h"
 
 #include <fstream>
 #include <iostream>
