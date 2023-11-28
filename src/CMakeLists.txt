@@ -498,7 +498,7 @@ if (WITH_SERIALIZATION)
     set(fb_header "${fb_dir}/halide_ir.fbs.h")
     add_custom_command(
         OUTPUT "${fb_header}"
-        COMMAND flatbuffers::flatc --cpp -o "${fb_dir}" "${fb_def}"
+        COMMAND flatbuffers::flatc --cpp --cpp-std C++17 --no-union-value-namespacing --keep-prefix --filename-suffix ".fbs" -o "${fb_dir}" "${fb_def}"
         DEPENDS "${fb_def}"
         VERBATIM
     )
