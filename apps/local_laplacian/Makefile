@@ -1,6 +1,7 @@
 include ../support/Makefile.inc
 
 .PHONY: build clean test
+.SECONDARY:
 
 build: $(BIN)/$(HL_TARGET)/process
 
