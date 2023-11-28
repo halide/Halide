@@ -1122,7 +1122,7 @@ void CodeGen_LLVM::optimize_module() {
     PipelineTuningOptions pto;
     pto.LoopInterleaving = do_loop_opt;
     pto.LoopVectorization = do_loop_opt;
-    pto.SLPVectorization = use_slp_vectorization();
+    pto.SLPVectorization = true;
     pto.LoopUnrolling = do_loop_opt;
     // Clear ScEv info for all loops. Certain Halide applications spend a very
     // long time compiling in forgetLoop, and prefer to forget everything
@@ -5161,7 +5161,7 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
                 return nullptr;
             }
         } else if (t.is_handle()) {
-            return llvm::Type::getInt8PtrTy(*c);
+            return llvm::PointerType::getUnqual(*c);
         } else {
             return llvm::Type::getIntNTy(*c, t.bits());
         }

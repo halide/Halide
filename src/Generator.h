@@ -973,11 +973,15 @@ using GeneratorParamImplBase =
  *   "int8"     Halide::Int(8)
  *   "int16"    Halide::Int(16)
  *   "int32"    Halide::Int(32)
+ *   "int64"    Halide::Int(64)
  *   "uint8"    Halide::UInt(8)
  *   "uint16"   Halide::UInt(16)
  *   "uint32"   Halide::UInt(32)
+ *   "uint64"   Halide::UInt(64)
+ *   "float16"  Halide::Float(16)
  *   "float32"  Halide::Float(32)
  *   "float64"  Halide::Float(64)
+ *   "bfloat16"  Halide::BFloat(16)
  *
  * No vector Types are currently supported by this mapping.
  *
@@ -3052,6 +3056,7 @@ protected:
     using LoopLevel = Halide::LoopLevel;
     using MemoryType = Halide::MemoryType;
     using NameMangling = Halide::NameMangling;
+    using Partition = Halide::Partition;
     using Pipeline = Halide::Pipeline;
     using PrefetchBoundStrategy = Halide::PrefetchBoundStrategy;
     using RDom = Halide::RDom;
