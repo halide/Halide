@@ -1574,14 +1574,17 @@ Pipeline deserialize_pipeline(const std::vector<uint8_t> &buffer, const std::map
 
 std::map<std::string, Parameter> deserialize_parameters(const std::string &filename) {
     user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+    return {};
 }
 
 std::map<std::string, Parameter> deserialize_parameters(std::istream &in) {
     user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+    return {};
 }
 
 std::map<std::string, Parameter> deserialize_parameters(const std::vector<uint8_t> &buffer) {
     user_error << "Deserialization is not supported in this build of Halide; try rebuilding with WITH_SERIALIZATION=ON.";
+    return {};
 }
 
 }  // namespace Halide
