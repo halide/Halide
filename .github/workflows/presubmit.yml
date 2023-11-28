@@ -22,7 +22,6 @@ jobs:
         with:
           source: '.'
           extensions: 'h,c,cpp'
-          exclude: halide_ir.fbs.h
           clangFormatVersion: 16
   # As of Aug 2023, the macOS runners have more RAM (14GB vs 7GB) and CPU (3 cores vs 2)
   # than the Linux and Windows runners, so let's use those instead, since clang-tidy is
