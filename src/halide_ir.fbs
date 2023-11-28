@@ -640,6 +640,13 @@ table Parameter {
     scalar_estimate: Expr;
 }
 
+table ExternalParameter {
+    is_buffer: bool;
+    type: Type;
+    dimensions: int32;
+    name: string;
+}
+
 enum ExternFuncArgumentType: ubyte {
     UndefinedArg,
     FuncArg,
@@ -701,6 +708,7 @@ table Pipeline {
     requirements: [Stmt];
     func_names_in_order: [string];
     parameters: [Parameter];
+    external_parameters: [ExternalParameter];
     buffers: [Buffer];
 }
 
