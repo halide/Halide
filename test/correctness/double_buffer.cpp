@@ -192,6 +192,47 @@ int main(int argc, char **argv) {
         });
     }
 
+    // One async producer and two consumers.
+    {
+        Func producer("producer"), interm1("interm1"), interm2("interm2"), consumer("consumer");
+        Var x, y, xo, yo, xi, yi;
+
+        producer(x, y) = x + y;
+        interm1(x, y) = producer(x - 1, y + 1);
+        interm2(x, y) = producer(x + 1, y - 1);
+        consumer(x, y) = interm1(x, y) + interm2(x, y);
+
+        consumer
+            .compute_root()
+            .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::RoundUp);
+
+        interm1
+            .compute_at(consumer, xo)
+            .hoist_storage(consumer, yo);
+
+        interm2
+            .compute_at(consumer, xo)
+            .hoist_storage(consumer, yo);
+
+        producer
+            .compute_at(consumer, xo)
+            .hoist_storage(consumer, yo)
+            // .hoist_storage_root()
+            .double_buffer()
+            .async();
+
+        Buffer<int> out = consumer.realize({128, 128});
+
+        out.for_each_element([&](int x, int y) {
+            int correct = 2 * (x + y);
+            if (out(x, y) != correct) {
+                printf("out(%d, %d) = %d instead of %d\n",
+                       x, y, out(x, y), correct);
+                exit(1);
+            }
+        });
+    }
+
     printf("Success!\n");
     return 0;
 }

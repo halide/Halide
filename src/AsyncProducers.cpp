@@ -203,6 +203,19 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         return op;
     }
 
+    Stmt visit(const Allocate *op) override {
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return body;
+        } else if (!starts_with(op->name, func) && ends_with(op->name, ".double_buffer.index")) {
+            return body;
+        } else {
+            return Allocate::make(op->name, op->type, op->memory_type,
+                                  op->extents, op->condition, body,
+                                  op->new_expr, op->free_function, op->padding);
+        }
+    }
+
     Stmt visit(const Realize *op) override {
         Stmt body = mutate(op->body);
         if (is_no_op(body)) {
@@ -679,18 +692,23 @@ class InjectDoubleBuffering : public IRMutator {
     }
 
     Stmt visit(const HoistedStorage *op) override {
-        Stmt body = mutate(op->body);
+        Stmt mutated = mutate(op->body);
         Function f = env.find(op->name)->second;
+        if (f.schedule().async() && f.schedule().double_buffer()) {
+            mutated = Block::make(Store::make(f.name() + ".double_buffer.index", 0, 0, Parameter(), const_true(), ModulusRemainder()), mutated);
+            mutated = Allocate::make(f.name() + ".double_buffer.index", Int(32), MemoryType::Stack, {}, const_true(), mutated);
+        }
+
+        mutated = HoistedStorage::make(op->name, mutated);
+
         if (f.schedule().async() && f.schedule().double_buffer()) {
             // Make a semaphore on the stack
             Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
                                          {2}, Call::Extern);
-            body = Block::make(Store::make(f.name() + ".double_buffer.index", 0, 0, Parameter(), const_true(), ModulusRemainder()), body);
-            body = Allocate::make(f.name() + ".double_buffer.index", Int(32), MemoryType::Stack, {}, const_true(), body);
-
-            body = LetStmt::make(f.name() + std::string(".folding_semaphore.double_buffer"), sema_space, body);
+            mutated = LetStmt::make(f.name() + std::string(".folding_semaphore.double_buffer"), sema_space, mutated);
         }
-        return HoistedStorage::make(op->name, body);
+
+        return mutated;
     }
 
     Stmt visit(const For *op) override {
@@ -909,7 +927,11 @@ Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     debug(0) << "After ForkAsyncProducers\n"
              << s << "\n";
     s = ExpandAcquireNodes().mutate(s);
+    debug(0) << "After ExpandAcquireNodes\n"
+             << s << "\n";
     s = TightenForkNodes().mutate(s);
+    debug(0) << "After TightenForkNodes\n"
+             << s << "\n";
     s = InitializeSemaphores().mutate(s);
     return s;
 }
