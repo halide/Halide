@@ -8,7 +8,7 @@
 #include "IR.h"
 #include "RealizationOrder.h"
 #include "Schedule.h"
-#include "halide_ir_generated.h"
+#include "halide_ir.fbs.h"
 
 #include <fstream>
 #include <iostream>
@@ -141,254 +141,254 @@ private:
 Serialize::MemoryType Serializer::serialize_memory_type(const MemoryType &memory_type) {
     switch (memory_type) {
     case MemoryType::Auto:
-        return Serialize::MemoryType::MemoryType_Auto;
+        return Serialize::MemoryType::Auto;
     case MemoryType::Heap:
-        return Serialize::MemoryType::MemoryType_Heap;
+        return Serialize::MemoryType::Heap;
     case MemoryType::Stack:
-        return Serialize::MemoryType::MemoryType_Stack;
+        return Serialize::MemoryType::Stack;
     case MemoryType::Register:
-        return Serialize::MemoryType::MemoryType_Register;
+        return Serialize::MemoryType::Register;
     case MemoryType::GPUShared:
-        return Serialize::MemoryType::MemoryType_GPUShared;
+        return Serialize::MemoryType::GPUShared;
     case MemoryType::GPUTexture:
-        return Serialize::MemoryType::MemoryType_GPUTexture;
+        return Serialize::MemoryType::GPUTexture;
     case MemoryType::LockedCache:
-        return Serialize::MemoryType::MemoryType_LockedCache;
+        return Serialize::MemoryType::LockedCache;
     case MemoryType::VTCM:
-        return Serialize::MemoryType::MemoryType_VTCM;
+        return Serialize::MemoryType::VTCM;
     case MemoryType::AMXTile:
-        return Serialize::MemoryType::MemoryType_AMXTile;
+        return Serialize::MemoryType::AMXTile;
     default:
         user_error << "Unsupported memory type\n";
-        return Serialize::MemoryType_Auto;
+        return Serialize::MemoryType::Auto;
     }
 }
 
 Serialize::ForType Serializer::serialize_for_type(const ForType &for_type) {
     switch (for_type) {
     case ForType::Serial:
-        return Serialize::ForType::ForType_Serial;
+        return Serialize::ForType::Serial;
     case ForType::Parallel:
-        return Serialize::ForType::ForType_Parallel;
+        return Serialize::ForType::Parallel;
     case ForType::Vectorized:
-        return Serialize::ForType::ForType_Vectorized;
+        return Serialize::ForType::Vectorized;
     case ForType::Unrolled:
-        return Serialize::ForType::ForType_Unrolled;
+        return Serialize::ForType::Unrolled;
     case ForType::Extern:
-        return Serialize::ForType::ForType_Extern;
+        return Serialize::ForType::Extern;
     case ForType::GPUBlock:
-        return Serialize::ForType::ForType_GPUBlock;
+        return Serialize::ForType::GPUBlock;
     case ForType::GPUThread:
-        return Serialize::ForType::ForType_GPUThread;
+        return Serialize::ForType::GPUThread;
     case ForType::GPULane:
-        return Serialize::ForType::ForType_GPULane;
+        return Serialize::ForType::GPULane;
     default:
         user_error << "Unsupported for type\n";
-        return Serialize::ForType_Serial;
+        return Serialize::ForType::Serial;
     }
 }
 
 Serialize::Partition Serializer::serialize_partition(const Partition &partition) {
     switch (partition) {
     case Halide::Partition::Auto:
-        return Serialize::Partition::Partition_Auto;
+        return Serialize::Partition::Auto;
     case Halide::Partition::Never:
-        return Serialize::Partition::Partition_Never;
+        return Serialize::Partition::Never;
     case Halide::Partition::Always:
-        return Serialize::Partition::Partition_Always;
+        return Serialize::Partition::Always;
     default:
         user_error << "Unsupported loop partition policy\n";
-        return Serialize::Partition::Partition_Auto;
+        return Serialize::Partition::Auto;
     }
 }
 
 Serialize::DeviceAPI Serializer::serialize_device_api(const DeviceAPI &device_api) {
     switch (device_api) {
     case DeviceAPI::None:
-        return Serialize::DeviceAPI::DeviceAPI_None;
+        return Serialize::DeviceAPI::None;
     case DeviceAPI::Host:
-        return Serialize::DeviceAPI::DeviceAPI_Host;
+        return Serialize::DeviceAPI::Host;
     case DeviceAPI::Default_GPU:
-        return Serialize::DeviceAPI::DeviceAPI_Default_GPU;
+        return Serialize::DeviceAPI::Default_GPU;
     case DeviceAPI::CUDA:
-        return Serialize::DeviceAPI::DeviceAPI_CUDA;
+        return Serialize::DeviceAPI::CUDA;
     case DeviceAPI::OpenCL:
-        return Serialize::DeviceAPI::DeviceAPI_OpenCL;
+        return Serialize::DeviceAPI::OpenCL;
     case DeviceAPI::OpenGLCompute:
-        return Serialize::DeviceAPI::DeviceAPI_OpenGLCompute;
+        return Serialize::DeviceAPI::OpenGLCompute;
     case DeviceAPI::Metal:
-        return Serialize::DeviceAPI::DeviceAPI_Metal;
+        return Serialize::DeviceAPI::Metal;
     case DeviceAPI::Hexagon:
-        return Serialize::DeviceAPI::DeviceAPI_Hexagon;
+        return Serialize::DeviceAPI::Hexagon;
     case DeviceAPI::HexagonDma:
-        return Serialize::DeviceAPI::DeviceAPI_HexagonDma;
+        return Serialize::DeviceAPI::HexagonDma;
     case DeviceAPI::D3D12Compute:
-        return Serialize::DeviceAPI::DeviceAPI_D3D12Compute;
+        return Serialize::DeviceAPI::D3D12Compute;
     case DeviceAPI::Vulkan:
-        return Serialize::DeviceAPI::DeviceAPI_Vulkan;
+        return Serialize::DeviceAPI::Vulkan;
     case DeviceAPI::WebGPU:
-        return Serialize::DeviceAPI::DeviceAPI_WebGPU;
+        return Serialize::DeviceAPI::WebGPU;
     default:
         user_error << "Unsupported device API\n";
-        return Serialize::DeviceAPI_None;
+        return Serialize::DeviceAPI::None;
     }
 }
 
 Serialize::CallType Serializer::serialize_call_type(const Call::CallType &call_type) {
     switch (call_type) {
     case Call::CallType::Image:
-        return Serialize::CallType::CallType_Image;
+        return Serialize::CallType::Image;
     case Call::CallType::Extern:
-        return Serialize::CallType::CallType_Extern;
+        return Serialize::CallType::Extern;
     case Call::CallType::ExternCPlusPlus:
-        return Serialize::CallType::CallType_ExternCPlusPlus;
+        return Serialize::CallType::ExternCPlusPlus;
     case Call::CallType::PureExtern:
-        return Serialize::CallType::CallType_PureExtern;
+        return Serialize::CallType::PureExtern;
     case Call::CallType::Halide:
-        return Serialize::CallType::CallType_Halide;
+        return Serialize::CallType::Halide;
     case Call::CallType::Intrinsic:
-        return Serialize::CallType::CallType_Intrinsic;
+        return Serialize::CallType::Intrinsic;
     case Call::CallType::PureIntrinsic:
-        return Serialize::CallType::CallType_PureIntrinsic;
+        return Serialize::CallType::PureIntrinsic;
     default:
         user_error << "Unsupported call type\n";
-        return Serialize::CallType::CallType_Image;
+        return Serialize::CallType::Image;
     }
 }
 
 Serialize::VectorReduceOp Serializer::serialize_vector_reduce_op(const VectorReduce::Operator &vector_reduce_op) {
     switch (vector_reduce_op) {
     case VectorReduce::Operator::Add:
-        return Serialize::VectorReduceOp::VectorReduceOp_Add;
+        return Serialize::VectorReduceOp::Add;
     case VectorReduce::Operator::SaturatingAdd:
-        return Serialize::VectorReduceOp::VectorReduceOp_SaturatingAdd;
+        return Serialize::VectorReduceOp::SaturatingAdd;
     case VectorReduce::Operator::Mul:
-        return Serialize::VectorReduceOp::VectorReduceOp_Mul;
+        return Serialize::VectorReduceOp::Mul;
     case VectorReduce::Operator::Min:
-        return Serialize::VectorReduceOp::VectorReduceOp_Min;
+        return Serialize::VectorReduceOp::Min;
     case VectorReduce::Operator::Max:
-        return Serialize::VectorReduceOp::VectorReduceOp_Max;
+        return Serialize::VectorReduceOp::Max;
     case VectorReduce::Operator::And:
-        return Serialize::VectorReduceOp::VectorReduceOp_And;
+        return Serialize::VectorReduceOp::And;
     case VectorReduce::Operator::Or:
-        return Serialize::VectorReduceOp::VectorReduceOp_Or;
+        return Serialize::VectorReduceOp::Or;
     default:
         user_error << "Unsupported vector reduce op\n";
-        return Serialize::VectorReduceOp::VectorReduceOp_Add;
+        return Serialize::VectorReduceOp::Add;
     }
 }
 
 Serialize::PrefetchBoundStrategy Serializer::serialize_prefetch_bound_strategy(const PrefetchBoundStrategy &prefetch_bound_strategy) {
     switch (prefetch_bound_strategy) {
     case PrefetchBoundStrategy::Clamp:
-        return Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_Clamp;
+        return Serialize::PrefetchBoundStrategy::Clamp;
     case PrefetchBoundStrategy::GuardWithIf:
-        return Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_GuardWithIf;
+        return Serialize::PrefetchBoundStrategy::GuardWithIf;
     case PrefetchBoundStrategy::NonFaulting:
-        return Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_NonFaulting;
+        return Serialize::PrefetchBoundStrategy::NonFaulting;
     default:
         user_error << "Unsupported prefetch bound strategy\n";
-        return Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_Clamp;
+        return Serialize::PrefetchBoundStrategy::Clamp;
     }
 }
 
 Serialize::NameMangling Serializer::serialize_name_mangling(const NameMangling &name_mangling) {
     switch (name_mangling) {
     case NameMangling::Default:
-        return Serialize::NameMangling::NameMangling_Default;
+        return Serialize::NameMangling::Default;
     case NameMangling::C:
-        return Serialize::NameMangling::NameMangling_C;
+        return Serialize::NameMangling::C;
     case NameMangling::CPlusPlus:
-        return Serialize::NameMangling::NameMangling_CPlusPlus;
+        return Serialize::NameMangling::CPlusPlus;
     default:
         user_error << "Unsupported name mangling\n";
-        return Serialize::NameMangling::NameMangling_Default;
+        return Serialize::NameMangling::Default;
     }
 }
 
 Serialize::TailStrategy Serializer::serialize_tail_strategy(const TailStrategy &tail_strategy) {
     switch (tail_strategy) {
     case TailStrategy::RoundUp:
-        return Serialize::TailStrategy::TailStrategy_RoundUp;
+        return Serialize::TailStrategy::RoundUp;
     case TailStrategy::GuardWithIf:
-        return Serialize::TailStrategy::TailStrategy_GuardWithIf;
+        return Serialize::TailStrategy::GuardWithIf;
     case TailStrategy::Predicate:
-        return Serialize::TailStrategy::TailStrategy_Predicate;
+        return Serialize::TailStrategy::Predicate;
     case TailStrategy::PredicateLoads:
-        return Serialize::TailStrategy::TailStrategy_PredicateLoads;
+        return Serialize::TailStrategy::PredicateLoads;
     case TailStrategy::PredicateStores:
-        return Serialize::TailStrategy::TailStrategy_PredicateStores;
+        return Serialize::TailStrategy::PredicateStores;
     case TailStrategy::ShiftInwards:
-        return Serialize::TailStrategy::TailStrategy_ShiftInwards;
+        return Serialize::TailStrategy::ShiftInwards;
     case TailStrategy::Auto:
-        return Serialize::TailStrategy::TailStrategy_Auto;
+        return Serialize::TailStrategy::Auto;
     default:
         user_error << "Unsupported tail strategy\n";
-        return Serialize::TailStrategy::TailStrategy_RoundUp;
+        return Serialize::TailStrategy::RoundUp;
     }
 }
 
 Serialize::SplitType Serializer::serialize_split_type(const Split::SplitType &split_type) {
     switch (split_type) {
     case Split::SplitType::SplitVar:
-        return Serialize::SplitType::SplitType_SplitVar;
+        return Serialize::SplitType::SplitVar;
     case Split::SplitType::RenameVar:
-        return Serialize::SplitType::SplitType_RenameVar;
+        return Serialize::SplitType::RenameVar;
     case Split::SplitType::FuseVars:
-        return Serialize::SplitType::SplitType_FuseVars;
+        return Serialize::SplitType::FuseVars;
     case Split::SplitType::PurifyRVar:
-        return Serialize::SplitType::SplitType_PurifyRVar;
+        return Serialize::SplitType::PurifyRVar;
     default:
         user_error << "Unsupported split type\n";
-        return Serialize::SplitType::SplitType_SplitVar;
+        return Serialize::SplitType::SplitVar;
     }
 }
 
 Serialize::DimType Serializer::serialize_dim_type(const DimType &dim_type) {
     switch (dim_type) {
     case DimType::PureVar:
-        return Serialize::DimType::DimType_PureVar;
+        return Serialize::DimType::PureVar;
     case DimType::PureRVar:
-        return Serialize::DimType::DimType_PureRVar;
+        return Serialize::DimType::PureRVar;
     case DimType::ImpureRVar:
-        return Serialize::DimType::DimType_ImpureRVar;
+        return Serialize::DimType::ImpureRVar;
     default:
         user_error << "Unsupported dim type\n";
-        return Serialize::DimType::DimType_PureVar;
+        return Serialize::DimType::PureVar;
     }
 }
 
 Serialize::LoopAlignStrategy Serializer::serialize_loop_align_strategy(const LoopAlignStrategy &loop_align_strategy) {
     switch (loop_align_strategy) {
     case LoopAlignStrategy::AlignStart:
-        return Serialize::LoopAlignStrategy::LoopAlignStrategy_AlignStart;
+        return Serialize::LoopAlignStrategy::AlignStart;
     case LoopAlignStrategy::AlignEnd:
-        return Serialize::LoopAlignStrategy::LoopAlignStrategy_AlignEnd;
+        return Serialize::LoopAlignStrategy::AlignEnd;
     case LoopAlignStrategy::NoAlign:
-        return Serialize::LoopAlignStrategy::LoopAlignStrategy_NoAlign;
+        return Serialize::LoopAlignStrategy::NoAlign;
     case LoopAlignStrategy::Auto:
-        return Serialize::LoopAlignStrategy::LoopAlignStrategy_Auto;
+        return Serialize::LoopAlignStrategy::Auto;
     default:
         user_error << "Unsupported loop align strategy\n";
-        return Serialize::LoopAlignStrategy::LoopAlignStrategy_AlignStart;
+        return Serialize::LoopAlignStrategy::AlignStart;
     }
 }
 
 Serialize::ExternFuncArgumentType Serializer::serialize_extern_func_argument_type(const ExternFuncArgument::ArgType &extern_func_argument_type) {
     switch (extern_func_argument_type) {
     case ExternFuncArgument::ArgType::UndefinedArg:
-        return Serialize::ExternFuncArgumentType::ExternFuncArgumentType_UndefinedArg;
+        return Serialize::ExternFuncArgumentType::UndefinedArg;
     case ExternFuncArgument::ArgType::FuncArg:
-        return Serialize::ExternFuncArgumentType::ExternFuncArgumentType_FuncArg;
+        return Serialize::ExternFuncArgumentType::FuncArg;
     case ExternFuncArgument::ArgType::BufferArg:
-        return Serialize::ExternFuncArgumentType::ExternFuncArgumentType_BufferArg;
+        return Serialize::ExternFuncArgumentType::BufferArg;
     case ExternFuncArgument::ArgType::ExprArg:
-        return Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ExprArg;
+        return Serialize::ExternFuncArgumentType::ExprArg;
     case ExternFuncArgument::ArgType::ImageParamArg:
-        return Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ImageParamArg;
+        return Serialize::ExternFuncArgumentType::ImageParamArg;
     default:
         user_error << "Unsupported extern func argument type\n";
-        return Serialize::ExternFuncArgumentType::ExternFuncArgumentType_UndefinedArg;
+        return Serialize::ExternFuncArgumentType::UndefinedArg;
     }
 }
 
@@ -406,7 +406,7 @@ Offset<Serialize::Type> Serializer::serialize_type(FlatBufferBuilder &builder, c
 
 std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBuilder &builder, const Stmt &stmt) {
     if (!stmt.defined()) {
-        return std::make_pair(Serialize::Stmt::Stmt_UndefinedStmt, Serialize::CreateUndefinedStmt(builder).Union());
+        return std::make_pair(Serialize::Stmt::UndefinedStmt, Serialize::CreateUndefinedStmt(builder).Union());
     }
     switch (stmt->node_type) {
     case IRNodeType::LetStmt: {
@@ -414,7 +414,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto name_serialized = serialize_string(builder, let_stmt->name);
         const auto value_serialized = serialize_expr(builder, let_stmt->value);
         const auto body_serialized = serialize_stmt(builder, let_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_LetStmt,
+        return std::make_pair(Serialize::Stmt::LetStmt,
                               Serialize::CreateLetStmt(builder, name_serialized,
                                                        value_serialized.first, value_serialized.second,
                                                        body_serialized.first, body_serialized.second)
@@ -424,7 +424,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto *const assert_stmt = stmt.as<AssertStmt>();
         const auto condition_serialized = serialize_expr(builder, assert_stmt->condition);
         const auto message_serialized = serialize_expr(builder, assert_stmt->message);
-        return std::make_pair(Serialize::Stmt::Stmt_AssertStmt,
+        return std::make_pair(Serialize::Stmt::AssertStmt,
                               Serialize::CreateAssertStmt(builder,
                                                           condition_serialized.first, condition_serialized.second,
                                                           message_serialized.first, message_serialized.second)
@@ -434,7 +434,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto *const producer_consumer = stmt.as<ProducerConsumer>();
         const auto name_serialized = serialize_string(builder, producer_consumer->name);
         const auto body_serialized = serialize_stmt(builder, producer_consumer->body);
-        return std::make_pair(Serialize::Stmt::Stmt_ProducerConsumer,
+        return std::make_pair(Serialize::Stmt::ProducerConsumer,
                               Serialize::CreateProducerConsumer(builder, name_serialized,
                                                                 producer_consumer->is_producer,
                                                                 body_serialized.first, body_serialized.second)
@@ -449,7 +449,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const Serialize::Partition partition_policy = serialize_partition(for_stmt->partition_policy);
         const Serialize::DeviceAPI device_api = serialize_device_api(for_stmt->device_api);
         const auto body_serialized = serialize_stmt(builder, for_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_For,
+        return std::make_pair(Serialize::Stmt::For,
                               Serialize::CreateFor(builder, name_serialized,
                                                    min_serialized.first, min_serialized.second,
                                                    extent_serialized.first, extent_serialized.second,
@@ -469,7 +469,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         }
         const auto param_name_serialized = serialize_string(builder, param_name);
         const auto alignment_serialized = serialize_modulus_remainder(builder, store_stmt->alignment);
-        return std::make_pair(Serialize::Stmt::Stmt_Store,
+        return std::make_pair(Serialize::Stmt::Store,
                               Serialize::CreateStore(builder, name_serialized,
                                                      predicate_serialized.first, predicate_serialized.second,
                                                      value_serialized.first, value_serialized.second,
@@ -481,7 +481,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto *const provide_stmt = stmt.as<Provide>();
         const auto name_serialized = serialize_string(builder, provide_stmt->name);
         const auto values = provide_stmt->values;
-        std::vector<uint8_t> values_types;
+        std::vector<Serialize::Expr> values_types;
         values_types.reserve(values.size());
         std::vector<Offset<void>> values_serialized;
         values_serialized.reserve(values.size());
@@ -491,7 +491,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
             values_serialized.push_back(value_serialized.second);
         }
         const auto args = provide_stmt->args;
-        std::vector<uint8_t> args_types;
+        std::vector<Serialize::Expr> args_types;
         args_types.reserve(args.size());
         std::vector<Offset<void>> args_serialized;
         args_serialized.reserve(args.size());
@@ -501,7 +501,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
             args_serialized.push_back(arg_serialized.second);
         }
         const auto predicate_serialized = serialize_expr(builder, provide_stmt->predicate);
-        return std::make_pair(Serialize::Stmt::Stmt_Provide,
+        return std::make_pair(Serialize::Stmt::Provide,
                               Serialize::CreateProvide(builder, name_serialized,
                                                        builder.CreateVector(values_types),
                                                        builder.CreateVector(values_serialized),
@@ -516,7 +516,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto type_serialized = serialize_type(builder, allocate_stmt->type);
         const Serialize::MemoryType memory_type = serialize_memory_type(allocate_stmt->memory_type);
         const auto extents = allocate_stmt->extents;
-        std::vector<uint8_t> extents_types;
+        std::vector<Serialize::Expr> extents_types;
         extents_types.reserve(extents.size());
         std::vector<Offset<void>> extents_serialized;
         extents_serialized.reserve(extents.size());
@@ -530,7 +530,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto free_function_serialized = serialize_string(builder, allocate_stmt->free_function);
         const auto padding = allocate_stmt->padding;
         const auto body_serialized = serialize_stmt(builder, allocate_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_Allocate,
+        return std::make_pair(Serialize::Stmt::Allocate,
                               Serialize::CreateAllocate(builder, name_serialized,
                                                         type_serialized, memory_type,
                                                         builder.CreateVector(extents_types),
@@ -544,7 +544,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
     case IRNodeType::Free: {
         const auto *const free_stmt = stmt.as<Free>();
         const auto name_serialized = serialize_string(builder, free_stmt->name);
-        return std::make_pair(Serialize::Stmt::Stmt_Free, Serialize::CreateFree(builder, name_serialized).Union());
+        return std::make_pair(Serialize::Stmt::Free, Serialize::CreateFree(builder, name_serialized).Union());
     }
     case IRNodeType::Realize: {
         const auto *const realize_stmt = stmt.as<Realize>();
@@ -564,7 +564,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         }
         const auto condition_serialized = serialize_expr(builder, realize_stmt->condition);
         const auto body_serialized = serialize_stmt(builder, realize_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_Realize,
+        return std::make_pair(Serialize::Stmt::Realize,
                               Serialize::CreateRealize(builder, name_serialized,
                                                        builder.CreateVector(types_serialized),
                                                        memory_type,
@@ -577,7 +577,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto *const block_stmt = stmt.as<Block>();
         const auto first_serialized = serialize_stmt(builder, block_stmt->first);
         const auto rest_serialized = serialize_stmt(builder, block_stmt->rest);
-        return std::make_pair(Serialize::Stmt::Stmt_Block,
+        return std::make_pair(Serialize::Stmt::Block,
                               Serialize::CreateBlock(builder,
                                                      first_serialized.first, first_serialized.second,
                                                      rest_serialized.first, rest_serialized.second)
@@ -588,7 +588,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto condition_serialized = serialize_expr(builder, if_then_else_stmt->condition);
         const auto then_case_serialized = serialize_stmt(builder, if_then_else_stmt->then_case);
         const auto else_case_serialized = serialize_stmt(builder, if_then_else_stmt->else_case);
-        return std::make_pair(Serialize::Stmt::Stmt_IfThenElse,
+        return std::make_pair(Serialize::Stmt::IfThenElse,
                               Serialize::CreateIfThenElse(builder,
                                                           condition_serialized.first, condition_serialized.second,
                                                           then_case_serialized.first, then_case_serialized.second,
@@ -598,7 +598,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
     case IRNodeType::Evaluate: {
         const auto *const evaluate_stmt = stmt.as<Evaluate>();
         const auto value_serialized = serialize_expr(builder, evaluate_stmt->value);
-        return std::make_pair(Serialize::Stmt::Stmt_Evaluate,
+        return std::make_pair(Serialize::Stmt::Evaluate,
                               Serialize::CreateEvaluate(builder, value_serialized.first, value_serialized.second).Union());
     }
     case IRNodeType::Prefetch: {
@@ -620,7 +620,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto prefetch_serialized = serialize_prefetch_directive(builder, prefetch_stmt->prefetch);
         const auto condition_serialized = serialize_expr(builder, prefetch_stmt->condition);
         const auto body_serialized = serialize_stmt(builder, prefetch_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_Prefetch,
+        return std::make_pair(Serialize::Stmt::Prefetch,
                               Serialize::CreatePrefetch(builder, name_serialized, types_vector,
                                                         builder.CreateVector(bounds_serialized),
                                                         prefetch_serialized,
@@ -633,7 +633,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto semaphore_serialized = serialize_expr(builder, acquire_stmt->semaphore);
         const auto count_serialized = serialize_expr(builder, acquire_stmt->count);
         const auto body_serialized = serialize_stmt(builder, acquire_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_Acquire,
+        return std::make_pair(Serialize::Stmt::Acquire,
                               Serialize::CreateAcquire(builder,
                                                        semaphore_serialized.first, semaphore_serialized.second,
                                                        count_serialized.first, count_serialized.second,
@@ -644,7 +644,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto *const fork_stmt = stmt.as<Fork>();
         const auto first_serialized = serialize_stmt(builder, fork_stmt->first);
         const auto rest_serialized = serialize_stmt(builder, fork_stmt->rest);
-        return std::make_pair(Serialize::Stmt::Stmt_Fork,
+        return std::make_pair(Serialize::Stmt::Fork,
                               Serialize::CreateFork(builder,
                                                     first_serialized.first, first_serialized.second,
                                                     rest_serialized.first, rest_serialized.second)
@@ -655,7 +655,7 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto producer_name_serialized = serialize_string(builder, atomic_stmt->producer_name);
         const auto mutex_name_serialized = serialize_string(builder, atomic_stmt->mutex_name);
         const auto body_serialized = serialize_stmt(builder, atomic_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_Atomic,
+        return std::make_pair(Serialize::Stmt::Atomic,
                               Serialize::CreateAtomic(builder, producer_name_serialized, mutex_name_serialized,
                                                       body_serialized.first, body_serialized.second)
                                   .Union());
@@ -664,155 +664,155 @@ std::pair<Serialize::Stmt, Offset<void>> Serializer::serialize_stmt(FlatBufferBu
         const auto *const hoisted_storage_stmt = stmt.as<HoistedStorage>();
         const auto name_serialized = serialize_string(builder, hoisted_storage_stmt->name);
         const auto body_serialized = serialize_stmt(builder, hoisted_storage_stmt->body);
-        return std::make_pair(Serialize::Stmt::Stmt_HoistedStorage,
+        return std::make_pair(Serialize::Stmt::HoistedStorage,
                               Serialize::CreateHoistedStorage(builder, name_serialized,
                                                               body_serialized.first, body_serialized.second)
                                   .Union());
     }
     default:
         user_error << "Unsupported stmt type\n";
-        return std::make_pair(Serialize::Stmt::Stmt_UndefinedStmt, Serialize::CreateUndefinedStmt(builder).Union());
+        return std::make_pair(Serialize::Stmt::UndefinedStmt, Serialize::CreateUndefinedStmt(builder).Union());
     }
 }
 
 std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBuilder &builder, const Expr &expr) {
     if (!expr.defined()) {
-        return std::make_pair(Serialize::Expr::Expr_UndefinedExpr, Serialize::CreateUndefinedExpr(builder).Union());
+        return std::make_pair(Serialize::Expr::UndefinedExpr, Serialize::CreateUndefinedExpr(builder).Union());
     }
     switch (expr->node_type) {
     case IRNodeType::IntImm: {
         const auto *const int_imm = expr.as<IntImm>();
         const auto type_serialized = serialize_type(builder, int_imm->type);
-        return std::make_pair(Serialize::Expr::Expr_IntImm, Serialize::CreateIntImm(builder, int_imm->value, type_serialized).Union());
+        return std::make_pair(Serialize::Expr::IntImm, Serialize::CreateIntImm(builder, int_imm->value, type_serialized).Union());
     }
     case IRNodeType::UIntImm: {
         const auto *const uint_imm = expr.as<UIntImm>();
         const auto type_serialized = serialize_type(builder, uint_imm->type);
-        return std::make_pair(Serialize::Expr::Expr_UIntImm, Serialize::CreateUIntImm(builder, uint_imm->value, type_serialized).Union());
+        return std::make_pair(Serialize::Expr::UIntImm, Serialize::CreateUIntImm(builder, uint_imm->value, type_serialized).Union());
     }
     case IRNodeType::FloatImm: {
         const auto *const float_imm = expr.as<FloatImm>();
         const auto type_serialized = serialize_type(builder, float_imm->type);
-        return std::make_pair(Serialize::Expr::Expr_FloatImm, Serialize::CreateFloatImm(builder, float_imm->value, type_serialized).Union());
+        return std::make_pair(Serialize::Expr::FloatImm, Serialize::CreateFloatImm(builder, float_imm->value, type_serialized).Union());
     }
     case IRNodeType::StringImm: {
         const auto *const string_imm = expr.as<StringImm>();
         const auto value_serialized = serialize_string(builder, string_imm->value);
-        return std::make_pair(Serialize::Expr::Expr_StringImm, Serialize::CreateStringImm(builder, value_serialized).Union());
+        return std::make_pair(Serialize::Expr::StringImm, Serialize::CreateStringImm(builder, value_serialized).Union());
     }
     case IRNodeType::Cast: {
         const auto *const cast_expr = expr.as<Cast>();
         const auto value_serialized = serialize_expr(builder, cast_expr->value);
         const auto type_serialized = serialize_type(builder, cast_expr->type);
-        return std::make_pair(Serialize::Expr::Expr_Cast, Serialize::CreateCast(builder, value_serialized.first, value_serialized.second, type_serialized).Union());
+        return std::make_pair(Serialize::Expr::Cast, Serialize::CreateCast(builder, value_serialized.first, value_serialized.second, type_serialized).Union());
     }
     case IRNodeType::Reinterpret: {
         const auto *const reinterpret_expr = expr.as<Reinterpret>();
         const auto value_serialized = serialize_expr(builder, reinterpret_expr->value);
         const auto type_serialized = serialize_type(builder, reinterpret_expr->type);
-        return std::make_pair(Serialize::Expr::Expr_Reinterpret, Serialize::CreateReinterpret(builder, value_serialized.first, value_serialized.second, type_serialized).Union());
+        return std::make_pair(Serialize::Expr::Reinterpret, Serialize::CreateReinterpret(builder, value_serialized.first, value_serialized.second, type_serialized).Union());
     }
     case IRNodeType::Add: {
         const auto *const add_expr = expr.as<Add>();
         const auto a_serialized = serialize_expr(builder, add_expr->a);
         const auto b_serialized = serialize_expr(builder, add_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_Add, Serialize::CreateAdd(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::Add, Serialize::CreateAdd(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::Sub: {
         const auto *const sub_expr = expr.as<Sub>();
         const auto a_serialized = serialize_expr(builder, sub_expr->a);
         const auto b_serialized = serialize_expr(builder, sub_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_Sub, Serialize::CreateSub(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::Sub, Serialize::CreateSub(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::Mul: {
         const auto *const mul_expr = expr.as<Mul>();
         const auto a_serialized = serialize_expr(builder, mul_expr->a);
         const auto b_serialized = serialize_expr(builder, mul_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_Mul, Serialize::CreateMul(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::Mul, Serialize::CreateMul(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::Div: {
         const auto *const div_expr = expr.as<Div>();
         const auto a_serialized = serialize_expr(builder, div_expr->a);
         const auto b_serialized = serialize_expr(builder, div_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_Div, Serialize::CreateDiv(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::Div, Serialize::CreateDiv(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::Mod: {
         const auto *const mod_expr = expr.as<Mod>();
         const auto a_serialized = serialize_expr(builder, mod_expr->a);
         const auto b_serialized = serialize_expr(builder, mod_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_Mod, Serialize::CreateMod(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::Mod, Serialize::CreateMod(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::Min: {
         const auto *const min_expr = expr.as<Min>();
         const auto a_serialized = serialize_expr(builder, min_expr->a);
         const auto b_serialized = serialize_expr(builder, min_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_Min, Serialize::CreateMin(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::Min, Serialize::CreateMin(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::Max: {
         const auto *const max_expr = expr.as<Max>();
         const auto a_serialized = serialize_expr(builder, max_expr->a);
         const auto b_serialized = serialize_expr(builder, max_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_Max, Serialize::CreateMax(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::Max, Serialize::CreateMax(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::EQ: {
         const auto *const eq_expr = expr.as<EQ>();
         const auto a_serialized = serialize_expr(builder, eq_expr->a);
         const auto b_serialized = serialize_expr(builder, eq_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_EQ, Serialize::CreateEQ(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::EQ, Serialize::CreateEQ(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::NE: {
         const auto *const ne_expr = expr.as<NE>();
         const auto a_serialized = serialize_expr(builder, ne_expr->a);
         const auto b_serialized = serialize_expr(builder, ne_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_NE, Serialize::CreateNE(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::NE, Serialize::CreateNE(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::LT: {
         const auto *const lt_expr = expr.as<LT>();
         const auto a_serialized = serialize_expr(builder, lt_expr->a);
         const auto b_serialized = serialize_expr(builder, lt_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_LT, Serialize::CreateLT(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::LT, Serialize::CreateLT(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::LE: {
         const auto *const le_expr = expr.as<LE>();
         const auto a_serialized = serialize_expr(builder, le_expr->a);
         const auto b_serialized = serialize_expr(builder, le_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_LE, Serialize::CreateLE(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::LE, Serialize::CreateLE(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::GT: {
         const auto *const gt_expr = expr.as<GT>();
         const auto a_serialized = serialize_expr(builder, gt_expr->a);
         const auto b_serialized = serialize_expr(builder, gt_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_GT, Serialize::CreateGT(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::GT, Serialize::CreateGT(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::GE: {
         const auto *const ge_expr = expr.as<GE>();
         const auto a_serialized = serialize_expr(builder, ge_expr->a);
         const auto b_serialized = serialize_expr(builder, ge_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_GE, Serialize::CreateGE(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::GE, Serialize::CreateGE(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::And: {
         const auto *const and_expr = expr.as<And>();
         const auto a_serialized = serialize_expr(builder, and_expr->a);
         const auto b_serialized = serialize_expr(builder, and_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_And, Serialize::CreateAnd(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::And, Serialize::CreateAnd(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::Or: {
         const auto *const or_expr = expr.as<Or>();
         const auto a_serialized = serialize_expr(builder, or_expr->a);
         const auto b_serialized = serialize_expr(builder, or_expr->b);
-        return std::make_pair(Serialize::Expr::Expr_Or, Serialize::CreateOr(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::Or, Serialize::CreateOr(builder, a_serialized.first, a_serialized.second, b_serialized.first, b_serialized.second).Union());
     }
     case IRNodeType::Not: {
         const auto *const not_expr = expr.as<Not>();
         const auto a_serialized = serialize_expr(builder, not_expr->a);
-        return std::make_pair(Serialize::Expr::Expr_Not, Serialize::CreateNot(builder, a_serialized.first, a_serialized.second).Union());
+        return std::make_pair(Serialize::Expr::Not, Serialize::CreateNot(builder, a_serialized.first, a_serialized.second).Union());
     }
     case IRNodeType::Select: {
         const auto *const select_expr = expr.as<Select>();
         const auto condition_serialized = serialize_expr(builder, select_expr->condition);
         const auto true_value_serialized = serialize_expr(builder, select_expr->true_value);
         const auto false_value_serialized = serialize_expr(builder, select_expr->false_value);
-        return std::make_pair(Serialize::Expr::Expr_Select,
+        return std::make_pair(Serialize::Expr::Select,
                               Serialize::CreateSelect(builder,
                                                       condition_serialized.first, condition_serialized.second,
                                                       true_value_serialized.first, true_value_serialized.second,
@@ -836,7 +836,7 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         const auto param_name_serialized = serialize_string(builder, param_name);
         const auto alignment_serialized = serialize_modulus_remainder(builder, load_expr->alignment);
         const auto type_serialized = serialize_type(builder, load_expr->type);
-        return std::make_pair(Serialize::Expr::Expr_Load,
+        return std::make_pair(Serialize::Expr::Load,
                               Serialize::CreateLoad(builder, name_serialized,
                                                     predicate_serialized.first, predicate_serialized.second,
                                                     index_serialized.first, index_serialized.second,
@@ -849,7 +849,7 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         const auto base_serialized = serialize_expr(builder, ramp_expr->base);
         const auto stride_serialized = serialize_expr(builder, ramp_expr->stride);
         const auto lanes = ramp_expr->lanes;
-        return std::make_pair(Serialize::Expr::Expr_Ramp,
+        return std::make_pair(Serialize::Expr::Ramp,
                               Serialize::CreateRamp(builder,
                                                     base_serialized.first, base_serialized.second,
                                                     stride_serialized.first, stride_serialized.second, lanes)
@@ -859,14 +859,14 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         const auto *const broadcast_expr = expr.as<Broadcast>();
         const auto value_serialized = serialize_expr(builder, broadcast_expr->value);
         const auto lanes = broadcast_expr->lanes;
-        return std::make_pair(Serialize::Expr::Expr_Broadcast, Serialize::CreateBroadcast(builder, value_serialized.first, value_serialized.second, lanes).Union());
+        return std::make_pair(Serialize::Expr::Broadcast, Serialize::CreateBroadcast(builder, value_serialized.first, value_serialized.second, lanes).Union());
     }
     case IRNodeType::Let: {
         const auto *const let_expr = expr.as<Let>();
         const auto name_serialized = serialize_string(builder, let_expr->name);
         const auto value_serialized = serialize_expr(builder, let_expr->value);
         const auto body_serialized = serialize_expr(builder, let_expr->body);
-        return std::make_pair(Serialize::Expr::Expr_Let,
+        return std::make_pair(Serialize::Expr::Let,
                               Serialize::CreateLet(builder, name_serialized,
                                                    value_serialized.first, value_serialized.second,
                                                    body_serialized.first, body_serialized.second)
@@ -876,7 +876,7 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         const auto *const call_expr = expr.as<Call>();
         const auto name_serialized = serialize_string(builder, call_expr->name);
         const auto args = call_expr->args;
-        std::vector<uint8_t> args_types;
+        std::vector<Serialize::Expr> args_types;
         args_types.reserve(args.size());
         std::vector<Offset<void>> args_serialized;
         args_serialized.reserve(args.size());
@@ -902,7 +902,7 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         }
         const auto param_name_serialized = serialize_string(builder, param_name);
         const auto type_serialized = serialize_type(builder, call_expr->type);
-        return std::make_pair(Serialize::Expr::Expr_Call,
+        return std::make_pair(Serialize::Expr::Call,
                               Serialize::CreateCall(builder, name_serialized,
                                                     builder.CreateVector(args_types),
                                                     builder.CreateVector(args_serialized),
@@ -925,7 +925,7 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         }
         const auto image_name_serialized = serialize_string(builder, image_name);
         const auto reduction_domain_serialized = serialize_reduction_domain(builder, variable_expr->reduction_domain);
-        return std::make_pair(Serialize::Expr::Expr_Variable,
+        return std::make_pair(Serialize::Expr::Variable,
                               Serialize::CreateVariable(builder, name_serialized, type_serialized,
                                                         param_name_serialized, image_name_serialized, reduction_domain_serialized)
                                   .Union());
@@ -933,7 +933,7 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
     case IRNodeType::Shuffle: {
         const auto *const shuffle_expr = expr.as<Shuffle>();
         const auto vectors = shuffle_expr->vectors;
-        std::vector<uint8_t> vectors_types;
+        std::vector<Serialize::Expr> vectors_types;
         vectors_types.reserve(vectors.size());
         std::vector<Offset<void>> vectors_serialized;
         vectors_serialized.reserve(vectors.size());
@@ -943,7 +943,7 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
             vectors_serialized.push_back(vector_serialized.second);
         }
         const auto indices = shuffle_expr->indices;
-        return std::make_pair(Serialize::Expr::Expr_Shuffle,
+        return std::make_pair(Serialize::Expr::Shuffle,
                               Serialize::CreateShuffle(builder,
                                                        builder.CreateVector(vectors_types),
                                                        builder.CreateVector(vectors_serialized),
@@ -955,7 +955,7 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
         const auto value_serialized = serialize_expr(builder, vector_reduce_expr->value);
         const auto reduction_op_serialized = serialize_vector_reduce_op(vector_reduce_expr->op);
         const int lanes = vector_reduce_expr->type.lanes();
-        return std::make_pair(Serialize::Expr::Expr_VectorReduce,
+        return std::make_pair(Serialize::Expr::VectorReduce,
                               Serialize::CreateVectorReduce(builder,
                                                             value_serialized.first, value_serialized.second,
                                                             reduction_op_serialized, lanes)
@@ -963,7 +963,7 @@ std::pair<Serialize::Expr, Offset<void>> Serializer::serialize_expr(FlatBufferBu
     }
     default:
         user_error << "Unsupported Expr type\n";
-        return std::make_pair(Serialize::Expr::Expr_UndefinedExpr, Serialize::CreateUndefinedExpr(builder).Union());
+        return std::make_pair(Serialize::Expr::UndefinedExpr, Serialize::CreateUndefinedExpr(builder).Union());
     }
 }
 
@@ -1134,7 +1134,7 @@ Offset<Serialize::Specialization> Serializer::serialize_specialization(FlatBuffe
 Offset<Serialize::Definition> Serializer::serialize_definition(FlatBufferBuilder &builder, const Definition &definition) {
     const auto is_init = definition.is_init();
     const auto predicate_serialized = serialize_expr(builder, definition.predicate());
-    std::vector<uint8_t> values_types;
+    std::vector<Serialize::Expr> values_types;
     values_types.reserve(definition.values().size());
     std::vector<Offset<void>> values_serialized;
     values_serialized.reserve(definition.values().size());
@@ -1143,7 +1143,7 @@ Offset<Serialize::Definition> Serializer::serialize_definition(FlatBufferBuilder
         values_types.push_back(value_serialized.first);
         values_serialized.push_back(value_serialized.second);
     }
-    std::vector<uint8_t> args_types;
+    std::vector<Serialize::Expr> args_types;
     args_types.reserve(definition.args().size());
     std::vector<Offset<void>> args_serialized;
     args_serialized.reserve(definition.args().size());
@@ -1236,7 +1236,7 @@ Offset<Serialize::Dim> Serializer::serialize_dim(FlatBufferBuilder &builder, con
 Offset<Serialize::FuseLoopLevel> Serializer::serialize_fuse_loop_level(FlatBufferBuilder &builder, const FuseLoopLevel &fuse_loop_level) {
     const auto fuse_level_serialized = serialize_loop_level(builder, fuse_loop_level.level);
     std::vector<Offset<String>> align_dimension_names_serialized;
-    std::vector<uint8_t> align_strategies_serialized;
+    std::vector<Serialize::LoopAlignStrategy> align_strategies_serialized;
     for (const auto &align : fuse_loop_level.align) {
         align_dimension_names_serialized.push_back(serialize_string(builder, align.first));
         align_strategies_serialized.push_back(serialize_loop_align_strategy(align.second));
@@ -1345,7 +1345,7 @@ Offset<Serialize::Parameter> Serializer::serialize_parameter(FlatBufferBuilder &
         const auto scalar_max_serialized = serialize_expr(builder, parameter.max_value());
         const auto scalar_estimate_serialized = serialize_expr(builder, parameter.estimate());
         return Serialize::CreateParameter(builder, defined, is_buffer, type_serialized,
-                                          dimensions, name_serialized, 0, 0, Serialize::MemoryType_Auto, scalar_data,
+                                          dimensions, name_serialized, 0, 0, Serialize::MemoryType::Auto, scalar_data,
                                           scalar_default_serialized.first, scalar_default_serialized.second,
                                           scalar_min_serialized.first, scalar_min_serialized.second,
                                           scalar_max_serialized.first, scalar_max_serialized.second,
@@ -1387,7 +1387,7 @@ Offset<Serialize::ExternFuncArgument> Serializer::serialize_extern_func_argument
             external_parameters[image_param_name] = extern_func_argument.image_param;
         }
         const auto image_param_name_serialized = serialize_string(builder, image_param_name);
-        return Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, 0, Serialize::Expr_NONE, 0, image_param_name_serialized);
+        return Serialize::CreateExternFuncArgument(builder, arg_type_serialized, -1, 0, Serialize::Expr::NONE, 0, image_param_name_serialized);
     }
 }
 
@@ -1468,7 +1468,7 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
     auto requirements = pipeline.requirements();
     std::vector<Offset<void>> requirements_serialized;
     requirements_serialized.reserve(requirements.size());
-    std::vector<uint8_t> requirements_types;
+    std::vector<Serialize::Stmt> requirements_types;
     requirements_types.reserve(requirements.size());
     for (const auto &stmt : requirements) {
         auto stmt_serialized = serialize_stmt(builder, stmt);
