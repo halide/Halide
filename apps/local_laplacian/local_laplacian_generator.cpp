@@ -81,10 +81,10 @@ public:
         // Reintroduce color (Connelly: use eps to avoid scaling up noise w/ apollo3.png input)
         Func color;
         float eps = 0.01f;
-        color(x, y, c) = outGPyramid[0](x, y) * (floating(x, y, c) + eps) / (gray(x, y) + eps);
+        color(x, y, c) = input(x, y, c) * (outGPyramid[0](x, y) + eps) / (gray(x, y) + eps);
 
         // Convert back to 16-bit
-        output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 1.0f) * 65535.0f);
+        output(x, y, c) = cast<uint16_t>(clamp(color(x, y, c), 0.0f, 65535.0f));
 
         /* ESTIMATES */
         // (This can be useful in conjunction with RunGen and benchmarks as well
@@ -102,10 +102,15 @@ public:
             // Nothing.
         } else if (get_target().has_gpu_feature()) {
             // GPU schedule.
-            // 3.19ms on an RTX 2060.
+            // 2.9ms on an RTX 2060.
+
+            // All loop partitioning disabled, which has no effect on runtime,
+            // but saves 15% compile time and 45% ptx shader code size.
             remap.compute_root();
             Var xi, yi;
-            output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
+            output.compute_root()
+                .never_partition_all()
+                .gpu_tile(x, y, xi, yi, 16, 8);
             for (int j = 0; j < J; j++) {
                 int blockw = 16, blockh = 8;
                 if (j > 3) {
@@ -113,10 +118,20 @@ public:
                     blockh = 2;
                 }
                 if (j > 0) {
-                    inGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
-                    gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, xi, yi, blockw, blockh);
+                    inGPyramid[j]
+                        .compute_root()
+                        .never_partition_all()
+                        .gpu_tile(x, y, xi, yi, blockw, blockh);
+                    gPyramid[j]
+                        .compute_root()
+                        .reorder(k, x, y)
+                        .never_partition_all()
+                        .gpu_tile(x, y, xi, yi, blockw, blockh);
                 }
-                outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
+                outGPyramid[j]
+                    .compute_root()
+                    .never_partition_all()
+                    .gpu_tile(x, y, xi, yi, blockw, blockh);
             }
         } else {
             // CPU schedule.
@@ -131,8 +146,16 @@ public:
 
             remap.compute_root();
             Var yo;
-            output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
-            gray.compute_root().parallel(y, 32).vectorize(x, 8);
+            output
+                .reorder(c, x, y)
+                .split(y, yo, y, 64)
+                .parallel(yo)
+                .vectorize(x, 8);
+            gray
+                .compute_root()
+                .never_partition(y)
+                .parallel(y, 32)
+                .vectorize(x, 8);
             for (int j = 1; j < 5; j++) {
                 inGPyramid[j]
                     .compute_root()
@@ -148,12 +171,19 @@ public:
                     .store_at(output, yo)
                     .compute_at(output, y)
                     .fold_storage(y, 4)
-                    .vectorize(x, 8);
+                    .vectorize(x, 8, TailStrategy::RoundUp);
+                if (j > 1) {
+                    // Turn off loop partitioning at higher pyramid levels. This
+                    // shaves about 3% off code size and compile time without
+                    // affecting performance.
+                    inGPyramid[j].never_partition_all();
+                    gPyramid[j].never_partition_all();
+                }
             }
             outGPyramid[0]
                 .compute_at(output, y)
                 .hoist_storage(output, yo)
-                .vectorize(x, 8);
+                .vectorize(x, 8, TailStrategy::RoundUp);
             for (int j = 5; j < J; j++) {
                 inGPyramid[j].compute_root();
                 gPyramid[j].compute_root().parallel(k);

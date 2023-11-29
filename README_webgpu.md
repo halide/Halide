@@ -36,7 +36,7 @@ When invoking `emcc` to link Halide-generated objects, include these flags:
 `-s USE_WEBGPU=1 -s ASYNCIFY`.
 
 Tests that use AOT compilation can be run using a native WebGPU implementation
-that has Node.js bindings, such as [Dawn](dawn.googlesource.com/dawn/).
+that has Node.js bindings, such as [Dawn](https://dawn.googlesource.com/dawn/).
 You must set an environment variable named `HL_WEBGPU_NODE_BINDINGS` that
 has an absolute path to the bindings to run these tests, e.g. `HL_WEBGPU_NODE_BINDINGS=/path/to/dawn.node`.
 
@@ -47,12 +47,17 @@ JIT compilation is not supported when using WebGPU with WASM.
 
 ## Running natively: `HL_TARGET=host-webgpu`
 
-> _Tested with top-of-tree Dawn as of 2023-03-14._
+> _Tested with top-of-tree Dawn as of 2023-11-27 [commit b5d38fc7dc2a20081312c95e379c4a918df8b7d4]._
 
 For testing purposes, Halide can also target native WebGPU libraries, such as
-[Dawn](dawn.googlesource.com/dawn/) or [wgpu](github.com/gfx-rs/wgpu).
+[Dawn](https://dawn.googlesource.com/dawn/) or
+[wgpu](https://github.com/gfx-rs/wgpu).
 This is currently the only path that can run the JIT correctness tests.
 See [below](#setting-up-dawn) for instructions on building Dawn.
+
+> Note that as of 2023-11-27, wgpu is not supported due to
+> [lacking `override` support for WGSL](https://github.com/gfx-rs/wgpu/issues/1762)
+> which we require > in order to set GPU block sizes.
 
 When targeting WebGPU with a native target, Halide defaults to looking for a
 build of Dawn (with several common names and suffixes); you can override this
@@ -71,7 +76,7 @@ will be selected based on the Halide target specified.
 
 Building Dawn's Node.js bindings currently requires using CMake.
 
-First, [install `depot_tools`](commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up) and add it to the
+First, [install `depot_tools`](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up) and add it to the
 `PATH` environment variable.
 
 Next, get Dawn and its dependencies:
@@ -108,3 +113,16 @@ This will produce the following artifacts:
 
 These paths can then be used for the `HL_WEBGPU_NODE_BINDINGS` and
 `HL_WEBGPU_NATIVE_LIB` environment variables when using Halide.
+
+## Updating mini_webgpu.h
+
+The recommended method for updating `mini_webgpu.h` is to copy the
+`gen/include/dawn/webgpu.h` file from the Dawn build directory, then:
+- Restore the `// clang-format {off,on}` lines.
+- Comment out the `#include <std*>` lines.
+- Remove the `void` parameter from the `WGPUProc` declaration.
+
+This guarantees a version of the WebGPU header that is compatible with Dawn.
+When the native API eventually stabilizes, it should be possible to obtain a
+header from the `webgpu-native` GitHub organization that will be compatible
+with Dawn, wgpu, and Emscripten.
