@@ -2255,6 +2255,10 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         return true;
     }
 
+    if (f.schedule().double_buffer() && store_at == hoist_storage_at) {
+        user_error << "Func \"" << f.name() << "\" is scheduled double_buffer(), but has matching store_at and hoist_storage levels.\n";
+    }
+
     vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
     int store_idx = -1, compute_idx = -1, hoist_storage_idx = -1;
     for (size_t i = 0; i < sites.size(); i++) {
