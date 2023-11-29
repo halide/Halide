@@ -14,6 +14,8 @@ int main(int argc, char **argv) {
 
     if (target.arch == Target::ARM &&
         target.os == Target::OSX) {
+        // vrecpe, vrecps, fmul have inverse throughputs of 1, 0.25, 0.25
+        // respectively, while fdiv has inverse throughput of 1.
         printf("[SKIP] Apple M1 chips have division performance roughly on par with the reciprocal instruction\n");
         return 0;
     }
@@ -31,13 +33,16 @@ int main(int argc, char **argv) {
     slow(x) = p / (slow(x) + 1) + 0 * r;
     fast(x) = fast_inverse((fast(x) + 1) + 0 * r);
 
-    slow.update().vectorize(x, 4);
-    fast.update().vectorize(x, 4);
+    // Use wide vectors to ensure we're throughput-limited rather than latency-limited.
+    const int vec = 32;
+
+    slow.update().vectorize(x, vec);
+    fast.update().vectorize(x, vec);
 
     slow.compile_jit();
     fast.compile_jit();
 
-    Buffer<float> out_fast(8), out_slow(8);
+    Buffer<float> out_fast(vec), out_slow(vec);
 
     double slow_time = benchmark([&]() { slow.realize(out_slow); });
     double fast_time = benchmark([&]() { fast.realize(out_fast); });
