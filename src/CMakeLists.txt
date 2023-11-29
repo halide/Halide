@@ -151,7 +151,7 @@ set(HEADER_FILES
     Solve.h
     SplitTuples.h
     StageStridedLoads.h
-    StmtToViz.h
+    StmtToHTML.h
     StorageFlattening.h
     StorageFolding.h
     StrictifyFloat.h
@@ -334,7 +334,7 @@ set(SOURCE_FILES
     SpirvIR.cpp
     SplitTuples.cpp
     StageStridedLoads.cpp
-    StmtToViz.cpp
+    StmtToHTML.cpp
     StorageFlattening.cpp
     StorageFolding.cpp
     StrictifyFloat.cpp
@@ -362,9 +362,9 @@ set(C_TEMPLATE_FILES
     )
 
 set(HTML_TEMPLATE_FILES
-    StmtToViz_dependencies
-    StmtToViz_javascript
-    StmtToViz_stylesheet
+    StmtToHTML_dependencies.html
+    StmtToHTML.js
+    StmtToHTML.css
     )
 
 ##
@@ -390,11 +390,12 @@ foreach (f IN LISTS C_TEMPLATE_FILES)
 endforeach ()
 
 foreach (f IN LISTS HTML_TEMPLATE_FILES)
-    set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/irvisualizer/${f}.template.html>")
-    set(DST "html_template.${f}.template.cpp")
+    set(SRC "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/irvisualizer/html_template_${f}>")
+    string(REPLACE "." "_" VARNAME "halide_html_template_${f}")
+    set(DST "html_template.${f}.cpp")
 
     add_custom_command(OUTPUT "${DST}"
-                       COMMAND binary2cpp "halide_html_template_${f}" < "${SRC}" > "${DST}"
+                       COMMAND binary2cpp "${VARNAME}" < "${SRC}" > "${DST}"
                        DEPENDS "${SRC}" binary2cpp
                        VERBATIM)
     target_sources(Halide_c_templates PRIVATE ${DST})
@@ -494,10 +495,10 @@ if (WITH_SERIALIZATION)
     set(fb_dir "${Halide_BINARY_DIR}/flatc/include")
 
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
-    set(fb_header "${fb_dir}/halide_ir_generated.h")
+    set(fb_header "${fb_dir}/halide_ir.fbs.h")
     add_custom_command(
         OUTPUT "${fb_header}"
-        COMMAND flatbuffers::flatc --cpp -o "${fb_dir}" "${fb_def}"
+        COMMAND flatbuffers::flatc --cpp --cpp-std C++17 --no-union-value-namespacing --keep-prefix --filename-suffix ".fbs" -o "${fb_dir}" "${fb_def}"
         DEPENDS "${fb_def}"
         VERBATIM
     )
@@ -508,6 +509,15 @@ if (WITH_SERIALIZATION)
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
     target_link_libraries(Halide PRIVATE Halide_flatbuffers)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
+endif ()
+
+# Enable serialization testing by intercepting JIT compilation with a serialization roundtrip;
+# This is used only for special builds made specifically for testing, and must be disabled by default.
+option(WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING "Intercepting JIT compilation with a serialization roundtrip, for test only" OFF)
+if (WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
+    if (WITH_SERIALIZATION)
+        target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION_JIT_ROUNDTRIP_TESTING)
+    endif ()
 endif ()
 
 add_library(Halide::Halide ALIAS Halide)

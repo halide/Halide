@@ -77,6 +77,7 @@ public:
     void visit(const VectorReduce *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
+    void visit(const HoistedStorage *) override;
 };
 
 void ComputeModulusRemainder::visit(const IntImm *op) {
@@ -279,6 +280,10 @@ void ComputeModulusRemainder::visit(const Prefetch *) {
 }
 
 void ComputeModulusRemainder::visit(const Atomic *) {
+    internal_error << "modulus_remainder of statement\n";
+}
+
+void ComputeModulusRemainder::visit(const HoistedStorage *) {
     internal_error << "modulus_remainder of statement\n";
 }
 

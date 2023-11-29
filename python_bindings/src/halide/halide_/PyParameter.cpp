@@ -30,11 +30,6 @@ void define_parameter(py::module &m) {
             .def(py::init<const Parameter &>(), py::arg("p"))
             .def(py::init<const Type &, bool, int>())
             .def(py::init<const Type &, bool, int, const std::string &>())
-            .def(py::init<const Type &, bool, int, const std::string &,
-                          const Buffer<void> &, int, const std::vector<BufferConstraint> &,
-                          MemoryType>())
-            .def(py::init<const Type &, bool, int, const std::string &,
-                          uint64_t, const Expr &, const Expr &, const Expr &, const Expr &>())
             .def("_to_argument", [](const Parameter &p) -> Argument {
                 return Argument(p.name(),
                                 p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,

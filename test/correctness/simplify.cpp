@@ -1644,6 +1644,24 @@ void check_boolean() {
                            Block::make(not_no_op(x + 1), not_no_op(x + 2)),
                            not_no_op(x + 3)));
 
+    check(x < y && y < x, const_false());
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y < x, not_no_op(x + 3))),
+          IfThenElse::make(x < y, not_no_op(x + 1),
+                           Block::make(not_no_op(x + 2),
+                                       IfThenElse::make(y < x, not_no_op(x + 3)))));
+
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y <= x, not_no_op(x + 3))),
+          IfThenElse::make(x < y, not_no_op(x + 1),
+                           Block::make(not_no_op(x + 2),
+                                       not_no_op(x + 3))));
+
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y <= x, not_no_op(x + 3), not_no_op(x + 4))),
+          Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(y <= x, not_no_op(x + 3), not_no_op(x + 4))));
+
     // The construct
     //     if (var == expr) then a else b;
     // was being simplified incorrectly, but *only* if var was of type Bool.
@@ -1700,7 +1718,7 @@ void check_boolean() {
 
     // A for loop is also an if statement that the extent is greater than zero
     Stmt body = AssertStmt::make(y == z, y);
-    Stmt loop = For::make("t", 0, x, ForType::Serial, DeviceAPI::None, body);
+    Stmt loop = For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body);
     check(IfThenElse::make(0 < x, loop), loop);
 
     // A for loop where the extent is exactly one is just the body
@@ -2146,9 +2164,9 @@ void check_unreachable() {
     check(Call::make(Int(32), Call::if_then_else, {x != 0, y, unreachable()}, Call::PureIntrinsic), y);
     check(Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), y}, Call::PureIntrinsic), y);
 
-    check(Block::make(not_no_op(y), For::make("i", 0, 1, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable()))),
+    check(Block::make(not_no_op(y), For::make("i", 0, 1, ForType::Serial, Partition::Auto, DeviceAPI::None, Evaluate::make(unreachable()))),
           Evaluate::make(unreachable()));
-    check(For::make("i", 0, x, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())),
+    check(For::make("i", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, Evaluate::make(unreachable())),
           Evaluate::make(0));
 }
 
@@ -2383,7 +2401,7 @@ int main(int argc, char **argv) {
 
     {
         Stmt body = AssertStmt::make(x > 0, y);
-        check(For::make("t", 0, x, ForType::Serial, DeviceAPI::None, body),
+        check(For::make("t", 0, x, ForType::Serial, Partition::Auto, DeviceAPI::None, body),
               Evaluate::make(0));
     }
 

@@ -743,7 +743,7 @@ class InjectHexagonRpc : public IRMutator {
         if (is_const_one(loop->extent)) {
             body = LetStmt::make(loop->name, loop->min, loop->body);
         } else {
-            body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
+            body = For::make(loop->name, loop->min, loop->extent, loop->for_type, loop->partition_policy,
                              DeviceAPI::None, loop->body);
         }
 

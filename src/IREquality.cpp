@@ -99,6 +99,7 @@ private:
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
     void visit(const VectorReduce *) override;
+    void visit(const HoistedStorage *) override;
 };
 
 template<typename T>
@@ -635,6 +636,13 @@ void IRComparer::visit(const VectorReduce *op) {
     compare_scalar(op->op, e->op);
     // We've already compared types, so it's enough to compare the value
     compare_expr(op->value, e->value);
+}
+
+void IRComparer::visit(const HoistedStorage *op) {
+    const HoistedStorage *s = stmt.as<HoistedStorage>();
+
+    compare_names(s->name, op->name);
+    compare_stmt(s->body, op->body);
 }
 
 }  // namespace

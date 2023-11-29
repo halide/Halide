@@ -184,6 +184,21 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
     return out;
 }
 
+std::ostream &operator<<(std::ostream &out, const Partition &p) {
+    switch (p) {
+    case Partition::Auto:
+        out << "Auto";
+        break;
+    case Partition::Never:
+        out << "Never";
+        break;
+    case Partition::Always:
+        out << "Always";
+        break;
+    }
+    return out;
+}
+
 ostream &operator<<(ostream &stream, const LoopLevel &loop_level) {
     return stream << "loop_level("
                   << (loop_level.defined() ? loop_level.to_string() : "undefined")
@@ -206,12 +221,12 @@ void IRPrinter::test() {
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
     Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1, Parameter(), const_true(), ModulusRemainder());
-    Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, DeviceAPI::Host, store);
+    Stmt for_loop = For::make("x", -2, y + 2, ForType::Parallel, Partition::Auto, DeviceAPI::Host, store);
     vector<Expr> args(1);
     args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
     Stmt store2 = Store::make("out", call + 1, x, Parameter(), const_true(), ModulusRemainder(3, 5));
-    Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized, DeviceAPI::Host, store2);
+    Stmt for_loop2 = For::make("x", 0, y, ForType::Vectorized, Partition::Auto, DeviceAPI::Host, store2);
 
     Stmt producer = ProducerConsumer::make_produce("buf", for_loop);
     Stmt consumer = ProducerConsumer::make_consume("buf", for_loop2);
@@ -304,25 +319,25 @@ ostream &operator<<(ostream &out, const ForType &type) {
 ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
     switch (op) {
     case VectorReduce::Add:
-        out << "Add";
+        out << "add";
         break;
     case VectorReduce::SaturatingAdd:
-        out << "SaturatingAdd";
+        out << "saturating_add";
         break;
     case VectorReduce::Mul:
-        out << "Mul";
+        out << "mul";
         break;
     case VectorReduce::Min:
-        out << "Min";
+        out << "min";
         break;
     case VectorReduce::Max:
-        out << "Max";
+        out << "max";
         break;
     case VectorReduce::And:
-        out << "And";
+        out << "and";
         break;
     case VectorReduce::Or:
-        out << "Or";
+        out << "or";
         break;
     }
     return out;
@@ -1087,8 +1102,7 @@ void IRPrinter::visit(const Shuffle *op) {
 void IRPrinter::visit(const VectorReduce *op) {
     stream << "("
            << op->type
-           << ")vector_reduce("
-           << op->op
+           << ")vector_reduce_" << op->op << "("
            << ", "
            << op->value
            << ")";
@@ -1100,6 +1114,20 @@ void IRPrinter::visit(const Atomic *op) {
     } else {
         stream << get_indent() << "atomic (";
         stream << op->mutex_name;
+        stream << ") {\n";
+    }
+    indent += 2;
+    print(op->body);
+    indent -= 2;
+    stream << get_indent() << "}\n";
+}
+
+void IRPrinter::visit(const HoistedStorage *op) {
+    if (op->name.empty()) {
+        stream << get_indent() << "hoisted_storage {\n";
+    } else {
+        stream << get_indent() << "hoisted_storage (";
+        stream << op->name;
         stream << ") {\n";
     }
     indent += 2;

@@ -395,11 +395,6 @@ protected:
     void visit(const Realize *) override;
     // @}
 
-    /** If we have to bail out of a pipeline midway, this should
-     * inject the appropriate target-specific cleanup code. */
-    virtual void prepare_for_early_exit() {
-    }
-
     /** Get the llvm type equivalent to the given halide type in the
      * current context. */
     virtual llvm::Type *llvm_type_of(const Type &) const;

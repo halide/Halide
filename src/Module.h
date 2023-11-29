@@ -41,7 +41,10 @@ enum class OutputFileType {
     schedule,
     static_library,
     stmt,
+    conceptual_stmt,
     stmt_html,
+    conceptual_stmt_html,
+    device_code,
 };
 
 /** Type of linkage a function in a lowered Halide module can have.
@@ -164,6 +167,17 @@ public:
     const std::vector<Module> &submodules() const;
     // @}
 
+    /** Tries to locate the offloaded CUDA PTX assembly contained in this Module.
+     * Might return a nullptr in case such buffer is not present in this Module.
+     */
+    Buffer<> get_cuda_ptx_assembly_buffer() const;
+
+    /**
+     * Tries to locate the offloaded (GPU) Device assembly contained in this Module.
+     * This can be any of the GPU kernel sources, etc...
+     */
+    Buffer<> get_device_code_buffer() const;
+
     /** Return the function with the given name. If no such function
      * exists in this module, assert. */
     Internal::LoweredFunc get_function_by_name(const std::string &name) const;
@@ -201,6 +215,12 @@ public:
 
     /** Set whether this module uses strict floating-point directives anywhere. */
     void set_any_strict_float(bool any_strict_float);
+
+    /** Remember the Stmt during lowing before device-specific offloading. */
+    void set_conceptual_code_stmt(const Internal::Stmt &stmt);
+
+    /** Get the remembered conceptual Stmt, remembered before device-specific offloading. */
+    const Internal::Stmt &get_conceptual_stmt() const;
 };
 
 /** Link a set of modules together into one module. */

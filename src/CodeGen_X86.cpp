@@ -916,6 +916,34 @@ string CodeGen_X86::mcpu_target() const {
     }
 }
 
+namespace {
+bool gather_might_be_slow(Target target) {
+    // Intel x86 processors between broadwell and tiger lake have a microcode
+    // mitigation that makes gather instructions very slow. If we know we're on
+    // an AMD processor, gather is safe to use. If we have the AVX512 extensions
+    // present in Zen4 (or above), we also know we're not on an affected
+    // processor.
+    switch (target.processor_tune) {
+    case Target::Processor::AMDFam10:
+    case Target::Processor::BdVer1:
+    case Target::Processor::BdVer2:
+    case Target::Processor::BdVer3:
+    case Target::Processor::BdVer4:
+    case Target::Processor::BtVer1:
+    case Target::Processor::BtVer2:
+    case Target::Processor::K8:
+    case Target::Processor::K8_SSE3:
+    case Target::Processor::ZnVer1:
+    case Target::Processor::ZnVer2:
+    case Target::Processor::ZnVer3:
+    case Target::Processor::ZnVer4:
+        return false;
+    default:
+        return !target.has_feature(Target::AVX512_Zen4);
+    }
+}
+}  // namespace
+
 string CodeGen_X86::mcpu_tune() const {
     // Check if any explicit request for tuning exists.
     switch (target.processor_tune) {  // Please keep sorted.
@@ -993,6 +1021,11 @@ string CodeGen_X86::mattrs() const {
             features += ",+avxvnni,+amx-int8,+amx-bf16";
         }
     }
+#if LLVM_VERSION >= 180
+    if (gather_might_be_slow(target)) {
+        features += ",+prefer-no-gather";
+    }
+#endif
     return features;
 }
 

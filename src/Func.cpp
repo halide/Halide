@@ -418,7 +418,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                     << " condition resulting in incorrect output."
                     << " It is possible to parallelize this by using the"
                     << " atomic() method if the operation is associative,"
-                    << " or set override_associativity_test to true in the atomic method "
+                    << " or set override_associativity_test to true in the atomic method"
                     << " if you are certain that the operation is associative."
                     << " It is also possible to override this error using"
                     << " the allow_race_conditions() method. Use allow_race_conditions()"
@@ -941,7 +941,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         const auto &iter = std::find_if(dims.begin(), dims.end(),
                                         [&v](const Dim &dim) { return var_name_match(dim.var, v.name()); });
         if (iter == dims.end()) {
-            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar};
+            Dim d = {v.name(), ForType::Serial, DeviceAPI::None, DimType::PureVar, Partition::Auto};
             dims.insert(dims.end() - 1, d);
         }
     }
@@ -1253,6 +1253,10 @@ Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRV
             } else {
                 dims[i].dim_type = DimType::PureVar;
             }
+            // We just changed the dim_type without checking the
+            // for_type. Redundantly re-set the for type on the fused var just
+            // to trigger validation of the existing for_type.
+            set_dim_type(fused, dims[i].for_type);
         }
     }
 
@@ -1624,6 +1628,56 @@ Stage &Stage::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail
         unroll(tmp);
     }
 
+    return *this;
+}
+
+Stage &Stage::partition(const VarOrRVar &var, Partition policy) {
+    definition.schedule().touched() = true;
+    bool found = false;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
+            found = true;
+            dim.partition_policy = policy;
+        }
+    }
+    user_assert(found)
+        << "In schedule for " << name()
+        << ", could not find var " << var.name()
+        << " to set loop partition policy.\n"
+        << dump_argument_list();
+    return *this;
+}
+
+Stage &Stage::never_partition(const std::vector<VarOrRVar> &vars) {
+    for (const auto &v : vars) {
+        partition(v, Partition::Never);
+    }
+    return *this;
+}
+
+Stage &Stage::never_partition_all() {
+    definition.schedule().touched() = true;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        dim.partition_policy = Partition::Never;
+    }
+    return *this;
+}
+
+Stage &Stage::always_partition(const std::vector<VarOrRVar> &vars) {
+    for (const auto &v : vars) {
+        partition(v, Partition::Always);
+    }
+    return *this;
+}
+
+Stage &Stage::always_partition_all() {
+    definition.schedule().touched() = true;
+    vector<Dim> &dims = definition.schedule().dims();
+    for (auto &dim : dims) {
+        dim.partition_policy = Partition::Always;
+    }
     return *this;
 }
 
@@ -2314,6 +2368,36 @@ Func &Func::unroll(const VarOrRVar &var, const Expr &factor, TailStrategy tail) 
     return *this;
 }
 
+Func &Func::partition(const VarOrRVar &var, Partition policy) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).partition(var, policy);
+    return *this;
+}
+
+Func &Func::never_partition(const std::vector<VarOrRVar> &vars) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).never_partition(vars);
+    return *this;
+}
+
+Func &Func::never_partition_all() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).never_partition_all();
+    return *this;
+}
+
+Func &Func::always_partition(const std::vector<VarOrRVar> &vars) {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).always_partition(vars);
+    return *this;
+}
+
+Func &Func::always_partition_all() {
+    invalidate_cache();
+    Stage(func, func.definition(), 0).always_partition_all();
+    return *this;
+}
+
 Func &Func::bound(const Var &var, Expr min, Expr extent) {
     user_assert(!min.defined() || Int(32).can_represent(min.type())) << "Can't represent min bound in int32\n";
     user_assert(extent.defined()) << "Extent bound of a Func can't be undefined\n";
@@ -2797,6 +2881,24 @@ Func &Func::store_at(const Func &f, const Var &var) {
 
 Func &Func::store_root() {
     return store_at(LoopLevel::root());
+}
+
+Func &Func::hoist_storage(LoopLevel loop_level) {
+    invalidate_cache();
+    func.schedule().hoist_storage_level() = std::move(loop_level);
+    return *this;
+}
+
+Func &Func::hoist_storage(const Func &f, const RVar &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
+Func &Func::hoist_storage(const Func &f, const Var &var) {
+    return hoist_storage(LoopLevel(f, var));
+}
+
+Func &Func::hoist_storage_root() {
+    return hoist_storage(LoopLevel::root());
 }
 
 Func &Func::compute_inline() {
