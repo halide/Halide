@@ -213,12 +213,48 @@ private:
         }
     }
 
+    // Is a type not permitted to be +/- infinity for the purpose of bounds
+    // inference. Note that we let UInt(32) and UInt(64) be infinite, because
+    // treating them as bounded just invites signed integer overflow in the
+    // simplifier when we work with their maximum possible values.
+    bool bounded(Type t) const {
+        return (t.is_uint() || t.is_int()) && t.bits() <= 16;
+    }
+
     void bounds_of_type(Type t) {
         t = t.element_of();
-        if ((t.is_uint() || t.is_int()) && t.bits() <= 16) {
+        if (bounded(t)) {
             interval = Interval(t.min(), t.max());
         } else {
             interval = Interval::everything();
+        }
+    }
+
+    // Convert bounds that invoke signed integer overflow into unbounded exprs
+    // instead. TODO: This is a little flawed because it relies on detecting the
+    // signed integer overflow eagerly. It's possible that some value will get
+    // substituted in later in compilation which will trigger signed integer
+    // overflow.
+    void handle_signed_integer_overflow() {
+        if (interval.has_upper_bound()) {
+            interval.max = simplify(interval.max);
+            if (has_signed_integer_overflow(interval.max)) {
+                if (bounded(interval.max.type())) {
+                    interval.max = interval.max.type().max();
+                } else {
+                    interval.max = Interval::pos_inf();
+                }
+            }
+        }
+        if (interval.has_lower_bound()) {
+            interval.min = simplify(interval.min);
+            if (has_signed_integer_overflow(interval.min)) {
+                if (bounded(interval.min.type())) {
+                    interval.min = interval.min.type().min();
+                } else {
+                    interval.min = Interval::neg_inf();
+                }
+            }
         }
     }
 
@@ -276,14 +312,20 @@ private:
             return;
         }
 
+        // We may be about to cast to a narrower type, so this is a good place
+        // to stop the propagation of signed integer overflow and treat it as
+        // unbounded instead.
+        handle_signed_integer_overflow();
+
         // If overflow is impossible, cast the min and max. If it's
         // possible, use the bounds of the destination type.
         bool could_overflow = true;
         if (to.can_represent(from) || to.is_float()) {
             could_overflow = false;
-        } else if (to.is_int() && to.bits() >= 32) {
-            // If we cast to an int32 or greater, assume that it won't
-            // overflow. Signed 32-bit integer overflow is undefined.
+        } else if (from.is_float() && to.is_int() && to.bits() >= 32) {
+            // If we cast from float to an int32 or greater, assume that it
+            // won't overflow. Signed 32-bit integer overflow on floating point
+            // casts is undefined. (Casting from uint is defined to wrap).
             could_overflow = false;
         } else if (a.is_bounded()) {
             if (from.can_represent(to)) {
@@ -365,6 +407,15 @@ private:
         } else {
             // This might overflow, so use the bounds of the destination type.
             bounds_of_type(to);
+        }
+
+        // DO NOT MERGE
+        if (from.is_uint() && to.is_int() && to.bits() >= 32 && !to.can_represent(from) &&
+            a.is_bounded() && !interval.is_bounded()) {
+            user_warning << "Formerly bounded cast is no longer bounded:\n"
+                         << " Cast: " << Expr(op) << "\n"
+                         << " Bounds of arg: " << a.min << " " << a.max << "\n"
+                         << " Bounds of output: " << interval.min << " " << interval.max << "\n";
         }
     }
 
@@ -1231,10 +1282,28 @@ private:
             }
         } else if (op->is_intrinsic(Call::saturating_cast)) {
             internal_assert(op->args.size() == 1);
+            bounds_of_type(t);
+            Interval type_bounds = interval;
+            interval = arg_bounds.get(0);
+            // We're about to cast to a narrower type, so this is a good place
+            // to stop the propagation of signed integer overflow and treat it
+            // as unbounded instead.
+            handle_signed_integer_overflow();
 
-            Expr a = lower_saturating_cast(op->type, op->args[0]);
-            a.accept(this);
-            return;
+            if (interval.has_lower_bound()) {
+                interval.min = saturating_cast(t, interval.min);
+            } else if (op->args[0].type().is_uint()) {
+                // If we're casting from a uint, we can at least lower bound it
+                // with zero.
+                interval.min = make_zero(t);
+            } else {
+                interval.min = type_bounds.min;
+            }
+            if (interval.has_upper_bound()) {
+                interval.max = saturating_cast(t, interval.max);
+            } else {
+                interval.max = type_bounds.max;
+            }
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
             // Unlike an explicit clamp, we are also permitted to
@@ -1471,15 +1540,18 @@ private:
                     op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
                     op->name == "exp_f32" || op->name == "exp_f64" ||
-                    op->name == "log_f32" || op->name == "log_f64") &&
-                   (interval = arg_bounds.get(0)).is_bounded()) {
+                    op->name == "log_f32" || op->name == "log_f64")) {
             // For monotonic, pure, single-argument functions, we can
             // make two calls for the min and the max.
-            interval = Interval(
-                Call::make(t, op->name, {interval.min}, op->call_type,
-                           op->func, op->value_index, op->image, op->param),
-                Call::make(t, op->name, {interval.max}, op->call_type,
-                           op->func, op->value_index, op->image, op->param));
+            interval = arg_bounds.get(0);
+            if (interval.has_lower_bound()) {
+                interval.min = Call::make(t, op->name, {interval.min}, op->call_type,
+                                          op->func, op->value_index, op->image, op->param);
+            }
+            if (interval.has_upper_bound()) {
+                interval.max = Call::make(t, op->name, {interval.max}, op->call_type,
+                                          op->func, op->value_index, op->image, op->param);
+            }
         } else if (op->is_intrinsic(Call::popcount) ||
                    op->is_intrinsic(Call::count_leading_zeros) ||
                    op->is_intrinsic(Call::count_trailing_zeros)) {
@@ -2270,15 +2342,47 @@ private:
 
             IRGraphVisitor::visit(op);
 
+            // DO NOT MERGE
+            class ContainsDodgyIntCast : public IRVisitor {
+                using IRVisitor::visit;
+
+                void visit(const Cast *op) override {
+                    if (op->type == Int(32) && !op->value.type().is_float() && !op->type.can_represent(op->value.type())) {
+                        result = true;
+                    }
+                    IRVisitor::visit(op);
+                }
+
+            public:
+                bool result = false;
+            };
+
             if (op->call_type == Call::Halide ||
                 op->call_type == Call::Image) {
                 for (const Expr &e : op->args) {
+                    ContainsDodgyIntCast checker;
+                    e.accept(&checker);
+                    if (checker.result) {
+                        user_warning << "Call node contains potentially-wrapping cast to int:\n"
+                                     << " Call: " << Expr(op) << "\n"
+                                     << " Dodgy arg: " << e << "\n";
+                    }
+
                     e.accept(this);
                 }
                 if (op->name == func || func.empty()) {
                     Box b(op->args.size());
                     b.used = const_true();
                     for (size_t i = 0; i < op->args.size(); i++) {
+                        const Expr &e = op->args[i];
+                        ContainsDodgyIntCast checker;
+                        e.accept(&checker);
+                        if (checker.result) {
+                            user_warning << "Call node contains potentially-wrapping cast to int:\n"
+                                         << " Call: " << Expr(op) << "\n"
+                                         << " Dodgy arg: " << e << "\n";
+                        }
+
                         b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
                     }
                     merge_boxes(boxes[op->name], b);
@@ -3653,6 +3757,24 @@ void bounds_test() {
         check(scope, saturating_cast<int32_t>(max(cast<uint32_t>(x), cast<uint32_t>(5))), cast<int32_t>(5), Int(32).max());
         scope.pop("x");
     }
+
+    {
+        scope.push("x", Interval::everything());
+        check(scope, saturating_cast<int16_t>(cast<uint32_t>(x)), cast<int16_t>(0), cast<int16_t>(32767));
+        scope.pop("x");
+    }
+
+    {
+        Expr z1 = Variable::make(Int(16), "z1");
+        Expr z2 = Variable::make(Int(16), "z2");
+        scope.push("z1", Interval(z1.type().min(), z1.type().max()));
+        scope.push("z2", Interval(z1.type().min(), z1.type().max()));
+        check(scope, saturating_cast<int16_t>(10 * cast<int>(z1) * z2), Int(16).min(), Int(16).max());
+        check(scope, cast<int16_t>(10 * cast<int>(z1) * z2), Int(16).min(), Int(16).max());
+        scope.pop("z1");
+        scope.pop("z2");
+    }
+
     {
         Expr z = Variable::make(Float(32), "z");
         scope.push("z", Interval(cast<float>(-1), cast<float>(1)));
