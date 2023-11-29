@@ -219,6 +219,15 @@ public:
             gray.compute_root();
             Iy.compute_root();
             Ix.compute_root();
+
+            // As discussed earlier, the generated schedule that is dumped to
+            // file is an actual Halide C++ source, which is readily copy-pasteable
+            // back into this very same source file with few modifications.
+            // Or, developers can save the generated schedules to the source directory,
+            // and then include the generated schedule here.
+            //
+            // #include "tutorial.schedule.h"
+            // apply_schedule_auto_schedule_true(get_pipeline(), get_target());
         }
     }
 
