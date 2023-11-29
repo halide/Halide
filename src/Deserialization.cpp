@@ -7,7 +7,7 @@
 #include "Function.h"
 #include "IR.h"
 #include "Schedule.h"
-#include "halide_ir_generated.h"
+#include "halide_ir.fbs.h"
 
 #include <fstream>
 #include <functional>
@@ -114,7 +114,7 @@ private:
 
     Expr deserialize_expr(Serialize::Expr type_code, const void *expr);
 
-    std::vector<Expr> deserialize_expr_vector(const flatbuffers::Vector<uint8_t> *exprs_types, const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized);
+    std::vector<Expr> deserialize_expr_vector(const flatbuffers::Vector<Serialize::Expr> *exprs_types, const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized);
 
     Range deserialize_range(const Serialize::Range *range);
 
@@ -170,254 +170,254 @@ std::string Deserializer::deserialize_string(const flatbuffers::String *str) {
 
 MemoryType Deserializer::deserialize_memory_type(Serialize::MemoryType memory_type) {
     switch (memory_type) {
-    case Serialize::MemoryType::MemoryType_Auto:
+    case Serialize::MemoryType::Auto:
         return MemoryType::Auto;
-    case Serialize::MemoryType::MemoryType_Heap:
+    case Serialize::MemoryType::Heap:
         return MemoryType::Heap;
-    case Serialize::MemoryType::MemoryType_Stack:
+    case Serialize::MemoryType::Stack:
         return MemoryType::Stack;
-    case Serialize::MemoryType::MemoryType_Register:
+    case Serialize::MemoryType::Register:
         return MemoryType::Register;
-    case Serialize::MemoryType::MemoryType_GPUShared:
+    case Serialize::MemoryType::GPUShared:
         return MemoryType::GPUShared;
-    case Serialize::MemoryType::MemoryType_GPUTexture:
+    case Serialize::MemoryType::GPUTexture:
         return MemoryType::GPUTexture;
-    case Serialize::MemoryType::MemoryType_LockedCache:
+    case Serialize::MemoryType::LockedCache:
         return MemoryType::LockedCache;
-    case Serialize::MemoryType::MemoryType_VTCM:
+    case Serialize::MemoryType::VTCM:
         return MemoryType::VTCM;
-    case Serialize::MemoryType::MemoryType_AMXTile:
+    case Serialize::MemoryType::AMXTile:
         return MemoryType::AMXTile;
     default:
-        user_error << "unknown memory type " << memory_type << "\n";
+        user_error << "unknown memory type " << (int)memory_type << "\n";
         return MemoryType::Auto;
     }
 }
 
 ForType Deserializer::deserialize_for_type(Serialize::ForType for_type) {
     switch (for_type) {
-    case Serialize::ForType::ForType_Serial:
+    case Serialize::ForType::Serial:
         return ForType::Serial;
-    case Serialize::ForType::ForType_Parallel:
+    case Serialize::ForType::Parallel:
         return ForType::Parallel;
-    case Serialize::ForType::ForType_Vectorized:
+    case Serialize::ForType::Vectorized:
         return ForType::Vectorized;
-    case Serialize::ForType::ForType_Unrolled:
+    case Serialize::ForType::Unrolled:
         return ForType::Unrolled;
-    case Serialize::ForType::ForType_Extern:
+    case Serialize::ForType::Extern:
         return ForType::Extern;
-    case Serialize::ForType::ForType_GPUBlock:
+    case Serialize::ForType::GPUBlock:
         return ForType::GPUBlock;
-    case Serialize::ForType::ForType_GPUThread:
+    case Serialize::ForType::GPUThread:
         return ForType::GPUThread;
-    case Serialize::ForType::ForType_GPULane:
+    case Serialize::ForType::GPULane:
         return ForType::GPULane;
     default:
-        user_error << "unknown for type " << for_type << "\n";
+        user_error << "unknown for type " << (int)for_type << "\n";
         return ForType::Serial;
     }
 }
 
 Partition Deserializer::deserialize_partition(Serialize::Partition partition) {
     switch (partition) {
-    case Serialize::Partition::Partition_Auto:
+    case Serialize::Partition::Auto:
         return Halide::Partition::Auto;
-    case Serialize::Partition::Partition_Never:
+    case Serialize::Partition::Never:
         return Halide::Partition::Never;
-    case Serialize::Partition::Partition_Always:
+    case Serialize::Partition::Always:
         return Halide::Partition::Always;
     default:
-        user_error << "unknown loop partition policy " << partition << "\n";
+        user_error << "unknown loop partition policy " << (int)partition << "\n";
         return Halide::Partition::Auto;
     }
 }
 
 DeviceAPI Deserializer::deserialize_device_api(Serialize::DeviceAPI device_api) {
     switch (device_api) {
-    case Serialize::DeviceAPI::DeviceAPI_None:
+    case Serialize::DeviceAPI::None:
         return DeviceAPI::None;
-    case Serialize::DeviceAPI::DeviceAPI_Host:
+    case Serialize::DeviceAPI::Host:
         return DeviceAPI::Host;
-    case Serialize::DeviceAPI::DeviceAPI_Default_GPU:
+    case Serialize::DeviceAPI::Default_GPU:
         return DeviceAPI::Default_GPU;
-    case Serialize::DeviceAPI::DeviceAPI_CUDA:
+    case Serialize::DeviceAPI::CUDA:
         return DeviceAPI::CUDA;
-    case Serialize::DeviceAPI::DeviceAPI_OpenCL:
+    case Serialize::DeviceAPI::OpenCL:
         return DeviceAPI::OpenCL;
-    case Serialize::DeviceAPI::DeviceAPI_OpenGLCompute:
+    case Serialize::DeviceAPI::OpenGLCompute:
         return DeviceAPI::OpenGLCompute;
-    case Serialize::DeviceAPI::DeviceAPI_Metal:
+    case Serialize::DeviceAPI::Metal:
         return DeviceAPI::Metal;
-    case Serialize::DeviceAPI::DeviceAPI_Hexagon:
+    case Serialize::DeviceAPI::Hexagon:
         return DeviceAPI::Hexagon;
-    case Serialize::DeviceAPI::DeviceAPI_HexagonDma:
+    case Serialize::DeviceAPI::HexagonDma:
         return DeviceAPI::HexagonDma;
-    case Serialize::DeviceAPI::DeviceAPI_D3D12Compute:
+    case Serialize::DeviceAPI::D3D12Compute:
         return DeviceAPI::D3D12Compute;
-    case Serialize::DeviceAPI::DeviceAPI_Vulkan:
+    case Serialize::DeviceAPI::Vulkan:
         return DeviceAPI::Vulkan;
-    case Serialize::DeviceAPI::DeviceAPI_WebGPU:
+    case Serialize::DeviceAPI::WebGPU:
         return DeviceAPI::WebGPU;
     default:
-        user_error << "unknown device api " << device_api << "\n";
+        user_error << "unknown device api " << (int)device_api << "\n";
         return DeviceAPI::None;
     }
 }
 
 Call::CallType Deserializer::deserialize_call_type(Serialize::CallType call_type) {
     switch (call_type) {
-    case Serialize::CallType::CallType_Image:
+    case Serialize::CallType::Image:
         return Call::CallType::Image;
-    case Serialize::CallType::CallType_Extern:
+    case Serialize::CallType::Extern:
         return Call::CallType::Extern;
-    case Serialize::CallType::CallType_ExternCPlusPlus:
+    case Serialize::CallType::ExternCPlusPlus:
         return Call::CallType::ExternCPlusPlus;
-    case Serialize::CallType::CallType_PureExtern:
+    case Serialize::CallType::PureExtern:
         return Call::CallType::PureExtern;
-    case Serialize::CallType::CallType_Halide:
+    case Serialize::CallType::Halide:
         return Call::CallType::Halide;
-    case Serialize::CallType::CallType_Intrinsic:
+    case Serialize::CallType::Intrinsic:
         return Call::CallType::Intrinsic;
-    case Serialize::CallType::CallType_PureIntrinsic:
+    case Serialize::CallType::PureIntrinsic:
         return Call::CallType::PureIntrinsic;
     default:
-        user_error << "unknown call type " << call_type << "\n";
+        user_error << "unknown call type " << (int)call_type << "\n";
         return Call::CallType::Image;
     }
 }
 
 VectorReduce::Operator Deserializer::deserialize_vector_reduce_op(Serialize::VectorReduceOp vector_reduce_op) {
     switch (vector_reduce_op) {
-    case Serialize::VectorReduceOp::VectorReduceOp_Add:
+    case Serialize::VectorReduceOp::Add:
         return VectorReduce::Operator::Add;
-    case Serialize::VectorReduceOp::VectorReduceOp_SaturatingAdd:
+    case Serialize::VectorReduceOp::SaturatingAdd:
         return VectorReduce::Operator::SaturatingAdd;
-    case Serialize::VectorReduceOp::VectorReduceOp_Mul:
+    case Serialize::VectorReduceOp::Mul:
         return VectorReduce::Operator::Mul;
-    case Serialize::VectorReduceOp::VectorReduceOp_Min:
+    case Serialize::VectorReduceOp::Min:
         return VectorReduce::Operator::Min;
-    case Serialize::VectorReduceOp::VectorReduceOp_Max:
+    case Serialize::VectorReduceOp::Max:
         return VectorReduce::Operator::Max;
-    case Serialize::VectorReduceOp::VectorReduceOp_And:
+    case Serialize::VectorReduceOp::And:
         return VectorReduce::Operator::And;
-    case Serialize::VectorReduceOp::VectorReduceOp_Or:
+    case Serialize::VectorReduceOp::Or:
         return VectorReduce::Operator::Or;
     default:
-        user_error << "unknown vector reduce op " << vector_reduce_op << "\n";
+        user_error << "unknown vector reduce op " << (int)vector_reduce_op << "\n";
         return VectorReduce::Operator::Add;
     }
 }
 
 PrefetchBoundStrategy Deserializer::deserialize_prefetch_bound_strategy(Serialize::PrefetchBoundStrategy prefetch_bound_strategy) {
     switch (prefetch_bound_strategy) {
-    case Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_Clamp:
+    case Serialize::PrefetchBoundStrategy::Clamp:
         return PrefetchBoundStrategy::Clamp;
-    case Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_GuardWithIf:
+    case Serialize::PrefetchBoundStrategy::GuardWithIf:
         return PrefetchBoundStrategy::GuardWithIf;
-    case Serialize::PrefetchBoundStrategy::PrefetchBoundStrategy_NonFaulting:
+    case Serialize::PrefetchBoundStrategy::NonFaulting:
         return PrefetchBoundStrategy::NonFaulting;
     default:
-        user_error << "unknown prefetch bound strategy " << prefetch_bound_strategy << "\n";
+        user_error << "unknown prefetch bound strategy " << (int)prefetch_bound_strategy << "\n";
         return PrefetchBoundStrategy::Clamp;
     }
 }
 
 NameMangling Deserializer::deserialize_name_mangling(Serialize::NameMangling name_mangling) {
     switch (name_mangling) {
-    case Serialize::NameMangling::NameMangling_Default:
+    case Serialize::NameMangling::Default:
         return NameMangling::Default;
-    case Serialize::NameMangling::NameMangling_C:
+    case Serialize::NameMangling::C:
         return NameMangling::C;
-    case Serialize::NameMangling::NameMangling_CPlusPlus:
+    case Serialize::NameMangling::CPlusPlus:
         return NameMangling::CPlusPlus;
     default:
-        user_error << "unknown name mangling " << name_mangling << "\n";
+        user_error << "unknown name mangling " << (int)name_mangling << "\n";
         return NameMangling::Default;
     }
 }
 
 TailStrategy Deserializer::deserialize_tail_strategy(Serialize::TailStrategy tail_strategy) {
     switch (tail_strategy) {
-    case Serialize::TailStrategy::TailStrategy_RoundUp:
+    case Serialize::TailStrategy::RoundUp:
         return TailStrategy::RoundUp;
-    case Serialize::TailStrategy::TailStrategy_GuardWithIf:
+    case Serialize::TailStrategy::GuardWithIf:
         return TailStrategy::GuardWithIf;
-    case Serialize::TailStrategy::TailStrategy_Predicate:
+    case Serialize::TailStrategy::Predicate:
         return TailStrategy::Predicate;
-    case Serialize::TailStrategy::TailStrategy_PredicateLoads:
+    case Serialize::TailStrategy::PredicateLoads:
         return TailStrategy::PredicateLoads;
-    case Serialize::TailStrategy::TailStrategy_PredicateStores:
+    case Serialize::TailStrategy::PredicateStores:
         return TailStrategy::PredicateStores;
-    case Serialize::TailStrategy::TailStrategy_ShiftInwards:
+    case Serialize::TailStrategy::ShiftInwards:
         return TailStrategy::ShiftInwards;
-    case Serialize::TailStrategy::TailStrategy_Auto:
+    case Serialize::TailStrategy::Auto:
         return TailStrategy::Auto;
     default:
-        user_error << "unknown tail strategy " << tail_strategy << "\n";
+        user_error << "unknown tail strategy " << (int)tail_strategy << "\n";
         return TailStrategy::RoundUp;
     }
 }
 
 Split::SplitType Deserializer::deserialize_split_type(Serialize::SplitType split_type) {
     switch (split_type) {
-    case Serialize::SplitType::SplitType_SplitVar:
+    case Serialize::SplitType::SplitVar:
         return Split::SplitType::SplitVar;
-    case Serialize::SplitType::SplitType_RenameVar:
+    case Serialize::SplitType::RenameVar:
         return Split::SplitType::RenameVar;
-    case Serialize::SplitType::SplitType_FuseVars:
+    case Serialize::SplitType::FuseVars:
         return Split::SplitType::FuseVars;
-    case Serialize::SplitType::SplitType_PurifyRVar:
+    case Serialize::SplitType::PurifyRVar:
         return Split::SplitType::PurifyRVar;
     default:
-        user_error << "unknown split type " << split_type << "\n";
+        user_error << "unknown split type " << (int)split_type << "\n";
         return Split::SplitType::SplitVar;
     }
 }
 
 DimType Deserializer::deserialize_dim_type(Serialize::DimType dim_type) {
     switch (dim_type) {
-    case Serialize::DimType::DimType_PureVar:
+    case Serialize::DimType::PureVar:
         return DimType::PureVar;
-    case Serialize::DimType::DimType_PureRVar:
+    case Serialize::DimType::PureRVar:
         return DimType::PureRVar;
-    case Serialize::DimType::DimType_ImpureRVar:
+    case Serialize::DimType::ImpureRVar:
         return DimType::ImpureRVar;
     default:
-        user_error << "unknown dim type " << dim_type << "\n";
+        user_error << "unknown dim type " << (int)dim_type << "\n";
         return DimType::PureVar;
     }
 }
 
 LoopAlignStrategy Deserializer::deserialize_loop_align_strategy(Serialize::LoopAlignStrategy loop_align_strategy) {
     switch (loop_align_strategy) {
-    case Serialize::LoopAlignStrategy::LoopAlignStrategy_AlignStart:
+    case Serialize::LoopAlignStrategy::AlignStart:
         return LoopAlignStrategy::AlignStart;
-    case Serialize::LoopAlignStrategy::LoopAlignStrategy_AlignEnd:
+    case Serialize::LoopAlignStrategy::AlignEnd:
         return LoopAlignStrategy::AlignEnd;
-    case Serialize::LoopAlignStrategy::LoopAlignStrategy_NoAlign:
+    case Serialize::LoopAlignStrategy::NoAlign:
         return LoopAlignStrategy::NoAlign;
-    case Serialize::LoopAlignStrategy::LoopAlignStrategy_Auto:
+    case Serialize::LoopAlignStrategy::Auto:
         return LoopAlignStrategy::Auto;
     default:
-        user_error << "unknown loop align strategy " << loop_align_strategy << "\n";
+        user_error << "unknown loop align strategy " << (int)loop_align_strategy << "\n";
         return LoopAlignStrategy::AlignStart;
     }
 }
 
 ExternFuncArgument::ArgType Deserializer::deserialize_extern_func_argument_type(Serialize::ExternFuncArgumentType extern_func_argument_type) {
     switch (extern_func_argument_type) {
-    case Serialize::ExternFuncArgumentType::ExternFuncArgumentType_UndefinedArg:
+    case Serialize::ExternFuncArgumentType::UndefinedArg:
         return ExternFuncArgument::ArgType::UndefinedArg;
-    case Serialize::ExternFuncArgumentType::ExternFuncArgumentType_FuncArg:
+    case Serialize::ExternFuncArgumentType::FuncArg:
         return ExternFuncArgument::ArgType::FuncArg;
-    case Serialize::ExternFuncArgumentType::ExternFuncArgumentType_BufferArg:
+    case Serialize::ExternFuncArgumentType::BufferArg:
         return ExternFuncArgument::ArgType::BufferArg;
-    case Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ExprArg:
+    case Serialize::ExternFuncArgumentType::ExprArg:
         return ExternFuncArgument::ArgType::ExprArg;
-    case Serialize::ExternFuncArgumentType::ExternFuncArgumentType_ImageParamArg:
+    case Serialize::ExternFuncArgumentType::ImageParamArg:
         return ExternFuncArgument::ArgType::ImageParamArg;
     default:
-        user_error << "unknown extern func argument type " << extern_func_argument_type << "\n";
+        user_error << "unknown extern func argument type " << (int)extern_func_argument_type << "\n";
         return ExternFuncArgument::ArgType::UndefinedArg;
     }
 }
@@ -430,23 +430,23 @@ Type Deserializer::deserialize_type(const Serialize::Type *type) {
     const TypeCode code_deserialized = type->code();
     halide_type_code_t code = halide_type_uint;
     switch (code_deserialized) {
-    case TypeCode::TypeCode_Int:
+    case TypeCode::Int:
         code = halide_type_int;
         break;
-    case TypeCode::TypeCode_UInt:
+    case TypeCode::UInt:
         code = halide_type_uint;
         break;
-    case TypeCode::TypeCode_Float:
+    case TypeCode::Float:
         code = halide_type_float;
         break;
-    case TypeCode::TypeCode_Handle:
+    case TypeCode::Handle:
         code = halide_type_handle;
         break;
-    case TypeCode::TypeCode_BFloat:
+    case TypeCode::BFloat:
         code = halide_type_bfloat;
         break;
     default:
-        user_error << "unknown type code " << code_deserialized << "\n";
+        user_error << "unknown type code " << (int)code_deserialized << "\n";
     }
 
     return Type(code, bits, lanes);
@@ -513,27 +513,27 @@ void Deserializer::deserialize_function(const Serialize::Func *function, Functio
 Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt) {
     user_assert(stmt != nullptr) << "deserializing a null Stmt\n";
     switch (type_code) {
-    case Serialize::Stmt_LetStmt: {
+    case Serialize::Stmt::LetStmt: {
         const auto *let_stmt = (const Serialize::LetStmt *)stmt;
         const auto name = deserialize_string(let_stmt->name());
         const auto value = deserialize_expr(let_stmt->value_type(), let_stmt->value());
         const auto body = deserialize_stmt(let_stmt->body_type(), let_stmt->body());
         return LetStmt::make(name, value, body);
     }
-    case Serialize::Stmt_AssertStmt: {
+    case Serialize::Stmt::AssertStmt: {
         const auto *assert_stmt = (const Serialize::AssertStmt *)stmt;
         const auto condition = deserialize_expr(assert_stmt->condition_type(), assert_stmt->condition());
         const auto message = deserialize_expr(assert_stmt->message_type(), assert_stmt->message());
         return AssertStmt::make(condition, message);
     }
-    case Serialize::Stmt_ProducerConsumer: {
+    case Serialize::Stmt::ProducerConsumer: {
         const auto *producer_consumer = (const Serialize::ProducerConsumer *)stmt;
         const auto name = deserialize_string(producer_consumer->name());
         const auto is_producer = producer_consumer->is_producer();
         const auto body = deserialize_stmt(producer_consumer->body_type(), producer_consumer->body());
         return ProducerConsumer::make(name, is_producer, body);
     }
-    case Serialize::Stmt_For: {
+    case Serialize::Stmt::For: {
         const auto *for_stmt = (const Serialize::For *)stmt;
         const auto name = deserialize_string(for_stmt->name());
         const auto min = deserialize_expr(for_stmt->min_type(), for_stmt->min());
@@ -544,7 +544,7 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         const auto body = deserialize_stmt(for_stmt->body_type(), for_stmt->body());
         return For::make(name, min, extent, for_type, partition_policy, device_api, body);
     }
-    case Serialize::Stmt_Store: {
+    case Serialize::Stmt::Store: {
         const auto *store_stmt = (const Serialize::Store *)stmt;
         const auto name = deserialize_string(store_stmt->name());
         const auto predicate = deserialize_expr(store_stmt->predicate_type(), store_stmt->predicate());
@@ -564,7 +564,7 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         const auto alignment = deserialize_modulus_remainder(store_stmt->alignment());
         return Store::make(name, value, index, param, predicate, alignment);
     }
-    case Serialize::Stmt_Provide: {
+    case Serialize::Stmt::Provide: {
         const auto *provide_stmt = (const Serialize::Provide *)stmt;
         const auto name = deserialize_string(provide_stmt->name());
         const std::vector<Expr> values = deserialize_expr_vector(provide_stmt->values_type(), provide_stmt->values());
@@ -572,7 +572,7 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         const auto predicate = deserialize_expr(provide_stmt->predicate_type(), provide_stmt->predicate());
         return Provide::make(name, values, args, predicate);
     }
-    case Serialize::Stmt_Allocate: {
+    case Serialize::Stmt::Allocate: {
         const auto *allocate_stmt = (const Serialize::Allocate *)stmt;
         const auto name = deserialize_string(allocate_stmt->name());
         const auto type = deserialize_type(allocate_stmt->type());
@@ -585,12 +585,12 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         const auto body = deserialize_stmt(allocate_stmt->body_type(), allocate_stmt->body());
         return Allocate::make(name, type, memory_type, extents, condition, body, new_expr, free_function, padding);
     }
-    case Serialize::Stmt_Free: {
+    case Serialize::Stmt::Free: {
         const auto *free_stmt = (const Serialize::Free *)stmt;
         const auto name = deserialize_string(free_stmt->name());
         return Free::make(name);
     }
-    case Serialize::Stmt_Realize: {
+    case Serialize::Stmt::Realize: {
         const auto *realize_stmt = (const Serialize::Realize *)stmt;
         const auto name = deserialize_string(realize_stmt->name());
         const std::vector<Type> types = deserialize_vector<Serialize::Type, Type>(realize_stmt->types(),
@@ -602,25 +602,25 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         const auto body = deserialize_stmt(realize_stmt->body_type(), realize_stmt->body());
         return Realize::make(name, types, memory_type, bounds, condition, body);
     }
-    case Serialize::Stmt_Block: {
+    case Serialize::Stmt::Block: {
         const auto *block_stmt = (const Serialize::Block *)stmt;
         const auto first = deserialize_stmt(block_stmt->first_type(), block_stmt->first());
         const auto rest = deserialize_stmt(block_stmt->rest_type(), block_stmt->rest());
         return Block::make(first, rest);
     }
-    case Serialize::Stmt_IfThenElse: {
+    case Serialize::Stmt::IfThenElse: {
         const auto *if_then_else_stmt = (const Serialize::IfThenElse *)stmt;
         const auto condition = deserialize_expr(if_then_else_stmt->condition_type(), if_then_else_stmt->condition());
         const auto then_case = deserialize_stmt(if_then_else_stmt->then_case_type(), if_then_else_stmt->then_case());
         const auto else_case = deserialize_stmt(if_then_else_stmt->else_case_type(), if_then_else_stmt->else_case());
         return IfThenElse::make(condition, then_case, else_case);
     }
-    case Serialize::Stmt_Evaluate: {
+    case Serialize::Stmt::Evaluate: {
         const auto *evaluate_stmt = (const Serialize::Evaluate *)stmt;
         const auto value = deserialize_expr(evaluate_stmt->value_type(), evaluate_stmt->value());
         return Evaluate::make(value);
     }
-    case Serialize::Stmt_Prefetch: {
+    case Serialize::Stmt::Prefetch: {
         const auto *prefetch_stmt = (const Serialize::Prefetch *)stmt;
         const auto name = deserialize_string(prefetch_stmt->name());
         const std::vector<Type> types = deserialize_vector<Serialize::Type, Type>(prefetch_stmt->types(),
@@ -632,37 +632,37 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
         const auto body = deserialize_stmt(prefetch_stmt->body_type(), prefetch_stmt->body());
         return Prefetch::make(name, types, bounds, prefetch, condition, body);
     }
-    case Serialize::Stmt_Acquire: {
+    case Serialize::Stmt::Acquire: {
         const auto *acquire_stmt = (const Serialize::Acquire *)stmt;
         const auto semaphore = deserialize_expr(acquire_stmt->semaphore_type(), acquire_stmt->semaphore());
         const auto count = deserialize_expr(acquire_stmt->count_type(), acquire_stmt->count());
         const auto body = deserialize_stmt(acquire_stmt->body_type(), acquire_stmt->body());
         return Acquire::make(semaphore, count, body);
     }
-    case Serialize::Stmt_Fork: {
+    case Serialize::Stmt::Fork: {
         const auto *fork_stmt = (const Serialize::Fork *)stmt;
         const auto first = deserialize_stmt(fork_stmt->first_type(), fork_stmt->first());
         const auto rest = deserialize_stmt(fork_stmt->rest_type(), fork_stmt->rest());
         return Fork::make(first, rest);
     }
-    case Serialize::Stmt_Atomic: {
+    case Serialize::Stmt::Atomic: {
         const auto *atomic_stmt = (const Serialize::Atomic *)stmt;
         const auto producer_name = deserialize_string(atomic_stmt->producer_name());
         const auto mutex_name = deserialize_string(atomic_stmt->mutex_name());
         const auto body = deserialize_stmt(atomic_stmt->body_type(), atomic_stmt->body());
         return Atomic::make(producer_name, mutex_name, body);
     }
-    case Serialize::Stmt_HoistedStorage: {
+    case Serialize::Stmt::HoistedStorage: {
         const auto *hoisted_storage_stmt = (const Serialize::HoistedStorage *)stmt;
         const auto name = deserialize_string(hoisted_storage_stmt->name());
         const auto body = deserialize_stmt(hoisted_storage_stmt->body_type(), hoisted_storage_stmt->body());
         return HoistedStorage::make(name, body);
     }
-    case Serialize::Stmt_UndefinedStmt: {
+    case Serialize::Stmt::UndefinedStmt: {
         return Stmt();
     }
     default:
-        user_error << "unknown type code " << type_code << "\n";
+        user_error << "unknown type code " << (int)type_code << "\n";
         return Stmt();
     }
 }
@@ -670,144 +670,144 @@ Stmt Deserializer::deserialize_stmt(Serialize::Stmt type_code, const void *stmt)
 Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr) {
     user_assert(expr != nullptr);
     switch (type_code) {
-    case Serialize::Expr::Expr_IntImm: {
+    case Serialize::Expr::IntImm: {
         const auto *int_imm_expr = (const Serialize::IntImm *)expr;
         const auto value = int_imm_expr->value();
         const auto type = deserialize_type(int_imm_expr->type());
         return IntImm::make(type, value);
     }
-    case Serialize::Expr::Expr_UIntImm: {
+    case Serialize::Expr::UIntImm: {
         const auto *uint_imm_expr = (const Serialize::UIntImm *)expr;
         const auto value = uint_imm_expr->value();
         const auto type = deserialize_type(uint_imm_expr->type());
         return UIntImm::make(type, value);
     }
-    case Serialize::Expr::Expr_FloatImm: {
+    case Serialize::Expr::FloatImm: {
         const auto *float_imm_expr = (const Serialize::FloatImm *)expr;
         const auto value = float_imm_expr->value();
         const auto type = deserialize_type(float_imm_expr->type());
         return FloatImm::make(type, value);
     }
-    case Serialize::Expr::Expr_StringImm: {
+    case Serialize::Expr::StringImm: {
         const auto *string_imm_expr = (const Serialize::StringImm *)expr;
         const auto value = deserialize_string(string_imm_expr->value());
         return StringImm::make(value);
     }
-    case Serialize::Expr::Expr_Cast: {
+    case Serialize::Expr::Cast: {
         const auto *cast_expr = (const Serialize::Cast *)expr;
         const auto value = deserialize_expr(cast_expr->value_type(), cast_expr->value());
         const auto type = deserialize_type(cast_expr->type());
         return Cast::make(type, value);
     }
-    case Serialize::Expr::Expr_Reinterpret: {
+    case Serialize::Expr::Reinterpret: {
         const auto *reinterpret_expr = (const Serialize::Reinterpret *)expr;
         const auto value = deserialize_expr(reinterpret_expr->value_type(), reinterpret_expr->value());
         const auto type = deserialize_type(reinterpret_expr->type());
         return Reinterpret::make(type, value);
     }
-    case Serialize::Expr::Expr_Add: {
+    case Serialize::Expr::Add: {
         const auto *add_expr = (const Serialize::Add *)expr;
         const auto a = deserialize_expr(add_expr->a_type(), add_expr->a());
         const auto b = deserialize_expr(add_expr->b_type(), add_expr->b());
         return Add::make(a, b);
     }
-    case Serialize::Expr::Expr_Sub: {
+    case Serialize::Expr::Sub: {
         const auto *sub_expr = (const Serialize::Sub *)expr;
         const auto a = deserialize_expr(sub_expr->a_type(), sub_expr->a());
         const auto b = deserialize_expr(sub_expr->b_type(), sub_expr->b());
         return Sub::make(a, b);
     }
-    case Serialize::Expr::Expr_Mul: {
+    case Serialize::Expr::Mul: {
         const auto *mul_expr = (const Serialize::Mul *)expr;
         const auto a = deserialize_expr(mul_expr->a_type(), mul_expr->a());
         const auto b = deserialize_expr(mul_expr->b_type(), mul_expr->b());
         return Mul::make(a, b);
     }
-    case Serialize::Expr::Expr_Div: {
+    case Serialize::Expr::Div: {
         const auto *div_expr = (const Serialize::Div *)expr;
         const auto a = deserialize_expr(div_expr->a_type(), div_expr->a());
         const auto b = deserialize_expr(div_expr->b_type(), div_expr->b());
         return Div::make(a, b);
     }
-    case Serialize::Expr::Expr_Mod: {
+    case Serialize::Expr::Mod: {
         const auto *mod_expr = (const Serialize::Mod *)expr;
         const auto a = deserialize_expr(mod_expr->a_type(), mod_expr->a());
         const auto b = deserialize_expr(mod_expr->b_type(), mod_expr->b());
         return Mod::make(a, b);
     }
-    case Serialize::Expr::Expr_Min: {
+    case Serialize::Expr::Min: {
         const auto *min_expr = (const Serialize::Min *)expr;
         const auto a = deserialize_expr(min_expr->a_type(), min_expr->a());
         const auto b = deserialize_expr(min_expr->b_type(), min_expr->b());
         return Min::make(a, b);
     }
-    case Serialize::Expr::Expr_Max: {
+    case Serialize::Expr::Max: {
         const auto *max_expr = (const Serialize::Max *)expr;
         const auto a = deserialize_expr(max_expr->a_type(), max_expr->a());
         const auto b = deserialize_expr(max_expr->b_type(), max_expr->b());
         return Max::make(a, b);
     }
-    case Serialize::Expr::Expr_EQ: {
+    case Serialize::Expr::EQ: {
         const auto *eq_expr = (const Serialize::EQ *)expr;
         const auto a = deserialize_expr(eq_expr->a_type(), eq_expr->a());
         const auto b = deserialize_expr(eq_expr->b_type(), eq_expr->b());
         return EQ::make(a, b);
     }
-    case Serialize::Expr::Expr_NE: {
+    case Serialize::Expr::NE: {
         const auto *ne_expr = (const Serialize::NE *)expr;
         const auto a = deserialize_expr(ne_expr->a_type(), ne_expr->a());
         const auto b = deserialize_expr(ne_expr->b_type(), ne_expr->b());
         return NE::make(a, b);
     }
-    case Serialize::Expr::Expr_LT: {
+    case Serialize::Expr::LT: {
         const Serialize::LT *lt_expr = (const Serialize::LT *)expr;
         const auto a = deserialize_expr(lt_expr->a_type(), lt_expr->a());
         const auto b = deserialize_expr(lt_expr->b_type(), lt_expr->b());
         return LT::make(a, b);
     }
-    case Serialize::Expr::Expr_LE: {
+    case Serialize::Expr::LE: {
         const auto *le_expr = (const Serialize::LE *)expr;
         const auto a = deserialize_expr(le_expr->a_type(), le_expr->a());
         const auto b = deserialize_expr(le_expr->b_type(), le_expr->b());
         return LE::make(a, b);
     }
-    case Serialize::Expr::Expr_GT: {
+    case Serialize::Expr::GT: {
         const auto *gt_expr = (const Serialize::GT *)expr;
         const auto a = deserialize_expr(gt_expr->a_type(), gt_expr->a());
         const auto b = deserialize_expr(gt_expr->b_type(), gt_expr->b());
         return GT::make(a, b);
     }
-    case Serialize::Expr::Expr_GE: {
+    case Serialize::Expr::GE: {
         const auto *ge_expr = (const Serialize::GE *)expr;
         const auto a = deserialize_expr(ge_expr->a_type(), ge_expr->a());
         const auto b = deserialize_expr(ge_expr->b_type(), ge_expr->b());
         return GE::make(a, b);
     }
-    case Serialize::Expr::Expr_And: {
+    case Serialize::Expr::And: {
         const auto *and_expr = (const Serialize::And *)expr;
         const auto a = deserialize_expr(and_expr->a_type(), and_expr->a());
         const auto b = deserialize_expr(and_expr->b_type(), and_expr->b());
         return And::make(a, b);
     }
-    case Serialize::Expr::Expr_Or: {
+    case Serialize::Expr::Or: {
         const auto *or_expr = (const Serialize::Or *)expr;
         const auto a = deserialize_expr(or_expr->a_type(), or_expr->a());
         const auto b = deserialize_expr(or_expr->b_type(), or_expr->b());
         return Or::make(a, b);
     }
-    case Serialize::Expr::Expr_Not: {
+    case Serialize::Expr::Not: {
         const auto *not_expr = (const Serialize::Not *)expr;
         const auto a = deserialize_expr(not_expr->a_type(), not_expr->a());
         return Not::make(a);
     }
-    case Serialize::Expr::Expr_Select: {
+    case Serialize::Expr::Select: {
         const auto *select_expr = (const Serialize::Select *)expr;
         const auto condition = deserialize_expr(select_expr->condition_type(), select_expr->condition());
         const auto true_value = deserialize_expr(select_expr->true_value_type(), select_expr->true_value());
         const auto false_value = deserialize_expr(select_expr->false_value_type(), select_expr->false_value());
         return Select::make(condition, true_value, false_value);
     }
-    case Serialize::Expr::Expr_Load: {
+    case Serialize::Expr::Load: {
         const auto *load_expr = (const Serialize::Load *)expr;
         const auto name = deserialize_string(load_expr->name());
         const auto predicate = deserialize_expr(load_expr->predicate_type(), load_expr->predicate());
@@ -832,27 +832,27 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         const auto type = deserialize_type(load_expr->type());
         return Load::make(type, name, index, image, param, predicate, alignment);
     }
-    case Serialize::Expr::Expr_Ramp: {
+    case Serialize::Expr::Ramp: {
         const auto *ramp_expr = (const Serialize::Ramp *)expr;
         const auto base = deserialize_expr(ramp_expr->base_type(), ramp_expr->base());
         const auto stride = deserialize_expr(ramp_expr->stride_type(), ramp_expr->stride());
         const auto lanes = ramp_expr->lanes();
         return Ramp::make(base, stride, lanes);
     }
-    case Serialize::Expr::Expr_Broadcast: {
+    case Serialize::Expr::Broadcast: {
         const auto *broadcast_expr = (const Serialize::Broadcast *)expr;
         const auto value = deserialize_expr(broadcast_expr->value_type(), broadcast_expr->value());
         const auto lanes = broadcast_expr->lanes();
         return Broadcast::make(value, lanes);
     }
-    case Serialize::Expr::Expr_Let: {
+    case Serialize::Expr::Let: {
         const auto *let_expr = (const Serialize::Let *)expr;
         auto name = deserialize_string(let_expr->name());
         auto value = deserialize_expr(let_expr->value_type(), let_expr->value());
         auto body = deserialize_expr(let_expr->body_type(), let_expr->body());
         return Let::make(name, value, body);
     }
-    case Serialize::Expr::Expr_Call: {
+    case Serialize::Expr::Call: {
         const auto *call_expr = (const Serialize::Call *)expr;
         const auto name = deserialize_string(call_expr->name());
         std::vector<Expr> args = deserialize_expr_vector(call_expr->args_type(), call_expr->args());
@@ -884,7 +884,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         const auto type = deserialize_type(call_expr->type());
         return Call::make(type, name, args, call_type, func_ptr, value_index, image, param);
     }
-    case Serialize::Expr::Expr_Variable: {
+    case Serialize::Expr::Variable: {
         const auto *variable_expr = (const Serialize::Variable *)expr;
         const auto name = deserialize_string(variable_expr->name());
         const auto type = deserialize_type(variable_expr->type());
@@ -907,7 +907,7 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         const auto reduction_domain = deserialize_reduction_domain(variable_expr->reduction_domain());
         return Variable::make(type, name, image, param, reduction_domain);
     }
-    case Serialize::Expr::Expr_Shuffle: {
+    case Serialize::Expr::Shuffle: {
         const auto *shuffle_expr = (const Serialize::Shuffle *)expr;
         std::vector<Expr> vectors = deserialize_expr_vector(shuffle_expr->vectors_type(), shuffle_expr->vectors());
         const auto *const indices_serialized = shuffle_expr->indices();
@@ -918,24 +918,24 @@ Expr Deserializer::deserialize_expr(Serialize::Expr type_code, const void *expr)
         }
         return Shuffle::make(vectors, indices);
     }
-    case Serialize::Expr::Expr_VectorReduce: {
+    case Serialize::Expr::VectorReduce: {
         const auto *vector_reduce_expr = (const Serialize::VectorReduce *)expr;
         const auto value = deserialize_expr(vector_reduce_expr->value_type(), vector_reduce_expr->value());
         const auto reduction_op = deserialize_vector_reduce_op(vector_reduce_expr->reduction_op());
         const int32_t lanes = vector_reduce_expr->lanes();
         return VectorReduce::make(reduction_op, value, lanes);
     }
-    case Serialize::Expr::Expr_UndefinedExpr: {
+    case Serialize::Expr::UndefinedExpr: {
         return Expr();
     }
     default: {
-        user_error << "unknown type code " << type_code << "\n";
+        user_error << "unknown type code " << (int)type_code << "\n";
         return Expr();
     }
     }
 }
 
-std::vector<Expr> Deserializer::deserialize_expr_vector(const flatbuffers::Vector<uint8_t> *exprs_types,
+std::vector<Expr> Deserializer::deserialize_expr_vector(const flatbuffers::Vector<Serialize::Expr> *exprs_types,
                                                         const flatbuffers::Vector<flatbuffers::Offset<void>> *exprs_serialized) {
     user_assert(exprs_types != nullptr);
     user_assert(exprs_serialized != nullptr);

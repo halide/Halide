@@ -1395,14 +1395,14 @@ $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(S
 	$(CXX) $(TEST_CXX_FLAGS) $< -I$(SRC_DIR) $(TEST_LD_FLAGS) -o $@
 
 ifneq (,$(shell which flatc))
-$(BUILD_DIR)/Deserialization.o : $(BUILD_DIR)/halide_ir_generated.h
-$(BUILD_DIR)/Serialization.o : $(BUILD_DIR)/halide_ir_generated.h
+$(BUILD_DIR)/Deserialization.o : $(BUILD_DIR)/halide_ir.fbs.h
+$(BUILD_DIR)/Serialization.o : $(BUILD_DIR)/halide_ir.fbs.h
 endif
 
 # Generated header for serialization/deserialization
-$(BUILD_DIR)/halide_ir_generated.h: $(SRC_DIR)/halide_ir.fbs
+$(BUILD_DIR)/halide_ir.fbs.h: $(SRC_DIR)/halide_ir.fbs
 	@mkdir -p $(@D)
-	flatc -o $(BUILD_DIR) -c $^  
+	flatc --cpp --cpp-std C++17 --no-union-value-namespacing --keep-prefix --filename-suffix ".fbs" -o $(BUILD_DIR) $^
 
 # Correctness test that link against libHalide
 $(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)
