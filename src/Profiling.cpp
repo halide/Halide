@@ -439,12 +439,16 @@ private:
                 } else {
                     internal_error << "Expected to find a variable as first argument of the function call " << call->name << ".\n";
                 }
+                Expr device_interface;
                 if (call->name == "halide_copy_to_host") {
                     int copy_to_host_id = get_func_id(buffer_name + " (copy to host)");
                     start_profiler = set_current_func(copy_to_host_id);
+                    device_interface = Call::make(type_of<const halide_device_interface_t *>(),
+                                                  Call::buffer_get_device_interface, {call->args.back()}, Call::Extern);
                 } else if (call->name == "halide_copy_to_device") {
                     int copy_to_device_id = get_func_id(buffer_name + " (copy to device)");
                     start_profiler = set_current_func(copy_to_device_id);
+                    device_interface = call->args.back();  // The last argument to the copy calls is the device_interface.
                 }
                 if (start_profiler.defined()) {
                     // The copy functions are followed by an assert, which we will wrap in the timed body.
@@ -458,8 +462,7 @@ private:
                     } else if (const AssertStmt *assert = op->body.as<AssertStmt>()) {
                         copy_assert = assert;
                     }
-                    if (copy_assert) {
-                        Expr device_interface = call->args.back();  // The last argument to the copy calls is the device_interface.
+                    if (copy_assert && device_interface.defined()) {
                         Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
 
                         std::vector<Stmt> steps{
