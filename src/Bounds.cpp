@@ -43,7 +43,8 @@ using std::vector;
 namespace {
 
 bool can_widen(const Expr &e) {
-    return e.type().bits() < 64;
+    // We don't want to widen Xtensa 48-bit integers
+    return e.type().bits() <= 32;
 }
 
 bool can_widen_all(const std::vector<Expr> &args) {
@@ -1269,6 +1270,12 @@ private:
                     bounds_of_type(t);
                 }
             }
+        } else if (op->is_intrinsic(Call::saturating_cast)) {
+            internal_assert(op->args.size() == 1);
+
+            Expr a = lower_saturating_cast(op->type, op->args[0]);
+            a.accept(this);
+            return;
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
             // Unlike an explicit clamp, we are also permitted to
@@ -1600,26 +1607,6 @@ private:
                          narrow(clamp(widen(op->args[0]) - widen(op->args[1]), t.min(), t.max())) :
                          Expr();
             handle_expr_bounds(e);
-        } else if (op->is_intrinsic(Call::saturating_cast)) {
-            internal_assert(op->args.size() == 1);
-            bounds_of_type(t);
-            Interval type_bounds = interval;
-            interval = arg_bounds.get(0);
-
-            if (interval.has_lower_bound()) {
-                interval.min = saturating_cast(t, interval.min);
-            } else if (op->args[0].type().is_uint()) {
-                // If we're casting from a uint, we can at least lower bound it
-                // with zero.
-                interval.min = make_zero(t);
-            } else {
-                interval.min = type_bounds.min;
-            }
-            if (interval.has_upper_bound()) {
-                interval.max = saturating_cast(t, interval.max);
-            } else {
-                interval.max = type_bounds.max;
-            }
         } else if (op->is_intrinsic(Call::widening_shift_left)) {
             internal_assert(op->args.size() == 2);
             Expr e = can_widen(op->args[0]) ?
