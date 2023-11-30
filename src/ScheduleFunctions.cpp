@@ -475,14 +475,6 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
         debug(3) << "Site " << i << " = " << s << "\n";
     }
 
-    // if (func.schedule().double_buffer()) {
-    //     for (const auto& s: site) {
-    //         debug(0) << "Site: " << s << "\n";
-    //     }
-    //     Expr s = qualify(prefix, Expr("double_buffer"));
-    //     site.push_back(s);
-    // }
-
     // Make the (multi-dimensional multi-valued) store node.
     Stmt body = Provide::make(func.name(), values, site, const_true());
     if (def.schedule().atomic()) {  // Add atomic node.
@@ -1364,10 +1356,6 @@ private:
                 Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
                 bounds.emplace_back(min, extent);
             }
-
-            // if (func.schedule().double_buffer()) {
-            //     bounds.emplace_back(0, 2);
-            // }
 
             s = Realize::make(name, func.output_types(), func.schedule().memory_type(), bounds, const_true(), s);
         }
@@ -2595,7 +2583,7 @@ Stmt schedule_functions(const vector<Function> &outputs,
     const For *root_loop = s.as<For>();
     internal_assert(root_loop);
     s = root_loop->body;
-    // debug(0) << s << "\n";
+
     // We can also remove all the loops over __outermost now.
     s = RemoveLoopsOverOutermost().mutate(s);
 

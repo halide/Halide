@@ -2281,6 +2281,10 @@ public:
      */
     Func &async();
 
+    /** Adds an extra dimension to the function storage to enable
+     * double buffering. This is especially useful in combination
+     * with the \ref Func::async.
+     */
     Func &double_buffer();
 
     /** Bound the extent of a Func's storage, but not extent of its
