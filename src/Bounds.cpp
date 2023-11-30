@@ -2396,6 +2396,7 @@ private:
                     Stmt else_case = Evaluate::make(op->args[2]);
                     equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
                 } else {
+                    internal_assert(op->args.size() == 2);
                     equivalent_if = IfThenElse::make(op->args[0], then_case);
                 }
                 equivalent_if.accept(this);
