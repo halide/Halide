@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     g.compute_at(h, y);
 
-    // This makes no sense, because the compute_at level is higher than the hoist_storage level
+    // double_buffer() requires an explicit hoist_storage().
     f.compute_root().double_buffer();
 
     h.realize({10, 10});
