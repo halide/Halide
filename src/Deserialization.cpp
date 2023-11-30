@@ -1403,6 +1403,25 @@ Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
         user_warning << "deserialized pipeline is empty\n";
         return Pipeline();
     }
+
+    std::string deserialized_halide_version = deserialize_string(pipeline_obj->halide_version());
+    std::string halide_version = std::to_string(HALIDE_VERSION_MAJOR) + "." +
+                                 std::to_string(HALIDE_VERSION_MINOR) + "." +
+                                 std::to_string(HALIDE_VERSION_PATCH);
+    if (deserialized_halide_version != halide_version) {
+        user_warning << "deserialized pipeline is built with Halide version " << deserialized_halide_version
+                     << ", but current Halide version is " << halide_version << "\n";
+    }
+
+    std::string deserialized_serialization_version = deserialize_string(pipeline_obj->serialization_version());
+    std::string serialization_version = std::to_string(HALIDE_SERIALIZATION_VERSION_MAJOR) + "." +
+                                        std::to_string(HALIDE_SERIALIZATION_VERSION_MINOR) + "." +
+                                        std::to_string(HALIDE_SERIALIZATION_VERSION_PATCH);
+    if (deserialized_serialization_version != serialization_version) {
+        user_error << "deserialized pipeline is built with Halide serialization version " << deserialized_serialization_version
+                   << ", but current Halide serialization version is " << serialization_version << "\n";
+    }
+
     const std::vector<std::string> func_names_in_order =
         deserialize_vector<flatbuffers::String, std::string>(pipeline_obj->func_names_in_order(),
                                                              &Deserializer::deserialize_string);

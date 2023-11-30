@@ -1,7 +1,7 @@
 namespace Halide.Serialize;
 
-// This corresponds to the corresponding Halide version.
-file_identifier "HL17";
+// This identifies the serialized data being a Halide pipeline. Should be exactly 4 bytes.
+file_identifier "HLDE";
 
 // File extension of any written files. "hlpipe" stands for Halide Pipeline.
 file_extension "hlpipe";
@@ -710,6 +710,8 @@ table Pipeline {
     parameters: [Parameter];
     external_parameters: [ExternalParameter];
     buffers: [Buffer];
+    halide_version: string;
+    serialization_version: string;
 }
 
 root_type Pipeline;

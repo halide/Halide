@@ -509,6 +509,12 @@ if (WITH_SERIALIZATION)
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
     target_link_libraries(Halide PRIVATE Halide_flatbuffers)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
+    # Note: if updating here, be sure to update in Makefile as well
+    target_compile_definitions(Halide PUBLIC
+                               HALIDE_SERIALIZATION_VERSION_MAJOR=0
+                               HALIDE_SERIALIZATION_VERSION_MINOR=1
+                               HALIDE_SERIALIZATION_VERSION_PATCH=0
+                               )
 endif ()
 
 # Enable serialization testing by intercepting JIT compilation with a serialization roundtrip;
