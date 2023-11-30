@@ -381,19 +381,9 @@ class ForkAsyncProducers : public IRMutator {
         Stmt producer = GenerateProducerBody(name, sema_vars, cloned_acquires).mutate(body);
         Stmt consumer = GenerateConsumerBody(name, sema_vars).mutate(body);
 
-        // debug(0) << "Producer: \n" << producer << "\n";
-        // debug(0) << "Consumer: \n" << consumer << "\n";
-        // debug(0) << "Mutating for producer of " << name << "\n";
         // Recurse on both sides
         producer = mutate(producer);
-        // debug(0) << "Ended mutating for producer of " << name << "\n";
-        // debug(0) << "Mutating for consumer of " << name << "\n";
         consumer = mutate(consumer);
-        // debug(0) << "Ended mutating for consumer for " << name << "\n";
-        // debug(0) << "Producer (after mutation): \n"
-        //          << producer << "\n";
-        // debug(0) << "Consumer (after mutation): \n"
-        //          << consumer << "\n";
 
         // Run them concurrently
         body = Fork::make(producer, consumer);
@@ -666,19 +656,15 @@ class InjectDoubleBuffering : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
-        debug(0) << "@@@Realize - " << op->name << "\n";
         Stmt body = mutate(op->body);
         Function f = env.find(op->name)->second;
         Region bounds = op->bounds;
         if (f.schedule().double_buffer()) {
-            debug(0) << "@@@Found Realize with double buffering: " << op->name << "\n";
             std::string enclosing_loop_var = loop_names.back();
-            debug(0) << "@@@Enclosing loop variable: " << enclosing_loop_var << "\n";
 
             bounds.emplace_back(0, 2);
             Expr current_index = Load::make(Int(32), f.name() + ".double_buffer.index", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
             body = UpdateIndices(op->name, current_index).mutate(body);
-            // TODO(vksnk): logically this semaphore needs to be around the realize node.
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.double_buffer");
             Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
             Stmt release = Evaluate::make(release_producer);

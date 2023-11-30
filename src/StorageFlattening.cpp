@@ -263,6 +263,7 @@ private:
 
         Stmt stmt = body;
         internal_assert(op->types.size() == 1);
+
         // Make the names for the mins, extents, and strides
         int dims = op->bounds.size();
         vector<string> min_name(dims), extent_name(dims), stride_name(dims);
@@ -284,6 +285,7 @@ private:
         builder.host = Variable::make(Handle(), op->name);
         builder.type = op->types[0];
         builder.dimensions = dims;
+
         for (int i = 0; i < dims; i++) {
             builder.mins.push_back(min_var[i]);
             builder.extents.push_back(extent_var[i]);
