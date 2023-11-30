@@ -32,6 +32,24 @@ class UnrollLoops : public IRMutator {
         }
     }
 
+    std::vector<Expr> facts;
+    Stmt visit(const IfThenElse *op) override {
+        facts.push_back(op->condition);
+        Stmt then_case = mutate(op->then_case);
+        Stmt else_case;
+        if (op->else_case.defined()) {
+            facts.back() = simplify(!op->condition);
+            else_case = mutate(op->else_case);
+        }
+        facts.pop_back();
+        if (then_case.same_as(op->then_case) &&
+            else_case.same_as(op->else_case)) {
+            return op;
+        } else {
+            return IfThenElse::make(op->condition, then_case, else_case);
+        }
+    }
+
     Stmt visit(const For *for_loop) override {
         if (for_loop->for_type == ForType::Unrolled) {
             // Give it one last chance to simplify to an int
@@ -47,7 +65,11 @@ class UnrollLoops : public IRMutator {
                 }
                 extent = remove_likelies(extent);
                 extent = substitute_in_all_lets(extent);
-                extent = simplify(extent);
+                extent = simplify(extent,
+                                  true,
+                                  Scope<Interval>::empty_scope(),
+                                  Scope<ModulusRemainder>::empty_scope(),
+                                  facts);
                 e = extent.as<IntImm>();
             }
 

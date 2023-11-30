@@ -13,19 +13,22 @@
 namespace Halide {
 namespace Internal {
 
-/** Perform a a wide range of simplifications to expressions and
- * statements, including constant folding, substituting in trivial
- * values, arithmetic rearranging, etc. Simplifies across let
- * statements, so must not be called on stmts with dangling or
- * repeated variable names.
+/** Perform a wide range of simplifications to expressions and statements,
+ * including constant folding, substituting in trivial values, arithmetic
+ * rearranging, etc. Simplifies across let statements, so must not be called on
+ * stmts with dangling or repeated variable names. Can optionally be passed
+ * known bounds of any variables, known alignment properties, and any other
+ * Exprs that should be assumed to be true.
  */
 // @{
 Stmt simplify(const Stmt &, bool remove_dead_code = true,
               const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
-              const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
+              const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope(),
+              const std::vector<Expr> &assumptions = std::vector<Expr>());
 Expr simplify(const Expr &, bool remove_dead_code = true,
               const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
-              const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
+              const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope(),
+              const std::vector<Expr> &assumptions = std::vector<Expr>());
 // @}
 
 /** Attempt to statically prove an expression is true using the simplifier. */
