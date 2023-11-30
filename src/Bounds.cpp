@@ -41,6 +41,36 @@ using std::string;
 using std::vector;
 
 namespace {
+
+bool can_widen(const Expr &e) {
+    return e.type().bits() < 64;
+}
+
+bool can_widen_all(const std::vector<Expr> &args) {
+    for (const auto &e : args) {
+        if (!can_widen(e)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Expr widen(Expr a) {
+    internal_assert(can_widen(a));
+    Type result_type = a.type().widen();
+    return Cast::make(result_type, std::move(a));
+}
+
+Expr narrow(Expr a) {
+    Type result_type = a.type().narrow();
+    return Cast::make(result_type, std::move(a));
+}
+
+Expr saturating_narrow(const Expr &a) {
+    Type narrow = a.type().narrow();
+    return saturating_cast(narrow, a);
+}
+
 int static_sign(const Expr &x) {
     if (is_positive_const(x)) {
         return 1;
@@ -56,6 +86,7 @@ int static_sign(const Expr &x) {
     }
     return 0;
 }
+
 }  // anonymous namespace
 
 const FuncValueBounds &empty_func_value_bounds() {
@@ -1195,6 +1226,15 @@ private:
             // else fall thru and continue
         }
 
+        const auto handle_expr_bounds = [this, t](const Expr &e) -> void {
+            if (e.defined()) {
+                e.accept(this);
+            } else {
+                // Just use the bounds of the type
+                this->bounds_of_type(t);
+            }
+        };
+
         if (op->is_intrinsic(Call::abs)) {
             Interval a = arg_bounds.get(0);
             interval.min = make_zero(t);
@@ -1229,12 +1269,6 @@ private:
                     bounds_of_type(t);
                 }
             }
-        } else if (op->is_intrinsic(Call::saturating_cast)) {
-            internal_assert(op->args.size() == 1);
-
-            Expr a = lower_saturating_cast(op->type, op->args[0]);
-            a.accept(this);
-            return;
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
             // Unlike an explicit clamp, we are also permitted to
@@ -1468,6 +1502,7 @@ private:
             }
         } else if (op->args.size() == 1 &&
                    (op->is_intrinsic(Call::round) ||
+                    op->is_intrinsic(Call::strict_float) ||
                     op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
                     op->name == "exp_f32" || op->name == "exp_f64" ||
@@ -1518,14 +1553,127 @@ private:
             }
             interval = result;
         } else if (op->is_intrinsic(Call::widen_right_add)) {
-            Expr add = Add::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            add.accept(this);
-        } else if (op->is_intrinsic(Call::widen_right_sub)) {
-            Expr sub = Sub::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            sub.accept(this);
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen(op->args[1]) ?
+                         lower_widen_right_add(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
         } else if (op->is_intrinsic(Call::widen_right_mul)) {
-            Expr mul = Mul::make(op->args[0], cast(op->args[0].type(), op->args[1]));
-            mul.accept(this);
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen(op->args[1]) ?
+                         lower_widen_right_mul(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::widen_right_sub)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen(op->args[1]) ?
+                         lower_widen_right_sub(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::widening_add)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         lower_widening_add(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::widening_mul)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         lower_widening_mul(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::widening_sub)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         lower_widening_sub(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::saturating_add)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         narrow(clamp(widen(op->args[0]) + widen(op->args[1]), t.min(), t.max())) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::saturating_sub)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         narrow(clamp(widen(op->args[0]) - widen(op->args[1]), t.min(), t.max())) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::saturating_cast)) {
+            internal_assert(op->args.size() == 1);
+            bounds_of_type(t);
+            Interval type_bounds = interval;
+            interval = arg_bounds.get(0);
+
+            if (interval.has_lower_bound()) {
+                interval.min = saturating_cast(t, interval.min);
+            } else if (op->args[0].type().is_uint()) {
+                // If we're casting from a uint, we can at least lower bound it
+                // with zero.
+                interval.min = make_zero(t);
+            } else {
+                interval.min = type_bounds.min;
+            }
+            if (interval.has_upper_bound()) {
+                interval.max = saturating_cast(t, interval.max);
+            } else {
+                interval.max = type_bounds.max;
+            }
+        } else if (op->is_intrinsic(Call::widening_shift_left)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen(op->args[0]) ?
+                         lower_widening_shift_left(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::widening_shift_right)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen(op->args[0]) ?
+                         lower_widening_shift_right(op->args[0], op->args[1]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::rounding_shift_right)) {
+            internal_assert(op->args.size() == 2);
+            // TODO: uses bitwise ops we may not handle well
+            handle_expr_bounds(lower_rounding_shift_right(op->args[0], op->args[1]));
+        } else if (op->is_intrinsic(Call::rounding_shift_left)) {
+            internal_assert(op->args.size() == 2);
+            // TODO: uses bitwise ops we may not handle well
+            handle_expr_bounds(lower_rounding_shift_left(op->args[0], op->args[1]));
+        } else if (op->is_intrinsic(Call::halving_add)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         narrow((widen(op->args[0]) + widen(op->args[1])) / 2) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::halving_sub)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         narrow((widen(op->args[0]) - widen(op->args[1])) / 2) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::rounding_halving_add)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = can_widen_all(op->args) ?
+                         narrow((widen(op->args[0]) + widen(op->args[1]) + 1) / 2) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
+            internal_assert(op->args.size() == 3);
+            Expr e = can_widen_all(op->args) ?
+                         saturating_narrow(rounding_shift_right(widening_mul(op->args[0], op->args[1]), op->args[2])) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::mul_shift_right)) {
+            internal_assert(op->args.size() == 3);
+            Expr e = can_widen_all(op->args) ?
+                         saturating_narrow(widening_mul(op->args[0], op->args[1]) >> op->args[2]) :
+                         Expr();
+            handle_expr_bounds(e);
+        } else if (op->is_intrinsic(Call::sorted_avg)) {
+            internal_assert(op->args.size() == 2);
+            Expr e = lower_sorted_avg(op->args[0], op->args[1]);
+            handle_expr_bounds(e);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {
@@ -2261,7 +2409,6 @@ private:
                     Stmt else_case = Evaluate::make(op->args[2]);
                     equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
                 } else {
-                    internal_assert(op->args.size() == 2);
                     equivalent_if = IfThenElse::make(op->args[0], then_case);
                 }
                 equivalent_if.accept(this);

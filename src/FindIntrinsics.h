@@ -30,6 +30,7 @@ Expr lower_saturating_cast(const Type &t, const Expr &a);
 Expr lower_halving_add(const Expr &a, const Expr &b);
 Expr lower_halving_sub(const Expr &a, const Expr &b);
 Expr lower_rounding_halving_add(const Expr &a, const Expr &b);
+Expr lower_sorted_avg(const Expr &a, const Expr &b);
 
 Expr lower_mul_shift_right(const Expr &a, const Expr &b, const Expr &q);
 Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q);
