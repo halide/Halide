@@ -18,6 +18,7 @@ tests(GROUPS error
       bad_const_cast.cpp
       bad_device_api.cpp
       bad_dimensions.cpp
+      bad_double_buffer.cpp
       bad_extern_split.cpp
       bad_fold.cpp
       bad_host_alignment.cpp
