@@ -157,6 +157,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
             // This is a counter associated with the producer side of a storage-folding semaphore. Keep it.
             return op;
         } else if (starts_with(op->name, func + ".double_buffer.")) {
+            // This is a counter associated with the producer side of a double buffering.
             return op;
         } else {
             return Evaluate::make(0);
@@ -425,9 +426,6 @@ class ForkAsyncProducers : public IRMutator {
     }
 
     Stmt visit(const Realize *op) override {
-        if (hoisted_storages.count(op->name) > 0) {
-            debug(0) << "+++Found Realize node with separate hoisted storage" << op->name << "\n";
-        }
         auto it = env.find(op->name);
         internal_assert(it != env.end());
         Function f = it->second;
@@ -612,16 +610,12 @@ public:
     }
 };
 
-// Inject double buffering.
+// Update indices to add double buffering.
 class UpdateIndices : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Provide *op) override {
         if (op->name == func_name) {
-            debug(0) << "@@@ found Provide for: " << op->name << "\n";
-            for (const auto &a : op->args) {
-                debug(0) << a.type() << " " << a << "\n";
-            }
             std::vector<Expr> args = op->args;
             args.push_back(double_buffer_index);
             return Provide::make(op->name, op->values, args, op->predicate);
@@ -631,10 +625,6 @@ class UpdateIndices : public IRMutator {
 
     Expr visit(const Call *op) override {
         if (op->call_type == Call::Halide && op->name == func_name) {
-            debug(0) << "@@@ found Call for: " << op->name << " " << op->args.size() << "\n";
-            for (const auto &a : op->args) {
-                debug(0) << a << "\n";
-            }
             std::vector<Expr> args = op->args;
             args.push_back(double_buffer_index);
             return Call::make(op->type, op->name, args, op->call_type, op->func, op->value_index, op->image, op->param);
@@ -907,17 +897,9 @@ class TightenForkNodes : public IRMutator {
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     s = TightenProducerConsumerNodes(env).mutate(s);
     s = InjectDoubleBuffering(env).mutate(s);
-    debug(0) << "After InjectDoubleBuffering\n"
-             << s << "\n";
     s = ForkAsyncProducers(env).mutate(s);
-    debug(0) << "After ForkAsyncProducers\n"
-             << s << "\n";
     s = ExpandAcquireNodes().mutate(s);
-    debug(0) << "After ExpandAcquireNodes\n"
-             << s << "\n";
     s = TightenForkNodes().mutate(s);
-    debug(0) << "After TightenForkNodes\n"
-             << s << "\n";
     s = InitializeSemaphores().mutate(s);
     return s;
 }
