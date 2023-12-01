@@ -1013,6 +1013,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     const auto memory_type = deserialize_memory_type(func_schedule->memory_type());
     const auto memoized = func_schedule->memoized();
     const auto async = func_schedule->async();
+    const auto double_buffer = func_schedule->double_buffer();
     const auto memoize_eviction_key = deserialize_expr(func_schedule->memoize_eviction_key_type(), func_schedule->memoize_eviction_key());
     auto hl_func_schedule = FuncSchedule();
     hl_func_schedule.store_level() = store_level;
@@ -1025,6 +1026,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     hl_func_schedule.memory_type() = memory_type;
     hl_func_schedule.memoized() = memoized;
     hl_func_schedule.async() = async;
+    hl_func_schedule.double_buffer() = double_buffer;
     hl_func_schedule.memoize_eviction_key() = memoize_eviction_key;
     return hl_func_schedule;
 }
