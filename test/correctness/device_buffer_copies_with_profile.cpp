@@ -25,7 +25,6 @@ int run_test(Target t) {
     f2(x, y) = f1(x, y) * 2;
     f2.compute_root();
 
-
     // Make the buffer a little bigger so we actually can see the copy time.
     Buffer<int> out = f2.realize({2000, 2000}, t);
     // Let's only verify a part of it...
