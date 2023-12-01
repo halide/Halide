@@ -825,11 +825,6 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         to_release = max_required - max_required_next;  // This is the last time we use these entries
                     }
 
-                    if (provided.used.defined()) {
-                        to_acquire = select(provided.used, to_acquire, 0);
-                    }
-                    // We should always release the required region, even if we don't use it.
-
                     // On the first iteration, we need to acquire the extent of the region shared
                     // between the producer and consumer, and we need to release it on the last
                     // iteration.
