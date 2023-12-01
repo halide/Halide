@@ -22,7 +22,7 @@ void my_print(JITUserContext *, const char *msg) {
     int val;
 
     // printf("%s", msg);
-    val = sscanf(msg, "    g_%d: %fms (%f%%) threads: %f peak: %d num: %d avg: %d",
+    val = sscanf(msg, " g_%d: %fms (%f%%) threads: %f peak: %d num: %d avg: %d",
                  &idx, &this_ms, &this_percentage, &this_threads, &this_heap_peak,
                  &this_num_mallocs, &this_malloc_avg);
     if (val == 7) {
@@ -31,7 +31,7 @@ void my_print(JITUserContext *, const char *msg) {
         malloc_avg = this_malloc_avg;
     }
 
-    val = sscanf(msg, "    g_%d: %fms (%f%%) peak: %d num: %d avg: %d",
+    val = sscanf(msg, " g_%d: %fms (%f%%) peak: %d num: %d avg: %d",
                  &idx, &this_ms, &this_percentage, &this_heap_peak,
                  &this_num_mallocs, &this_malloc_avg);
     if (val == 6) {
@@ -40,13 +40,13 @@ void my_print(JITUserContext *, const char *msg) {
         malloc_avg = this_malloc_avg;
     }
 
-    val = sscanf(msg, "    g_%d: %fms (%f%%) threads: %f stack: %d",
+    val = sscanf(msg, " g_%d: %fms (%f%%) threads: %f stack: %d",
                  &idx, &this_ms, &this_percentage, &this_threads, &this_stack_peak);
     if (val == 5) {
         stack_peak = this_stack_peak;
     }
 
-    val = sscanf(msg, "    g_%d: %fms (%f%%) stack: %d",
+    val = sscanf(msg, " g_%d: %fms (%f%%) stack: %d",
                  &idx, &this_ms, &this_percentage, &this_stack_peak);
     if (val == 4) {
         stack_peak = this_stack_peak;

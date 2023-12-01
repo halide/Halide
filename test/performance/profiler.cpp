@@ -8,9 +8,9 @@ float ms = 0;
 void my_print(JITUserContext *, const char *msg) {
     float this_ms;
     float this_percentage;
-    int val = sscanf(msg, "    fn13: %fms (%f", &this_ms, &this_percentage);
+    int val = sscanf(msg, " fn13: %fms (%f", &this_ms, &this_percentage);
     if (val != 2) {
-        val = sscanf(msg, "    fn13$1: %fms (%f", &this_ms, &this_percentage);
+        val = sscanf(msg, " fn13$1: %fms (%f", &this_ms, &this_percentage);
     }
     if (val == 2) {
         ms = this_ms;
