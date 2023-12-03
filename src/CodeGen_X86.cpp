@@ -47,6 +47,9 @@ Target complete_x86_target(Target t) {
     }
     if (t.has_feature(Target::AVX2)) {
         t.set_feature(Target::AVX);
+        // All AVX2-enabled architectures have F16C and FMA
+        t.set_feature(Target::F16C);
+        t.set_feature(Target::FMA);
     }
     if (t.has_feature(Target::AVX)) {
         t.set_feature(Target::SSE41);
