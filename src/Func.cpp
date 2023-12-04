@@ -420,6 +420,8 @@ void check_for_race_conditions_in_split_with_blend(const StageSchedule &sched) {
         }
     }
 
+    // Now propagate back to all children of the identified root vars, to assert
+    // that none of them use a blending tail strategy.
     for (auto it = sched.splits().begin(); it != sched.splits().end(); it++) {
         if (it->is_fuse()) {
             if (parallel.count(it->inner) || parallel.count(it->outer)) {
