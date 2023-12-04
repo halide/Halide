@@ -247,6 +247,14 @@ CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 # On ubuntu, this requires packages flatbuffers-compiler and libflatbuffers-dev
 ifneq (,$(shell which flatc))
 CXX_FLAGS += -DWITH_SERIALIZATION -I $(BUILD_DIR) -I $(shell which flatc | sed 's/bin.flatc/include/')
+# Note: if updating here, be sure to update in CMakeLists.txt as well
+HALIDE_SERIALIZATION_VERSION_MAJOR ?= 0
+HALIDE_SERIALIZATION_VERSION_MINOR ?= 1
+HALIDE_SERIALIZATION_VERSION_PATCH ?= 0
+HALIDE_SERIALIZATION_VERSION=$(HALIDE_SERIALIZATION_VERSION_MAJOR).$(HALIDE_SERIALIZATION_VERSION_MINOR).$(HALIDE_SERIALIZATION_VERSION_PATCH)
+CXX_FLAGS += -DHALIDE_SERIALIZATION_VERSION_MAJOR=$(HALIDE_SERIALIZATION_VERSION_MAJOR)
+CXX_FLAGS += -DHALIDE_SERIALIZATION_VERSION_MINOR=$(HALIDE_SERIALIZATION_VERSION_MINOR)
+CXX_FLAGS += -DHALIDE_SERIALIZATION_VERSION_PATCH=$(HALIDE_SERIALIZATION_VERSION_PATCH)
 endif
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
@@ -1395,14 +1403,14 @@ $(BIN_DIR)/test_internal: $(ROOT_DIR)/test/internal.cpp $(BIN_DIR)/libHalide.$(S
 	$(CXX) $(TEST_CXX_FLAGS) $< -I$(SRC_DIR) $(TEST_LD_FLAGS) -o $@
 
 ifneq (,$(shell which flatc))
-$(BUILD_DIR)/Deserialization.o : $(BUILD_DIR)/halide_ir_generated.h
-$(BUILD_DIR)/Serialization.o : $(BUILD_DIR)/halide_ir_generated.h
+$(BUILD_DIR)/Deserialization.o : $(BUILD_DIR)/halide_ir.fbs.h
+$(BUILD_DIR)/Serialization.o : $(BUILD_DIR)/halide_ir.fbs.h
 endif
 
 # Generated header for serialization/deserialization
-$(BUILD_DIR)/halide_ir_generated.h: $(SRC_DIR)/halide_ir.fbs
+$(BUILD_DIR)/halide_ir.fbs.h: $(SRC_DIR)/halide_ir.fbs
 	@mkdir -p $(@D)
-	flatc -o $(BUILD_DIR) -c $^  
+	flatc --cpp --cpp-std C++17 --no-union-value-namespacing --keep-prefix --filename-suffix ".fbs" -o $(BUILD_DIR) $^
 
 # Correctness test that link against libHalide
 $(BIN_DIR)/correctness_%: $(ROOT_DIR)/test/correctness/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(RUNTIME_EXPORTED_INCLUDES)

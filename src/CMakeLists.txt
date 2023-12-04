@@ -495,10 +495,10 @@ if (WITH_SERIALIZATION)
     set(fb_dir "${Halide_BINARY_DIR}/flatc/include")
 
     set(fb_def "${CMAKE_CURRENT_SOURCE_DIR}/halide_ir.fbs")
-    set(fb_header "${fb_dir}/halide_ir_generated.h")
+    set(fb_header "${fb_dir}/halide_ir.fbs.h")
     add_custom_command(
         OUTPUT "${fb_header}"
-        COMMAND flatbuffers::flatc --cpp -o "${fb_dir}" "${fb_def}"
+        COMMAND flatbuffers::flatc --cpp --cpp-std C++17 --no-union-value-namespacing --keep-prefix --filename-suffix ".fbs" -o "${fb_dir}" "${fb_def}"
         DEPENDS "${fb_def}"
         VERBATIM
     )
@@ -509,6 +509,12 @@ if (WITH_SERIALIZATION)
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
     target_link_libraries(Halide PRIVATE Halide_flatbuffers)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
+    # Note: if updating here, be sure to update in Makefile as well
+    target_compile_definitions(Halide PUBLIC
+                               HALIDE_SERIALIZATION_VERSION_MAJOR=0
+                               HALIDE_SERIALIZATION_VERSION_MINOR=1
+                               HALIDE_SERIALIZATION_VERSION_PATCH=0
+                               )
 endif ()
 
 # Enable serialization testing by intercepting JIT compilation with a serialization roundtrip;

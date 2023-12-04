@@ -1,7 +1,7 @@
 namespace Halide.Serialize;
 
-// This corresponds to the corresponding Halide version.
-file_identifier "HL17";
+// This identifies the serialized data being a Halide pipeline. Should be exactly 4 bytes.
+file_identifier "HLDE";
 
 // File extension of any written files. "hlpipe" stands for Halide Pipeline.
 file_extension "hlpipe";
@@ -640,6 +640,13 @@ table Parameter {
     scalar_estimate: Expr;
 }
 
+table ExternalParameter {
+    is_buffer: bool;
+    type: Type;
+    dimensions: int32;
+    name: string;
+}
+
 enum ExternFuncArgumentType: ubyte {
     UndefinedArg,
     FuncArg,
@@ -701,7 +708,10 @@ table Pipeline {
     requirements: [Stmt];
     func_names_in_order: [string];
     parameters: [Parameter];
+    external_parameters: [ExternalParameter];
     buffers: [Buffer];
+    halide_version: string;
+    serialization_version: string;
 }
 
 root_type Pipeline;

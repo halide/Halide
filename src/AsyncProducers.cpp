@@ -109,15 +109,55 @@ protected:
 class GenerateProducerBody : public NoOpCollapsingMutator {
     const string &func;
     vector<Expr> sema;
+    std::set<string> producers_dropped;
+    bool found_producer = false;
 
     using NoOpCollapsingMutator::visit;
+
+    void bad_producer_nesting_error(const string &producer, const string &async_consumer) {
+        user_error
+            << "The Func " << producer << " is consumed by async Func " << async_consumer
+            << " and has a compute_at location in between the store_at "
+            << "location and the compute_at location of " << async_consumer
+            << ". This is only legal when " << producer
+            << " is both async and has a store_at location outside the store_at location of the consumer.";
+    }
 
     // Preserve produce nodes and add synchronization
     Stmt visit(const ProducerConsumer *op) override {
         if (op->name == func && op->is_producer) {
+            found_producer = true;
+
             // Add post-synchronization
             internal_assert(!sema.empty()) << "Duplicate produce node: " << op->name << "\n";
             Stmt body = op->body;
+
+            // We don't currently support waiting on producers to the producer
+            // half of the fork node. Or rather, if you want to do that you have
+            // to schedule those Funcs as async too. Check for any consume nodes
+            // where the producer has gone to the consumer side of the fork
+            // node.
+            class FindBadConsumeNodes : public IRVisitor {
+                const std::set<string> &producers_dropped;
+                using IRVisitor::visit;
+
+                void visit(const ProducerConsumer *op) override {
+                    if (!op->is_producer && producers_dropped.count(op->name)) {
+                        found = op->name;
+                    }
+                }
+
+            public:
+                string found;
+                FindBadConsumeNodes(const std::set<string> &p)
+                    : producers_dropped(p) {
+                }
+            } finder(producers_dropped);
+            body.accept(&finder);
+            if (!finder.found.empty()) {
+                bad_producer_nesting_error(finder.found, func);
+            }
+
             while (!sema.empty()) {
                 Expr release = Call::make(Int(32), "halide_semaphore_release", {sema.back(), 1}, Call::Extern);
                 body = Block::make(body, Evaluate::make(release));
@@ -125,7 +165,18 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
             }
             return ProducerConsumer::make_produce(op->name, body);
         } else {
+            if (op->is_producer) {
+                producers_dropped.insert(op->name);
+            }
+            bool found_producer_before = found_producer;
             Stmt body = mutate(op->body);
+            if (!op->is_producer && producers_dropped.count(op->name) &&
+                found_producer && !found_producer_before) {
+                // We've found a consume node wrapping our async producer where
+                // the corresponding producer node was dropped from this half of
+                // the fork.
+                bad_producer_nesting_error(op->name, func);
+            }
             if (is_no_op(body) || op->is_producer) {
                 return body;
             } else {
