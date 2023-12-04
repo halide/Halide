@@ -5,9 +5,6 @@
 #include "Substitute.h"
 #include "UniquifyVariableNames.h"
 
-using std::pair;
-using std::vector;
-
 namespace Halide {
 namespace Internal {
 
