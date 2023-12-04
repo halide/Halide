@@ -336,6 +336,7 @@ tests(GROUPS correctness
       vectorize_nested.cpp
       vectorize_varying_allocation_size.cpp
       vectorized_gpu_allocation.cpp
+      vectorized_guard_with_if_tail.cpp
       vectorized_initialization.cpp
       vectorized_load_from_vectorized_allocation.cpp
       vectorized_reduction_bug.cpp
