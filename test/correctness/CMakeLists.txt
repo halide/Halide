@@ -8,6 +8,7 @@ tests(GROUPS correctness
       align_bounds.cpp
       argmax.cpp
       async_device_copy.cpp
+      async_order.cpp
       autodiff.cpp
       bad_likely.cpp
       bit_counting.cpp

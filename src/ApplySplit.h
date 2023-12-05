@@ -36,7 +36,8 @@ struct ApplySplitResult {
                 LetStmt,
                 PredicateCalls,
                 PredicateProvides,
-                Predicate };
+                Predicate,
+                BlendProvides };
     Type type;
 
     ApplySplitResult(const std::string &n, Expr val, Type t)
@@ -66,6 +67,9 @@ struct ApplySplitResult {
     }
     bool is_predicate_provides() const {
         return (type == PredicateProvides);
+    }
+    bool is_blend_provides() const {
+        return (type == BlendProvides);
     }
 };
 
