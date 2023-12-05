@@ -1402,6 +1402,8 @@ Pipeline Deserializer::deserialize(std::istream &in) {
 }
 
 Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
+    using Serialize::SerializationVersion;
+
     const auto *pipeline_obj = Serialize::GetPipeline(data.data());
     if (pipeline_obj == nullptr) {
         user_warning << "deserialized pipeline is empty\n";
@@ -1418,9 +1420,9 @@ Pipeline Deserializer::deserialize(const std::vector<uint8_t> &data) {
     }
 
     std::string deserialized_serialization_version = deserialize_string(pipeline_obj->serialization_version());
-    std::string serialization_version = std::to_string(HALIDE_SERIALIZATION_VERSION_MAJOR) + "." +
-                                        std::to_string(HALIDE_SERIALIZATION_VERSION_MINOR) + "." +
-                                        std::to_string(HALIDE_SERIALIZATION_VERSION_PATCH);
+    std::string serialization_version = std::to_string(SerializationVersion::Major) + "." +
+                                        std::to_string(SerializationVersion::Minor) + "." +
+                                        std::to_string(SerializationVersion::Patch);
     if (deserialized_serialization_version != serialization_version) {
         user_error << "deserialized pipeline is built with Halide serialization version " << deserialized_serialization_version
                    << ", but current Halide serialization version is " << serialization_version << "\n";

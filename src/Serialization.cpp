@@ -1446,6 +1446,8 @@ void Serializer::build_function_mappings(const std::map<std::string, Function> &
 }
 
 void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &result) {
+    using Serialize::SerializationVersion;
+
     FlatBufferBuilder builder(1024);
 
     // extract the DAG, unwrap function from Funcs
@@ -1509,9 +1511,9 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
                                  std::to_string(HALIDE_VERSION_MINOR) + "." +
                                  std::to_string(HALIDE_VERSION_PATCH);
 
-    std::string serialization_version = std::to_string(HALIDE_SERIALIZATION_VERSION_MAJOR) + "." +
-                                        std::to_string(HALIDE_SERIALIZATION_VERSION_MINOR) + "." +
-                                        std::to_string(HALIDE_SERIALIZATION_VERSION_PATCH);
+    std::string serialization_version = std::to_string(SerializationVersion::Major) + "." +
+                                        std::to_string(SerializationVersion::Minor) + "." +
+                                        std::to_string(SerializationVersion::Patch);
 
     auto pipeline_obj = Serialize::CreatePipeline(builder,
                                                   builder.CreateVector(funcs_serialized),
