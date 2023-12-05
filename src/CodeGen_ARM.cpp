@@ -1647,19 +1647,26 @@ string CodeGen_ARM::mcpu_tune() const {
 }
 
 string CodeGen_ARM::mattrs() const {
+    string arch_flags;
+    string separator;
     if (target.bits == 32) {
+        if (target.has_feature(Target::ARMFp16)) {
+            arch_flags += separator + "+fullfp16";
+            separator = ",";
+        }
         if (target.has_feature(Target::ARMv7s)) {
-            return "+neon";
+            arch_flags += separator + "+neon";
+            separator = ",";
         }
         if (!target.has_feature(Target::NoNEON)) {
-            return "+neon";
+            arch_flags += separator + "+neon";
+            separator = ",";
         } else {
-            return "-neon";
+            arch_flags += separator + "-neon";
+            separator = ",";
         }
     } else {
         // TODO: Should Halide's SVE flags be 64-bit only?
-        string arch_flags;
-        string separator;
         if (target.has_feature(Target::SVE2)) {
             arch_flags = "+sve2";
             separator = ",";
@@ -1684,11 +1691,10 @@ string CodeGen_ARM::mattrs() const {
         }
 
         if (target.os == Target::IOS || target.os == Target::OSX) {
-            return arch_flags + separator + "+reserve-x18";
-        } else {
-            return arch_flags;
+            arch_flags += separator + "+reserve-x18";
         }
     }
+    return arch_flags;
 }
 
 bool CodeGen_ARM::use_soft_float_abi() const {
