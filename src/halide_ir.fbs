@@ -528,6 +528,8 @@ enum TailStrategy: ubyte {
     PredicateLoads,
     PredicateStores,
     ShiftInwards,
+    ShiftInwardsAndBlend,
+    RoundUpAndBlend,
     Auto,
 }
 

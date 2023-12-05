@@ -350,6 +350,10 @@ TailStrategy Deserializer::deserialize_tail_strategy(Serialize::TailStrategy tai
         return TailStrategy::PredicateStores;
     case Serialize::TailStrategy::ShiftInwards:
         return TailStrategy::ShiftInwards;
+    case Serialize::TailStrategy::ShiftInwardsAndBlend:
+        return TailStrategy::ShiftInwardsAndBlend;
+    case Serialize::TailStrategy::RoundUpAndBlend:
+        return TailStrategy::RoundUpAndBlend;
     case Serialize::TailStrategy::Auto:
         return TailStrategy::Auto;
     default:
