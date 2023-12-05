@@ -1649,11 +1649,19 @@ string CodeGen_ARM::mcpu_tune() const {
 string CodeGen_ARM::mattrs() const {
     string arch_flags;
     string separator;
+    if (target.has_feature(Target::ARMFp16)) {
+        arch_flags += separator + "+fullfp16";
+        separator = ",";
+    }
+    if (target.has_feature(Target::ARMv81a)) {
+        arch_flags += separator + "+v8.1a";
+        separator = ",";
+    }
+    if (target.has_feature(Target::ARMDotProd)) {
+        arch_flags += separator + "+dotprod";
+        separator = ",";
+    }
     if (target.bits == 32) {
-        if (target.has_feature(Target::ARMFp16)) {
-            arch_flags += separator + "+fullfp16";
-            separator = ",";
-        }
         if (target.has_feature(Target::ARMv7s)) {
             arch_flags += separator + "+neon";
             separator = ",";
@@ -1674,22 +1682,6 @@ string CodeGen_ARM::mattrs() const {
             arch_flags = "+sve";
             separator = ",";
         }
-
-        if (target.has_feature(Target::ARMv81a)) {
-            arch_flags += separator + "+v8.1a";
-            separator = ",";
-        }
-
-        if (target.has_feature(Target::ARMDotProd)) {
-            arch_flags += separator + "+dotprod";
-            separator = ",";
-        }
-
-        if (target.has_feature(Target::ARMFp16)) {
-            arch_flags += separator + "+fullfp16";
-            separator = ",";
-        }
-
         if (target.os == Target::IOS || target.os == Target::OSX) {
             arch_flags += separator + "+reserve-x18";
         }
