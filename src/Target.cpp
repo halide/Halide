@@ -813,7 +813,7 @@ void Target::validate_features() const {
             WasmSimd128,
             WasmThreads,
         };
-        user_assert(!features_any_of(bad_features_x86)) << "At least os_entry of the features for "
+        user_assert(!features_any_of(bad_features_x86)) << "At least one of the features for "
                                                         << *this << " is incompatible with the Target's architecture.";
     } else if (arch == ARM) {
         static const std::vector<Feature> bad_features_arm = {
@@ -843,7 +843,7 @@ void Target::validate_features() const {
             WasmSimd128,
             WasmThreads,
         };
-        user_assert(!features_any_of(bad_features_arm)) << "At least os_entry of the features for "
+        user_assert(!features_any_of(bad_features_arm)) << "At least one of the features for "
                                                         << *this << " is incompatible with the Target's architecture.";
     } else if (arch == WebAssembly) {
         static const std::vector<Feature> bad_features_wasm = {
@@ -875,7 +875,7 @@ void Target::validate_features() const {
             SVE2,
             VSX,
         };
-        user_assert(!features_any_of(bad_features_wasm)) << "At least os_entry of the features for "
+        user_assert(!features_any_of(bad_features_wasm)) << "At least one of the features for "
                                                         << *this << " is incompatible with the Target's architecture.";
     }
 }
@@ -891,6 +891,7 @@ Target::Target(const std::string &target) {
             bad_target_string(target);
         }
     }
+    validate_features();
 }
 
 Target::Target(const char *s)
