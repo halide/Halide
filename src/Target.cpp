@@ -876,7 +876,7 @@ void Target::validate_features() const {
             VSX,
         };
         user_assert(!features_any_of(bad_features_wasm)) << "At least one of the features for "
-                                                        << *this << " is incompatible with the Target's architecture.";
+                                                         << *this << " is incompatible with the Target's architecture.";
     }
 }
 
