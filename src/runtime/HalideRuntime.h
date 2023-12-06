@@ -18,6 +18,15 @@
 #include "runtime_internal.h"
 #endif
 
+// Note that the canonical Halide version is considered to be defined here
+// (rather than in the build system); we redundantly define the value in
+// our CMake build, so that we ensure that the in-build metadata (eg soversion)
+// matches, but keeping the canonical version here makes it easier to keep
+// downstream build systems (eg Blaze/Bazel) properly in sync with the source.
+#define HALIDE_VERSION_MAJOR 17
+#define HALIDE_VERSION_MINOR 0
+#define HALIDE_VERSION_PATCH 0
+
 #ifdef __cplusplus
 // Forward declare type to allow naming typed handles.
 // See Type.h for documentation.
