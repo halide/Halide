@@ -788,6 +788,98 @@ void bad_target_string(const std::string &target) {
 
 }  // namespace
 
+void Target::validate_features() const {
+    // Note that the features don't have to be exhaustive, but enough to avoid obvious mistakes is good.
+    if (arch == X86) {
+        static const std::vector<Feature> bad_features_x86 = {
+            ARMDotProd,
+            ARMFp16,
+            ARMv7s,
+            ARMv81a,
+            HVX_128,
+            HVX_128,
+            HVX_v62,
+            HVX_v65,
+            HVX_v66,
+            NoNEON,
+            POWER_ARCH_2_07,
+            RVV,
+            SVE,
+            SVE2,
+            VSX,
+            WasmBulkMemory,
+            WasmSatFloatToInt,
+            WasmSignExt,
+            WasmSimd128,
+            WasmThreads,
+        };
+        user_assert(!features_any_of(bad_features_x86)) << "At least os_entry of the features for "
+                                                        << *this << " is incompatible with the Target's architecture.";
+    } else if (arch == ARM) {
+        static const std::vector<Feature> bad_features_arm = {
+            AVX,
+            AVX2,
+            AVX512,
+            AVX512_Cannonlake,
+            AVX512_KNL,
+            AVX512_SapphireRapids,
+            AVX512_Skylake,
+            AVX512_Zen4,
+            F16C,
+            FMA,
+            FMA4,
+            HVX_128,
+            HVX_128,
+            HVX_v62,
+            HVX_v65,
+            HVX_v66,
+            POWER_ARCH_2_07,
+            RVV,
+            SSE41,
+            VSX,
+            WasmBulkMemory,
+            WasmSatFloatToInt,
+            WasmSignExt,
+            WasmSimd128,
+            WasmThreads,
+        };
+        user_assert(!features_any_of(bad_features_arm)) << "At least os_entry of the features for "
+                                                        << *this << " is incompatible with the Target's architecture.";
+    } else if (arch == WebAssembly) {
+        static const std::vector<Feature> bad_features_wasm = {
+            ARMDotProd,
+            ARMFp16,
+            ARMv7s,
+            ARMv81a,
+            AVX,
+            AVX2,
+            AVX512,
+            AVX512_Cannonlake,
+            AVX512_KNL,
+            AVX512_SapphireRapids,
+            AVX512_Skylake,
+            AVX512_Zen4,
+            F16C,
+            FMA,
+            FMA4,
+            HVX_128,
+            HVX_128,
+            HVX_v62,
+            HVX_v65,
+            HVX_v66,
+            NoNEON,
+            POWER_ARCH_2_07,
+            RVV,
+            SSE41,
+            SVE,
+            SVE2,
+            VSX,
+        };
+        user_assert(!features_any_of(bad_features_wasm)) << "At least os_entry of the features for "
+                                                        << *this << " is incompatible with the Target's architecture.";
+    }
+}
+
 Target::Target(const std::string &target) {
     Target host = get_host_target();
 
