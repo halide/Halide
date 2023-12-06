@@ -2804,9 +2804,12 @@ void Partitioner::generate_group_cpu_schedule(
         }
     }
 
-    if (can_prove(def_par < arch_params.parallelism)) {
-        user_warning << "Insufficient parallelism for " << f_handle.name() << "\n";
-    }
+    // Silenced: the user can't really do anything about it,
+    // and it triggers on things like tiny lookup tables
+    //
+    // if (can_prove(def_par < arch_params.parallelism)) {
+    //     user_warning << "Insufficient parallelism for " << f_handle.name() << "\n";
+    // }
 
     // Find the level at which group members will be computed.
     int tile_inner_index = dims.size() - outer_dims.size() - 1;
