@@ -50,9 +50,6 @@ def test_target():
         32,
         [
             hl.TargetFeature.JIT,
-            hl.TargetFeature.SSE41,
-            hl.TargetFeature.AVX,
-            hl.TargetFeature.AVX2,
             hl.TargetFeature.CUDA,
             hl.TargetFeature.OpenCL,
             hl.TargetFeature.OpenGLCompute,
@@ -60,7 +57,7 @@ def test_target():
         ],
     )
     ts = t1.to_string()
-    assert ts == "arm-32-android-avx-avx2-cuda-debug-jit-opencl-openglcompute-sse41"
+    assert ts == "arm-32-android-cuda-debug-jit-opencl-openglcompute"
     assert hl.Target.validate_target_string(ts)
 
     # Expected failures:
