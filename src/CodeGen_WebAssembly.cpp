@@ -336,29 +336,29 @@ string CodeGen_WebAssembly::mattrs() const {
     std::vector<std::string_view> attrs;
 
     if (target.has_feature(Target::WasmSignExt)) {
-        attrs.push_back("+sign-ext");
+        attrs.emplace_back("+sign-ext");
     }
     if (target.has_feature(Target::WasmSimd128)) {
-        attrs.push_back("+simd128");
+        attrs.emplace_back("+simd128");
     }
     if (target.has_feature(Target::WasmSatFloatToInt)) {
-        attrs.push_back("+nontrapping-fptoint");
+        attrs.emplace_back("+nontrapping-fptoint");
     }
     if (target.has_feature(Target::WasmThreads)) {
         // "WasmThreads" doesn't directly affect LLVM codegen,
         // but it does end up requiring atomics, so be sure to enable them.
-        attrs.push_back("+atomics");
+        attrs.emplace_back("+atomics");
     }
     // PIC implies +mutable-globals because the PIC ABI used by the linker
     // depends on importing and exporting mutable globals. Also -pthread implies
     // mutable-globals too, so quitely enable it if either of these are specified.
     if (use_pic() || target.has_feature(Target::WasmThreads)) {
-        attrs.push_back("+mutable-globals");
+        attrs.emplace_back("+mutable-globals");
     }
     // Recent Emscripten builds assume that specifying `-pthread` implies bulk-memory too,
     // so quietly enable it if either of these are specified.
     if (target.has_feature(Target::WasmBulkMemory) || target.has_feature(Target::WasmThreads)) {
-        attrs.push_back("+bulk-memory");
+        attrs.emplace_back("+bulk-memory");
     }
 
     return join_strings(attrs, ",");

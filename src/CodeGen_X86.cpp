@@ -989,44 +989,44 @@ string CodeGen_X86::mcpu_tune() const {
 string CodeGen_X86::mattrs() const {
     std::vector<std::string_view> attrs;
     if (target.has_feature(Target::FMA)) {
-        attrs.push_back("+fma");
+        attrs.emplace_back("+fma");
     }
     if (target.has_feature(Target::FMA4)) {
-        attrs.push_back("+fma4");
+        attrs.emplace_back("+fma4");
     }
     if (target.has_feature(Target::F16C)) {
-        attrs.push_back("+f16c");
+        attrs.emplace_back("+f16c");
     }
     if (target.has_feature(Target::AVX512) ||
         target.has_feature(Target::AVX512_KNL) ||
         target.has_feature(Target::AVX512_Skylake) ||
         target.has_feature(Target::AVX512_Cannonlake)) {
-        attrs.push_back("+avx512f");
-        attrs.push_back("+avx512cd");
+        attrs.emplace_back("+avx512f");
+        attrs.emplace_back("+avx512cd");
         if (target.has_feature(Target::AVX512_KNL)) {
-            attrs.push_back("+avx512pf");
-            attrs.push_back("+avx512er");
+            attrs.emplace_back("+avx512pf");
+            attrs.emplace_back("+avx512er");
         }
         if (target.has_feature(Target::AVX512_Skylake) ||
             target.has_feature(Target::AVX512_Cannonlake)) {
-            attrs.push_back("+avx512vl");
-            attrs.push_back("+avx512bw");
-            attrs.push_back("+avx512dq");
+            attrs.emplace_back("+avx512vl");
+            attrs.emplace_back("+avx512bw");
+            attrs.emplace_back("+avx512dq");
         }
         if (target.has_feature(Target::AVX512_Cannonlake)) {
-            attrs.push_back("+avx512ifma");
-            attrs.push_back("+avx512vbmi");
+            attrs.emplace_back("+avx512ifma");
+            attrs.emplace_back("+avx512vbmi");
         }
         if (target.has_feature(Target::AVX512_Zen4)) {
-            attrs.push_back("+avx512bf16");
-            attrs.push_back("+avx512vnni");
-            attrs.push_back("+avx512bitalg");
-            attrs.push_back("+avx512vbmi2");
+            attrs.emplace_back("+avx512bf16");
+            attrs.emplace_back("+avx512vnni");
+            attrs.emplace_back("+avx512bitalg");
+            attrs.emplace_back("+avx512vbmi2");
         }
         if (target.has_feature(Target::AVX512_SapphireRapids)) {
-            attrs.push_back("+avxvnni");
-            attrs.push_back("+amx-int8");
-            attrs.push_back("+amx-bf16");
+            attrs.emplace_back("+avxvnni");
+            attrs.emplace_back("+amx-int8");
+            attrs.emplace_back("+amx-bf16");
         }
     }
 #if LLVM_VERSION >= 180

@@ -1649,32 +1649,32 @@ string CodeGen_ARM::mcpu_tune() const {
 string CodeGen_ARM::mattrs() const {
     std::vector<std::string_view> attrs;
     if (target.has_feature(Target::ARMFp16)) {
-        attrs.push_back("+fullfp16");
+        attrs.emplace_back("+fullfp16");
     }
     if (target.has_feature(Target::ARMv81a)) {
-        attrs.push_back("+v8.1a");
+        attrs.emplace_back("+v8.1a");
     }
     if (target.has_feature(Target::ARMDotProd)) {
-        attrs.push_back("+dotprod");
+        attrs.emplace_back("+dotprod");
     }
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
-            attrs.push_back("+neon");
+            attrs.emplace_back("+neon");
         }
         if (!target.has_feature(Target::NoNEON)) {
-            attrs.push_back("+neon");
+            attrs.emplace_back("+neon");
         } else {
-            attrs.push_back("-neon");
+            attrs.emplace_back("-neon");
         }
     } else {
         // TODO: Should Halide's SVE flags be 64-bit only?
         if (target.has_feature(Target::SVE2)) {
-            attrs.push_back("+sve2");
+            attrs.emplace_back("+sve2");
         } else if (target.has_feature(Target::SVE)) {
-            attrs.push_back("+sve");
+            attrs.emplace_back("+sve");
         }
         if (target.os == Target::IOS || target.os == Target::OSX) {
-            attrs.push_back("+reserve-x18");
+            attrs.emplace_back("+reserve-x18");
         }
     }
     return join_strings(attrs, ",");
