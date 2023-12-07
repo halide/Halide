@@ -1308,14 +1308,12 @@ wabt::interp::HostFunc::Ptr make_extern_callback(wabt::interp::Store &store,
 
 wabt::Features calc_features(const Target &target) {
     wabt::Features f;
-    if (target.has_feature(Target::WasmSignExt)) {
+    if (!target.has_feature(Target::WasmMvpOnly)) {
         f.enable_sign_extension();
+        f.enable_sat_float_to_int();
     }
     if (target.has_feature(Target::WasmSimd128)) {
         f.enable_simd();
-    }
-    if (target.has_feature(Target::WasmSatFloatToInt)) {
-        f.enable_sat_float_to_int();
     }
     return f;
 }

@@ -16,8 +16,8 @@ public:
     SimdOpCheckWASM(Target t, int w = 768, int h = 128)
         : SimdOpCheckTest(t, w, h) {
         use_wasm_simd128 = target.has_feature(Target::WasmSimd128);
-        use_wasm_sat_float_to_int = target.has_feature(Target::WasmSatFloatToInt);
-        use_wasm_sign_ext = target.has_feature(Target::WasmSignExt);
+        use_wasm_sign_ext = !target.has_feature(Target::WasmMvpOnly);
+        use_wasm_sat_float_to_int = !target.has_feature(Target::WasmMvpOnly);
     }
 
     void add_tests() override {
