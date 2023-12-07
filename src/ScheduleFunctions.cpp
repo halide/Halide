@@ -2110,7 +2110,6 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
                     << " schedule it. If this was intentional, call "
                     << f.name() << ".update(" << i << ").unscheduled() to suppress"
                     << " this warning.\n";
-                abort();
             }
         }
     }

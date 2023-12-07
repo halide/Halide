@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
 
     Var xo, xi;
     h.split(x, xo, xi, 16, TailStrategy::RoundUp);
+    h.update(0).unscheduled();
 
     Buffer<int> r0(size);
     Buffer<int> r1(size);
