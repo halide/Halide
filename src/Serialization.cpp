@@ -1509,9 +1509,9 @@ void Serializer::serialize(const Pipeline &pipeline, std::vector<uint8_t> &resul
                                  std::to_string(HALIDE_VERSION_MINOR) + "." +
                                  std::to_string(HALIDE_VERSION_PATCH);
 
-    std::string serialization_version = std::to_string(HALIDE_SERIALIZATION_VERSION_MAJOR) + "." +
-                                        std::to_string(HALIDE_SERIALIZATION_VERSION_MINOR) + "." +
-                                        std::to_string(HALIDE_SERIALIZATION_VERSION_PATCH);
+    std::string serialization_version = std::to_string((int)Serialize::SerializationVersionMajor::Value) + "." +
+                                        std::to_string((int)Serialize::SerializationVersionMinor::Value) + "." +
+                                        std::to_string((int)Serialize::SerializationVersionPatch::Value);
 
     auto pipeline_obj = Serialize::CreatePipeline(builder,
                                                   builder.CreateVector(funcs_serialized),

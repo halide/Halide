@@ -6,6 +6,16 @@ file_identifier "HLDE";
 // File extension of any written files. "hlpipe" stands for Halide Pipeline.
 file_extension "hlpipe";
 
+enum SerializationVersionMajor: int {
+    Value = 0
+}
+enum SerializationVersionMinor: int {
+    Value = 1
+}
+enum SerializationVersionPatch: int {
+    Value = 0
+}
+
 // from src/IR.cpp
 union Stmt {
     LetStmt,
