@@ -2479,10 +2479,13 @@ void Partitioner::vectorize_stage(const Group &g, Stage f_handle, int stage_num,
         // storage dimension of the func.
         //
         // TODO: Check if the warning is necessary.
-        if (vec_dim_index > 0) {
-            user_warning << "Outer dim vectorization of var \"" << vec_dim_name
-                         << "\" in function \"" << f_handle.name() << "\"\n";
-        }
+        //
+        // Disabled: this isn't really user actionable, and is just noise.
+        //
+        // if (vec_dim_index > 0) {
+        //     user_warning << "Outer dim vectorization of var \"" << vec_dim_name
+        //                  << "\" in function \"" << f_handle.name() << "\"\n";
+        // }
     }
 }
 
