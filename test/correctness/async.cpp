@@ -18,6 +18,43 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    {
+        Func producer1("producer1"), producer2("producer2"), consumer("consumer");
+        Var x, y, xo, yo, xi, yi;
+
+        producer1(x, y) = x + y;
+        producer2(x, y) = x * y;
+        consumer(x, y) = producer1(x - 1, y - 1) + producer2(x, y) + producer1(x + 1, y + 1);// + producer2(x + 2, y + 2);
+
+        consumer
+            .compute_root()
+            .bound(x, 0, 128)
+            .bound(y, 0, 128);
+        producer1
+            .compute_at(consumer, y)
+            .store_at(consumer, Var::outermost())
+            .fold_storage(y, 4)
+            .async();
+        producer2
+            .compute_at(consumer, y)
+            .store_at(consumer, Var::outermost())
+            .fold_storage(y, 4)
+            .async();
+
+        Buffer<int> out = consumer.realize({128, 128});
+
+        out.for_each_element([&](int x, int y) {
+            int correct = 2 * (x + y) + x * y;// + (x + 2) * (y + 2);
+            if (out(x, y) != correct) {
+                printf("out(%d, %d) = %d instead of %d\n",
+                       x, y, out(x, y), correct);
+                exit(1);
+            }
+        });
+    }
+
+    printf("Success!\n");
+    return 0;
     // Basic compute-root async producer
     {
         Func producer, consumer;

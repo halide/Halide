@@ -389,10 +389,15 @@ class ForkAsyncProducers : public IRMutator {
 
             Stmt producer = GenerateProducerBody(op->name, sema_vars, cloned_acquires).mutate(body);
             Stmt consumer = GenerateConsumerBody(op->name, sema_vars).mutate(body);
+            debug(0) << "@@@ " << op->name << " producer: \n" << producer << "\n";
+            debug(0) << "@@@ " << op->name << " consumer: \n" << consumer << "\n";
 
             // Recurse on both sides
             producer = mutate(producer);
             consumer = mutate(consumer);
+
+            debug(0) << "@@@ " << op->name << " mutated producer: \n" << producer << "\n";
+            debug(0) << "@@@ " << op->name << " mutated consumer: \n" << consumer << "\n";
 
             // Run them concurrently
             body = Fork::make(producer, consumer);
@@ -757,8 +762,11 @@ class TightenForkNodes : public IRMutator {
 }  // namespace
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
+    // debug(0) << "Beginning of the fork_async_producers\n" << s << "\n";
     s = TightenProducerConsumerNodes(env).mutate(s);
+    debug(0) << "TightenProducerConsumerNodes\n" << s << "\n";
     s = ForkAsyncProducers(env).mutate(s);
+    debug(0) << "ForkAsyncProducers\n" << s << "\n";
     s = ExpandAcquireNodes().mutate(s);
     s = TightenForkNodes().mutate(s);
     s = InitializeSemaphores().mutate(s);
