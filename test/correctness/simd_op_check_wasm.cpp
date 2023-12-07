@@ -544,6 +544,7 @@ int main(int argc, char **argv) {
         argc, argv,
         {
             Target("wasm-32-wasmrt"),
-            Target("wasm-32-wasmrt-wasm_simd128-wasm_sat_float_to_int"),
+            Target("wasm-32-wasmrt-wasm_simd128"),
+            Target("wasm-32-wasmrt-wasm_mvponly"),
         });
 }
