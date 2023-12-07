@@ -330,50 +330,38 @@ string CodeGen_WebAssembly::mcpu_tune() const {
 }
 
 string CodeGen_WebAssembly::mattrs() const {
-    std::ostringstream s;
-    string sep;
+    user_assert(target.os == Target::WebAssemblyRuntime)
+        << "wasmrt is the only supported 'os' for WebAssembly at this time.";
+
+    std::vector<std::string_view> attrs;
 
     if (target.has_feature(Target::WasmSignExt)) {
-        s << sep << "+sign-ext";
-        sep = ",";
+        attrs.push_back("+sign-ext");
     }
-
     if (target.has_feature(Target::WasmSimd128)) {
-        s << sep << "+simd128";
-        sep = ",";
+        attrs.push_back("+simd128");
     }
-
     if (target.has_feature(Target::WasmSatFloatToInt)) {
-        s << sep << "+nontrapping-fptoint";
-        sep = ",";
+        attrs.push_back("+nontrapping-fptoint");
     }
-
     if (target.has_feature(Target::WasmThreads)) {
         // "WasmThreads" doesn't directly affect LLVM codegen,
         // but it does end up requiring atomics, so be sure to enable them.
-        s << sep << ",+atomics";
-        sep = ",";
+        attrs.push_back("+atomics");
     }
-
     // PIC implies +mutable-globals because the PIC ABI used by the linker
     // depends on importing and exporting mutable globals. Also -pthread implies
     // mutable-globals too, so quitely enable it if either of these are specified.
     if (use_pic() || target.has_feature(Target::WasmThreads)) {
-        s << sep << "+mutable-globals";
-        sep = ",";
+        attrs.push_back("+mutable-globals");
     }
-
     // Recent Emscripten builds assume that specifying `-pthread` implies bulk-memory too,
     // so quietly enable it if either of these are specified.
     if (target.has_feature(Target::WasmBulkMemory) || target.has_feature(Target::WasmThreads)) {
-        s << sep << "+bulk-memory";
-        sep = ",";
+        attrs.push_back("+bulk-memory");
     }
 
-    user_assert(target.os == Target::WebAssemblyRuntime)
-        << "wasmrt is the only supported 'os' for WebAssembly at this time.";
-
-    return s.str();
+    return join_strings(attrs, ",");
 }
 
 bool CodeGen_WebAssembly::use_soft_float_abi() const {
