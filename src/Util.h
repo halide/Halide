@@ -191,7 +191,7 @@ template<typename T>
 std::string join_strings(const std::vector<T> &sources, const std::string &delim) {
     size_t sz = 0;
     if (!sources.empty()) {
-        delim.size() * (sources.size() - 1);
+        sz += delim.size() * (sources.size() - 1);
     }
     for (const auto &s : sources) {
         sz += s.size();
