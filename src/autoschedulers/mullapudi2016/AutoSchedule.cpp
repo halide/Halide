@@ -837,20 +837,27 @@ struct AutoSchedule {
                 }
             }
 
-            for (const auto &m : f.second) {
-                const int stage = m.first;
-                const vector<string> &schedules = m.second;
-                internal_assert(!schedules.empty());
+            const int num_stages = func.updates().size() + 1;
+            for (int stage = 0; stage < num_stages; stage++) {
                 schedule_ss << "    " << fname;
                 if (stage > 0) {
-                    schedule_ss << ".update(" << std::to_string(stage - 1) << ")";
+                    schedule_ss << ".update(" << (stage - 1) << ")";
                 }
-                for (const std::string &s : schedules) {
-                    schedule_ss << "\n        ." << s;
+                auto it = f.second.find(stage);
+                if (it != f.second.end()) {
+                    const vector<string> &schedules = it->second;
+                    internal_assert(!schedules.empty());
+                    for (const std::string &s : schedules) {
+                        internal_assert(!s.empty());
+                        schedule_ss << "\n        ." << s;
+                    }
+                } else {
+                    if (stage > 0) {
+                        schedule_ss << ".unscheduled()";
+                    }
                 }
                 schedule_ss << ";\n";
             }
-
             schedule_ss << "}\n";
         }
 
@@ -3385,6 +3392,16 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
     AutoSchedule sched(env, top_order);
     debug(2) << "Generating CPU schedule...\n";
     part.generate_cpu_schedule(target, sched);
+
+    // Ensure that all update stages are "touched" so we get no warnings/errors
+    for (const auto &f : sched.func_schedules) {
+        const Function &func = get_element(sched.env, f.first);
+        const int num_update_stages = func.updates().size();
+        for (int stage = 0; stage < num_update_stages; stage++) {
+            Definition def = get_stage_definition(func, stage + 1);
+            def.schedule().touched() = true;
+        }
+    }
 
     std::ostringstream oss;
     oss << sched;
