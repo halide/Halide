@@ -439,16 +439,17 @@ private:
                 } else {
                     internal_error << "Expected to find a variable as first argument of the function call " << call->name << ".\n";
                 }
-                Expr device_interface;
+                bool requires_sync = false;
                 if (call->name == "halide_copy_to_host") {
                     int copy_to_host_id = get_func_id(buffer_name + " (copy to host)");
                     start_profiler = set_current_func(copy_to_host_id);
-                    device_interface = Call::make(type_of<const halide_device_interface_t *>(),
-                                                  Call::buffer_get_device_interface, {call->args.back()}, Call::Extern);
+                    requires_sync = false;
                 } else if (call->name == "halide_copy_to_device") {
                     int copy_to_device_id = get_func_id(buffer_name + " (copy to device)");
                     start_profiler = set_current_func(copy_to_device_id);
-                    device_interface = call->args.back();  // The last argument to the copy calls is the device_interface.
+                    requires_sync = true;
+                } else {
+                    internal_error << "Unexpected function name.\n";
                 }
                 if (start_profiler.defined()) {
                     // The copy functions are followed by an assert, which we will wrap in the timed body.
@@ -462,14 +463,17 @@ private:
                     } else if (const AssertStmt *assert = op->body.as<AssertStmt>()) {
                         copy_assert = assert;
                     }
-                    if (copy_assert && device_interface.defined()) {
-                        Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
+                    if (copy_assert) {
+                        std::vector<Stmt> steps;
+                        steps.push_back(AssertStmt::make(copy_assert->condition, copy_assert->message));
+                        if (requires_sync) {
+                            internal_assert(call->name == "halide_copy_to_device");
+                            Expr device_interface = call->args.back();  // The last argument to the copy_to_device calls is the device_interface.
+                            Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
+                            steps.push_back(sync_and_assert);
+                        }
+                        steps.push_back(set_current_func(stack.back()));
 
-                        std::vector<Stmt> steps{
-                            AssertStmt::make(copy_assert->condition, copy_assert->message),
-                            sync_and_assert,
-                            set_current_func(stack.back()),
-                        };
                         if (other.defined()) {
                             steps.push_back(mutate(other));
                         }

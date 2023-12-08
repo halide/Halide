@@ -444,10 +444,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             }
 
             const auto print_time_and_percentage = [&sstr, p](uint64_t time, size_t &cursor, bool light) {
-                if (light) {
-                    sstr.erase(2);  // Cheat a little. There is 5 characters margin anyway.
-                    sstr << "[ ";
-                }
                 float ft = time / (p->runs * 1000000.0f);
                 if (ft < 10000) {
                     sstr << " ";
@@ -480,12 +476,11 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
                 int percent = perthousand / 10;
                 sstr << percent << "." << (perthousand - percent * 10) << "%)";
-                if (light) {
-                    sstr << " ]";
-                }
-                cursor += 10;
-                while (sstr.size() < cursor) {
-                    sstr << " ";
+                if (!light) {
+                    cursor += 10;
+                    while (sstr.size() < cursor) {
+                        sstr << " ";
+                    }
                 }
             };
 
@@ -549,16 +544,18 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 const auto print_section_header = [&](const char *name, uint64_t total_time) {
                     size_t cursor = 0;
                     sstr.clear();
+                    sstr << "  ";
                     if (support_colors) {
-                        sstr << "\033[2m\033[1m";
-                        cursor += 8;
+                        sstr << "\033[90m\033[3m";
+                        cursor += 9;
                     }
-                    sstr << "  [" << name << "]";
+                    sstr << "[" << name << " ";
                     cursor += max_func_name_length + 7;
                     while (sstr.size() < cursor) {
-                        sstr << " ";
+                        sstr << ":";
                     }
                     print_time_and_percentage(total_time, cursor, true);
+                    sstr << " ::::]";
                     if (support_colors) {
                         sstr << "\033[0m";
                     }
