@@ -786,12 +786,20 @@ void bad_target_string(const std::string &target) {
                << "On this platform, the host target is: " << get_host_target().to_string() << "\n";
 }
 
+void do_check_bad(const Target &t, const std::initializer_list<Target::Feature> &v) {
+    for  (Target::Feature f : v) {
+       user_assert(!t.has_feature(f))
+            << "Target feature " << Target::feature_to_name(f)
+            << " is incompatible with the Target's architecture. (" << t << ")\n";
+    }
+}
+
 }  // namespace
 
 void Target::validate_features() const {
     // Note that the features don't have to be exhaustive, but enough to avoid obvious mistakes is good.
     if (arch == X86) {
-        static const std::vector<Feature> bad_features_x86 = {
+        do_check_bad(*this, {
             ARMDotProd,
             ARMFp16,
             ARMv7s,
@@ -807,11 +815,9 @@ void Target::validate_features() const {
             WasmSignExt,
             WasmSimd128,
             WasmThreads,
-        };
-        user_assert(!features_any_of(bad_features_x86)) << "At least one of the features for "
-                                                        << *this << " is incompatible with the Target's architecture.";
+        });
     } else if (arch == ARM) {
-        static const std::vector<Feature> bad_features_arm = {
+        do_check_bad(*this, {
             AVX,
             AVX2,
             AVX512,
@@ -832,11 +838,9 @@ void Target::validate_features() const {
             WasmSignExt,
             WasmSimd128,
             WasmThreads,
-        };
-        user_assert(!features_any_of(bad_features_arm)) << "At least one of the features for "
-                                                        << *this << " is incompatible with the Target's architecture.";
+        });
     } else if (arch == WebAssembly) {
-        static const std::vector<Feature> bad_features_wasm = {
+        do_check_bad(*this, {
             ARMDotProd,
             ARMFp16,
             ARMv7s,
@@ -864,9 +868,7 @@ void Target::validate_features() const {
             SVE,
             SVE2,
             VSX,
-        };
-        user_assert(!features_any_of(bad_features_wasm)) << "At least one of the features for "
-                                                         << *this << " is incompatible with the Target's architecture.";
+        });
     }
 }
 
