@@ -738,12 +738,52 @@ void CodeGen_Xtensa::visit(const Or *op) {
     string sb = print_expr(op->b);
 
     if (op->a.type().is_bool() && op->type.is_vector()) {
-        if (op->a.type().lanes() == 16) {
+        const int bytes_in_vector = get_target().natural_vector_size<uint8_t>();
+        if (op->a.type().lanes() == bytes_in_vector / 4) {
             print_assignment(op->type, "IVP_ORBN_2(" + sa + ", " + sb + ")");
-        } else if (op->a.type().lanes() == 32) {
+        } else if (op->a.type().lanes() == bytes_in_vector / 2) {
             print_assignment(op->type, "IVP_ORBN(" + sa + ", " + sb + ")");
-        } else if (op->a.type().lanes() == 64) {
+        } else if (op->a.type().lanes() == bytes_in_vector) {
             print_assignment(op->type, "IVP_ORB2N(" + sa + ", " + sb + ")");
+        } else {
+            internal_assert(false) << "Unhandled boolean type in the || op\n";
+        }
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_Xtensa::visit(const And *op) {
+    string sa = print_expr(op->a);
+    string sb = print_expr(op->b);
+
+    if (op->a.type().is_bool() && op->type.is_vector()) {
+        const int bytes_in_vector = get_target().natural_vector_size<uint8_t>();
+        if (op->a.type().lanes() == bytes_in_vector / 4) {
+            print_assignment(op->type, "IVP_ANDBN_2(" + sa + ", " + sb + ")");
+        } else if (op->a.type().lanes() == bytes_in_vector / 2) {
+            print_assignment(op->type, "IVP_ANDBN(" + sa + ", " + sb + ")");
+        } else if (op->a.type().lanes() == bytes_in_vector) {
+            print_assignment(op->type, "IVP_ANDB2N(" + sa + ", " + sb + ")");
+        } else {
+            internal_assert(false) << "Unhandled boolean type in the || op\n";
+        }
+    } else {
+        CodeGen_C::visit(op);
+    }
+}
+
+void CodeGen_Xtensa::visit(const Not *op) {
+    string sa = print_expr(op->a);
+
+    if (op->a.type().is_bool() && op->type.is_vector()) {
+        const int bytes_in_vector = get_target().natural_vector_size<uint8_t>();
+        if (op->a.type().lanes() == bytes_in_vector / 4) {
+            print_assignment(op->type, "IVP_NOTBN_2(" + sa + ")");
+        } else if (op->a.type().lanes() == bytes_in_vector / 2) {
+            print_assignment(op->type, "IVP_NOTBN(" + sa + ")");
+        } else if (op->a.type().lanes() == bytes_in_vector) {
+            print_assignment(op->type, "IVP_NOTB2N(" + sa + ")");
         } else {
             internal_assert(false) << "Unhandled boolean type in the || op\n";
         }

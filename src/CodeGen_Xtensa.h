@@ -51,6 +51,8 @@ protected:
     void visit(const GE *op) override;
     void visit(const GT *op) override;
     void visit(const Or *op) override;
+    void visit(const And *op) override;
+    void visit(const Not *op) override;
     void visit(const Reinterpret *op) override;
     void visit(const Store *op) override;
     void visit(const Select *op) override;
