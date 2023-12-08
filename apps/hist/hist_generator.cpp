@@ -181,6 +181,7 @@ public:
                     .compute_at(hist_rows.in(), y)
                     .vectorize(x, vec);
 
+                hist_rows.update(0).unscheduled();
                 hist_rows.in()
                     .compute_root()
                     .vectorize(x, vec)
@@ -199,7 +200,7 @@ public:
                     .parallel(x)
                     .reorder(ry, x);
 
-                cdf.compute_root();
+                cdf.compute_root().update().unscheduled();
                 output.reorder(c, x, y)
                     .bound(c, 0, 3)
                     .unroll(c)
