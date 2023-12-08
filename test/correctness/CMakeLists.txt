@@ -335,6 +335,7 @@ tests(GROUPS correctness
       vectorize_mixed_widths.cpp
       vectorize_nested.cpp
       vectorize_varying_allocation_size.cpp
+      vectorized_assert.cpp
       vectorized_gpu_allocation.cpp
       vectorized_initialization.cpp
       vectorized_load_from_vectorized_allocation.cpp

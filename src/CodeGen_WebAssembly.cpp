@@ -175,6 +175,17 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
                 }
             }
         }
+
+        // Narrowing float -> int casts should go via an integer type of the
+        // matching width (see https://github.com/halide/Halide/issues/7972)
+        if (op->value.type().is_float() &&
+            (op->type.is_int() || op->type.is_uint()) &&
+            op->type.bits() < op->value.type().bits()) {
+            Expr equiv = Cast::make(op->type.with_bits(op->value.type().bits()), op->value);
+            equiv = Cast::make(op->type, equiv);
+            codegen(equiv);
+            return;
+        }
     }
 
     CodeGen_Posix::visit(op);
@@ -322,18 +333,14 @@ string CodeGen_WebAssembly::mattrs() const {
     std::ostringstream s;
     string sep;
 
-    if (target.has_feature(Target::WasmSignExt)) {
+    if (!target.has_feature(Target::WasmMvpOnly)) {
         s << sep << "+sign-ext";
         sep = ",";
+        s << sep << "+nontrapping-fptoint";
     }
 
     if (target.has_feature(Target::WasmSimd128)) {
         s << sep << "+simd128";
-        sep = ",";
-    }
-
-    if (target.has_feature(Target::WasmSatFloatToInt)) {
-        s << sep << "+nontrapping-fptoint";
         sep = ",";
     }
 

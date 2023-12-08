@@ -9,12 +9,6 @@
 #     For correctness and performance tests this include halide build time and run time. For
 #     the tests in test/generator/ this times only the halide build time.
 
-# Halide project version
-HALIDE_VERSION_MAJOR ?= 17
-HALIDE_VERSION_MINOR ?= 0
-HALIDE_VERSION_PATCH ?= 0
-HALIDE_VERSION=$(HALIDE_VERSION_MAJOR).$(HALIDE_VERSION_MINOR).$(HALIDE_VERSION_PATCH)
-
 # Disable built-in makefile rules for all apps to avoid pointless file-system
 # scanning and general weirdness resulting from implicit rules.
 MAKEFLAGS += --no-builtin-rules
@@ -146,12 +140,6 @@ WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
 HL_TARGET ?= host
 HL_JIT_TARGET ?= host
 
-HL_VERSION_FLAGS = \
-	-DHALIDE_VERSION="$(HALIDE_VERSION)" \
-	-DHALIDE_VERSION_MAJOR=$(HALIDE_VERSION_MAJOR) \
-	-DHALIDE_VERSION_MINOR=$(HALIDE_VERSION_MINOR) \
-	-DHALIDE_VERSION_PATCH=$(HALIDE_VERSION_PATCH)
-
 X86_CXX_FLAGS=$(if $(WITH_X86), -DWITH_X86, )
 X86_LLVM_CONFIG_LIB=$(if $(WITH_X86), x86, )
 
@@ -222,7 +210,6 @@ LLVM_CXX_FLAGS_LIBCPP := $(findstring -stdlib=libc++, $(LLVM_CXX_FLAGS))
 endif
 
 CXX_FLAGS = $(CXXFLAGS) $(CXX_WARNING_FLAGS) $(RTTI_CXX_FLAGS) -Woverloaded-virtual $(FPIC) $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE
-CXX_FLAGS += $(HL_VERSION_FLAGS)
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
 CXX_FLAGS += $(ARM_CXX_FLAGS)
@@ -248,13 +235,8 @@ CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 ifneq (,$(shell which flatc))
 CXX_FLAGS += -DWITH_SERIALIZATION -I $(BUILD_DIR) -I $(shell which flatc | sed 's/bin.flatc/include/')
 # Note: if updating here, be sure to update in CMakeLists.txt as well
-HALIDE_SERIALIZATION_VERSION_MAJOR ?= 0
 HALIDE_SERIALIZATION_VERSION_MINOR ?= 1
 HALIDE_SERIALIZATION_VERSION_PATCH ?= 0
-HALIDE_SERIALIZATION_VERSION=$(HALIDE_SERIALIZATION_VERSION_MAJOR).$(HALIDE_SERIALIZATION_VERSION_MINOR).$(HALIDE_SERIALIZATION_VERSION_PATCH)
-CXX_FLAGS += -DHALIDE_SERIALIZATION_VERSION_MAJOR=$(HALIDE_SERIALIZATION_VERSION_MAJOR)
-CXX_FLAGS += -DHALIDE_SERIALIZATION_VERSION_MINOR=$(HALIDE_SERIALIZATION_VERSION_MINOR)
-CXX_FLAGS += -DHALIDE_SERIALIZATION_VERSION_PATCH=$(HALIDE_SERIALIZATION_VERSION_PATCH)
 endif
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
@@ -307,7 +289,6 @@ TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
 # In the tests, some of our expectations change depending on the llvm version
 TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
-TEST_CXX_FLAGS += $(HL_VERSION_FLAGS)
 
 # In the tests, default to exporting no symbols that aren't explicitly exported
 TEST_CXX_FLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
@@ -1118,7 +1099,6 @@ RUNTIME_CXX_FLAGS = \
     -Wno-unused-function \
     -Wvla \
     -Wsign-compare
-RUNTIME_CXX_FLAGS += $(HL_VERSION_FLAGS)
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)

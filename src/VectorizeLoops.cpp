@@ -816,7 +816,7 @@ class VectorSubs : public IRMutator {
     }
 
     Stmt visit(const AssertStmt *op) override {
-        return (op->condition.type().lanes() > 1) ? scalarize(op) : op;
+        return (mutate(op->condition).type().lanes() > 1) ? scalarize(op) : op;
     }
 
     Stmt visit(const IfThenElse *op) override {
