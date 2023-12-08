@@ -1109,7 +1109,6 @@ void IRPrinter::visit(const VectorReduce *op) {
     stream << "("
            << op->type
            << ")vector_reduce_" << op->op << "("
-           << ", "
            << op->value
            << ")";
 }

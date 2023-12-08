@@ -1386,9 +1386,8 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hexagon_dma,            ///< Enable Hexagon DMA buffers.
     halide_target_feature_embed_bitcode,          ///< Emulate clang -fembed-bitcode flag.
     halide_target_feature_enable_llvm_loop_opt,   ///< Enable loop vectorization + unrolling in LLVM. Overrides halide_target_feature_disable_llvm_loop_opt. (Ignored for non-LLVM targets.)
+    halide_target_feature_wasm_mvponly,           ///< Disable all extensions to WebAssembly codegen (including +sign-ext and +nontrapping-fptoint, which are on by default).
     halide_target_feature_wasm_simd128,           ///< Enable +simd128 instructions for WebAssembly codegen.
-    halide_target_feature_wasm_signext,           ///< Enable +sign-ext instructions for WebAssembly codegen.
-    halide_target_feature_wasm_sat_float_to_int,  ///< Enable saturating (nontrapping) float-to-int instructions for WebAssembly codegen.
     halide_target_feature_wasm_threads,           ///< Enable use of threads in WebAssembly codegen. Requires the use of a wasm runtime that provides pthread-compatible wrappers (typically, Emscripten with the -pthreads flag). Unsupported under WASI.
     halide_target_feature_wasm_bulk_memory,       ///< Enable +bulk-memory instructions for WebAssembly codegen.
     halide_target_feature_webgpu,                 ///< Enable the WebGPU runtime.

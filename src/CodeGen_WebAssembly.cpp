@@ -335,14 +335,12 @@ string CodeGen_WebAssembly::mattrs() const {
 
     std::vector<std::string_view> attrs;
 
-    if (target.has_feature(Target::WasmSignExt)) {
+    if (!target.has_feature(Target::WasmMvpOnly)) {
         attrs.emplace_back("+sign-ext");
+        attrs.emplace_back("+nontrapping-fptoint");
     }
     if (target.has_feature(Target::WasmSimd128)) {
         attrs.emplace_back("+simd128");
-    }
-    if (target.has_feature(Target::WasmSatFloatToInt)) {
-        attrs.emplace_back("+nontrapping-fptoint");
     }
     if (target.has_feature(Target::WasmThreads)) {
         // "WasmThreads" doesn't directly affect LLVM codegen,
