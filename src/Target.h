@@ -177,6 +177,7 @@ struct Target {
         for (const auto &f : initial_features) {
             set_feature(f);
         }
+        validate_features();
     }
 
     Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
@@ -357,6 +358,11 @@ struct Target {
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
+
+    /** Attempt to validate that all features set are sensible for the base Target.
+     * This is *not* guaranteed to get all invalid combinations, but is intended
+     * to catch at least the most common (e.g., setting arm-specific features on x86). */
+    void validate_features() const;
 };
 
 /** Return the target corresponding to the host machine. */
