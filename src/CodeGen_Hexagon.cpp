@@ -1801,13 +1801,14 @@ string CodeGen_Hexagon::mcpu_tune() const {
 }
 
 string CodeGen_Hexagon::mattrs() const {
-    std::stringstream attrs;
-    attrs << "+hvx-length128b";
-    attrs << ",+long-calls";
+    std::vector<std::string> attrs = {
+        "+hvx-length128b",
+        "+long-calls",
+    };
     if (target.has_feature(Target::HVX)) {
-        attrs << ",+hvxv" << isa_version;
+        attrs.push_back("+hvxv" + std::to_string(isa_version));
     }
-    return attrs.str();
+    return join_strings(attrs, ",");
 }
 
 bool CodeGen_Hexagon::use_soft_float_abi() const {
