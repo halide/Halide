@@ -320,6 +320,7 @@ tests(GROUPS correctness
       uninitialized_read.cpp
       unique_func_image.cpp
       unroll_dynamic_loop.cpp
+      unroll_loop_with_implied_constant_bounds.cpp
       unrolled_reduction.cpp
       unsafe_dedup_lets.cpp
       unsafe_promises.cpp
@@ -336,7 +337,9 @@ tests(GROUPS correctness
       vectorize_mixed_widths.cpp
       vectorize_nested.cpp
       vectorize_varying_allocation_size.cpp
+      vectorized_assert.cpp
       vectorized_gpu_allocation.cpp
+      vectorized_guard_with_if_tail.cpp
       vectorized_initialization.cpp
       vectorized_load_from_vectorized_allocation.cpp
       vectorized_reduction_bug.cpp

@@ -51,6 +51,8 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
             blur.compute_at(transpose, yo);
 
             // Vectorize computations within the strips.
+            blur.update(0)
+                .unscheduled();
             blur.update(1)
                 .reorder(x, ry)
                 .vectorize(x);

@@ -39,6 +39,8 @@ Halide::Expr align(const Halide::Expr &x, const Halide::Expr &n);
 // where N is the number of bits of the narrowed result minus one.
 Halide::Expr multiply_2x_high(const Halide::Expr &a, const Halide::Expr &b);
 
+// For a visualization of the approx_* functions and their errors, see:
+// apps/hannk/halide/docs/approx_log2_and_applications.ipynb
 // Approximate log2(x/2^q_x)*2^q.
 // q must be less than 16.
 Halide::Expr approx_log2(int q, const Halide::Expr &x, int q_x, const Halide::Type &type = Halide::Int(32));

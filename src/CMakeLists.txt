@@ -21,7 +21,8 @@ set(HEADER_FILES
     BoundaryConditions.h
     Bounds.h
     BoundsInference.h
-    BoundSmallAllocations.h
+    BoundConstantExtentLoops.h
+    BoundSmallAllocations.h    
     Buffer.h
     Callable.h
     CanonicalizeGPUVars.h
@@ -192,6 +193,7 @@ set(SOURCE_FILES
     BoundaryConditions.cpp
     Bounds.cpp
     BoundsInference.cpp
+    BoundConstantExtentLoops.cpp
     BoundSmallAllocations.cpp
     Buffer.cpp
     Callable.cpp
@@ -517,12 +519,6 @@ if (WITH_SERIALIZATION)
     target_include_directories(Halide PRIVATE "$<BUILD_INTERFACE:${fb_dir}>")
     target_link_libraries(Halide PRIVATE Halide_flatbuffers)
     target_compile_definitions(Halide PRIVATE WITH_SERIALIZATION)
-    # Note: if updating here, be sure to update in Makefile as well
-    target_compile_definitions(Halide PUBLIC
-                               HALIDE_SERIALIZATION_VERSION_MAJOR=0
-                               HALIDE_SERIALIZATION_VERSION_MINOR=1
-                               HALIDE_SERIALIZATION_VERSION_PATCH=0
-                               )
 endif ()
 
 # Enable serialization testing by intercepting JIT compilation with a serialization roundtrip;
@@ -557,8 +553,10 @@ set_target_properties(Halide PROPERTIES
                       VERSION ${Halide_VERSION}
                       SOVERSION ${Halide_SOVERSION_OVERRIDE})
 
+# Note that we (deliberately) redeclare these versions here, even though the macros
+# with identical versions are expected to be defined in source; this allows us to
+# ensure that the versions defined between all build systems are identical.
 target_compile_definitions(Halide PUBLIC 
-                           HALIDE_VERSION=${Halide_VERSION} 
                            HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
                            HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
                            HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})

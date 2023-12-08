@@ -26,6 +26,10 @@ int main(int argc, char **argv) {
     // have to pass 'true' to the atomic call to tell it to skip the check.
     h.update(2).atomic(true).vectorize(r, 16);
 
+    // These stages don't need scheduling
+    h.update(0).unscheduled();
+    h.update(1).unscheduled();
+
     Buffer<int> r0(size);
     Buffer<int> r1(size);
     h.realize({r0, r1});
