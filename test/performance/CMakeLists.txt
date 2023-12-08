@@ -7,6 +7,7 @@ endif()
 tests(GROUPS performance
       SOURCES
       async_gpu.cpp
+      blend_tail_strategies.cpp
       block_transpose.cpp
       boundary_conditions.cpp
       clamped_vector_load.cpp

@@ -180,6 +180,12 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
     case TailStrategy::RoundUp:
         out << "RoundUp";
         break;
+    case TailStrategy::ShiftInwardsAndBlend:
+        out << "ShiftInwardsAndBlend";
+        break;
+    case TailStrategy::RoundUpAndBlend:
+        out << "RoundUpAndBlend";
+        break;
     }
     return out;
 }
@@ -1103,7 +1109,6 @@ void IRPrinter::visit(const VectorReduce *op) {
     stream << "("
            << op->type
            << ")vector_reduce_" << op->op << "("
-           << ", "
            << op->value
            << ")";
 }

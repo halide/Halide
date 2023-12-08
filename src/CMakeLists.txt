@@ -543,8 +543,10 @@ set_target_properties(Halide PROPERTIES
                       VERSION ${Halide_VERSION}
                       SOVERSION ${Halide_SOVERSION_OVERRIDE})
 
+# Note that we (deliberately) redeclare these versions here, even though the macros
+# with identical versions are expected to be defined in source; this allows us to
+# ensure that the versions defined between all build systems are identical.
 target_compile_definitions(Halide PUBLIC 
-                           HALIDE_VERSION=${Halide_VERSION} 
                            HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
                            HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
                            HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
