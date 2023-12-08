@@ -810,8 +810,7 @@ void Target::validate_features() const {
                                 SVE2,
                                 VSX,
                                 WasmBulkMemory,
-                                WasmSatFloatToInt,
-                                WasmSignExt,
+                                WasmMvpOnly,
                                 WasmSimd128,
                                 WasmThreads,
                             });
@@ -833,8 +832,7 @@ void Target::validate_features() const {
                                 SSE41,
                                 VSX,
                                 WasmBulkMemory,
-                                WasmSatFloatToInt,
-                                WasmSignExt,
+                                WasmMvpOnly,
                                 WasmSimd128,
                                 WasmThreads,
                             });
