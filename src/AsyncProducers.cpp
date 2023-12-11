@@ -207,7 +207,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             // This is a counter associated with the producer side of a storage-folding semaphore. Keep it.
             return op;
-        } else if (starts_with(op->name, func + ".double_buffer.")) {
+        } else if (starts_with(op->name, func + ".ring_buffer.")) {
             // This is a counter associated with the producer side of a double buffering.
             return op;
         } else {
@@ -259,7 +259,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         Stmt body = mutate(op->body);
         if (is_no_op(body)) {
             return body;
-        } else if (!starts_with(op->name, func) && ends_with(op->name, ".double_buffer.index")) {
+        } else if (!starts_with(op->name, func) && ends_with(op->name, ".ring_buffer.index")) {
             return body;
         } else {
             return Allocate::make(op->name, op->type, op->memory_type,
@@ -467,7 +467,7 @@ class ForkAsyncProducers : public IRMutator {
         auto it = env.find(op->name);
         internal_assert(it != env.end());
         Function f = it->second;
-        if (f.schedule().async() && f.schedule().double_buffer()) {
+        if (f.schedule().async() && f.schedule().ring_buffer()) {
             body = process_body(op->name, body);
         } else {
             body = mutate(body);
@@ -668,7 +668,7 @@ class UpdateIndices : public IRMutator {
     Stmt visit(const Provide *op) override {
         if (op->name == func_name) {
             std::vector<Expr> args = op->args;
-            args.push_back(double_buffer_index);
+            args.push_back(ring_buffer_index);
             return Provide::make(op->name, op->values, args, op->predicate);
         }
         return IRMutator::visit(op);
@@ -677,18 +677,18 @@ class UpdateIndices : public IRMutator {
     Expr visit(const Call *op) override {
         if (op->call_type == Call::Halide && op->name == func_name) {
             std::vector<Expr> args = op->args;
-            args.push_back(double_buffer_index);
+            args.push_back(ring_buffer_index);
             return Call::make(op->type, op->name, args, op->call_type, op->func, op->value_index, op->image, op->param);
         }
         return IRMutator::visit(op);
     }
 
     std::string func_name;
-    Expr double_buffer_index;
+    Expr ring_buffer_index;
 
 public:
     UpdateIndices(const string &fn, Expr di)
-        : func_name(fn), double_buffer_index(std::move(di)) {
+        : func_name(fn), ring_buffer_index(std::move(di)) {
     }
 };
 
@@ -700,18 +700,18 @@ class InjectDoubleBuffering : public IRMutator {
         Stmt body = mutate(op->body);
         Function f = env.find(op->name)->second;
         Region bounds = op->bounds;
-        if (f.schedule().double_buffer()) {
+        if (f.schedule().ring_buffer()) {
             std::string enclosing_loop_var = loop_names.back();
 
             bounds.emplace_back(0, 2);
-            Expr current_index = Load::make(Int(32), f.name() + ".double_buffer.index", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+            Expr current_index = Load::make(Int(32), f.name() + ".ring_buffer.index", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
             body = UpdateIndices(op->name, current_index).mutate(body);
-            Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.double_buffer");
+            Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.ring_buffer");
             Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
             Stmt release = Evaluate::make(release_producer);
             body = Block::make(body, release);
             body = Acquire::make(sema_var, 1, body);
-            Stmt advance_index = Store::make(f.name() + ".double_buffer.index", 1 - current_index, 0, Parameter(), const_true(), ModulusRemainder());
+            Stmt advance_index = Store::make(f.name() + ".ring_buffer.index", 1 - current_index, 0, Parameter(), const_true(), ModulusRemainder());
             body = Block::make({body, advance_index});
         }
 
@@ -721,18 +721,18 @@ class InjectDoubleBuffering : public IRMutator {
     Stmt visit(const HoistedStorage *op) override {
         Stmt mutated = mutate(op->body);
         Function f = env.find(op->name)->second;
-        if (f.schedule().double_buffer()) {
-            mutated = Block::make(Store::make(f.name() + ".double_buffer.index", 0, 0, Parameter(), const_true(), ModulusRemainder()), mutated);
-            mutated = Allocate::make(f.name() + ".double_buffer.index", Int(32), MemoryType::Stack, {}, const_true(), mutated);
+        if (f.schedule().ring_buffer()) {
+            mutated = Block::make(Store::make(f.name() + ".ring_buffer.index", 0, 0, Parameter(), const_true(), ModulusRemainder()), mutated);
+            mutated = Allocate::make(f.name() + ".ring_buffer.index", Int(32), MemoryType::Stack, {}, const_true(), mutated);
         }
 
         mutated = HoistedStorage::make(op->name, mutated);
 
-        if (f.schedule().double_buffer()) {
+        if (f.schedule().ring_buffer()) {
             // Make a semaphore on the stack
             Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
                                          {2}, Call::Extern);
-            mutated = LetStmt::make(f.name() + std::string(".folding_semaphore.double_buffer"), sema_space, mutated);
+            mutated = LetStmt::make(f.name() + std::string(".folding_semaphore.ring_buffer"), sema_space, mutated);
         }
 
         return mutated;

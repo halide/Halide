@@ -217,12 +217,12 @@ private:
         vector<Expr> allocation_extents(extents.size());
         vector<int> storage_permutation;
         vector<Stmt> bound_asserts;
-        bool is_double_buffered = false;
+        bool is_ring_buffered = false;
         {
             auto iter = env.find(op->name);
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
             Function f = iter->second.first;
-            is_double_buffered = f.schedule().double_buffer();
+            is_ring_buffered = f.schedule().ring_buffer();
             const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
             const vector<string> &args = f.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
@@ -253,7 +253,7 @@ private:
                 }
                 internal_assert(storage_permutation.size() == i + 1);
             }
-            if (is_double_buffered) {
+            if (is_ring_buffered) {
                 storage_permutation.push_back(storage_dims.size());
                 allocation_extents[storage_dims.size()] = extents[storage_dims.size()];
             }

@@ -1,7 +1,7 @@
 // Halide tutorial lesson 24: Async execution
 
 // This lesson demonstrates how to asynchronously execute a function
-// using scheduling directives 'async' and 'double_buffer'.
+// using scheduling directives 'async' and 'ring_buffer'.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_24*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_24 -std=c++17
@@ -160,19 +160,19 @@ int main(int argc, char **argv) {
         // A more direct way to express this would be to hoist storage of `producer` to ouside of the loop
         // `c` over planes, double its size and add necessary indices to flip between two planes.
         // The first part can be achieved with `hoist_storage` directive and the rest is done with 
-        // `double_buffer`.
+        // `ring_buffer`.
         producer.compute_root()
             .async()
             .compute_at(consumer, c)
             .hoist_storage(consumer, Var::outermost())
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         consumer.realize({128, 128, 4});
     }
 
     {
-        // The advantage of the `hoist_storage` + `double_buffer` approach is that it can be applied to
+        // The advantage of the `hoist_storage` + `ring_buffer` approach is that it can be applied to
         // fairly arbitrary loop splits and tilings. For example, in the following schedule isntead of 
         // double buffering over whole planes, we double buffer over sub-regions or tiles of the planes.
         Func producer("producer"), consumer("consumer");
@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
             .async()
             .compute_at(consumer, xo)
             .hoist_storage(consumer, Var::outermost())
-            .double_buffer();
+            .ring_buffer();
 
         consumer.realize({128, 128, 4});
     }

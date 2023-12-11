@@ -521,7 +521,7 @@ table FuncSchedule {
     memory_type: MemoryType = Auto;
     memoized: bool;
     async: bool;
-    double_buffer: bool;
+    ring_buffer: bool;
     memoize_eviction_key: Expr;
 }
 

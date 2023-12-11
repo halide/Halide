@@ -13,8 +13,8 @@ int main(int argc, char **argv) {
 
     g.compute_at(h, y);
 
-    // double_buffer() requires an explicit hoist_storage().
-    f.compute_root().double_buffer();
+    // ring_buffer() requires an explicit hoist_storage().
+    f.compute_root().ring_buffer();
 
     h.realize({10, 10});
 

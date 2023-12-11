@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
             // .hoist_storage_root()
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         Buffer<int> out = consumer.realize({128, 128});
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
             // .hoist_storage_root()
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         interm1
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
             // .hoist_storage_root()
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         interm1
@@ -135,12 +135,12 @@ int main(int argc, char **argv) {
         producer1
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer()
+            .ring_buffer()
             .async();
         producer2
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         Buffer<int> out = consumer.realize({128, 128});
@@ -171,13 +171,13 @@ int main(int argc, char **argv) {
         producer1
             .compute_at(consumer, xo)
             .hoist_storage_root()
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         producer2
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         Buffer<int> out = consumer.realize({128, 128});
@@ -216,13 +216,13 @@ int main(int argc, char **argv) {
         producer1
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         producer2
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         Buffer<int> out = consumer.realize({128, 128});
@@ -265,19 +265,19 @@ int main(int argc, char **argv) {
         producer1
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         producer2
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         producer3
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer()
+            .ring_buffer()
             .async();
 
         Buffer<int> out = consumer.realize({128, 128});
@@ -320,17 +320,17 @@ int main(int argc, char **argv) {
         producer1
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer();
+            .ring_buffer();
 
         producer2
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer();
+            .ring_buffer();
 
         producer3
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .double_buffer();
+            .ring_buffer();
 
         Buffer<int> out = consumer.realize({128, 128});
 

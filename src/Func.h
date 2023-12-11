@@ -2285,7 +2285,7 @@ public:
      * double buffering. This is especially useful in combination
      * with the \ref Func::async.
      */
-    Func &double_buffer();
+    Func &ring_buffer();
 
     /** Bound the extent of a Func's storage, but not extent of its
      * compute. This can be useful for forcing a function's allocation

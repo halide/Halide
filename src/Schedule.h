@@ -624,8 +624,8 @@ public:
     bool &async();
     bool async() const;
 
-    bool &double_buffer();
-    bool double_buffer() const;
+    bool &ring_buffer();
+    bool ring_buffer() const;
 
     /** The list and order of dimensions used to store this
      * function. The first dimension in the vector corresponds to the

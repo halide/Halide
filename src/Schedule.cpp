@@ -241,7 +241,7 @@ struct FuncScheduleContents {
     MemoryType memory_type = MemoryType::Auto;
     bool memoized = false;
     bool async = false;
-    bool double_buffer = false;
+    bool ring_buffer = false;
     Expr memoize_eviction_key;
 
     FuncScheduleContents()
@@ -363,7 +363,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memoized = contents->memoized;
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
-    copy.contents->double_buffer = contents->double_buffer;
+    copy.contents->ring_buffer = contents->ring_buffer;
 
     // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
@@ -407,12 +407,12 @@ bool FuncSchedule::async() const {
     return contents->async;
 }
 
-bool &FuncSchedule::double_buffer() {
-    return contents->double_buffer;
+bool &FuncSchedule::ring_buffer() {
+    return contents->ring_buffer;
 }
 
-bool FuncSchedule::double_buffer() const {
-    return contents->double_buffer;
+bool FuncSchedule::ring_buffer() const {
+    return contents->ring_buffer;
 }
 
 std::vector<StorageDim> &FuncSchedule::storage_dims() {

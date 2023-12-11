@@ -2398,9 +2398,9 @@ Func &Func::async() {
     return *this;
 }
 
-Func &Func::double_buffer() {
+Func &Func::ring_buffer() {
     invalidate_cache();
-    func.schedule().double_buffer() = true;
+    func.schedule().ring_buffer() = true;
     return *this;
 }
 
