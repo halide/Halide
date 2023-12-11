@@ -212,10 +212,11 @@ int main(int argc, char **argv) {
         interm2
             .compute_at(consumer, xo);
 
+        // Extents for ring_buffer() below are random to test various cases.
         producer1
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .ring_buffer(2)
+            .ring_buffer(5)
             .async();
 
         producer2
@@ -261,6 +262,7 @@ int main(int argc, char **argv) {
             // Let's hoist storage of this consumer to make it more complicated.
             .hoist_storage(consumer, yo);
 
+        // Extents for ring_buffer() below are random to test various cases.
         producer1
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
@@ -270,13 +272,13 @@ int main(int argc, char **argv) {
         producer2
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .ring_buffer(2)
+            .ring_buffer(3)
             .async();
 
         producer3
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .ring_buffer(2)
+            .ring_buffer(4)
             .async();
 
         Buffer<int> out = consumer.realize({128, 128});
@@ -316,10 +318,11 @@ int main(int argc, char **argv) {
             // Let's hoist storage of this consumer to make it more complicated.
             .hoist_storage(consumer, yo);
 
+        // Extents for ring_buffer() below are random to test various cases.
         producer1
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .ring_buffer(2);
+            .ring_buffer(3);
 
         producer2
             .compute_at(consumer, xo)
@@ -329,7 +332,7 @@ int main(int argc, char **argv) {
         producer3
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            .ring_buffer(2);
+            .ring_buffer(4);
 
         Buffer<int> out = consumer.realize({128, 128});
 

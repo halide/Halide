@@ -703,7 +703,7 @@ class InjectDoubleBuffering : public IRMutator {
         if (f.schedule().ring_buffer().defined()) {
             std::string enclosing_loop_var = loop_names.back();
 
-            bounds.emplace_back(0, 2);
+            bounds.emplace_back(0, f.schedule().ring_buffer());
             Expr current_index = Load::make(Int(32), f.name() + ".ring_buffer.index", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
             body = UpdateIndices(op->name, current_index).mutate(body);
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.ring_buffer");
@@ -711,7 +711,7 @@ class InjectDoubleBuffering : public IRMutator {
             Stmt release = Evaluate::make(release_producer);
             body = Block::make(body, release);
             body = Acquire::make(sema_var, 1, body);
-            Stmt advance_index = Store::make(f.name() + ".ring_buffer.index", 1 - current_index, 0, Parameter(), const_true(), ModulusRemainder());
+            Stmt advance_index = Store::make(f.name() + ".ring_buffer.index", (current_index + 1) % f.schedule().ring_buffer(), 0, Parameter(), const_true(), ModulusRemainder());
             body = Block::make({body, advance_index});
         }
 
