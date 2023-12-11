@@ -467,7 +467,7 @@ class ForkAsyncProducers : public IRMutator {
         auto it = env.find(op->name);
         internal_assert(it != env.end());
         Function f = it->second;
-        if (f.schedule().async() && f.schedule().ring_buffer()) {
+        if (f.schedule().async() && f.schedule().ring_buffer().defined()) {
             body = process_body(op->name, body);
         } else {
             body = mutate(body);
@@ -700,7 +700,7 @@ class InjectDoubleBuffering : public IRMutator {
         Stmt body = mutate(op->body);
         Function f = env.find(op->name)->second;
         Region bounds = op->bounds;
-        if (f.schedule().ring_buffer()) {
+        if (f.schedule().ring_buffer().defined()) {
             std::string enclosing_loop_var = loop_names.back();
 
             bounds.emplace_back(0, 2);
@@ -721,14 +721,14 @@ class InjectDoubleBuffering : public IRMutator {
     Stmt visit(const HoistedStorage *op) override {
         Stmt mutated = mutate(op->body);
         Function f = env.find(op->name)->second;
-        if (f.schedule().ring_buffer()) {
+        if (f.schedule().ring_buffer().defined()) {
             mutated = Block::make(Store::make(f.name() + ".ring_buffer.index", 0, 0, Parameter(), const_true(), ModulusRemainder()), mutated);
             mutated = Allocate::make(f.name() + ".ring_buffer.index", Int(32), MemoryType::Stack, {}, const_true(), mutated);
         }
 
         mutated = HoistedStorage::make(op->name, mutated);
 
-        if (f.schedule().ring_buffer()) {
+        if (f.schedule().ring_buffer().defined()) {
             // Make a semaphore on the stack
             Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
                                          {2}, Call::Extern);

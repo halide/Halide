@@ -2398,9 +2398,9 @@ Func &Func::async() {
     return *this;
 }
 
-Func &Func::ring_buffer() {
+Func &Func::ring_buffer(Expr extent) {
     invalidate_cache();
-    func.schedule().ring_buffer() = true;
+    func.schedule().ring_buffer() = extent;
     return *this;
 }
 

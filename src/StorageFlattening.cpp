@@ -222,7 +222,7 @@ private:
             auto iter = env.find(op->name);
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
             Function f = iter->second.first;
-            is_ring_buffered = f.schedule().ring_buffer();
+            is_ring_buffered = f.schedule().ring_buffer().defined();
             const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
             const vector<string> &args = f.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {

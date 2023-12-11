@@ -165,7 +165,7 @@ int main(int argc, char **argv) {
             .async()
             .compute_at(consumer, c)
             .hoist_storage(consumer, Var::outermost())
-            .ring_buffer()
+            .ring_buffer(2)
             .async();
 
         consumer.realize({128, 128, 4});
@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
             .async()
             .compute_at(consumer, xo)
             .hoist_storage(consumer, Var::outermost())
-            .ring_buffer();
+            .ring_buffer(2);
 
         consumer.realize({128, 128, 4});
     }

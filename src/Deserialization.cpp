@@ -1017,7 +1017,7 @@ FuncSchedule Deserializer::deserialize_func_schedule(const Serialize::FuncSchedu
     const auto memory_type = deserialize_memory_type(func_schedule->memory_type());
     const auto memoized = func_schedule->memoized();
     const auto async = func_schedule->async();
-    const auto ring_buffer = func_schedule->ring_buffer();
+    const auto ring_buffer = deserialize_expr(func_schedule->ring_buffer_type(), func_schedule->ring_buffer());
     const auto memoize_eviction_key = deserialize_expr(func_schedule->memoize_eviction_key_type(), func_schedule->memoize_eviction_key());
     auto hl_func_schedule = FuncSchedule();
     hl_func_schedule.store_level() = store_level;

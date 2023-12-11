@@ -2249,7 +2249,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
         return true;
     }
 
-    if (f.schedule().ring_buffer() && store_at == hoist_storage_at) {
+    if (f.schedule().ring_buffer().defined() && store_at == hoist_storage_at) {
         user_error << "Func \"" << f.name() << "\" is scheduled ring_buffer(), but has matching store_at and hoist_storage levels.\n";
     }
 

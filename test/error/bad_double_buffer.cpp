@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     g.compute_at(h, y);
 
     // ring_buffer() requires an explicit hoist_storage().
-    f.compute_root().ring_buffer();
+    f.compute_root().ring_buffer(2);
 
     h.realize({10, 10});
 

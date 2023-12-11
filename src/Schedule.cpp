@@ -241,7 +241,7 @@ struct FuncScheduleContents {
     MemoryType memory_type = MemoryType::Auto;
     bool memoized = false;
     bool async = false;
-    bool ring_buffer = false;
+    Expr ring_buffer;
     Expr memoize_eviction_key;
 
     FuncScheduleContents()
@@ -407,11 +407,11 @@ bool FuncSchedule::async() const {
     return contents->async;
 }
 
-bool &FuncSchedule::ring_buffer() {
+Expr &FuncSchedule::ring_buffer() {
     return contents->ring_buffer;
 }
 
-bool FuncSchedule::ring_buffer() const {
+Expr FuncSchedule::ring_buffer() const {
     return contents->ring_buffer;
 }
 
