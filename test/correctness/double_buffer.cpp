@@ -360,15 +360,13 @@ int main(int argc, char **argv) {
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
             .ring_buffer(2)
-            .async()
-            ;
+            .async();
 
         producer2
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
             .ring_buffer(2)
-            .async()
-            ;
+            .async();
 
         Buffer<int> out = consumer.realize({128, 128});
 

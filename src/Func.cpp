@@ -2400,7 +2400,7 @@ Func &Func::async() {
 
 Func &Func::ring_buffer(Expr extent) {
     invalidate_cache();
-    func.schedule().ring_buffer() = extent;
+    func.schedule().ring_buffer() = std::move(extent);
     return *this;
 }
 
