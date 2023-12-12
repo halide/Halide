@@ -226,7 +226,6 @@ void define_enums(py::module &m) {
         .value("Auto", Partition::Auto)
         .value("Never", Partition::Never)
         .value("Always", Partition::Always);
-
 }
 
 }  // namespace PythonBindings
