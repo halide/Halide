@@ -213,6 +213,7 @@ void define_func(py::module &m) {
             .def("store_at", (Func & (Func::*)(LoopLevel)) & Func::store_at, py::arg("loop_level"))
 
             .def("async_", &Func::async)
+            .def("ring_buffer", &Func::ring_buffer)
             .def("memoize", &Func::memoize)
             .def("compute_inline", &Func::compute_inline)
             .def("compute_root", &Func::compute_root)
