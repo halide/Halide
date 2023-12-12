@@ -136,12 +136,52 @@ int main(int argc, char **argv) {
         producer
             .async()
             .compute_at(consumer, c)
+            // fold_storage requires store_at which is separate from compute_at.
             .store_at(consumer, Var::outermost())
             // Explicit fold_storage is required here, because otherwise Halide will infer that only
             // one plane of `producer` is necessary for `consumer`, but for the purposes of this
             // example we want at least 2.
             .fold_storage(c, 2);
 
+        // The high-level structure of the generated code will be:
+        // {
+        //     allocate producer1[extent.x, extent.y, 2]
+        //     // In this case there are two semaphores, because producer can run ahead, so we need
+        //     // to track how much was consumed and produced separately.
+        //     // This semaphore indicates how much producer has produced.
+        //     producer1.semaphore = 0
+        //     // This semaphore indicates how much `space` for producer is available.
+        //     producer1.folding_semaphore = 2
+        //     thread #1 {
+        //         loop over c {
+        //             // Acquire a semaphore or block until the space to produce to is available.
+        //             // The semaphore is released by consumer thread, when the data was fully
+        //             // consumed.
+        //             acquire(producer1.folding_semaphore, 1)
+        //             produce producer1 {
+        //                 // Produce the next plane of the producer1 and store it at index c % 2.
+        //                 producer1[_, _, c % 2] = ...
+        //                 // Release a semaphore to indicate that plane was produced, consumer will
+        //                 // acquire this semaphore in the other thread.
+        //                 release(producer1.semaphore)
+        //             }
+        //         }
+        //     }
+        //     thread #2 {
+        //         loop over c {
+        //             // Acquire a semaphore or block until the data from producer is ready.
+        //             // The semaphore is released by producer thread, when the data was fully
+        //             // produced.
+        //             acquire(producer1.semaphore, 1)
+        //             consume producer1 {
+        //                 consumer[_, _, c] = <computations which use producer[_, _, c % 2]>
+        //                 // Release a semaphore to indicate that plane was consumed, producer will
+        //                 // acquire this semaphore in the other thread.
+        //                 release(producer1.folding_semaphore)
+        //             }
+        //         }
+        //     }
+        // }
         consumer.realize({128, 128, 4});
     }
 
@@ -167,6 +207,7 @@ int main(int argc, char **argv) {
             .hoist_storage(consumer, Var::outermost())
             .ring_buffer(2);
 
+        // The high-level structure of the generated code will be very similar to the previous example.
         consumer.realize({128, 128, 4});
     }
 
@@ -188,6 +229,7 @@ int main(int argc, char **argv) {
             .hoist_storage(consumer, Var::outermost())
             .ring_buffer(2);
 
+        // The high-level structure of the generated code will be very similar to the previous example.
         consumer.realize({128, 128, 4});
     }
 
