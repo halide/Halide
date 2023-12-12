@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 140
+#if LLVM_VERSION >= 160
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 14.0 or newer"
+#error "Compiling Halide requires LLVM 16.0 or newer"
 #endif
 
 // No msvc warnings from llvm headers please
@@ -31,7 +31,7 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/StringMap.h>
 #include <llvm/ADT/StringRef.h>
-#if LLVM_VERSION < 170
+#if !(LLVM_VERSION >= 170)
 #include <llvm/ADT/Triple.h>
 #endif
 #include <llvm/ADT/Twine.h>
@@ -92,7 +92,7 @@
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/AlwaysInliner.h>
 #include <llvm/Transforms/IPO/Inliner.h>
-#if LLVM_VERSION < 170
+#if !(LLVM_VERSION >= 170)
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #endif
 #include <llvm/Transforms/Instrumentation.h>
