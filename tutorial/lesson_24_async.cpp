@@ -131,9 +131,9 @@ int main(int argc, char **argv) {
         // In this example the planes are processed separately, so producer can run ahead 
         // and start producing plane `c + 1`, while `consumer` consumes already produced plane `c`.
         // One way to express it with Halide schedule is very similar to how sliding window schedules
-        // are expressed (see lesson_8 for details). There are indeed a lot of commonalities between two
+        // are expressed (see lesson_8 for details). There are indeed a lot of commonalities between the two
         // because both of them are relying on a circular buffer as underlying data structure.
-        producer.compute_root()
+        producer
             .async()
             .compute_at(consumer, c)
             .store_at(consumer, Var::outermost())
@@ -158,22 +158,21 @@ int main(int argc, char **argv) {
         // As mentioned in the previous example, the planes are processed separately, so producer can run
         // ahead and start producing plane `c + 1`, while `consumer` consumes already produced plane `c`.
         // A more direct way to express this would be to hoist storage of `producer` to ouside of the loop
-        // `c` over planes, double its size and add necessary indices to flip between two planes.
+        // `c` over planes, double its size and add necessary indices to flip the  planes.
         // The first part can be achieved with `hoist_storage` directive and the rest is done with 
         // `ring_buffer`.
-        producer.compute_root()
+        producer
             .async()
             .compute_at(consumer, c)
             .hoist_storage(consumer, Var::outermost())
-            .ring_buffer(2)
-            .async();
+            .ring_buffer(2);
 
         consumer.realize({128, 128, 4});
     }
 
     {
         // The advantage of the `hoist_storage` + `ring_buffer` approach is that it can be applied to
-        // fairly arbitrary loop splits and tilings. For example, in the following schedule isntead of 
+        // fairly arbitrary loop splits and tilings. For example, in the following schedule instead of 
         // double buffering over whole planes, we double buffer over sub-regions or tiles of the planes.
         Func producer("producer"), consumer("consumer");
 
@@ -183,7 +182,7 @@ int main(int argc, char **argv) {
         consumer.compute_root()
             .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::Auto);
 
-        producer.compute_root()
+        producer
             .async()
             .compute_at(consumer, xo)
             .hoist_storage(consumer, Var::outermost())
