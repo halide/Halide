@@ -200,7 +200,7 @@ int main(int argc, char **argv) {
         // A more direct way to express this would be to hoist storage of `producer` to ouside of the loop
         // `c` over planes, double its size and add necessary indices to flip the  planes.
         // The first part can be achieved with `hoist_storage` directive and the rest is done with 
-        // `ring_buffer`.
+        // `ring_buffer`. This schedule is rougly equivalent to the schedule in the previous example.
         producer
             .async()
             .compute_at(consumer, c)
@@ -215,6 +215,8 @@ int main(int argc, char **argv) {
         // The advantage of the `hoist_storage` + `ring_buffer` approach is that it can be applied to
         // fairly arbitrary loop splits and tilings. For example, in the following schedule instead of 
         // double buffering over whole planes, we double buffer over sub-regions or tiles of the planes.
+        // This is not possible to achieve with fold_storage, because it works over the *storage*
+        // dimensions of the function and not the loop splits.
         Func producer("producer"), consumer("consumer");
 
         producer(x, y, c) = (x + y) * (c + 1);
@@ -229,7 +231,7 @@ int main(int argc, char **argv) {
             .hoist_storage(consumer, Var::outermost())
             .ring_buffer(2);
 
-        // The high-level structure of the generated code will be very similar to the previous example.
+        // The high-level structure of the generated code will be similar to the previous example.
         consumer.realize({128, 128, 4});
     }
 

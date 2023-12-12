@@ -55,7 +55,6 @@ int main(int argc, char **argv) {
         producer
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            // .hoist_storage_root()
             .ring_buffer(2)
             .async();
 
@@ -96,7 +95,6 @@ int main(int argc, char **argv) {
         producer
             .compute_at(consumer, xo)
             .hoist_storage(consumer, yo)
-            // .hoist_storage_root()
             .ring_buffer(2)
             .async();
 
@@ -338,6 +336,44 @@ int main(int argc, char **argv) {
 
         out.for_each_element([&](int x, int y) {
             int correct = 4 * (x + y) + ((x - 1) * (y - 1)) + ((x + 1) * (y + 1));
+            if (out(x, y) != correct) {
+                printf("out(%d, %d) = %d instead of %d\n",
+                       x, y, out(x, y), correct);
+                exit(1);
+            }
+        });
+    }
+
+    // Chain of two async producers and consumer.
+    {
+        Func producer1("producer1"), producer2("producer2"), consumer("consumer");
+        Var x, y, xo, yo, xi, yi;
+
+        producer1(x, y) = x + y;
+        producer2(x, y) = producer1(x, y) + x * y;
+        consumer(x, y) = producer2(x, y) * 2;
+
+        consumer
+            .compute_root()
+            .tile(x, y, xo, yo, xi, yi, 16, 16, TailStrategy::RoundUp);
+        producer1
+            .compute_at(consumer, xo)
+            .hoist_storage(consumer, yo)
+            .ring_buffer(2)
+            .async()
+            ;
+
+        producer2
+            .compute_at(consumer, xo)
+            .hoist_storage(consumer, yo)
+            .ring_buffer(2)
+            .async()
+            ;
+
+        Buffer<int> out = consumer.realize({128, 128});
+
+        out.for_each_element([&](int x, int y) {
+            int correct = 2 * (x + y + x * y);
             if (out(x, y) != correct) {
                 printf("out(%d, %d) = %d instead of %d\n",
                        x, y, out(x, y), correct);
