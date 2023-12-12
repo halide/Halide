@@ -885,6 +885,15 @@ extern int halide_device_release_crop(void *user_context,
  * should rarely be necessary, except maybe for profiling. */
 extern int halide_device_sync(void *user_context, struct halide_buffer_t *buf);
 
+/**
+ * Wait for current GPU operations to complete. Calling this explicitly
+ * should rarely be necessary, except maybe for profiling.
+ * This variation of the synchronizing is useful when a synchronization is desirable
+ * without specifying any buffer to synchronize on.
+ * Calling this with a null device_interface is always illegal.
+ */
+extern int halide_device_sync_global(void *user_context, const struct halide_device_interface_t *device_interface);
+
 /** Allocate device memory to back a halide_buffer_t. */
 extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
                                 const struct halide_device_interface_t *device_interface);

@@ -21,7 +21,8 @@ set(HEADER_FILES
     BoundaryConditions.h
     Bounds.h
     BoundsInference.h
-    BoundSmallAllocations.h
+    BoundConstantExtentLoops.h
+    BoundSmallAllocations.h    
     Buffer.h
     Callable.h
     CanonicalizeGPUVars.h
@@ -189,6 +190,7 @@ set(SOURCE_FILES
     BoundaryConditions.cpp
     Bounds.cpp
     BoundsInference.cpp
+    BoundConstantExtentLoops.cpp
     BoundSmallAllocations.cpp
     Buffer.cpp
     Callable.cpp

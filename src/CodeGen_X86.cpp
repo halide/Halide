@@ -987,49 +987,54 @@ string CodeGen_X86::mcpu_tune() const {
 // FIXME: we should lower everything here, instead of relying
 //        that -mcpu= (`mcpu_target()`) implies/sets features for us.
 string CodeGen_X86::mattrs() const {
-    string features;
-    string separator;
+    std::vector<std::string_view> attrs;
     if (target.has_feature(Target::FMA)) {
-        features += "+fma";
-        separator = ",";
+        attrs.emplace_back("+fma");
     }
     if (target.has_feature(Target::FMA4)) {
-        features += separator + "+fma4";
-        separator = ",";
+        attrs.emplace_back("+fma4");
     }
     if (target.has_feature(Target::F16C)) {
-        features += separator + "+f16c";
-        separator = ",";
+        attrs.emplace_back("+f16c");
     }
     if (target.has_feature(Target::AVX512) ||
         target.has_feature(Target::AVX512_KNL) ||
         target.has_feature(Target::AVX512_Skylake) ||
         target.has_feature(Target::AVX512_Cannonlake)) {
-        features += separator + "+avx512f,+avx512cd";
-        separator = ",";
+        attrs.emplace_back("+avx512f");
+        attrs.emplace_back("+avx512cd");
         if (target.has_feature(Target::AVX512_KNL)) {
-            features += ",+avx512pf,+avx512er";
+            attrs.emplace_back("+avx512pf");
+            attrs.emplace_back("+avx512er");
         }
         if (target.has_feature(Target::AVX512_Skylake) ||
             target.has_feature(Target::AVX512_Cannonlake)) {
-            features += ",+avx512vl,+avx512bw,+avx512dq";
+            attrs.emplace_back("+avx512vl");
+            attrs.emplace_back("+avx512bw");
+            attrs.emplace_back("+avx512dq");
         }
         if (target.has_feature(Target::AVX512_Cannonlake)) {
-            features += ",+avx512ifma,+avx512vbmi";
+            attrs.emplace_back("+avx512ifma");
+            attrs.emplace_back("+avx512vbmi");
         }
         if (target.has_feature(Target::AVX512_Zen4)) {
-            features += ",+avx512bf16,+avx512vnni,+avx512bitalg,+avx512vbmi2";
+            attrs.emplace_back("+avx512bf16");
+            attrs.emplace_back("+avx512vnni");
+            attrs.emplace_back("+avx512bitalg");
+            attrs.emplace_back("+avx512vbmi2");
         }
         if (target.has_feature(Target::AVX512_SapphireRapids)) {
-            features += ",+avxvnni,+amx-int8,+amx-bf16";
+            attrs.emplace_back("+avxvnni");
+            attrs.emplace_back("+amx-int8");
+            attrs.emplace_back("+amx-bf16");
         }
     }
 #if LLVM_VERSION >= 180
     if (gather_might_be_slow(target)) {
-        features += ",+prefer-no-gather";
+        attrs.push_back("+prefer-no-gather");
     }
 #endif
-    return features;
+    return join_strings(attrs, ",");
 }
 
 bool CodeGen_X86::use_soft_float_abi() const {

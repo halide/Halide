@@ -785,7 +785,89 @@ void bad_target_string(const std::string &target) {
                << "On this platform, the host target is: " << get_host_target().to_string() << "\n";
 }
 
+void do_check_bad(const Target &t, const std::initializer_list<Target::Feature> &v) {
+    for (Target::Feature f : v) {
+        user_assert(!t.has_feature(f))
+            << "Target feature " << Target::feature_to_name(f)
+            << " is incompatible with the Target's architecture. (" << t << ")\n";
+    }
+}
+
 }  // namespace
+
+void Target::validate_features() const {
+    // Note that the features don't have to be exhaustive, but enough to avoid obvious mistakes is good.
+    if (arch == X86) {
+        do_check_bad(*this, {
+                                ARMDotProd,
+                                ARMFp16,
+                                ARMv7s,
+                                ARMv81a,
+                                NoNEON,
+                                POWER_ARCH_2_07,
+                                RVV,
+                                SVE,
+                                SVE2,
+                                VSX,
+                                WasmBulkMemory,
+                                WasmMvpOnly,
+                                WasmSimd128,
+                                WasmThreads,
+                            });
+    } else if (arch == ARM) {
+        do_check_bad(*this, {
+                                AVX,
+                                AVX2,
+                                AVX512,
+                                AVX512_Cannonlake,
+                                AVX512_KNL,
+                                AVX512_SapphireRapids,
+                                AVX512_Skylake,
+                                AVX512_Zen4,
+                                F16C,
+                                FMA,
+                                FMA4,
+                                POWER_ARCH_2_07,
+                                RVV,
+                                SSE41,
+                                VSX,
+                                WasmBulkMemory,
+                                WasmMvpOnly,
+                                WasmSimd128,
+                                WasmThreads,
+                            });
+    } else if (arch == WebAssembly) {
+        do_check_bad(*this, {
+                                ARMDotProd,
+                                ARMFp16,
+                                ARMv7s,
+                                ARMv81a,
+                                AVX,
+                                AVX2,
+                                AVX512,
+                                AVX512_Cannonlake,
+                                AVX512_KNL,
+                                AVX512_SapphireRapids,
+                                AVX512_Skylake,
+                                AVX512_Zen4,
+                                F16C,
+                                FMA,
+                                FMA4,
+                                HVX_128,
+                                HVX_128,
+                                HVX_v62,
+                                HVX_v65,
+                                HVX_v66,
+                                NoNEON,
+                                POWER_ARCH_2_07,
+                                RVV,
+                                SSE41,
+                                SVE,
+                                SVE2,
+                                VSX,
+                            });
+    }
+}
 
 Target::Target(const std::string &target) {
     Target host = get_host_target();
@@ -798,6 +880,7 @@ Target::Target(const std::string &target) {
             bad_target_string(target);
         }
     }
+    validate_features();
 }
 
 Target::Target(const char *s)

@@ -17,6 +17,7 @@
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -184,6 +185,29 @@ std::string replace_all(const std::string &str, const std::string &find, const s
 
 /** Split the source string using 'delim' as the divider. */
 std::vector<std::string> split_string(const std::string &source, const std::string &delim);
+
+/** Join the source vector using 'delim' as the divider. */
+template<typename T>
+std::string join_strings(const std::vector<T> &sources, const std::string &delim) {
+    size_t sz = 0;
+    if (!sources.empty()) {
+        sz += delim.size() * (sources.size() - 1);
+    }
+    for (const auto &s : sources) {
+        sz += s.size();
+    }
+    std::string result;
+    result.reserve(sz);
+    bool need_delim = false;
+    for (const auto &s : sources) {
+        if (need_delim) {
+            result += delim;
+        }
+        result += s;
+        need_delim = true;
+    }
+    return result;
+}
 
 /** Perform a left fold of a vector. Returns a default-constructed
  * vector element if the vector is empty. Similar to std::accumulate
