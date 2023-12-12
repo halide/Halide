@@ -31,7 +31,7 @@
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/StringMap.h>
 #include <llvm/ADT/StringRef.h>
-#if !(LLVM_VERSION >= 170)
+#if LLVM_VERSION < 170
 #include <llvm/ADT/Triple.h>
 #endif
 #include <llvm/ADT/Twine.h>
@@ -92,7 +92,7 @@
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/AlwaysInliner.h>
 #include <llvm/Transforms/IPO/Inliner.h>
-#if !(LLVM_VERSION >= 170)
+#if LLVM_VERSION < 170
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #endif
 #include <llvm/Transforms/Instrumentation.h>

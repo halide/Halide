@@ -143,7 +143,7 @@ CodeGen_RISCV::CodeGen_RISCV(const Target &t)
     user_assert(native_vector_bits() > 0) << "No vector_bits was specified for RISCV codegen; "
                                           << "this is almost certainly a mistake. You should add -rvv-vector_bits_N "
                                           << "to your Target string, where N is the SIMD width in bits (e.g. 128).";
-#if !(LLVM_VERSION >= 170)
+#if LLVM_VERSION < 170
     user_warning << "RISCV codegen is only tested with LLVM 17.0 or later; it is unlikely to work well with earlier versions of LLVM.\n";
 #endif
 }
