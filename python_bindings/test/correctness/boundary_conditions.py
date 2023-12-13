@@ -4,19 +4,22 @@ test_exterior = 42
 test_min = -25
 test_extent = 100
 
-x, y = hl.Var(), hl.Var()
+x, y = hl.vars("x y")
 
 
 def expect_eq(actual, expected):
     assert expected == actual, "Failed: expected %d, actual %d" % (expected, actual)
 
 
-def schedule_test(f, vector_width, target):
+def schedule_test(f, vector_width, target, partition_policy):
     if vector_width != 1:
         f.vectorize(x, vector_width)
 
+    f.partition(x, partition_policy);
+    f.partition(y, partition_policy);
+
     if target.has_gpu_feature() and vector_width <= 16:
-        xo, yo, xi, yi = hl.Var(), hl.Var(), hl.Var(), hl.Var()
+        xo, yo, xi, yi = hl.vars("xo yo xi yi")
         f.gpu_tile(x, y, xo, yo, xi, yi, 2, 2)
 
 
@@ -30,11 +33,12 @@ def realize_and_check(
     test_extent_y,
     vector_width,
     target,
+    partition_policy,
 ):
     result = hl.Buffer(hl.UInt(8), [test_extent_x, test_extent_y])
     result.set_min([test_min_x, test_min_y])
     f2 = hl.lambda_func(x, y, f[x, y])
-    schedule_test(f2, vector_width, target)
+    schedule_test(f2, vector_width, target, partition_policy)
     f2.realize(result, target)
     result.copy_to_host()
     for r in range(test_min_y, test_min_y + test_extent_y):
@@ -91,8 +95,8 @@ def check_mirror_interior(input, result, c, r):
     expect_eq(result[c, r], input[mapped_x, mapped_y])
 
 
-def test_all(vector_width, target):
-    # print("target is %s " % str(target))
+def test_all(vector_width, target, partition_policy):
+    # print("target is %s, partition_policy is %s " % (str(target), str(partition_policy)))
 
     W = 32
     H = 32
@@ -137,6 +141,7 @@ def test_all(vector_width, target):
             test_extent,
             vector_width,
             target,
+            partition_policy,
         )
         realize_and_check(
             bc(**image_input_args),
@@ -148,6 +153,7 @@ def test_all(vector_width, target):
             test_extent,
             vector_width,
             target,
+            partition_policy,
         )
         realize_and_check(
             bc(**undef_min_args),
@@ -159,6 +165,7 @@ def test_all(vector_width, target):
             test_extent,
             vector_width,
             target,
+            partition_policy,
         )
         realize_and_check(
             bc(**undef_max_args),
@@ -170,6 +177,7 @@ def test_all(vector_width, target):
             H,
             vector_width,
             target,
+            partition_policy,
         )
         realize_and_check(
             bc(**implicit_bounds_args),
@@ -181,6 +189,7 @@ def test_all(vector_width, target):
             test_extent,
             vector_width,
             target,
+            partition_policy,
         )
 
 
@@ -189,11 +198,13 @@ if __name__ == "__main__":
 
     vector_width_power_max = 6
     # https://github.com/halide/Halide/issues/2148
-    if target.has_feature(hl.TargetFeature.Metal) or target.has_feature(
-        hl.TargetFeature.D3D12Compute
-    ):
-        vector_width_power_max = 3
+    if target.has_feature(hl.TargetFeature.Metal) or \
+        target.has_feature(hl.TargetFeature.Vulkan) or \
+        target.has_feature(hl.TargetFeature.OpenGLCompute) or \
+        target.has_feature(hl.TargetFeature.D3D12Compute):
+        vector_width_power_max = 2
 
     for i in range(0, vector_width_power_max):
         vector_width = 1 << i
-        test_all(vector_width, target)
+        test_all(vector_width, target, hl.Partition.Auto)
+        test_all(vector_width, target, hl.Partition.Never)
