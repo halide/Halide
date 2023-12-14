@@ -56,6 +56,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # cibuildwheel is confused by the presence of the .so
+      # prebuilts for Hexagon and considers them an error.
+      # Just pre-emptively remove them to avoid this.
+      - name: Remove Hexagon prebuilts
+        run: rm -rf src/runtime/hexagon_remote/bin/
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
