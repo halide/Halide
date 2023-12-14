@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
         // launched in separate threads. Since `consumer` depends on both of them, and producers
         // are scheduled as compute_root(), `consumer` will have to wait until `producer1` and
         // `producer2` fully completed their work. The required synchronization primitives 
-        // will be added between producers and `consumer` to ensure that  it's safe for `consumer`
+        // will be added between producers and `consumer` to ensure that it's safe for `consumer`
         // to start its work and input data is fully ready.
         consumer.compute_root();
         producer1.compute_root().async();
@@ -186,8 +186,8 @@ int main(int argc, char **argv) {
     }
 
     {
-        // In the previous example, we relied on storage folding to to use double buffering
-        // technique, but there is another, more direct way to express that.
+        // In the previous example, we relied on the storage folding to express double buffering
+        // technique, but there is another, more direct way to do that.
         Func producer("producer"), consumer("consumer");
 
         producer(x, y, c) = (x + y) * (c + 1);
