@@ -208,7 +208,7 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
             // This is a counter associated with the producer side of a storage-folding semaphore. Keep it.
             return op;
         } else if (starts_with(op->name, func + ".ring_buffer.")) {
-            // This is a counter associated with the producer side of a double buffering.
+            // This is a counter associated with the producer side of a ring buffering.
             return op;
         } else {
             return Evaluate::make(0);
@@ -659,7 +659,7 @@ public:
     }
 };
 
-// Update indices to add double buffering.
+// Update indices to add ring buffer.
 class UpdateIndices : public IRMutator {
     using IRMutator::visit;
 
@@ -690,8 +690,8 @@ public:
     }
 };
 
-// Inject double buffering.
-class InjectDoubleBuffering : public IRMutator {
+// Inject ring buffering.
+class InjectRingBuffering : public IRMutator {
     using IRMutator::visit;
 
     struct Loop {
@@ -760,7 +760,7 @@ class InjectDoubleBuffering : public IRMutator {
     }
 
 public:
-    InjectDoubleBuffering(const map<string, Function> &e)
+    InjectRingBuffering(const map<string, Function> &e)
         : env(e) {
     }
 };
@@ -959,7 +959,7 @@ class TightenForkNodes : public IRMutator {
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     s = TightenProducerConsumerNodes(env).mutate(s);
-    s = InjectDoubleBuffering(env).mutate(s);
+    s = InjectRingBuffering(env).mutate(s);
     s = ForkAsyncProducers(env).mutate(s);
     s = ExpandAcquireNodes().mutate(s);
     s = TightenForkNodes().mutate(s);
