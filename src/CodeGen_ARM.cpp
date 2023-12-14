@@ -771,44 +771,6 @@ const std::map<string, string> float16_transcendental_remapping = {
 };
 // clang-format on
 
-#if 0
-llvm::Function *CodeGen_ARM::define_concat_args_wrapper(llvm::Function *inner, const string &name) {
-    llvm::FunctionType *inner_ty = inner->getFunctionType();
-
-    internal_assert(inner_ty->getNumParams() == 2);
-    llvm::Type *inner_arg0_ty = inner_ty->getParamType(0);
-    llvm::Type *inner_arg1_ty = inner_ty->getParamType(1);
-    int inner_arg0_lanes = get_vector_num_elements(inner_arg0_ty);
-    int inner_arg1_lanes = get_vector_num_elements(inner_arg1_ty);
-
-    llvm::Type *concat_arg_ty =
-        get_vector_type(inner_arg0_ty->getScalarType(), inner_arg0_lanes + inner_arg1_lanes);
-
-    // Make a wrapper.
-    llvm::FunctionType *wrapper_ty =
-        llvm::FunctionType::get(inner_ty->getReturnType(), {concat_arg_ty}, false);
-    llvm::Function *wrapper =
-        llvm::Function::Create(wrapper_ty, llvm::GlobalValue::InternalLinkage, name, module.get());
-    llvm::BasicBlock *block =
-        llvm::BasicBlock::Create(module->getContext(), "entry", wrapper);
-    IRBuilderBase::InsertPoint here = builder->saveIP();
-    builder->SetInsertPoint(block);
-
-    // Call the real intrinsic.
-    Value *low = slice_vector(wrapper->getArg(0), 0, inner_arg0_lanes);
-    Value *high = slice_vector(wrapper->getArg(0), inner_arg0_lanes, inner_arg1_lanes);
-    Value *ret = builder->CreateCall(inner, {low, high});
-    builder->CreateRet(ret);
-
-    // Always inline these wrappers.
-    wrapper->addFnAttr(llvm::Attribute::AlwaysInline);
-
-    builder->restoreIP(here);
-
-    llvm::verifyFunction(*wrapper);
-    return wrapper;
-}
-#else
 llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name,
                                                    const Type &ret_type,
                                                    const std::string &mangled_name,
@@ -900,7 +862,6 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
     llvm::verifyFunction(*wrapper);
     return wrapper;
 }
-#endif
 
 void CodeGen_ARM::init_module() {
     CodeGen_Posix::init_module();
@@ -967,13 +928,7 @@ void CodeGen_ARM::init_module() {
                     break;
                 }
                 Type arg_type = i;
-#if 0 // TODO(zvookin): Verify that we want the scaling in the scalar case.
-                if (arg_type.is_vector()) {
-                    arg_type = arg_type.with_lanes(arg_type.lanes() * width_factor);
-                }
-#else
                 arg_type = arg_type.with_lanes(arg_type.lanes() * width_factor);
-#endif
                 arg_types.emplace_back(arg_type);
             }
 
