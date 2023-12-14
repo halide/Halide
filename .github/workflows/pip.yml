@@ -74,9 +74,10 @@ jobs:
           # CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux* cp311-manylinux*"
           CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux*"
           CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }} --global-option=--build-number --global-option=${{github.run_id}}"
-          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
-          CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
+          CIBW_MANYLINUX_X86_64_IMAGE: https://ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
+          CIBW_MANYLINUX_AARCH64_IMAGE: https://ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BUILD_VERBOSITY: 3
+          CIBW_BUILD_VERBOSITY_LINUX: 3
           CIBW_BEFORE_ALL_LINUX: >
             cmake -G Ninja -S . -B build
               -DCMAKE_BUILD_TYPE=Release
