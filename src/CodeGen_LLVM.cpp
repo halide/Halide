@@ -3319,6 +3319,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen(lower_extract_bits(op));
     } else if (op->is_intrinsic(Call::concat_bits)) {
         value = codegen(lower_concat_bits(op));
+    } else if (op->is_intrinsic(Call::get_runtime_vscale)) {
+        value = builder->CreateVScale(ConstantInt::get(i32_t, 1));
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (!lowered.defined()) {
@@ -4768,10 +4770,14 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
     llvm::FunctionType *intrin_type = intrin->getFunctionType();
     for (int i = 0; i < (int)arg_values.size(); i++) {
         if (arg_values[i]->getType() != intrin_type->getParamType(i)) {
+#if 0
             // TODO: Change this to call convert_fixed_or_scalable_vector_type and
             // remove normalize_fixed_scalable_vector_type, fixed_to_scalable_vector_type,
             // and scalable_to_fixed_vector_type
             arg_values[i] = normalize_fixed_scalable_vector_type(intrin_type->getParamType(i), arg_values[i]);
+#else
+            arg_values[i] = convert_fixed_or_scalable_vector_type(arg_values[i], intrin_type->getParamType(i));
+#endif
         }
         if (arg_values[i]->getType() != intrin_type->getParamType(i)) {
             // There can be some mismatches in types, such as when passing scalar Halide type T

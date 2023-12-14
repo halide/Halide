@@ -625,6 +625,8 @@ struct Call : public ExprNode<Call> {
         widening_shift_right,
         widening_sub,
 
+        get_runtime_vscale,
+
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
