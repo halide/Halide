@@ -259,8 +259,6 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         Stmt body = mutate(op->body);
         if (is_no_op(body)) {
             return body;
-        } else if (!starts_with(op->name, func) && ends_with(op->name, ".ring_buffer.index")) {
-            return body;
         } else {
             return Allocate::make(op->name, op->type, op->memory_type,
                                   op->extents, op->condition, body,
@@ -696,36 +694,52 @@ public:
 class InjectDoubleBuffering : public IRMutator {
     using IRMutator::visit;
 
+    struct Loop {
+        std::string name;
+        Expr min;
+        Expr extent;
+
+        Loop(std::string n, Expr m, Expr e)
+            : name(n), min(m), extent(e) {
+        }
+    };
+
+    const map<string, Function> &env;
+    std::vector<Loop> loops;
+    std::map<std::string, int> hoist_storage_loop_index;
+
     Stmt visit(const Realize *op) override {
         Stmt body = mutate(op->body);
         Function f = env.find(op->name)->second;
         Region bounds = op->bounds;
         if (f.schedule().ring_buffer().defined()) {
-            std::string enclosing_loop_var = loop_names.back();
-
             bounds.emplace_back(0, f.schedule().ring_buffer());
-            Expr current_index = Load::make(Int(32), f.name() + ".ring_buffer.index", 0, Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+            int loop_index = hoist_storage_loop_index[op->name] + 1;
+            Expr current_index = Variable::make(Int(32), loops[loop_index].name);
+            while (++loop_index < (int)loops.size()) {
+                current_index = current_index *
+                                    (loops[loop_index].extent - loops[loop_index].min) +
+                                Variable::make(Int(32), loops[loop_index].name);
+            }
+            current_index = current_index % f.schedule().ring_buffer();
             body = UpdateIndices(op->name, current_index).mutate(body);
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.ring_buffer");
             Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
             Stmt release = Evaluate::make(release_producer);
             body = Block::make(body, release);
             body = Acquire::make(sema_var, 1, body);
-            Stmt advance_index = Store::make(f.name() + ".ring_buffer.index", (current_index + 1) % f.schedule().ring_buffer(), 0, Parameter(), const_true(), ModulusRemainder());
-            body = Block::make({body, advance_index});
         }
 
         return Realize::make(op->name, op->types, op->memory_type, bounds, op->condition, body);
     }
 
     Stmt visit(const HoistedStorage *op) override {
-        Stmt mutated = mutate(op->body);
+        hoist_storage_loop_index[op->name] = loops.size() - 1;
         Function f = env.find(op->name)->second;
         if (f.schedule().ring_buffer().defined()) {
-            mutated = Block::make(Store::make(f.name() + ".ring_buffer.index", 0, 0, Parameter(), const_true(), ModulusRemainder()), mutated);
-            mutated = Allocate::make(f.name() + ".ring_buffer.index", Int(32), MemoryType::Stack, {}, const_true(), mutated);
         }
 
+        Stmt mutated = mutate(op->body);
         mutated = HoistedStorage::make(op->name, mutated);
 
         if (f.schedule().ring_buffer().defined()) {
@@ -734,18 +748,16 @@ class InjectDoubleBuffering : public IRMutator {
                                          {2}, Call::Extern);
             mutated = LetStmt::make(f.name() + std::string(".folding_semaphore.ring_buffer"), sema_space, mutated);
         }
-
+        hoist_storage_loop_index.erase(op->name);
         return mutated;
     }
 
     Stmt visit(const For *op) override {
-        loop_names.push_back(op->name);
+        loops.emplace_back(op->name, op->min, op->extent);
         Stmt mutated = IRMutator::visit(op);
-        loop_names.pop_back();
+        loops.pop_back();
         return mutated;
     }
-    const map<string, Function> &env;
-    std::vector<std::string> loop_names;
 
 public:
     InjectDoubleBuffering(const map<string, Function> &e)
