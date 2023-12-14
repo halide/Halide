@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // Basic compute-root async producer
+    // Double-buffer a tile of producer computed as async.
     {
         Func producer("producer"), consumer("consumer");
         Var x, y, xo, yo, xi, yi;
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Basic compute-root async producer
+    // Double-buffer a tile of producer computed as async, but the storage moved to the outside.
     {
         Func producer("producer"), consumer("consumer");
         Var x, y, xo, yo, xi, yi;
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Basic compute-root async producer
+    // Double-buffer a tile of producer computed as async with multiple intermediate consumers.
     {
         Func producer("producer"), consumer("consumer"), interm1("interm1"), interm2("interm2"), interm3("interm3");
         Var x, y, xo, yo, xi, yi;
@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // One producer and three consumers.
+    // Double-buffer a tile of producer computed as async with multiple intermediate consumers and output consumer.
     {
         Func producer("producer"), consumer("consumer"), interm1("interm1"), interm2("interm2"), interm3("interm3");
         Var x, y, xo, yo, xi, yi;
@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Two async producers and one consumer.
+    // Two async producers with double buffering and one consumer.
     {
         Func producer1("producer1"), producer2("producer2"), consumer("consumer");
         Var x, y, xo, yo, xi, yi;
@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Two async producers at different storage levels and one consumer.
+    // Two async producers with double buffering at different storage levels and one consumer.
     {
         Func producer1("producer1"), producer2("producer2"), consumer("consumer");
         Var x, y, xo, yo, xi, yi;
@@ -218,7 +218,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Two async producers and two consumers.
+    // Two async producers with ring buffers and two consumers.
     {
         Func producer1("producer1"), producer2("producer2"), interm1("interm1"), interm2("interm2"), consumer("consumer");
         Var x, y, xo, yo, xi, yi;
@@ -264,7 +264,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Three async producers and two consumers.
+    // Three async producers with ring buffers and two consumers.
     {
         Func producer1("producer1"), producer2("producer2"), producer3("producer3");
         Func interm1("interm1"), interm2("interm2"), consumer("consumer");
@@ -320,7 +320,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Two non-async double-buffered producers and two consumers.
+    // Two non-async ring-buffered producers and two consumers.
     {
         Func producer1("producer1"), producer2("producer2"), producer3("producer3");
         Func interm1("interm1"), interm2("interm2"), consumer("consumer");
@@ -373,7 +373,7 @@ int main(int argc, char **argv) {
         });
     }
 
-    // Chain of two async producers and consumer.
+    // Chain of two async double-buffered producers and consumer.
     {
         Func producer1("producer1"), producer2("producer2"), consumer("consumer");
         Var x, y, xo, yo, xi, yi;
