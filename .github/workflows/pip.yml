@@ -69,8 +69,8 @@ jobs:
 
       - name: Pull LLVM Images
         shell: bash
-        run: >
-          docker pull ghcr.io/halide/manylinux2014_${{ matrix.arch }}-llvm:${{ env.LLVM_VER }}
+        run: |
+          docker pull ghcr.io/halide/docker-images/manylinux2014_${{ matrix.arch }}-llvm:${{ env.LLVM_VER }}
 
       - name: Build Wheels
         uses: pypa/cibuildwheel@v2.16.2
