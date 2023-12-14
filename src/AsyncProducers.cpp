@@ -713,7 +713,12 @@ class InjectRingBuffering : public IRMutator {
         Function f = env.find(op->name)->second;
         Region bounds = op->bounds;
         if (f.schedule().ring_buffer().defined()) {
+            // For the ring buffering we expand the storage by adding another dimension of
+            // the range of [0, ring_buffer.extent].
             bounds.emplace_back(0, f.schedule().ring_buffer());
+            // Build an index for accessing ring buffer as a linear combination of all
+            // loop variables between the storage location (defined by the HoistStorage loop level)
+            // and corresponding Realize node.
             int loop_index = hoist_storage_loop_index[op->name] + 1;
             Expr current_index = Variable::make(Int(32), loops[loop_index].name);
             while (++loop_index < (int)loops.size()) {
@@ -722,6 +727,7 @@ class InjectRingBuffering : public IRMutator {
                                 Variable::make(Int(32), loops[loop_index].name);
             }
             current_index = current_index % f.schedule().ring_buffer();
+            // Adds an extra index for to the all of the references of f.
             body = UpdateIndices(op->name, current_index).mutate(body);
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.ring_buffer");
             Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
@@ -734,10 +740,9 @@ class InjectRingBuffering : public IRMutator {
     }
 
     Stmt visit(const HoistedStorage *op) override {
+        // Store the index of the last loop we encountered.
         hoist_storage_loop_index[op->name] = loops.size() - 1;
         Function f = env.find(op->name)->second;
-        if (f.schedule().ring_buffer().defined()) {
-        }
 
         Stmt mutated = mutate(op->body);
         mutated = HoistedStorage::make(op->name, mutated);
