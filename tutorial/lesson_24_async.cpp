@@ -141,6 +141,8 @@ int main(int argc, char **argv) {
             // Explicit fold_storage is required here, because otherwise Halide will infer that only
             // one plane of `producer` is necessary for `consumer`, but for the purposes of this
             // example we want at least 2.
+            // Please, note that adding a fold_storage(c, 2) will double the amount of storage allocated
+            // for `producer`.
             .fold_storage(c, 2);
 
         // The high-level structure of the generated code will be:
@@ -200,11 +202,15 @@ int main(int argc, char **argv) {
         // A more direct way to express this would be to hoist storage of `producer` to ouside of the loop
         // `c` over planes, double its size and add necessary indices to flip the  planes.
         // The first part can be achieved with `hoist_storage` directive and the rest is done with 
-        // `ring_buffer`. This schedule is rougly equivalent to the schedule in the previous example.
+        // `ring_buffer`. Please, note that it's enough to provide only extent of the ring buffer, there is no
+        // need to specify an explicit loop level to tie ring buffer to, because the index for ring buffer
+        // will be implicitly computed based on a linear combination of loop variables between storage and
+        // compute_at/store_at levels.
         producer
             .async()
             .compute_at(consumer, c)
             .hoist_storage(consumer, Var::outermost())
+            // Similarly, to the previous example, the amount of storage is doubled here.
             .ring_buffer(2);
 
         // The high-level structure of the generated code will be very similar to the previous example.
@@ -231,7 +237,59 @@ int main(int argc, char **argv) {
             .hoist_storage(consumer, Var::outermost())
             .ring_buffer(2);
 
-        // The high-level structure of the generated code will be similar to the previous example.
+        // // The high-level structure of the generated code will be:
+        // {
+        //     // The size of the tile (16, 16, 1) + extra to accomodate 3x3 filter. The fourth dimension
+        //     // is added by ring_buffer() directive.
+        //     allocate producer1[18, 18, 1, 2]
+        //     // In this case there are two semaphores, because producer can run ahead, so we need
+        //     // to track how much was consumed and produced separately.
+        //     // This semaphore indicates how much producer has produced.
+        //     producer1.semaphore = 0
+        //     // This semaphore indicates how much `space` for producer is available.
+        //     producer1.folding_semaphore.ring_buffer = 2
+        //     thread #1 {
+        //         loop over c {
+        //             loop over yo {
+        //                 loop over xo {
+        //                     // Acquire a semaphore or block until the space to produce to is available.
+        //                     // The semaphore is released by consumer thread, when the data was fully
+        //                     // consumed.
+        //                     acquire(producer1.folding_semaphore.ring_buffer, 1)
+        //                     produce producer1 {
+        //                         // The index of ring buffer is computed as a linear combination of the all loop
+        //                         // variables up to the storage level.
+        //                         ring_buffer_index = <linear combination of c, yo, xo> % 2
+        //                         // Produce the next tile of the producer1 and store it at index ring_buffer_index.
+        //                         producer1[x, y, 0, ring_buffer_index % 2] = ...
+        //                         // Release a semaphore to indicate that tile was produced, consumer will
+        //                         // acquire this semaphore in the other thread.
+        //                         release(producer1.semaphore)
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        //     thread #2 {
+        //         loop over c {
+        //             loop over yo {
+        //                 loop over xo {
+        //                     // Acquire a semaphore or block until the data from producer is ready.
+        //                     // The semaphore is released by producer thread, when the data was fully
+        //                     // produced.
+        //                     acquire(producer1.semaphore, 1)
+        //                     consume producer1 {
+        //                         ring_buffer_index = <linear combination of c, yo, xo> % 2
+        //                         consumer[_, _, c] = <computations which use producer[_, _, 0, ring_buffer_index]>
+        //                         // Release a semaphore to indicate that tile was consumed, producer will
+        //                         // acquire this semaphore in the other thread.
+        //                         release(producer1.folding_semaphore.ring_buffer)
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
         consumer.realize({128, 128, 4});
     }
 
