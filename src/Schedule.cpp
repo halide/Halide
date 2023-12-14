@@ -411,7 +411,7 @@ Expr &FuncSchedule::ring_buffer() {
     return contents->ring_buffer;
 }
 
-Expr FuncSchedule::ring_buffer() const {
+Expr &FuncSchedule::ring_buffer() const {
     return contents->ring_buffer;
 }
 
