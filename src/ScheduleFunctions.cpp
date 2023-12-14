@@ -2250,7 +2250,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
     }
 
     if (f.schedule().ring_buffer().defined() && store_at == hoist_storage_at) {
-        user_error << "Func \"" << f.name() << "\" is scheduled ring_buffer(), but has matching store_at and hoist_storage levels.\n";
+        user_error << "Func \"" << f.name() << "\" is scheduled with ring_buffer(), but has matching store_at and hoist_storage levels. Add an explicit hoist_storage directive to the schedule to fix the issue.\n";
     }
 
     vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
