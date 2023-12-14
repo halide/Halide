@@ -700,7 +700,7 @@ class InjectRingBuffering : public IRMutator {
         Expr extent;
 
         Loop(std::string n, Expr m, Expr e)
-            : name(n), min(m), extent(e) {
+            : name(std::move(n)), min(std::move(m)), extent(std::move(e)) {
         }
     };
 
