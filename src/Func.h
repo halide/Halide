@@ -2291,6 +2291,8 @@ public:
      * amount of memory required for this function by an *extent* times.
      * ring_buffer is especially useful in combination with \ref Func::async,
      * but can be used without it.
+     *
+     * The extent is expected to be a positive integer.
      */
     Func &ring_buffer(Expr extent);
 
