@@ -241,6 +241,7 @@ struct FuncScheduleContents {
     MemoryType memory_type = MemoryType::Auto;
     bool memoized = false;
     bool async = false;
+    // This is an extent of the ring buffer and expected to be a positive integer.
     Expr ring_buffer;
     Expr memoize_eviction_key;
 

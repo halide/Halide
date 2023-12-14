@@ -2289,7 +2289,7 @@ public:
      * the loop variables between hoist_storage and compute_at/store_at
      * loop levels. Scheduling a function with ring_buffer increases the
      * amount of memory required for this function by an *extent* times.
-     * ring_buffer is especially useful in combination with the \ref Func::async,
+     * ring_buffer is especially useful in combination with \ref Func::async,
      * but can be used without it.
      */
     Func &ring_buffer(Expr extent);
