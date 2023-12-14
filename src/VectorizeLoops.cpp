@@ -951,7 +951,9 @@ class VectorSubs : public IRMutator {
 
         if (op->for_type == ForType::Vectorized) {
             const IntImm *extent_int = extent.as<IntImm>();
-            if (!extent_int || extent_int->value <= 1) {
+            internal_assert(extent_int)
+                << "Vectorized for loop extent should have been rewritten to a constant\n";
+            if (extent_int->value <= 1) {
                 user_error << "Loop over " << op->name
                            << " has extent " << extent
                            << ". Can only vectorize loops over a "

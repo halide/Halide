@@ -11,6 +11,7 @@
 #include "AddParameterChecks.h"
 #include "AllocationBoundsInference.h"
 #include "AsyncProducers.h"
+#include "BoundConstantExtentLoops.h"
 #include "BoundSmallAllocations.h"
 #include "Bounds.h"
 #include "BoundsInference.h"
@@ -311,6 +312,10 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
     log("Lowering after simplifying correlated differences:", s);
+
+    debug(1) << "Bounding constant extent loops...\n";
+    s = bound_constant_extent_loops(s);
+    log("Lowering after bounding constant extent loops:", s);
 
     debug(1) << "Unrolling...\n";
     s = unroll_loops(s);

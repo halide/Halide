@@ -164,17 +164,23 @@ string CodeGen_RISCV::mattrs() const {
     //   +f Single-Precision Floating-Point,
     //   +d Double-Precision Floating-Point,
     //   +c Compressed Instructions,
-    string arch_flags = "+m,+a,+f,+d,+c";
+    std::vector<std::string> attrs = {
+        "+m",
+        "+a",
+        "+f",
+        "+d",
+        "+c",
+    };
 
     if (target.has_feature(Target::RVV)) {
-        arch_flags += ",+v";
+        attrs.emplace_back("+v");
 #if LLVM_VERSION >= 160
         if (target.vector_bits != 0) {
-            arch_flags += ",+zvl" + std::to_string(target.vector_bits) + "b";
+            attrs.push_back("+zvl" + std::to_string(target.vector_bits) + "b");
         }
 #endif
     }
-    return arch_flags;
+    return join_strings(attrs, ",");
 }
 
 string CodeGen_RISCV::mabi() const {

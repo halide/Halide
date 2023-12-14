@@ -355,8 +355,13 @@ Simplify::ScopedFact::~ScopedFact() {
 
 Expr simplify(const Expr &e, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
-              const Scope<ModulusRemainder> &alignment) {
+              const Scope<ModulusRemainder> &alignment,
+              const std::vector<Expr> &assumptions) {
     Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    std::vector<Simplify::ScopedFact> facts;
+    for (const Expr &a : assumptions) {
+        facts.push_back(m.scoped_truth(a));
+    }
     Expr result = m.mutate(e, nullptr);
     if (m.in_unreachable) {
         return unreachable(e.type());
@@ -366,8 +371,13 @@ Expr simplify(const Expr &e, bool remove_dead_let_stmts,
 
 Stmt simplify(const Stmt &s, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
-              const Scope<ModulusRemainder> &alignment) {
+              const Scope<ModulusRemainder> &alignment,
+              const std::vector<Expr> &assumptions) {
     Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    std::vector<Simplify::ScopedFact> facts;
+    for (const Expr &a : assumptions) {
+        facts.push_back(m.scoped_truth(a));
+    }
     Stmt result = m.mutate(s);
     if (m.in_unreachable) {
         return Evaluate::make(unreachable());

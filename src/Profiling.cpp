@@ -6,6 +6,7 @@
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "InjectHostDevBufferCopies.h"
 #include "Profiling.h"
 #include "Scope.h"
 #include "Simplify.h"
@@ -421,6 +422,77 @@ private:
             return op;
         }
         return IfThenElse::make(std::move(condition), std::move(then_case), std::move(else_case));
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        if (const Call *call = op->value.as<Call>()) {
+            Stmt start_profiler;
+            if (call->name == "halide_copy_to_host" || call->name == "halide_copy_to_device") {
+                std::string buffer_name;
+                if (const Variable *var = call->args.front().as<Variable>()) {
+                    buffer_name = var->name;
+                    if (ends_with(buffer_name, ".buffer")) {
+                        buffer_name = buffer_name.substr(0, buffer_name.size() - 7);
+                    } else {
+                        internal_error << "Expected to find a variable ending in .buffer as first argument to function call " << call->name << "\n";
+                    }
+                } else {
+                    internal_error << "Expected to find a variable as first argument of the function call " << call->name << ".\n";
+                }
+                bool requires_sync = false;
+                if (call->name == "halide_copy_to_host") {
+                    int copy_to_host_id = get_func_id(buffer_name + " (copy to host)");
+                    start_profiler = set_current_func(copy_to_host_id);
+                    requires_sync = false;
+                } else if (call->name == "halide_copy_to_device") {
+                    int copy_to_device_id = get_func_id(buffer_name + " (copy to device)");
+                    start_profiler = set_current_func(copy_to_device_id);
+                    requires_sync = true;
+                } else {
+                    internal_error << "Unexpected function name.\n";
+                }
+                if (start_profiler.defined()) {
+                    // The copy functions are followed by an assert, which we will wrap in the timed body.
+                    const AssertStmt *copy_assert = nullptr;
+                    Stmt other;
+                    if (const Block *block = op->body.as<Block>()) {
+                        if (const AssertStmt *assert = block->first.as<AssertStmt>()) {
+                            copy_assert = assert;
+                            other = block->rest;
+                        }
+                    } else if (const AssertStmt *assert = op->body.as<AssertStmt>()) {
+                        copy_assert = assert;
+                    }
+                    if (copy_assert) {
+                        std::vector<Stmt> steps;
+                        steps.push_back(AssertStmt::make(copy_assert->condition, copy_assert->message));
+                        if (requires_sync) {
+                            internal_assert(call->name == "halide_copy_to_device");
+                            Expr device_interface = call->args.back();  // The last argument to the copy_to_device calls is the device_interface.
+                            Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
+                            steps.push_back(sync_and_assert);
+                        }
+                        steps.push_back(set_current_func(stack.back()));
+
+                        if (other.defined()) {
+                            steps.push_back(mutate(other));
+                        }
+                        return Block::make(start_profiler,
+                                           LetStmt::make(op->name, mutate(op->value),
+                                                         Block::make(steps)));
+                    } else {
+                        internal_error << "No assert found after buffer copy.\n";
+                    }
+                }
+            }
+        }
+
+        Stmt body = mutate(op->body);
+        Expr value = mutate(op->value);
+        if (body.same_as(op->body) && value.same_as(op->value)) {
+            return op;
+        }
+        return LetStmt::make(op->name, value, body);
     }
 };
 

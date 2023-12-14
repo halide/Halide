@@ -1013,11 +1013,11 @@ public:
                     }
 
                     // Dump out the region required of each stage for debugging.
-
                     /*
                     debug(0) << "Box required of " << producer.name
                              << " by " << consumer.name
-                             << " stage " << consumer.stage << ":\n";
+                             << " stage " << consumer.stage << ":\n"
+                             << " used: " << b.used << "\n";
                     for (size_t k = 0; k < b.size(); k++) {
                         debug(0) << "  " << b[k].min << " ... " << b[k].max << "\n";
                     }
