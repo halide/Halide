@@ -51,13 +51,12 @@ jobs:
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           max-size: 5G
-        run: which ccache && ccache -s
 
       # cibuildwheel is confused by the presence of the .so
       # prebuilts for Hexagon and considers them an error.
       # Just pre-emptively remove them to avoid this.
       - name: Remove Hexagon prebuilts
-        run: rm -rf src/runtime/hexagon_remote/bin/
+        run: rm -rf src/runtime/hexagon_remote/bin/ && which ccache && ccache -s
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
