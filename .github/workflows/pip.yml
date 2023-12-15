@@ -43,8 +43,8 @@ jobs:
         # [runner, pytag, arch]
         - [ubuntu-22.04, manylinux_x86_64, x86_64]
         # - [ubuntu-22.04, manylinux_aarch64, aarch64]
-        - [macos-12, macosx_universal2, x86_64;arm64]
-        - [windows-2022, win_amd64, x64]
+        # - [macos-12, macosx_universal2, arm64;x86_64]
+        # - [windows-2022, win_amd64, x64]
 
     steps:
       - uses: actions/checkout@v4
@@ -161,6 +161,7 @@ jobs:
       - name: Configure Halide (Linux)
         if: runner.os == 'Linux'
         run: >
+          docker pull ghcr.io/halide/manylinux2014_${{ matrix.buildplat[2] }}-llvm:${{ env.LLVM_VER }}
           cmake -G Ninja -S . -B halide-build
             -DCMAKE_BUILD_TYPE=Release
             -DWITH_DOCS=NO
