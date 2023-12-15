@@ -25,7 +25,7 @@ jobs:
     runs-on: ${{ matrix.buildplat[0] }}
 
     concurrency:
-      group: pip-all-${{ matrix.buildplat[0] }}-${{ matrix.buildplat[1] }}-${{ matrix.buildplat[2] }}
+      group: pip-all-${{ matrix.buildplat[0] }}-${{ matrix.buildplat[1] }}-${{ matrix.buildplat[2] }}-${{ matrix.python }}
       cancel-in-progress: true
 
     permissions:
