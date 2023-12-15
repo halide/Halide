@@ -175,10 +175,8 @@ jobs:
             -DWITH_UTILS=NO &&
 
       - name: Build Halide
-        run: cmake --build halide-build --config Release
-
-      - name: Install Halide
-        run: cmake --install halide-build --config Release --prefix local-halide
+        if: runner.os != 'Linux'
+        run: cmake --build halide-build --target install --config Release --prefix local-halide
 
       - name: Build Wheels
         uses: pypa/cibuildwheel@v2.16.2
@@ -190,6 +188,16 @@ jobs:
           CIBW_CONFIG_SETTINGS: --global-option=egg_info --global-option=--tag-build=dev --global-option=--tag-date
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
+          CIBW_BEFORE_ALL_LINUX: >
+            cmake -G Ninja -S . -B halide-build
+              -DCMAKE_BUILD_TYPE=Release
+              -DWITH_DOCS=NO
+              -DWITH_PYTHON_BINDINGS=NO
+              -DWITH_PYTHON_STUBS=NO
+              -DWITH_TESTS=NO
+              -DWITH_TUTORIALS=NO
+              -DWITH_UTILS=NO &&
+            cmake --build halide-build --target install --config Release --prefix local-halide
 
       - uses: actions/upload-artifact@v4
         with:
