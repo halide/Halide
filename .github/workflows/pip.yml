@@ -47,16 +47,11 @@ jobs:
       #     sudo apt-get install ccache && \
       #     ccache -s
 
-      - name: Install ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          max-size: 5G
-
       # cibuildwheel is confused by the presence of the .so
       # prebuilts for Hexagon and considers them an error.
       # Just pre-emptively remove them to avoid this.
       - name: Remove Hexagon prebuilts
-        run: rm -rf src/runtime/hexagon_remote/bin/ && which ccache && ccache -s
+        run: rm -rf src/runtime/hexagon_remote/bin/
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -70,6 +65,11 @@ jobs:
         with:
           platforms: all
 
+      - name: Install ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          max-size: 5G
+
       - name: Build Wheels
         uses: pypa/cibuildwheel@v2.16.2
         env:
@@ -78,10 +78,12 @@ jobs:
           CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
           # CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux* cp311-manylinux* p312-manylinux*"
           CIBW_BUILD: "${{ matrix.python }}-manylinux_${{ matrix.arch }}"
-          CIBW_CONFIG_SETTINGS: --global-option=--build-number=${{github.run_id}} --global-option=egg_info --global-option=--tag-build=dev --global-option=--tag-date
+          CIBW_CONFIG_SETTINGS: --global-option=egg_info --global-option=--tag-build=dev --global-option=--tag-date
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: |
+            which ccache && \
+            ccache -s && \
             cmake -G Ninja -S . -B build \
               -DCMAKE_BUILD_TYPE=Release \
               -DWITH_DOCS=NO \
