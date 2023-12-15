@@ -27,7 +27,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     concurrency:
-      group: pip-all-group
+      group: pip-all-${{ matrix.runner }}-${{ matrix.arch }}
       cancel-in-progress: true
 
     permissions:
