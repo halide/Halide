@@ -52,7 +52,7 @@ jobs:
       fail-fast: false
       matrix:
         # arch: [ x86_64, aarch64 ]
-        arch: [ x86_64 ]
+        arch: [ aarch64 ]
         # python: [["cp38", "3.8"], ["cp39", "3.9"], ["cp310", "3.10"], ["cp311", "3.11"], ["cp312", "3.12"]]
         # python: [["cp39", "3.9"]]
 
@@ -65,8 +65,6 @@ jobs:
       - name: Remove Hexagon prebuilts
         run: rm -rf src/runtime/hexagon_remote/bin/
 
-      # TODO: this is a pretty cheesy way to allow overriding version for nightlies
-      # (ie by writing an __init__.py into the root dir); surely there is a better way?
       - name: Add nightly timestamp
         run: echo "__VERSION__=17.0.0dev${{ needs.pip-labels.outputs.halide_dev_label }}" >> __init__.py
 
@@ -92,7 +90,10 @@ jobs:
           # TODO: --global-option is deprecated
           # TODO: wtf is `egg_info` and/or `-b.dev`
           # CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_dev_label }} --global-option=--build-number --global-option=${{github.run_id}}"
-          CIBW_CONFIG_SETTINGS: --config-settings=--build-number=${{github.run_id}}
+          CIBW_CONFIG_SETTINGS: --config-settings=--build-number=${{github.run_id}} \
+                                --config-settings=egg_info \
+                                --config-settings=--tag-build=dev \
+                                --config-settings=--tag-date
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: |

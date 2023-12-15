@@ -2,6 +2,7 @@ import pybind11
 from setuptools import find_packages
 from skbuild import setup
 from pathlib import Path
+from .Halide import *
 
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README_python.md").read_text()
