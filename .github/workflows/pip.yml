@@ -10,13 +10,10 @@ on:
   release:
     types: [ created ]
 
-# concurrency:
-#   group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
-#   cancel-in-progress: true
-
 env:
   LLVM_VER: 17.0.6
   HALIDE_CMAKE_OPTS: -DCMAKE_BUILD_TYPE=Release -DWITH_DOCS=NO -DWITH_PYTHON_BINDINGS=NO -DWITH_PYTHON_STUBS=NO -DWITH_TESTS=NO -DWITH_TUTORIALS=NO -DWITH_UTILS=NO
+  DEV_PREFIX: experiment
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
@@ -38,14 +35,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # python: [ cp38, cp39, cp310, cp311, cp312 ]
-        python: [ cp311 ]
+        python: [ cp38, cp39, cp310, cp311, cp312 ]
         buildplat:
         # [runner, pytag, arch]
         - [ubuntu-22.04, manylinux_x86_64, x86_64]
-        # - [ubuntu-22.04, manylinux_aarch64, aarch64]
-        # - [macos-12, macosx_universal2, arm64;x86_64]
-        # - [windows-2022, win_amd64, x64]
+        - [ubuntu-22.04, manylinux_aarch64, aarch64]
+        - [macos-12, macosx_universal2, arm64;x86_64]
+        - [windows-2022, win_amd64, x64]
 
     steps:
       - uses: actions/checkout@v4
@@ -167,7 +163,7 @@ jobs:
           CIBW_ARCHS_LINUX: "${{ matrix.buildplat[2] }}"
           CIBW_ARCHS_MACOS: "universal2"
           CIBW_BUILD: "${{ matrix.python }}-${{ matrix.buildplat[1] }}"
-          CIBW_CONFIG_SETTINGS: --global-option=egg_info --global-option=--tag-build=dev --global-option=--tag-date
+          CIBW_CONFIG_SETTINGS: --global-option=egg_info --global-option=--tag-build=${{ env.DEV_PREFIX }} --global-option=--tag-date
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: |
