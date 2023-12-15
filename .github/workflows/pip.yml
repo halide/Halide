@@ -36,8 +36,8 @@ jobs:
       matrix:
         arch: [ x86_64, aarch64 ]
         # arch: [ x86_64 ]
-        python: [ cp38 cp39 cp310 cp311 cp312 ]
-        # python: [ cp311 ]
+        # python: [ cp38, cp39, cp310, cp311, cp312 ]
+        python: [ cp311 ]
 
     steps:
       - uses: actions/checkout@v4
