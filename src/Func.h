@@ -2283,9 +2283,9 @@ public:
 
     /** Expands the storage of the function by an extra dimension
      * to enable ring buffering. For this to be useful the storage
-     * of the function has to be hoisted to a upper loop level using
+     * of the function has to be hoisted to an upper loop level using
      * \ref Func::hoist_storage. The index for the new ring buffer dimension
-     * is caluclated implicitly based on a linear combination of the all of
+     * is calculated implicitly based on a linear combination of the all of
      * the loop variables between hoist_storage and compute_at/store_at
      * loop levels. Scheduling a function with ring_buffer increases the
      * amount of memory required for this function by an *extent* times.
