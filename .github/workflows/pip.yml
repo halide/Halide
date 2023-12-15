@@ -42,10 +42,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ccache
-        run: |
-          sudo apt-get install ccache && \
-          ccache -s
+      # - name: Install ccache
+      #   run: |
+      #     sudo apt-get install ccache && \
+      #     ccache -s
 
       # cibuildwheel is confused by the presence of the .so
       # prebuilts for Hexagon and considers them an error.
@@ -76,20 +76,15 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: |
-            which ccache && \
-            ccache -s && \
             cmake -G Ninja -S . -B build \
               -DCMAKE_BUILD_TYPE=Release \
-              -DHalide_CCACHE_BUILD=ON \
               -DWITH_DOCS=NO \
               -DWITH_PYTHON_BINDINGS=NO \
               -DWITH_TESTS=NO \
               -DWITH_TUTORIALS=NO \
               -DWITH_UTILS=NO \
               -DWITH_PYTHON_STUBS=NO && \
-            ccache -s && \
-            cmake --build build --target install && \
-            ccache -s
+            cmake --build build --target install \
 
       - uses: actions/upload-artifact@v4
         with:
