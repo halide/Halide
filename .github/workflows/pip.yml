@@ -26,7 +26,6 @@ jobs:
     name: Package Halide Python bindings
 
     runs-on: ubuntu-22.04
-    needs: pip-labels
 
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
@@ -88,7 +87,6 @@ jobs:
   #   name: Package Halide Python bindings
 
   #   runs-on: ${{ matrix.runner }}
-  #   needs: pip-labels
 
   #   strategy:
   #     fail-fast: false
