@@ -158,9 +158,16 @@ jobs:
           "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.buildplat[2] }}"
           -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
 
+      # - name: Build Halide
+      #   if: runner.os != 'Linux'
+      #   run: cmake --build halide-build --target install --config Release --prefix local-halide
       - name: Build Halide
         if: runner.os != 'Linux'
-        run: cmake --build halide-build --target install --config Release --prefix local-halide
+        run: cmake --build halide-build --config Release
+
+      - name: Install Halide
+        if: runner.os != 'Linux'
+        run: cmake --install halide-build --config Release --prefix local-halide
 
       - name: Build Wheels
         uses: pypa/cibuildwheel@v2.16.2
@@ -173,10 +180,9 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: |
-            cmake -G Ninja -S . -B halide-build \
-              ${{ env.HALIDE_CMAKE_OPTS }} \
-              -DCMAKE_BUILD_TYPE=Release && \
-            cmake --build halide-build --target install --config Release --prefix local-halide
+            cmake -G Ninja -S . -B halide-build ${{ env.HALIDE_CMAKE_OPTS }} && \
+            cmake --build halide-build --config Release && \
+            cmake --install halide-build --config Release --prefix local-halide
 
       - uses: actions/upload-artifact@v4
         with:
