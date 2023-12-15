@@ -8,7 +8,7 @@ long_description = (this_directory / "README_python.md").read_text()
 
 setup(
     name="halide",
-    version='16.0.0',
+    version='17.0.0',
     author="The Halide team",
     author_email="halide-dev@lists.csail.mit.edu",
     description="Halide is a programming language designed to make it easier "
