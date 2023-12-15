@@ -2,7 +2,7 @@
 # https://docs.github.com/en/actions/using-jobs/running-jobs-in-a-container
 # https://docs.github.com/en/packages/managing-github-packages-using-github-actions-workflows/publishing-and-installing-a-package-with-github-actions#upgrading-a-workflow-that-accesses-ghcrio
 
-name: Build PyPI package
+name: Build PyPI nightlies
 
 on:
   push:
@@ -163,7 +163,7 @@ jobs:
       #   run: cmake --build halide-build --target install --config Release --prefix local-halide
       - name: Build Halide
         if: runner.os != 'Linux'
-        run: cmake --build halide-build --config Release
+        run: cmake --build halide-build --target install --config Release
 
       - name: Install Halide
         if: runner.os != 'Linux'
@@ -181,7 +181,7 @@ jobs:
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: |
             cmake -G Ninja -S . -B halide-build ${{ env.HALIDE_CMAKE_OPTS }} && \
-            cmake --build halide-build --config Release && \
+            cmake --build halide-build --target install --config Release && \
             cmake --install halide-build --config Release --prefix local-halide
 
       - uses: actions/upload-artifact@v4
