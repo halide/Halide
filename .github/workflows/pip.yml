@@ -27,7 +27,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     concurrency:
-      group: pip-all-${{ matrix.runner }}-${{ matrix.arch }}
+      # group: pip-all-${{ matrix.runner }}-${{ matrix.arch }}
       cancel-in-progress: true
 
     permissions:
@@ -141,7 +141,7 @@ jobs:
         run: rm -rf llvm-src
 
       # ------------------------ Build Halide
-      - name: Configure Halide
+      - name: Configure Halide (Windows)
         if: runner.os == 'Windows'
         run: >
           cmake -G "Visual Studio 17 2022" -T ClangCL -A "${{ matrix.arch }}" -S . -B halide-build
@@ -153,7 +153,7 @@ jobs:
           -DWITH_TUTORIALS=NO
           -DWITH_UTILS=NO
 
-      - name: Configure Halide
+      - name: Configure Halide (macOS)
         if: runner.os == 'macOS'
         run: >
           cmake -G Ninja -S . -B halide-build
@@ -167,7 +167,7 @@ jobs:
           -DWITH_TUTORIALS=NO
           -DWITH_UTILS=NO
 
-      - name: Configure Halide
+      - name: Configure Halide (Linux)
         if: runner.os == 'Linux'
         run: >
           cmake -G Ninja -S . -B halide-build
