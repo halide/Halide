@@ -69,7 +69,7 @@ jobs:
           # CIBW_ARCHS_LINUX: "x86_64 aarch64"
           CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
           # CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux* cp311-manylinux* p312-manylinux*"
-          CIBW_BUILD: "cp311-manylinux_${{ matrix.arch }}-llvm:${{ env.LLVM_VER }}"
+          CIBW_BUILD: "cp311-manylinux_${{ matrix.arch }}-llvm"
           CIBW_CONFIG_SETTINGS: --config-settings=--build-number=${{github.run_id}} --config-settings=egg_info --config-settings=--tag-build=dev --config-settings=--tag-date
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
