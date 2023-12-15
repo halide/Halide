@@ -2,19 +2,13 @@ import pybind11
 from setuptools import find_packages
 from skbuild import setup
 from pathlib import Path
-from .Halide import *
 
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README_python.md").read_text()
 
-# TODO: this is a pretty cheesy way to allow overriding version for nightlies
-# (ie by writing an __init__.py into the root dir); surely there is a better way?
-if not "__VERSION__" in globals():
-    __VERSION__="17.0.0"
-
 setup(
     name="halide",
-    version=__VERSION__,
+    version="17.0.0",
     author="The Halide team",
     author_email="halide-dev@lists.csail.mit.edu",
     description="Halide is a programming language designed to make it easier "
