@@ -1,6 +1,8 @@
 #include "Halide.h"
 #include "simd_op_check.h"
 
+#include <format>
+
 using namespace Halide;
 using namespace Halide::ConciseCasts;
 
@@ -21,7 +23,13 @@ public:
 
     void compile_and_check(Func error, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) override {
         // Compile just the vector Func to assembly.
-        std::string cpp_filename = output_directory + "check_" + name + ".cpp";
+        std::string cpp_filename = output_directory + "check_";
+        if (target.has_feature(Target::XtensaQ8)) {
+          cpp_filename += "q8_";
+        } else {
+          cpp_filename += "q7_";
+        }
+        cpp_filename += name + ".cpp";
         error.compile_to_c(cpp_filename, arg_types, "", target);
         std::ifstream cpp_file;
         cpp_file.open(cpp_filename);
@@ -80,6 +88,10 @@ public:
         Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
 
         int vector_width = 64;
+        auto target = get_run_target();
+        if (target.has_feature(Target::XtensaQ8)) {
+          vector_width = 128;
+        }
 
         // 48-bit math
         check("IVP_MULNX16", vector_width / 2, i32(i16_1) * i32(i16_2));
@@ -115,25 +127,101 @@ public:
         // https://github.com/halide/Halide/issues/7858
         // check("convert<float16x32_t,float32x32_t>", vector_width / 2, f16(f32_1));
         // check("convert<float32x32_t,float16x32_t>", vector_width / 2, f32(f16_1));
-        check("convert<float32x32_t,int16x32_t>", vector_width / 2, f32(i16_1));
-        check("convert<float32x32_t,uint16x32_t>", vector_width / 2, f32(u16_1));
-        check("convert<int8x64_t,int16x64_t>", vector_width / 2, i8(i16_1) + i8(i16_2));
-        check("convert<int8x64_t,uint16x64_t>", vector_width / 2, i8(u16_1) + i8(u16_2));
-        check("convert<int8x64_t,int32x64_t>", vector_width, i8(i32_1));
-        check("convert<int8x64_t,uint32x64_t>", vector_width, i8(u32_1));
-        check("convert<uint8x64_t,int32x64_t>", vector_width, u8(i32_1));
-        check("convert<int16x64_t,uint8x64_t>", vector_width, i16(u8_1));
-        check("convert<uint16x64_t,uint8x64_t>", vector_width, u16(u8_1));
-        check("convert<int32x64_t,uint8x64_t>", vector_width, i32(u8_1));
-        check("convert<int32x32_t,int16x32_t>", vector_width / 2, i32(i16_1));
-        check("convert<int32x32_t,uint16x32_t>", vector_width / 2, i32(u16_1));
-        check("convert<uint32x64_t,uint8x64_t>", vector_width, u32(u8_1));
-        check("convert<uint32x32_t,uint16x32_t>", vector_width / 2, u32(u16_1));
-        check("store_narrowing<int32x16_t,int16_t,16>", vector_width / 4, i16(i32_1));
-        check("store_narrowing<uint32x16_t,uint16_t,16>", vector_width / 4, u16(u32_1));
-        check("store_narrowing<int16x32_t,int8_t,32>", vector_width / 2, i8(i16_1));
-        check("store_narrowing<int16x32_t,uint8_t,32>", vector_width / 2, u8(i16_1));
-        check("store_narrowing<uint16x32_t,uint8_t,32>", vector_width / 2, u8(u16_1));
+        check(
+            std::vformat(
+                "convert<float32x{}_t,int16x{}_t>",
+                std::make_format_args(vector_width / 2, vector_width / 2)),
+            vector_width / 2, f32(i16_1));
+        check(
+            std::vformat(
+                "convert<float32x{}_t,uint16x{}_t>",
+                std::make_format_args(vector_width / 2, vector_width / 2)),
+            vector_width / 2, f32(u16_1));
+        check(
+            std::vformat(
+                "convert<int8x{}_t,int16x{}_t>",
+                std::make_format_args(vector_width, vector_width)),
+            vector_width / 2, i8(i16_1) + i8(i16_2));
+        check(
+            std::vformat(
+                "convert<int8x{}_t,uint16x{}_t>",
+                std::make_format_args(vector_width, vector_width)),
+            vector_width / 2, i8(u16_1) + i8(u16_2));
+        check(
+            std::vformat(
+                "convert<int8x{}_t,int32x{}_t>",
+                std::make_format_args(vector_width, vector_width)),
+            vector_width, i8(i32_1));
+        check(
+            std::vformat(
+                "convert<int8x{}_t,uint32x{}_t>",
+                std::make_format_args(vector_width, vector_width)),
+            vector_width, i8(u32_1));
+        check(
+            std::vformat(
+                "convert<uint8x{}_t,int32x{}_t>",
+                std::make_format_args(vector_width, vector_width)),
+            vector_width, u8(i32_1));
+        check(
+            std::vformat(
+                "convert<int16x{}_t,uint8x{}_t>",
+                std::make_format_args(vector_width, vector_width)),
+            vector_width, i16(u8_1));
+        check(
+            std::vformat(
+                "convert<uint16x{}_t,uint8x{}_t>",
+                std::make_format_args(vector_width, vector_width)),
+            vector_width, u16(u8_1));
+        check(
+            std::vformat(
+                "convert<int32x{}_t,uint8x{}_t>",
+                std::make_format_args(vector_width, vector_width)),
+            vector_width, i32(u8_1));
+        check(
+            std::vformat(
+                "convert<int32x{}_t,int16x{}_t>",
+                std::make_format_args(vector_width / 2, vector_width / 2)),
+            vector_width / 2, i32(i16_1));
+        check(
+            std::vformat(
+                "convert<int32x{}_t,uint16x{}_t>",
+                std::make_format_args(vector_width / 2, vector_width / 2)),
+            vector_width / 2, i32(u16_1));
+        check(
+            std::vformat(
+                "convert<uint32x{}_t,uint8x{}_t>",
+                std::make_format_args(vector_width, vector_width)),
+            vector_width, u32(u8_1));
+        check(
+            std::vformat(
+                "convert<uint32x{}_t,uint16x{}_t>",
+                std::make_format_args(vector_width / 2, vector_width / 2)),
+            vector_width / 2, u32(u16_1));
+        check(
+            std::vformat(
+                "store_narrowing<int32x{}_t,int16_t,{}>",
+                std::make_format_args(vector_width / 4, vector_width / 4)),
+            vector_width / 4, i16(i32_1));
+        check(
+            std::vformat(
+                "store_narrowing<uint32x{}_t,uint16_t,{}>",
+                std::make_format_args(vector_width / 4, vector_width / 4)),
+            vector_width / 4, u16(u32_1));
+        check(
+            std::vformat(
+                "store_narrowing<int16x{}_t,int8_t,{}>",
+                std::make_format_args(vector_width / 2, vector_width / 2)),
+            vector_width / 2, i8(i16_1));
+        check(
+            std::vformat(
+                "store_narrowing<int16x{}_t,uint8_t,{}>",
+                std::make_format_args(vector_width / 2, vector_width / 2)),
+            vector_width / 2, u8(i16_1));
+        check(
+            std::vformat(
+                "store_narrowing<uint16x{}_t,uint8_t,{}>",
+                std::make_format_args(vector_width / 2, vector_width / 2)),
+            vector_width / 2, u8(u16_1));
         check("halide_xtensa_sat_narrow_u8", vector_width, u8_sat(i16_1 + i16_2));
         check("halide_xtensa_convert_concat_i16_to_i8", vector_width, i8(i16_1 + i16_2));
         // Two tests below need fixing.
