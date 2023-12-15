@@ -6,6 +6,8 @@ from pathlib import Path
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README_python.md").read_text()
 
+# TODO: this is a pretty cheesy way to allow overriding version for nightlies
+# (ie by writing an __init__.py into the root dir); surely there is a better way?
 if not "__VERSION__" in globals():
     __VERSION__="17.0.0"
 

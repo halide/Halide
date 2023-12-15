@@ -65,6 +65,8 @@ jobs:
       - name: Remove Hexagon prebuilts
         run: rm -rf src/runtime/hexagon_remote/bin/
 
+      # TODO: this is a pretty cheesy way to allow overriding version for nightlies
+      # (ie by writing an __init__.py into the root dir); surely there is a better way?
       - name: Add nightly timestamp
         run: echo "__VERSION__=17.0.0dev${{ needs.pip-labels.outputs.halide_dev_label }}" >> __init__.py
 
