@@ -22,7 +22,7 @@ env:
                      -DWITH_PYTHON_STUBS=NO \
                      -DWITH_TESTS=NO \
                      -DWITH_TUTORIALS=NO \
-                     -DWITH_UTILS=NO
+                     -DWITH_UTILS=NO \
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
