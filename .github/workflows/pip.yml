@@ -29,19 +29,20 @@ jobs:
     name: Create Label for PyPI Packages
     runs-on: ubuntu-22.04
     outputs:
-      halide_pypi_label: ${{ steps.make_label.outputs.unix_time_utc }}
+      halide_dev_label: ${{ steps.make_label.outputs.yyyymmdd }}
     steps:
       - id: make_label
-        run: echo "unix_time_utc=$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")" >> "$GITHUB_OUTPUT"
+        # run: echo "unix_time_utc=$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")" >> "$GITHUB_OUTPUT"
+        run: echo "yyyymmdd=$(date -u +\"%Y-%m-%d\")" >> "$GITHUB_OUTPUT"
 
   pip-linux:
     name: Package Halide Python bindings
 
     runs-on: ubuntu-22.04
     needs: pip-labels
-    environment:
-      name: pypi
-      url: https://test.pypi.org/legacy/project/halide
+    # environment:
+    #   name: pypi
+    #   url: https://test.pypi.org/legacy/project/halide
 
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
@@ -64,6 +65,9 @@ jobs:
       - name: Remove Hexagon prebuilts
         run: rm -rf src/runtime/hexagon_remote/bin/
 
+      - name: Add nightly timestamp
+        run: echo "__VERSION__=17.0.0dev${{ needs.pip-labels.outputs.halide_dev_label }}" >> __init__.py
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -85,7 +89,7 @@ jobs:
           CIBW_BUILD: "cp39-manylinux_${{ matrix.arch }}"
           # TODO: --global-option is deprecated
           # TODO: wtf is `egg_info` and/or `-b.dev`
-          # CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }} --global-option=--build-number --global-option=${{github.run_id}}"
+          # CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_dev_label }} --global-option=--build-number --global-option=${{github.run_id}}"
           CIBW_CONFIG_SETTINGS: --config-settings=--build-number=${{github.run_id}}
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
@@ -214,7 +218,7 @@ jobs:
   #       env:
   #         CMAKE_PREFIX_PATH: ${{ github.workspace }}/local-halide
   #         CIBW_BUILD: "cp38-${{ matrix.pytag }} cp39-${{ matrix.pytag }} cp310-${{ matrix.pytag }}"
-  #         CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }} --global-option=--build-number --global-option=${{github.run_id}}"
+  #         CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_dev_label }} --global-option=--build-number --global-option=${{github.run_id}}"
   #         CIBW_ARCHS_MACOS: "universal2"
 
   #     - uses: actions/upload-artifact@v4
@@ -237,7 +241,7 @@ jobs:
         with:
           user: __token__
           password: ${{ secrets.TEST_PYPI_TOKEN }}
-          repository-url: https://test.pypi.org/
+          repository_url: https://test.pypi.org/legacy/
           verbose: true
 
       # - uses: pypa/gh-action-pypi-publish@1.8.11

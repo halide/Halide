@@ -6,15 +6,18 @@ from pathlib import Path
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README_python.md").read_text()
 
+if not "__VERSION__" in globals():
+    __VERSION__="17.0.0"
+
 setup(
     name="halide",
-    version='17.0.0',
+    version=__VERSION__,
     author="The Halide team",
     author_email="halide-dev@lists.csail.mit.edu",
     description="Halide is a programming language designed to make it easier "
                 "to write high-performance image and array processing code.",
     long_description=long_description,
-    long_description_content_type='text/markdown',
+    long_description_content_type="text/markdown",
     python_requires=">=3.8",
     packages=find_packages(where="python_bindings/src"),
     package_dir={"": "python_bindings/src"},
