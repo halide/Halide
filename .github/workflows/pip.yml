@@ -16,13 +16,7 @@ on:
 
 env:
   LLVM_VER: 17.0.6
-  HALIDE_CMAKE_OPTS: -DCMAKE_BUILD_TYPE=Release \
-                     -DWITH_DOCS=NO \
-                     -DWITH_PYTHON_BINDINGS=NO \
-                     -DWITH_PYTHON_STUBS=NO \
-                     -DWITH_TESTS=NO \
-                     -DWITH_TUTORIALS=NO \
-                     -DWITH_UTILS=NO \
+  HALIDE_CMAKE_OPTS: -DCMAKE_BUILD_TYPE=Release -DWITH_DOCS=NO -DWITH_PYTHON_BINDINGS=NO -DWITH_PYTHON_STUBS=NO -DWITH_TESTS=NO -DWITH_TUTORIALS=NO -DWITH_UTILS=NO
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
@@ -89,7 +83,7 @@ jobs:
         uses: actions/cache@v3.3.2
         with:
           path: local-llvm
-          key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
+          key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}-${{ runner.arch }}
 
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@latest
@@ -158,9 +152,6 @@ jobs:
           "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.buildplat[2] }}"
           -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
 
-      # - name: Build Halide
-      #   if: runner.os != 'Linux'
-      #   run: cmake --build halide-build --target install --config Release --prefix local-halide
       - name: Build Halide
         if: runner.os != 'Linux'
         run: cmake --build halide-build --target install --config Release
