@@ -80,7 +80,7 @@ jobs:
       - name: Cache LLVM build folder
         if: runner.os != 'Linux'
         id: cache-llvm
-        uses: actions/cache@v3.3
+        uses: actions/cache@v3.3.2
         with:
           path: local-llvm
           key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}
