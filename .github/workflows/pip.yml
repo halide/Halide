@@ -41,7 +41,7 @@ jobs:
     needs: pip-labels
     environment:
       name: pypi
-      url: https://test.pypi.org/project/halide
+      url: https://test.pypi.org/legacy/project/halide
 
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
@@ -52,6 +52,8 @@ jobs:
       matrix:
         # arch: [ x86_64, aarch64 ]
         arch: [ x86_64 ]
+        # python: [["cp38", "3.8"], ["cp39", "3.9"], ["cp310", "3.10"], ["cp311", "3.11"], ["cp312", "3.12"]]
+        # python: [["cp39", "3.9"]]
 
     steps:
       - uses: actions/checkout@v4
@@ -80,7 +82,7 @@ jobs:
           # CIBW_ARCHS_LINUX: "x86_64 aarch64"
           CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
           # CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux* cp311-manylinux*"
-          CIBW_BUILD: "cp38-manylinux_${{ matrix.arch }}"
+          CIBW_BUILD: "cp39-manylinux_${{ matrix.arch }}"
           # TODO: --global-option is deprecated
           # TODO: wtf is `egg_info` and/or `-b.dev`
           # CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_pypi_label }} --global-option=--build-number --global-option=${{github.run_id}}"
