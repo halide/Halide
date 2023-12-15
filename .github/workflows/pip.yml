@@ -10,9 +10,9 @@ on:
   release:
     types: [ created ]
 
-concurrency:
-  group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
-  cancel-in-progress: true
+# concurrency:
+#   group: '${{ github.workflow }}-${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+#   cancel-in-progress: true
 
 env:
   LLVM_VER: 17.0.6
@@ -25,6 +25,10 @@ jobs:
   pip-all:
     name: Package Halide Python bindings
     runs-on: ${{ matrix.runner }}
+
+    concurrency:
+      group: pip-all-group
+      cancel-in-progress: true
 
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
