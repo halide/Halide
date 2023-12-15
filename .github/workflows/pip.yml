@@ -53,6 +53,7 @@ jobs:
       # prebuilts for Hexagon and considers them an error.
       # Just pre-emptively remove them to avoid this.
       - name: Remove Hexagon prebuilts
+        shell: bash
         run: rm -rf src/runtime/hexagon_remote/bin/
 
       # ---------- Linux-specific LLVM stuff
