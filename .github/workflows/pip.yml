@@ -40,6 +40,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install ccache
+        run: |
+          sudo apt-get install ccache && \
+          ccache -s
+
       # cibuildwheel is confused by the presence of the .so
       # prebuilts for Hexagon and considers them an error.
       # Just pre-emptively remove them to avoid this.
@@ -63,21 +68,24 @@ jobs:
         env:
           # CIBW_ARCHS_LINUX: "x86_64 aarch64"
           CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
-          # CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux* cp311-manylinux*"
-          CIBW_BUILD: "cp39-manylinux* cp310-manylinux* cp311-manylinux*"
+          # CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux* cp311-manylinux* p312-manylinux*"
+          CIBW_BUILD: "cp311-manylinux_${{ matrix.arch }}-llvm:${{ env.LLVM_VER }}"
           CIBW_CONFIG_SETTINGS: --config-settings=--build-number=${{github.run_id}} --config-settings=egg_info --config-settings=--tag-build=dev --config-settings=--tag-date
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: |
             cmake -G Ninja -S . -B build \
               -DCMAKE_BUILD_TYPE=Release \
+              -DHalide_CCACHE_BUILD=ON \
               -DWITH_DOCS=NO \
               -DWITH_PYTHON_BINDINGS=NO \
               -DWITH_TESTS=NO \
               -DWITH_TUTORIALS=NO \
               -DWITH_UTILS=NO \
               -DWITH_PYTHON_STUBS=NO && \
-            cmake --build build --target install
+            ccache -s && \
+            cmake --build build --target install && \
+            ccache -s
 
       - uses: actions/upload-artifact@v4
         with:
