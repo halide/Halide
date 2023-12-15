@@ -162,18 +162,6 @@ jobs:
           -DWITH_TUTORIALS=NO
           -DWITH_UTILS=NO
 
-      - name: Configure Halide (Linux)
-        if: runner.os == 'Linux'
-        run: >
-          cmake -G Ninja -S . -B halide-build
-            -DCMAKE_BUILD_TYPE=Release
-            -DWITH_DOCS=NO
-            -DWITH_PYTHON_BINDINGS=NO
-            -DWITH_PYTHON_STUBS=NO
-            -DWITH_TESTS=NO
-            -DWITH_TUTORIALS=NO
-            -DWITH_UTILS=NO &&
-
       - name: Build Halide
         if: runner.os != 'Linux'
         run: cmake --build halide-build --target install --config Release --prefix local-halide
