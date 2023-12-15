@@ -90,10 +90,7 @@ jobs:
           # TODO: --global-option is deprecated
           # TODO: wtf is `egg_info` and/or `-b.dev`
           # CIBW_CONFIG_SETTINGS: "--global-option=egg_info --global-option=-b.dev${{ needs.pip-labels.outputs.halide_dev_label }} --global-option=--build-number --global-option=${{github.run_id}}"
-          CIBW_CONFIG_SETTINGS: --config-settings=--build-number=${{github.run_id}} \
-                                --config-settings=egg_info \
-                                --config-settings=--tag-build=dev \
-                                --config-settings=--tag-date
+          CIBW_CONFIG_SETTINGS: --config-settings=--build-number=${{github.run_id}} --config-settings=egg_info --config-settings=--tag-build=dev --config-settings=--tag-date
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: |
