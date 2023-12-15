@@ -65,6 +65,8 @@ if (Halide_CCACHE_BUILD)
 
     set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+    message(STATUS "CMAKE_C_COMPILER_LAUNCHER is ${CMAKE_C_COMPILER_LAUNCHER}")
+    message(STATUS "CMAKE_CXX_COMPILER_LAUNCHER is ${CMAKE_CXX_COMPILER_LAUNCHER}")
 
     # Per https://ccache.dev/manual/latest.html#_precompiled_headers,
     # we must set -fno-pch-timestamp when using Clang + CCache + PCH
