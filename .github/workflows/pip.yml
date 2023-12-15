@@ -34,10 +34,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # arch: [ x86_64, aarch64 ]
-        arch: [ x86_64 ]
-        # python: [ cp38 cp39 cp310 cp311 cp312 ]
-        python: [ cp311 ]
+        arch: [ x86_64, aarch64 ]
+        # arch: [ x86_64 ]
+        python: [ cp38 cp39 cp310 cp311 cp312 ]
+        # python: [ cp311 ]
 
     steps:
       - uses: actions/checkout@v4
@@ -60,22 +60,10 @@ jobs:
         with:
           platforms: all
 
-      # - name: Install ccache
-      #   run: |
-      #     sudo apt-get install ccache && \
-      #     ccache -s
-
-      # - name: Install ccache
-      #   uses: hendrikmuhs/ccache-action@v1.2
-      #   with:
-      #     max-size: 5G
-
       - name: Build Wheels
         uses: pypa/cibuildwheel@v2.16.2
         env:
-          # CIBW_ARCHS_LINUX: "x86_64 aarch64"
           CIBW_ARCHS_LINUX: "${{ matrix.arch }}"
-          # CIBW_BUILD: "cp38-manylinux* cp39-manylinux* cp310-manylinux* cp311-manylinux* p312-manylinux*"
           CIBW_BUILD: "${{ matrix.python }}-manylinux_${{ matrix.arch }}"
           CIBW_CONFIG_SETTINGS: --global-option=egg_info --global-option=--tag-build=dev --global-option=--tag-date
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
