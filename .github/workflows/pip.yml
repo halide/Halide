@@ -71,6 +71,10 @@ jobs:
         with:
           platforms: all
 
+      - name: Pull LLVM Container
+        if: runner.os == 'Linux'
+        run: docker pull ghcr.io/halide/manylinux2014_${{ matrix.buildplat[2] }}-llvm:${{ env.LLVM_VER }}
+
       # ---------- non-Linux-specific LLVM stuff
       - name: Cache LLVM build folder
         if: runner.os != 'Linux'
@@ -161,7 +165,6 @@ jobs:
       - name: Configure Halide (Linux)
         if: runner.os == 'Linux'
         run: >
-          docker pull ghcr.io/halide/manylinux2014_${{ matrix.buildplat[2] }}-llvm:${{ env.LLVM_VER }}
           cmake -G Ninja -S . -B halide-build
             -DCMAKE_BUILD_TYPE=Release
             -DWITH_DOCS=NO
