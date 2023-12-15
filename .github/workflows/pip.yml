@@ -76,6 +76,8 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: |
+            which ccache && \
+            ccache -s && \
             cmake -G Ninja -S . -B build \
               -DCMAKE_BUILD_TYPE=Release \
               -DHalide_CCACHE_BUILD=ON \
