@@ -174,7 +174,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: wheels
-          path: ./wheelhouse/halide-*${{ matrix.python }}*${{ matrix.buildplat[1] }}*.whl
+          path: ./wheelhouse/*.whl
 
   publish:
     name: Publish on PyPI
