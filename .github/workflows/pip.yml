@@ -13,7 +13,7 @@ on:
 env:
   LLVM_VER: 17.0.6
   HALIDE_CMAKE_OPTS: -DCMAKE_BUILD_TYPE=Release -DWITH_DOCS=NO -DWITH_PYTHON_BINDINGS=NO -DWITH_PYTHON_STUBS=NO -DWITH_TESTS=NO -DWITH_TUTORIALS=NO -DWITH_UTILS=NO
-  DEV_PREFIX: exp
+  DEV_PREFIX: b
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
