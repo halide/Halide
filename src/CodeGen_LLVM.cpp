@@ -1359,10 +1359,6 @@ bool is_power_of_two(int x) {
     return (x & (x - 1)) == 0;
 }
 
-int next_power_of_two(int x) {
-    return static_cast<int>(1) << static_cast<int>(std::ceil(std::log2(x)));
-}
-
 }  // namespace
 
 Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
@@ -2370,9 +2366,8 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
 llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::string &name, const Expr &base,
                                                const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
                                                llvm::Value *vpred, bool slice_to_native, llvm::Value *stride) {
-    debug(4) << "Vectorize predicated dense vector load:\n\t"
+    debug(0) << "Vectorize predicated dense vector load:\n\t"
              << "(" << type << ")" << name << "[ramp(base, 1, " << type.lanes() << ")]\n";
-
     int align_bytes = type.bytes();  // The size of a single element
 
     int native_bits = native_vector_bits();
@@ -4806,6 +4801,7 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
         return builder->CreateExtractElement(vec, (uint64_t)start);
     }
 
+#if 0
     vector<int> indices(size);
     for (int i = 0; i < size; i++) {
         int idx = start + i;
@@ -4815,7 +4811,47 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
             indices[i] = -1;
         }
     }
-    return shuffle_vectors(vec, indices);
+    auto result = shuffle_vectors(vec, indices);
+#else
+    llvm::Type *scalar_type = vec->getType()->getScalarType();
+
+    bool is_fixed = isa<FixedVectorType>(vec->getType());
+    int result_lanes = size;
+    if (!is_fixed && effective_vscale != 0) {
+        result_lanes = (result_lanes + effective_vscale - 1) / effective_vscale;
+    }
+    llvm::Type *result_type = get_vector_type(scalar_type, result_lanes,
+                                              is_fixed ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
+
+    int sub_max_size = std::min(vec_lanes - start, size);
+    int sub_max_lanes = sub_max_size;
+    if (!is_fixed && effective_vscale != 0) {
+        sub_max_lanes = (sub_max_lanes + effective_vscale - 1) / effective_vscale;
+    }
+    llvm::Type *sub_max_type = get_vector_type(scalar_type, sub_max_lanes,
+                                               is_fixed ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
+
+    vec = builder->CreateExtractVector(sub_max_type, vec, ConstantInt::get(i64_t, start));
+
+    if (size > sub_max_size) {
+        // Insert vector into a poison vector and return.
+        Constant *poison = PoisonValue::get(scalar_type);
+        llvm::ElementCount element_count;
+        if (isa<VectorType>(result_type)) {
+            element_count = cast<llvm::VectorType>(result_type)->getElementCount();
+        } else {
+            element_count = ElementCount::getFixed(1);
+        }
+        llvm::Value *result_vec = ConstantVector::getSplat(element_count, poison);
+        vec = builder->CreateInsertVector(result_type, result_vec, vec, ConstantInt::get(i64_t, 0));
+    } else {
+        internal_assert(result_lanes == sub_max_lanes);
+    }
+
+    auto result = vec;
+#endif
+
+    return result;
 }
 
 Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
@@ -4852,6 +4888,11 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
             }
             int w_matched = std::max(w1, w2);
 
+            if (v1->getType() != v2->getType()) {
+                // arbitrary decision here to convert v2 to type of v1 rather than
+                // target fixed or scalable.
+                v2 = convert_fixed_or_scalable_vector_type(v2, v1->getType());
+            }
             internal_assert(v1->getType() == v2->getType());
 
             vector<int> indices(w1 + w2);

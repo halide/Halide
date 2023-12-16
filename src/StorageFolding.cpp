@@ -10,16 +10,13 @@
 #include "Monotonic.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "Util.h"
 #include <utility>
 
 namespace Halide {
 namespace Internal {
 
 namespace {
-
-int64_t next_power_of_two(int64_t x) {
-    return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
-}
 
 using std::map;
 using std::string;

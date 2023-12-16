@@ -17,6 +17,7 @@
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <cmath>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -531,6 +532,11 @@ int popcount64(uint64_t x);
 int clz64(uint64_t x);
 int ctz64(uint64_t x);
 // @}
+
+/** Return an integer 2^n, for some n,  which is >= x. Argument x must be > 0. */
+inline int64_t next_power_of_two(int64_t x) {
+    return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
+}
 
 }  // namespace Internal
 }  // namespace Halide
