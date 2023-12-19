@@ -2398,6 +2398,13 @@ Func &Func::async() {
     return *this;
 }
 
+Func &Func::ring_buffer(Expr extent) {
+    invalidate_cache();
+    func.schedule().ring_buffer() = std::move(extent);
+    return *this;
+}
+
+
 Func &Func::dma() {
     invalidate_cache();
     func.schedule().dma() = true;

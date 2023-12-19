@@ -241,6 +241,8 @@ struct FuncScheduleContents {
     MemoryType memory_type = MemoryType::Auto;
     bool memoized = false;
     bool async = false;
+    // This is an extent of the ring buffer and expected to be a positive integer.
+    Expr ring_buffer;
     bool dma = false;
     Expr memoize_eviction_key;
 
@@ -364,6 +366,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
     copy.contents->dma = contents->dma;
+    copy.contents->ring_buffer = contents->ring_buffer;
 
     // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
@@ -413,6 +416,14 @@ bool &FuncSchedule::dma() {
 
 bool FuncSchedule::dma() const {
     return contents->dma;
+}
+
+Expr &FuncSchedule::ring_buffer() {
+    return contents->ring_buffer;
+}
+
+Expr &FuncSchedule::ring_buffer() const {
+    return contents->ring_buffer;
 }
 
 std::vector<StorageDim> &FuncSchedule::storage_dims() {
