@@ -2280,7 +2280,7 @@ public:
      * deadlock and a bound on the number of threads launched.
      */
     Func &async();
-    
+
     /** Expands the storage of the function by an extra dimension
      * to enable ring buffering. For this to be useful the storage
      * of the function has to be hoisted to an upper loop level using

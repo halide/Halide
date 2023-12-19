@@ -2404,7 +2404,6 @@ Func &Func::ring_buffer(Expr extent) {
     return *this;
 }
 
-
 Func &Func::dma() {
     invalidate_cache();
     func.schedule().dma() = true;
