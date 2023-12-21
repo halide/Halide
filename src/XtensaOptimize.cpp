@@ -2161,11 +2161,9 @@ Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     const int alignment = target.natural_vector_size<uint8_t>();
     const int lut_size_in_bytes = 2 * target.natural_vector_size<uint8_t>();
     Stmt s = OptimizeShuffles(alignment, lut_size_in_bytes).mutate(stmt);
-    // TODO(b/317374878): index cast to uint16_t for int16_t argument is at
-    // least sometimes wrong.
-    // if (target.has_feature(Target::Feature::XtensaQ8)) {
-    //     s = ConvertGatherLoadIndex().mutate(s);
-    // }
+    if (target.has_feature(Target::Feature::XtensaQ8)) {
+        s = ConvertGatherLoadIndex().mutate(s);
+    }
     s = align_loads(s, alignment, 1);
 
     // Use at most 16 vector registers for carrying values.
