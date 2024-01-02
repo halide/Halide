@@ -97,30 +97,22 @@ foreach (comp IN LISTS known_components)
     endif ()
 endforeach ()
 
-# This is a hack to allow us to use apt.llvm.org prebuilts without
-# needing to disable WebAssembly output, which requires linking LLD.
-option(Halide_ASSUME_LLDCONFIG_MISSING "Assume that LLVM is build with LLVM_ENABLE_PROJECTS=lld but without LLDConfig.cmake in the install (true of some prebuilts on apt.llvm.org).)." OFF)
-
 set(wasm_libs "")
 if (TARGET_WEBASSEMBLY)
-    if (Halide_ASSUME_LLDCONFIG_MISSING)
-        message(STATUS "Assuming that LLDConfig.cmake is missing; trying to link directly with lldWasm.")
-    else ()
-        find_package(LLD CONFIG REQUIRED HINTS "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")
-        message(STATUS "Using LLDConfig.cmake in: ${LLD_DIR}")
+    find_package(LLD CONFIG REQUIRED HINTS "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")
+    message(STATUS "Using LLDConfig.cmake in: ${LLD_DIR}")
 
-        # LLVM has a mis-feature that allows it to build and export both static and shared libraries at the same
-        # time, while inconsistently linking its own static libraries (for lldWasm and others) to the shared library.
-        # Ignoring this causes Halide to link to both the static AND the shared LLVM libs and it breaks at runtime.
-        # From issue: https://github.com/halide/Halide/issues/5471
-        if (LLVM_LINK_LLVM_DYLIB AND NOT Halide_SHARED_LLVM)
-            message(FATAL_ERROR "LLD was linked to shared LLVM (see: LLVM_LINK_LLVM_DYLIB), "
-                    "but static LLVM was requested. Re-configure with Halide_SHARED_LLVM=YES "
-                    "to enable WebAssembly, or disable WebAssembly with TARGET_WEBASSEMBLY=OFF.")
-        endif ()
-
-        set(wasm_libs lldWasm)
+    # LLVM has a mis-feature that allows it to build and export both static and shared libraries at the same
+    # time, while inconsistently linking its own static libraries (for lldWasm and others) to the shared library.
+    # Ignoring this causes Halide to link to both the static AND the shared LLVM libs and it breaks at runtime.
+    # From issue: https://github.com/halide/Halide/issues/5471
+    if (LLVM_LINK_LLVM_DYLIB AND NOT Halide_SHARED_LLVM)
+        message(FATAL_ERROR "LLD was linked to shared LLVM (see: LLVM_LINK_LLVM_DYLIB), "
+                "but static LLVM was requested. Re-configure with Halide_SHARED_LLVM=YES "
+                "to enable WebAssembly, or disable WebAssembly with TARGET_WEBASSEMBLY=OFF.")
     endif ()
+
+    set(wasm_libs lldWasm)
 endif ()
 
 ##
