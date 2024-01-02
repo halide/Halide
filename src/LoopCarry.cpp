@@ -301,9 +301,9 @@ class LoopCarryOverLoop : public IRMutator {
                 }
                 if (loads[i][0]->name == loads[j][0]->name &&
                     next_indices[j].defined() &&
-                    graph_equal(indices[i], next_indices[j]) &&
+                    (graph_equal(indices[i], next_indices[j]) || can_prove(indices[i] == next_indices[j])) &&
                     next_predicates[j].defined() &&
-                    graph_equal(predicates[i], next_predicates[j])) {
+                    (graph_equal(predicates[i], next_predicates[j]) || can_prove(predicates[i] == next_predicates[j]))) {
                     chains.push_back({j, i});
                     debug(3) << "Found carried value:\n"
                              << i << ":  -> " << Expr(loads[i][0]) << "\n"
