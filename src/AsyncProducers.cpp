@@ -73,6 +73,15 @@ protected:
         }
     }
 
+    Stmt visit(const HoistedStorage *op) override {
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return body;
+        } else {
+            return HoistedStorage::make(op->name, body);
+        }
+    }
+
     Stmt visit(const Allocate *op) override {
         Stmt body = mutate(op->body);
         if (is_no_op(body)) {
@@ -198,6 +207,9 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         if (starts_with(op->name, func + ".folding_semaphore.") && ends_with(op->name, ".head")) {
             // This is a counter associated with the producer side of a storage-folding semaphore. Keep it.
             return op;
+        } else if (starts_with(op->name, func + ".ring_buffer.")) {
+            // This is a counter associated with the producer side of a ring buffering.
+            return op;
         } else {
             return Evaluate::make(0);
         }
@@ -243,8 +255,42 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         return op;
     }
 
+    Stmt visit(const Allocate *op) override {
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return body;
+        } else {
+            return Allocate::make(op->name, op->type, op->memory_type,
+                                  op->extents, op->condition, body,
+                                  op->new_expr, op->free_function, op->padding);
+        }
+    }
+
+    Stmt visit(const Realize *op) override {
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return body;
+        } else {
+            inner_realizes.insert(op->name);
+            return Realize::make(op->name, op->types, op->memory_type,
+                                 op->bounds, op->condition, body);
+        }
+    }
+
+    Stmt visit(const HoistedStorage *op) override {
+        Stmt body = mutate(op->body);
+        if (is_no_op(body)) {
+            return body;
+        } else if (inner_realizes.count(op->name) == 0) {
+            return body;
+        } else {
+            return HoistedStorage::make(op->name, body);
+        }
+    }
+
     map<string, vector<string>> &cloned_acquires;
     set<string> inner_semaphores;
+    set<string> inner_realizes;
 
 public:
     GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, vector<string>> &a)
@@ -363,57 +409,78 @@ class ForkAsyncProducers : public IRMutator {
     const map<string, Function> &env;
 
     map<string, vector<string>> cloned_acquires;
+    std::set<string> hoisted_storages;
+
+    Stmt process_body(const string &name, Stmt body) {
+        // Make two copies of the body, one which only does the
+        // producer, and one which only does the consumer. Inject
+        // synchronization to preserve dependencies. Put them in a
+        // task-parallel block.
+
+        // Make a semaphore per consume node
+        CountConsumeNodes consumes(name);
+        body.accept(&consumes);
+
+        vector<string> sema_names;
+        vector<Expr> sema_vars;
+        for (int i = 0; i < consumes.count; i++) {
+            sema_names.push_back(name + ".semaphore_" + std::to_string(i));
+            sema_vars.push_back(Variable::make(type_of<halide_semaphore_t *>(), sema_names.back()));
+        }
+
+        Stmt producer = GenerateProducerBody(name, sema_vars, cloned_acquires).mutate(body);
+        Stmt consumer = GenerateConsumerBody(name, sema_vars).mutate(body);
+
+        // Recurse on both sides
+        producer = mutate(producer);
+        consumer = mutate(consumer);
+
+        // Run them concurrently
+        body = Fork::make(producer, consumer);
+
+        for (const string &sema_name : sema_names) {
+            // Make a semaphore on the stack
+            Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
+                                         {0}, Call::Extern);
+
+            // If there's a nested async producer, we may have
+            // recursively cloned this semaphore inside the mutation
+            // of the producer and consumer.
+            const vector<string> &clones = cloned_acquires[sema_name];
+            for (const auto &i : clones) {
+                body = CloneAcquire(sema_name, i).mutate(body);
+                body = LetStmt::make(i, sema_space, body);
+            }
+
+            body = LetStmt::make(sema_name, sema_space, body);
+        }
+
+        return body;
+    }
+
+    Stmt visit(const HoistedStorage *op) override {
+        hoisted_storages.insert(op->name);
+        Stmt body = op->body;
+
+        auto it = env.find(op->name);
+        internal_assert(it != env.end());
+        Function f = it->second;
+        if (f.schedule().async() && f.schedule().ring_buffer().defined()) {
+            body = process_body(op->name, body);
+        } else {
+            body = mutate(body);
+        }
+        hoisted_storages.erase(op->name);
+        return HoistedStorage::make(op->name, body);
+    }
 
     Stmt visit(const Realize *op) override {
         auto it = env.find(op->name);
         internal_assert(it != env.end());
         Function f = it->second;
-        if (f.schedule().async()) {
+        if (f.schedule().async() && hoisted_storages.count(op->name) == 0) {
             Stmt body = op->body;
-
-            // Make two copies of the body, one which only does the
-            // producer, and one which only does the consumer. Inject
-            // synchronization to preserve dependencies. Put them in a
-            // task-parallel block.
-
-            // Make a semaphore per consume node
-            CountConsumeNodes consumes(op->name);
-            body.accept(&consumes);
-
-            vector<string> sema_names;
-            vector<Expr> sema_vars;
-            for (int i = 0; i < consumes.count; i++) {
-                sema_names.push_back(op->name + ".semaphore_" + std::to_string(i));
-                sema_vars.push_back(Variable::make(type_of<halide_semaphore_t *>(), sema_names.back()));
-            }
-
-            Stmt producer = GenerateProducerBody(op->name, sema_vars, cloned_acquires).mutate(body);
-            Stmt consumer = GenerateConsumerBody(op->name, sema_vars).mutate(body);
-
-            // Recurse on both sides
-            producer = mutate(producer);
-            consumer = mutate(consumer);
-
-            // Run them concurrently
-            body = Fork::make(producer, consumer);
-
-            for (const string &sema_name : sema_names) {
-                // Make a semaphore on the stack
-                Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
-                                             {0}, Call::Extern);
-
-                // If there's a nested async producer, we may have
-                // recursively cloned this semaphore inside the mutation
-                // of the producer and consumer.
-                const vector<string> &clones = cloned_acquires[sema_name];
-                for (const auto &i : clones) {
-                    body = CloneAcquire(sema_name, i).mutate(body);
-                    body = LetStmt::make(i, sema_space, body);
-                }
-
-                body = LetStmt::make(sema_name, sema_space, body);
-            }
-
+            body = process_body(op->name, body);
             return Realize::make(op->name, op->types, op->memory_type,
                                  op->bounds, op->condition, body);
         } else {
@@ -592,6 +659,117 @@ public:
     }
 };
 
+// Update indices to add ring buffer.
+class UpdateIndices : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const Provide *op) override {
+        if (op->name == func_name) {
+            std::vector<Expr> args = op->args;
+            args.push_back(ring_buffer_index);
+            return Provide::make(op->name, op->values, args, op->predicate);
+        }
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->call_type == Call::Halide && op->name == func_name) {
+            std::vector<Expr> args = op->args;
+            args.push_back(ring_buffer_index);
+            return Call::make(op->type, op->name, args, op->call_type, op->func, op->value_index, op->image, op->param);
+        }
+        return IRMutator::visit(op);
+    }
+
+    std::string func_name;
+    Expr ring_buffer_index;
+
+public:
+    UpdateIndices(const string &fn, Expr di)
+        : func_name(fn), ring_buffer_index(std::move(di)) {
+    }
+};
+
+// Inject ring buffering.
+class InjectRingBuffering : public IRMutator {
+    using IRMutator::visit;
+
+    struct Loop {
+        std::string name;
+        Expr min;
+        Expr extent;
+
+        Loop(std::string n, Expr m, Expr e)
+            : name(std::move(n)), min(std::move(m)), extent(std::move(e)) {
+        }
+    };
+
+    const map<string, Function> &env;
+    std::vector<Loop> loops;
+    std::map<std::string, int> hoist_storage_loop_index;
+
+    Stmt visit(const Realize *op) override {
+        Stmt body = mutate(op->body);
+        Function f = env.find(op->name)->second;
+        Region bounds = op->bounds;
+        if (f.schedule().ring_buffer().defined()) {
+            // For the ring buffering we expand the storage by adding another dimension of
+            // the range of [0, ring_buffer.extent].
+            bounds.emplace_back(0, f.schedule().ring_buffer());
+            // Build an index for accessing ring buffer as a linear combination of all
+            // loop variables between the storage location (defined by the HoistStorage loop level)
+            // and corresponding Realize node.
+            int loop_index = hoist_storage_loop_index[op->name] + 1;
+            Expr current_index = Variable::make(Int(32), loops[loop_index].name);
+            while (++loop_index < (int)loops.size()) {
+                current_index = current_index *
+                                    (loops[loop_index].extent - loops[loop_index].min) +
+                                Variable::make(Int(32), loops[loop_index].name);
+            }
+            current_index = current_index % f.schedule().ring_buffer();
+            // Adds an extra index for to the all of the references of f.
+            body = UpdateIndices(op->name, current_index).mutate(body);
+            Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.ring_buffer");
+            Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
+            Stmt release = Evaluate::make(release_producer);
+            body = Block::make(body, release);
+            body = Acquire::make(sema_var, 1, body);
+        }
+
+        return Realize::make(op->name, op->types, op->memory_type, bounds, op->condition, body);
+    }
+
+    Stmt visit(const HoistedStorage *op) override {
+        // Store the index of the last loop we encountered.
+        hoist_storage_loop_index[op->name] = loops.size() - 1;
+        Function f = env.find(op->name)->second;
+
+        Stmt mutated = mutate(op->body);
+        mutated = HoistedStorage::make(op->name, mutated);
+
+        if (f.schedule().ring_buffer().defined()) {
+            // Make a semaphore on the stack
+            Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
+                                         {2}, Call::Extern);
+            mutated = LetStmt::make(f.name() + std::string(".folding_semaphore.ring_buffer"), sema_space, mutated);
+        }
+        hoist_storage_loop_index.erase(op->name);
+        return mutated;
+    }
+
+    Stmt visit(const For *op) override {
+        loops.emplace_back(op->name, op->min, op->extent);
+        Stmt mutated = IRMutator::visit(op);
+        loops.pop_back();
+        return mutated;
+    }
+
+public:
+    InjectRingBuffering(const map<string, Function> &e)
+        : env(e) {
+    }
+};
+
 // Broaden the scope of acquire nodes to pack trailing work into the
 // same task and to potentially reduce the nesting depth of tasks.
 class ExpandAcquireNodes : public IRMutator {
@@ -636,6 +814,18 @@ class ExpandAcquireNodes : public IRMutator {
         } else {
             return Realize::make(op->name, op->types, op->memory_type,
                                  op->bounds, op->condition, body);
+        }
+    }
+
+    Stmt visit(const HoistedStorage *op) override {
+        Stmt body = mutate(op->body);
+        if (const Acquire *a = body.as<Acquire>()) {
+            // Don't do the allocation until we have the
+            // semaphore. Reduces peak memory use.
+            return Acquire::make(a->semaphore, a->count,
+                                 mutate(HoistedStorage::make(op->name, a->body)));
+        } else {
+            return HoistedStorage::make(op->name, body);
         }
     }
 
@@ -693,6 +883,9 @@ class TightenForkNodes : public IRMutator {
         const LetStmt *lr = rest.as<LetStmt>();
         const Realize *rf = first.as<Realize>();
         const Realize *rr = rest.as<Realize>();
+        const HoistedStorage *hf = first.as<HoistedStorage>();
+        const HoistedStorage *hr = rest.as<HoistedStorage>();
+
         if (lf && lr &&
             lf->name == lr->name &&
             equal(lf->value, lr->value)) {
@@ -707,6 +900,10 @@ class TightenForkNodes : public IRMutator {
         } else if (rr && !stmt_uses_var(first, rr->name)) {
             return Realize::make(rr->name, rr->types, rr->memory_type,
                                  rr->bounds, rr->condition, make_fork(first, rr->body));
+        } else if (hf && !stmt_uses_var(rest, hf->name)) {
+            return HoistedStorage::make(hf->name, make_fork(rf->body, rest));
+        } else if (hr && !stmt_uses_var(first, hr->name)) {
+            return HoistedStorage::make(hr->name, make_fork(first, hr->body));
         } else {
             return Fork::make(first, rest);
         }
@@ -740,6 +937,15 @@ class TightenForkNodes : public IRMutator {
         }
     }
 
+    Stmt visit(const HoistedStorage *op) override {
+        Stmt body = mutate(op->body);
+        if (in_fork && !stmt_uses_var(body, op->name)) {
+            return body;
+        } else {
+            return HoistedStorage::make(op->name, body);
+        }
+    }
+
     Stmt visit(const LetStmt *op) override {
         Stmt body = mutate(op->body);
         if (in_fork && !stmt_uses_var(body, op->name)) {
@@ -758,6 +964,7 @@ class TightenForkNodes : public IRMutator {
 
 Stmt fork_async_producers(Stmt s, const map<string, Function> &env) {
     s = TightenProducerConsumerNodes(env).mutate(s);
+    s = InjectRingBuffering(env).mutate(s);
     s = ForkAsyncProducers(env).mutate(s);
     s = ExpandAcquireNodes().mutate(s);
     s = TightenForkNodes().mutate(s);
