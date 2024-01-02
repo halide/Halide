@@ -729,11 +729,14 @@ class InjectRingBuffering : public IRMutator {
             current_index = current_index % f.schedule().ring_buffer();
             // Adds an extra index for to the all of the references of f.
             body = UpdateIndices(op->name, current_index).mutate(body);
-            Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.ring_buffer");
-            Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
-            Stmt release = Evaluate::make(release_producer);
-            body = Block::make(body, release);
-            body = Acquire::make(sema_var, 1, body);
+
+            if (f.schedule().async()) {
+                Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), f.name() + ".folding_semaphore.ring_buffer");
+                Expr release_producer = Call::make(Int(32), "halide_semaphore_release", {sema_var, 1}, Call::Extern);
+                Stmt release = Evaluate::make(release_producer);
+                body = Block::make(body, release);
+                body = Acquire::make(sema_var, 1, body);
+            }
         }
 
         return Realize::make(op->name, op->types, op->memory_type, bounds, op->condition, body);
@@ -747,7 +750,7 @@ class InjectRingBuffering : public IRMutator {
         Stmt mutated = mutate(op->body);
         mutated = HoistedStorage::make(op->name, mutated);
 
-        if (f.schedule().ring_buffer().defined()) {
+        if (f.schedule().async() && f.schedule().ring_buffer().defined()) {
             // Make a semaphore on the stack
             Expr sema_space = Call::make(type_of<halide_semaphore_t *>(), "halide_make_semaphore",
                                          {2}, Call::Extern);
