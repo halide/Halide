@@ -11,7 +11,11 @@ WEAK void halide_default_error(void *user_context, const char *msg) {
     constexpr int buf_size = 4096;
     char buf[buf_size];
     PrinterBase dst(user_context, buf, buf + buf_size);
-    dst << "Error: " << msg << "\n";
+    dst << "Error: " << msg;
+    const char *d = dst.str();
+    if (d && *d && d[strlen(d) - 1] != '\n') {
+        dst << "\n";
+    }
     halide_print(user_context, dst.str());
     abort();
 }
