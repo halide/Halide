@@ -2164,14 +2164,12 @@ Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     if (target.has_feature(Target::Feature::XtensaQ8)) {
         s = ConvertGatherLoadIndex().mutate(s);
     }
-    s = align_loads(s, alignment, 1);
 
     // Use at most 16 vector registers for carrying values.
-    // NOTE(vksnk): loop_carry seems to be a little finicky right now
-    // but looks like something we'd definitely want to have, so
-    // need to figure out where it goes wrong.
     s = loop_carry(s, 16);
+    s = align_loads(s, alignment, 1);
     s = simplify(s);
+
     for (int ix = 0; ix < 10; ix++) {
         s = MatchXtensaPatterns(target).mutate(s);
     }
