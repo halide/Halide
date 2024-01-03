@@ -1244,7 +1244,11 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     if (tm) {
+#if LLVM_VERSION >= 180
+        tm->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
+#else
         tm->registerPassBuilderCallbacks(pb);
+#endif
     }
 
     mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
