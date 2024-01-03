@@ -700,7 +700,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     using OptimizationLevel = llvm::OptimizationLevel;
     OptimizationLevel level = OptimizationLevel::O3;
 
+#if LLVM_VERSION >= 180
+    target_machine->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
+#else
     target_machine->registerPassBuilderCallbacks(pb);
+#endif
 
     mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
     mpm.run(*module, mam);
