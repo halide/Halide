@@ -291,9 +291,15 @@ class InjectDmaTransferIntoProducer : public IRMutator {
 
         if (is_output_dma) {
             source_name = maybe_load->name;
+        } else {
+            source_name = op->name;
         }
 
-        Stmt call_result_assert = AssertStmt::make(copy_call > 0, -1);
+        // Store id of DMA transaction, so we can later wait on it.
+        Stmt call_result_assert = Store::make(source_name + ".ring_buffer.dma_id",
+                                              copy_call, ring_buffer_index,
+                                              Parameter(), const_true(),
+                                              ModulusRemainder());
 
         return call_result_assert;
     }
@@ -307,6 +313,8 @@ public:
     bool is_output_dma = false;
     // If yes store the name of the source.
     std::string source_name;
+
+    Expr ring_buffer_index = 0;
 };
 
 class InjectDmaTransfer : public IRMutator {
@@ -317,32 +325,110 @@ class InjectDmaTransfer : public IRMutator {
     // Mapping from the function name to the assigned DMA channel.
     std::map<std::string, int> function_name_to_index;
 
+    // A structure to hold loop information.
+    struct Loop {
+        string name;
+        Expr min;
+        Expr extent;
+
+        Loop(string name, Expr min, Expr extent)
+            : name(name), min(min), extent(extent) {
+        }
+    };
+
+    std::vector<Loop> loops;
+    std::vector<std::vector<std::pair<string, Expr>>> lets_in_loops;
+
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
             auto it = env.find(op->name);
             if (it != env.end()) {
                 Function f = it->second;
                 if (f.schedule().dma()) {
-                    Stmt body = mutate(op->body);
+                    Stmt producer_body = mutate(op->body);
                     // Assign a separate DMA channel for each of the buffers.
                     if (function_name_to_index.find(op->name) == function_name_to_index.end()) {
                         function_name_to_index[op->name] = index;
                         index++;
                     }
+                    Stmt body;
+                    Expr dma_id_index;
                     auto injector = InjectDmaTransferIntoProducer(op->name, function_name_to_index[op->name]);
-                    body = injector.mutate(body);
+                    // If ring_buffer is defined, we can unroll one iteration
+                    // to do double-buffering DMA.
+                    if (f.schedule().ring_buffer().defined()) {
+                        // Find a variable to do double-buffering over.
+                        Expr index_var = Variable::make(Int(32), loops.back().name);
+                        Expr first_index = loops.back().min;
+                        Expr last_index = loops.back().min + loops.back().extent - 1;
+
+                        dma_id_index = index_var % f.schedule().ring_buffer();
+                        injector.ring_buffer_index = dma_id_index;
+                        producer_body = injector.mutate(producer_body);
+
+                        auto &lets = lets_in_loops.back();
+                        // We want to find all Let-s which depend on the loop variable which we use
+                        // to double-buffer.
+                        Scope<void> dependant_lets_scope;
+                        for (const auto &let : lets) {
+                            if (expr_uses_var(let.second, loops.back().name) || expr_uses_vars(let.second, dependant_lets_scope)) {
+                                debug(3) << "Let " << let.first << " uses var " << loops.back().name << "\n"
+                                         << let.second << "\n";
+                                dependant_lets_scope.push(let.first);
+                            }
+                        }
+
+                        Stmt next_producer_body = producer_body;
+                        debug(3) << "0: Next producer body: \n"
+                                 << next_producer_body << "\n";
+
+                        // Create a copy of all Let's which depend on the loop variable.
+                        std::map<string, Expr> replacements;
+                        for (int ix = lets.size() - 1; ix >= 0; ix--) {
+                            if (dependant_lets_scope.contains(lets[ix].first)) {
+                                next_producer_body = LetStmt::make(lets[ix].first + ".next_index", lets[ix].second, next_producer_body);
+                                replacements.insert({lets[ix].first, Variable::make(Int(32), lets[ix].first + ".next_index")});
+                            }
+                        }
+                        // Replace all dependant variables by their clones.
+                        next_producer_body = substitute(replacements, next_producer_body);
+                        debug(3) << "1: Next producer body: \n"
+                                 << next_producer_body << "\n";
+
+                        // Advance loop variable by one in this producer body.
+                        next_producer_body = substitute(
+                            loops.back().name, Variable::make(Int(32), loops.back().name) + 1,
+                            next_producer_body);
+                        debug(3) << "2: Next producer body: \n"
+                                 << next_producer_body << "\n";
+
+                        Expr is_last_iteration = LT::make(index_var, last_index);
+                        body = IfThenElse::make(is_last_iteration, next_producer_body);
+
+                        Expr is_first_iteration = EQ::make(index_var, first_index);
+                        Stmt first_copy = IfThenElse::make(is_first_iteration, producer_body);
+                        body = Block::make(first_copy, body);
+                    } else {
+                        dma_id_index = 0;
+                        body = injector.mutate(producer_body);
+                    }
+
                     if (!injector.is_output_dma) {
                         // Add a wait in the *end* of the producer node for the
                         // case when there any outstanding DMA transactions.
-                        Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy",
-                                                      {(function_name_to_index[op->name] % kNumberOfChannelsForInputs) + kOffsetOfChannelForInputs}, Call::Intrinsic);
-                        Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
+                        Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy_with_id",
+                                                      {(function_name_to_index[op->name] % kNumberOfChannelsForInputs) + kOffsetOfChannelForInputs,
+                                                       Load::make(Int(32), op->name + ".ring_buffer.dma_id", dma_id_index, Buffer<>(), Parameter(), const_true(), ModulusRemainder())},
+                                                      Call::Intrinsic);
+                        Stmt wait_is_done = Evaluate::make(wait_result);
                         body = Block::make(body, wait_is_done);
                     } else {
                         // For the output nodes collect all of the corresponding
                         // producers, so we can add required waits in a separate
                         // pass later.
-                        producers_to_wait[injector.source_name] = function_name_to_index[op->name] % kNumberOfChannelsForOutputs;
+                        DelayedWaitInfo info(function_name_to_index[op->name] % kNumberOfChannelsForOutputs,
+                                             dma_id_index, f.schedule().ring_buffer());
+                        producers_to_wait.insert({injector.source_name, info});
                     }
                     return ProducerConsumer::make_produce(op->name, body);
                 }
@@ -351,17 +437,67 @@ class InjectDmaTransfer : public IRMutator {
         return IRMutator::visit(op);
     }
 
+    Stmt visit(const Allocate *op) {
+        Stmt mutated = IRMutator::visit(op);
+
+        auto it = env.find(op->name);
+        if (it != env.end()) {
+            Function f = it->second;
+            // Allocate memory for DMA transaction ID(s).
+            if (f.schedule().dma()) {
+                std::vector<Expr> extents;
+                if (f.schedule().ring_buffer().defined()) {
+                    extents.push_back(f.schedule().ring_buffer());
+                }
+                mutated = Allocate::make(op->name + ".ring_buffer.dma_id", Int(32), MemoryType::Stack, extents, const_true(), mutated);
+            }
+        }
+
+        return mutated;
+    }
+
+    Stmt visit(const LetStmt *op) {
+        if (!lets_in_loops.empty()) {
+            lets_in_loops.back().push_back({op->name, op->value});
+            Stmt mutated = IRMutator::visit(op);
+            lets_in_loops.back().pop_back();
+            return mutated;
+        }
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const For *op) {
+        lets_in_loops.push_back({});
+        loops.emplace_back(op->name, op->min, op->extent);
+        Stmt mutated = IRMutator::visit(op);
+        loops.pop_back();
+        lets_in_loops.pop_back();
+        return mutated;
+    }
+
 public:
     InjectDmaTransfer(const std::map<std::string, Function> &e)
         : env(e) {
     }
 
-    std::map<std::string, int> producers_to_wait;
+    struct DelayedWaitInfo {
+        int channel_index;
+        Expr dma_id_index;
+        Expr ring_buffer_extent;
+
+        DelayedWaitInfo(int channel_index, Expr dma_id_index, Expr ring_buffer_extent)
+            : channel_index(channel_index),
+              dma_id_index(dma_id_index),
+              ring_buffer_extent(ring_buffer_extent) {
+        }
+    };
+
+    std::map<string, DelayedWaitInfo> producers_to_wait;
 };
 
 class InjectWaitsInProducers : public IRMutator {
     using IRMutator::visit;
-    const std::map<std::string, int> &producers_to_wait;
+    const std::map<string, InjectDmaTransfer::DelayedWaitInfo> &producers_to_wait;
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
@@ -370,8 +506,12 @@ class InjectWaitsInProducers : public IRMutator {
                 // Add a wait in the *beginning* of the producer node to make
                 // sure that everything is copied before starting production of
                 // the new lines.
-                Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy", {it->second}, Call::Intrinsic);
-                Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
+                Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy_with_id",
+                                              {it->second.channel_index,
+                                               Load::make(Int(32), op->name + ".ring_buffer.dma_id", it->second.dma_id_index, Buffer<>(), Parameter(), const_true(), ModulusRemainder())},
+                                              Call::Intrinsic);
+
+                Stmt wait_is_done = Evaluate::make(wait_result);
                 Stmt body = mutate(op->body);
                 body = Block::make(wait_is_done, body);
 
@@ -386,24 +526,32 @@ class InjectWaitsInProducers : public IRMutator {
         if (it != producers_to_wait.end()) {
             // Add a wait in the end of the allocate node to make sure that
             // everything is copied before de-allocation.
-            Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy", {it->second}, Call::Intrinsic);
-            Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
+            Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy", {it->second.channel_index}, Call::Intrinsic);
+            Stmt wait_is_done = Evaluate::make(wait_result);
             Stmt body = mutate(op->body);
             body = Block::make(body, wait_is_done);
 
-            return Allocate::make(op->name, op->type, op->memory_type,
+            body = Allocate::make(op->name, op->type, op->memory_type,
                                   op->extents, op->condition, body,
                                   op->new_expr, op->free_function);
+
+            std::vector<Expr> extents;
+            if (it->second.ring_buffer_extent.defined()) {
+                extents.push_back(it->second.ring_buffer_extent);
+            }
+            body = Allocate::make(op->name + ".ring_buffer.dma_id", Int(32),
+                                  MemoryType::Stack, extents, const_true(), body);
+
+            return body;
         }
 
         return IRMutator::visit(op);
     }
 
 public:
-    InjectWaitsInProducers(const std::map<std::string, int> &pr)
-        : producers_to_wait(pr){}
-
-          ;
+    InjectWaitsInProducers(const std::map<string, InjectDmaTransfer::DelayedWaitInfo> &pr)
+        : producers_to_wait(pr) {
+    }
 };
 
 Stmt inject_dma_transfer(Stmt s, const std::map<std::string, Function> &env) {
