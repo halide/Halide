@@ -63,6 +63,7 @@ set(RUNTIME_CPP
     posix_timer_profiler
     powerpc_cpu_features
     prefetch
+    printer
     profiler
     profiler_inlined
     pseudostack

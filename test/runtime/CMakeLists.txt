@@ -29,7 +29,9 @@ if(NOT MSVC)
     # Weak linkages are easier to get right with OBJECT libraries
     add_library(runtime_internal_common OBJECT
                 common.cpp
+                "${Halide_SOURCE_DIR}/src/runtime/float16_t.cpp"
                 "${Halide_SOURCE_DIR}/src/runtime/msan_stubs.cpp"
+                "${Halide_SOURCE_DIR}/src/runtime/printer.cpp"
                 "${Halide_SOURCE_DIR}/src/runtime/to_string.cpp")
     _set_target_options(runtime_internal_common)
 

@@ -130,6 +130,7 @@ DECLARE_CPP_INITMOD(posix_threads)
 DECLARE_CPP_INITMOD(posix_threads_tsan)
 DECLARE_CPP_INITMOD(posix_timer_profiler)
 DECLARE_CPP_INITMOD(prefetch)
+DECLARE_CPP_INITMOD(printer)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(pseudostack)
@@ -804,6 +805,7 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     modules.push_back(get_initmod_float16_t(c, bits_64, debug));
     modules.push_back(get_initmod_errors(c, bits_64, debug));
     modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
+    modules.push_back(get_initmod_printer(c, bits_64, debug));
 
     // We don't want anything marked as weak for the wasm-jit runtime,
     // so convert all of them to linkonce
@@ -857,6 +859,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             // OS-dependent modules
             if (t.os == Target::Linux) {
                 add_allocator();
+                modules.push_back(get_initmod_printer(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
@@ -876,6 +879,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::WebAssemblyRuntime) {
                 add_allocator();
+                modules.push_back(get_initmod_printer(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
@@ -891,6 +895,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_fake_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
                 add_allocator();
+                modules.push_back(get_initmod_printer(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
@@ -906,6 +911,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
             } else if (t.os == Target::Android) {
                 add_allocator();
+                modules.push_back(get_initmod_printer(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 if (t.arch == Target::ARM || t.arch == Target::RISCV) {
@@ -938,6 +944,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_windows_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::IOS) {
                 add_allocator();
+                modules.push_back(get_initmod_printer(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
@@ -964,6 +971,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 // process instead at link time. Less aggressive than
                 // NoRuntime, as OS-agnostic modules like tracing are
                 // still included below.
+                modules.push_back(get_initmod_printer(c, bits_64, debug));
                 if (t.arch == Target::Hexagon) {
                     modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
                     modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
@@ -977,6 +985,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
             } else if (t.os == Target::Fuchsia) {
                 add_allocator();
+                modules.push_back(get_initmod_printer(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_print(c, bits_64, debug));
                 modules.push_back(get_initmod_fuchsia_clock(c, bits_64, debug));
