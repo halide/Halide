@@ -299,6 +299,9 @@ class LoopCarryOverLoop : public IRMutator {
                 if (i == j) {
                     continue;
                 }
+                // can_prove is stronger than graph_equal, because it doesn't require index expressions to be
+                // exactly the same, but evalutate to the same value. We keep the graph_equal check, because
+                // it's faster and should be executed before the more expensive check.
                 if (loads[i][0]->name == loads[j][0]->name &&
                     next_indices[j].defined() &&
                     (graph_equal(indices[i], next_indices[j]) ||
