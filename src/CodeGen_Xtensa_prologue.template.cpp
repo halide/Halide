@@ -11,6 +11,7 @@ extern void **halide_init_dma(int32_t channel_count);
 extern int32_t halide_xtensa_copy_1d(int32_t channel, void *dst, int32_t dst_base, void *src, int32_t src_base, int32_t extent, int32_t item_size);
 extern int32_t halide_xtensa_copy_2d(int32_t channel, void *dst, int32_t dst_base, int32_t dst_stride, void *src, int32_t src_base, int32_t src_stride, int32_t extent0, int32_t extent1, int32_t item_size);
 extern int32_t halide_xtensa_wait_for_copy(int32_t channel);
+extern int32_t halide_xtensa_wait_for_copy_with_id(int32_t channel, int32_t index);
 extern int32_t halide_release_dma(int32_t channel_count, void **dma_desc);
 
 #ifdef __cplusplus
