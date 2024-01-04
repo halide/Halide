@@ -166,6 +166,7 @@ jobs:
           CIBW_BUILD: "${{ matrix.python }}-${{ matrix.buildplat[1] }}"
           CIBW_CONFIG_SETTINGS: --global-option=egg_info --global-option=--tag-build=${{ env.DEV_PREFIX }} --global-option=--tag-date
           CIBW_BEFORE_ALL_LINUX: |
+            wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
             sudo add-apt-repository "deb http://apt.llvm.org/${{ env.MANYLINUX_INSTALL_DISTRO }}/ llvm-toolchain-${{ env.MANYLINUX_INSTALL_DISTRO }}-${{ env.LLVM_VER_MAJOR }} main"
             sudo apt install libllvm${{ env.LLVM_VER_MAJOR }} llvm-${{ env.LLVM_VER_MAJOR }} llvm-${{ env.LLVM_VER_MAJOR }}-dev llvm-${{ env.LLVM_VER_MAJOR }}-runtime libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev libfuzzer-${{ env.LLVM_VER_MAJOR }}-dev lld-18 libc++-${{ env.LLVM_VER_MAJOR }}-dev libc++abi-${{ env.LLVM_VER_MAJOR }}-dev libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm64 libc++-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libc++abi-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm64 libclang-${{ env.LLVM_VER_MAJOR }}-dev libzstd-dev liblld-${{ env.LLVM_VER_MAJOR }} liblld-${{ env.LLVM_VER_MAJOR }}-dev
             cmake -G Ninja -S . -B halide-build ${{ env.HALIDE_CMAKE_OPTS }} && \
