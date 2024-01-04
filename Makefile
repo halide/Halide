@@ -1448,7 +1448,7 @@ $(BIN_DIR)/runtime_common:
 	@mkdir -p $(@D)
 	touch $@
 
-$(BIN_DIR)/runtime_%: $(ROOT_DIR)/test/runtime/%.cpp $(BIN_DIR)/runtime_internal_common.o $(BIN_DIR)/runtime_internal_msan_stubs.o $(BIN_DIR)/runtime_internal_to_string.o
+$(BIN_DIR)/runtime_%: $(ROOT_DIR)/test/runtime/%.cpp $(BIN_DIR)/runtime_internal_common.o $(BIN_DIR)/runtime_internal_msan_stubs.o $(BIN_DIR)/runtime_internal_to_string.o $(BIN_DIR)/runtime_internal_float16_t.o $(BIN_DIR)/runtime_internal_printer.o
 	@mkdir -p $(@D)
 	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) $^ $(COMMON_LD_FLAGS) -o $@
 
