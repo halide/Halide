@@ -11,9 +11,13 @@ on:
     types: [ created ]
 
 env:
-  LLVM_VER: 17.0.6
+  LLVM_VER_MAJOR: 17
+  LLVM_VER_MINOR: 0
+  LLVM_VER_PATCH: 6
+  LLVM_VER: ${LLVM_VER_MAJOR}.${LLVM_VER_MINOR}.${LLVM_VER_PATCH}
   HALIDE_CMAKE_OPTS: -DCMAKE_BUILD_TYPE=Release -DWITH_DOCS=NO -DWITH_PYTHON_BINDINGS=NO -DWITH_PYTHON_STUBS=NO -DWITH_TESTS=NO -DWITH_TUTORIALS=NO -DWITH_UTILS=NO
   DEV_PREFIX: b
+  MANYLINUX_INSTALL_DISTRO: buster
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
@@ -54,23 +58,19 @@ jobs:
         run: rm -rf src/runtime/hexagon_remote/bin/
 
       # ---------- Linux-specific LLVM stuff
-      - name: Log in to GitHub Container Registry
-        if: runner.os == 'Linux'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Log in to GitHub Container Registry
+      #   if: runner.os == 'Linux'
+      #   uses: docker/login-action@v3
+      #   with:
+      #     registry: ghcr.io
+      #     username: ${{ github.actor }}
+      #     password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
         if: runner.os == 'Linux'
         uses: docker/setup-qemu-action@v3
         with:
           platforms: all
-
-      - name: Pull LLVM Container
-        if: runner.os == 'Linux'
-        run: docker pull ghcr.io/halide/manylinux2014_${{ matrix.buildplat[2] }}-llvm:${{ env.LLVM_VER }}
 
       # ---------- non-Linux-specific LLVM stuff
       - name: Cache LLVM build folder
@@ -164,12 +164,15 @@ jobs:
           CIBW_ARCHS_MACOS: "universal2"
           CIBW_BUILD: "${{ matrix.python }}-${{ matrix.buildplat[1] }}"
           CIBW_CONFIG_SETTINGS: --global-option=egg_info --global-option=--tag-build=${{ env.DEV_PREFIX }} --global-option=--tag-date
-          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
-          CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: |
+            sudo add-apt-repository "deb http://apt.llvm.org/${MANYLINUX_INSTALL_DISTRO}/ llvm-toolchain-${MANYLINUX_INSTALL_DISTRO}-${LLVM_VER_MAJOR} main"
+            sudo apt install libllvm${LLVM_VER_MAJOR} llvm-${LLVM_VER_MAJOR} llvm-${LLVM_VER_MAJOR}-dev llvm-${LLVM_VER_MAJOR}-runtime libclang-rt-${LLVM_VER_MAJOR}-dev libfuzzer-${LLVM_VER_MAJOR}-dev lld-18 libc++-${LLVM_VER_MAJOR}-dev libc++abi-${LLVM_VER_MAJOR}-dev libclang-rt-${LLVM_VER_MAJOR}-dev-wasm32 libclang-rt-${LLVM_VER_MAJOR}-dev-wasm64 libc++-${LLVM_VER_MAJOR}-dev-wasm32 libc++abi-${LLVM_VER_MAJOR}-dev-wasm32 libclang-rt-${LLVM_VER_MAJOR}-dev-wasm32 libclang-rt-${LLVM_VER_MAJOR}-dev-wasm64 libclang-${LLVM_VER_MAJOR}-dev libzstd-dev liblld-${LLVM_VER_MAJOR} liblld-${LLVM_VER_MAJOR}-dev
             cmake -G Ninja -S . -B halide-build ${{ env.HALIDE_CMAKE_OPTS }} && \
             cmake --build halide-build --target install --config Release && \
             cmake --install halide-build --config Release --prefix local-halide
+
+          # CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
+          # CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
 
       - uses: actions/upload-artifact@v4
         with:

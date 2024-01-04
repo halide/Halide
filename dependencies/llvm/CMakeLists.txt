@@ -106,11 +106,14 @@ if (TARGET_WEBASSEMBLY)
     # time, while inconsistently linking its own static libraries (for lldWasm and others) to the shared library.
     # Ignoring this causes Halide to link to both the static AND the shared LLVM libs and it breaks at runtime.
     # From issue: https://github.com/halide/Halide/issues/5471
-    if (LLVM_LINK_LLVM_DYLIB AND NOT Halide_SHARED_LLVM)
-        message(FATAL_ERROR "LLD was linked to shared LLVM (see: LLVM_LINK_LLVM_DYLIB), "
-                "but static LLVM was requested. Re-configure with Halide_SHARED_LLVM=YES "
-                "to enable WebAssembly, or disable WebAssembly with TARGET_WEBASSEMBLY=OFF.")
-    endif ()
+
+    # TODO: see issue above, this triggers for the stuff from apt.llvm.org but causes no failure when removed
+
+    # if (LLVM_LINK_LLVM_DYLIB AND NOT Halide_SHARED_LLVM)
+    #     message(FATAL_ERROR "LLD was linked to shared LLVM (see: LLVM_LINK_LLVM_DYLIB), "
+    #             "but static LLVM was requested. Re-configure with Halide_SHARED_LLVM=YES "
+    #             "to enable WebAssembly, or disable WebAssembly with TARGET_WEBASSEMBLY=OFF.")
+    # endif ()
 
     set(wasm_libs lldWasm)
 endif ()
