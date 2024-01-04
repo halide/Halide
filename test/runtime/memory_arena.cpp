@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
         MemoryArena::Config config = {sizeof(double), 32, 0};
         MemoryArena *arena = MemoryArena::create(user_context, config, test_allocator);
 
-        size_t count = 4 * 1024;
+        constexpr size_t count = 4 * 1024;
         void *pointers[count];
         for (size_t n = 0; n < count; ++n) {
             pointers[n] = arena->reserve(user_context, true);
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
 
         arena.destroy(user_context);
 
-        size_t count = 4 * 1024;
+        constexpr size_t count = 4 * 1024;
         void *pointers[count];
         for (size_t n = 0; n < count; ++n) {
             pointers[n] = arena.reserve(user_context, true);
