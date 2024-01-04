@@ -308,7 +308,7 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                     if (print_bits == 32) {
                         ss << ((float *)(e->value))[i];
                     } else if (print_bits == 16) {
-                        ss.write_float16_from_bits(((uint16_t *)(e->value))[i]);
+                        ss << PrinterBase::Float16Bits{((uint16_t *)(e->value))[i]};
                     } else {
                         ss << ((double *)(e->value))[i];
                     }
