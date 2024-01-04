@@ -44,8 +44,8 @@ jobs:
         # [runner, pytag, arch]
         - [ubuntu-22.04, manylinux_x86_64, x86_64]
         - [ubuntu-22.04, manylinux_aarch64, aarch64]
-        - [macos-12, macosx_universal2, arm64;x86_64]
-        - [windows-2022, win_amd64, x64]
+        # - [macos-12, macosx_universal2, arm64;x86_64]
+        # - [windows-2022, win_amd64, x64]
 
     steps:
       - uses: actions/checkout@v4
