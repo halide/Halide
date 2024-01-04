@@ -294,22 +294,22 @@ class LoopCarryOverLoop : public IRMutator {
             if (indices.back().defined()) {
                 indices_csed.push_back(common_subexpression_elimination(indices.back()));
             } else {
-                indices_csed.push_back(Expr());
+                indices_csed.emplace_back();
             }
             if (next_indices.back().defined()) {
                 next_indices_csed.push_back(common_subexpression_elimination(next_indices.back()));
             } else {
-                next_indices_csed.push_back(Expr());
+                next_indices_csed.emplace_back();
             }
             if (predicates.back().defined()) {
                 predicates_csed.push_back(common_subexpression_elimination(predicates.back()));
             } else {
-                predicates_csed.push_back(Expr());
+                predicates_csed.emplace_back();
             }
             if (next_predicates.back().defined()) {
                 next_predicates_csed.push_back(common_subexpression_elimination(next_predicates.back()));
             } else {
-                next_predicates_csed.push_back(Expr());
+                next_predicates_csed.emplace_back();
             }
         }
 
