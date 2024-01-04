@@ -15,6 +15,7 @@ function(_set_target_options NAME)
         COMPILING_HALIDE_RUNTIME
         COMPILING_HALIDE_RUNTIME_TESTS
     )
+    set_halide_compiler_warnings(${NAME})
 endfunction()
 
 function(halide_define_runtime_internal_test NAME)
