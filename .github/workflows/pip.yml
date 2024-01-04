@@ -167,7 +167,6 @@ jobs:
           CIBW_BUILD: "${{ matrix.python }}-${{ matrix.buildplat[1] }}"
           CIBW_CONFIG_SETTINGS: --global-option=egg_info --global-option=--tag-build=${{ env.DEV_PREFIX }} --global-option=--tag-date
           CIBW_BEFORE_ALL_LINUX: |
-            which wget && \
             sudo apt-get install wget && \
             which wget && \
             wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add - && \
