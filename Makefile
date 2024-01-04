@@ -1444,6 +1444,14 @@ $(BIN_DIR)/runtime_internal_to_string.o: $(ROOT_DIR)/src/runtime/to_string.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
 
+$(BIN_DIR)/runtime_internal_float16_t.o: $(ROOT_DIR)/src/runtime/float16_t.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
+
+$(BIN_DIR)/runtime_internal_printer.o: $(ROOT_DIR)/src/runtime/printer.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(TEST_CXX_FLAGS) $(RUNTIME_TESTS_CXXFLAGS) -I$(ROOT_DIR)/test/runtime -I$(ROOT_DIR)/src/runtime $(OPTIMIZE_FOR_BUILD_TIME) -c $< -o $@
+
 $(BIN_DIR)/runtime_common:
 	@mkdir -p $(@D)
 	touch $@
