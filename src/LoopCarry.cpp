@@ -283,11 +283,34 @@ class LoopCarryOverLoop : public IRMutator {
 
         // For each load, move the load index forwards by one loop iteration
         vector<Expr> indices, next_indices, predicates, next_predicates;
+        // CSE-d versions of the above, so can_prove can be safely used on them.
+        vector<Expr> indices_csed, next_indices_csed, predicates_csed, next_predicates_csed;
         for (const vector<const Load *> &v : loads) {
             indices.push_back(v[0]->index);
             next_indices.push_back(step_forwards(v[0]->index, linear));
             predicates.push_back(v[0]->predicate);
             next_predicates.push_back(step_forwards(v[0]->predicate, linear));
+
+            if (indices.back().defined()) {
+                indices_csed.push_back(common_subexpression_elimination(indices.back()));
+            } else {
+                indices_csed.push_back(Expr());
+            }
+            if (next_indices.back().defined()) {
+                next_indices_csed.push_back(common_subexpression_elimination(next_indices.back()));
+            } else {
+                next_indices_csed.push_back(Expr());
+            }
+            if (predicates.back().defined()) {
+                predicates_csed.push_back(common_subexpression_elimination(predicates.back()));
+            } else {
+                predicates_csed.push_back(Expr());
+            }
+            if (next_predicates.back().defined()) {
+                next_predicates_csed.push_back(common_subexpression_elimination(next_predicates.back()));
+            } else {
+                next_predicates_csed.push_back(Expr());
+            }
         }
 
         // Find loads done on this loop iteration that will be
@@ -300,15 +323,15 @@ class LoopCarryOverLoop : public IRMutator {
                     continue;
                 }
                 // can_prove is stronger than graph_equal, because it doesn't require index expressions to be
-                // exactly the same, but evalutate to the same value. We keep the graph_equal check, because
+                // exactly the same, but evaluate to the same value. We keep the graph_equal check, because
                 // it's faster and should be executed before the more expensive check.
                 if (loads[i][0]->name == loads[j][0]->name &&
                     next_indices[j].defined() &&
                     (graph_equal(indices[i], next_indices[j]) ||
-                     ((indices[i].type() == next_indices[j].type()) && can_prove(indices[i] == next_indices[j]))) &&
+                     ((indices[i].type() == next_indices[j].type()) && can_prove(indices_csed[i] == next_indices_csed[j]))) &&
                     next_predicates[j].defined() &&
                     (graph_equal(predicates[i], next_predicates[j]) ||
-                     ((predicates[i].type() == next_predicates[j].type()) && can_prove(predicates[i] == next_predicates[j])))) {
+                     ((predicates[i].type() == next_predicates[j].type()) && can_prove(predicates_csed[i] == next_predicates_csed[j])))) {
                     chains.push_back({j, i});
                     debug(3) << "Found carried value:\n"
                              << i << ":  -> " << Expr(loads[i][0]) << "\n"
