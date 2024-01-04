@@ -11,14 +11,9 @@ on:
     types: [ created ]
 
 env:
-  # TODO: these don't need to be env vars, is there another way?
-  LLVM_VER_MAJOR: 17
-  LLVM_VER_MINOR: 0
-  LLVM_VER_PATCH: 6
-  LLVM_VER: ${LLVM_VER_MAJOR}.${LLVM_VER_MINOR}.${LLVM_VER_PATCH}
+  LLVM_VER: 17.0.6
   HALIDE_CMAKE_OPTS: -DCMAKE_BUILD_TYPE=Release -DWITH_DOCS=NO -DWITH_PYTHON_BINDINGS=NO -DWITH_PYTHON_STUBS=NO -DWITH_TESTS=NO -DWITH_TUTORIALS=NO -DWITH_UTILS=NO
   DEV_PREFIX: b
-  MANYLINUX_INSTALL_DISTRO: bionic
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
@@ -40,14 +35,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # python: [ cp38, cp39, cp310, cp311, cp312 ]
-        python: [ cp311 ]
+        python: [ cp38, cp39, cp310, cp311, cp312 ]
         buildplat:
         # [runner, pytag, arch]
         - [ubuntu-22.04, manylinux_x86_64, x86_64]
         - [ubuntu-22.04, manylinux_aarch64, aarch64]
-        # - [macos-12, macosx_universal2, arm64;x86_64]
-        # - [windows-2022, win_amd64, x64]
+        - [macos-12, macosx_universal2, arm64;x86_64]
+        - [windows-2022, win_amd64, x64]
 
     steps:
       - uses: actions/checkout@v4
@@ -60,19 +54,23 @@ jobs:
         run: rm -rf src/runtime/hexagon_remote/bin/
 
       # ---------- Linux-specific LLVM stuff
-      # - name: Log in to GitHub Container Registry
-      #   if: runner.os == 'Linux'
-      #   uses: docker/login-action@v3
-      #   with:
-      #     registry: ghcr.io
-      #     username: ${{ github.actor }}
-      #     password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to GitHub Container Registry
+        if: runner.os == 'Linux'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
         if: runner.os == 'Linux'
         uses: docker/setup-qemu-action@v3
         with:
           platforms: all
+
+      - name: Pull LLVM Container
+        if: runner.os == 'Linux'
+        run: docker pull ghcr.io/halide/manylinux2014_${{ matrix.buildplat[2] }}-llvm:${{ env.LLVM_VER }}
 
       # ---------- non-Linux-specific LLVM stuff
       - name: Cache LLVM build folder
@@ -166,30 +164,12 @@ jobs:
           CIBW_ARCHS_MACOS: "universal2"
           CIBW_BUILD: "${{ matrix.python }}-${{ matrix.buildplat[1] }}"
           CIBW_CONFIG_SETTINGS: --global-option=egg_info --global-option=--tag-build=${{ env.DEV_PREFIX }} --global-option=--tag-date
-          CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_28_x86_64
-          CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_28_aarch64
+          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
+          CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
           CIBW_BEFORE_ALL_LINUX: |
-            dnf copr enable -y @fedora-llvm-team/llvm-snapshots && \
-            dnf install llvm clang compiler-rt lld && \
             cmake -G Ninja -S . -B halide-build ${{ env.HALIDE_CMAKE_OPTS }} && \
             cmake --build halide-build --target install --config Release && \
             cmake --install halide-build --config Release --prefix local-halide
-
-            # llvm-${{ env.LLVM_VER_MAJOR }} llvm-${{ env.LLVM_VER_MAJOR }}-dev llvm-${{ env.LLVM_VER_MAJOR }}-runtime libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev libfuzzer-${{ env.LLVM_VER_MAJOR }}-dev lld-18 libc++-${{ env.LLVM_VER_MAJOR }}-dev libc++abi-${{ env.LLVM_VER_MAJOR }}-dev libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm64 libc++-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libc++abi-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm64 libclang-${{ env.LLVM_VER_MAJOR }}-dev libzstd-dev liblld-${{ env.LLVM_VER_MAJOR }} liblld-${{ env.LLVM_VER_MAJOR }}-dev && \
-
-          # sudo add-apt-repository "deb http://apt.llvm.org/${{ env.MANYLINUX_INSTALL_DISTRO }}/ llvm-toolchain-${{ env.MANYLINUX_INSTALL_DISTRO }}-${{ env.LLVM_VER_MAJOR }} main" && \
-            # wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add - && \
-            # add-apt-repository "deb http://apt.llvm.org/${{ env.MANYLINUX_INSTALL_DISTRO }}/ llvm-toolchain-${{ env.MANYLINUX_INSTALL_DISTRO }}-${{ env.LLVM_VER_MAJOR }} main" && \
-            # apt install libllvm${{ env.LLVM_VER_MAJOR }} llvm-${{ env.LLVM_VER_MAJOR }} llvm-${{ env.LLVM_VER_MAJOR }}-dev llvm-${{ env.LLVM_VER_MAJOR }}-runtime libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev libfuzzer-${{ env.LLVM_VER_MAJOR }}-dev lld-18 libc++-${{ env.LLVM_VER_MAJOR }}-dev libc++abi-${{ env.LLVM_VER_MAJOR }}-dev libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm64 libc++-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libc++abi-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm64 libclang-${{ env.LLVM_VER_MAJOR }}-dev libzstd-dev liblld-${{ env.LLVM_VER_MAJOR }} liblld-${{ env.LLVM_VER_MAJOR }}-dev && \
-
-            # yum install wget && \
-            # wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add - && \
-            # apt install libllvm${{ env.LLVM_VER_MAJOR }} llvm-${{ env.LLVM_VER_MAJOR }} llvm-${{ env.LLVM_VER_MAJOR }}-dev llvm-${{ env.LLVM_VER_MAJOR }}-runtime libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev libfuzzer-${{ env.LLVM_VER_MAJOR }}-dev lld-18 libc++-${{ env.LLVM_VER_MAJOR }}-dev libc++abi-${{ env.LLVM_VER_MAJOR }}-dev libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm64 libc++-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libc++abi-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm64 libclang-${{ env.LLVM_VER_MAJOR }}-dev libzstd-dev liblld-${{ env.LLVM_VER_MAJOR }} liblld-${{ env.LLVM_VER_MAJOR }}-dev && \
-
-            # yum install epel-release snapd wget && \
-            # systemctl enable --now snapd.socket && \
-            # ln -s /var/lib/snapd/snap /snap && \
-            # snap install apt-mirror --beta && \
 
       - uses: actions/upload-artifact@v4
         with:
