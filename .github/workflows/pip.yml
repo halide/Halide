@@ -170,12 +170,12 @@ jobs:
             sudo yum install wget && \
             which wget && \
             wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add - && \
-            sudo add-apt-repository "deb http://apt.llvm.org/${{ env.MANYLINUX_INSTALL_DISTRO }}/ llvm-toolchain-${{ env.MANYLINUX_INSTALL_DISTRO }}-${{ env.LLVM_VER_MAJOR }} main" && \
             sudo yum install libllvm${{ env.LLVM_VER_MAJOR }} llvm-${{ env.LLVM_VER_MAJOR }} llvm-${{ env.LLVM_VER_MAJOR }}-dev llvm-${{ env.LLVM_VER_MAJOR }}-runtime libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev libfuzzer-${{ env.LLVM_VER_MAJOR }}-dev lld-18 libc++-${{ env.LLVM_VER_MAJOR }}-dev libc++abi-${{ env.LLVM_VER_MAJOR }}-dev libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm64 libc++-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libc++abi-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm32 libclang-rt-${{ env.LLVM_VER_MAJOR }}-dev-wasm64 libclang-${{ env.LLVM_VER_MAJOR }}-dev libzstd-dev liblld-${{ env.LLVM_VER_MAJOR }} liblld-${{ env.LLVM_VER_MAJOR }}-dev && \
             cmake -G Ninja -S . -B halide-build ${{ env.HALIDE_CMAKE_OPTS }} && \
             cmake --build halide-build --target install --config Release && \
             cmake --install halide-build --config Release --prefix local-halide
 
+            # sudo add-apt-repository "deb http://apt.llvm.org/${{ env.MANYLINUX_INSTALL_DISTRO }}/ llvm-toolchain-${{ env.MANYLINUX_INSTALL_DISTRO }}-${{ env.LLVM_VER_MAJOR }} main" && \
           # CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/halide/manylinux2014_x86_64-llvm:${{ env.LLVM_VER }}
           # CIBW_MANYLINUX_AARCH64_IMAGE: ghcr.io/halide/manylinux2014_aarch64-llvm:${{ env.LLVM_VER }}
 
