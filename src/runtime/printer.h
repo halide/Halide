@@ -60,7 +60,9 @@ public:
     // checking of the pointers, so if you pass in a null or bogus value,
     // it will attempt to use it.
     NEVER_INLINE PrinterBase(void *user_context, char *start, char *end)
-        : dst(start), end(end), start(start), user_context(user_context) {
+        // Note that while the caller is expected to pass one-past-the-final-byte,
+        // internally we need end to point to the final byte, so decrement by one here.
+        : dst(start), end(end - 1), start(start), user_context(user_context) {
         if (!start) {
             // Pointers equal ensures no writes to buffer via formatting code
             end = dst;
