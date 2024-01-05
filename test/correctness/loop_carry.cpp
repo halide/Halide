@@ -14,7 +14,7 @@ class LoopCarryWrapper : public IRMutator {
     using IRMutator::visit;
 
     int register_count_;
-    Stmt mutate(const Stmt &stmt) {
+    Stmt mutate(const Stmt &stmt) override {
         return simplify(loop_carry(stmt, register_count_));
     }
 
