@@ -96,6 +96,80 @@ if (TARGET_VULKAN)
     set(TARGET_SPIRV ON) # required
 endif()
 
+# Helper function to set C++ compiler warnings in a sane way
+function(set_halide_compiler_warnings NAME)
+    target_compile_options(
+        ${NAME}
+        PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
+
+        # variable length arrays in C++ are a Clang extension, we don't want to use them
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wvla-extension>
+
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Woverloaded-virtual>
+
+        $<$<CXX_COMPILER_ID:GNU>:-Wsuggest-override>
+
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
+
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-double-promotion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-field-initializers>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-old-style-cast>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shadow>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-sign-conversion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-switch-enum>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undef>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-function>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-macros>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-parameter>
+
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat-pedantic>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-cast-align>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-comma>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-covered-switch-default>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation-unknown-command>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-exit-time-destructors>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-global-constructors>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-float-conversion>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-conversion>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-float-conversion>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-missing-prototypes>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nonportable-system-include-path>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-reserved-id-macro>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field-in-constructor>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shorten-64-to-32>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-undefined-func-template>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
+
+        # This warning was removed in Clang 13
+        $<$<AND:$<CXX_COMPILER_ID:Clang,AppleClang>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,13.0>>:-Wno-return-std-move-in-c++11>
+
+        $<$<CXX_COMPILER_ID:MSVC>:/W3>
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4141>  # 4141: 'inline' used more than once
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # 4146: unary minus applied to unsigned type
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # 4244: conversion, possible loss of data
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: conversion from 'size_t' to 'int', possible loss of data
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4291>  # 4291: No matching operator delete found
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4503>  # 4503: disable "decorated name length exceeded, name was truncated"
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # 4800: forcing value to bool 'true' or 'false' (performance warning)
+
+        # No: enable deprecation warnings
+        # $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # 4996: compiler encountered deprecated declaration
+    )
+endfunction()
+
+
 ##
 # Import dependencies
 ##
