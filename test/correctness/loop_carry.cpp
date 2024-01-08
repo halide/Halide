@@ -1,15 +1,10 @@
 #include "Halide.h"
 #include <stdio.h>
 
-// This file demonstrates two example custom lowering passes. The
-// first just makes sure the IR passes some test, and doesn't modify
-// it. The second actually changes the IR in some useful way.
-
 using namespace Halide;
 using namespace Halide::Internal;
 
-// Verify that all floating point divisions by constants have been
-// converted to float multiplication.
+// Wrapper class to call loop_carry on a given statement.
 class LoopCarryWrapper : public IRMutator {
     using IRMutator::visit;
 
