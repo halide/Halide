@@ -217,10 +217,12 @@ private:
         vector<Expr> allocation_extents(extents.size());
         vector<int> storage_permutation;
         vector<Stmt> bound_asserts;
+        bool is_ring_buffered = false;
         {
             auto iter = env.find(op->name);
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
             Function f = iter->second.first;
+            is_ring_buffered = f.schedule().ring_buffer().defined();
             const vector<StorageDim> &storage_dims = f.schedule().storage_dims();
             const vector<string> &args = f.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
@@ -251,6 +253,10 @@ private:
                 }
                 internal_assert(storage_permutation.size() == i + 1);
             }
+            if (is_ring_buffered) {
+                storage_permutation.push_back(storage_dims.size());
+                allocation_extents[storage_dims.size()] = extents[storage_dims.size()];
+            }
         }
 
         internal_assert(storage_permutation.size() == op->bounds.size());
@@ -279,13 +285,13 @@ private:
         builder.host = Variable::make(Handle(), op->name);
         builder.type = op->types[0];
         builder.dimensions = dims;
+
         for (int i = 0; i < dims; i++) {
             builder.mins.push_back(min_var[i]);
             builder.extents.push_back(extent_var[i]);
             builder.strides.push_back(stride_var[i]);
         }
         stmt = LetStmt::make(op->name + ".buffer", builder.build(), stmt);
-
         if (hoisted_storages_map.count(op->name) > 0) {
             HoistedStorageData &hoisted_storage_data = hoisted_storages[hoisted_storages_map[op->name]];
             vector<Expr> bounded_extents;
@@ -336,6 +342,7 @@ private:
             stmt = LetStmt::make(min_name[i - 1], op->bounds[i - 1].min, stmt);
             stmt = LetStmt::make(extent_name[i - 1], extents[i - 1], stmt);
         }
+
         return stmt;
     }
 

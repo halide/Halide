@@ -249,7 +249,13 @@ class InjectGpuOffload : public IRMutator {
             Call::make(Handle(), Call::make_struct, args, Call::Intrinsic),
             Call::make(Handle(), Call::make_struct, arg_is_buffer, Call::Intrinsic),
         };
-        return call_extern_and_assert("halide_" + api_unique_name + "_run", run_args);
+        Stmt run_and_assert = call_extern_and_assert("halide_" + api_unique_name + "_run", run_args);
+        if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
+            Expr device_interface = make_device_interface_call(loop->device_api, MemoryType::Auto);
+            Stmt sync_and_assert = call_extern_and_assert("halide_device_sync_global", {device_interface});
+            return Block::make(run_and_assert, sync_and_assert);
+        }
+        return run_and_assert;
     }
 
 public:

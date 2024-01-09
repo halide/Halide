@@ -1231,20 +1231,24 @@ void CodeGen_LLVM::optimize_module() {
             // Do not annotate any of Halide's low-level synchronization code as it has
             // tsan interface calls to mark its behavior and is much faster if
             // it is not analyzed instruction by instruction.
-            if (!(function.getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+            if (!(function.getName().starts_with("_ZN6Halide7Runtime8Internal15Synchronization") ||
                   // TODO: this is a benign data race that re-initializes the detected features;
                   // we should really fix it properly inside the implementation, rather than disabling
                   // it here as a band-aid.
-                  function.getName().startswith("halide_default_can_use_target_features") ||
-                  function.getName().startswith("halide_mutex_") ||
-                  function.getName().startswith("halide_cond_"))) {
+                  function.getName().starts_with("halide_default_can_use_target_features") ||
+                  function.getName().starts_with("halide_mutex_") ||
+                  function.getName().starts_with("halide_cond_"))) {
                 function.addFnAttr(Attribute::SanitizeThread);
             }
         }
     }
 
     if (tm) {
+#if LLVM_VERSION >= 180
+        tm->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
+#else
         tm->registerPassBuilderCallbacks(pb);
+#endif
     }
 
     mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);

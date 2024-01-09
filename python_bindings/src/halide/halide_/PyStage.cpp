@@ -17,7 +17,9 @@ void define_stage(py::module &m) {
             .def("rfactor", (Func(Stage::*)(std::vector<std::pair<RVar, Var>>)) & Stage::rfactor,
                  py::arg("preserved"))
             .def("rfactor", (Func(Stage::*)(const RVar &, const Var &)) & Stage::rfactor,
-                 py::arg("r"), py::arg("v"));
+                 py::arg("r"), py::arg("v"))
+
+            .def("unscheduled", &Stage::unscheduled);
 
     py::implicitly_convertible<Func, Stage>();
 
