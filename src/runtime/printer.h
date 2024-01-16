@@ -63,6 +63,7 @@ public:
         // Note that while the caller is expected to pass one-past-the-final-byte,
         // internally we need end to point to the final byte, so decrement by one here.
         : dst(start), end(end - 1), start(start), user_context(user_context) {
+        halide_debug_assert(user_context, end >= dst);
         if (!start) {
             // Pointers equal ensures no writes to buffer via formatting code
             end = dst;
@@ -83,10 +84,12 @@ public:
     }
 
     uint64_t size() const {
+        halide_debug_assert(user_context, dst >= start);
         return (uint64_t)(dst - start);
     }
 
     uint64_t capacity() const {
+        halide_debug_assert(user_context, end >= start);
         return (uint64_t)(end - start);
     }
 
