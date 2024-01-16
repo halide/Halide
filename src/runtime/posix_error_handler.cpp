@@ -10,7 +10,7 @@ WEAK void halide_default_error(void *user_context, const char *msg) {
     // Can't use StackBasicPrinter here because it limits size to 256
     constexpr int buf_size = 4096;
     char buf[buf_size];
-    PrinterBase dst(user_context, buf, buf + buf_size);
+    PrinterBase dst(user_context, buf, buf_size);
     dst << "Error: " << msg;
     const char *d = dst.str();
     if (d && *d && d[strlen(d) - 1] != '\n') {

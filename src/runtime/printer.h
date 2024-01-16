@@ -53,29 +53,22 @@ protected:
     }
 
 public:
-    // This class will stream text into the range [start, end).
+    // This class will stream text into the range [start, start + size - 1].
     // It does *not* assume any ownership of the memory; it assumes
     // the memory will remain valid for its lifespan, and doesn't
     // attempt to free any allocations. It also doesn't do any sanity
     // checking of the pointers, so if you pass in a null or bogus value,
     // it will attempt to use it.
-    NEVER_INLINE PrinterBase(void *user_context_, char *start_, char *end_)
-        // Note that while the caller is expected to pass one-past-the-final-byte,
-        // internally we need end to point to the final byte, so decrement by one here.
-        : dst(start_), end(end_ - 1), start(start_), user_context(user_context_) {
-        halide_debug_assert(user_context, end >= dst);
-        if (!start) {
-            // Pointers equal ensures no writes to buffer via formatting code
-            end = dst;
-        } else {
-            // null-terminate ahead of time
+    NEVER_INLINE PrinterBase(void *user_context_, char *start_, uint64_t size_)
+        : dst(start_),
+          // (If start is null, set end = start to ensure no writes are done)
+          end(start_ ? start_ + size_ - 1 : start_),
+          start(start_),
+          user_context(user_context_) {
+        if (end > start) {
+            // null-terminate the final byte to ensure string isn't $ENDLESS
             *end = 0;
         }
-    }
-
-    // Alternate start-and-size ctor that is more convenient for the Printer subclass
-    PrinterBase(void *user_context, char *start, uint64_t size)
-        : PrinterBase(user_context, start, start + size) {
     }
 
     NEVER_INLINE const char *str() {
