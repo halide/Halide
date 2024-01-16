@@ -214,7 +214,7 @@ typedef int (*halide_task_t)(void *user_context, int task_number, uint8_t *closu
 extern int halide_do_par_for(void *user_context,
                              halide_task_t task,
                              int min, int size, uint8_t *closure);
-extern void halide_shutdown_thread_pool();
+extern void halide_shutdown_thread_pool(void);
 //@}
 
 /** Set a custom method for performing a parallel for loop. Returns
@@ -751,7 +751,7 @@ extern int halide_get_trace_file(void *user_context);
 
 /** If tracing is writing to a file. This call closes that file
  * (flushing the trace). Returns zero on success. */
-extern int halide_shutdown_trace();
+extern int halide_shutdown_trace(void);
 
 /** All Halide GPU or device backend implementations provide an
  * interface to be used with halide_device_malloc, etc. This is
@@ -1005,7 +1005,7 @@ extern void halide_memoization_cache_release(void *user_context, void *host);
 /** Free all memory and resources associated with the memoization cache.
  * Must be called at a time when no other threads are accessing the cache.
  */
-extern void halide_memoization_cache_cleanup();
+extern void halide_memoization_cache_cleanup(void);
 
 /** Verify that a given range of memory has been initialized; only used when Target::MSAN is enabled.
  *
@@ -1911,7 +1911,7 @@ enum {
 
 /** Get a pointer to the global profiler state for programmatic
  * inspection. Lock it before using to pause the profiler. */
-extern struct halide_profiler_state *halide_profiler_get_state();
+extern struct halide_profiler_state *halide_profiler_get_state(void);
 
 /** Get a pointer to the pipeline state associated with pipeline_name.
  * This function grabs the global profiler state's lock on entry. */
@@ -1930,14 +1930,14 @@ extern int halide_profiler_sample(struct halide_profiler_state *s, uint64_t *pre
  * running; halide_profiler_memory_allocate/free and
  * halide_profiler_stack_peak_update update the profiler pipeline's
  * state without grabbing the global profiler state's lock. */
-extern void halide_profiler_reset();
+extern void halide_profiler_reset(void);
 
 /** Reset all profiler state.
  * WARNING: Do NOT call this method while any halide pipeline is
  * running; halide_profiler_memory_allocate/free and
  * halide_profiler_stack_peak_update update the profiler pipeline's
  * state without grabbing the global profiler state's lock. */
-void halide_profiler_shutdown();
+void halide_profiler_shutdown(void);
 
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
@@ -1946,12 +1946,12 @@ extern void halide_profiler_report(void *user_context);
 /** For timer based profiling, this routine starts the timer chain running.
  * halide_get_profiler_state can be called to get the current timer interval.
  */
-extern void halide_start_timer_chain();
+extern void halide_start_timer_chain(void);
 /** These routines are called to temporarily disable and then reenable
  * timer interuppts for profiling */
 //@{
-extern void halide_disable_timer_interrupt();
-extern void halide_enable_timer_interrupt();
+extern void halide_disable_timer_interrupt(void);
+extern void halide_enable_timer_interrupt(void);
 //@}
 
 /// \name "Float16" functions
