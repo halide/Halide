@@ -2161,9 +2161,7 @@ Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
     const int alignment = target.natural_vector_size<uint8_t>();
     const int lut_size_in_bytes = 2 * target.natural_vector_size<uint8_t>();
     Stmt s = OptimizeShuffles(alignment, lut_size_in_bytes).mutate(stmt);
-    if (target.has_feature(Target::Feature::XtensaQ8)) {
-        s = ConvertGatherLoadIndex().mutate(s);
-    }
+    s = ConvertGatherLoadIndex().mutate(s);
 
     // Use at most 16 vector registers for carrying values.
     s = loop_carry(s, 16);
