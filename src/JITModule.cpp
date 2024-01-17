@@ -225,11 +225,7 @@ JITModule::Symbol compile_and_get_function(llvm::orc::LLJIT &JIT, const string &
     auto addr = JIT.lookup(name);
     internal_assert(addr) << llvm::toString(addr.takeError()) << "\n";
 
-#if LLVM_VERSION >= 150
     void *f = (void *)addr->getValue();
-#else
-    void *f = (void *)addr->getAddress();
-#endif
     if (!f) {
         internal_error << "Compiling " << name << " returned nullptr\n";
     }
@@ -1014,20 +1010,12 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         }
 
         uint64_t arg_addr = llvm::cantFail(runtime.jit_module->JIT->lookup("halide_jit_module_argument"))
-#if LLVM_VERSION >= 150
                                 .getValue();
-#else
-                                .getAddress();
-#endif
         internal_assert(arg_addr != 0);
         *((void **)arg_addr) = runtime.jit_module.get();
 
         uint64_t fun_addr = llvm::cantFail(runtime.jit_module->JIT->lookup("halide_jit_module_adjust_ref_count"))
-#if LLVM_VERSION >= 150
                                 .getValue();
-#else
-                                .getAddress();
-#endif
         internal_assert(fun_addr != 0);
         *(void (**)(void *arg, int32_t count))fun_addr = &adjust_module_ref_count;
     }
