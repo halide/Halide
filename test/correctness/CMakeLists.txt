@@ -199,6 +199,7 @@ tests(GROUPS correctness
       likely.cpp
       load_library.cpp
       logical.cpp
+      loop_carry.cpp
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
       lossless_cast.cpp

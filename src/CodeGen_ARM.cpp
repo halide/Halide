@@ -1144,10 +1144,8 @@ void CodeGen_ARM::visit(const Store *op) {
         llvm::Type *intrin_llvm_type = llvm_type_of(intrin_type);
 #if LLVM_VERSION >= 170
         const bool is_opaque = true;
-#elif LLVM_VERSION >= 150
-        const bool is_opaque = llvm::PointerType::get(intrin_llvm_type, 0)->isOpaque();
 #else
-        const bool is_opaque = false;
+        const bool is_opaque = llvm::PointerType::get(intrin_llvm_type, 0)->isOpaque();
 #endif
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
