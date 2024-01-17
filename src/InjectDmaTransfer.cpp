@@ -331,7 +331,7 @@ class InjectDmaTransfer : public IRMutator {
         Expr min;
         Expr extent;
 
-        Loop(string name, Expr min, Expr extent)
+        Loop(const string &name, const Expr &min, const Expr &extent)
             : name(name), min(min), extent(extent) {
         }
     };
@@ -437,7 +437,7 @@ class InjectDmaTransfer : public IRMutator {
         return IRMutator::visit(op);
     }
 
-    Stmt visit(const Allocate *op) {
+    Stmt visit(const Allocate *op) override {
         Stmt mutated = IRMutator::visit(op);
 
         auto it = env.find(op->name);
@@ -456,9 +456,9 @@ class InjectDmaTransfer : public IRMutator {
         return mutated;
     }
 
-    Stmt visit(const LetStmt *op) {
+    Stmt visit(const LetStmt *op) override {
         if (!lets_in_loops.empty()) {
-            lets_in_loops.back().push_back({op->name, op->value});
+            lets_in_loops.back().emplace_back(op->name, op->value);
             Stmt mutated = IRMutator::visit(op);
             lets_in_loops.back().pop_back();
             return mutated;
@@ -466,8 +466,8 @@ class InjectDmaTransfer : public IRMutator {
         return IRMutator::visit(op);
     }
 
-    Stmt visit(const For *op) {
-        lets_in_loops.push_back({});
+    Stmt visit(const For *op) override {
+        lets_in_loops.emplace_back();
         loops.emplace_back(op->name, op->min, op->extent);
         Stmt mutated = IRMutator::visit(op);
         loops.pop_back();
@@ -485,7 +485,7 @@ public:
         Expr dma_id_index;
         Expr ring_buffer_extent;
 
-        DelayedWaitInfo(int channel_index, Expr dma_id_index, Expr ring_buffer_extent)
+        DelayedWaitInfo(int channel_index, const Expr &dma_id_index, const Expr &ring_buffer_extent)
             : channel_index(channel_index),
               dma_id_index(dma_id_index),
               ring_buffer_extent(ring_buffer_extent) {
