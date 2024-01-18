@@ -5264,8 +5264,9 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
     switch (type_constraint) {
     case VectorTypeConstraint::None:
         if (effective_vscale > 0) {
-          //            int total_bit_size = n * t->getScalarSizeInBits();
-          bool wide_enough = (n / effective_vscale) > 1; //(total_bit_size >= (target.vector_bits / effective_vscale));
+            // TODO(<need issue>): AArch64 SVE2 support is crashy with scalable vectors of min size 1.
+          bool wide_enough = (target.arch != Target::ARM) ||
+                             ((n / effective_vscale) > 1);
             scalable = wide_enough && ((n % effective_vscale) == 0);
             if (scalable) {
                 n = n / effective_vscale;
