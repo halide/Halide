@@ -331,6 +331,11 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
     // Read it back in.
     llvm::MemoryBufferRef buffer_ref(llvm::StringRef(clone_buffer.data(), clone_buffer.size()), "clone_buffer");
     auto cloned_module = llvm::parseBitcodeFile(buffer_ref, module_in.getContext());
+
+    // TODO: Add support for returning the error.
+    // if (!cloned_module) {
+    //        llvm::dbgs() << cloned_module.takeError();
+    // }
     internal_assert(cloned_module);
 
     return std::move(cloned_module.get());

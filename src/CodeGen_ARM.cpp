@@ -116,7 +116,8 @@ protected:
                                           bool add_inactive_arg,  // for SVE
                                           bool add_predicate,     // for SVE
                                           bool split_arg0,
-                                          bool scalars_are_vectors);
+                                          bool scalars_are_vectors,
+                                          bool force_fixed_vector_types);
 
     void init_module() override;
     void compile_func(const LoweredFunc &f,
@@ -125,7 +126,7 @@ protected:
     void begin_func(LinkageType linkage, const std::string &simple_name,
                     const std::string &extern_name, const std::vector<LoweredArgument> &args) override;
 
-    /** Nodes for which we want to emit specific neon intrinsics */
+    /** Nodes for which we want to emit specific ARM vector intrinsics */
     // @{
     void visit(const Cast *) override;
     void visit(const Add *) override;
@@ -140,6 +141,9 @@ protected:
     void visit(const LT *) override;
     void visit(const LE *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
+    bool codegen_dot_product_vector_reduce(const VectorReduce *, const Expr &);
+    bool codegen_pairwise_vector_reduce(const VectorReduce *, const Expr &);
+    bool codegen_across_vector_reduce(const VectorReduce *, const Expr &);
     // @}
     Type upgrade_type_for_arithmetic(const Type &t) const override;
     Type upgrade_type_for_argument_passing(const Type &t) const override;
@@ -170,8 +174,9 @@ protected:
     int target_vscale() const override;
 
     // NEON can be disabled for older processors.
-    bool neon_intrinsics_disabled() {
-        return target.has_feature(Target::NoNEON);
+    bool simd_intrinsics_disabled() {
+        return target.has_feature(Target::NoNEON) &&
+               !target.has_feature(Target::SVE2);
     }
 
     bool is_float16_and_has_feature(const Type &t) const {
@@ -186,6 +191,7 @@ protected:
         return (x + n - 1) / n * n;
     }
 
+     // TODO(zvookin): See if we need wrapper stiuff at call sites to make sure this was vscale vectors.
     /** Make predicate vector which starts with consecutive true followed by consecutive false */
     Expr make_vector_predicate_1s_0s(int true_lanes, int false_lanes) {
         return Shuffle::make_concat({const_true(true_lanes), const_false(false_lanes)});
@@ -335,7 +341,7 @@ struct ArmIntrinsic {
         SveUnavailable = 1 << 10,    // Unavailable for SVE
         SveNoPredicate = 1 << 11,    // In SVE intrinsics, additional predicate argument is required as default, unless this flag is set.
         SveInactiveArg = 1 << 12,    // This intrinsic needs the additional argument for fallback value for the lanes inactivated by predicate.
-        SveRequired = 1 << 14,        // This intrinsic requires SVE.
+        SveRequired = 1 << 14,       // This intrinsic requires SVE.
     };
 };
 
@@ -354,34 +360,40 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"llvm.fabs", "llvm.fabs", Float(16, 4), "abs", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
     {"llvm.fabs", "llvm.fabs", Float(32, 2), "abs", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"llvm.fabs", "llvm.fabs", Float(64, 2), "abs", {Float(64, 2)}},
+    {"llvm.fabs.f16", "llvm.fabs.f16", Float(16), "abs", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
+    {"llvm.fabs.f32", "llvm.fabs.f32", Float(32), "abs", {Float(32)}, ArmIntrinsic::NoMangle},
+    {"llvm.fabs.f64", "llvm.fabs.f64", Float(64), "abs", {Float(64)}, ArmIntrinsic::NoMangle},
 
     {"llvm.sqrt", "llvm.sqrt", Float(16, 4), "sqrt_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
     {"llvm.sqrt", "llvm.sqrt", Float(32, 2), "sqrt_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"llvm.sqrt", "llvm.sqrt", Float(64, 2), "sqrt_f64", {Float(64, 2)}},
+    {"llvm.sqrt.f16", "llvm.sqrt.f16", Float(16), "sqrt_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
+    {"llvm.sqrt.f32", "llvm.sqrt.f32", Float(32), "sqrt_f32", {Float(32)}, ArmIntrinsic::NoMangle},
+    {"llvm.sqrt.f64", "llvm.sqrt.f64", Float(64), "sqrt_f64", {Float(64)}, ArmIntrinsic::NoMangle},
 
-    // TODO(zvookin): Is this a good addition?
-    // (We assume scalar no mangle versions are in the generic code.)
-    // {
     {"llvm.floor", "llvm.floor", Float(16, 4), "floor_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
     {"llvm.floor", "llvm.floor", Float(32, 2), "floor_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"llvm.floor", "llvm.floor", Float(64, 2), "floor_f64", {Float(64, 2)}},
+    {"llvm.floor.f16", "llvm.floor.f16", Float(16), "floor_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
+    {"llvm.floor.f32", "llvm.floor.f32", Float(32), "floor_f32", {Float(32)}, ArmIntrinsic::NoMangle},
+    {"llvm.floor.f64", "llvm.floor.f64", Float(64), "floor_f64", {Float(64)}, ArmIntrinsic::NoMangle},
 
     {"llvm.ceil", "llvm.ceil", Float(16, 4), "ceil_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
     {"llvm.ceil", "llvm.ceil", Float(32, 2), "ceil_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"llvm.ceil", "llvm.ceil", Float(64, 2), "ceil_f64", {Float(64, 2)}},
-
-    {"llvm.round", "llvm.nearbyint", Float(16, 4), "round_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
-    {"llvm.round", "llvm.nearbyint", Float(32, 2), "round_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.round", "llvm.nearbyint", Float(64, 2), "round_f64", {Float(64, 2)}},
+    {"llvm.ceil.f16", "llvm.ceil.f16", Float(16), "ceil_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
+    {"llvm.ceil.f32", "llvm.ceil.f32", Float(32), "ceil_f32", {Float(32)}, ArmIntrinsic::NoMangle},
+    {"llvm.ceil.f64", "llvm.ceil.f64", Float(64), "ceil_f64", {Float(64)}, ArmIntrinsic::NoMangle},
 
     {"llvm.trunc", "llvm.trunc", Float(16, 4), "trunc_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
     {"llvm.trunc", "llvm.trunc", Float(32, 2), "trunc_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"llvm.trunc", "llvm.trunc", Float(64, 2), "trunc_f64", {Float(64, 2)}},
-    // }
+    {"llvm.trunc.f16", "llvm.trunc.f16", Float(16), "trunc_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
+    {"llvm.trunc.f32", "llvm.trunc.f32", Float(32), "trunc_f32", {Float(32)}, ArmIntrinsic::NoMangle},
+    {"llvm.trunc.f64", "llvm.trunc.f64", Float(64), "trunc_f64", {Float(64)}, ArmIntrinsic::NoMangle},
 
-    // TODO(zvookin): Do these need half width flag?
-    {"llvm.roundeven", "llvm.roundeven", Float(16, 8), "round", {Float(16, 8)}, ArmIntrinsic::RequireFp16},
-    {"llvm.roundeven", "llvm.roundeven", Float(32, 4), "round", {Float(32, 4)}},
+    {"llvm.roundeven", "llvm.roundeven", Float(16, 4), "round", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
+    {"llvm.roundeven", "llvm.roundeven", Float(32, 2), "round", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"llvm.roundeven", "llvm.roundeven", Float(64, 2), "round", {Float(64, 2)}},
     {"llvm.roundeven.f16", "llvm.roundeven.f16", Float(16), "round", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
     {"llvm.roundeven.f32", "llvm.roundeven.f32", Float(32), "round", {Float(32)}, ArmIntrinsic::NoMangle},
@@ -456,6 +468,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "umin", UInt(64, 2), "min", {UInt(64, 2), UInt(64, 2)}, ArmIntrinsic::Neon64Unavailable},
     {"vmins", "fmin", Float(32, 2), "min", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vmins", "fmin", Float(16, 4), "min", {Float(16, 4), Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
+    {"vmins", "fmin", Float(32, 2), "min", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {nullptr, "fmin", Float(64, 2), "min", {Float(64, 2), Float(64, 2)}},
 
     // FCVTZS, FCVTZU
@@ -477,7 +490,14 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "umax", UInt(64, 2), "max", {UInt(64, 2), UInt(64, 2)}, ArmIntrinsic::Neon64Unavailable},
     {"vmaxs", "fmax", Float(32, 2), "max", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vmaxs", "fmax", Float(16, 4), "max", {Float(16, 4), Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
+    {"vmaxs", "fmax", Float(32, 2), "max", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {nullptr, "fmax", Float(64, 2), "max", {Float(64, 2), Float(64, 2)}},
+
+    // NEG, FNEG
+    {nullptr, "neg", Int(8, 16), "negate", {Int(8, 16)}, ArmIntrinsic::SveInactiveArg | ArmIntrinsic::Neon64Unavailable},
+    {nullptr, "neg", Int(16, 8), "negate", {Int(16, 8)}, ArmIntrinsic::SveInactiveArg | ArmIntrinsic::Neon64Unavailable},
+    {nullptr, "neg", Int(32, 4), "negate", {Int(32, 4)}, ArmIntrinsic::SveInactiveArg | ArmIntrinsic::Neon64Unavailable},
+    {nullptr, "neg", Int(64, 2), "negate", {Int(64, 2)}, ArmIntrinsic::SveInactiveArg | ArmIntrinsic::Neon64Unavailable},
 
     // SQNEG, UQNEG - Saturating negation
     {"vqneg", "sqneg", Int(8, 8), "saturating_negate", {Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
@@ -731,13 +751,13 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "sdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
     {nullptr, "udot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
     {nullptr, "udot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveUnavailable},
-    // SVE versions. TODO(zvookin): Make these only register is SVE.
-    {nullptr, "sdot.nxv4i32.nxv16i8", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
-    {nullptr, "udot.nxv4i32.nxv16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
-    {nullptr, "udot.nxv4i32.nxv16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
-    {nullptr, "sdot.nxv2i64.nxv16i8", Int(64, 2), "dot_product", {Int(64, 2), Int(16, 8), Int(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::Neon64Unavailable | ArmIntrinsic::SveRequired},
-    {nullptr, "udott.nxv2i64.nxv16i8", Int(64, 2), "dot_product", {Int(64, 2), UInt(16, 8), UInt(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::Neon64Unavailable | ArmIntrinsic::SveRequired},
-    {nullptr, "udott.nxv2i64.nxv16i8", UInt(64, 2), "dot_product", {UInt(64, 2), UInt(16, 8), UInt(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::Neon64Unavailable | ArmIntrinsic::SveRequired},
+    // SVE versions.
+    {nullptr, "sdot.nxv4i32", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
+    {nullptr, "udot.nxv4i32", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
+    {nullptr, "udot.nxv4i32", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::SveRequired},
+    {nullptr, "sdot.nxv2i64", Int(64, 2), "dot_product", {Int(64, 2), Int(16, 8), Int(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::Neon64Unavailable | ArmIntrinsic::SveRequired},
+    {nullptr, "udot.nxv2i64", Int(64, 2), "dot_product", {Int(64, 2), UInt(16, 8), UInt(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::Neon64Unavailable | ArmIntrinsic::SveRequired},
+    {nullptr, "udot.nxv2i64", UInt(64, 2), "dot_product", {UInt(64, 2), UInt(16, 8), UInt(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate | ArmIntrinsic::Neon64Unavailable | ArmIntrinsic::SveRequired},
 
     // ABDL - Widening absolute difference
     // The ARM backend folds both signed and unsigned widening casts of absd to a widening_absd, so we need to handle both signed and
@@ -800,7 +820,8 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
                                                    bool add_inactive_arg,
                                                    bool add_predicate,
                                                    bool split_arg0,
-                                                   bool scalars_are_vectors) {
+                                                   bool scalars_are_vectors,
+                                                   bool force_fixed_vector_types) {
 
     if (!(add_inactive_arg || add_predicate || split_arg0)) {
         // No need to wrap
@@ -843,7 +864,7 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
     auto to_llvm_type = [&](const Type &t) {
         llvm::Type *ret = llvm_type_of(t);
         if (t.is_scalar() && scalars_are_vectors) {
-            ret = get_vector_type(ret, 1);
+            ret = get_vector_type(ret, 1, force_fixed_vector_types ? VectorTypeConstraint::Fixed : VectorTypeConstraint::None);
         }
         return ret;
     };
@@ -888,29 +909,32 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
 void CodeGen_ARM::init_module() {
     CodeGen_Posix::init_module();
 
-    if (neon_intrinsics_disabled()) {
+    const bool has_neon = !target.has_feature(Target::NoNEON);
+    const bool has_sve = target.has_feature(Target::SVE2);
+    if (!(has_neon || has_sve)) {
         return;
     }
 
-    const bool is_sve = target.has_feature(Target::SVE2);
+    std::string neon_prefix = "llvm.arm.neon.";
+    std::string sve_prefix = "llvm.aarch64.sve.";
 
-    string prefix = target.bits == 32 ? "llvm.arm.neon." :
-                    (is_sve ? "llvm.aarch64.sve." : "llvm.aarch64.neon.");
+    enum class SIMDFlavors {
+        Neon64,
+        Neon128,
+        SVE,
+    };
+
+    std::vector<SIMDFlavors> flavors;
+    if (has_neon) {
+        flavors.push_back(SIMDFlavors::Neon64);
+        flavors.push_back(SIMDFlavors::Neon128);
+    }
+    if (has_sve) {
+        flavors.push_back(SIMDFlavors::SVE);
+    }
+
     for (const ArmIntrinsic &intrin : intrinsic_defs) {
         if (intrin.flags & ArmIntrinsic::RequireFp16 && !target.has_feature(Target::ARMFp16)) {
-            continue;
-        }
-        // Skip intrinsics that are NEON or SVE only depending on whether compiling for SVE.
-        if (is_sve) {
-            if (intrin.flags & ArmIntrinsic::SveUnavailable) {
-                continue;
-            }
-        } else {
-            if (intrin.flags & ArmIntrinsic::SveRequired) {
-                continue;
-            }
-        }
-        if (intrin.flags & ArmIntrinsic::Neon64Unavailable && (target.bits == 64 && !is_sve)) {
             continue;
         }
 
@@ -924,25 +948,50 @@ void CodeGen_ARM::init_module() {
         if (!intrin_name) {
             continue;
         }
-        string full_name = intrin_name;
-        const bool is_vanilla_intrinsic = starts_with(full_name, "llvm.");
-        if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
-            full_name = prefix + full_name;
-        }
 
-        // We might have to generate versions of this intrinsic with multiple widths.
-        vector<int> width_factors = {is_sve ? 2 : 1};
-        if (intrin.flags & ArmIntrinsic::HalfWidth) {
-            if (!is_sve) {
-                // In case of SVE, full version only
-                width_factors.push_back(2);
+        for (const auto flavor : flavors) {
+            const bool is_sve = (flavor == SIMDFlavors::SVE);
+
+            // Skip intrinsics that are NEON or SVE only depending on whether compiling for SVE.
+            if (is_sve) {
+                if (intrin.flags & ArmIntrinsic::SveUnavailable) {
+                    continue;
+                }
+            } else {
+                if (intrin.flags & ArmIntrinsic::SveRequired) {
+                    continue;
+                }
             }
-        }
+            if ((flavor == SIMDFlavors::Neon64) &&
+                (intrin.flags & ArmIntrinsic::Neon64Unavailable)) {
+                continue;
+            }
 
-        for (int width_factor : width_factors) {
+            string full_name = intrin_name;
+            const bool is_vanilla_intrinsic = starts_with(full_name, "llvm.");
+            if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
+                full_name = (is_sve ? sve_prefix : neon_prefix) + full_name;
+            }
+
+            int width_factor = 1;
+            if (!((intrin.ret_type.lanes <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {
+                switch (flavor) {
+                case SIMDFlavors::Neon64:
+                    width_factor = 1;
+                    break;
+                case SIMDFlavors::Neon128:
+                    width_factor = 2;
+                    break;
+                case SIMDFlavors::SVE:
+                    width_factor = (intrin.flags & ArmIntrinsic::HalfWidth) ? 2 : 1;
+                    width_factor *= target_vscale();
+                    break;
+                }
+            }
+
             Type ret_type = intrin.ret_type;
             ret_type = ret_type.with_lanes(ret_type.lanes() * width_factor);
-            //            internal_assert(ret_type.bits() * ret_type.lanes() <= 128) << full_name << "\n";
+            internal_assert(ret_type.bits() * ret_type.lanes() <= 128 * width_factor) << full_name << "\n";
             vector<Type> arg_types;
             arg_types.reserve(4);
             for (halide_type_t i : intrin.arg_types) {
@@ -969,7 +1018,9 @@ void CodeGen_ARM::init_module() {
                     types = {ret_type};
                 }
                 for (const Type &t : types) {
-                    mangled_name_builder << (is_sve ? ".nxv" : ".v") << t.lanes();
+                    std::string llvm_vector_prefix = is_sve ? ".nxv" : ".v";
+                    int mangle_lanes = t.lanes() / (is_sve ? target_vscale() : 1);
+                    mangled_name_builder << llvm_vector_prefix << mangle_lanes;
                     if (t.is_int() || t.is_uint()) {
                         mangled_name_builder << "i";
                     } else if (t.is_float()) {
@@ -988,7 +1039,8 @@ void CodeGen_ARM::init_module() {
                 is_sve && intrin.flags & ArmIntrinsic::SveInactiveArg,
                 require_predicate,
                 intrin.flags & ArmIntrinsic::SplitArg0,
-                intrin.flags & ArmIntrinsic::ScalarsAreVectors);
+                intrin.flags & ArmIntrinsic::ScalarsAreVectors,
+                !is_sve);
 
             function_does_not_access_memory(intrin_impl);
             intrin_impl->addFnAttr(llvm::Attribute::NoUnwind);
@@ -1044,7 +1096,7 @@ void CodeGen_ARM::begin_func(LinkageType linkage, const std::string &simple_name
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
-    if (!neon_intrinsics_disabled() && op->type.is_vector()) {
+    if (!simd_intrinsics_disabled() && op->type.is_vector()) {
         vector<Expr> matches;
         for (const Pattern &pattern : casts) {
             if (expr_match(pattern.pattern, op, matches)) {
@@ -1079,6 +1131,15 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
+#if 1
+    // LLVM fptoui generates fcvtzs or fcvtzu in inconsistent way
+    if (op->value.type().is_float() && op->type.is_int_or_uint()) {
+        if (Value *v = call_overloaded_intrin(op->type, "fp_to_int", {op->value})) {
+            value = v;
+            return;
+        }
+    }
+#else
     // LLVM fptoui generates fcvtzs if src is fp16 scalar else fcvtzu.
     // To avoid that, we use neon intrinsic explicitly.
     if (is_float16_and_has_feature(op->value.type())) {
@@ -1089,12 +1150,13 @@ void CodeGen_ARM::visit(const Cast *op) {
             }
         }
     }
+#endif
 
     CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const Add *op) {
-    if (neon_intrinsics_disabled() ||
+    if (simd_intrinsics_disabled() ||
         !op->type.is_vector() ||
         !target.has_feature(Target::ARMDotProd) ||
         !op->type.is_int_or_uint() ||
@@ -1178,7 +1240,7 @@ void CodeGen_ARM::visit(const Add *op) {
 }
 
 void CodeGen_ARM::visit(const Sub *op) {
-    if (neon_intrinsics_disabled()) {
+    if (simd_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1196,14 +1258,15 @@ void CodeGen_ARM::visit(const Sub *op) {
     // Peep-hole (0 - b) pattern to generate "negate" instruction
     if (is_const_zero(op->a)) {
         if (target_vscale() != 0) {
-            if ((op->type.bits() >= 8 && op->type.is_int()) ||
-                (op->type.bits() >= 16 && op->type.is_float())) {
+            if ((op->type.bits() >= 8 && op->type.is_int())) {
                 if (Value *v = call_overloaded_intrin(op->type, "negate", {op->b})) {
                     value = v;
                     return;
                 }
+            } else if (op->type.bits() >= 16 && op->type.is_float()) {
+                value = builder->CreateFNeg(codegen(op->b));
+                return;
             }
-
         } else {
             // llvm.neon.neg/fneg intrinsic doesn't seem to exist. Instead,
             // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
@@ -1262,7 +1325,7 @@ void CodeGen_ARM::visit(const Sub *op) {
 
 void CodeGen_ARM::visit(const Min *op) {
     // Use a 2-wide vector for scalar floats.
-    if (!neon_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
+    if (!simd_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
         value = call_overloaded_intrin(op->type, "min", {op->a, op->b});
         if (value) {
             return;
@@ -1274,7 +1337,7 @@ void CodeGen_ARM::visit(const Min *op) {
 
 void CodeGen_ARM::visit(const Max *op) {
     // Use a 2-wide vector for scalar floats.
-    if (!neon_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
+    if (!simd_intrinsics_disabled() && (op->type.is_float() || op->type.is_vector())) {
         value = call_overloaded_intrin(op->type, "max", {op->a, op->b});
         if (value) {
             return;
@@ -1292,7 +1355,7 @@ void CodeGen_ARM::visit(const Store *op) {
         return;
     }
 
-    if (neon_intrinsics_disabled()) {
+    if (simd_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1300,7 +1363,7 @@ void CodeGen_ARM::visit(const Store *op) {
     // A dense store of an interleaving can be done using a vst2 intrinsic
     const Ramp *ramp = op->index.as<Ramp>();
 
-    // We only deal with ramps here
+    // We only deal with ramps here except for SVE2
     if (!ramp && !target.has_feature(Target::SVE2)) {
         CodeGen_Posix::visit(op);
         return;
@@ -1323,13 +1386,18 @@ void CodeGen_ARM::visit(const Store *op) {
         intrin_type = t;
         Type elt = t.element_of();
         int vec_bits = t.bits() * t.lanes();
-        if (elt == Float(32) ||
+        if (elt == Float(32) || elt == Float(64) ||
             is_float16_and_has_feature(elt) ||
-            elt == Int(8) || elt == Int(16) || elt == Int(32) ||
-            elt == UInt(8) || elt == UInt(16) || elt == UInt(32)) {
+            elt == Int(8) || elt == Int(16) || elt == Int(32) || elt == Int(64) ||
+            elt == UInt(8) || elt == UInt(16) || elt == UInt(32) || elt == UInt(64)) {
+            // TODO(zvookin): Handle vector_bits_*.
             if (vec_bits % 128 == 0) {
                 type_ok_for_vst = true;
-                intrin_type = intrin_type.with_lanes(128 / t.bits());
+                int target_vector_bits = target.vector_bits;
+                if (target_vector_bits == 0) {
+                    target_vector_bits = 128;
+                }
+                intrin_type = intrin_type.with_lanes(target_vector_bits / t.bits());
             } else if (vec_bits % 64 == 0) {
                 type_ok_for_vst = true;
                 auto intrin_bits = (vec_bits % 128 == 0 || target.has_feature(Target::SVE2)) ? 128 : 64;
@@ -1389,7 +1457,7 @@ void CodeGen_ARM::visit(const Store *op) {
                 instr << "llvm.aarch64.sve.st"
                       << num_vecs
                       << ".nxv"
-                      << intrin_type.lanes()
+                      << (intrin_type.lanes() / target_vscale())
                       << (t.is_float() ? 'f' : 'i')
                       << t.bits();
                 arg_types = vector<llvm::Type *>(num_vecs, llvm_type_of(intrin_type));
@@ -1414,10 +1482,9 @@ void CodeGen_ARM::visit(const Store *op) {
         llvm::FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
         internal_assert(fn);
 
-        // How many vst instructions do we need to generate?
-        int slices = t.lanes() / intrin_type.lanes();
-
-        internal_assert(slices >= 1);
+        // SVE2 supports predication for smaller than whole vector size.
+        internal_assert(target.has_feature(Target::SVE2) || (t.lanes() >= intrin_type.lanes()));
+        
         for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.lanes() * num_vecs);
@@ -1427,6 +1494,7 @@ void CodeGen_ARM::visit(const Store *op) {
             // Take a slice of each arg
             for (int j = 0; j < num_vecs; j++) {
                 slice_args[j] = slice_vector(slice_args[j], i, intrin_type.lanes());
+                slice_args[j] = convert_fixed_or_scalable_vector_type(slice_args[j], get_vector_type(slice_args[j]->getType()->getScalarType(), intrin_type.lanes()));
             }
 
             if (target.bits == 32) {
@@ -1446,6 +1514,7 @@ void CodeGen_ARM::visit(const Store *op) {
                     } else {
                         Expr vpred = make_vector_predicate_1s_0s(active_lanes, intrin_type.lanes() - active_lanes);
                         vpred_val = codegen(vpred);
+                        vpred_val = convert_fixed_or_scalable_vector_type(vpred_val, get_vector_type(vpred_val->getType()->getScalarType(), intrin_type.lanes()));
                     }
                     slice_args.push_back(vpred_val);
                 }
@@ -1518,7 +1587,7 @@ void CodeGen_ARM::visit(const Store *op) {
             instr << "llvm.aarch64.sve.st1.scatter.uxtw."
                   << (elt.bits() != 8 ? "index." : "")  // index is scaled into bytes
                   << "nxv"
-                  << natural_lanes
+                  << (natural_lanes / target_vscale())
                   << (elt == Float(32) || elt == Float(64) ? 'f' : 'i')
                   << elt.bits();
 
@@ -1534,11 +1603,14 @@ void CodeGen_ARM::visit(const Store *op) {
 
                 Expr vpred = make_vector_predicate_1s_0s(active_lanes, natural_lanes - active_lanes);
                 Value *vpred_val = codegen(vpred);
+                vpred_val = convert_fixed_or_scalable_vector_type(vpred_val, pred_type);
                 if (is_predicated_store) {
                     Value *sliced_store_vpred_val = slice_vector(store_pred_val, i, natural_lanes);
                     vpred_val = builder->CreateAnd(vpred_val, sliced_store_vpred_val);
                 }
 
+                slice_value = convert_fixed_or_scalable_vector_type(slice_value, get_vector_type(slice_value->getType()->getScalarType(), natural_lanes));
+                slice_index = convert_fixed_or_scalable_vector_type(slice_index, get_vector_type(slice_index->getType()->getScalarType(), natural_lanes));
                 CallInst *store = builder->CreateCall(fn, {slice_value, vpred_val, elt_ptr, slice_index});
                 add_tbaa_metadata(store, op->name, op->index);
             }
@@ -1587,7 +1659,7 @@ void CodeGen_ARM::visit(const Load *op) {
         return;
     }
 
-    if (neon_intrinsics_disabled()) {
+    if (simd_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
     }
@@ -1704,6 +1776,7 @@ void CodeGen_ARM::visit(const Load *op) {
 
                 Expr vpred = make_vector_predicate_1s_0s(active_lanes, slice_lanes - active_lanes);
                 Value *vpred_val = codegen(vpred);
+                vpred_val = convert_fixed_or_scalable_vector_type(vpred_val, get_vector_type(vpred_val->getType()->getScalarType(), slice_lanes));
                 if (is_predicated_load) {
                     Value *sliced_load_vpred_val = slice_vector(load_pred_val, i, slice_lanes);
                     vpred_val = builder->CreateAnd(vpred_val, sliced_load_vpred_val);
@@ -1740,7 +1813,6 @@ void CodeGen_ARM::visit(const Load *op) {
             Type type_with_max_bits = Int(std::max(elt.bits(), index_bits));
             // The number of lanes is constrained by index vector type
             const int natural_lanes = target.natural_vector_size(type_with_max_bits);
-
             Expr base = 0;
             Value *elt_ptr = codegen_buffer_pointer(op->name, elt, base);
             Value *index = codegen(op->index);
@@ -1754,7 +1826,7 @@ void CodeGen_ARM::visit(const Load *op) {
             instr << "llvm.aarch64.sve.ld1.gather.uxtw."
                   << (elt.bits() != 8 ? "index." : "")  // index is scaled into bytes
                   << "nxv"
-                  << natural_lanes
+                  << (natural_lanes / target_vscale())
                   << (elt == Float(32) || elt == Float(64) ? 'f' : 'i')
                   << elt.bits();
 
@@ -1775,6 +1847,7 @@ void CodeGen_ARM::visit(const Load *op) {
                     vpred_val = builder->CreateAnd(vpred_val, sliced_load_vpred_val);
                 }
 
+                slice_index = convert_fixed_or_scalable_vector_type(slice_index, get_vector_type(slice_index->getType()->getScalarType(), natural_lanes));
                 CallInst *gather = builder->CreateCall(fn, {vpred_val, elt_ptr, slice_index});
                 add_tbaa_metadata(gather, op->name, op->index);
                 results.push_back(gather);
@@ -1982,12 +2055,26 @@ void CodeGen_ARM::visit(const LE *op) {
 }
 
 void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
-    if (neon_intrinsics_disabled() ||
-        op->op == VectorReduce::Or ||
-        op->op == VectorReduce::And ||
-        op->op == VectorReduce::Mul) {
+    if (simd_intrinsics_disabled()) {
         CodeGen_Posix::codegen_vector_reduce(op, init);
         return;
+    }
+
+    if (codegen_dot_product_vector_reduce(op, init)) {
+        return;
+    }
+    if (codegen_pairwise_vector_reduce(op, init)) {
+        return;
+    }
+    if (codegen_across_vector_reduce(op, init)) {
+        return;
+    }
+    CodeGen_Posix::codegen_vector_reduce(op, init);
+}
+
+bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (op->op != VectorReduce::Add) {
+        return false;
     }
 
     struct Pattern {
@@ -2003,11 +2090,23 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, i64(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, i64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, u64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
         // A sum is the same as a dot product with a vector of ones, and this appears to
         // be a bit faster.
         {VectorReduce::Add, 4, i32(wild_i8x_), "dot_product", Target::ARMDotProd, {1}},
         {VectorReduce::Add, 4, i32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
         {VectorReduce::Add, 4, u32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
+        {VectorReduce::Add, 4, i32(wild_i8x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, i32(wild_u8x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, u32(wild_u8x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, i64(wild_i16x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, i64(wild_u16x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, u64(wild_u16x_), "dot_product", Target::SVE2, {1}},
     };
     // clang-format on
 
@@ -2025,7 +2124,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 Expr equiv = VectorReduce::make(op->op, op->value, op->value.type().lanes() / p.factor);
                 equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
                 codegen_vector_reduce(equiv.as<VectorReduce>(), init);
-                return;
+                return true;
             }
 
             for (int i : p.extra_operands) {
@@ -2036,6 +2135,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             if (!i.defined()) {
                 i = make_zero(op->type);
             }
+
             if (const Shuffle *s = matches[0].as<Shuffle>()) {
                 if (s->is_broadcast()) {
                     // LLVM wants the broadcast as the second operand for the broadcasting
@@ -2043,15 +2143,27 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                     std::swap(matches[0], matches[1]);
                 }
             }
-            value = call_overloaded_intrin(op->type, p.intrin, {i, matches[0], matches[1]});
-            if (value) {
-                return;
+
+            if (Value *v = call_overloaded_intrin(op->type, p.intrin, {i, matches[0], matches[1]})) {
+                value = v;
+                return true;
             }
         }
     }
 
+    return false;
+}
+
+bool CodeGen_ARM::codegen_pairwise_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (op->op != VectorReduce::Add &&
+        op->op != VectorReduce::Max &&
+        op->op != VectorReduce::Min) {
+        return false;
+    }
+
     // TODO: Move this to be patterns? The patterns are pretty trivial, but some
     // of the other logic is tricky.
+    int factor = op->value.type().lanes() / op->type.lanes();
     const char *intrin = nullptr;
     vector<Expr> intrin_args;
     Expr accumulator = init;
@@ -2065,11 +2177,15 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             narrow = lossless_cast(narrow_type.with_code(Type::UInt), op->value);
         }
         if (narrow.defined()) {
-            if (init.defined() && target.bits == 32) {
-                // On 32-bit, we have an intrinsic for widening add-accumulate.
+            if (init.defined() && (target.bits == 32 || target.has_feature(Target::SVE2))) {
+                // On 32-bit or SVE2, we have an intrinsic for widening add-accumulate.
                 // TODO: this could be written as a pattern with widen_right_add (#6951).
                 intrin = "pairwise_widening_add_accumulate";
                 intrin_args = {accumulator, narrow};
+                accumulator = Expr();
+            } else if (target.has_feature(Target::SVE2)) {
+                intrin = "pairwise_widening_add_accumulate";
+                intrin_args = {Expr(0), narrow};
                 accumulator = Expr();
             } else {
                 // On 64-bit, LLVM pattern matches widening add-accumulate if
@@ -2077,21 +2193,22 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 intrin = "pairwise_widening_add";
                 intrin_args = {narrow};
             }
-        } else {
+        } else if (!target.has_feature(Target::SVE2)) {
+            // Exclude SVE, as it process lanes in different order (even/odd wise) than NEON
             intrin = "pairwise_add";
             intrin_args = {op->value};
         }
-    } else if (op->op == VectorReduce::Min && factor == 2) {
+    } else if (op->op == VectorReduce::Min && factor == 2 && !target.has_feature(Target::SVE2)) {
         intrin = "pairwise_min";
         intrin_args = {op->value};
-    } else if (op->op == VectorReduce::Max && factor == 2) {
+    } else if (op->op == VectorReduce::Max && factor == 2 && !target.has_feature(Target::SVE2)) {
         intrin = "pairwise_max";
         intrin_args = {op->value};
     }
 
     if (intrin) {
-        value = call_overloaded_intrin(op->type, intrin, intrin_args);
-        if (value) {
+        if (Value *v = call_overloaded_intrin(op->type, intrin, intrin_args)) {
+            value = v;
             if (accumulator.defined()) {
                 // We still have an initial value to take care of
                 string n = unique_name('t');
@@ -2113,11 +2230,125 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 codegen(accumulator);
                 sym_pop(n);
             }
-            return;
+            return true;
         }
     }
 
-    CodeGen_Posix::codegen_vector_reduce(op, init);
+    return false;
+}
+
+bool CodeGen_ARM::codegen_across_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (target_vscale() == 0) {
+        // Leave this to vanilla codegen to emit "llvm.vector.reduce." intrinsic,
+        // which doesn't support scalable vector in LLVM 14
+        return false;
+    }
+
+    if (op->op != VectorReduce::Add &&
+        op->op != VectorReduce::Max &&
+        op->op != VectorReduce::Min) {
+        return false;
+    }
+
+    Expr val = op->value;
+    const int output_lanes = op->type.lanes();
+    const int native_lanes = target.natural_vector_size(op->type);
+    const int input_lanes = val.type().lanes();
+    const int input_bits = op->type.bits();
+    Type elt = op->type.element_of();
+
+    if (output_lanes != 1 || input_lanes < 2) {
+        return false;
+    }
+
+    Expr (*binop)(Expr, Expr) = nullptr;
+    std::string op_name;
+    switch (op->op) {
+    case VectorReduce::Add:
+        binop = Add::make;
+        op_name = "add";
+        break;
+    case VectorReduce::Min:
+        binop = Min::make;
+        op_name = "min";
+        break;
+    case VectorReduce::Max:
+        binop = Max::make;
+        op_name = "max";
+        break;
+    default:
+        internal_error << "unreachable";
+    }
+
+    if (input_lanes == native_lanes) {
+        std::stringstream name;  // e.g. llvm.aarch64.sve.sminv.nxv4i32
+        name << "llvm.aarch64.sve."
+             << (op->type.is_float() ? "f" : op->type.is_int() ? "s" :
+                                                                 "u")
+             << op_name << "v"
+             << ".nxv" << (native_lanes / target_vscale()) << (op->type.is_float() ? "f" : "i") << input_bits;
+
+        // Integer add accumulation output is 64 bit only
+        const bool type_upgraded = op->op == VectorReduce::Add && op->type.is_int_or_uint();
+        const int output_bits = type_upgraded ? 64 : input_bits;
+        Type intrin_ret_type = op->type.with_bits(output_bits);
+
+        const string intrin_name = name.str();
+
+        Expr pred = const_true(native_lanes);
+        vector<Expr> args{pred, op->value};
+
+        // Make sure the declaration exists, or the codegen for
+        // call will assume that the args should scalarize.
+        if (!module->getFunction(intrin_name)) {
+            vector<llvm::Type *> arg_types;
+            for (const Expr &e : args) {
+                arg_types.push_back(llvm_type_of(e.type()));
+            }
+            FunctionType *func_t = FunctionType::get(llvm_type_of(intrin_ret_type), arg_types, false);
+            llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
+        }
+
+        Expr equiv = Call::make(intrin_ret_type, intrin_name, args, Call::PureExtern);
+        if (type_upgraded) {
+            equiv = Cast::make(op->type, equiv);
+        }
+        if (init.defined()) {
+            equiv = binop(init, equiv);
+        }
+        equiv = common_subexpression_elimination(equiv);
+        equiv.accept(this);
+        return true;
+
+    } else if (input_lanes < native_lanes) {
+        // Create equivalent where lanes==native_lanes by padding data which doesn't affect the result
+        Expr padding;
+        const int inactive_lanes = native_lanes - input_lanes;
+
+        switch (op->op) {
+        case VectorReduce::Add:
+            padding = make_zero(elt.with_lanes(inactive_lanes));
+            break;
+        case VectorReduce::Min:
+            padding = elt.with_lanes(inactive_lanes).min();
+            break;
+        case VectorReduce::Max:
+            padding = elt.with_lanes(inactive_lanes).max();
+            break;
+        default:
+            internal_error << "unreachable";
+        }
+
+        Expr equiv = VectorReduce::make(op->op, Shuffle::make_concat({val, padding}), 1);
+        if (init.defined()) {
+            equiv = binop(equiv, init);
+        }
+        equiv = common_subexpression_elimination(equiv);
+        equiv.accept(this);
+        return true;
+    }
+
+    return false;
 }
 
 Type CodeGen_ARM::upgrade_type_for_arithmetic(const Type &t) const {
@@ -2186,6 +2417,8 @@ string CodeGen_ARM::mcpu_target() const {
             return "cyclone";
         } else if (target.os == Target::OSX) {
             return "apple-a12";
+        } else if (target.has_feature(Target::SVE2)) {
+            return "cortex-x1";
         } else {
             return "generic";
         }
@@ -2218,6 +2451,7 @@ string CodeGen_ARM::mattrs() const {
         }
     } else {
         // TODO: Should Halide's SVE flags be 64-bit only?
+        // TODO: Sound we ass "-neon" if NoNEON is set? Does this make any sense?
         if (target.has_feature(Target::SVE2)) {
             attrs.emplace_back("+sve2");
         } else if (target.has_feature(Target::SVE)) {
