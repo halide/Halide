@@ -402,11 +402,7 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
         if (target.bits == 32) {
             return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32-S128");
         } else {
-#if LLVM_VERSION >= 160
             return llvm::DataLayout("e-m:e-p:64:64-i64:64-i128:128-n32:64-S128");
-#else
-            return llvm::DataLayout("e-m:e-p:64:64-i64:64-i128:128-n64-S128");
-#endif
         }
     } else {
         // Return empty data layout. Must be set later.

@@ -236,14 +236,14 @@ int run_test() {
         Param<float16_t> mul("mul");
 
         Func output;
-        output(x, y) = x * y * (input(x, y) * mul);
+        output(x, y) = x * y * (sqrt(input(x, y)) * mul);
 
         Var xi, yi;
         output.gpu_tile(x, y, xi, yi, 8, 8);
 
         mul.set(float16_t(2.0f));
         Buffer<float16_t> in(8, 8);
-        in.fill(float16_t(0.25f));
+        in.fill(float16_t(0.0625f));
         input.set(in);
         Buffer<float16_t> buf = output.realize({8, 8});
         for (int y = 0; y < 8; y++) {
