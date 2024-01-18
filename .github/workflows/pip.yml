@@ -38,10 +38,10 @@ jobs:
         python: [ cp38, cp39, cp310, cp311, cp312 ]
         buildplat:
         # [runner, pytag, arch]
-        - [ubuntu-22.04, manylinux_x86_64, x86_64]
-        - [ubuntu-22.04, manylinux_aarch64, aarch64]
+        # - [ubuntu-22.04, manylinux_x86_64, x86_64]
+        # - [ubuntu-22.04, manylinux_aarch64, aarch64]
         - [macos-12, macosx_universal2, arm64;x86_64]
-        - [windows-2022, win_amd64, x64]
+        # - [windows-2022, win_amd64, x64]
 
     steps:
       - uses: actions/checkout@v4
