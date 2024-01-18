@@ -948,8 +948,7 @@ public:
             // LLVM15 emits UZP2 if the shift amount is half the width of the vector element.
             const auto shrn_or_uzp2 = [&](int element_width, int shift_amt, int vector_width) {
                 constexpr int simd_vector_bits = 128;
-                if (Halide::Internal::get_llvm_version() >= 150 &&
-                    ((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
+                if (((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
                     shift_amt == element_width / 2) {
                     return "uzp2";
                 }
