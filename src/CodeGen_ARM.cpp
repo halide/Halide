@@ -191,7 +191,7 @@ protected:
         return (x + n - 1) / n * n;
     }
 
-     // TODO(zvookin): See if we need wrapper stiuff at call sites to make sure this was vscale vectors.
+     // TODO(<issue needed>): See if we need wrapper stiuff at call sites to make sure this was vscale vectors.
     /** Make predicate vector which starts with consecutive true followed by consecutive false */
     Expr make_vector_predicate_1s_0s(int true_lanes, int false_lanes) {
         return Shuffle::make_concat({const_true(true_lanes), const_false(false_lanes)});
@@ -862,9 +862,10 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
     llvm::FunctionType *inner_ty = inner->getFunctionType();
 
     auto to_llvm_type = [&](const Type &t) {
-        llvm::Type *ret = llvm_type_of(t);
-        if (t.is_scalar() && scalars_are_vectors) {
-            ret = get_vector_type(ret, 1, force_fixed_vector_types ? VectorTypeConstraint::Fixed : VectorTypeConstraint::None);
+        llvm::Type *ret = llvm_type_of(t.element_of());
+        if (!t.is_scalar() || scalars_are_vectors) {
+            ret = get_vector_type(ret, t.lanes(),
+                                  force_fixed_vector_types ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
         }
         return ret;
     };
@@ -915,9 +916,6 @@ void CodeGen_ARM::init_module() {
         return;
     }
 
-    std::string neon_prefix = "llvm.arm.neon.";
-    std::string sve_prefix = "llvm.aarch64.sve.";
-
     enum class SIMDFlavors {
         Neon64,
         Neon128,
@@ -949,8 +947,20 @@ void CodeGen_ARM::init_module() {
             continue;
         }
 
+        // This makes up to three passes defining intrinsics for 64-bit,
+        // 128-bit, and, if SVE is avaailable, whatever the SVE target width
+        // is. Some variants will not result in a definition getting added based
+        // on the target and the intrinsic flags. The intrinsic width may be
+        // scaled and one of two opcodes may be selected by different
+        // interations of this loop.
         for (const auto flavor : flavors) {
             const bool is_sve = (flavor == SIMDFlavors::SVE);
+
+            // TODO(<issue needed>): This is unecessarily confusing. The flags
+            // logic on the intrinsics needs to be rewritten. Specifically they
+            // should likely all be declared witha consistent width. Not doing
+            // so now to make changes more incremental for reliabilty while
+            // adding SVE.
 
             // Skip intrinsics that are NEON or SVE only depending on whether compiling for SVE.
             if (is_sve) {
@@ -966,11 +976,20 @@ void CodeGen_ARM::init_module() {
                 (intrin.flags & ArmIntrinsic::Neon64Unavailable)) {
                 continue;
             }
+            if ((flavor == SIMDFlavors::Neon128) &&
+                !(intrin.flags & ArmIntrinsic::Neon64Unavailable) &&
+                !(intrin.flags & ArmIntrinsic::HalfWidth)) {
+                continue;
+            }
 
             string full_name = intrin_name;
             const bool is_vanilla_intrinsic = starts_with(full_name, "llvm.");
             if (!is_vanilla_intrinsic && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
-                full_name = (is_sve ? sve_prefix : neon_prefix) + full_name;
+                if (target.bits == 32) {
+                    full_name = "llvm.arm.neon." + full_name;
+                } else {
+                    full_name = (is_sve ? "llvm.aarch64.sve." : "llvm.aarch64.neon.") + full_name;
+                }
             }
 
             int width_factor = 1;
@@ -1131,6 +1150,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
+    // TODO(<issue needed>): Resolve whether this is still needed.
 #if 1
     // LLVM fptoui generates fcvtzs or fcvtzu in inconsistent way
     if (op->value.type().is_float() && op->type.is_int_or_uint()) {
