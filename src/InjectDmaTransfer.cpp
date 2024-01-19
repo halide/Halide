@@ -324,7 +324,8 @@ class InjectDmaTransfer : public IRMutator {
     int index = 0;
     // Mapping from the function name to the assigned DMA channel.
     std::map<std::string, int> function_name_to_index;
-
+    // Mapping from the allocation name to the loop level index.
+    std::map<std::string, int> allocation_to_loop_index;
     // A structure to hold loop information.
     struct Loop {
         string name;
@@ -356,7 +357,9 @@ class InjectDmaTransfer : public IRMutator {
                     auto injector = InjectDmaTransferIntoProducer(op->name, function_name_to_index[op->name]);
                     // If ring_buffer is defined, we can unroll one iteration
                     // to do double-buffering DMA.
-                    if (f.schedule().ring_buffer().defined()) {
+                    if (f.schedule().ring_buffer().defined() && loops.size() > allocation_to_loop_index[op->name]) {
+                        user_assert((loops.size() - allocation_to_loop_index[op->name]) == 1)
+                            << "There can only be one loop level between compute_at and hoist_storage loop levels for ring_buffer() to work correctly with DMA.";
                         // Find a variable to do double-buffering over.
                         Expr index_var = Variable::make(Int(32), loops.back().name);
                         Expr first_index = loops.back().min;
@@ -438,6 +441,7 @@ class InjectDmaTransfer : public IRMutator {
     }
 
     Stmt visit(const Allocate *op) override {
+        allocation_to_loop_index[op->name] = loops.size();
         Stmt mutated = IRMutator::visit(op);
 
         auto it = env.find(op->name);
@@ -453,6 +457,7 @@ class InjectDmaTransfer : public IRMutator {
             }
         }
 
+        allocation_to_loop_index.erase(op->name);
         return mutated;
     }
 
