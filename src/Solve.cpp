@@ -395,9 +395,8 @@ private:
             const int64_t *ib = as_const_int(b);
             auto is_multiple_of_b = [&](const Expr &e) {
                 if (ib) {
-                    int64_t r;
-                    reduce_expr_modulo(e, *ib, &r);
-                    return r == 0;
+                    int64_t r = 0;
+                    return reduce_expr_modulo(e, *ib, &r) && r == 0;
                 } else {
                     return can_prove(e / b * b == e);
                 }
