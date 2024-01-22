@@ -202,7 +202,8 @@ public:
             void visit(const Internal::Call *op) override {
                 if (op->call_type == Internal::Call::Halide) {
                     Internal::Function f(op->func);
-                    if (f.has_update_definition()) {
+                    if (f.has_update_definition() &&
+                        f.update(0).schedule().rvars().size() > 0) {
                         inline_reduction = f;
                         result = true;
                     }

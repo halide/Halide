@@ -1144,10 +1144,8 @@ void CodeGen_ARM::visit(const Store *op) {
         llvm::Type *intrin_llvm_type = llvm_type_of(intrin_type);
 #if LLVM_VERSION >= 170
         const bool is_opaque = true;
-#elif LLVM_VERSION >= 150
-        const bool is_opaque = llvm::PointerType::get(intrin_llvm_type, 0)->isOpaque();
 #else
-        const bool is_opaque = false;
+        const bool is_opaque = llvm::PointerType::get(intrin_llvm_type, 0)->isOpaque();
 #endif
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
@@ -1647,46 +1645,37 @@ string CodeGen_ARM::mcpu_tune() const {
 }
 
 string CodeGen_ARM::mattrs() const {
-    string arch_flags;
-    string separator;
+    std::vector<std::string_view> attrs;
     if (target.has_feature(Target::ARMFp16)) {
-        arch_flags += separator + "+fullfp16";
-        separator = ",";
+        attrs.emplace_back("+fullfp16");
     }
     if (target.has_feature(Target::ARMv81a)) {
-        arch_flags += separator + "+v8.1a";
-        separator = ",";
+        attrs.emplace_back("+v8.1a");
     }
     if (target.has_feature(Target::ARMDotProd)) {
-        arch_flags += separator + "+dotprod";
-        separator = ",";
+        attrs.emplace_back("+dotprod");
     }
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
-            arch_flags += separator + "+neon";
-            separator = ",";
+            attrs.emplace_back("+neon");
         }
         if (!target.has_feature(Target::NoNEON)) {
-            arch_flags += separator + "+neon";
-            separator = ",";
+            attrs.emplace_back("+neon");
         } else {
-            arch_flags += separator + "-neon";
-            separator = ",";
+            attrs.emplace_back("-neon");
         }
     } else {
         // TODO: Should Halide's SVE flags be 64-bit only?
         if (target.has_feature(Target::SVE2)) {
-            arch_flags = "+sve2";
-            separator = ",";
+            attrs.emplace_back("+sve2");
         } else if (target.has_feature(Target::SVE)) {
-            arch_flags = "+sve";
-            separator = ",";
+            attrs.emplace_back("+sve");
         }
         if (target.os == Target::IOS || target.os == Target::OSX) {
-            arch_flags += separator + "+reserve-x18";
+            attrs.emplace_back("+reserve-x18");
         }
     }
-    return arch_flags;
+    return join_strings(attrs, ",");
 }
 
 bool CodeGen_ARM::use_soft_float_abi() const {

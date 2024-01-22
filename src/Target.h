@@ -143,9 +143,8 @@ struct Target {
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
         EmbedBitcode = halide_target_feature_embed_bitcode,
         EnableLLVMLoopOpt = halide_target_feature_enable_llvm_loop_opt,
+        WasmMvpOnly = halide_target_feature_wasm_mvponly,
         WasmSimd128 = halide_target_feature_wasm_simd128,
-        WasmSignExt = halide_target_feature_wasm_signext,
-        WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
         WasmThreads = halide_target_feature_wasm_threads,
         WasmBulkMemory = halide_target_feature_wasm_bulk_memory,
         WebGPU = halide_target_feature_webgpu,
@@ -178,6 +177,7 @@ struct Target {
         for (const auto &f : initial_features) {
             set_feature(f);
         }
+        validate_features();
     }
 
     Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
@@ -358,6 +358,11 @@ struct Target {
 private:
     /** A bitmask that stores the active features. */
     std::bitset<FeatureEnd> features;
+
+    /** Attempt to validate that all features set are sensible for the base Target.
+     * This is *not* guaranteed to get all invalid combinations, but is intended
+     * to catch at least the most common (e.g., setting arm-specific features on x86). */
+    void validate_features() const;
 };
 
 /** Return the target corresponding to the host machine. */

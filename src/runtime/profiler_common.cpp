@@ -349,6 +349,14 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             };
         }
     }
+    bool support_colors = false;
+    const char *term = getenv("TERM");
+    if (term) {
+        // Check if the terminal supports colors
+        if (strstr(term, "color") || strstr(term, "xterm")) {
+            support_colors = true;
+        }
+    }
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
@@ -385,13 +393,30 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         if (print_f_states) {
             int f_stats_count = 0;
             halide_profiler_func_stats **f_stats = (halide_profiler_func_stats **)__builtin_alloca(p->num_funcs * sizeof(halide_profiler_func_stats *));
+            const char *substr_copy_to_device = " (copy to device)";
+            const char *substr_copy_to_host = " (copy to host)";
 
-            int max_func_name_length = 0;
+            int max_func_name_length = 23;  // length of the section header
+            int num_copy_to_device = 0;
+            int num_copy_to_host = 0;
+
+            uint64_t total_func_time = 0;
+            uint64_t total_copy_to_device_time = 0;
+            uint64_t total_copy_to_host_time = 0;
             for (int i = 0; i < p->num_funcs; i++) {
                 halide_profiler_func_stats *fs = p->funcs + i;
                 int name_len = strlen(fs->name);
                 if (name_len > max_func_name_length) {
                     max_func_name_length = name_len;
+                }
+                if (strstr(fs->name, substr_copy_to_device)) {
+                    num_copy_to_device++;
+                    total_copy_to_device_time += fs->time;
+                } else if (strstr(fs->name, substr_copy_to_host)) {
+                    num_copy_to_host++;
+                    total_copy_to_host_time += fs->time;
+                } else {
+                    total_func_time += fs->time;
                 }
             }
 
@@ -418,18 +443,8 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
             }
 
-            for (int i = 0; i < f_stats_count; i++) {
-                size_t cursor = 0;
-                sstr.clear();
-                halide_profiler_func_stats *fs = f_stats[i];
-
-                sstr << "  " << fs->name << ": ";
-                cursor += max_func_name_length + 5;
-                while (sstr.size() < cursor) {
-                    sstr << " ";
-                }
-
-                float ft = fs->time / (p->runs * 1000000.0f);
+            const auto print_time_and_percentage = [&sstr, p](uint64_t time, size_t &cursor, bool light) {
+                float ft = time / (p->runs * 1000000.0f);
                 if (ft < 10000) {
                     sstr << " ";
                 }
@@ -451,15 +466,39 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     sstr << " ";
                 }
 
-                int percent = 0;
+                int perthousand = 0;
                 if (p->time != 0) {
-                    percent = (100 * fs->time) / p->time;
+                    perthousand = (1000 * time) / p->time;
                 }
-                sstr << "(" << percent << "%)";
-                cursor += 8;
+                sstr << "(";
+                if (perthousand < 100) {
+                    sstr << " ";
+                }
+                int percent = perthousand / 10;
+                sstr << percent << "." << (perthousand - percent * 10) << "%)";
+                if (!light) {
+                    cursor += 10;
+                    while (sstr.size() < cursor) {
+                        sstr << " ";
+                    }
+                }
+            };
+
+            auto print_report_entry = [&](halide_profiler_func_stats *fs, const char *suffix_cut) {
+                size_t cursor = 0;
+                sstr.clear();
+
+                sstr << "    " << fs->name;
+                if (suffix_cut) {
+                    sstr.erase(strlen(suffix_cut));
+                }
+                sstr << ": ";
+                cursor += max_func_name_length + 7;
                 while (sstr.size() < cursor) {
                     sstr << " ";
                 }
+
+                print_time_and_percentage(fs->time, cursor, false);
 
                 if (!serial) {
                     float threads = fs->active_threads_numerator / (fs->active_threads_denominator + 1e-10);
@@ -494,6 +533,61 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 sstr << "\n";
 
                 halide_print(user_context, sstr.str());
+            };
+
+            if (num_copy_to_host == 0 && num_copy_to_device == 0) {
+                for (int i = 0; i < f_stats_count; i++) {
+                    halide_profiler_func_stats *fs = f_stats[i];
+                    print_report_entry(fs, nullptr);
+                }
+            } else {
+                const auto print_section_header = [&](const char *name, uint64_t total_time) {
+                    size_t cursor = 0;
+                    sstr.clear();
+                    sstr << "  ";
+                    if (support_colors) {
+                        sstr << "\033[90m\033[3m";
+                        cursor += 9;
+                    }
+                    sstr << "[" << name << " ";
+                    cursor += max_func_name_length + 7;
+                    while (sstr.size() < cursor) {
+                        sstr << ":";
+                    }
+                    print_time_and_percentage(total_time, cursor, true);
+                    sstr << " ::::]";
+                    if (support_colors) {
+                        sstr << "\033[0m";
+                    }
+                    sstr << "\n";
+                    halide_print(user_context, sstr.str());
+                };
+
+                print_section_header("funcs", total_func_time);
+                for (int i = 0; i < f_stats_count; i++) {
+                    halide_profiler_func_stats *fs = f_stats[i];
+                    if (!strstr(fs->name, substr_copy_to_device) && !strstr(fs->name, substr_copy_to_host)) {
+                        print_report_entry(fs, nullptr);
+                    }
+                }
+                if (num_copy_to_device) {
+                    print_section_header("buffer copies to device", total_copy_to_device_time);
+                    for (int i = 0; i < f_stats_count; i++) {
+                        halide_profiler_func_stats *fs = f_stats[i];
+                        if (strstr(fs->name, substr_copy_to_device)) {
+                            print_report_entry(fs, substr_copy_to_device);
+                        }
+                    }
+                }
+                if (num_copy_to_host) {
+                    print_section_header("buffer copies to host", total_copy_to_host_time);
+                    for (int i = 0; i < f_stats_count; i++) {
+                        halide_profiler_func_stats *fs = f_stats[i];
+                        if (strstr(fs->name, substr_copy_to_host)) {
+                            print_report_entry(fs, substr_copy_to_host);
+                        }
+                    }
+                }
             }
         }
     }

@@ -16,8 +16,8 @@ public:
     SimdOpCheckWASM(Target t, int w = 768, int h = 128)
         : SimdOpCheckTest(t, w, h) {
         use_wasm_simd128 = target.has_feature(Target::WasmSimd128);
-        use_wasm_sat_float_to_int = target.has_feature(Target::WasmSatFloatToInt);
-        use_wasm_sign_ext = target.has_feature(Target::WasmSignExt);
+        use_wasm_sign_ext = !target.has_feature(Target::WasmMvpOnly);
+        use_wasm_sat_float_to_int = !target.has_feature(Target::WasmMvpOnly);
     }
 
     void add_tests() override {
@@ -388,17 +388,10 @@ public:
                 // check("v128.load64_zero", 2 * w, in_u64(0));
 
                 // Load vector with identical lanes generates *.splat.
-                if (Halide::Internal::get_llvm_version() >= 160) {
-                    check("i8x16.splat", 16 * w, in_u8(0));
-                    check("i16x8.splat", 8 * w, in_u16(0));
-                    check("i32x4.splat", 4 * w, in_u32(0));
-                    check("i64x2.splat", 2 * w, in_u64(0));
-                } else {
-                    check("v128.load8_splat", 16 * w, in_u8(0));
-                    check("v128.load16_splat", 8 * w, in_u16(0));
-                    check("v128.load32_splat", 4 * w, in_u32(0));
-                    check("v128.load64_splat", 2 * w, in_u64(0));
-                }
+                check("i8x16.splat", 16 * w, in_u8(0));
+                check("i16x8.splat", 8 * w, in_u16(0));
+                check("i32x4.splat", 4 * w, in_u32(0));
+                check("i64x2.splat", 2 * w, in_u64(0));
 
                 // Load Lane
                 // TODO: does Halide have any idiom that obviously generates these?
@@ -544,6 +537,7 @@ int main(int argc, char **argv) {
         argc, argv,
         {
             Target("wasm-32-wasmrt"),
-            Target("wasm-32-wasmrt-wasm_simd128-wasm_sat_float_to_int"),
+            Target("wasm-32-wasmrt-wasm_simd128"),
+            Target("wasm-32-wasmrt-wasm_mvponly"),
         });
 }

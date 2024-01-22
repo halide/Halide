@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 140
+#if LLVM_VERSION >= 160
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 14.0 or newer"
+#error "Compiling Halide requires LLVM 16.0 or newer"
 #endif
 
 // No msvc warnings from llvm headers please

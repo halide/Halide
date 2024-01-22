@@ -27,6 +27,30 @@ def test_warnings():
     for line in stdout_lines:
         assert line == expected_warning
 
+def test_unscheduled(suppress):
+    x = hl.Var()
+    f = hl.Func("f_%s" % str(suppress))
+    f[x] = 0
+    f[x] += 5
+    f.vectorize(x, 8)
+    if suppress:
+        f.update(0).unscheduled()
+
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        f.realize([1024])
+
+    buffer.seek(0)
+    stdout_lines = buffer.readlines()
+    if suppress:
+        assert len(stdout_lines) == 0
+    else:
+        expected_warning = "Warning: Update definition 0 of function f_False has not been scheduled"
+        assert len(stdout_lines) > 0
+        for line in stdout_lines:
+            assert line.startswith(expected_warning), "\n%s\n%s" % (line, expected_warning)
 
 if __name__ == "__main__":
     test_warnings()
+    test_unscheduled(True)
+    test_unscheduled(False)

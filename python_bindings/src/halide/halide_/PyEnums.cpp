@@ -68,7 +68,12 @@ void define_enums(py::module &m) {
     py::enum_<TailStrategy>(m, "TailStrategy")
         .value("RoundUp", TailStrategy::RoundUp)
         .value("GuardWithIf", TailStrategy::GuardWithIf)
+        .value("Predicate", TailStrategy::Predicate)
+        .value("PredicateLoads", TailStrategy::PredicateLoads)
+        .value("PredicateStores", TailStrategy::PredicateStores)
         .value("ShiftInwards", TailStrategy::ShiftInwards)
+        .value("ShiftInwardsAndBlend", TailStrategy::ShiftInwardsAndBlend)
+        .value("RoundUpAndBlend", TailStrategy::RoundUpAndBlend)
         .value("Auto", TailStrategy::Auto);
 
     py::enum_<Target::OS>(m, "TargetOS")
@@ -165,9 +170,8 @@ void define_enums(py::module &m) {
         .value("HexagonDma", Target::Feature::HexagonDma)
         .value("EmbedBitcode", Target::Feature::EmbedBitcode)
         .value("EnableLLVMLoopOpt", Target::Feature::EnableLLVMLoopOpt)
+        .value("WasmMvpOnly", Target::Feature::WasmMvpOnly)
         .value("WasmSimd128", Target::Feature::WasmSimd128)
-        .value("WasmSignExt", Target::Feature::WasmSignExt)
-        .value("WasmSatFloatToInt", Target::Feature::WasmSatFloatToInt)
         .value("WasmThreads", Target::Feature::WasmThreads)
         .value("WasmBulkMemory", Target::Feature::WasmBulkMemory)
         .value("SVE", Target::Feature::SVE)
@@ -217,6 +221,11 @@ void define_enums(py::module &m) {
         .value("stmt", OutputFileType::stmt)
         .value("stmt_html", OutputFileType::stmt_html)
         .value("compiler_log", OutputFileType::compiler_log);
+
+    py::enum_<Partition>(m, "Partition")
+        .value("Auto", Partition::Auto)
+        .value("Never", Partition::Never)
+        .value("Always", Partition::Always);
 }
 
 }  // namespace PythonBindings

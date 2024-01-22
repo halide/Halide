@@ -76,6 +76,7 @@ tests(GROUPS correctness
       debug_to_file_reorder.cpp
       deferred_loop_level.cpp
       deinterleave4.cpp
+      device_buffer_copies_with_profile.cpp
       device_buffer_copy.cpp
       device_copy_at_inner_loop.cpp
       device_crop.cpp
@@ -83,6 +84,7 @@ tests(GROUPS correctness
       dilate3x3.cpp
       div_by_zero.cpp
       div_round_to_zero.cpp
+      ring_buffer.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
       early_out.cpp
@@ -197,6 +199,7 @@ tests(GROUPS correctness
       likely.cpp
       load_library.cpp
       logical.cpp
+      loop_carry.cpp
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
       lossless_cast.cpp
@@ -319,6 +322,7 @@ tests(GROUPS correctness
       uninitialized_read.cpp
       unique_func_image.cpp
       unroll_dynamic_loop.cpp
+      unroll_loop_with_implied_constant_bounds.cpp
       unrolled_reduction.cpp
       unsafe_dedup_lets.cpp
       unsafe_promises.cpp
@@ -335,7 +339,9 @@ tests(GROUPS correctness
       vectorize_mixed_widths.cpp
       vectorize_nested.cpp
       vectorize_varying_allocation_size.cpp
+      vectorized_assert.cpp
       vectorized_gpu_allocation.cpp
+      vectorized_guard_with_if_tail.cpp
       vectorized_initialization.cpp
       vectorized_load_from_vectorized_allocation.cpp
       vectorized_reduction_bug.cpp

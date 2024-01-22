@@ -6,10 +6,11 @@ backend.
 As WebAssembly itself is still under active development, Halide's support has
 some limitations. Some of the most important:
 
+-   Sign-extension operations are enabled by default (but can be avoided via
+    Target::WasmMvpOnly).
+-   Non-trapping float-to-int conversions are enabled by default (but can be
+    avoided via Target::WasmMvpOnly).
 -   Fixed-width SIMD (128 bit) can be enabled via Target::WasmSimd128.
--   Sign-extension operations can be enabled via Target::WasmSignExt.
--   Non-trapping float-to-int conversions can be enabled via
-    Target::WasmSatFloatToInt.
 -   Threads have very limited support via Target::WasmThreads; see
     [below](#using-threads) for more details.
 -   Halide's JIT for Wasm is extremely limited and really useful only for
@@ -152,9 +153,8 @@ cmake -DLLVM_ENABLE_PROJECTS="clang;lld" ...
 ```
 
 -   To run the JIT tests, set `HL_JIT_TARGET=wasm-32-wasmrt` (possibly adding
-    `wasm_simd128`, `wasm_signext`, and/or `wasm_sat_float_to_int`) and run
-    CMake/CTest normally. Note that wasm testing is only support under CMake
-    (not via Make).
+    `wasm_simd128`) and run CMake/CTest normally. Note that wasm testing is
+    only supported under CMake (not via Make).
 
 ## Enabling wasm AOT
 
@@ -165,9 +165,8 @@ will), you need to install Emscripten locally.
     (https://emscripten.org/docs/getting_started/downloads.html).
 
 -   To run the AOT tests, set `HL_TARGET=wasm-32-wasmrt` (possibly adding
-    `wasm_simd128`, `wasm_signext`, and/or `wasm_sat_float_to_int`) and run
-    CMake/CTest normally. Note that wasm testing is only support under CMake
-    (not via Make).
+    `wasm_simd128`) and run CMake/CTest normally. Note that wasm testing is
+    only supported under CMake (not via Make).
 
 # Running benchmarks
 

@@ -1177,35 +1177,19 @@ void CodeGen_LLVM::optimize_module() {
                 if (get_target().os == Target::OS::Linux) {
                     sanitizercoverage_options.StackDepth = true;
                 }
-#if LLVM_VERSION >= 160
                 mpm.addPass(SanitizerCoveragePass(sanitizercoverage_options));
-#else
-                mpm.addPass(ModuleSanitizerCoveragePass(sanitizercoverage_options));
-#endif
             });
     }
 
     if (get_target().has_feature(Target::ASAN)) {
-#if LLVM_VERSION >= 150
-        // Nothing, ASanGlobalsMetadataAnalysis no longer exists
-#else
-        pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm, OptimizationLevel) {
-            mpm.addPass(RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
-        });
-#endif
         pb.registerPipelineStartEPCallback([](ModulePassManager &mpm, OptimizationLevel) {
             AddressSanitizerOptions asan_options;  // default values are good...
             asan_options.UseAfterScope = true;     // ...except this one
             constexpr bool use_global_gc = false;
             constexpr bool use_odr_indicator = true;
             constexpr auto destructor_kind = AsanDtorKind::Global;
-#if LLVM_VERSION >= 160
             mpm.addPass(AddressSanitizerPass(
                 asan_options, use_global_gc, use_odr_indicator, destructor_kind));
-#else
-            mpm.addPass(ModuleAddressSanitizerPass(
-                asan_options, use_global_gc, use_odr_indicator, destructor_kind));
-#endif
         });
     }
 
@@ -1231,20 +1215,24 @@ void CodeGen_LLVM::optimize_module() {
             // Do not annotate any of Halide's low-level synchronization code as it has
             // tsan interface calls to mark its behavior and is much faster if
             // it is not analyzed instruction by instruction.
-            if (!(function.getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+            if (!(function.getName().starts_with("_ZN6Halide7Runtime8Internal15Synchronization") ||
                   // TODO: this is a benign data race that re-initializes the detected features;
                   // we should really fix it properly inside the implementation, rather than disabling
                   // it here as a band-aid.
-                  function.getName().startswith("halide_default_can_use_target_features") ||
-                  function.getName().startswith("halide_mutex_") ||
-                  function.getName().startswith("halide_cond_"))) {
+                  function.getName().starts_with("halide_default_can_use_target_features") ||
+                  function.getName().starts_with("halide_mutex_") ||
+                  function.getName().starts_with("halide_cond_"))) {
                 function.addFnAttr(Attribute::SanitizeThread);
             }
         }
     }
 
     if (tm) {
+#if LLVM_VERSION >= 180
+        tm->registerPassBuilderCallbacks(pb, /*PopulateClassToPassNames=*/false);
+#else
         tm->registerPassBuilderCallbacks(pb);
+#endif
     }
 
     mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
@@ -2042,11 +2030,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, con
 }
 
 void CodeGen_LLVM::function_does_not_access_memory(llvm::Function *fn) {
-#if LLVM_VERSION >= 160
     fn->addFnAttr("memory(none)");
-#else
-    fn->addFnAttr(llvm::Attribute::ReadNone);
-#endif
 }
 
 void CodeGen_LLVM::visit(const Load *op) {
