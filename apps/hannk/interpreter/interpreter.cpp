@@ -120,7 +120,7 @@ std::unique_ptr<char[]> allocate_tensors(const Op *root, const InterpreterOption
 
     if (options.verbosity >= 1) {
         std::ostringstream oss;
-        oss << "Arena memory needed: " << planner.memory_needed() << '\n';
+        oss << "Arena memory needed: " << planner.memory_needed() << "\n";
         oss << "    Offsets:";
         for (int i = 0; i < planner.block_count(); i++) {
             oss << ' ' << planner.get_block_offset(i);

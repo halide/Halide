@@ -68,7 +68,7 @@ WEAK int load_libopencl(void *user_context) {
     halide_abort_if_false(user_context, clCreateContext == nullptr);
     halide_error_code_t result;
 
-// clang-format off
+    // clang-format off
 #define CL_FN(ret, fn, args)     result = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, true, fn); if (result) return result;   // NOLINT(bugprone-macro-parentheses)
 #define CL_12_FN(ret, fn, args)  result = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, false, fn); if (result) return result; // NOLINT(bugprone-macro-parentheses)
 #include "cl_functions.h"

@@ -193,7 +193,7 @@ public:
         return sz;
     }
 
-    void swap(StateQueue &other) {
+    void swap(StateQueue &other) noexcept {
         storage.swap(other.storage);
         std::swap(sz, other.sz);
     }

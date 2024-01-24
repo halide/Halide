@@ -781,7 +781,7 @@ void associativity_test() {
                                 true));
     }
 
-    std::cout << "Associativity test passed" << std::endl;
+    std::cout << "Associativity test passed\n";
 }
 
 }  // namespace Internal

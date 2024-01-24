@@ -19,7 +19,7 @@ int main(int argc, const char **argv) {
     while (std::getline(std::cin, line)) {
         std::regex_replace(std::ostreambuf_iterator<char>(std::cout),
                            line.begin(), line.end(), re, argv[2]);
-        std::cout << std::endl;
+        std::cout << "\n";
     }
     return 0;
 }
