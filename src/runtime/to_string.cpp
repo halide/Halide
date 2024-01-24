@@ -1,8 +1,11 @@
 #include "HalideRuntime.h"
+#include "runtime_internal.h"
 
 extern "C" {
 
 WEAK char *halide_string_to_string(char *dst, char *end, const char *arg) {
+    halide_debug_assert(nullptr, dst <= end);
+
     if (dst >= end) {
         return dst;
     }
@@ -25,6 +28,8 @@ WEAK char *halide_string_to_string(char *dst, char *end, const char *arg) {
 }
 
 WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int min_digits) {
+    halide_debug_assert(nullptr, dst <= end);
+
     // 32 is more than enough chars to contain any 64-bit int.
     char buf[32];
     buf[31] = 0;
@@ -43,6 +48,8 @@ WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int min_d
 }
 
 WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int min_digits) {
+    halide_debug_assert(nullptr, dst <= end);
+
     if (arg < 0 && dst < end) {
         *dst++ = '-';
         arg = -arg;
@@ -51,6 +58,8 @@ WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int min_dig
 }
 
 WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scientific) {
+    halide_debug_assert(nullptr, dst <= end);
+
     uint64_t bits = 0;
     memcpy(&bits, &arg, sizeof(double));
 
@@ -234,6 +243,8 @@ WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scienti
 }
 
 WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg) {
+    halide_debug_assert(nullptr, dst <= end);
+
     const char *hex_digits = "0123456789abcdef";
     char buf[20] = {0};
     char *buf_ptr = buf + 18;
@@ -251,6 +262,8 @@ WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg) {
 }
 
 WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *t) {
+    halide_debug_assert(nullptr, dst <= end);
+
     const char *code_name = nullptr;
     switch (t->code) {
     case halide_type_int:
@@ -282,6 +295,8 @@ WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *t) {
 }
 
 WEAK char *halide_buffer_to_string(char *dst, char *end, const halide_buffer_t *buf) {
+    halide_debug_assert(nullptr, dst <= end);
+
     if (buf == nullptr) {
         return halide_string_to_string(dst, end, "nullptr");
     }

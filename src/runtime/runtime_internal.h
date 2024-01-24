@@ -51,6 +51,8 @@ typedef ptrdiff_t ssize_t;
 
 #define WEAK __attribute__((weak))
 
+#define NEVER_INLINE __attribute__((noinline))
+
 // Note that ALWAYS_INLINE should *always* also be `inline`.
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 
