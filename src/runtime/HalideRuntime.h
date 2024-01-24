@@ -23,7 +23,7 @@
 // our CMake build, so that we ensure that the in-build metadata (eg soversion)
 // matches, but keeping the canonical version here makes it easier to keep
 // downstream build systems (eg Blaze/Bazel) properly in sync with the source.
-#define HALIDE_VERSION_MAJOR 17
+#define HALIDE_VERSION_MAJOR 18
 #define HALIDE_VERSION_MINOR 0
 #define HALIDE_VERSION_PATCH 0
 
