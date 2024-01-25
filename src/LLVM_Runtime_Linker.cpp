@@ -844,8 +844,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
     vector<std::unique_ptr<llvm::Module>> modules;
 
     // Start with the module that defines our struct types. This must be
-    // included first, so that when any later structs we encounter get named
-    // with same elements, they use TODO
+    // included first, because when parsing modules, if two structs are
+    // encountered with the same fields, they are deduped, and the first name
+    // wins.
     modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
 
     const auto add_allocator = [&]() {
