@@ -847,6 +847,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
     // included first, because when parsing modules, if two structs are
     // encountered with the same fields, they are deduped, and the first name
     // wins.
+    //
+    // If in the future these names become unpredictable, an alternative
+    // strategy is to make this module include a global variable of each type we
+    // care about, recover the struct types from those named globals, and then
+    // delete the globals in link_modules.
     modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
 
     const auto add_allocator = [&]() {
