@@ -19,7 +19,7 @@ Checks: >
     bugprone-dangling-handle,
     bugprone-dynamic-static-initializers,
     -bugprone-easily-swappable-parameters,
-    bugprone-empty-catch,
+    -bugprone-empty-catch,
     -bugprone-exception-escape,
     bugprone-fold-init-type,
     bugprone-forward-declaration-namespace,
