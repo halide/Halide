@@ -930,17 +930,17 @@ std::ostream &operator<<(std::ostream &s, const BinOp<Mod, A, B> &op) {
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator+(A &&a, B &&b) noexcept -> BinOp<Add, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+HALIDE_ALWAYS_INLINE auto operator+(A &&a, B &&b) noexcept -> BinOp<Add, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(b)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto add(A &&a, B &&b) -> decltype(IRMatcher::operator+(a, b)) {
+HALIDE_ALWAYS_INLINE auto add(A &&a, B &&b) -> decltype(IRMatcher::operator+(std::forward<A>(a), std::forward<B>(b))) {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return IRMatcher::operator+(a, b);
+    return IRMatcher::operator+(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -963,17 +963,17 @@ HALIDE_ALWAYS_INLINE double constant_fold_bin_op<Add>(halide_type_t &t, double a
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator-(A &&a, B &&b) noexcept -> BinOp<Sub, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+HALIDE_ALWAYS_INLINE auto operator-(A &&a, B &&b) noexcept -> BinOp<Sub, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(b)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto sub(A &&a, B &&b) -> decltype(IRMatcher::operator-(a, b)) {
+HALIDE_ALWAYS_INLINE auto sub(A &&a, B &&b) -> decltype(IRMatcher::operator-(std::forward<A>(a), std::forward<B>(b))) {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return IRMatcher::operator-(a, b);
+    return IRMatcher::operator-(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -996,17 +996,17 @@ HALIDE_ALWAYS_INLINE double constant_fold_bin_op<Sub>(halide_type_t &t, double a
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator*(A &&a, B &&b) noexcept -> BinOp<Mul, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+HALIDE_ALWAYS_INLINE auto operator*(A &&a, B &&b) noexcept -> BinOp<Mul, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(b)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto mul(A &&a, B &&b) -> decltype(IRMatcher::operator*(a, b)) {
+HALIDE_ALWAYS_INLINE auto mul(A &&a, B &&b) -> decltype(IRMatcher::operator*(std::forward<A>(a), std::forward<B>(b))) {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return IRMatcher::operator*(a, b);
+    return IRMatcher::operator*(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -1029,15 +1029,15 @@ HALIDE_ALWAYS_INLINE double constant_fold_bin_op<Mul>(halide_type_t &t, double a
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator/(A &&a, B &&b) noexcept -> BinOp<Div, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+HALIDE_ALWAYS_INLINE auto operator/(A &&a, B &&b) noexcept -> BinOp<Div, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(b)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto div(A &&a, B &&b) -> decltype(IRMatcher::operator/(a, b)) {
-    return IRMatcher::operator/(a, b);
+HALIDE_ALWAYS_INLINE auto div(A &&a, B &&b) -> decltype(IRMatcher::operator/(std::forward<A>(a), std::forward<B>(b))) {
+    return IRMatcher::operator/(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -1056,17 +1056,17 @@ HALIDE_ALWAYS_INLINE double constant_fold_bin_op<Div>(halide_type_t &t, double a
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator%(A &&a, B &&b) noexcept -> BinOp<Mod, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+HALIDE_ALWAYS_INLINE auto operator%(A &&a, B &&b) noexcept -> BinOp<Mod, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(b)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto mod(A &&a, B &&b) -> decltype(IRMatcher::operator%(a, b)) {
+HALIDE_ALWAYS_INLINE auto mod(A &&a, B &&b) -> decltype(IRMatcher::operator%(std::forward<A>(a), std::forward<B>(b))) {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return IRMatcher::operator%(a, b);
+    return IRMatcher::operator%(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -1085,10 +1085,10 @@ HALIDE_ALWAYS_INLINE double constant_fold_bin_op<Mod>(halide_type_t &t, double a
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto min(A &&a, B &&b) noexcept -> BinOp<Min, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+HALIDE_ALWAYS_INLINE auto min(A &&a, B &&b) noexcept -> BinOp<Min, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
-    return {pattern_arg(a), pattern_arg(b)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<>
@@ -1107,7 +1107,7 @@ HALIDE_ALWAYS_INLINE double constant_fold_bin_op<Min>(halide_type_t &t, double a
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto max(A &&a, B &&b) noexcept -> BinOp<Max, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+HALIDE_ALWAYS_INLINE auto max(A &&a, B &&b) noexcept -> BinOp<Max, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
     return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
@@ -1129,13 +1129,13 @@ HALIDE_ALWAYS_INLINE double constant_fold_bin_op<Max>(halide_type_t &t, double a
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator<(A &&a, B &&b) noexcept -> CmpOp<LT, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {pattern_arg(a), pattern_arg(b)};
+HALIDE_ALWAYS_INLINE auto operator<(A &&a, B &&b) noexcept -> CmpOp<LT, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto lt(A &&a, B &&b) -> decltype(IRMatcher::operator<(a, b)) {
-    return IRMatcher::operator<(a, b);
+HALIDE_ALWAYS_INLINE auto lt(A &&a, B &&b) -> decltype(IRMatcher::operator<(std::forward<A>(a), std::forward<B>(b))) {
+    return IRMatcher::operator<(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -1154,13 +1154,13 @@ HALIDE_ALWAYS_INLINE uint64_t constant_fold_cmp_op<LT>(double a, double b) noexc
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator>(A &&a, B &&b) noexcept -> CmpOp<GT, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {pattern_arg(a), pattern_arg(b)};
+HALIDE_ALWAYS_INLINE auto operator>(A &&a, B &&b) noexcept -> CmpOp<GT, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto gt(A &&a, B &&b) -> decltype(IRMatcher::operator>(a, b)) {
-    return IRMatcher::operator>(a, b);
+HALIDE_ALWAYS_INLINE auto gt(A &&a, B &&b) -> decltype(IRMatcher::operator>(std::forward<A>(a), std::forward<B>(b))) {
+    return IRMatcher::operator>(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -1179,13 +1179,13 @@ HALIDE_ALWAYS_INLINE uint64_t constant_fold_cmp_op<GT>(double a, double b) noexc
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator<=(A &&a, B &&b) noexcept -> CmpOp<LE, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {pattern_arg(a), pattern_arg(b)};
+HALIDE_ALWAYS_INLINE auto operator<=(A &&a, B &&b) noexcept -> CmpOp<LE, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto le(A &&a, B &&b) -> decltype(IRMatcher::operator<=(a, b)) {
-    return IRMatcher::operator<=(a, b);
+HALIDE_ALWAYS_INLINE auto le(A &&a, B &&b) -> decltype(IRMatcher::operator<=(std::forward<A>(a), std::forward<B>(b))) {
+    return IRMatcher::operator<=(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -1204,13 +1204,13 @@ HALIDE_ALWAYS_INLINE uint64_t constant_fold_cmp_op<LE>(double a, double b) noexc
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator>=(A &&a, B &&b) noexcept -> CmpOp<GE, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {pattern_arg(a), pattern_arg(b)};
+HALIDE_ALWAYS_INLINE auto operator>=(A &&a, B &&b) noexcept -> CmpOp<GE, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto ge(A &&a, B &&b) -> decltype(IRMatcher::operator>=(a, b)) {
-    return IRMatcher::operator>=(a, b);
+HALIDE_ALWAYS_INLINE auto ge(A &&a, B &&b) -> decltype(IRMatcher::operator>=(std::forward<A>(a), std::forward<B>(b))) {
+    return IRMatcher::operator>=(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -1229,13 +1229,13 @@ HALIDE_ALWAYS_INLINE uint64_t constant_fold_cmp_op<GE>(double a, double b) noexc
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator==(A &&a, B &&b) noexcept -> CmpOp<EQ, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {pattern_arg(a), pattern_arg(b)};
+HALIDE_ALWAYS_INLINE auto operator==(A &&a, B &&b) noexcept -> CmpOp<EQ, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto eq(A &&a, B &&b) -> decltype(IRMatcher::operator==(a, b)) {
-    return IRMatcher::operator==(a, b);
+HALIDE_ALWAYS_INLINE auto eq(A &&a, B &&b) -> decltype(IRMatcher::operator==(std::forward<A>(a), std::forward<B>(b))) {
+    return IRMatcher::operator==(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -1254,13 +1254,13 @@ HALIDE_ALWAYS_INLINE uint64_t constant_fold_cmp_op<EQ>(double a, double b) noexc
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator!=(A &&a, B &&b) noexcept -> CmpOp<NE, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {pattern_arg(a), pattern_arg(b)};
+HALIDE_ALWAYS_INLINE auto operator!=(A &&a, B &&b) noexcept -> CmpOp<NE, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto ne(A &&a, B &&b) -> decltype(IRMatcher::operator!=(a, b)) {
-    return IRMatcher::operator!=(a, b);
+HALIDE_ALWAYS_INLINE auto ne(A &&a, B &&b) -> decltype(IRMatcher::operator!=(std::forward<A>(a), std::forward<B>(b))) {
+    return IRMatcher::operator!=(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -1279,13 +1279,13 @@ HALIDE_ALWAYS_INLINE uint64_t constant_fold_cmp_op<NE>(double a, double b) noexc
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator||(A &&a, B &&b) noexcept -> BinOp<Or, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {pattern_arg(a), pattern_arg(b)};
+HALIDE_ALWAYS_INLINE auto operator||(A &&a, B &&b) noexcept -> BinOp<Or, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto or_op(A &&a, B &&b) -> decltype(IRMatcher::operator||(a, b)) {
-    return IRMatcher::operator||(a, b);
+HALIDE_ALWAYS_INLINE auto or_op(A &&a, B &&b) -> decltype(IRMatcher::operator||(std::forward<A>(a), std::forward<B>(b))) {
+    return IRMatcher::operator||(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -1305,13 +1305,13 @@ HALIDE_ALWAYS_INLINE double constant_fold_bin_op<Or>(halide_type_t &t, double a,
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator&&(A &&a, B &&b) noexcept -> BinOp<And, decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {pattern_arg(a), pattern_arg(b)};
+HALIDE_ALWAYS_INLINE auto operator&&(A &&a, B &&b) noexcept -> BinOp<And, decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto and_op(A &&a, B &&b) -> decltype(IRMatcher::operator&&(a, b)) {
-    return IRMatcher::operator&&(a, b);
+HALIDE_ALWAYS_INLINE auto and_op(A &&a, B &&b) -> decltype(IRMatcher::operator&&(std::forward<A>(a), std::forward<B>(b))) {
+    return IRMatcher::operator&&(std::forward<A>(a), std::forward<B>(b));
 }
 
 template<>
@@ -1536,79 +1536,79 @@ HALIDE_ALWAYS_INLINE auto intrin(Call::IntrinsicOp intrinsic_op, Args... args) n
 }
 
 template<typename A, typename B>
-auto widen_right_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widen_right_add, pattern_arg(a), pattern_arg(b)};
+auto widen_right_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::widen_right_add, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto widen_right_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widen_right_mul, pattern_arg(a), pattern_arg(b)};
+auto widen_right_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::widen_right_mul, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto widen_right_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widen_right_sub, pattern_arg(a), pattern_arg(b)};
+auto widen_right_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::widen_right_sub, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 
 template<typename A, typename B>
-auto widening_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widening_add, pattern_arg(a), pattern_arg(b)};
+auto widening_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::widening_add, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto widening_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widening_sub, pattern_arg(a), pattern_arg(b)};
+auto widening_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::widening_sub, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto widening_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::widening_mul, pattern_arg(a), pattern_arg(b)};
+auto widening_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::widening_mul, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto saturating_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::saturating_add, pattern_arg(a), pattern_arg(b)};
+auto saturating_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::saturating_add, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto saturating_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::saturating_sub, pattern_arg(a), pattern_arg(b)};
+auto saturating_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::saturating_sub, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A>
-auto saturating_cast(const Type &t, A &&a) noexcept -> Intrin<decltype(pattern_arg(a))> {
-    Intrin<decltype(pattern_arg(a))> p = {Call::saturating_cast, pattern_arg(a)};
+auto saturating_cast(const Type &t, A &&a) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a)))> {
+    Intrin<decltype(pattern_arg(std::forward<A>(a)))> p = {Call::saturating_cast, pattern_arg(std::forward<A>(a))};
     p.optional_type_hint = t;
     return p;
 }
 template<typename A, typename B>
-auto halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::halving_add, pattern_arg(a), pattern_arg(b)};
+auto halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::halving_add, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto halving_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::halving_sub, pattern_arg(a), pattern_arg(b)};
+auto halving_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::halving_sub, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto rounding_halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::rounding_halving_add, pattern_arg(a), pattern_arg(b)};
+auto rounding_halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::rounding_halving_add, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::shift_left, pattern_arg(a), pattern_arg(b)};
+auto shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::shift_left, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::shift_right, pattern_arg(a), pattern_arg(b)};
+auto shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::shift_right, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto rounding_shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::rounding_shift_left, pattern_arg(a), pattern_arg(b)};
+auto rounding_shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::rounding_shift_left, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B>
-auto rounding_shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::rounding_shift_right, pattern_arg(a), pattern_arg(b)};
+auto rounding_shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b)))> {
+    return {Call::rounding_shift_right, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b))};
 }
 template<typename A, typename B, typename C>
-auto mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
-    return {Call::mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
+auto mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b))), decltype(pattern_arg(std::forward<C>(c)))> {
+    return {Call::mul_shift_right, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b)), pattern_arg(std::forward<C>(c))};
 }
 template<typename A, typename B, typename C>
-auto rounding_mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
-    return {Call::rounding_mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
+auto rounding_mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b))), decltype(pattern_arg(std::forward<C>(c)))> {
+    return {Call::rounding_mul_shift_right, pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b)), pattern_arg(std::forward<C>(c))};
 }
 
 template<typename A>
@@ -1652,15 +1652,15 @@ struct NotOp {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto operator!(A &&a) noexcept -> NotOp<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto operator!(A &&a) noexcept -> NotOp<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(std::forward<A>(a))};
 }
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto not_op(A &&a) -> decltype(IRMatcher::operator!(a)) {
+HALIDE_ALWAYS_INLINE auto not_op(A &&a) -> decltype(IRMatcher::operator!(std::forward<A>(a))) {
     assert_is_lvalue_if_expr<A>();
-    return IRMatcher::operator!(a);
+    return IRMatcher::operator!(std::forward<A>(a));
 }
 
 template<typename A>
@@ -1728,11 +1728,11 @@ std::ostream &operator<<(std::ostream &s, const SelectOp<C, T, F> &op) {
 }
 
 template<typename C, typename T, typename F>
-HALIDE_ALWAYS_INLINE auto select(C &&c, T &&t, F &&f) noexcept -> SelectOp<decltype(pattern_arg(c)), decltype(pattern_arg(t)), decltype(pattern_arg(f))> {
+HALIDE_ALWAYS_INLINE auto select(C &&c, T &&t, F &&f) noexcept -> SelectOp<decltype(pattern_arg(std::forward<C>(c))), decltype(pattern_arg(std::forward<T>(t))), decltype(pattern_arg(std::forward<F>(f)))> {
     assert_is_lvalue_if_expr<C>();
     assert_is_lvalue_if_expr<T>();
     assert_is_lvalue_if_expr<F>();
-    return {pattern_arg(c), pattern_arg(t), pattern_arg(f)};
+    return {pattern_arg(std::forward<C>(c)), pattern_arg(std::forward<T>(t)), pattern_arg(std::forward<F>(f))};
 }
 
 template<typename A, typename B>
@@ -1801,9 +1801,9 @@ inline std::ostream &operator<<(std::ostream &s, const BroadcastOp<A, B> &op) {
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto broadcast(A &&a, B lanes) noexcept -> BroadcastOp<decltype(pattern_arg(a)), decltype(pattern_arg(lanes))> {
+HALIDE_ALWAYS_INLINE auto broadcast(A &&a, B lanes) noexcept -> BroadcastOp<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(lanes))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), pattern_arg(lanes)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(lanes)};
 }
 
 template<typename A, typename B, typename C>
@@ -1865,11 +1865,11 @@ std::ostream &operator<<(std::ostream &s, const RampOp<A, B, C> &op) {
 }
 
 template<typename A, typename B, typename C>
-HALIDE_ALWAYS_INLINE auto ramp(A &&a, B &&b, C &&c) noexcept -> RampOp<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+HALIDE_ALWAYS_INLINE auto ramp(A &&a, B &&b, C &&c) noexcept -> RampOp<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(std::forward<B>(b))), decltype(pattern_arg(std::forward<C>(c)))> {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
     assert_is_lvalue_if_expr<C>();
-    return {pattern_arg(a), pattern_arg(b), pattern_arg(c)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(std::forward<B>(b)), pattern_arg(std::forward<C>(c))};
 }
 
 template<typename A, typename B, VectorReduce::Operator reduce_op>
@@ -1923,33 +1923,33 @@ inline std::ostream &operator<<(std::ostream &s, const VectorReduceOp<A, B, redu
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto h_add(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), decltype(pattern_arg(lanes)), VectorReduce::Add> {
+HALIDE_ALWAYS_INLINE auto h_add(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(lanes)), VectorReduce::Add> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), pattern_arg(lanes)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(lanes)};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto h_min(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), decltype(pattern_arg(lanes)), VectorReduce::Min> {
+HALIDE_ALWAYS_INLINE auto h_min(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(lanes)), VectorReduce::Min> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), pattern_arg(lanes)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(lanes)};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto h_max(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), decltype(pattern_arg(lanes)), VectorReduce::Max> {
+HALIDE_ALWAYS_INLINE auto h_max(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(lanes)), VectorReduce::Max> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), pattern_arg(lanes)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(lanes)};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto h_and(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), decltype(pattern_arg(lanes)), VectorReduce::And> {
+HALIDE_ALWAYS_INLINE auto h_and(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(lanes)), VectorReduce::And> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), pattern_arg(lanes)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(lanes)};
 }
 
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto h_or(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(a)), decltype(pattern_arg(lanes)), VectorReduce::Or> {
+HALIDE_ALWAYS_INLINE auto h_or(A &&a, B lanes) noexcept -> VectorReduceOp<decltype(pattern_arg(std::forward<A>(a))), decltype(pattern_arg(lanes)), VectorReduce::Or> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), pattern_arg(lanes)};
+    return {pattern_arg(std::forward<A>(a)), pattern_arg(lanes)};
 }
 
 template<typename A>
@@ -2023,15 +2023,15 @@ std::ostream &operator<<(std::ostream &s, const NegateOp<A> &op) {
 }
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto operator-(A &&a) noexcept -> NegateOp<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto operator-(A &&a) noexcept -> NegateOp<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(std::forward<A>(a))};
 }
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto negate(A &&a) -> decltype(IRMatcher::operator-(a)) {
+HALIDE_ALWAYS_INLINE auto negate(A &&a) -> decltype(IRMatcher::operator-(std::forward<A>(a))) {
     assert_is_lvalue_if_expr<A>();
-    return IRMatcher::operator-(a);
+    return IRMatcher::operator-(std::forward<A>(a));
 }
 
 template<typename A>
@@ -2075,9 +2075,9 @@ std::ostream &operator<<(std::ostream &s, const CastOp<A> &op) {
 }
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto cast(halide_type_t t, A &&a) noexcept -> CastOp<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto cast(halide_type_t t, A &&a) noexcept -> CastOp<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {t, pattern_arg(a)};
+    return {t, pattern_arg(std::forward<A>(a))};
 }
 
 template<typename Vec, typename Base, typename Stride, typename Lanes>
@@ -2188,9 +2188,9 @@ struct Fold {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto fold(A &&a) noexcept -> Fold<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto fold(A &&a) noexcept -> Fold<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(std::forward<A>(a))};
 }
 
 template<typename A>
@@ -2225,9 +2225,9 @@ struct Overflows {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto overflows(A &&a) noexcept -> Overflows<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto overflows(A &&a) noexcept -> Overflows<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(std::forward<A>(a))};
 }
 
 template<typename A>
@@ -2307,15 +2307,15 @@ struct IsConst {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_const(A &&a) noexcept -> IsConst<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_const(A &&a) noexcept -> IsConst<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), false, 0};
+    return {pattern_arg(std::forward<A>(a)), false, 0};
 }
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_const(A &&a, int64_t value) noexcept -> IsConst<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_const(A &&a, int64_t value) noexcept -> IsConst<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), true, value};
+    return {pattern_arg(std::forward<A>(a)), true, value};
 }
 
 template<typename A>
@@ -2355,9 +2355,9 @@ struct CanProve {
 };
 
 template<typename A, typename Prover>
-HALIDE_ALWAYS_INLINE auto can_prove(A &&a, Prover *p) noexcept -> CanProve<decltype(pattern_arg(a)), Prover> {
+HALIDE_ALWAYS_INLINE auto can_prove(A &&a, Prover *p) noexcept -> CanProve<decltype(pattern_arg(std::forward<A>(a))), Prover> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), p};
+    return {pattern_arg(std::forward<A>(a)), p};
 }
 
 template<typename A, typename Prover>
@@ -2392,9 +2392,9 @@ struct IsFloat {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_float(A &&a) noexcept -> IsFloat<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_float(A &&a) noexcept -> IsFloat<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(std::forward<A>(a))};
 }
 
 template<typename A>
@@ -2430,9 +2430,9 @@ struct IsInt {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_int(A &&a, int bits = 0, int lanes = 0) noexcept -> IsInt<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_int(A &&a, int bits = 0, int lanes = 0) noexcept -> IsInt<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), bits, lanes};
+    return {pattern_arg(std::forward<A>(a)), bits, lanes};
 }
 
 template<typename A>
@@ -2475,9 +2475,9 @@ struct IsUInt {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_uint(A &&a, int bits = 0, int lanes = 0) noexcept -> IsUInt<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_uint(A &&a, int bits = 0, int lanes = 0) noexcept -> IsUInt<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), bits, lanes};
+    return {pattern_arg(std::forward<A>(a)), bits, lanes};
 }
 
 template<typename A>
@@ -2519,9 +2519,9 @@ struct IsScalar {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_scalar(A &&a) noexcept -> IsScalar<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_scalar(A &&a) noexcept -> IsScalar<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(std::forward<A>(a))};
 }
 
 template<typename A>
@@ -2560,9 +2560,9 @@ struct IsMaxValue {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_max_value(A &&a) noexcept -> IsMaxValue<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_max_value(A &&a) noexcept -> IsMaxValue<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(std::forward<A>(a))};
 }
 
 template<typename A>
@@ -2603,9 +2603,9 @@ struct IsMinValue {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_min_value(A &&a) noexcept -> IsMinValue<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_min_value(A &&a) noexcept -> IsMinValue<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(std::forward<A>(a))};
 }
 
 template<typename A>
@@ -2640,9 +2640,9 @@ struct LanesOf {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto lanes_of(A &&a) noexcept -> LanesOf<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto lanes_of(A &&a) noexcept -> LanesOf<decltype(pattern_arg(std::forward<A>(a)))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(std::forward<A>(a))};
 }
 
 template<typename A>
@@ -2671,7 +2671,11 @@ HALIDE_NEVER_INLINE void fuzz_test_rule(Before &&before, After &&after, Predicat
     }
 
     // Print it in a form where it can be piped into a python/z3 validator
-    debug(0) << "validate('" << before << "', '" << after << "', '" << pred << "', " << Type(wildcard_type) << ", " << Type(output_type) << ")\n";
+    debug(0) << "validate('" << std::forward<Before>(before) << "', '"
+             << std::forward<After>(after) << "', '"
+             << std::forward<Predicate>(pred) << "', "
+             << Type(wildcard_type) << ", "
+             << Type(output_type) << ")\n";
 
     // Substitute some random constants into the before and after
     // expressions and see if the rule holds true. This should catch

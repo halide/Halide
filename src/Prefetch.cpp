@@ -394,10 +394,10 @@ template<typename Fn>
 void traverse_block(const Stmt &s, Fn &&f) {
     const Block *b = s.as<Block>();
     if (!b) {
-        f(s);
+        std::forward<Fn>(f)(s);
     } else {
-        traverse_block(b->first, f);
-        traverse_block(b->rest, f);
+        traverse_block(b->first, std::forward<Fn>(f));
+        traverse_block(b->rest, std::forward<Fn>(f));
     }
 }
 

@@ -186,7 +186,7 @@ public:
     /** Move construct from a Buffer of a different type */
     template<typename T2, int D2>
     Buffer(Buffer<T2, D2> &&other) noexcept {
-        assert_can_convert_from(other);
+        assert_can_convert_from(std::forward<Buffer<T2, D2>>(other));
         contents = std::move(other.contents);
     }
 
@@ -263,7 +263,7 @@ public:
                     Internal::add_const_if_T_is_const<T, void> *data,
                     int first, Args &&...rest)
         : Buffer(Runtime::Buffer<T, Dims>(t, data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
-                 Internal::get_name_from_end_of_parameter_pack(rest...)) {
+                 Internal::get_name_from_end_of_parameter_pack(std::forward<Args>(rest)...)) {
     }
 
     template<typename... Args,
@@ -280,7 +280,7 @@ public:
     explicit Buffer(T *data,
                     int first, Args &&...rest)
         : Buffer(Runtime::Buffer<T, Dims>(data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
-                 Internal::get_name_from_end_of_parameter_pack(rest...)) {
+                 Internal::get_name_from_end_of_parameter_pack(std::forward<Args>(rest)...)) {
     }
 
     explicit Buffer(T *data,

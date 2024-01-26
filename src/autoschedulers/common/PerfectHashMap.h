@@ -16,7 +16,7 @@ struct PerfectHashMapAsserter {
     template<typename T>
     PerfectHashMapAsserter &operator<<(T &&t) {
         if (!c) {
-            std::cerr << t;
+            std::cerr << std::forward<T>(t);
         }
         return *this;
     }
