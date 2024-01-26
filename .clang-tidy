@@ -86,7 +86,7 @@ Checks: >
 
     cppcoreguidelines-avoid-capturing-lambda-coroutines,
     cppcoreguidelines-misleading-capture-default-by-value,
-    -cppcoreguidelines-missing-std-forward,  # TODO: consider enabling
+    cppcoreguidelines-missing-std-forward,
     cppcoreguidelines-rvalue-reference-param-not-moved,
 
     misc-confusable-identifiers,
@@ -215,5 +215,7 @@ HeaderFilterRegex: '.*'
 FormatStyle: 'file'
 CheckOptions:
     - key:   modernize-use-default-member-init.UseAssignment
+      value: 1
+    - key:   cppcoreguidelines-rvalue-reference-param-not-moved.AllowPartialMove
       value: 1
 ...

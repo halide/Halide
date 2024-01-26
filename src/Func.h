@@ -2629,7 +2629,7 @@ inline void assign_results(Realization &r, int idx, Last last) {
 template<typename First, typename Second, typename... Rest>
 inline void assign_results(Realization &r, int idx, First first, Second second, Rest &&...rest) {
     assign_results<First>(r, idx, first);
-    assign_results<Second, Rest...>(r, idx + 1, second, rest...);
+    assign_results<Second, Rest...>(r, idx + 1, second, std::forward<Rest>(rest)...);
 }
 
 }  // namespace Internal
@@ -2657,19 +2657,19 @@ HALIDE_NO_USER_CODE_INLINE T evaluate(const Expr &e) {
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
 template<typename First, typename... Rest>
-HALIDE_NO_USER_CODE_INLINE void evaluate(JITUserContext *ctx, Tuple t, First first, Rest &&...rest) {
+HALIDE_NO_USER_CODE_INLINE void evaluate(JITUserContext *ctx, const Tuple &t, First first, Rest &&...rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;
     f() = t;
     Realization r = f.realize(ctx);
-    Internal::assign_results(r, 0, first, rest...);
+    Internal::assign_results(r, 0, first, std::forward<Rest>(rest)...);
 }
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
 template<typename First, typename... Rest>
-HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest &&...rest) {
-    evaluate<First, Rest...>(nullptr, std::move(t), std::forward<First>(first), std::forward<Rest...>(rest...));
+HALIDE_NO_USER_CODE_INLINE void evaluate(const Tuple &t, First first, Rest &&...rest) {
+    evaluate<First, Rest...>(nullptr, t, std::forward<First>(first), std::forward<Rest>(rest)...);
 }
 
 namespace Internal {
@@ -2715,7 +2715,7 @@ HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest &&..
     f() = t;
     Internal::schedule_scalar(f);
     Realization r = f.realize();
-    Internal::assign_results(r, 0, first, rest...);
+    Internal::assign_results(r, 0, first, std::forward<Rest>(rest)...);
 }
 // @}
 

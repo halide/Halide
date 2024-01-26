@@ -85,6 +85,7 @@ struct debug_sink {
 
     template<typename T>
     inline debug_sink &operator<<(T &&x) {
+        (void)std::forward<T>(x);  // Appease clang-tidy
         return *this;
     }
 };
