@@ -66,7 +66,7 @@ Checks: >
     bugprone-suspicious-semicolon,
     bugprone-suspicious-string-compare,
     bugprone-swapped-arguments,
-    bugprone-switch-missing-default-case,  # TODO: consider enabling
+    bugprone-switch-missing-default-case,
     bugprone-terminating-continue,
     bugprone-throw-keyword-missing,
     bugprone-too-small-loop-variable,
