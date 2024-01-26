@@ -93,7 +93,7 @@ Checks: >
     -misc-const-correctness,
     misc-definitions-in-headers,
     misc-header-include-cycle,
-    -misc-include-cleaner,  # TODO: consider enabling
+    -misc-include-cleaner,
     misc-misleading-bidirectional,
     misc-misleading-identifier,
     misc-misplaced-const,
