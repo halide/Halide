@@ -1448,7 +1448,10 @@ void CodeGen_LLVM::visit(const Cast *op) {
     }
 
     value = codegen(op->value);
-    llvm::Type *llvm_dst = llvm_type_of(dst);
+    llvm::Type *llvm_dst = llvm_type_of(dst.element_of());
+    if (value->getType()->isVectorTy()) {
+        llvm_dst = VectorType::get(llvm_dst, dyn_cast<VectorType>(value->getType())->getElementCount());
+    }
 
     if (dst.is_handle() && src.is_handle()) {
         value = builder->CreateBitCast(value, llvm_dst);
@@ -1875,6 +1878,11 @@ void CodeGen_LLVM::visit(const Select *op) {
 
     Value *a = codegen(op->true_value);
     Value *b = codegen(op->false_value);
+    if (a->getType()->isVectorTy()) {
+        cmp = match_vector_type_scalable(cmp, a);
+        b = match_vector_type_scalable(b, a);
+    }
+
     if (!try_vector_predication_intrinsic("llvm.vp.select", llvm_type_of(op->type), op->type.lanes(),
                                           NoMask(), {VPArg(cmp), VPArg(a, 0), VPArg(b)})) {
         value = builder->CreateSelect(cmp, a, b);
@@ -2262,6 +2270,7 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
         Value *vpred = codegen(op->predicate);
         Halide::Type value_type = op->value.type();
         Value *val = codegen(op->value);
+        vpred = match_vector_type_scalable(vpred, value);
         int alignment = value_type.bytes();
         int native_bytes = native_vector_bits() / 8;
 
@@ -2397,7 +2406,7 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
         Value *elt_ptr = codegen_buffer_pointer(name, type.element_of(), slice_base);
         Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
 
-        Value *slice_mask = (vpred != nullptr) ? slice_vector(vpred, i, slice_lanes) : nullptr;
+        Value *slice_mask = (vpred != nullptr) ? match_vector_type_scalable(slice_vector(vpred, i, slice_lanes), slice_type) : nullptr;
         MaskVariant vp_slice_mask = slice_mask ? MaskVariant(slice_mask) : AllEnabledMask();
 
         Instruction *load_inst = nullptr;
@@ -3474,6 +3483,11 @@ void CodeGen_LLVM::visit(const Call *op) {
                         debug(4) << "Pointer casting argument to extern call: "
                                  << halide_arg << "\n";
                         args[i] = builder->CreatePointerCast(args[i], t);
+                    }
+                } else if (args[i]->getType()->isVectorTy()) {
+                    llvm::Type *t = func_t->getParamType(i);
+                    if (t->isVectorTy()) {
+                        args[i] = match_vector_type_scalable(args[i], t);
                     }
                 }
             }
@@ -4758,9 +4772,9 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
 
             // Apparently the bitcast in the else branch below can
             // change the scalar type and vector length togehter so
-            // long as the total bits are the same. E.g. on HVX, <128
-            // x i16> to <64 x i32>.  This is probably a bug, but it
-            // seems to be allowed so it is also supported in the
+            // long as the total bits are the same. E.g. on HVX,
+            // <128 x i16> to <64 x i32>.  This is probably a bug, but
+            // it seems to be allowed so it is also supported in the
             // fixed/vscale matching path.
             if (both_vectors && (arg_is_fixed != formal_is_fixed) && (effective_vscale != 0)) {
                 bool scalar_types_match = arg_type->getScalarType() == formal_param_type->getScalarType();
@@ -4839,7 +4853,9 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
         vec = builder->CreateExtractVector(intermediate_type, vec, ConstantInt::get(i64_t, start));
 
         // Insert vector into a poison vector and return.
-        llvm::VectorType *result_type = dyn_cast<VectorType>(get_vector_type(scalar_type, size));
+        int effective_size = is_fixed ? size : (size / effective_vscale);
+        llvm::VectorType *result_type = dyn_cast<VectorType>(get_vector_type(scalar_type, effective_size,
+                                                                             is_fixed ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale));
         Constant *poison = PoisonValue::get(scalar_type);
         llvm::Value *result_vec = ConstantVector::getSplat(result_type->getElementCount(), poison);
         vec = builder->CreateInsertVector(result_type, result_vec, vec, ConstantInt::get(i64_t, 0));
@@ -5080,6 +5096,37 @@ llvm::Value *CodeGen_LLVM::normalize_fixed_scalable_vector_type(llvm::Type *desi
     return result;
 }
 
+llvm::Value *CodeGen_LLVM::match_vector_type_scalable(llvm::Value *value, VectorTypeConstraint constraint) {
+  internal_assert(isa<llvm::VectorType>(value->getType())) << "match_predicate_vector_type can only be called with vector arguments.\n";
+    if (constraint == VectorTypeConstraint::None) {
+        return value;
+    }
+    llvm::Type *value_type = value->getType();
+
+    bool value_fixed = isa<llvm::FixedVectorType>(value_type);
+    bool guide_fixed = (constraint == VectorTypeConstraint::Fixed);
+    if (value_fixed != guide_fixed) {
+        int value_scaled_elements = get_vector_num_elements(value_type);
+        if (!guide_fixed) {
+            value_scaled_elements /= effective_vscale;
+        }
+        llvm::Type *desired_type = get_vector_type(value_type->getScalarType(), value_scaled_elements,
+                                                   guide_fixed ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
+        value = convert_fixed_or_scalable_vector_type(value, desired_type);
+    }
+
+    return value;
+}
+
+llvm::Value *CodeGen_LLVM::match_vector_type_scalable(llvm::Value *value, llvm::Type *guide_type) {
+    internal_assert(isa<llvm::VectorType>(guide_type)) << "match_predicate_vector_type can only be called with vector arguments.\n";
+    return match_vector_type_scalable(value, isa<FixedVectorType>(guide_type) ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
+}
+
+llvm::Value *CodeGen_LLVM::match_vector_type_scalable(llvm::Value *value, llvm::Value *guide) {
+    return match_vector_type_scalable(value, guide->getType());
+}
+
 llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *arg,
                                                                  llvm::Type *desired_type) {
     llvm::Type *arg_type = arg->getType();
@@ -5105,13 +5152,21 @@ llvm::Value *CodeGen_LLVM::convert_fixed_or_scalable_vector_type(llvm::Value *ar
     if (isa<llvm::FixedVectorType>(arg_type) &&
         isa<llvm::ScalableVectorType>(result_type)) {
         use_insert = true;
+        if (arg_elements > result_elements) {
+            arg = slice_vector(arg, 0, result_elements);
+        }
+        arg_elements = result_elements;
     } else if (isa<llvm::FixedVectorType>(result_type) &&
                isa<llvm::ScalableVectorType>(arg_type)) {
         use_insert = false;
+        if (arg_elements < result_elements) {
+            arg = slice_vector(arg, 0, result_elements);
+        }
+        arg_elements = result_elements;
     } else {
         // Use extract to make smaller, insert to make bigger.
         // A somewhat arbitary decision.
-        use_insert = (arg_elements > result_elements);
+        use_insert = (arg_elements < result_elements);
     }
 
     std::string intrin_name = "llvm.vector.";
@@ -5264,9 +5319,21 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
     switch (type_constraint) {
     case VectorTypeConstraint::None:
         if (effective_vscale > 0) {
-            // TODO(<need issue>): AArch64 SVE2 support is crashy with scalable vectors of min size 1.
-          bool wide_enough = (target.arch != Target::ARM) ||
-                             ((n / effective_vscale) > 1);
+            bool wide_enough = true;
+            // TODO(<issue needed>): Architecture specific code should not go
+            // here.Ideally part of this can go away via LLVM fixes and
+            // modifying intrinsic selection to handle scalable vs. fixed
+            // vectors. Making this method virtual is possibly expensive.
+            if (target.arch == Target::ARM) {
+                if (!target.has_feature(Target::NoNEON)) {
+                    // force booleans into bytes. TODO(<issue needed>): figure out a better way to do this.
+                  int bit_size = std::max((int)t->getScalarSizeInBits(), 8);
+                    wide_enough = (bit_size * n) > 128;
+                } else {
+                    // TODO(<need issue>): AArch64 SVE2 support is crashy with scalable vectors of min size 1.
+                    wide_enough = (n / effective_vscale) > 1;
+                }
+            }
             scalable = wide_enough && ((n % effective_vscale) == 0);
             if (scalable) {
                 n = n / effective_vscale;

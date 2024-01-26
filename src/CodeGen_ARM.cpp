@@ -107,6 +107,9 @@ protected:
     using codegen_func_t = std::function<Value *(int lanes, const std::vector<Value *> &)>;
     using CodeGen_Posix::visit;
 
+    /** Similar to llvm_type_of, but allows forcing use of Fixed of Vscale vectors. */
+    llvm::Type *llvm_type_with_constraint(const Type &t, bool scalars_are_vectors, VectorTypeConstraint constraint);
+
     /** Define a wrapper LLVM func that takes some arguments which Halide defines
      * and call inner LLVM intrinsic with an additional argument which LLVM requires. */
     llvm::Function *define_intrin_wrapper(const std::string &inner_name,
@@ -813,6 +816,19 @@ const std::map<string, string> float16_transcendental_remapping = {
 };
 // clang-format on
 
+llvm::Type *CodeGen_ARM::llvm_type_with_constraint(const Type &t, bool scalars_are_vectors,
+                                                   VectorTypeConstraint constraint) {
+    llvm::Type *ret = llvm_type_of(t.element_of());
+    if (!t.is_scalar() || scalars_are_vectors) {
+        int lanes = t.lanes();
+        if (constraint == VectorTypeConstraint::VScale) {
+            lanes /= target_vscale();
+        }
+        ret = get_vector_type(ret, lanes, constraint);
+    }
+    return ret;
+}
+
 llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name,
                                                    const Type &ret_type,
                                                    const std::string &mangled_name,
@@ -823,12 +839,21 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
                                                    bool scalars_are_vectors,
                                                    bool force_fixed_vector_types) {
 
+    auto to_llvm_type = [&](const Type &t) {
+        return llvm_type_with_constraint(t, scalars_are_vectors,
+                                         force_fixed_vector_types ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
+    };
+
+    llvm::Type *llvm_ret_type = to_llvm_type(ret_type);
+    std::vector<llvm::Type *> llvm_arg_types;
+    std::transform(arg_types.begin(), arg_types.end(), std::back_inserter(llvm_arg_types), to_llvm_type);
+
     if (!(add_inactive_arg || add_predicate || split_arg0)) {
         // No need to wrap
-        return get_llvm_intrin(ret_type, mangled_name, arg_types, scalars_are_vectors);
+        return get_llvm_intrin(llvm_ret_type, mangled_name, llvm_arg_types);
     }
 
-    std::vector<Type> inner_arg_types;
+    std::vector<llvm::Type *> inner_llvm_arg_types;
     std::vector<Value *> inner_args;
     internal_assert(!arg_types.empty());
     const int inner_lanes = split_arg0 ? arg_types[0].lanes() / 2 : arg_types[0].lanes();
@@ -836,41 +861,31 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
     if (add_inactive_arg) {
         // The fallback value has the same type as ret value.
         // We don't use this, so just pad it with 0.
-        inner_arg_types.push_back(ret_type);
+        inner_llvm_arg_types.push_back(llvm_ret_type);
 
-        Value *zero = Constant::getNullValue(llvm_type_of(ret_type));
+        Value *zero = Constant::getNullValue(llvm_ret_type);
         inner_args.push_back(zero);
     }
     if (add_predicate) {
-        Type pred_type = Int(1, inner_lanes);
-        inner_arg_types.push_back(pred_type);
+        llvm::Type *pred_type = to_llvm_type(Int(1, inner_lanes));
+        inner_llvm_arg_types.push_back(pred_type);
         // For now, we don't use predicate in overloaded intrinsic
-        Value *ptrue = Constant::getAllOnesValue(llvm_type_of(pred_type));
+        Value *ptrue = Constant::getAllOnesValue(pred_type);
         inner_args.push_back(ptrue);
     }
     if (split_arg0) {
-        Type split_arg_type = arg_types[0].with_lanes(inner_lanes);
-        inner_arg_types.push_back(split_arg_type);
-        inner_arg_types.push_back(split_arg_type);
+        llvm::Type *split_arg_type = to_llvm_type(arg_types[0].with_lanes(inner_lanes));
+        inner_llvm_arg_types.push_back(split_arg_type);
+        inner_llvm_arg_types.push_back(split_arg_type);
         internal_assert(arg_types.size() == 1);
     } else {
         // Push back all argument typs which Halide defines
-        std::copy(arg_types.begin(), arg_types.end(), std::back_inserter(inner_arg_types));
+        std::copy(llvm_arg_types.begin(), llvm_arg_types.end(), std::back_inserter(inner_llvm_arg_types));
     }
 
-    llvm::Function *inner = get_llvm_intrin(ret_type, mangled_name, inner_arg_types, scalars_are_vectors);
+    llvm::Function *inner = get_llvm_intrin(llvm_ret_type, mangled_name, inner_llvm_arg_types);
     llvm::FunctionType *inner_ty = inner->getFunctionType();
 
-    auto to_llvm_type = [&](const Type &t) {
-        llvm::Type *ret = llvm_type_of(t.element_of());
-        if (!t.is_scalar() || scalars_are_vectors) {
-            ret = get_vector_type(ret, t.lanes(),
-                                  force_fixed_vector_types ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
-        }
-        return ret;
-    };
-    std::vector<llvm::Type *> llvm_arg_types;
-    std::transform(arg_types.begin(), arg_types.end(), std::back_inserter(llvm_arg_types), to_llvm_type);
     llvm::FunctionType *wrapper_ty = llvm::FunctionType::get(inner_ty->getReturnType(), llvm_arg_types, false);
 
     string wrapper_name = inner_name + unique_name("_wrapper");
@@ -887,7 +902,7 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
         Value *high = slice_vector(wrapper->getArg(0), inner_lanes, inner_lanes);
         inner_args.push_back(low);
         inner_args.push_back(high);
-        internal_assert(inner_arg_types.size() == 2);
+        internal_assert(inner_llvm_arg_types.size() == 2);
     } else {
         for (auto *itr = wrapper->arg_begin(); itr != wrapper->arg_end(); ++itr) {
             inner_args.push_back(itr);
@@ -1450,10 +1465,12 @@ void CodeGen_ARM::visit(const Store *op) {
         }
         Value *store_pred_val = codegen(op->predicate);
 
+        bool is_sve = target.has_feature(Target::SVE2);
+
         // Declare the function
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
-        llvm::Type *intrin_llvm_type = llvm_type_of(intrin_type);
+        llvm::Type *intrin_llvm_type = llvm_type_with_constraint(intrin_type, false, is_sve ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed);
 #if LLVM_VERSION >= 170
         const bool is_opaque = true;
 #else
@@ -1471,15 +1488,15 @@ void CodeGen_ARM::visit(const Store *op) {
             arg_types.front() = i8_t->getPointerTo();
             arg_types.back() = i32_t;
         } else {
-            if (target.has_feature(Target::SVE2)) {
+            if (is_sve) {
                 instr << "llvm.aarch64.sve.st"
                       << num_vecs
                       << ".nxv"
                       << (intrin_type.lanes() / target_vscale())
                       << (t.is_float() ? 'f' : 'i')
                       << t.bits();
-                arg_types = vector<llvm::Type *>(num_vecs, llvm_type_of(intrin_type));
-                arg_types.emplace_back(get_vector_type(i1_t, intrin_type.lanes()));  // predicate
+                arg_types = vector<llvm::Type *>(num_vecs, intrin_llvm_type);
+                arg_types.emplace_back(get_vector_type(i1_t, intrin_type.lanes() / target_vscale(), VectorTypeConstraint::VScale));  // predicate
                 arg_types.emplace_back(llvm_type_of(intrin_type.element_of())->getPointerTo());
             } else {
                 instr << "llvm.aarch64.neon.st"
@@ -1502,7 +1519,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
         // SVE2 supports predication for smaller than whole vector size.
         internal_assert(target.has_feature(Target::SVE2) || (t.lanes() >= intrin_type.lanes()));
-        
+
         for (int i = 0; i < t.lanes(); i += intrin_type.lanes()) {
             Expr slice_base = simplify(ramp->base + i * num_vecs);
             Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_type.lanes() * num_vecs);
@@ -1523,7 +1540,7 @@ void CodeGen_ARM::visit(const Store *op) {
                 // Set the alignment argument
                 slice_args.push_back(ConstantInt::get(i32_t, alignment));
             } else {
-                if (target.has_feature(Target::SVE2)) {
+                if (is_sve) {
                     // Set the predicate argument
                     auto active_lanes = std::min(t.lanes() - i, intrin_type.lanes());
                     Value *vpred_val;
@@ -1532,12 +1549,19 @@ void CodeGen_ARM::visit(const Store *op) {
                     } else {
                         Expr vpred = make_vector_predicate_1s_0s(active_lanes, intrin_type.lanes() - active_lanes);
                         vpred_val = codegen(vpred);
-                        vpred_val = convert_fixed_or_scalable_vector_type(vpred_val, get_vector_type(vpred_val->getType()->getScalarType(), intrin_type.lanes()));
                     }
                     slice_args.push_back(vpred_val);
                 }
                 // Set the pointer argument
                 slice_args.push_back(ptr);
+            }
+
+            if (is_sve) {
+                for (auto & arg : slice_args) {
+                    if (arg->getType()->isVectorTy()) {
+                        arg = match_vector_type_scalable(arg, VectorTypeConstraint::VScale);
+                    }
+                }
             }
 
             CallInst *store = builder->CreateCall(fn, slice_args);
@@ -1590,6 +1614,7 @@ void CodeGen_ARM::visit(const Store *op) {
             Type type_with_max_bits = Int(std::max(elt.bits(), index_bits));
             // The number of lanes is constrained by index vector type
             const int natural_lanes = target.natural_vector_size(type_with_max_bits);
+            const int vscale_natural_lanes = natural_lanes / target_vscale();
 
             Expr base = 0;
             Value *elt_ptr = codegen_buffer_pointer(op->name, elt, base);
@@ -1597,15 +1622,15 @@ void CodeGen_ARM::visit(const Store *op) {
             Value *index = codegen(op->index);
             Value *store_pred_val = codegen(op->predicate);
 
-            llvm::Type *slice_type = get_vector_type(llvm_type_of(elt), natural_lanes);
-            llvm::Type *slice_index_type = get_vector_type(llvm_type_of(op->index.type().element_of()), natural_lanes);
-            llvm::Type *pred_type = get_vector_type(llvm_type_of(op->predicate.type().element_of()), natural_lanes);
+            llvm::Type *slice_type = get_vector_type(llvm_type_of(elt), vscale_natural_lanes, VectorTypeConstraint::VScale);
+            llvm::Type *slice_index_type = get_vector_type(llvm_type_of(op->index.type().element_of()), vscale_natural_lanes, VectorTypeConstraint::VScale);
+            llvm::Type *pred_type = get_vector_type(llvm_type_of(op->predicate.type().element_of()), vscale_natural_lanes, VectorTypeConstraint::VScale);
 
             std::ostringstream instr;
             instr << "llvm.aarch64.sve.st1.scatter.uxtw."
                   << (elt.bits() != 8 ? "index." : "")  // index is scaled into bytes
                   << "nxv"
-                  << (natural_lanes / target_vscale())
+                  << vscale_natural_lanes
                   << (elt == Float(32) || elt == Float(64) ? 'f' : 'i')
                   << elt.bits();
 
@@ -1627,8 +1652,9 @@ void CodeGen_ARM::visit(const Store *op) {
                     vpred_val = builder->CreateAnd(vpred_val, sliced_store_vpred_val);
                 }
 
-                slice_value = convert_fixed_or_scalable_vector_type(slice_value, get_vector_type(slice_value->getType()->getScalarType(), natural_lanes));
-                slice_index = convert_fixed_or_scalable_vector_type(slice_index, get_vector_type(slice_index->getType()->getScalarType(), natural_lanes));
+                slice_value = match_vector_type_scalable(slice_value, VectorTypeConstraint::VScale);
+                vpred_val = match_vector_type_scalable(vpred_val, VectorTypeConstraint::VScale);
+                slice_index = match_vector_type_scalable(slice_index, VectorTypeConstraint::VScale);
                 CallInst *store = builder->CreateCall(fn, {slice_value, vpred_val, elt_ptr, slice_index});
                 add_tbaa_metadata(store, op->name, op->index);
             }
@@ -1831,20 +1857,22 @@ void CodeGen_ARM::visit(const Load *op) {
             Type type_with_max_bits = Int(std::max(elt.bits(), index_bits));
             // The number of lanes is constrained by index vector type
             const int natural_lanes = target.natural_vector_size(type_with_max_bits);
+            const int vscale_natural_lanes = natural_lanes / target_vscale();
+
             Expr base = 0;
             Value *elt_ptr = codegen_buffer_pointer(op->name, elt, base);
             Value *index = codegen(op->index);
             Value *load_pred_val = codegen(op->predicate);
 
-            llvm::Type *slice_type = get_vector_type(llvm_type_of(elt), natural_lanes);
-            llvm::Type *slice_index_type = get_vector_type(llvm_type_of(op->index.type().element_of()), natural_lanes);
-            llvm::Type *pred_type = get_vector_type(llvm_type_of(op->predicate.type().element_of()), natural_lanes);
+            llvm::Type *slice_type = get_vector_type(llvm_type_of(elt), vscale_natural_lanes, VectorTypeConstraint::VScale);
+            llvm::Type *slice_index_type = get_vector_type(llvm_type_of(op->index.type().element_of()), vscale_natural_lanes, VectorTypeConstraint::VScale);
+            llvm::Type *pred_type = get_vector_type(llvm_type_of(op->predicate.type().element_of()), vscale_natural_lanes, VectorTypeConstraint::VScale);
 
             std::ostringstream instr;
             instr << "llvm.aarch64.sve.ld1.gather.uxtw."
                   << (elt.bits() != 8 ? "index." : "")  // index is scaled into bytes
                   << "nxv"
-                  << (natural_lanes / target_vscale())
+                  << vscale_natural_lanes
                   << (elt == Float(32) || elt == Float(64) ? 'f' : 'i')
                   << elt.bits();
 
@@ -1865,7 +1893,8 @@ void CodeGen_ARM::visit(const Load *op) {
                     vpred_val = builder->CreateAnd(vpred_val, sliced_load_vpred_val);
                 }
 
-                slice_index = convert_fixed_or_scalable_vector_type(slice_index, get_vector_type(slice_index->getType()->getScalarType(), natural_lanes));
+                vpred_val = match_vector_type_scalable(vpred_val, VectorTypeConstraint::VScale);
+                slice_index = match_vector_type_scalable(slice_index, VectorTypeConstraint::VScale);
                 CallInst *gather = builder->CreateCall(fn, {vpred_val, elt_ptr, slice_index});
                 add_tbaa_metadata(gather, op->name, op->index);
                 results.push_back(gather);
@@ -2321,9 +2350,10 @@ bool CodeGen_ARM::codegen_across_vector_reduce(const VectorReduce *op, const Exp
         if (!module->getFunction(intrin_name)) {
             vector<llvm::Type *> arg_types;
             for (const Expr &e : args) {
-                arg_types.push_back(llvm_type_of(e.type()));
+                arg_types.push_back(llvm_type_with_constraint(e.type(), false, VectorTypeConstraint::VScale));
             }
-            FunctionType *func_t = FunctionType::get(llvm_type_of(intrin_ret_type), arg_types, false);
+            FunctionType *func_t = FunctionType::get(llvm_type_with_constraint(intrin_ret_type, false, VectorTypeConstraint::VScale),
+                                                     arg_types, false);
             llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
         }
 
