@@ -4840,7 +4840,6 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
         }
         return shuffle_vectors(vec, indices);
     } else {
-#if 1
         // Extract a fixed vector with all the values in the source.
         // Then insert back into a vector extended to size. This will
         // be a scalable vector if size can be scalable, fixed
@@ -4859,44 +4858,6 @@ Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
         Constant *poison = PoisonValue::get(scalar_type);
         llvm::Value *result_vec = ConstantVector::getSplat(result_type->getElementCount(), poison);
         vec = builder->CreateInsertVector(result_type, result_vec, vec, ConstantInt::get(i64_t, 0));
-#else
-        // Prev method.
-        llvm::Type *scalar_type = vec->getType()->getScalarType();
-
-        int result_lanes = size;
-        if (!is_fixed && effective_vscale != 0) {
-            result_lanes = (result_lanes + effective_vscale - 1) / effective_vscale;
-            internal_assert((start % effective_vscale) == 0) << "slice_vector: start must be a multiple of effective_vscale for vscale vectors.\n";
-            start /= effective_vscale;
-        }
-        llvm::Type *result_type = get_vector_type(scalar_type, result_lanes,
-                                                  is_fixed ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
-
-        int sub_max_size = std::min(vec_lanes - start, size);
-        int sub_max_lanes = sub_max_size;
-        if (!is_fixed && effective_vscale != 0) {
-            sub_max_lanes = (sub_max_lanes + effective_vscale - 1) / effective_vscale;
-        }
-        llvm::Type *sub_max_type = get_vector_type(scalar_type, sub_max_lanes,
-                                                   is_fixed ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
-
-        vec = builder->CreateExtractVector(sub_max_type, vec, ConstantInt::get(i64_t, start));
-
-        if (size > sub_max_size) {
-            // Insert vector into a poison vector and return.
-            Constant *poison = PoisonValue::get(scalar_type);
-            llvm::ElementCount element_count;
-            if (isa<VectorType>(result_type)) {
-                element_count = cast<llvm::VectorType>(result_type)->getElementCount();
-            } else {
-                element_count = ElementCount::getFixed(1);
-            }
-            llvm::Value *result_vec = ConstantVector::getSplat(element_count, poison);
-            vec = builder->CreateInsertVector(result_type, result_vec, vec, ConstantInt::get(i64_t, 0));
-        } else {
-            internal_assert(result_lanes == sub_max_lanes);
-        }
-#endif
 
         return vec;
     }
