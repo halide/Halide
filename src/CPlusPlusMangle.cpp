@@ -246,6 +246,8 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
             return "H";
         case 64:
             return "_J";
+        default:
+            break;
         }
         internal_error << "Unexpected integer size: " << type.bits() << ".\n";
         return "";
@@ -261,6 +263,8 @@ MangledNamePart mangle_type(const Type &type, const Target &target, PreviousDecl
             return "I";
         case 64:
             return "_K";
+        default:
+            break;
         }
         internal_error << "Unexpected unsigned integer size: " << type.bits() << "\n";
         return "";
@@ -546,6 +550,8 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
             } else {
                 return "l";
             }
+        default:
+            break;
         }
         internal_error << "Unexpected integer size: " << type.bits() << ".\n";
         return "";
@@ -571,6 +577,8 @@ std::string mangle_type(const Type &type, const Target &target, PrevPrefixes &pr
             } else {
                 return "m";
             }
+        default:
+            break;
         }
         internal_error << "Unexpected unsigned integer size: " << type.bits() << "\n";
         return "";
