@@ -782,6 +782,7 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     // things that are 'alwaysinline' can be included here but are unnecessary.
     vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(std::move(extra_module));
+    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
     modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
     modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -796,7 +797,6 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
     modules.push_back(get_initmod_fopen(c, bits_64, debug));
     modules.push_back(get_initmod_device_interface(c, bits_64, debug));
-    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
     modules.push_back(get_initmod_float16_t(c, bits_64, debug));
     modules.push_back(get_initmod_errors(c, bits_64, debug));
     modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
@@ -842,6 +842,17 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
     bool tsan = t.has_feature(Target::TSAN);
 
     vector<std::unique_ptr<llvm::Module>> modules;
+
+    // Start with the module that defines our struct types. This must be
+    // included first, because when parsing modules, if two structs are
+    // encountered with the same fields, they are deduped, and the first name
+    // wins.
+    //
+    // If in the future these names become unpredictable, an alternative
+    // strategy is to make this module include a global variable of each type we
+    // care about, recover the struct types from those named globals, and then
+    // delete the globals in link_modules.
+    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
 
     const auto add_allocator = [&]() {
         modules.push_back(get_initmod_posix_aligned_alloc(c, bits_64, debug));
@@ -1276,8 +1287,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         t.os == Target::NoOS) {
         modules.push_back(get_initmod_runtime_api(c, bits_64, debug));
     }
-
-    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
 
     link_modules(modules, t);
 

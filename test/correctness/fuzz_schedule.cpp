@@ -183,6 +183,25 @@ int main(int argc, char **argv) {
         check_blur_output(buf, correct);
     }
 
+    // https://github.com/halide/Halide/issues/8038
+    {
+        Func input("input");
+        Func local_sum("local_sum");
+        Func blurry("blurry");
+        Var x("x"), y("y"), yi("yi"), yo("yo"), xi("xi"), xo("xo"), yofxi("yofxi"), yofxio("yofxio"), yofxii("yofxii"), yofxiifyi("yofxiifyi"), yofxioo("yofxioo"), yofxioi("yofxioi");
+        input(x, y) = 2 * x + 5 * y;
+        RDom r(-2, 5, -2, 5, "rdom_r");
+        local_sum(x, y) = 0;
+        local_sum(x, y) += input(x + r.x, y + r.y);
+        blurry(x, y) = cast<int32_t>(local_sum(x, y) / 25);
+        local_sum.split(y, yi, yo, 2, TailStrategy::GuardWithIf).split(x, xi, xo, 5, TailStrategy::Predicate).fuse(yo, xi, yofxi).split(yofxi, yofxio, yofxii, 8, TailStrategy::ShiftInwards).fuse(yofxii, yi, yofxiifyi).split(yofxio, yofxioo, yofxioi, 5, TailStrategy::ShiftInwards).vectorize(yofxiifyi).vectorize(yofxioi);
+        local_sum.update(0).unscheduled();
+        blurry.split(x, xo, xi, 5, TailStrategy::Auto);
+        Pipeline p({blurry});
+        auto buf = p.realize({32, 32});
+        check_blur_output(buf, correct);
+    }
+
     printf("Success!\n");
     return 0;
 }
