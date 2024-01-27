@@ -2247,7 +2247,7 @@ void generator_test() {
     // Verify that Tuple parameter-pack variants can convert GeneratorParam to Expr
     Tuple t(gp, gp, gp);
 
-    std::cout << "Generator test passed" << std::endl;
+    std::cout << "Generator test passed\n";
 }
 
 }  // namespace Internal

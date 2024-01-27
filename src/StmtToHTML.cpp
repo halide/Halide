@@ -1124,7 +1124,7 @@ private:
 
     // Prints newline to stream
     void print_ln() {
-        stream << '\n';
+        stream << "\n";
     }
 
     // Prints a variable to stream

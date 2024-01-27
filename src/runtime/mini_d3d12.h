@@ -635,8 +635,12 @@ typedef struct _RPC_MESSAGE {
 #define THIS void
 #define DECLARE_INTERFACE(iface) interface DECLSPEC_NOVTABLE iface
 #define DECLARE_INTERFACE_(iface, baseiface) interface DECLSPEC_NOVTABLE iface : public baseiface
-#define DECLARE_INTERFACE_IID(iface, iid) interface DECLSPEC_UUID(iid) DECLSPEC_NOVTABLE iface
-#define DECLARE_INTERFACE_IID_(iface, baseiface, iid) interface DECLSPEC_UUID(iid) DECLSPEC_NOVTABLE iface : public baseiface
+#define DECLARE_INTERFACE_IID(iface, iid) \
+    interface DECLSPEC_UUID(iid)          \
+    DECLSPEC_NOVTABLE iface
+#define DECLARE_INTERFACE_IID_(iface, baseiface, iid) \
+    interface DECLSPEC_UUID(iid)                      \
+    DECLSPEC_NOVTABLE iface : public baseiface
 
 #define IFACEMETHOD(method) __override STDMETHOD(method)
 #define IFACEMETHOD_(type, method) __override STDMETHOD_(type, method)
@@ -715,7 +719,8 @@ _Post_equal_to_(pp) _Post_satisfies_(return == pp) void **IID_PPV_ARGS_Helper(T 
 #define DECLARE_INTERFACE(iface)                  \
     typedef interface iface {                     \
         const struct iface##Vtbl FAR *lpVtbl;     \
-    } iface;                                      \
+    }                                             \
+    iface;                                        \
     typedef const struct iface##Vtbl iface##Vtbl; \
     const struct iface##Vtbl
 #else
@@ -724,7 +729,8 @@ _Post_equal_to_(pp) _Post_satisfies_(return == pp) void **IID_PPV_ARGS_Helper(T 
 #define DECLARE_INTERFACE(iface)            \
     typedef interface iface {               \
         struct iface##Vtbl FAR *lpVtbl;     \
-    } iface;                                \
+    }                                       \
+    iface;                                  \
     typedef struct iface##Vtbl iface##Vtbl; \
     struct iface##Vtbl
 #endif
@@ -2299,10 +2305,10 @@ typedef enum D3D12_SHADER_COMPONENT_MAPPING {
 #define D3D12_SHADER_COMPONENT_MAPPING_MASK 0x7
 #define D3D12_SHADER_COMPONENT_MAPPING_SHIFT 3
 #define D3D12_SHADER_COMPONENT_MAPPING_ALWAYS_SET_BIT_AVOIDING_ZEROMEM_MISTAKES (1 << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 4))
-#define D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(Src0, Src1, Src2, Src3) ((((Src0)&D3D12_SHADER_COMPONENT_MAPPING_MASK) |                                                 \
-                                                                          (((Src1)&D3D12_SHADER_COMPONENT_MAPPING_MASK) << D3D12_SHADER_COMPONENT_MAPPING_SHIFT) |       \
-                                                                          (((Src2)&D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 2)) | \
-                                                                          (((Src3)&D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 3)) | \
+#define D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(Src0, Src1, Src2, Src3) ((((Src0) & D3D12_SHADER_COMPONENT_MAPPING_MASK) |                                                 \
+                                                                          (((Src1) & D3D12_SHADER_COMPONENT_MAPPING_MASK) << D3D12_SHADER_COMPONENT_MAPPING_SHIFT) |       \
+                                                                          (((Src2) & D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 2)) | \
+                                                                          (((Src3) & D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 3)) | \
                                                                           D3D12_SHADER_COMPONENT_MAPPING_ALWAYS_SET_BIT_AVOIDING_ZEROMEM_MISTAKES))
 #define D3D12_DECODE_SHADER_4_COMPONENT_MAPPING(ComponentToExtract, Mapping) \
     ((D3D12_SHADER_COMPONENT_MAPPING)((Mapping) >> (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * (ComponentToExtract)) & D3D12_SHADER_COMPONENT_MAPPING_MASK))

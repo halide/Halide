@@ -222,7 +222,7 @@ ALWAYS_INLINE T is_power_of_two(T value) {
 
 namespace {
 template<typename T>
-ALWAYS_INLINE void swap(T &a, T &b) {
+ALWAYS_INLINE void swap(T &a, T &b) noexcept {
     T t = a;
     a = b;
     b = t;
