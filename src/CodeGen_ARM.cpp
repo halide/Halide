@@ -194,7 +194,7 @@ protected:
         return (x + n - 1) / n * n;
     }
 
-     // TODO(<issue needed>): See if we need wrapper stiuff at call sites to make sure this was vscale vectors.
+    // TODO(<issue needed>): See if we need wrapper stiuff at call sites to make sure this was vscale vectors.
     /** Make predicate vector which starts with consecutive true followed by consecutive false */
     Expr make_vector_predicate_1s_0s(int true_lanes, int false_lanes) {
         return Shuffle::make_concat({const_true(true_lanes), const_false(false_lanes)});
@@ -1500,17 +1500,17 @@ void CodeGen_ARM::visit(const Store *op) {
                 arg_types.emplace_back(llvm_type_of(intrin_type.element_of())->getPointerTo());
             } else {
                 instr << "llvm.aarch64.neon.st"
-                          << num_vecs
-                          << ".v"
-                          << intrin_type.lanes()
-                          << (t.is_float() ? 'f' : 'i')
-                          << t.bits()
-                          << ".p0";
-                    if (!is_opaque) {
-                        instr << (t.is_float() ? 'f' : 'i') << t.bits();
-                    }
-                    arg_types = vector<llvm::Type *>(num_vecs + 1, intrin_llvm_type);
-                    arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
+                      << num_vecs
+                      << ".v"
+                      << intrin_type.lanes()
+                      << (t.is_float() ? 'f' : 'i')
+                      << t.bits()
+                      << ".p0";
+                if (!is_opaque) {
+                    instr << (t.is_float() ? 'f' : 'i') << t.bits();
+                }
+                arg_types = vector<llvm::Type *>(num_vecs + 1, intrin_llvm_type);
+                arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
             }
         }
         llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
@@ -1557,7 +1557,7 @@ void CodeGen_ARM::visit(const Store *op) {
             }
 
             if (is_sve) {
-                for (auto & arg : slice_args) {
+                for (auto &arg : slice_args) {
                     if (arg->getType()->isVectorTy()) {
                         arg = match_vector_type_scalable(arg, VectorTypeConstraint::VScale);
                     }
@@ -1934,14 +1934,14 @@ void CodeGen_ARM::visit(const Shuffle *op) {
 }
 
 void CodeGen_ARM::visit(const Ramp *op) {
-  if (target_vscale() != 0 && op->type.is_int_or_uint()) {
+    if (target_vscale() != 0 && op->type.is_int_or_uint()) {
         if (is_const_zero(op->base) && is_const_one(op->stride)) {
-
             codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
                 internal_assert(args.empty());
                 // Generate stepvector intrinsic for ScalableVector
                 return builder->CreateStepVector(llvm_type_of(op->type.with_lanes(lanes)));
             };
+
             // codgen with next-power-of-two lanes, because if we sliced into natural_lanes(e.g. 4),
             // it would produce {0,1,2,3,0,1,..} instead of {0,1,2,3,4,5,..}
             const int ret_lanes = op->type.lanes();
@@ -2522,12 +2522,12 @@ bool CodeGen_ARM::use_soft_float_abi() const {
 }
 
 int CodeGen_ARM::native_vector_bits() const {
-  if (target.has_feature(Target::SVE) || target.has_feature(Target::SVE2)) {
-      // TODO(zvookin): Minimum of 128 bits. Probably should limit at 2048 as well.
-      return std::max(target.vector_bits, 128);
-  } else {
-      return 128;
-  }
+    if (target.has_feature(Target::SVE) || target.has_feature(Target::SVE2)) {
+        // TODO(<issue needed>): Minimum of 128 bits. Probably should limit at 2048 as well.
+        return std::max(target.vector_bits, 128);
+    } else {
+        return 128;
+    }
 }
 
 int CodeGen_ARM::target_vscale() const {

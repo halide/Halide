@@ -5058,11 +5058,14 @@ llvm::Value *CodeGen_LLVM::normalize_fixed_scalable_vector_type(llvm::Type *desi
 }
 
 llvm::Value *CodeGen_LLVM::match_vector_type_scalable(llvm::Value *value, VectorTypeConstraint constraint) {
-  internal_assert(isa<llvm::VectorType>(value->getType())) << "match_predicate_vector_type can only be called with vector arguments.\n";
     if (constraint == VectorTypeConstraint::None) {
         return value;
     }
+
     llvm::Type *value_type = value->getType();
+    if (!isa<VectorType>(value_type)) {
+        return value;
+    }
 
     bool value_fixed = isa<llvm::FixedVectorType>(value_type);
     bool guide_fixed = (constraint == VectorTypeConstraint::Fixed);
@@ -5080,7 +5083,9 @@ llvm::Value *CodeGen_LLVM::match_vector_type_scalable(llvm::Value *value, Vector
 }
 
 llvm::Value *CodeGen_LLVM::match_vector_type_scalable(llvm::Value *value, llvm::Type *guide_type) {
-    internal_assert(isa<llvm::VectorType>(guide_type)) << "match_predicate_vector_type can only be called with vector arguments.\n";
+    if (!isa<llvm::VectorType>(guide_type)) {
+        return value;
+    }
     return match_vector_type_scalable(value, isa<FixedVectorType>(guide_type) ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
 }
 
@@ -5282,13 +5287,13 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
         if (effective_vscale > 0) {
             bool wide_enough = true;
             // TODO(<issue needed>): Architecture specific code should not go
-            // here.Ideally part of this can go away via LLVM fixes and
+            // here. Ideally part of this can go away via LLVM fixes and
             // modifying intrinsic selection to handle scalable vs. fixed
             // vectors. Making this method virtual is possibly expensive.
             if (target.arch == Target::ARM) {
                 if (!target.has_feature(Target::NoNEON)) {
                     // force booleans into bytes. TODO(<issue needed>): figure out a better way to do this.
-                  int bit_size = std::max((int)t->getScalarSizeInBits(), 8);
+                    int bit_size = std::max((int)t->getScalarSizeInBits(), 8);
                     wide_enough = (bit_size * n) > 128;
                 } else {
                     // TODO(<need issue>): AArch64 SVE2 support is crashy with scalable vectors of min size 1.
@@ -5321,8 +5326,7 @@ llvm::Constant *CodeGen_LLVM::get_splat(int lanes, llvm::Constant *value,
     switch (type_constraint) {
     case VectorTypeConstraint::None:
         if (effective_vscale > 0) {
-          //            int total_bit_size = lanes * value->getType()->getScalarSizeInBits();
-          bool wide_enough = (lanes / effective_vscale) > 1;//(total_bit_size >= (target.vector_bits / effective_vscale));
+            bool wide_enough = (lanes / effective_vscale) > 1;
             scalable = wide_enough && ((lanes % effective_vscale) == 0);
             if (scalable) {
                 lanes = lanes / effective_vscale;

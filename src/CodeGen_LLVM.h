@@ -579,7 +579,6 @@ protected:
     llvm::Constant *get_splat(int lanes, llvm::Constant *value,
                               VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
 
-
     /** Make sure a value type has the same scalable/fixed vector type as a guide. */
     // @{
     llvm::Value *match_vector_type_scalable(llvm::Value *value, VectorTypeConstraint constraint);

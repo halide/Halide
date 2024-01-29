@@ -565,7 +565,7 @@ private:
                 continue;
             }
 
-            vector total_bits_params = {256}; //  {64, 128, 192, 256};
+            vector total_bits_params = {256};  // {64, 128, 192, 256};
             if (bits != 64) {
                 // Add scalar case to verify float16 native operation
                 total_bits_params.push_back(bits);
@@ -618,8 +618,8 @@ private:
                 add_arm64({{"fmin", bits, force_vectorized_lanes}}, vf, min(f_1, f_2));
                 if (bits != 64 && total_bits != 192) {
                     // Halide relies on LLVM optimization for this pattern, and in some case it doesn't work
-                  add_arm64("fmla", is_vector ? (has_sve() ? "(fmla|fmad)" : "fmla") : "fmadd", f_1 + f_2 * f_3);
-                  add_arm64("fmls", is_vector ? (has_sve() ? "(fmls|fmsb)" : "fmls") : "fmsub", f_1 - f_2 * f_3);
+                    add_arm64("fmla", is_vector ? (has_sve() ? "(fmla|fmad)" : "fmla") : "fmadd", f_1 + f_2 * f_3);
+                    add_arm64("fmls", is_vector ? (has_sve() ? "(fmls|fmsb)" : "fmls") : "fmsub", f_1 - f_2 * f_3);
                 }
                 if (bits != 64) {
                     add_arm64(vector<string>{"frecpe", "frecps"}, fast_inverse(f_1_clamped));
@@ -699,7 +699,7 @@ private:
                     // in native width, ld1b/st1b is used regardless of data type
                     const bool allow_byte_ls = (width == target.vector_bits);
                     add({get_sve_ls_instr("ld1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
-                    add({get_sve_ls_instr("st1", bits, bits, "",  allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
+                    add({get_sve_ls_instr("st1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
                 } else {
                     // vector register is not used for simple load/store
                     string reg_prefix = (width <= 64) ? "d" : "q";
@@ -785,7 +785,7 @@ private:
                 Expr store_3 = tmp2(0, 0) + tmp2(0, 127);
 
                 if (has_sve()) {
-                  // TODO(issue needed): Added strided load support.
+                    // TODO(issue needed): Added strided load support.
 #if 0
                     add_ldn({get_sve_ls_instr("ld3", bits)}, vector_lanes, load_3);
                     add_stn({get_sve_ls_instr("st3", bits)}, total_lanes, store_3);
@@ -818,7 +818,7 @@ private:
                 Expr store_4 = tmp2(0, 0) + tmp2(0, 127);
 
                 if (has_sve()) {
-                  // TODO(inssue needed): Added strided load support.
+                    // TODO(issue needed): Added strided load support.
 #if 0
                     add_ldn({get_sve_ls_instr("ld4", bits)}, vector_lanes, load_4);
                     add_stn({get_sve_ls_instr("st4", bits)}, total_lanes, store_4);

@@ -13,11 +13,11 @@
 /** \file
  * Various utility functions used internally Halide. */
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <functional>
 #include <limits>
-#include <cmath>
 #include <sstream>
 #include <string>
 #include <utility>
