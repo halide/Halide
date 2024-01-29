@@ -1103,7 +1103,7 @@ private:
                 std::string scalar_reg_pattern = (pattern_lanes > 1) ? "" : std::string("|(") + bits_designator + R"(\d\d?))";  // e.g. "h15"
 
                 return std::string(R"(((z\d\d?\.)") + bits_designator + ")|(" +
-                      R"(v\d\d?\.)" + to_string(pattern_lanes.value()) + bits_designator + ")" + scalar_reg_pattern + ")";
+                       R"(v\d\d?\.)" + to_string(pattern_lanes.value()) + bits_designator + ")" + scalar_reg_pattern + ")";
             }
         }
 
@@ -1219,7 +1219,6 @@ private:
             vector<string> instr_patterns;
             transform(instructions.begin(), instructions.end(), back_inserter(instr_patterns),
                       [t = parent.target](const Instruction &instr) { return instr.generate_pattern(t); });
-
 
             std::stringstream type_name_stream;
             type_name_stream << e.type();
