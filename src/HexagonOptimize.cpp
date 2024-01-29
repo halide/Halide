@@ -91,6 +91,8 @@ string type_suffix(Type type, bool signed_variants) {
             return prefix + "h";
         case 32:
             return prefix + "w";
+        default:
+            break;
         }
     } else if (type.is_uint()) {
         switch (type.bits()) {
@@ -100,6 +102,8 @@ string type_suffix(Type type, bool signed_variants) {
             return prefix + "uh";
         case 32:
             return prefix + "uw";
+        default:
+            break;
         }
     }
     internal_error << "Unsupported HVX type: " << type << "\n";

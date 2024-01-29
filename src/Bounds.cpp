@@ -3919,7 +3919,7 @@ void bounds_test() {
         internal_assert(in.is_single_point());
     }
 
-    std::cout << "Bounds test passed" << std::endl;
+    std::cout << "Bounds test passed\n";
 }
 
 }  // namespace Internal

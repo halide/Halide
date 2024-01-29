@@ -60,18 +60,18 @@ void emit_big_endian_u32(std::ostream &out, uint32_t value) {
     out << static_cast<uint8_t>((value >> 24) & 0xff)
         << static_cast<uint8_t>((value >> 16) & 0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff)
-        << static_cast<uint8_t>((value)&0xff);
+        << static_cast<uint8_t>((value) & 0xff);
 }
 
 void emit_little_endian_u32(std::ostream &out, uint32_t value) {
-    out << static_cast<uint8_t>((value)&0xff)
+    out << static_cast<uint8_t>((value) & 0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff)
         << static_cast<uint8_t>((value >> 16) & 0xff)
         << static_cast<uint8_t>((value >> 24) & 0xff);
 }
 
 void emit_little_endian_u16(std::ostream &out, uint16_t value) {
-    out << static_cast<uint8_t>((value)&0xff)
+    out << static_cast<uint8_t>((value) & 0xff)
         << static_cast<uint8_t>((value >> 8) & 0xff);
 }
 
