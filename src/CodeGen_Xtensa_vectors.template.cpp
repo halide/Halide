@@ -1347,6 +1347,20 @@ HALIDE_ALWAYS_INLINE native_vector_i16_x2 halide_xtensa_interleave_i16(const nat
                                 IVP_SELNX16I(b, a, IVP_SELI_16B_INTERLEAVE_1_HI));
 }
 
+HALIDE_ALWAYS_INLINE native_vector_f16_x2 halide_xtensa_interleave_f16(const native_vector_f16 &a, const native_vector_f16 &b) {
+    return native_vector_f16_x2(native_vector_f16_x2::from_native_vector,
+                                IVP_SELNXF16I(b, a, IVP_SELI_16B_INTERLEAVE_1_LO),
+                                IVP_SELNXF16I(b, a, IVP_SELI_16B_INTERLEAVE_1_HI));
+}
+
+HALIDE_ALWAYS_INLINE native_vector_f16_x4 halide_xtensa_interleave_f16(const native_vector_f16_x2 &a, const native_vector_f16_x2 &b) {
+    return native_vector_f16_x4(native_vector_f16_x4::from_native_vector,
+                                IVP_SELNXF16I(b.native_vector[0], a.native_vector[0], IVP_SELI_16B_INTERLEAVE_1_LO),
+                                IVP_SELNXF16I(b.native_vector[0], a.native_vector[0], IVP_SELI_16B_INTERLEAVE_1_HI),
+                                IVP_SELNXF16I(b.native_vector[1], a.native_vector[1], IVP_SELI_16B_INTERLEAVE_1_LO),
+                                IVP_SELNXF16I(b.native_vector[1], a.native_vector[1], IVP_SELI_16B_INTERLEAVE_1_HI));
+}
+
 HALIDE_ALWAYS_INLINE native_vector_i32_x2 halide_xtensa_interleave_i32(const native_vector_i32 &a, const native_vector_i32 &b) {
     return native_vector_i32_x2(
         native_vector_i32_x2::from_native_vector,
