@@ -1,5 +1,6 @@
-#include "Halide.h"
 #include "simd_op_check.h"
+
+#include "Halide.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -18,9 +19,9 @@ namespace {
 
 using CastFuncTy = function<Expr(Expr)>;
 
-class SimdOpCheckArm : public SimdOpCheckTest {
+class SimdOpCheckArmSve : public SimdOpCheckTest {
 public:
-    SimdOpCheckArm(Target t, int w = 768, int h = 128)
+    SimdOpCheckArmSve(Target t, int w = 384, int h = 32)
         : SimdOpCheckTest(t, w, h), debug_mode(Internal::get_env_variable("HL_DEBUG_SIMDOPCHECK")) {
 
         // Determine and hold can_run_the_code
@@ -696,9 +697,9 @@ private:
 
                 if (has_sve()) {
                     // in native width, ld1b/st1b is used regardless of data type
-                    const int instr_bits = (width == target.vector_bits) ? 8 : bits;
-                    add({get_sve_ls_instr("ld1", instr_bits)}, total_lanes, load_store_1);
-                    add({get_sve_ls_instr("st1", instr_bits)}, total_lanes, load_store_1);
+                    const bool allow_byte_ls = (width == target.vector_bits);
+                    add({get_sve_ls_instr("ld1", bits, bits, "", allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
+                    add({get_sve_ls_instr("st1", bits, bits, "",  allow_byte_ls ? "b" : "")}, total_lanes, load_store_1);
                 } else {
                     // vector register is not used for simple load/store
                     string reg_prefix = (width <= 64) ? "d" : "q";
@@ -1122,11 +1123,25 @@ private:
         }
     };
 
-    Instruction get_sve_ls_instr(const string &base_opcode, int opcode_bits, int operand_bits, const string &additional) {
+    Instruction get_sve_ls_instr(const string &base_opcode, int opcode_bits, int operand_bits, const string &additional = "", const string &optional_type = "") {
         static const map<int, string> opcode_suffix_map = {{8, "b"}, {16, "h"}, {32, "w"}, {64, "d"}};
         static const map<int, string> operand_suffix_map = {{8, "b"}, {16, "h"}, {32, "s"}, {64, "d"}};
-        const string opcode = base_opcode + opcode_suffix_map.at(opcode_bits);
-        string operand = R"(z\d\d?\.)" + operand_suffix_map.at(operand_bits);
+        string opcode_size_specifier;
+        string operand_size_specifier;
+        if (!optional_type.empty()) {
+            opcode_size_specifier = "[";
+            operand_size_specifier = "[";
+        }
+        opcode_size_specifier += opcode_suffix_map.at(opcode_bits);
+        operand_size_specifier += operand_suffix_map.at(operand_bits);
+        if (!optional_type.empty()) {
+            opcode_size_specifier += optional_type;
+            opcode_size_specifier += "]";
+            operand_size_specifier += optional_type;
+            operand_size_specifier += "]";
+        }
+        const string opcode = base_opcode + opcode_size_specifier;
+        string operand = R"(z\d\d?\.)" + operand_size_specifier;
         if (!additional.empty()) {
             operand += ", " + additional;
         }
@@ -1140,7 +1155,7 @@ private:
     // Helper functor to add test case
     class AddTestFunctor {
     public:
-        AddTestFunctor(SimdOpCheckArm &p,
+        AddTestFunctor(SimdOpCheckArmSve &p,
                        int default_bits,
                        int default_instr_lanes,
                        int default_vec_factor,
@@ -1148,7 +1163,7 @@ private:
             : parent(p), default_bits(default_bits), default_instr_lanes(default_instr_lanes),
               default_vec_factor(default_vec_factor), is_enabled(is_enabled){};
 
-        AddTestFunctor(SimdOpCheckArm &p,
+        AddTestFunctor(SimdOpCheckArmSve &p,
                        int default_bits,
                        // default_instr_lanes is inferred from bits and vec_factor
                        int default_vec_factor,
@@ -1221,7 +1236,7 @@ private:
             parent.arm_tasks.emplace(unique_name, ArmTask{std::move(instr_patterns)});
         }
 
-        SimdOpCheckArm &parent;
+        SimdOpCheckArmSve &parent;
         int default_bits;
         int default_instr_lanes;
         int default_vec_factor;
@@ -1322,15 +1337,23 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
+#if 1
+    return SimdOpCheckTest::main<SimdOpCheckArmSve>(
+        argc, argv,
+        {
+            Target("arm-64-linux-sve2-no_neon-vector_bits_128"),
+            Target("arm-64-linux-sve2-no_neon-vector_bits_256"),
+        });
+#else
     Target hl_target = get_target_from_environment();
 
     if (hl_target.arch != Target::ARM) {
-        cout << "[SKIP] To run SimdOpCheckArm, set HL_TARGET=arm-<bits>-<os>. \n";
+        cout << "[SKIP] To run SimdOpCheckArmSve, set HL_TARGET=arm-<bits>-<os>. \n";
         return 0;
     }
     // Create Test Object
     // Use smaller dimension than default(768, 128) to avoid fp16 overflow in reduction test case
-    SimdOpCheckArm test(hl_target, 384, 32);
+    SimdOpCheckArmSve test(hl_target, 384, 32);
 
     if (argc > 1) {
         test.filter = argv[1];
@@ -1358,4 +1381,5 @@ int main(int argc, char **argv) {
 
     cout << "Success!\n";
     return 0;
+#endif
 }
