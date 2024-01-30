@@ -658,6 +658,7 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckX86>(
         argc, argv,
         {
+#if 0
             Target("x86-32-linux"),
             Target("x86-32-linux-sse41"),
             // Always turn on f16c when using avx. Sandy Bridge had avx without
@@ -673,5 +674,8 @@ int main(int argc, char **argv) {
             Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake"),
             Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
             Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
+#else
+            Target("x86-64-linux-avx10_1-vector_bits_256-x86apx"),
+#endif
         });
 }

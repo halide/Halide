@@ -56,6 +56,7 @@ Target complete_x86_target(Target t) {
     }
 
     // TODO(resolve before landing): Fill in for AVX10_1.
+    // TODO(resolve before landing): Is there anything to do here for X86APX?
 
     return t;
 }
@@ -1050,6 +1051,13 @@ string CodeGen_X86::mattrs() const {
           user_error << "AVX10 only supports 256 or 512 bit variants at present.\n";
           break;
       }
+    }
+
+    if (target.has_feature(Target::X86APX)) {
+        attrs.push_back("egpr");
+        attrs.push_back("push2pop2");
+        attrs.push_back("ppx");
+        attrs.push_back("ndd");
     }
 
     return join_strings(attrs, ",");
