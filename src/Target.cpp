@@ -293,6 +293,8 @@ Target calculate_host_target() {
             }
         }
     }
+
+    // TODO(resolve before landing): Fill in for AVX10_1.
 #endif
 #endif
 #endif
@@ -557,6 +559,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"vk_v12", Target::VulkanV12},
     {"vk_v13", Target::VulkanV13},
     {"semihosting", Target::Semihosting},
+    {"avx10_1", Target::AVX10_1},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 

@@ -168,6 +168,7 @@ struct Target {
         VulkanV12 = halide_target_feature_vulkan_version12,
         VulkanV13 = halide_target_feature_vulkan_version13,
         Semihosting = halide_target_feature_semihosting,
+        AVX10_1,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

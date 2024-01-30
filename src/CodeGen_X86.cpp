@@ -54,6 +54,9 @@ Target complete_x86_target(Target t) {
     if (t.has_feature(Target::AVX)) {
         t.set_feature(Target::SSE41);
     }
+
+    // TODO(resolve before landing): Fill in for AVX10_1.
+
     return t;
 }
 
@@ -1034,6 +1037,21 @@ string CodeGen_X86::mattrs() const {
         attrs.push_back("+prefer-no-gather");
     }
 #endif
+
+    if (target.has_feature(Target::AVX10_1)) {
+      switch (target.vector_bits) {
+        case 256:
+          attrs.push_back("+avx10.1-256");
+          break;
+        case 512:
+          attrs.push_back("+avx10.1-512");
+          break;
+        default:
+          user_error << "AVX10 only supports 256 or 512 bit variants at present.\n";
+          break;
+      }
+    }
+
     return join_strings(attrs, ",");
 }
 
@@ -1042,7 +1060,9 @@ bool CodeGen_X86::use_soft_float_abi() const {
 }
 
 int CodeGen_X86::native_vector_bits() const {
-    if (target.has_feature(Target::AVX512) ||
+    if (target.has_feature(Target::AVX10_1)) {
+        return target.vector_bits;
+    } else if (target.has_feature(Target::AVX512) ||
         target.has_feature(Target::AVX512_Skylake) ||
         target.has_feature(Target::AVX512_KNL) ||
         target.has_feature(Target::AVX512_Cannonlake)) {
