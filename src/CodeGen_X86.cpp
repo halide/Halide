@@ -1035,29 +1035,29 @@ string CodeGen_X86::mattrs() const {
     }
 #if LLVM_VERSION >= 180
     if (gather_might_be_slow(target)) {
-        attrs.push_back("+prefer-no-gather");
+        attrs.emplace_back("+prefer-no-gather");
     }
 #endif
 
     if (target.has_feature(Target::AVX10_1)) {
         switch (target.vector_bits) {
         case 256:
-              attrs.push_back("+avx10.1-256");
-              break;
+            attrs.emplace_back("+avx10.1-256");
+            break;
         case 512:
-              attrs.push_back("+avx10.1-512");
-              break;
+            attrs.emplace_back("+avx10.1-512");
+            break;
         default:
-              user_error << "AVX10 only supports 256 or 512 bit variants at present.\n";
-              break;
+            user_error << "AVX10 only supports 256 or 512 bit variants at present.\n";
+            break;
         }
     }
 
     if (target.has_feature(Target::X86APX)) {
-        attrs.push_back("+egpr");
-        attrs.push_back("+push2pop2");
-        attrs.push_back("+ppx");
-        attrs.push_back("+ndd");
+        attrs.emplace_back("+egpr");
+        attrs.emplace_back("+push2pop2");
+        attrs.emplace_back("+ppx");
+        attrs.emplace_back("+ndd");
     }
 
     return join_strings(attrs, ",");
