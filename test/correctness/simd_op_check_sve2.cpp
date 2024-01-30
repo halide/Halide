@@ -1336,49 +1336,15 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
-#if 1
+    if (Halide::Internal::get_llvm_version() < 190) {
+        std::cout << "[SKIP] simd_op_check_sve2 requires LLVM 19 or later.\n";
+        return 0;
+    }
+
     return SimdOpCheckTest::main<SimdOpCheckArmSve>(
         argc, argv,
         {
             Target("arm-64-linux-sve2-no_neon-vector_bits_128"),
             Target("arm-64-linux-sve2-no_neon-vector_bits_256"),
         });
-#else
-    Target hl_target = get_target_from_environment();
-
-    if (hl_target.arch != Target::ARM) {
-        cout << "[SKIP] To run SimdOpCheckArmSve, set HL_TARGET=arm-<bits>-<os>. \n";
-        return 0;
-    }
-    // Create Test Object
-    // Use smaller dimension than default(768, 128) to avoid fp16 overflow in reduction test case
-    SimdOpCheckArmSve test(hl_target, 384, 32);
-
-    if (argc > 1) {
-        test.filter = argv[1];
-    }
-
-    if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
-        test.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
-    }
-
-    if (argc > 2) {
-        // Don't forget: if you want to run the standard tests to a specific output
-        // directory, you'll need to invoke with the first arg enclosed
-        // in quotes (to avoid it being wildcard-expanded by the shell):
-        //
-        //    correctness_simd_op_check "*" /path/to/output
-        //
-        test.output_directory = argv[2];
-    }
-
-    bool success = test.test_all();
-
-    if (!success) {
-        return -1;
-    }
-
-    cout << "Success!\n";
-    return 0;
-#endif
 }
