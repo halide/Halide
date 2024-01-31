@@ -194,10 +194,17 @@ protected:
         return (x + n - 1) / n * n;
     }
 
-    // TODO(<issue needed>): See if we need wrapper stiuff at call sites to make sure this was vscale vectors.
+    // TODO(<issue needed>): See if we need wrapper stuff at call sites to make sure result has proper scalable setting.
     /** Make predicate vector which starts with consecutive true followed by consecutive false */
     Expr make_vector_predicate_1s_0s(int true_lanes, int false_lanes) {
-        return Shuffle::make_concat({const_true(true_lanes), const_false(false_lanes)});
+        internal_assert((true_lanes + false_lanes) != 0) << "CodeGen_ARM::make_vector_predicate_1s_0s called with total of 0 lanes.\n";
+        if (true_lanes == 0) {
+            return const_false(false_lanes);
+        } else if (false_lanes == 0) {
+            return const_true(true_lanes);
+        } else {
+            return Shuffle::make_concat({const_true(true_lanes), const_false(false_lanes)});
+        }
     }
 };
 
