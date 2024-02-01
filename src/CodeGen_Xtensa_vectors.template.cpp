@@ -559,6 +559,26 @@ HALIDE_ALWAYS_INLINE native_vector_u16 load_predicated<native_vector_u16, native
 }
 
 template<>
+HALIDE_ALWAYS_INLINE native_vector_f16 load_predicated<native_vector_f16, native_vector_i32_x2, native_mask_i16, float16_t, VECTOR_WIDTH_F16>(const void *base, const native_vector_i32_x2 &offset, const native_mask_i16 &predicate) {
+    int __attribute__((aligned(XCHAL_VISION_SIMD8))) offsets[VECTOR_WIDTH_I16];
+    aligned_store<native_vector_i32_x2, int32_t, VECTOR_WIDTH_F16>(offset, &offsets[0], 0);
+    native_vector_i16 vmask = IVP_MOVNX16T(native_vector_i16(1), native_vector_i16(0), predicate);
+    int16_t __attribute__((aligned(XCHAL_VISION_SIMD8))) mask[VECTOR_WIDTH_I16];
+    aligned_store<native_vector_i16, int16_t, VECTOR_WIDTH_F16>(vmask, &mask[0], 0);
+
+    float16_t __attribute__((aligned(XCHAL_VISION_SIMD8))) output[VECTOR_WIDTH_F16];
+    for (int i = 0; i < VECTOR_WIDTH_F16; i++) {
+        if (mask[i] == 1) {
+            output[i] = ((const float16_t *)base)[offsets[i]];
+        } else {
+            output[i] = 0;
+        }
+    }
+
+    return *((native_vector_f16 *)output);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE native_vector_f32 load_predicated<native_vector_f32, native_vector_i32, native_mask_i32, float, VECTOR_WIDTH_F32>(const void *base, const native_vector_i32 &offset, const native_mask_i32 &predicate) {
     int __attribute__((aligned(XCHAL_VISION_SIMD8))) offsets[VECTOR_WIDTH_F32];
     aligned_store<native_vector_i32, int32_t, VECTOR_WIDTH_F32>(offset, &offsets[0], 0);
