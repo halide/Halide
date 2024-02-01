@@ -88,6 +88,8 @@ WEAK const char *gl_error_name(int32_t err) {
     case 0x8031:
         return "GL_TABLE_TOO_LARGE";
         break;
+    default:
+        break;
     }
     return "<unknown GL error>";
 }

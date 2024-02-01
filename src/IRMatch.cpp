@@ -48,7 +48,7 @@ void expr_match_test() {
 
     internal_assert(expr_match(vec_wild * 3, Ramp::make(x, y, 4) * 3, matches));
 
-    std::cout << "expr_match test passed" << std::endl;
+    std::cout << "expr_match test passed\n";
 }
 
 namespace {

@@ -768,7 +768,7 @@ void is_monotonic_test() {
 
     check_unknown(select(0 < x, max(min(x, 4), 3), 4));
 
-    std::cout << "is_monotonic test passed" << std::endl;
+    std::cout << "is_monotonic test passed\n";
 }
 
 }  // namespace Internal

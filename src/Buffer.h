@@ -394,18 +394,18 @@ public:
     // @}
 
     // We forward numerous methods from the underlying Buffer
-#define HALIDE_BUFFER_FORWARD_CONST(method)                                                                                           \
-    template<typename... Args>                                                                                                        \
-    auto method(Args &&...args) const->decltype(std::declval<const Runtime::Buffer<T, Dims>>().method(std::forward<Args>(args)...)) { \
-        user_assert(defined()) << "Undefined buffer calling const method " #method "\n";                                              \
-        return get()->method(std::forward<Args>(args)...);                                                                            \
+#define HALIDE_BUFFER_FORWARD_CONST(method)                                                                                             \
+    template<typename... Args>                                                                                                          \
+    auto method(Args &&...args) const -> decltype(std::declval<const Runtime::Buffer<T, Dims>>().method(std::forward<Args>(args)...)) { \
+        user_assert(defined()) << "Undefined buffer calling const method " #method "\n";                                                \
+        return get()->method(std::forward<Args>(args)...);                                                                              \
     }
 
-#define HALIDE_BUFFER_FORWARD(method)                                                                                     \
-    template<typename... Args>                                                                                            \
-    auto method(Args &&...args)->decltype(std::declval<Runtime::Buffer<T, Dims>>().method(std::forward<Args>(args)...)) { \
-        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                                        \
-        return get()->method(std::forward<Args>(args)...);                                                                \
+#define HALIDE_BUFFER_FORWARD(method)                                                                                       \
+    template<typename... Args>                                                                                              \
+    auto method(Args &&...args) -> decltype(std::declval<Runtime::Buffer<T, Dims>>().method(std::forward<Args>(args)...)) { \
+        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                                          \
+        return get()->method(std::forward<Args>(args)...);                                                                  \
     }
 
 // This is a weird-looking but effective workaround for a deficiency in "perfect forwarding":
@@ -418,10 +418,10 @@ public:
 // and forward it as is, we can just use ... to allow an arbitrary number of commas,
 // then use __VA_ARGS__ to forward the mess as-is, and while it looks horrible, it
 // works.
-#define HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(method, ...)                                                  \
-    inline auto method(const __VA_ARGS__ &a)->decltype(std::declval<Runtime::Buffer<T, Dims>>().method(a)) { \
-        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                           \
-        return get()->method(a);                                                                             \
+#define HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(method, ...)                                                    \
+    inline auto method(const __VA_ARGS__ &a) -> decltype(std::declval<Runtime::Buffer<T, Dims>>().method(a)) { \
+        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                             \
+        return get()->method(a);                                                                               \
     }
 
     /** Does the same thing as the equivalent Halide::Runtime::Buffer method */
