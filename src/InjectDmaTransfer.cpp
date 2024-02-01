@@ -357,7 +357,7 @@ class InjectDmaTransfer : public IRMutator {
                     auto injector = InjectDmaTransferIntoProducer(op->name, function_name_to_index[op->name]);
                     // If ring_buffer is defined, we can unroll one iteration
                     // to do double-buffering DMA.
-                    if (f.schedule().ring_buffer().defined() && loops.size() > allocation_to_loop_index[op->name]) {
+                    if (f.schedule().ring_buffer().defined() && ((int)loops.size() > allocation_to_loop_index[op->name])) {
                         user_assert((loops.size() - allocation_to_loop_index[op->name]) == 1)
                             << "There can only be one loop level between compute_at and hoist_storage loop levels for ring_buffer() to work correctly with DMA.";
                         // Find a variable to do double-buffering over.
