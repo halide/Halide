@@ -271,6 +271,10 @@ public:
         check("halide_xtensa_narrow_with_shift_u16", vector_width / 2, u16(i32_1 / 4));
 
         check("IVP_AVGRNX16", vector_width / 2, i16((i32(i16_1) + i32(i16_2) + 1) / 2));
+
+        // Divs
+        check("halide_xtensa_div_i32_i16", vector_width / 2, i32_1 / i32(i16_1));
+        check("halide_xtensa_div32", vector_width / 2, u32_1 / u32_2);
     }
 
 private:

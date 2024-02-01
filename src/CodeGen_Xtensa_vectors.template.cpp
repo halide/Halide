@@ -3112,6 +3112,18 @@ convert<native_vector_u32_x4, native_vector_i24>(const native_vector_i24 &src) {
                                 IVP_CVT32S2NX24HL(src), IVP_CVT32S2NX24HH(src));
 }
 
+HALIDE_ALWAYS_INLINE native_vector_i32_x2
+halide_xtensa_div_i32_i16(native_vector_i32_x2 a, native_vector_i16 b) {
+    native_vector_i32 reminder, quotent1, quotent2;
+    native_vector_i32_x2 b_i32 = convert<native_vector_i32_x2, native_vector_i16>(b);
+
+    IVP_DIVN_2X32X16(quotent1, reminder, a.native_vector[0], IVP_MOVNX16_FROMN_2X32(b_i32.native_vector[0]), 0);
+    IVP_DIVN_2X32X16(quotent2, reminder, a.native_vector[1], IVP_MOVNX16_FROMN_2X32(b_i32.native_vector[1]), 0);
+
+    return native_vector_i32_x2(
+        native_vector_i32_x2::from_native_vector, quotent1, quotent2);
+}
+
 HALIDE_ALWAYS_INLINE native_vector_u32
 halide_xtensa_div_32_by_low16_of_32(native_vector_u32 &a, native_vector_u32 &b) {
     native_vector_u32 quotient, remainder;
