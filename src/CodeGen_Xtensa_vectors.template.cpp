@@ -2541,9 +2541,9 @@ convert<native_vector_i32_x2, native_vector_i16>(const native_vector_i16 &src) {
     native_vector_i16 sign_val = IVP_SRANX16(src, 15);
     return native_vector_i32_x2(native_vector_i32_x2::from_native_vector,
                                 IVP_MOVN_2X32_FROMNX16(
-                                    IVP_SELNX16UI(sign_val, src, IVP_SELI_16B_INTERLEAVE_1_LO)),
+                                    IVP_SELNX16I(sign_val, src, IVP_SELI_16B_INTERLEAVE_1_LO)),
                                 IVP_MOVN_2X32_FROMNX16(
-                                    IVP_SELNX16UI(sign_val, src, IVP_SELI_16B_INTERLEAVE_1_HI)));
+                                    IVP_SELNX16I(sign_val, src, IVP_SELI_16B_INTERLEAVE_1_HI)));
 }
 
 template<>
