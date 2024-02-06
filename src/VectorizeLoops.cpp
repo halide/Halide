@@ -134,7 +134,7 @@ Interval bounds_of_lanes(const Expr &e) {
         Interval ia = bounds_of_lanes(not_->a);
         return {!ia.max, !ia.min};
     } else if (const Ramp *r = e.as<Ramp>()) {
-        Expr last_lane_idx = make_const(r->base.type(), r->lanes - 1);
+        Expr last_lane_idx = make_const(r->base.type().element_of(), r->lanes - 1);
         Interval ib = bounds_of_lanes(r->base);
         const Broadcast *b = as_scalar_broadcast(r->stride);
         Expr stride = b ? b->value : r->stride;
@@ -875,6 +875,7 @@ class VectorSubs : public IRMutator {
                 // generating a scalar condition that checks if
                 // the least-true lane is true.
                 Expr all_true = bounds_of_lanes(likely->args[0]).min;
+                internal_assert(all_true.type() == Bool());
                 // Wrap it in the same flavor of likely
                 all_true = Call::make(Bool(), likely->name,
                                       {all_true}, Call::PureIntrinsic);
