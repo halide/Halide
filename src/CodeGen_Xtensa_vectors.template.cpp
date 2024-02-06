@@ -2561,9 +2561,9 @@ convert<native_vector_i32_x2, native_vector_i16>(const native_vector_i16 &src) {
     native_vector_i16 sign_val = IVP_SRANX16(src, 15);
     return native_vector_i32_x2(native_vector_i32_x2::from_native_vector,
                                 IVP_MOVN_2X32_FROMNX16(
-                                    IVP_SELNX16UI(sign_val, src, IVP_SELI_16B_INTERLEAVE_1_LO)),
+                                    IVP_SELNX16I(sign_val, src, IVP_SELI_16B_INTERLEAVE_1_LO)),
                                 IVP_MOVN_2X32_FROMNX16(
-                                    IVP_SELNX16UI(sign_val, src, IVP_SELI_16B_INTERLEAVE_1_HI)));
+                                    IVP_SELNX16I(sign_val, src, IVP_SELI_16B_INTERLEAVE_1_HI)));
 }
 
 template<>
@@ -3132,6 +3132,19 @@ convert<native_vector_u32_x4, native_vector_i24>(const native_vector_i24 &src) {
                                 IVP_CVT32S2NX24HL(src), IVP_CVT32S2NX24HH(src));
 }
 
+HALIDE_ALWAYS_INLINE native_vector_i32_x2
+halide_xtensa_div_i32_i16(native_vector_i32_x2 dividend, native_vector_i16 divisor) {
+    native_vector_i32 reminder, quotent1, quotent2;
+
+    IVP_DIVN_2X32X16(quotent1, reminder, dividend.native_vector[0],
+                     IVP_SELNX16I(divisor, divisor, IVP_SELI_16B_INTERLEAVE_1_LO), 0);
+    IVP_DIVN_2X32X16(quotent2, reminder, dividend.native_vector[1],
+                     IVP_SELNX16I(divisor, divisor, IVP_SELI_16B_INTERLEAVE_1_HI), 1);
+
+    return native_vector_i32_x2(
+        native_vector_i32_x2::from_native_vector, quotent1, quotent2);
+}
+
 HALIDE_ALWAYS_INLINE native_vector_u32
 halide_xtensa_div_32_by_low16_of_32(native_vector_u32 &a, native_vector_u32 &b) {
     native_vector_u32 quotient, remainder;
@@ -3141,23 +3154,23 @@ halide_xtensa_div_32_by_low16_of_32(native_vector_u32 &a, native_vector_u32 &b) 
 
 HALIDE_ALWAYS_INLINE native_vector_u32
 halide_xtensa_div32(native_vector_u32 dividend, native_vector_u32 divisor) {
-    xb_vecN_2x32Uv nsa;
-    xb_vecNx16U vec_divisor;
-    xb_vecN_2x32Uv quotent;
-    xb_vecN_2x32Uv reminder;
-    vboolN_2 predicate;
+    native_vector_u32 nsa;
+    native_vector_u16 vec_divisor;
+    native_vector_u32 quotent;
+    native_vector_u32 reminder;
+    native_mask_i32 predicate;
 
     nsa = IVP_NSAUN_2X32U(divisor);
     predicate = IVP_LTUN_2X32U(16, nsa);
-    nsa = IVP_MOVN_2X32UT(0, (xb_vecN_2x32Uv)16 - nsa, predicate);
-    xb_vecN_2x32Uv divisor_nsa = IVP_SRLN_2X32U(divisor, nsa);
+    nsa = IVP_MOVN_2X32UT(0, (native_vector_u32)16 - nsa, predicate);
+    native_vector_u32 divisor_nsa = IVP_SRLN_2X32U(divisor, nsa);
 
     vec_divisor = IVP_MOVNX16_FROMN_2X32U(divisor_nsa);
     IVP_DIVN_2X32X16U(quotent, reminder, dividend, vec_divisor, 0);
     quotent = IVP_SRLN_2X32U(quotent, nsa);
 
-    xb_vecN_2x64w dividend_wide = IVP_MULUUN_2X16X32_0(IVP_MOVNX16_FROMN_2X32U(quotent), divisor);
-    xb_vecN_2x32Uv dividend_tmp = IVP_PACKLN_2X96(dividend_wide);
+    native_vector_i64 dividend_wide = IVP_MULUUN_2X16X32_0(IVP_MOVNX16_FROMN_2X32U(quotent), divisor);
+    native_vector_u32 dividend_tmp = IVP_PACKLN_2X96(dividend_wide);
     predicate = IVP_LTUN_2X32U(dividend, dividend_tmp);
     IVP_SUBN_2X32UT(quotent, quotent, 1, predicate);
     return quotent;

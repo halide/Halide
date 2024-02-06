@@ -768,8 +768,8 @@ private:
         if (op->type.is_vector()) {
             Expr div = op;
             static const std::vector<Pattern> divs = {
-                // TODO(vksnk): Before enabling it add a check for ExactLogOp
-                // {"halide_xtensa_div_i32_i16", wild_i32x / wild_i32x, Pattern::NarrowOp1}
+                // TODO(vksnk): Add a check for ExactLogOp
+                {"halide_xtensa_div_i32_i16", wild_i32x / wild_i32x, Pattern::NarrowOp1},
                 {"halide_xtensa_narrow_i48_with_shift_i32", i32(wild_i48x) / wild_i32, Pattern::ExactLog2Op1},
                 {"halide_xtensa_narrow_i48_with_shift_u32", u32(wild_i48x) / wild_u32, Pattern::ExactLog2Op1},
             };
@@ -1836,6 +1836,7 @@ private:
         // For some of the ops, it's better to slice into larger chunks.
         std::map<std::string, int> slicing_multipliers = {
             // There is only interleaved version of this intrinsic, so 2x vectors are required.
+            {"halide_xtensa_div_i32_i16", 2},
             {"halide_xtensa_narrow_i48_with_shift_i32", 2},
             {"halide_xtensa_narrow_i48_with_shift_u32", 2},
             {"halide_xtensa_widen_right_mul_i64", 2},
