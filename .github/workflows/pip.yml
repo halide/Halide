@@ -98,7 +98,7 @@ jobs:
       - name: Configure Halide (macOS)
         if: runner.os == 'macOS'
         run: >
-          cmake -G Ninja -S . -B halide-build
+          cmake -S . -B halide-build
           ${{ env.HALIDE_CMAKE_OPTS }}
           "-DCMAKE_OSX_ARCHITECTURES=${{ matrix.buildplat[2] }}"
           -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm
