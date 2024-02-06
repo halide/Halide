@@ -65,6 +65,42 @@ public:
     static int debug_level();
 };
 
+// "ConPrint" Stands for Container Print.
+// Mainly intended for debugging.
+template <typename T> struct ConPrint {
+    const T &container;
+    ConPrint(const T &container) : container(container) { }
+};
+
+template <typename StreamT, typename T>
+inline StreamT &operator<<(StreamT &stream, const ConPrint<T> &wrapper) {
+    stream << "{ ";
+    const char *sep = "";
+    for (const auto &e : wrapper.container) {
+        stream << sep << e;
+        sep = ", ";
+    }
+    stream << " }";
+    return stream;
+}
+
+// "ConPrintLn" Stands for Container Print Line. Prints items one per line.
+// Mainly intended for debugging.
+template <typename T> struct ConPrintLn {
+    const T &container;
+    ConPrintLn(const T &container) : container(container) { }
+};
+
+template <typename StreamT, typename T>
+inline StreamT &operator<<(StreamT &stream, const ConPrintLn<T> &wrapper) {
+    stream << "\n{\n";
+    for (const auto &e : wrapper.container) {
+        stream << "\t" << e << ",\n";
+    }
+    stream << "}\n";
+    return stream;
+}
+
 }  // namespace Internal
 }  // namespace Halide
 
