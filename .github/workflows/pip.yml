@@ -123,12 +123,18 @@ jobs:
           CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_28_aarch64
           CIBW_BEFORE_ALL_LINUX: |
             export LLVM_ZST=$(curl --silent https://buildbot.halide-lang.org | grep -o 'llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-.*\.zst') && \
+            echo Downloading ${LLVM_ZST}... && \
             curl --output /tmp/llvm.zst https://buildbot.halide-lang.org/${LLVM_ZST} && \
             rm -rf /tmp/local-llvm && \
             mkdir -p /tmp/local-llvm && \
             cd /tmp/local-llvm && \
-            cmake -E tar xv /tmp/llvm.zst --zstd && \
+            echo Extracting /tmp/llvm.zst... && \
+            cmake -E tar x /tmp/llvm.zst --zstd && \
+            echo Result is $? && \
+            ls -l /tmp/local-llvm
+            echo Removing /tmp/llvm.zst... && \
             rm -rf /tmp/llvm.zst && \
+            echo Configuring CMake... && \
             cmake -S . -B halide-build ${{ env.HALIDE_CMAKE_OPTS }} -DLLVM_DIR=/tmp/local-llvm/lib/cmake/llvm && \
             cmake --build halide-build --target install --config Release && \
             cmake --install halide-build --config Release --prefix local-halide
