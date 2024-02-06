@@ -71,12 +71,15 @@ public:
  *        debug(4) << "arg_types: " << ConPrint(arg_types) << "\n";
  * Which results in output like "arg_types: { uint8x8, uint8x8 }" on one line.
  * "ConPrint" Stands for "Container Print." */
-template <typename T> struct ConPrint {
+template<typename T>
+struct ConPrint {
     const T &container;
-    ConPrint(const T &container) : container(container) { }
+    ConPrint(const T &container)
+        : container(container) {
+    }
 };
 
-template <typename StreamT, typename T>
+template<typename StreamT, typename T>
 inline StreamT &operator<<(StreamT &stream, const ConPrint<T> &wrapper) {
     stream << "{ ";
     const char *sep = "";
@@ -99,12 +102,15 @@ inline StreamT &operator<<(StreamT &stream, const ConPrint<T> &wrapper) {
  *             uint8x8,
  *     }
  * Indentation uses a tab character. "ConPrintLn" Stands for "Container Print Line." */
-template <typename T> struct ConPrintLn {
+template<typename T>
+struct ConPrintLn {
     const T &container;
-    ConPrintLn(const T &container) : container(container) { }
+    ConPrintLn(const T &container)
+        : container(container) {
+    }
 };
 
-template <typename StreamT, typename T>
+template<typename StreamT, typename T>
 inline StreamT &operator<<(StreamT &stream, const ConPrintLn<T> &wrapper) {
     stream << "\n{\n";
     for (const auto &e : wrapper.container) {
