@@ -389,6 +389,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
                 rhs << "(int4)(" << coord[0] << idx << ", " << coord[1] << idx
                     << ", " << coord[2] << idx << ", 0)).s0";
                 break;
+            default:
+                internal_error << "Unsupported dims";
+                break;
             }
             print_assignment(op->type.with_bits(32).with_lanes(1), rhs.str());
             results[i] = id;
@@ -447,6 +450,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
             case 3:
                 write_image << "(int4)(" << coord[0] << idx << ", " << coord[1] << idx
                             << ", " << coord[2] << idx << ", 0)";
+                break;
+            default:
+                internal_error << "Unsupported dims";
                 break;
             }
             write_image << ", (" << print_type(value_type.with_bits(32).with_lanes(4))

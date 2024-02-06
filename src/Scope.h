@@ -243,7 +243,7 @@ public:
         return const_iterator(table.end());
     }
 
-    void swap(Scope<T> &other) {
+    void swap(Scope<T> &other) noexcept {
         table.swap(other.table);
         std::swap(containing_scope, other.containing_scope);
     }

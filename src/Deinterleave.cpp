@@ -836,7 +836,7 @@ void deinterleave_vector_test() {
           Shuffle::make({vec_x, vec_y}, {0, 2, 4, 3, 1, 3}),
           Shuffle::make({vec_x, vec_y}, {4, 6, 2, 7, 2, 4}));
 
-    std::cout << "deinterleave_vector test passed" << std::endl;
+    std::cout << "deinterleave_vector test passed\n";
 }
 
 }  // namespace Internal

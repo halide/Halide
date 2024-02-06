@@ -489,7 +489,7 @@ public:
         }
 
         for (auto &arg : args) {
-            std::cout << "\"" << arg << "\"" << std::endl;
+            std::cout << "\"" << arg << "\"\n";
         }
 
         return parse(args);
@@ -635,7 +635,7 @@ public:
     std::string error_full() const {
         std::ostringstream oss;
         for (const auto &error : errors) {
-            oss << error << std::endl;
+            oss << error << "\n";
         }
         return oss.str();
     }
@@ -649,8 +649,8 @@ public:
             }
         }
 
-        oss << "[options] ... " << ftr << std::endl;
-        oss << "options:" << std::endl;
+        oss << "[options] ... " << ftr << "\n";
+        oss << "options:\n";
 
         size_t max_width = 0;
         for (const auto &o : ordered) {
@@ -667,7 +667,7 @@ public:
             for (size_t j = o->name().length(); j < max_width + 4; j++) {
                 oss << ' ';
             }
-            oss << o->description() << std::endl;
+            oss << o->description() << "\n";
         }
         return oss.str();
     }
@@ -680,7 +680,7 @@ private:
         }
 
         if (!ok) {
-            std::cerr << error() << std::endl
+            std::cerr << error() << "\n"
                       << usage();
             exit(1);
         }
@@ -813,7 +813,7 @@ private:
                 actual = read(value);
                 has = true;
             } catch (const std::exception &e) {
-                std::cout << "Exception was caught: " << e.what() << std::endl;
+                std::cout << "Exception was caught: " << e.what() << "\n";
                 return false;
             }
             return true;

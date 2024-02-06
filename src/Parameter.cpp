@@ -142,6 +142,8 @@ Expr Parameter::scalar_expr() const {
             return Expr(sv.u.f32);
         case 64:
             return Expr(sv.u.f64);
+        default:
+            break;
         }
     } else if (t.is_int()) {
         switch (t.bits()) {
@@ -153,6 +155,8 @@ Expr Parameter::scalar_expr() const {
             return Expr(sv.u.i32);
         case 64:
             return Expr(sv.u.i64);
+        default:
+            break;
         }
     } else if (t.is_uint()) {
         switch (t.bits()) {
@@ -166,12 +170,16 @@ Expr Parameter::scalar_expr() const {
             return Expr(sv.u.u32);
         case 64:
             return Expr(sv.u.u64);
+        default:
+            break;
         }
     } else if (t.is_handle()) {
         // handles are always uint64 internally.
         switch (t.bits()) {
         case 64:
             return Expr(sv.u.u64);
+        default:
+            break;
         }
     }
     internal_error << "Unsupported type " << t << " in scalar_expr\n";

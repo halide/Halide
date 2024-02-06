@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     Buffer<float> in(100);
     in.for_each_element([&](int x) { in(x) = x * 2.0f; });
 
-    f(x) = in(x)*3;
+    f(x) = in(x) * 3;
     g(x) = f(x) * 2;
 
     Var xo, xi;

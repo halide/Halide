@@ -3951,7 +3951,7 @@ void spirv_ir_test() {
     binary.clear();
     builder.encode(binary);
 
-    std::cout << "SpirV IR test passed" << std::endl;
+    std::cout << "SpirV IR test passed\n";
 #else
     std::cout << "SpirV IR test *disabled*" << std::endl;
 #endif

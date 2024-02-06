@@ -88,7 +88,7 @@ void split_predicate_test() {
         check((x < y) && ((w == 1) || ((x == 10) && (y == z))), expected);
     }
 
-    std::cout << "Split predicate test passed" << std::endl;
+    std::cout << "Split predicate test passed\n";
 }
 
 struct ReductionDomainContents {

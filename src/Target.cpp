@@ -1550,7 +1550,7 @@ void target_test() {
     internal_assert(with_vector_bits.vector_bits == 512) << "Vector bits not populated in constructor.\n";
     internal_assert(Target(with_vector_bits.to_string()).vector_bits == 512) << "Vector bits not round tripped properly.\n";
 
-    std::cout << "Target test passed" << std::endl;
+    std::cout << "Target test passed\n";
 }
 
 }  // namespace Internal
