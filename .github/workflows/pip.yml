@@ -119,7 +119,7 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_28_x86_64
           CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_28_aarch64
           CIBW_BEFORE_ALL_LINUX: |
-            cmake -G Ninja -S . -B halide-build ${{ env.HALIDE_CMAKE_OPTS }} -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm && \
+            cmake -S . -B halide-build ${{ env.HALIDE_CMAKE_OPTS }} -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm && \
             cmake --build halide-build --target install --config Release && \
             cmake --install halide-build --config Release --prefix local-halide
 
