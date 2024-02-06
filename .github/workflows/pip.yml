@@ -37,11 +37,11 @@ jobs:
       matrix:
         python: [ cp38, cp39, cp310, cp311, cp312 ]
         buildplat:
-        # [runner, pytag, arch]
-        # - [ubuntu-22.04, manylinux_x86_64, x86_64]
-        # - [ubuntu-22.04, manylinux_aarch64, aarch64]
-        - [macos-12, macosx_universal2, arm64;x86_64]
-        # - [windows-2022, win_amd64, x64]
+        # [runner, pytag, arch, halide-triple]
+        - [ubuntu-22.04, manylinux_x86_64, x86_64, x86-64-linux]
+        # - [ubuntu-22.04, manylinux_aarch64, aarch64, arm-64-linux]
+        # - [macos-12, macosx_universal2, arm64;x86_64, x86-64-osx]
+        # - [windows-2022, win_amd64, x64, x86-64-windows]
 
     steps:
       - uses: actions/checkout@v4
@@ -53,84 +53,26 @@ jobs:
         shell: bash
         run: rm -rf src/runtime/hexagon_remote/bin/
 
-      # ---------- Linux-specific LLVM stuff
-      - name: Log in to GitHub Container Registry
-        if: runner.os == 'Linux'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Set up QEMU
         if: runner.os == 'Linux'
         uses: docker/setup-qemu-action@v3
         with:
           platforms: all
 
-      - name: Pull LLVM Container
-        if: runner.os == 'Linux'
-        run: docker pull ghcr.io/halide/manylinux2014_${{ matrix.buildplat[2] }}-llvm:${{ env.LLVM_VER }}
+      # We are doing a "wildcard" download so that we can grab the build regardless
+      # of the commit hash in the name -- this is a little janky but seems to work
+      - name: Pull LLVM build
+        run: |
+          rm -rf /tmp/buildbot.halide-lang.org
+          wget -r -l1 -np https://buildbot.halide-lang.org/ -O /tmp/llvm.zst -A "llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-*.zst" --reject *.html.tmp --reject *.txt
 
-      # ---------- non-Linux-specific LLVM stuff
-      - name: Cache LLVM build folder
-        if: runner.os != 'Linux'
-        id: cache-llvm
-        uses: actions/cache@v3.3.2
-        with:
-          path: local-llvm
-          key: llvmorg-${{ env.LLVM_VER }}-${{ runner.os }}-${{ runner.arch }}
-
-      - uses: ilammy/msvc-dev-cmd@v1
-      - uses: lukka/get-cmake@latest
-
-      - uses: actions/checkout@v4
-        if: runner.os != 'Linux' && steps.cache-llvm.outputs.cache-hit != 'true'
-        with:
-          path: llvm-src
-          repository: llvm/llvm-project
-          ref: llvmorg-${{ env.LLVM_VER }}
-
-      - name: Configure LLVM
-        if: runner.os != 'Linux' && steps.cache-llvm.outputs.cache-hit != 'true'
-        run: >
-          cmake -G Ninja -S llvm-src/llvm -B llvm-build
-          -DCMAKE_BUILD_TYPE=Release
-          "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
-          -DLLVM_ENABLE_ASSERTIONS=ON
-          -DLLVM_ENABLE_BINDINGS=OFF
-          -DLLVM_ENABLE_CURL=OFF
-          -DLLVM_ENABLE_DIA_SDK=OFF
-          -DLLVM_ENABLE_EH=ON
-          -DLLVM_ENABLE_HTTPLIB=OFF
-          -DLLVM_ENABLE_IDE=OFF
-          -DLLVM_ENABLE_LIBXML2=OFF
-          -DLLVM_ENABLE_OCAMLDOC=OFF
-          "-DLLVM_ENABLE_PROJECTS=clang;lld"
-          -DLLVM_ENABLE_RTTI=ON
-          -DLLVM_ENABLE_TERMINFO=OFF
-          -DLLVM_ENABLE_WARNINGS=OFF
-          -DLLVM_ENABLE_ZLIB=OFF
-          -DLLVM_ENABLE_ZSTD=OFF
-          -DLLVM_INCLUDE_BENCHMARKS=OFF
-          -DLLVM_INCLUDE_EXAMPLES=OFF
-          -DLLVM_INCLUDE_TESTS=OFF
-          "-DLLVM_TARGETS_TO_BUILD=X86;ARM;NVPTX;AArch64;Hexagon;PowerPC;WebAssembly"
-
-      - name: Build LLVM
-        if: runner.os != 'Linux' && steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --build llvm-build
-
-      - name: Install LLVM
-        if: runner.os != 'Linux' && steps.cache-llvm.outputs.cache-hit != 'true'
-        run: cmake --install llvm-build --prefix local-llvm
-
-      # Remove the LLVM source tree after building it, otherwise we can
-      # run out of local space while building halide
-      - name: Clean LLVM Source
-        if: runner.os != 'Linux' && steps.cache-llvm.outputs.cache-hit != 'true'
-        shell: bash
-        run: rm -rf llvm-src
+      - name: Decompress LLVM build
+        run: |
+          rm -rf ${{ github.workspace }}/local-llvm
+          mkdir -p ${{ github.workspace }}/local-llvm
+          cd ${{ github.workspace }}/local-llvm
+          cmake -E tar xv "/tmp/buildbot.halide-lang.org/llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-*.zst"
+          rm -rf /tmp/buildbot.halide-lang.org
 
       # ------------------------ Build Halide
       - name: Configure Halide (Windows)
