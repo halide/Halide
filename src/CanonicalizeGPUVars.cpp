@@ -283,12 +283,19 @@ class ValidateGPUSchedule : public IRVisitor {
     std::string innermost_blocks_loop, innermost_threads_loop;
     std::ostringstream blocks_not_ok_reason;
 
+    void clear_blocks_not_ok_reason() {
+        std::ostringstream empty;
+        blocks_not_ok_reason.swap(empty);
+    }
+
     void visit(const For *op) override {
         if (!root) {
             root = op;
         }
+        bool should_clear = false;
         if (in_blocks && op->for_type != ForType::GPUBlock && blocks_not_ok_reason.tellp() == 0) {
             blocks_not_ok_reason << op->for_type << " loop over " << op->name;
+            should_clear = true;
         }
         if (op->for_type == ForType::GPUBlock) {
             user_assert(blocks_not_ok_reason.tellp() == 0)
@@ -340,6 +347,9 @@ class ValidateGPUSchedule : public IRVisitor {
         } else {
             IRVisitor::visit(op);
         }
+        if (should_clear) {
+            clear_blocks_not_ok_reason();
+        }
     }
 
     void visit(const Realize *op) override {
@@ -349,7 +359,7 @@ class ValidateGPUSchedule : public IRVisitor {
         if (in_blocks && blocks_not_ok_reason.tellp() == 0) {
             blocks_not_ok_reason << "store_at location for " << op->name;
             IRVisitor::visit(op);
-            blocks_not_ok_reason.clear();
+            clear_blocks_not_ok_reason();
         } else {
             IRVisitor::visit(op);
         }
@@ -362,7 +372,7 @@ class ValidateGPUSchedule : public IRVisitor {
         if (op->is_producer && in_blocks && blocks_not_ok_reason.tellp() == 0) {
             blocks_not_ok_reason << "compute_at location for " << op->name;
             IRVisitor::visit(op);
-            blocks_not_ok_reason.clear();
+            clear_blocks_not_ok_reason();
         } else {
             IRVisitor::visit(op);
         }
@@ -375,7 +385,7 @@ class ValidateGPUSchedule : public IRVisitor {
         if (in_blocks && blocks_not_ok_reason.tellp() == 0) {
             blocks_not_ok_reason << "hoist_storage location for " << op->name;
             IRVisitor::visit(op);
-            blocks_not_ok_reason.clear();
+            clear_blocks_not_ok_reason();
         } else {
             IRVisitor::visit(op);
         }
