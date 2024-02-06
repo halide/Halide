@@ -2269,18 +2269,6 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
 
     std::ostringstream err;
 
-    /*
-    // If you're compute_at() inside a gpu blocks loop, you can't have a gpu blocks loop yourself
-    const auto has_gpu_blocks = [&]() {
-        for (const Dim &d : f.definition().schedule().dims()) {
-            if (d.for_type == ForType::GPUBlock) {
-                return true;
-            }
-        }
-        return false;
-    };
-    */
-
     const auto all_ok = [&]() {
         return store_idx >= 0 && compute_idx >= 0 && hoist_storage_idx >= 0;
     };
