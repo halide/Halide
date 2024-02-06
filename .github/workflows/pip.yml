@@ -132,6 +132,7 @@ jobs:
             cmake -E tar x /tmp/llvm.zst --zstd && \
             echo Result is $? && \
             ls -l /tmp/local-llvm
+            ls -l /tmp/local-llvm/lib/cmake/llvm
             echo Removing /tmp/llvm.zst... && \
             rm -rf /tmp/llvm.zst && \
             echo Configuring CMake... && \
