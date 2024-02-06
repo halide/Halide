@@ -41,8 +41,8 @@ jobs:
         # [runner, pytag, arch, halide-triple]
         # - [ubuntu-22.04, manylinux_x86_64, x86_64, x86-64-linux]
         # - [ubuntu-22.04, manylinux_aarch64, aarch64, arm-64-linux]
-        - [macos-12, macosx_x86_64, x86_64, x86-64-osx]
-        - [macos-12, macosx_arm64, arm64, arm-64-osx]
+        # - [macos-12, macosx_x86_64, x86_64, x86-64-osx]
+        # - [macos-12, macosx_arm64, arm64, arm-64-osx]
         - [windows-2022, win_amd64, x64, x86-64-windows]
 
     steps:
@@ -74,6 +74,7 @@ jobs:
       # we download to /tmp/buildbot.halide-lang.org/llvm-VER-TRIPLE-HASH.zst
       - name: Pull LLVM build
         if: runner.os != 'Linux'
+        shell: bash
         run: |
           rm -rf /tmp/llvm.zst
           export LLVM_ZST=$(curl --silent https://buildbot.halide-lang.org | grep -o 'llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-.*\.zst')
@@ -81,6 +82,7 @@ jobs:
 
       - name: Decompress LLVM build
         if: runner.os != 'Linux'
+        shell: bash
         run: |
           rm -rf ${{ github.workspace }}/local-llvm
           mkdir -p ${{ github.workspace }}/local-llvm
@@ -90,6 +92,7 @@ jobs:
 
       - name: Configure Halide (Windows)
         if: runner.os == 'Windows'
+        shell: bash
         run: >
           cmake -G "Visual Studio 17 2022" -T ClangCL -A "${{ matrix.buildplat[2] }}" -S . -B halide-build
           ${{ env.HALIDE_CMAKE_OPTS }}
@@ -97,6 +100,7 @@ jobs:
 
       - name: Configure Halide (macOS)
         if: runner.os == 'macOS'
+        shell: bash
         run: >
           cmake -S . -B halide-build
           ${{ env.HALIDE_CMAKE_OPTS }}
@@ -105,10 +109,12 @@ jobs:
 
       - name: Build Halide
         if: runner.os != 'Linux'
+        shell: bash
         run: cmake --build halide-build --target install --config Release
 
       - name: Install Halide
         if: runner.os != 'Linux'
+        shell: bash
         run: cmake --install halide-build --config Release --prefix local-halide
 
       - name: Build Wheels
