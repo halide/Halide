@@ -65,8 +65,12 @@ public:
     static int debug_level();
 };
 
-// "ConPrint" Stands for Container Print.
-// Mainly intended for debugging.
+/** Allow easily printing the contents of containers, or std::vector-like containers,
+ *  in debug output. Used like so:
+ *        std::vector<Type> arg_types;
+ *        debug(4) << "arg_types: " << ConPrint(arg_types) << "\n";
+ * Which results in output like "arg_types: { uint8x8, uint8x8 }" on one line.
+ * "ConPrint" Stands for "Container Print." */
 template <typename T> struct ConPrint {
     const T &container;
     ConPrint(const T &container) : container(container) { }
@@ -84,8 +88,17 @@ inline StreamT &operator<<(StreamT &stream, const ConPrint<T> &wrapper) {
     return stream;
 }
 
-// "ConPrintLn" Stands for Container Print Line. Prints items one per line.
-// Mainly intended for debugging.
+/** Allow easily printing the contents of containers, or std::vector-like containers,
+ *  in debug output. Used like so:
+ *        std::vector<Type> arg_types;
+ *        debug(4) << "arg_types: " << ConPrint(arg_types) << "\n";
+ * Which results in output like:
+ *     arg_types:
+ *     {
+ *             uint8x8,
+ *             uint8x8,
+ *     }
+ * Indentation uses a tab character. "ConPrintLn" Stands for "Container Print Line." */
 template <typename T> struct ConPrintLn {
     const T &container;
     ConPrintLn(const T &container) : container(container) { }
