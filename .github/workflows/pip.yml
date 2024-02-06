@@ -66,6 +66,7 @@ jobs:
         run: |
           rm -rf /tmp/buildbot.halide-lang.org
           wget -r -l1 -np https://buildbot.halide-lang.org/ -P /tmp -A "llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-*.zst"
+          ls -l /tmp/buildbot.halide-lang.org
 
       - name: Decompress LLVM build
         run: |
