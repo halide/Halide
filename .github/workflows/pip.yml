@@ -60,11 +60,12 @@ jobs:
           platforms: all
 
       # We are doing a "wildcard" download so that we can grab the build regardless
-      # of the commit hash in the name -- this is a little janky but seems to work
+      # of the commit hash in the name -- this is a little janky but seems to work;
+      # we download to /tmp/buildbot.halide-lang.org/llvm-VER-TRIPLE-HASH.zst
       - name: Pull LLVM build
         run: |
           rm -rf /tmp/buildbot.halide-lang.org
-          wget -r -l1 -np https://buildbot.halide-lang.org/ -O /tmp/llvm.zst -A "llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-*.zst"
+          wget -r -l1 -np https://buildbot.halide-lang.org/ -P /tmp -A "llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-*.zst"
 
       - name: Decompress LLVM build
         run: |
