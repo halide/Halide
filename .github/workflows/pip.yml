@@ -64,17 +64,20 @@ jobs:
       # we download to /tmp/buildbot.halide-lang.org/llvm-VER-TRIPLE-HASH.zst
       - name: Pull LLVM build
         run: |
-          rm -rf /tmp/buildbot.halide-lang.org
-          wget -r -l1 -np https://buildbot.halide-lang.org/ -P /tmp -A "llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-*.zst"
-          ls -l /tmp/buildbot.halide-lang.org
+          rm -rf /tmp/llvm.zst
+          # wget -r -l1 -np https://buildbot.halide-lang.org/ -P /tmp -A "llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-*.zst"
+          export LLVM_ZST=$(curl --silent https://buildbot.halide-lang.org | grep -o 'llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-.*\.zst')
+          echo ${LLVM_ZST}
+          curl --output /tmp/llvm.zst https://buildbot.halide-lang.org/${LLVM_ZST}
+          ls -l /tmp/*.zst
 
       - name: Decompress LLVM build
         run: |
           rm -rf ${{ github.workspace }}/local-llvm
           mkdir -p ${{ github.workspace }}/local-llvm
           cd ${{ github.workspace }}/local-llvm
-          cmake -E tar xv "/tmp/buildbot.halide-lang.org/llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-*.zst"
-          rm -rf /tmp/buildbot.halide-lang.org
+          cmake -E tar xv /tmp/llvm.zst --zstd
+          rm -rf /tmp/llvm.zst
 
       # ------------------------ Build Halide
       - name: Configure Halide (Windows)
