@@ -41,7 +41,7 @@ jobs:
         # [runner, pytag, arch, halide-triple]
         - [ubuntu-22.04, manylinux_x86_64, x86_64, x86-64-linux]
         # - [ubuntu-22.04, manylinux_aarch64, aarch64, arm-64-linux]
-        - [macos-12, macosx_x86_64, x86_64, x86-64-osx]
+        # - [macos-12, macosx_x86_64, x86_64, x86-64-osx]
         # - [macos-12, macosx_arm64, arm64, arm-64-osx]
         # - [windows-2022, win_amd64, x64, x86-64-windows]
 
@@ -131,6 +131,9 @@ jobs:
             echo Extracting /tmp/llvm.zst... && \
             cmake -E tar x /tmp/llvm.zst --zstd && \
             echo Result is $? && \
+            cd -
+            pwd
+            echo ${{ github.workspace }}/local-halide
             ls -l /tmp/local-llvm
             ls -l /tmp/local-llvm/lib/cmake/llvm
             echo Removing /tmp/llvm.zst... && \
