@@ -36,10 +36,10 @@ jobs:
       fail-fast: false
       matrix:
         # python: [ cp38, cp39, cp310, cp311, cp312 ]
-        python: [ cp310 ]
+        python: [ cp311 ]
         buildplat:
         # [runner, pytag, arch, halide-triple]
-        # - [ubuntu-22.04, manylinux_x86_64, x86_64, x86-64-linux]
+        - [ubuntu-22.04, manylinux_x86_64, x86_64, x86-64-linux]
         # - [ubuntu-22.04, manylinux_aarch64, aarch64, arm-64-linux]
         - [macos-12, macosx_x86_64, x86_64, x86-64-osx]
         # - [macos-12, macosx_arm64, arm64, arm-64-osx]
@@ -73,20 +73,20 @@ jobs:
       # of the commit hash in the name -- this is a little janky but seems to work;
       # we download to /tmp/buildbot.halide-lang.org/llvm-VER-TRIPLE-HASH.zst
       - name: Pull LLVM build
+        if: runner.os != 'Linux'
         run: |
           rm -rf /tmp/llvm.zst
           export LLVM_ZST=$(curl --silent https://buildbot.halide-lang.org | grep -o 'llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-.*\.zst')
           curl --output /tmp/llvm.zst https://buildbot.halide-lang.org/${LLVM_ZST}
 
       - name: Decompress LLVM build
+        if: runner.os != 'Linux'
         run: |
           rm -rf ${{ github.workspace }}/local-llvm
           mkdir -p ${{ github.workspace }}/local-llvm
           cd ${{ github.workspace }}/local-llvm
           cmake -E tar xv /tmp/llvm.zst --zstd
-          ls -l ${{ github.workspace }}/local-llvm
-          ls -l ${{ github.workspace }}/local-llvm/lib/cmake/llvm
-          # rm -rf /tmp/llvm.zst
+          rm -rf /tmp/llvm.zst
 
       - name: Configure Halide (Windows)
         if: runner.os == 'Windows'
@@ -122,9 +122,14 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_28_x86_64
           CIBW_MANYLINUX_AARCH64_IMAGE: quay.io/pypa/manylinux_2_28_aarch64
           CIBW_BEFORE_ALL_LINUX: |
-            ls -l ${{ github.workspace }}/local-llvm
-            ls -l ${{ github.workspace }}/local-llvm/lib/cmake/llvm
-            cmake -S . -B halide-build ${{ env.HALIDE_CMAKE_OPTS }} -DLLVM_DIR=${{ github.workspace }}/local-llvm/lib/cmake/llvm && \
+            export LLVM_ZST=$(curl --silent https://buildbot.halide-lang.org | grep -o 'llvm-${{ env.LLVM_VER }}-${{ matrix.buildplat[3] }}-.*\.zst') && \
+            curl --output /tmp/llvm.zst https://buildbot.halide-lang.org/${LLVM_ZST} && \
+            rm -rf /tmp/local-llvm && \
+            mkdir -p /tmp/local-llvm && \
+            cd /tmp/local-llvm && \
+            cmake -E tar xv /tmp/llvm.zst --zstd && \
+            rm -rf /tmp/llvm.zst && \
+            cmake -S . -B halide-build ${{ env.HALIDE_CMAKE_OPTS }} -DLLVM_DIR=/tmp/local-llvm/lib/cmake/llvm && \
             cmake --build halide-build --target install --config Release && \
             cmake --install halide-build --config Release --prefix local-halide
 
