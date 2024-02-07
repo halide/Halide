@@ -45,7 +45,7 @@ add_app(depthwise_separable_conv)
 add_app(fft)
 add_app(hannk)
 add_app(harris)
-# add_app(hexagon_benchmarks)  # TODO(#5374): missing CMake build
+add_app(hexagon_benchmarks)
 # add_app(hexagon_dma)  # TODO(#5374): missing CMake build
 add_app(hist)
 add_app(iir_blur)
