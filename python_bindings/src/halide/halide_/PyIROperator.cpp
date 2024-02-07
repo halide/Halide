@@ -44,6 +44,7 @@ void define_operators(py::module &m) {
     });
 
     m.def("clamp", &clamp);
+    m.def("unsafe_promise_clamped", &unsafe_promise_clamped);
     m.def("abs", &abs);
     m.def("absd", &absd);
 

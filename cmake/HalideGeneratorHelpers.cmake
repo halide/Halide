@@ -739,7 +739,7 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
         target_link_libraries(${TARGET} ${VISIBILITY} "${FOUNDATION_LIBRARY}" "${METAL_LIBRARY}")
     endif ()
 
-    if ("${ARGN}" MATCHES "webgpu")
+    if ("${ARGN}" MATCHES "webgpu" AND NOT "${ARGN}" MATCHES "wasm")
         find_package(Halide_WebGPU REQUIRED)
         target_link_libraries(${TARGET} ${VISIBILITY} Halide::WebGPU)
     endif ()
