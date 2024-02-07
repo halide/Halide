@@ -14,6 +14,7 @@ tests(GROUPS correctness
       bit_counting.cpp
       bitwise_ops.cpp
       bool_compute_root_vectorize.cpp
+      bool_predicate_cast.cpp
       bound.cpp
       bound_small_allocations.cpp
       bound_storage.cpp
