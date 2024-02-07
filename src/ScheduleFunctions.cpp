@@ -2269,48 +2269,9 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
 
     std::ostringstream err;
 
-    // If you're compute_at() inside a gpu blocks loop, you can't have a gpu blocks loop yourself
-    const auto has_gpu_blocks = [&]() {
-        for (const Dim &d : f.definition().schedule().dims()) {
-            if (d.for_type == ForType::GPUBlock) {
-                return true;
-            }
-        }
-        return false;
-    };
-
     const auto all_ok = [&]() {
         return store_idx >= 0 && compute_idx >= 0 && hoist_storage_idx >= 0;
     };
-
-    if (all_ok() && has_gpu_blocks()) {
-        for (int i = 0; i <= compute_idx; i++) {
-            if (sites[i].is_gpu_block) {
-                string site_fname = sites[i].loop_level.func();
-                user_error << "Functions that are compute_at() a gpu_block() loop cannot have their own gpu_block() loops, "
-                           << "but Func \"" << f.name() << "\" is compute_at() \"" << site_fname << "\"\n";
-            }
-        }
-    }
-
-    // If you're compute_at() a var marked as a gpu block var, it must be the innermost one
-    if (all_ok() && sites[compute_idx].is_gpu_block) {
-        string compute_at_fname = sites[compute_idx].loop_level.func();
-        int possibly_invalid_idx = compute_idx;
-        for (int i = compute_idx + 1; i < (int)sites.size(); i++) {
-            if (!sites[i].is_gpu_block) {
-                continue;
-            }
-            string site_fname = sites[i].loop_level.func();
-            if (site_fname == compute_at_fname) {
-                err << "Functions that are compute_at() a gpu_block() loop must specify the innermost gpu_block() loop for that Func.\n";
-                sites.erase(sites.begin() + possibly_invalid_idx);
-                // This one will also be invalid if we find a subsequent loop from the same func
-                possibly_invalid_idx = i;
-                store_idx = compute_idx = hoist_storage_idx = -1;
-            }
-        }
-    }
 
     // Check there isn't a parallel loop between the compute_at and the store_at
     if (all_ok()) {
