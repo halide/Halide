@@ -35,7 +35,6 @@ set(HEADER_FILES
     CodeGen_LLVM.h
     CodeGen_Metal_Dev.h
     CodeGen_OpenCL_Dev.h
-    CodeGen_OpenGLCompute_Dev.h
     CodeGen_Posix.h
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
@@ -206,7 +205,6 @@ set(SOURCE_FILES
     CodeGen_LLVM.cpp
     CodeGen_Metal_Dev.cpp
     CodeGen_OpenCL_Dev.cpp
-    CodeGen_OpenGLCompute_Dev.cpp
     CodeGen_Posix.cpp
     CodeGen_PowerPC.cpp
     CodeGen_PTX_Dev.cpp
@@ -610,11 +608,6 @@ endif ()
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
-endif ()
-
-option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
-if (TARGET_OPENGLCOMPUTE)
-    target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
 
 if (TARGET_VULKAN)

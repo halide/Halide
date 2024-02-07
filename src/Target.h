@@ -109,7 +109,6 @@ struct Target {
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        OpenGLCompute = halide_target_feature_openglcompute,  // NOTE: This feature is deprecated and will be removed in Halide 17.
         EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
         Profile = halide_target_feature_profile,
@@ -234,10 +233,7 @@ struct Target {
 
     /** Is a fully feature GPU compute runtime enabled? I.e. is
      * Func::gpu_tile and similar going to work? Currently includes
-     * CUDA, OpenCL, Metal and D3D12Compute. We do not include OpenGL,
-     * because it is not capable of gpgpu, and is not scheduled via
-     * Func::gpu_tile.
-     * TODO: Should OpenGLCompute be included here? */
+     * CUDA, OpenCL, Metal and D3D12Compute. */
     bool has_gpu_feature() const;
 
     /** Does this target allow using a certain type. Generally all

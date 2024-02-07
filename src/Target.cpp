@@ -498,7 +498,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
     {"cl_atomics64", Target::CLAtomics64},
-    {"openglcompute", Target::OpenGLCompute},
     {"egl", Target::EGL},
     {"user_context", Target::UserContext},
     {"profile", Target::Profile},
@@ -983,9 +982,6 @@ bool Target::supported() const {
 #if !defined(WITH_METAL)
     bad |= has_feature(Target::Metal);
 #endif
-#if !defined(WITH_OPENGLCOMPUTE)
-    bad |= has_feature(Target::OpenGLCompute);
-#endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
 #endif
@@ -1059,7 +1055,6 @@ bool Target::has_gpu_feature() const {
             has_feature(OpenCL) ||
             has_feature(Metal) ||
             has_feature(D3D12Compute) ||
-            has_feature(OpenGLCompute) ||
             has_feature(Vulkan) ||
             has_feature(WebGPU));
 }
@@ -1118,14 +1113,12 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return (!has_feature(Metal) &&
-                    !has_feature(OpenGLCompute) &&
                     !has_feature(D3D12Compute) &&
                     (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles)) &&
                     (!has_feature(Vulkan) || has_feature(Target::VulkanFloat64)) &&
                     !has_feature(WebGPU));
         } else {
             return (!has_feature(Metal) &&
-                    !has_feature(OpenGLCompute) &&
                     !has_feature(D3D12Compute) &&
                     (!has_feature(Vulkan) || has_feature(Target::VulkanInt64)) &&
                     !has_feature(WebGPU));
@@ -1156,8 +1149,6 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
     } else if (device == DeviceAPI::D3D12Compute) {
         // Shader Model 5.x can optionally support double-precision; 64-bit int
         // types are not supported.
-        return t.bits() < 64;
-    } else if (device == DeviceAPI::OpenGLCompute) {
         return t.bits() < 64;
     } else if (device == DeviceAPI::Vulkan) {
         if (t.is_float() && t.bits() == 64) {
@@ -1214,9 +1205,6 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::OpenCL)) {
         return DeviceAPI::OpenCL;
     }
-    if (has_feature(Target::OpenGLCompute)) {
-        return DeviceAPI::OpenGLCompute;
-    }
     if (has_feature(Target::Vulkan)) {
         return DeviceAPI::Vulkan;
     }
@@ -1232,8 +1220,6 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::CUDA;
     case DeviceAPI::OpenCL:
         return Target::OpenCL;
-    case DeviceAPI::OpenGLCompute:
-        return Target::OpenGLCompute;
     case DeviceAPI::Metal:
         return Target::Metal;
     case DeviceAPI::Hexagon:
@@ -1333,7 +1319,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         Metal,
         NoNEON,
         OpenCL,
-        OpenGLCompute,
         Vulkan,
         WebGPU,
 

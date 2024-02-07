@@ -214,8 +214,6 @@ Serialize::DeviceAPI Serializer::serialize_device_api(const DeviceAPI &device_ap
         return Serialize::DeviceAPI::CUDA;
     case DeviceAPI::OpenCL:
         return Serialize::DeviceAPI::OpenCL;
-    case DeviceAPI::OpenGLCompute:
-        return Serialize::DeviceAPI::OpenGLCompute;
     case DeviceAPI::Metal:
         return Serialize::DeviceAPI::Metal;
     case DeviceAPI::Hexagon:

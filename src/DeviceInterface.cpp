@@ -94,8 +94,6 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         name = "opencl";
     } else if (d == DeviceAPI::CUDA) {
         name = "cuda";
-    } else if (d == DeviceAPI::OpenGLCompute) {
-        name = "openglcompute";
     } else if (d == DeviceAPI::Hexagon) {
         name = "hexagon";
     } else if (d == DeviceAPI::HexagonDma) {
@@ -154,8 +152,6 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::OpenCL;
     } else if (target.has_feature(Target::CUDA)) {
         return DeviceAPI::CUDA;
-    } else if (target.has_feature(Target::OpenGLCompute)) {
-        return DeviceAPI::OpenGLCompute;
     } else if (target.arch != Target::Hexagon && target.has_feature(Target::HVX)) {
         return DeviceAPI::Hexagon;
     } else if (target.has_feature(Target::HexagonDma)) {
@@ -191,9 +187,6 @@ Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type) {
         break;
     case DeviceAPI::Metal:
         interface_name = "halide_metal_device_interface";
-        break;
-    case DeviceAPI::OpenGLCompute:
-        interface_name = "halide_openglcompute_device_interface";
         break;
     case DeviceAPI::Hexagon:
         interface_name = "halide_hexagon_device_interface";

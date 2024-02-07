@@ -4,10 +4,6 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Target t(get_jit_target_from_environment());
-    if (!t.has_gpu_feature() && !t.has_feature(Target::OpenGLCompute)) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
-    }
 
     Func f1, f2, f3, f4, f5, f6, g;
     Var x, y;
@@ -23,7 +19,7 @@ int main(int argc, char **argv) {
 
     // All of the f's have a dynamic size required (it depends on p),
     // so we'll store them in global memory ("Heap"). On cuda we get
-    // one big heap allocation. On openglcompute/d3d we should get one
+    // one big heap allocation. On d3d we should get one
     // allocation per coalesced group, and groups can only be
     // coalesced if the types match, so we get an allocation for
     // [f1,f3,f6], another for [f2,f4], and a third for f5.

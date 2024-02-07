@@ -25,7 +25,6 @@ void define_enums(py::module &m) {
         .value("CUDA", DeviceAPI::CUDA)
         .value("Vulkan", DeviceAPI::Vulkan)
         .value("OpenCL", DeviceAPI::OpenCL)
-        .value("OpenGLCompute", DeviceAPI::OpenGLCompute)
         .value("Metal", DeviceAPI::Metal)
         .value("Hexagon", DeviceAPI::Hexagon);
 
@@ -137,7 +136,6 @@ void define_enums(py::module &m) {
         .value("CLDoubles", Target::Feature::CLDoubles)
         .value("CLHalf", Target::Feature::CLHalf)
         .value("CLAtomics64", Target::Feature::CLAtomics64)
-        .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("EGL", Target::Feature::EGL)
         .value("UserContext", Target::Feature::UserContext)
         .value("Profile", Target::Feature::Profile)
