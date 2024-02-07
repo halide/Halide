@@ -448,6 +448,7 @@ SOURCE_FILES = \
   AddAtomicMutex.cpp \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
+  AddSplitFactorChecks.cpp \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
@@ -644,6 +645,7 @@ HEADER_FILES = \
   AddAtomicMutex.h \
   AddImageChecks.h \
   AddParameterChecks.h \
+  AddSplitFactorChecks.h \
   AlignLoads.h \
   AllocationBoundsInference.h \
   ApplySplit.h \

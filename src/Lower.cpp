@@ -9,6 +9,7 @@
 #include "AddAtomicMutex.h"
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
+#include "AddSplitFactorChecks.h"
 #include "AllocationBoundsInference.h"
 #include "AsyncProducers.h"
 #include "BoundConstantExtentLoops.h"
@@ -181,6 +182,10 @@ void lower_impl(const vector<Function> &output_funcs,
     debug(1) << "Performing computation bounds inference...\n";
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
     log("Lowering after computation bounds inference:", s);
+
+    debug(1) << "Asserting that all split factors are positive...\n";
+    s = add_split_factor_checks(s, env);
+    log("Lowering after asserting that all split factors are positive:", s);
 
     debug(1) << "Removing extern loops...\n";
     s = remove_extern_loops(s);

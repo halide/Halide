@@ -1242,6 +1242,10 @@ enum halide_error_code_t {
     /** An explicit storage bound provided is too small to store
      * all the values produced by the function. */
     halide_error_code_storage_bound_too_small = -45,
+
+    /** A factor used to split a loop was discovered to be zero or negative at
+     * runtime. */
+    halide_error_code_split_factor_not_positive = -46,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1316,6 +1320,8 @@ extern int halide_error_device_dirty_with_no_device_support(void *user_context, 
 extern int halide_error_storage_bound_too_small(void *user_context, const char *func_name, const char *var_name,
                                                 int provided_size, int required_size);
 extern int halide_error_device_crop_failed(void *user_context);
+extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
+
 // @}
 
 /** Optional features a compilation Target can have.
