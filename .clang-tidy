@@ -19,7 +19,7 @@ Checks: >
     bugprone-dangling-handle,
     bugprone-dynamic-static-initializers,
     -bugprone-easily-swappable-parameters,
-    -bugprone-empty-catch,  # TODO: consider enabling
+    -bugprone-empty-catch,
     -bugprone-exception-escape,
     bugprone-fold-init-type,
     bugprone-forward-declaration-namespace,
@@ -66,7 +66,7 @@ Checks: >
     bugprone-suspicious-semicolon,
     bugprone-suspicious-string-compare,
     bugprone-swapped-arguments,
-    -bugprone-switch-missing-default-case,  # TODO: consider enabling
+    bugprone-switch-missing-default-case,
     bugprone-terminating-continue,
     bugprone-throw-keyword-missing,
     bugprone-too-small-loop-variable,
@@ -93,7 +93,7 @@ Checks: >
     -misc-const-correctness,
     misc-definitions-in-headers,
     misc-header-include-cycle,
-    -misc-include-cleaner,  # TODO: consider enabling
+    -misc-include-cleaner,
     misc-misleading-bidirectional,
     misc-misleading-identifier,
     misc-misplaced-const,
@@ -128,7 +128,7 @@ Checks: >
     -modernize-replace-random-shuffle,
     -modernize-return-braced-init-list,
     -modernize-shrink-to-fit,
-    -modernize-type-traits,  # TODO: consider enabling
+    -modernize-type-traits,
     -modernize-unary-static-assert,
     -modernize-use-auto,
     modernize-use-bool-literals,

@@ -1455,6 +1455,9 @@ bool load_mat(const std::string &filename, ImageType *im) {
     case miDOUBLE:
         type = halide_type_of<double>();
         break;
+    default:
+        check(false, "Unknown header");
+        return false;
     }
 
     *im = ImageType(type, extents);
