@@ -222,6 +222,7 @@ tests(GROUPS correctness
       multiple_outputs.cpp
       mux.cpp
       narrow_predicates.cpp
+      negative_split_factors.cpp
       nested_tail_strategies.cpp
       newtons_method.cpp
       non_nesting_extern_bounds_query.cpp
