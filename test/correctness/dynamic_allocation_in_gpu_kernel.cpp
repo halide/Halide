@@ -3,6 +3,12 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Target t(get_jit_target_from_environment());
+    if (!t.has_gpu_feature()) {
+        printf("[SKIP] No GPU target enabled.\n");
+        return 0;
+    }
+
     Func f1, f2, f3, f4, f5, f6, g;
     Var x, y;
     Param<int> p;
