@@ -1289,11 +1289,13 @@ void CodeGen_Xtensa::visit(const Reinterpret *op) {
         } else if (is_native_xtensa_vector<uint32_t>(op->type) &&
                    is_native_xtensa_vector<int32_t>(op->value.type())) {
             op_name = "xb_vecN_2x32v_rtor_xb_vecN_2x32Uv";
-        } else if (is_native_xtensa_vector<uint32_t>(op->type) &&
+        } else if ((is_native_xtensa_vector<uint32_t>(op->type) ||
+                    is_native_xtensa_vector<int32_t>(op->type)) &&
                    is_native_xtensa_vector<float>(op->value.type())) {
             op_name = "IVP_MOVN_2X32_FROMN_2XF32";
         } else if (is_native_xtensa_vector<float>(op->type) &&
-                   is_native_xtensa_vector<uint32_t>(op->value.type())) {
+                   (is_native_xtensa_vector<uint32_t>(op->value.type()) ||
+                    is_native_xtensa_vector<int32_t>(op->value.type()))) {
             op_name = "IVP_MOVN_2XF32_FROMN_2X32";
         }
         if (!op_name.empty()) {
