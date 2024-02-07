@@ -3,6 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef TARGET_HAS_HVX
+#include "HalideRuntimeHexagonHost.h"
+#endif
+
 #include "halide_benchmark.h"
 #include "process.h"
 
@@ -39,11 +43,10 @@ int main(int argc, char **argv) {
     Dilate3x3Descriptor dilate3x3_pipeine(W, H);
     Median3x3Descriptor median3x3_pipeline(W, H);
     Gaussian5x5Descriptor gaussian5x5_pipeline(W, H);
-    SobelDescriptor sobel_pipeline(W, H);
     Conv3x3a32Descriptor conv3x3a32_pipeline(W, H);
 
     std::vector<PipelineDescriptorBase *> pipelines = {&conv3x3a16_pipeline, &dilate3x3_pipeine, &median3x3_pipeline,
-                                                       &gaussian5x5_pipeline, &sobel_pipeline, &conv3x3a32_pipeline};
+                                                       &gaussian5x5_pipeline, &conv3x3a32_pipeline};
 
     for (PipelineDescriptorBase *p : pipelines) {
         if (!p->defined()) {
