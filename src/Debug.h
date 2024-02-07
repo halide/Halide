@@ -68,22 +68,21 @@ public:
 /** Allow easily printing the contents of containers, or std::vector-like containers,
  *  in debug output. Used like so:
  *        std::vector<Type> arg_types;
- *        debug(4) << "arg_types: " << ConPrint(arg_types) << "\n";
- * Which results in output like "arg_types: { uint8x8, uint8x8 }" on one line.
- * "ConPrint" Stands for "Container Print." */
+ *        debug(4) << "arg_types: " << PrintSpan(arg_types) << "\n";
+ * Which results in output like "arg_types: { uint8x8, uint8x8 }" on one line. */
 template<typename T>
-struct ConPrint {
-    const T &container;
-    ConPrint(const T &container)
-        : container(container) {
+struct PrintSpan {
+    const T &span;
+    PrintSpan(const T &span)
+        : span(span) {
     }
 };
 
 template<typename StreamT, typename T>
-inline StreamT &operator<<(StreamT &stream, const ConPrint<T> &wrapper) {
+inline StreamT &operator<<(StreamT &stream, const PrintSpan<T> &wrapper) {
     stream << "{ ";
     const char *sep = "";
-    for (const auto &e : wrapper.container) {
+    for (const auto &e : wrapper.span) {
         stream << sep << e;
         sep = ", ";
     }
@@ -91,29 +90,29 @@ inline StreamT &operator<<(StreamT &stream, const ConPrint<T> &wrapper) {
     return stream;
 }
 
-/** Allow easily printing the contents of containers, or std::vector-like containers,
+/** Allow easily printing the contents of spans, or std::vector-like spans,
  *  in debug output. Used like so:
  *        std::vector<Type> arg_types;
- *        debug(4) << "arg_types: " << ConPrint(arg_types) << "\n";
+ *        debug(4) << "arg_types: " << PrintSpan(arg_types) << "\n";
  * Which results in output like:
  *     arg_types:
  *     {
  *             uint8x8,
  *             uint8x8,
  *     }
- * Indentation uses a tab character. "ConPrintLn" Stands for "Container Print Line." */
+ * Indentation uses a tab character. */
 template<typename T>
-struct ConPrintLn {
-    const T &container;
-    ConPrintLn(const T &container)
-        : container(container) {
+struct PrintSpanLn {
+    const T &span;
+    PrintSpanLn(const T &span)
+        : span(span) {
     }
 };
 
 template<typename StreamT, typename T>
-inline StreamT &operator<<(StreamT &stream, const ConPrintLn<T> &wrapper) {
+inline StreamT &operator<<(StreamT &stream, const PrintSpanLn<T> &wrapper) {
     stream << "\n{\n";
-    for (const auto &e : wrapper.container) {
+    for (const auto &e : wrapper.span) {
         stream << "\t" << e << ",\n";
     }
     stream << "}\n";
