@@ -3,6 +3,7 @@
 
 #include "Halide.h"
 #include "halide_test_dirs.h"
+#include "halide_thread_pool.h"
 #include "test_sharding.h"
 
 #include <fstream>
@@ -33,7 +34,6 @@ public:
     std::string filter{"*"};
     std::string output_directory{Internal::get_test_tmp_dir()};
     std::vector<Task> tasks;
-    std::mt19937 rng;
 
     Target target;
 
@@ -55,10 +55,12 @@ public:
     int W;
     int H;
 
+    int rng_seed;
+
     using Sharder = Halide::Internal::Test::Sharder;
 
     SimdOpCheckTest(const Target t, int w, int h)
-        : target(t), W(w), H(h) {
+        : target(t), W(w), H(h), rng_seed(0) {
         target = target
                      .with_feature(Target::NoBoundsQuery)
                      .with_feature(Target::NoAsserts)
@@ -67,7 +69,7 @@ public:
     virtual ~SimdOpCheckTest() = default;
 
     void set_seed(int seed) {
-        rng.seed(seed);
+        rng_seed = seed;
     }
 
     virtual bool can_run_code() const {
@@ -105,7 +107,7 @@ public:
                  Target::SVE2,
                  Target::VSX,
              }) {
-            if (target.has_feature(f) != host_target.has_feature(f)) {
+            if (target.has_feature(f) && !host_target.has_feature(f)) {
                 can_run_the_code = false;
             }
         }
@@ -250,42 +252,71 @@ public:
         Halide::Func error("error_" + name);
         error() = Halide::cast<double>(maximum(absd(f(r_check.x, r_check.y), f_scalar(r_check.x, r_check.y))));
 
-        setup_images();
         compile_and_check(error, op, name, vector_width, error_msg);
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
             Target run_target = get_run_target();
 
-            error.infer_input_bounds({}, run_target);
-            // Fill the inputs with noise
-            for (auto p : image_params) {
-                Halide::Buffer<> buf = p.get();
-                if (!buf.defined()) continue;
-                assert(buf.data());
-                Type t = buf.type();
-                // For floats/doubles, we only use values that aren't
-                // subject to rounding error that may differ between
-                // vectorized and non-vectorized versions
-                if (t == Float(32)) {
-                    buf.as<float>().for_each_value([&](float &f) { f = (rng() & 0xfff) / 8.0f - 0xff; });
-                } else if (t == Float(64)) {
-                    buf.as<double>().for_each_value([&](double &f) { f = (rng() & 0xfff) / 8.0 - 0xff; });
-                } else if (t == Float(16)) {
-                    buf.as<float16_t>().for_each_value([&](float16_t &f) { f = float16_t((rng() & 0xff) / 8.0f - 0xf); });
-                } else {
-                    // Random bits is fine
-                    for (uint32_t *ptr = (uint32_t *)buf.data();
-                         ptr != (uint32_t *)buf.data() + buf.size_in_bytes() / 4;
-                         ptr++) {
-                        // Never use the top four bits, to avoid
-                        // signed integer overflow.
-                        *ptr = ((uint32_t)rng()) & 0x0fffffff;
+            // Make some unallocated input buffers
+            std::vector<Runtime::Buffer<>> inputs(image_params.size());
+
+            std::vector<Argument> args(image_params.size());
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = image_params[i];
+                inputs[i] = Runtime::Buffer<>(args[i].type, nullptr, 0);
+            }
+            auto callable = error.compile_to_callable(args, run_target);
+
+            Runtime::Buffer<double> output = Runtime::Buffer<double>::make_scalar();
+            output(0) = 1;  // To ensure we'll fail if it's never written to
+
+            // Do the bounds query call
+            assert(inputs.size() == 12);  // FIXME. use argv entrypoint?
+            callable(inputs[0], inputs[1], inputs[2], inputs[3],
+                     inputs[4], inputs[5], inputs[6], inputs[7],
+                     inputs[8], inputs[9], inputs[10], inputs[11],
+                     output);
+
+            std::mt19937 rng;
+            rng.seed(rng_seed);
+
+            // Allocate the input buffers and fill them with noise
+            for (size_t i = 0; i < inputs.size(); i++) {
+                if (inputs[i].size_in_bytes()) {
+                    inputs[i].allocate();
+
+                    Type t = inputs[i].type();
+                    // For floats/doubles, we only use values that aren't
+                    // subject to rounding error that may differ between
+                    // vectorized and non-vectorized versions
+                    if (t == Float(32)) {
+                        inputs[i].as<float>().for_each_value([&](float &f) { f = (rng() & 0xfff) / 8.0f - 0xff; });
+                    } else if (t == Float(64)) {
+                        inputs[i].as<double>().for_each_value([&](double &f) { f = (rng() & 0xfff) / 8.0 - 0xff; });
+                    } else if (t == Float(16)) {
+                        inputs[i].as<float16_t>().for_each_value([&](float16_t &f) { f = float16_t((rng() & 0xff) / 8.0f - 0xf); });
+                    } else {
+                        // Random bits is fine
+                        for (uint32_t *ptr = (uint32_t *)inputs[i].data();
+                             ptr != (uint32_t *)inputs[i].data() + inputs[i].size_in_bytes() / 4;
+                             ptr++) {
+                            // Never use the top four bits, to avoid
+                            // signed integer overflow.
+                            *ptr = ((uint32_t)rng()) & 0x0fffffff;
+                        }
                     }
                 }
             }
-            Realization r = error.realize();
-            double e = Buffer<double>(r[0])();
+
+            // Do the real call
+            std::cerr << "Invoking!\n";
+            callable(inputs[0], inputs[1], inputs[2], inputs[3],
+                     inputs[4], inputs[5], inputs[6], inputs[7],
+                     inputs[8], inputs[9], inputs[10], inputs[11],
+                     output);
+
+            double e = output(0);
             // Use a very loose tolerance for floating point tests. The
             // kinds of bugs we're looking for are codegen bugs that
             // return the wrong value entirely, not floating point
@@ -340,6 +371,8 @@ public:
         }
     }
     virtual bool test_all() {
+        setup_images();
+
         /* First add some tests based on the target */
         add_tests();
 
@@ -348,21 +381,31 @@ public:
         const std::string run_target_str = run_target.to_string();
 
         Sharder sharder;
-        bool success = true;
+
+        Halide::Tools::ThreadPool<TestResult> pool;
+        std::vector<std::future<TestResult>> futures;
+
         for (size_t t = 0; t < tasks.size(); t++) {
             if (!sharder.should_run(t)) continue;
             const auto &task = tasks.at(t);
-            auto result = check_one(task.op, task.name, task.vector_width, task.expr);
+            futures.push_back(pool.async([&]() { return check_one(task.op, task.name, task.vector_width, task.expr); }));
+        }
+
+        for (auto &f : futures) {
+            auto result = f.get();
             constexpr int tabstop = 32;
             const int spaces = std::max(1, tabstop - (int)result.op.size());
             std::cout << result.op << std::string(spaces, ' ') << "(" << run_target_str << ")\n";
             if (!result.error_msg.empty()) {
                 std::cerr << result.error_msg;
-                success = false;
+                // The thread-pool destructor will block until in-progress tasks
+                // are done, and then will discard any tasks that haven't been
+                // launched yet.
+                return false;
             }
         }
 
-        return success;
+        return true;
     }
 
     template<typename SIMDOpCheckT>
