@@ -10,6 +10,8 @@ enum SerializationVersionMajor: int {
     Value = 18
 }
 enum SerializationVersionMinor: int {
+    // 0 = Unstable
+    // 1 = First stable version
     Value = 0
 }
 enum SerializationVersionPatch: int {
