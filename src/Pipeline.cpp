@@ -779,7 +779,7 @@ Realization Pipeline::realize(JITUserContext *context,
     // output size is good.
     int exit_status = 0;
     if (!target.has_feature(Target::NoBoundsQuery)) {
-        exit_status = call_jit_code(target, args);
+        exit_status = call_jit_code(args);
     }
     if (exit_status == 0) {
         // Make the output allocations
@@ -787,7 +787,7 @@ Realization Pipeline::realize(JITUserContext *context,
             r[i].allocate();
         }
         // Do the actual computation
-        exit_status = call_jit_code(target, args);
+        exit_status = call_jit_code(args);
     }
 
     // If we're profiling, report runtimes and reset profiler stats.
@@ -974,8 +974,8 @@ Pipeline::make_externs_jit_module(const Target &target,
     return result;
 }
 
-int Pipeline::call_jit_code(const Target &target, const JITCallArgs &args) {
-    return contents->jit_cache.call_jit_code(target, args.store);
+int Pipeline::call_jit_code(const JITCallArgs &args) {
+    return contents->jit_cache.call_jit_code(args.store);
 }
 
 void Pipeline::realize(RealizationArg outputs, const Target &t) {
@@ -1067,7 +1067,7 @@ void Pipeline::realize(JITUserContext *context,
     // exception.
 
     debug(2) << "Calling jitted function\n";
-    int exit_status = call_jit_code(target, args);
+    int exit_status = call_jit_code(args);
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
@@ -1137,7 +1137,7 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
         }
 
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = call_jit_code(contents->jit_cache.jit_target, args);
+        int exit_status = call_jit_code(args);
         jit_context.finalize(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
