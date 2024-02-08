@@ -234,12 +234,7 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
         WGPUDeviceDescriptor desc{};
         desc.nextInChain = nullptr;
         desc.label = nullptr;
-#if defined(__EMSCRIPTEN__)
-        // ...sigh, really?
-        desc.requiredFeaturesCount = 0;
-#else
         desc.requiredFeatureCount = 0;
-#endif
         desc.requiredFeatures = nullptr;
         desc.requiredLimits = &requestedLimits;
         desc.deviceLostCallback = device_lost_callback;
