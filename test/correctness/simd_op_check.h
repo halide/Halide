@@ -107,7 +107,7 @@ public:
                  Target::SVE2,
                  Target::VSX,
              }) {
-            if (target.has_feature(f) && !host_target.has_feature(f)) {
+            if (target.has_feature(f) != host_target.has_feature(f)) {
                 can_run_the_code = false;
             }
         }
