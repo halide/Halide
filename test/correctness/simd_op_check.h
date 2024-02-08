@@ -37,21 +37,48 @@ public:
 
     Target target;
 
-    ImageParam in_f32{Float(32), 1, "in_f32"};
-    ImageParam in_f64{Float(64), 1, "in_f64"};
-    ImageParam in_f16{Float(16), 1, "in_f16"};
-    ImageParam in_bf16{BFloat(16), 1, "in_bf16"};
-    ImageParam in_i8{Int(8), 1, "in_i8"};
-    ImageParam in_u8{UInt(8), 1, "in_u8"};
-    ImageParam in_i16{Int(16), 1, "in_i16"};
-    ImageParam in_u16{UInt(16), 1, "in_u16"};
-    ImageParam in_i32{Int(32), 1, "in_i32"};
-    ImageParam in_u32{UInt(32), 1, "in_u32"};
-    ImageParam in_i64{Int(64), 1, "in_i64"};
-    ImageParam in_u64{UInt(64), 1, "in_u64"};
+    // Some exprs of each type to use in checked expressions. These will turn
+    // into loads to thread-local image params.
+    Expr input(const Type &t, const Expr &arg) {
+        return Internal::Call::make(t, "input", {arg}, Internal::Call::Extern);
+    }
+    Expr in_f16(const Expr &arg) {
+        return input(Float(16), arg);
+    }
+    Expr in_bf16(const Expr &arg) {
+        return input(BFloat(16), arg);
+    }
+    Expr in_f32(const Expr &arg) {
+        return input(Float(32), arg);
+    }
+    Expr in_f64(const Expr &arg) {
+        return input(Float(64), arg);
+    }
+    Expr in_i8(const Expr &arg) {
+        return input(Int(8), arg);
+    }
+    Expr in_i16(const Expr &arg) {
+        return input(Int(16), arg);
+    }
+    Expr in_i32(const Expr &arg) {
+        return input(Int(32), arg);
+    }
+    Expr in_i64(const Expr &arg) {
+        return input(Int(64), arg);
+    }
+    Expr in_u8(const Expr &arg) {
+        return input(UInt(8), arg);
+    }
+    Expr in_u16(const Expr &arg) {
+        return input(UInt(16), arg);
+    }
+    Expr in_u32(const Expr &arg) {
+        return input(UInt(32), arg);
+    }
+    Expr in_u64(const Expr &arg) {
+        return input(UInt(64), arg);
+    }
 
-    const std::vector<ImageParam> image_params{in_f32, in_f64, in_f16, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
-    const std::vector<Argument> arg_types{in_f32, in_f64, in_f16, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
     int W;
     int H;
 
@@ -114,7 +141,12 @@ public:
         return can_run_the_code;
     }
 
-    virtual void compile_and_check(Func error, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) {
+    virtual void compile_and_check(Func error,
+                                   const std::string &op,
+                                   const std::string &name,
+                                   int vector_width,
+                                   const std::vector<Argument> &arg_types,
+                                   std::ostringstream &error_msg) {
         std::string fn_name = "test_" + name;
         std::string file_name = output_directory + fn_name;
 
@@ -199,6 +231,56 @@ public:
     TestResult check_one(const std::string &op, const std::string &name, int vector_width, Expr e) {
         std::ostringstream error_msg;
 
+        // Map the input calls in the Expr to loads to local
+        // imageparams, so that we're not sharing state across threads.
+        std::vector<ImageParam> image_params{
+            ImageParam{Float(32), 1, "in_f32"},
+            ImageParam{Float(64), 1, "in_f64"},
+            ImageParam{Float(16), 1, "in_f16"},
+            ImageParam{BFloat(16), 1, "in_bf16"},
+            ImageParam{Int(8), 1, "in_i8"},
+            ImageParam{UInt(8), 1, "in_u8"},
+            ImageParam{Int(16), 1, "in_i16"},
+            ImageParam{UInt(16), 1, "in_u16"},
+            ImageParam{Int(32), 1, "in_i32"},
+            ImageParam{UInt(32), 1, "in_u32"},
+            ImageParam{Int(64), 1, "in_i64"},
+            ImageParam{UInt(64), 1, "in_u64"}};
+
+        for (auto &p : image_params) {
+            const int alignment_bytes = image_param_alignment();
+            p.set_host_alignment(alignment_bytes);
+            const int alignment = alignment_bytes / p.type().bytes();
+            p.dim(0).set_min((p.dim(0).min() / alignment) * alignment);
+        }
+
+        const std::vector<Argument> arg_types(image_params.begin(), image_params.end());
+
+        class HookUpImageParams : public Internal::IRMutator {
+            using Internal::IRMutator::visit;
+
+            Expr visit(const Internal::Call *op) override {
+                if (op->name == "input") {
+                    for (auto &p : image_params) {
+                        if (p.type() == op->type) {
+                            return p(mutate(op->args[0]));
+                        }
+                    }
+                } else if (op->call_type == Internal::Call::Halide && !op->func.weak) {
+                    Internal::Function f(op->func);
+                    f.mutate(this);
+                }
+                return Internal::IRMutator::visit(op);
+            }
+            const std::vector<ImageParam> &image_params;
+
+        public:
+            HookUpImageParams(const std::vector<ImageParam> &image_params)
+                : image_params(image_params) {
+            }
+        } hook_up_image_params(image_params);
+        e = hook_up_image_params.mutate(e);
+
         class HasInlineReduction : public Internal::IRVisitor {
             using Internal::IRVisitor::visit;
             void visit(const Internal::Call *op) override {
@@ -252,7 +334,7 @@ public:
         Halide::Func error("error_" + name);
         error() = Halide::cast<double>(maximum(absd(f(r_check.x, r_check.y), f_scalar(r_check.x, r_check.y))));
 
-        compile_and_check(error, op, name, vector_width, error_msg);
+        compile_and_check(error, op, name, vector_width, arg_types, error_msg);
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
@@ -359,19 +441,11 @@ public:
         tasks.emplace_back(Task{op, name, vector_width, e});
     }
     virtual void add_tests() = 0;
-    virtual void setup_images() {
-        for (auto p : image_params) {
-            p.reset();
-
-            const int alignment_bytes = 16;
-            p.set_host_alignment(alignment_bytes);
-            const int alignment = alignment_bytes / p.type().bytes();
-            p.dim(0).set_min((p.dim(0).min() / alignment) * alignment);
-        }
+    virtual int image_param_alignment() {
+        return 16;
     }
-    virtual bool test_all() {
-        setup_images();
 
+    virtual bool test_all() {
         /* First add some tests based on the target */
         add_tests();
 
@@ -387,7 +461,9 @@ public:
         for (size_t t = 0; t < tasks.size(); t++) {
             if (!sharder.should_run(t)) continue;
             const auto &task = tasks.at(t);
-            futures.push_back(pool.async([&]() { return check_one(task.op, task.name, task.vector_width, task.expr); }));
+            futures.push_back(pool.async([&]() {
+                return check_one(task.op, task.name, task.vector_width, task.expr);
+            }));
         }
 
         for (auto &f : futures) {
