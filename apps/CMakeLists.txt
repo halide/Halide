@@ -45,7 +45,10 @@ add_app(depthwise_separable_conv)
 add_app(fft)
 add_app(hannk)
 add_app(harris)
-add_app(hexagon_benchmarks)
+if (NOT WIN32)
+    # Our WinBots aren't set up to handle Hexagon builds
+    add_app(hexagon_benchmarks)
+endif()
 # add_app(hexagon_dma)  # TODO(#5374): missing CMake build
 add_app(hist)
 add_app(iir_blur)
