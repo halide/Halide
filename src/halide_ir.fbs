@@ -7,10 +7,10 @@ file_identifier "HLDE";
 file_extension "hlpipe";
 
 enum SerializationVersionMajor: int {
-    Value = 0
+    Value = 18
 }
 enum SerializationVersionMinor: int {
-    Value = 1
+    Value = 0
 }
 enum SerializationVersionPatch: int {
     Value = 0
