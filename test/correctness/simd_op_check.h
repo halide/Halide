@@ -460,7 +460,7 @@ public:
 
         Sharder sharder;
 
-        Halide::Tools::ThreadPool<TestResult> pool(1);
+        Halide::Tools::ThreadPool<TestResult> pool;
         std::vector<std::future<TestResult>> futures;
 
         for (size_t t = 0; t < tasks.size(); t++) {
