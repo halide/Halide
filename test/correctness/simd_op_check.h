@@ -360,10 +360,10 @@ public:
 
             // Do the bounds query call
             assert(inputs.size() == 12);
-            callable(inputs[0], inputs[1], inputs[2], inputs[3],
-                     inputs[4], inputs[5], inputs[6], inputs[7],
-                     inputs[8], inputs[9], inputs[10], inputs[11],
-                     output);
+            (void)callable(inputs[0], inputs[1], inputs[2], inputs[3],
+                           inputs[4], inputs[5], inputs[6], inputs[7],
+                           inputs[8], inputs[9], inputs[10], inputs[11],
+                           output);
 
             std::mt19937 rng;
             rng.seed(rng_seed);
@@ -397,10 +397,10 @@ public:
             }
 
             // Do the real call
-            callable(inputs[0], inputs[1], inputs[2], inputs[3],
-                     inputs[4], inputs[5], inputs[6], inputs[7],
-                     inputs[8], inputs[9], inputs[10], inputs[11],
-                     output);
+            (void)callable(inputs[0], inputs[1], inputs[2], inputs[3],
+                           inputs[4], inputs[5], inputs[6], inputs[7],
+                           inputs[8], inputs[9], inputs[10], inputs[11],
+                           output);
 
             double e = output(0);
             // Use a very loose tolerance for floating point tests. The
