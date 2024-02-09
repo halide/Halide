@@ -328,9 +328,7 @@ WEAK int create_webgpu_context(void *user_context) {
         << "WGPU: create_webgpu_context (user_context: " << user_context
         << ")\n";
 
-    WGPUInstanceDescriptor desc{};
-    desc.nextInChain = nullptr;
-    global_instance = wgpuCreateInstance(&desc);
+    global_instance = wgpuCreateInstance(nullptr);
     debug(user_context)
         << "WGPU: wgpuCreateInstance produces: " << global_instance
         << ")\n";
