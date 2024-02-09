@@ -186,9 +186,7 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
         bool success = true;
     } results;
 
-    WGPUInstanceDescriptor desc{};
-    desc.nextInChain = nullptr;
-    results.instance = wgpuCreateInstance(&desc);
+    results.instance = wgpuCreateInstance(nullptr);
 
     auto request_adapter_callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, char const *message, void *userdata) {
         auto *results = (Results *)userdata;
