@@ -80,7 +80,7 @@ private:
 
     // Creates a new block region and adds it to the region list
     BlockRegion *create_block_region(void *user_context, const MemoryProperties &properties, size_t offset, size_t size, bool dedicated);
-    
+
     // Creates a new block region and adds it to the region list
     int destroy_block_region(void *user_context, BlockRegion *region);
 
@@ -271,7 +271,7 @@ bool RegionAllocator::is_block_region_suitable_for_request(void *user_context, c
                             << " block_region=" << (void *)region
                             << " request_size=" << (uint32_t)(request.size)
                             << " actual_size=" << (uint32_t)(actual_size)
-                            << " region_size=" << (uint32_t)(region->memory.size) 
+                            << " region_size=" << (uint32_t)(region->memory.size)
                             << ")";
 #endif
         return true;  // you betcha
@@ -282,13 +282,13 @@ bool RegionAllocator::is_block_region_suitable_for_request(void *user_context, c
 
 BlockRegion *RegionAllocator::find_block_region(void *user_context, const MemoryRequest &request) {
 #ifdef DEBUG_RUNTIME_INTERNAL
-        debug(user_context) << "RegionAllocator: find block region ( "
-                            << "user_context=" << (void *)(user_context) << " "
-                            << "requested_size=" << (uint32_t)request.size << " "
-                            << "requested_is_dedicated=" << (request.dedicated ? "true" : "false") << " "
-                            << "requested_usage=" << halide_memory_usage_name(request.properties.usage) << " "
-                            << "requested_caching=" << halide_memory_caching_name(request.properties.caching) << " "
-                            << "requested_visibility=" << halide_memory_visibility_name(request.properties.visibility) << ")";
+    debug(user_context) << "RegionAllocator: find block region ( "
+                        << "user_context=" << (void *)(user_context) << " "
+                        << "requested_size=" << (uint32_t)request.size << " "
+                        << "requested_is_dedicated=" << (request.dedicated ? "true" : "false") << " "
+                        << "requested_usage=" << halide_memory_usage_name(request.properties.usage) << " "
+                        << "requested_caching=" << halide_memory_caching_name(request.properties.caching) << " "
+                        << "requested_visibility=" << halide_memory_visibility_name(request.properties.visibility) << ")";
 #endif
     BlockRegion *block_region = block->regions;
     while (block_region != nullptr) {
@@ -752,7 +752,7 @@ int RegionAllocator::destroy(void *user_context) {
     block->reserved = 0;
     block->regions = nullptr;
     block->allocator = nullptr;
-    if(arena != nullptr) {
+    if (arena != nullptr) {
         MemoryArena::destroy(user_context, arena);
     }
     arena = nullptr;

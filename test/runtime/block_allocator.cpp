@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         // Manually create a block resource and allocate memory
         size_t block_size = 4 * 1024 * 1024;
         BlockResource block_resource = {};
-        MemoryBlock* memory_block = &(block_resource.memory);
+        MemoryBlock *memory_block = &(block_resource.memory);
         memory_block->size = block_size;
         allocate_block(user_context, memory_block);
 
@@ -125,12 +125,12 @@ int main(int argc, char **argv) {
         instance->release(user_context, r2);
         HALIDE_CHECK(user_context, true == instance->collect(user_context));
 
-        request.size = block_size / 2; // request two half-size regions
+        request.size = block_size / 2;  // request two half-size regions
         MemoryRegion *r4 = instance->reserve(user_context, request);
         HALIDE_CHECK(user_context, r4 != nullptr);
         MemoryRegion *r5 = instance->reserve(user_context, request);
         HALIDE_CHECK(user_context, r5 != nullptr);
-        HALIDE_CHECK(user_context, nullptr == instance->reserve(user_context, request)); // requesting a third should fail
+        HALIDE_CHECK(user_context, nullptr == instance->reserve(user_context, request));  // requesting a third should fail
 
         HALIDE_CHECK(user_context, allocated_block_memory == block_size);
         HALIDE_CHECK(user_context, allocated_region_memory == (2 * request.size));
@@ -170,7 +170,7 @@ int main(int argc, char **argv) {
         size_t block_size = 4 * 1024 * 1024;
         size_t padded_size = 32;
         BlockResource block_resource = {};
-        MemoryBlock* memory_block = &(block_resource.memory);
+        MemoryBlock *memory_block = &(block_resource.memory);
         memory_block->size = block_size;
         memory_block->properties.nearest_multiple = padded_size;
         allocate_block(user_context, memory_block);
@@ -201,12 +201,12 @@ int main(int argc, char **argv) {
         HALIDE_CHECK(user_context, allocated_region_memory == (2 * padded_size));
         HALIDE_CHECK(user_context, true == instance->collect(user_context));
 
-        request.size = block_size / 2; // request two half-size regions
+        request.size = block_size / 2;  // request two half-size regions
         MemoryRegion *r4 = instance->reserve(user_context, request);
         HALIDE_CHECK(user_context, r4 != nullptr);
         MemoryRegion *r5 = instance->reserve(user_context, request);
         HALIDE_CHECK(user_context, r5 != nullptr);
-        HALIDE_CHECK(user_context, nullptr == instance->reserve(user_context, request)); // requesting a third should fail
+        HALIDE_CHECK(user_context, nullptr == instance->reserve(user_context, request));  // requesting a third should fail
 
         HALIDE_CHECK(user_context, allocated_block_memory == block_size);
         HALIDE_CHECK(user_context, allocated_region_memory == (2 * request.size));
@@ -238,7 +238,6 @@ int main(int argc, char **argv) {
                             << ") ...";
 
         HALIDE_CHECK(user_context, get_allocated_system_memory() == 0);
-
     }
 
     // test block allocator class interface
