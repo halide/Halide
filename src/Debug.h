@@ -65,6 +65,60 @@ public:
     static int debug_level();
 };
 
+/** Allow easily printing the contents of containers, or std::vector-like containers,
+ *  in debug output. Used like so:
+ *        std::vector<Type> arg_types;
+ *        debug(4) << "arg_types: " << PrintSpan(arg_types) << "\n";
+ * Which results in output like "arg_types: { uint8x8, uint8x8 }" on one line. */
+template<typename T>
+struct PrintSpan {
+    const T &span;
+    PrintSpan(const T &span)
+        : span(span) {
+    }
+};
+
+template<typename StreamT, typename T>
+inline StreamT &operator<<(StreamT &stream, const PrintSpan<T> &wrapper) {
+    stream << "{ ";
+    const char *sep = "";
+    for (const auto &e : wrapper.span) {
+        stream << sep << e;
+        sep = ", ";
+    }
+    stream << " }";
+    return stream;
+}
+
+/** Allow easily printing the contents of spans, or std::vector-like spans,
+ *  in debug output. Used like so:
+ *        std::vector<Type> arg_types;
+ *        debug(4) << "arg_types: " << PrintSpan(arg_types) << "\n";
+ * Which results in output like:
+ *     arg_types:
+ *     {
+ *             uint8x8,
+ *             uint8x8,
+ *     }
+ * Indentation uses a tab character. */
+template<typename T>
+struct PrintSpanLn {
+    const T &span;
+    PrintSpanLn(const T &span)
+        : span(span) {
+    }
+};
+
+template<typename StreamT, typename T>
+inline StreamT &operator<<(StreamT &stream, const PrintSpanLn<T> &wrapper) {
+    stream << "\n{\n";
+    for (const auto &e : wrapper.span) {
+        stream << "\t" << e << ",\n";
+    }
+    stream << "}\n";
+    return stream;
+}
+
 }  // namespace Internal
 }  // namespace Halide
 

@@ -186,9 +186,7 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
         bool success = true;
     } results;
 
-    WGPUInstanceDescriptor desc{};
-    desc.nextInChain = nullptr;
-    results.instance = wgpuCreateInstance(&desc);
+    results.instance = wgpuCreateInstance(nullptr);
 
     auto request_adapter_callback = [](WGPURequestAdapterStatus status, WGPUAdapter adapter, char const *message, void *userdata) {
         auto *results = (Results *)userdata;
@@ -234,12 +232,7 @@ inline bool create_webgpu_context(WGPUInstance *instance_out, WGPUAdapter *adapt
         WGPUDeviceDescriptor desc{};
         desc.nextInChain = nullptr;
         desc.label = nullptr;
-#if defined(__EMSCRIPTEN__)
-        // ...sigh, really?
-        desc.requiredFeaturesCount = 0;
-#else
         desc.requiredFeatureCount = 0;
-#endif
         desc.requiredFeatures = nullptr;
         desc.requiredLimits = &requestedLimits;
         desc.deviceLostCallback = device_lost_callback;

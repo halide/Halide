@@ -14,6 +14,7 @@ tests(GROUPS correctness
       bit_counting.cpp
       bitwise_ops.cpp
       bool_compute_root_vectorize.cpp
+      bool_predicate_cast.cpp
       bound.cpp
       bound_small_allocations.cpp
       bound_storage.cpp
@@ -131,8 +132,6 @@ tests(GROUPS correctness
       gpu_data_flows.cpp
       gpu_different_blocks_threads_dimensions.cpp
       gpu_dynamic_shared.cpp
-      gpu_error_1.cpp
-      gpu_error_2.cpp
       gpu_free_sync.cpp
       gpu_give_input_buffers_device_allocations.cpp
       gpu_jit_explicit_copy_to_device.cpp
@@ -186,6 +185,7 @@ tests(GROUPS correctness
       interval.cpp
       intrinsics.cpp
       introspection.cpp
+      invalid_gpu_loop_nests.cpp
       inverse.cpp
       isnan.cpp
       issue_3926.cpp
