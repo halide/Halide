@@ -98,7 +98,6 @@ enum DeviceAPI: byte {
     Default_GPU,
     CUDA,
     OpenCL,
-    Reserved5,  // formerly OpenGLCompute
     Metal,
     Hexagon,
     HexagonDma,
