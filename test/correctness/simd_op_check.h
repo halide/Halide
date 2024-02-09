@@ -9,6 +9,53 @@
 #include <fstream>
 #include <iostream>
 
+namespace {
+
+using namespace Halide;
+
+// Some exprs of each type to use in checked expressions. These will turn
+// into loads to thread-local image params.
+Expr input(const Type &t, const Expr &arg) {
+    return Internal::Call::make(t, "input", {arg}, Internal::Call::Extern);
+}
+Expr in_f16(const Expr &arg) {
+    return input(Float(16), arg);
+}
+Expr in_bf16(const Expr &arg) {
+    return input(BFloat(16), arg);
+}
+Expr in_f32(const Expr &arg) {
+    return input(Float(32), arg);
+}
+Expr in_f64(const Expr &arg) {
+    return input(Float(64), arg);
+}
+Expr in_i8(const Expr &arg) {
+    return input(Int(8), arg);
+}
+Expr in_i16(const Expr &arg) {
+    return input(Int(16), arg);
+}
+Expr in_i32(const Expr &arg) {
+    return input(Int(32), arg);
+}
+Expr in_i64(const Expr &arg) {
+    return input(Int(64), arg);
+}
+Expr in_u8(const Expr &arg) {
+    return input(UInt(8), arg);
+}
+Expr in_u16(const Expr &arg) {
+    return input(UInt(16), arg);
+}
+Expr in_u32(const Expr &arg) {
+    return input(UInt(32), arg);
+}
+Expr in_u64(const Expr &arg) {
+    return input(UInt(64), arg);
+}
+}  // namespace
+
 namespace Halide {
 struct TestResult {
     std::string op;
@@ -36,48 +83,6 @@ public:
     std::vector<Task> tasks;
 
     Target target;
-
-    // Some exprs of each type to use in checked expressions. These will turn
-    // into loads to thread-local image params.
-    Expr input(const Type &t, const Expr &arg) {
-        return Internal::Call::make(t, "input", {arg}, Internal::Call::Extern);
-    }
-    Expr in_f16(const Expr &arg) {
-        return input(Float(16), arg);
-    }
-    Expr in_bf16(const Expr &arg) {
-        return input(BFloat(16), arg);
-    }
-    Expr in_f32(const Expr &arg) {
-        return input(Float(32), arg);
-    }
-    Expr in_f64(const Expr &arg) {
-        return input(Float(64), arg);
-    }
-    Expr in_i8(const Expr &arg) {
-        return input(Int(8), arg);
-    }
-    Expr in_i16(const Expr &arg) {
-        return input(Int(16), arg);
-    }
-    Expr in_i32(const Expr &arg) {
-        return input(Int(32), arg);
-    }
-    Expr in_i64(const Expr &arg) {
-        return input(Int(64), arg);
-    }
-    Expr in_u8(const Expr &arg) {
-        return input(UInt(8), arg);
-    }
-    Expr in_u16(const Expr &arg) {
-        return input(UInt(16), arg);
-    }
-    Expr in_u32(const Expr &arg) {
-        return input(UInt(32), arg);
-    }
-    Expr in_u64(const Expr &arg) {
-        return input(UInt(64), arg);
-    }
 
     int W;
     int H;
@@ -455,7 +460,7 @@ public:
 
         Sharder sharder;
 
-        Halide::Tools::ThreadPool<TestResult> pool;
+        Halide::Tools::ThreadPool<TestResult> pool(1);
         std::vector<std::future<TestResult>> futures;
 
         for (size_t t = 0; t < tasks.size(); t++) {
