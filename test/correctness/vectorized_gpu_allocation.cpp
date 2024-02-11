@@ -11,12 +11,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (t.has_feature(Target::OpenGLCompute)) {
-        printf("[SKIP] No support for vector loads and stores in OpenGLCompute yet\n");
-        // https://github.com/halide/Halide/issues/4979
-        return 0;
-    }
-
     // Fill input buffer.
     Buffer<float> input(2, 2, 3);
     Buffer<float> output(2, 2, 3);

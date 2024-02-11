@@ -20,12 +20,7 @@ bool expect_eq(T actual, T expected) {
 
 void schedule_test(Func f, int vector_width, Partition partition_policy, const Target &t) {
     if (vector_width != 1) {
-        if (t.has_feature(Target::OpenGLCompute)) {
-            // Vector stores not yet supported in OpenGLCompute backend
-            f.unroll(x, vector_width);
-        } else {
-            f.vectorize(x, vector_width);
-        }
+        f.vectorize(x, vector_width);
     }
     f.partition(x, partition_policy);
     f.partition(y, partition_policy);
@@ -388,7 +383,6 @@ int main(int argc, char **argv) {
     int vector_width_max = 32;
     if (target.has_feature(Target::Metal) ||
         target.has_feature(Target::Vulkan) ||
-        target.has_feature(Target::OpenGLCompute) ||
         target.has_feature(Target::D3D12Compute) ||
         target.has_feature(Target::WebGPU)) {
         // https://github.com/halide/Halide/issues/2148

@@ -140,21 +140,16 @@ int main(int argc, char **argv) {
 
     // Now run all at the same time to check for concurrency issues.
 
-    // FIXME: Skipping OpenGLCompute, which has concurrency
-    // issues. Probably due to using the GL context on the wrong
-    // thread.
-    if (!target.has_feature(Target::OpenGLCompute)) {
-        Halide::Tools::ThreadPool<void> pool(1);
-        std::vector<std::future<void>> futures;
-        futures.emplace_back(pool.async(test1, true));
-        futures.emplace_back(pool.async(test1, true));
-        futures.emplace_back(pool.async(test2, true));
-        futures.emplace_back(pool.async(test2, true));
-        futures.emplace_back(pool.async(test3, true));
-        futures.emplace_back(pool.async(test3, true));
-        for (auto &f : futures) {
-            f.get();
-        }
+    Halide::Tools::ThreadPool<void> pool(1);
+    std::vector<std::future<void>> futures;
+    futures.emplace_back(pool.async(test1, true));
+    futures.emplace_back(pool.async(test1, true));
+    futures.emplace_back(pool.async(test2, true));
+    futures.emplace_back(pool.async(test2, true));
+    futures.emplace_back(pool.async(test3, true));
+    futures.emplace_back(pool.async(test3, true));
+    for (auto &f : futures) {
+        f.get();
     }
 
     // Vulkan will OOM unless allocation cache is used ... skip this since we just ran the same tests above concurrently

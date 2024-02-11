@@ -211,7 +211,6 @@ void lower_impl(const vector<Function> &output_funcs,
 
     bool will_inject_host_copies =
         (t.has_gpu_feature() ||
-         t.has_feature(Target::OpenGLCompute) ||
          t.has_feature(Target::HexagonDma) ||
          (t.arch != Target::Hexagon && (t.has_feature(Target::HVX))));
 
@@ -251,11 +250,10 @@ void lower_impl(const vector<Function> &output_funcs,
     s = split_tuples(s, env);
     log("Lowering after destructuring tuple-valued realizations:", s);
 
-    // OpenGL relies on GPU var canonicalization occurring before
+    // Vulkan relies on GPU var canonicalization occurring before
     // storage flattening.
     if (t.has_gpu_feature() ||
-        t.has_feature(Target::Vulkan) ||
-        t.has_feature(Target::OpenGLCompute)) {
+        t.has_feature(Target::Vulkan)) {
         debug(1) << "Canonicalizing GPU var names...\n";
         s = canonicalize_gpu_vars(s);
         log("Lowering after canonicalizing GPU var names:", s);
@@ -327,8 +325,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after vectorizing:", s);
 
     if (t.has_gpu_feature() ||
-        t.has_feature(Target::Vulkan) ||
-        t.has_feature(Target::OpenGLCompute)) {
+        t.has_feature(Target::Vulkan)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
         log("Lowering after injecting per-block gpu synchronization:", s);

@@ -291,8 +291,6 @@ protected:
 // have the same number of lanes. If this is indeed the case then the 'lanes'
 // member stores the number of lanes in those loads and stores.
 //
-// FIXME: Refactor this and the version in CodeGen_OpenGLCompute_Dev to a common place!
-//
 class CheckAlignedDenseVectorLoadStore : public IRVisitor {
 public:
     // True if all loads and stores from the buffer are dense, aligned, and all
