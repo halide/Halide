@@ -1113,7 +1113,7 @@ Target JITCache::get_compiled_jit_target() const {
     return jit_target;
 }
 
-int JITCache::call_jit_code(const Target &target, const void *const *args) {
+int JITCache::call_jit_code(const void *const *args) {
 #if defined(__has_feature)
 #if __has_feature(memory_sanitizer)
     user_warning << "MSAN does not support JIT compilers of any sort, and will report "
@@ -1122,7 +1122,7 @@ int JITCache::call_jit_code(const Target &target, const void *const *args) {
                     "compilation for Halide code.";
 #endif
 #endif
-    if (target.arch == Target::WebAssembly) {
+    if (get_compiled_jit_target().arch == Target::WebAssembly) {
         internal_assert(wasm_module.contents.defined());
         return wasm_module.run(args);
     } else {

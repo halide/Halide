@@ -10,6 +10,7 @@ set(HEADER_FILES
     AddAtomicMutex.h
     AddImageChecks.h
     AddParameterChecks.h
+    AddSplitFactorChecks.h
     AlignLoads.h
     AllocationBoundsInference.h
     ApplySplit.h
@@ -22,7 +23,7 @@ set(HEADER_FILES
     Bounds.h
     BoundsInference.h
     BoundConstantExtentLoops.h
-    BoundSmallAllocations.h    
+    BoundSmallAllocations.h
     Buffer.h
     Callable.h
     CanonicalizeGPUVars.h
@@ -178,6 +179,7 @@ set(SOURCE_FILES
     AddAtomicMutex.cpp
     AddImageChecks.cpp
     AddParameterChecks.cpp
+    AddSplitFactorChecks.cpp
     AlignLoads.cpp
     AllocationBoundsInference.cpp
     ApplySplit.cpp
@@ -546,7 +548,7 @@ set_target_properties(Halide PROPERTIES
 # Note that we (deliberately) redeclare these versions here, even though the macros
 # with identical versions are expected to be defined in source; this allows us to
 # ensure that the versions defined between all build systems are identical.
-target_compile_definitions(Halide PUBLIC 
+target_compile_definitions(Halide PUBLIC
                            HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
                            HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
                            HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})

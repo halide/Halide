@@ -291,4 +291,13 @@ WEAK int halide_error_device_crop_failed(void *user_context) {
     return halide_error_code_device_crop_failed;
 }
 
+WEAK int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor) {
+    error(user_context) << "In schedule for func " << func_name
+                        << ", the factor used to split the variable " << orig
+                        << " into " << outer << " and " << inner << " is " << factor_str
+                        << ". This evaluated to " << factor << ", which is not strictly positive. "
+                        << "Consider using max(" << factor_str << ", 1) instead.";
+    return halide_error_code_split_factor_not_positive;
+}
+
 }  // extern "C"
