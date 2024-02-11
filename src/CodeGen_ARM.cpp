@@ -1000,7 +1000,6 @@ void CodeGen_ARM::init_module() {
             // Already declared in the x1 pass.
             if ((flavor == SIMDFlavors::NeonWidthX2) &&
                 !(intrin.flags & ArmIntrinsic::HalfWidth)) {
-              //              debug(0) << intrin_name << "\n";
                 continue;
             }
 
