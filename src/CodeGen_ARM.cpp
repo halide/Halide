@@ -107,7 +107,8 @@ protected:
     using codegen_func_t = std::function<Value *(int lanes, const std::vector<Value *> &)>;
     using CodeGen_Posix::visit;
 
-    /** Similar to llvm_type_of, but allows forcing use of Fixed of Vscale vectors. */
+    /** Similar to llvm_type_of, but allows providing a VectorTypeConstraint to
+     * force Fixed or VScale vector results. */
     llvm::Type *llvm_type_with_constraint(const Type &t, bool scalars_are_vectors, VectorTypeConstraint constraint);
 
     /** Define a wrapper LLVM func that takes some arguments which Halide defines
@@ -212,7 +213,7 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     : CodeGen_Posix(target) {
 
     // TODO(issue needed): See if use_llvm_vector_intrinsics can replace some special
-    // handling in this file, specificall in Load and Store visitors.
+    // handling in this file, specifically in Load and Store visitors.
 
     // RADDHN - Add and narrow with rounding
     // These must come before other narrowing rounding shift patterns
@@ -347,11 +348,11 @@ struct ArmIntrinsic {
         SplitArg0 = 1 << 6,          // This intrinsic requires splitting the argument into the low and high halves.
         NoPrefix = 1 << 7,           // Don't prefix the intrinsic with llvm.*
         RequireFp16 = 1 << 8,        // Available only if Target has ARMFp16 feature
-        Neon64Unavailable = 1 << 9,  // Unavailalbe for 64 bit NEON
+        Neon64Unavailable = 1 << 9,  // Unavailable for 64 bit NEON
         SveUnavailable = 1 << 10,    // Unavailable for SVE
         SveNoPredicate = 1 << 11,    // In SVE intrinsics, additional predicate argument is required as default, unless this flag is set.
         SveInactiveArg = 1 << 12,    // This intrinsic needs the additional argument for fallback value for the lanes inactivated by predicate.
-        SveRequired = 1 << 14,       // This intrinsic requires SVE.
+        SveRequired = 1 << 13,       // This intrinsic requires SVE.
     };
 };
 
@@ -874,7 +875,8 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
     if (add_predicate) {
         llvm::Type *pred_type = to_llvm_type(Int(1, inner_lanes));
         inner_llvm_arg_types.push_back(pred_type);
-        // For now, we don't use predicate in overloaded intrinsic
+        // Halide does not have general support for predication so use
+        // constant true for all lanes.
         Value *ptrue = Constant::getAllOnesValue(pred_type);
         inner_args.push_back(ptrue);
     }
@@ -1118,7 +1120,7 @@ void CodeGen_ARM::begin_func(LinkageType linkage, const std::string &simple_name
     CodeGen_Posix::begin_func(linkage, simple_name, extern_name, args);
 
     // TODO(issue neeed): There is likely a better way to ensure this is only
-    // genrated for the outermost function that is being compiled. Avoiding the
+    // generated for the outermost function that is being compiled. Avoiding the
     // assert on inner functions is both an efficiency and a correctness issue
     // as the assertion code may not compile in all contexts.
     if (linkage != LinkageType::Internal) {
