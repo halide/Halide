@@ -7,10 +7,12 @@ file_identifier "HLDE";
 file_extension "hlpipe";
 
 enum SerializationVersionMajor: int {
-    Value = 0
+    Value = 18
 }
 enum SerializationVersionMinor: int {
-    Value = 1
+    // 0 = Unstable
+    // 1 = First stable version
+    Value = 0
 }
 enum SerializationVersionPatch: int {
     Value = 0
@@ -96,7 +98,6 @@ enum DeviceAPI: byte {
     Default_GPU,
     CUDA,
     OpenCL,
-    OpenGLCompute,
     Metal,
     Hexagon,
     HexagonDma,

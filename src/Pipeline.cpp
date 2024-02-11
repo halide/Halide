@@ -570,7 +570,18 @@ Target Pipeline::get_compiled_jit_target() const {
 void Pipeline::compile_jit(const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
 
-    Target target = target_arg.with_feature(Target::JIT).with_feature(Target::UserContext);
+    Target target = target_arg;
+
+    if (target.has_unknowns()) {
+        // If we've already jit-compiled for a specific target, use that.
+        target = get_compiled_jit_target();
+        if (target.has_unknowns()) {
+            // Otherwise get the target from the environment
+            target = get_jit_target_from_environment();
+        }
+    }
+
+    target.set_features({Target::JIT, Target::UserContext});
 
     // If we're re-jitting for the same target, we can just keep the old jit module.
     if (get_compiled_jit_target() == target) {
@@ -751,17 +762,37 @@ Realization Pipeline::realize(JITUserContext *context,
             bufs.emplace_back(t, nullptr, sizes);
         }
     }
-    Realization r(std::move(bufs));
+    Realization r{std::move(bufs)};
+
+    compile_jit(target);
+    JITUserContext empty_user_context = {};
+    if (!context) {
+        context = &empty_user_context;
+    }
+    JITFuncCallContext jit_context(context, jit_handlers());
+    JITCallArgs args(contents->inferred_args.size() + r.size());
+    RealizationArg arg{r};
+    prepare_jit_call_arguments(arg, contents->jit_cache.jit_target,
+                               &context, true, args);
+
     // Do an output bounds query if we can. Otherwise just assume the
     // output size is good.
+    int exit_status = 0;
     if (!target.has_feature(Target::NoBoundsQuery)) {
-        realize(context, r, target);
+        exit_status = call_jit_code(args);
     }
-    for (size_t i = 0; i < r.size(); i++) {
-        r[i].allocate();
+    if (exit_status == 0) {
+        // Make the output allocations
+        for (size_t i = 0; i < r.size(); i++) {
+            r[i].allocate();
+        }
+        // Do the actual computation
+        exit_status = call_jit_code(args);
     }
-    // Do the actual computation
-    realize(context, r, target);
+
+    // If we're profiling, report runtimes and reset profiler stats.
+    contents->jit_cache.finish_profiling(context);
+    jit_context.finalize(exit_status);
 
     // Crop back to the requested size if necessary
     bool needs_crop = false;
@@ -943,8 +974,8 @@ Pipeline::make_externs_jit_module(const Target &target,
     return result;
 }
 
-int Pipeline::call_jit_code(const Target &target, const JITCallArgs &args) {
-    return contents->jit_cache.call_jit_code(target, args.store);
+int Pipeline::call_jit_code(const JITCallArgs &args) {
+    return contents->jit_cache.call_jit_code(args.store);
 }
 
 void Pipeline::realize(RealizationArg outputs, const Target &t) {
@@ -957,20 +988,7 @@ void Pipeline::realize(JITUserContext *context,
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
-    if (t.has_feature(Target::OpenGLCompute)) {
-        user_warning << "WARNING: OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.\n";
-    }
-
     debug(2) << "Realizing Pipeline for " << target << "\n";
-
-    if (target.has_unknowns()) {
-        // If we've already jit-compiled for a specific target, use that.
-        target = get_compiled_jit_target();
-        if (target.has_unknowns()) {
-            // Otherwise get the target from the environment
-            target = get_jit_target_from_environment();
-        }
-    }
 
     // We need to make a context for calling the jitted function to
     // carry the the set of custom handlers. Here's how handlers get
@@ -1045,7 +1063,7 @@ void Pipeline::realize(JITUserContext *context,
     // exception.
 
     debug(2) << "Calling jitted function\n";
-    int exit_status = call_jit_code(target, args);
+    int exit_status = call_jit_code(args);
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
@@ -1115,7 +1133,7 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
         }
 
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = call_jit_code(contents->jit_cache.jit_target, args);
+        int exit_status = call_jit_code(args);
         jit_context.finalize(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;

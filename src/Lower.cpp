@@ -9,6 +9,7 @@
 #include "AddAtomicMutex.h"
 #include "AddImageChecks.h"
 #include "AddParameterChecks.h"
+#include "AddSplitFactorChecks.h"
 #include "AllocationBoundsInference.h"
 #include "AsyncProducers.h"
 #include "BoundConstantExtentLoops.h"
@@ -182,6 +183,10 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
     log("Lowering after computation bounds inference:", s);
 
+    debug(1) << "Asserting that all split factors are positive...\n";
+    s = add_split_factor_checks(s, env);
+    log("Lowering after asserting that all split factors are positive:", s);
+
     debug(1) << "Removing extern loops...\n";
     s = remove_extern_loops(s);
     log("Lowering after removing extern loops:", s);
@@ -211,7 +216,6 @@ void lower_impl(const vector<Function> &output_funcs,
 
     bool will_inject_host_copies =
         (t.has_gpu_feature() ||
-         t.has_feature(Target::OpenGLCompute) ||
          t.has_feature(Target::HexagonDma) ||
          (t.arch != Target::Hexagon && (t.has_feature(Target::HVX))));
 
@@ -251,11 +255,10 @@ void lower_impl(const vector<Function> &output_funcs,
     s = split_tuples(s, env);
     log("Lowering after destructuring tuple-valued realizations:", s);
 
-    // OpenGL relies on GPU var canonicalization occurring before
+    // Vulkan relies on GPU var canonicalization occurring before
     // storage flattening.
     if (t.has_gpu_feature() ||
-        t.has_feature(Target::Vulkan) ||
-        t.has_feature(Target::OpenGLCompute)) {
+        t.has_feature(Target::Vulkan)) {
         debug(1) << "Canonicalizing GPU var names...\n";
         s = canonicalize_gpu_vars(s);
         log("Lowering after canonicalizing GPU var names:", s);
@@ -327,8 +330,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after vectorizing:", s);
 
     if (t.has_gpu_feature() ||
-        t.has_feature(Target::Vulkan) ||
-        t.has_feature(Target::OpenGLCompute)) {
+        t.has_feature(Target::Vulkan)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
         log("Lowering after injecting per-block gpu synchronization:", s);

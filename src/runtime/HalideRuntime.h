@@ -1243,9 +1243,13 @@ enum halide_error_code_t {
      * all the values produced by the function. */
     halide_error_code_storage_bound_too_small = -45,
 
+    /** A factor used to split a loop was discovered to be zero or negative at
+     * runtime. */
+    halide_error_code_split_factor_not_positive = -46,
+
     /** "vscale" value of Scalable Vector detected in runtime does not match
      * the vscale value used in compilation. */
-    halide_error_code_vscale_invalid = -46,
+    halide_error_code_vscale_invalid = -47,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1320,7 +1324,12 @@ extern int halide_error_device_dirty_with_no_device_support(void *user_context, 
 extern int halide_error_storage_bound_too_small(void *user_context, const char *func_name, const char *var_name,
                                                 int provided_size, int required_size);
 extern int halide_error_device_crop_failed(void *user_context);
+<<<<<<< HEAD
 extern int halide_error_vscale_invalid(void *user_context, const char *func_name, int runtime_vscale, int compiletime_vscale);
+=======
+extern int halide_error_split_factor_not_positive(void *user_context, const char *func_name, const char *orig, const char *outer, const char *inner, const char *factor_str, int factor);
+
+>>>>>>> main
 // @}
 
 /** Optional features a compilation Target can have.
@@ -1360,8 +1369,6 @@ typedef enum halide_target_feature_t {
     halide_target_feature_opencl,       ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets
     halide_target_feature_cl_atomic64,  ///< Enable 64-bit atomics operations on OpenCL targets
-
-    halide_target_feature_openglcompute,  ///< Enable OpenGL Compute runtime. NOTE: This feature is deprecated and will be removed in Halide 17.
 
     halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
 

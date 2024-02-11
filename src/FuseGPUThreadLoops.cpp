@@ -627,7 +627,6 @@ private:
 
                 if (!may_merge_allocs_of_different_type &&
                     mem_allocs[free_spaces[i]].group[0].type != alloc.type) {
-                    // Types must also match for OpenGLCompute
                     continue;
                 }
 
@@ -649,7 +648,6 @@ private:
 
                 if (!may_merge_allocs_of_different_type &&
                     mem_allocs[free_spaces[i]].group[0].type != alloc.type) {
-                    // Types must also match for OpenGLCompute
                     continue;
                 }
 
@@ -760,7 +758,7 @@ public:
         // lifetimes, and then cluster the groups according to which
         // ones can share a single allocation. For cuda, opencl, and
         // similar we get one big combined allocation per memory
-        // type. For vulkan, openglcompute and direct3d, we also separate by
+        // type. For vulkan and direct3d, we also separate by
         // element type.
         map<pair<MemoryType, Type>, vector<AllocGroup>> clustered_allocs;
 
@@ -1034,8 +1032,7 @@ public:
         : device_api(d),
           thread_id_var_name(unique_name('t')),
           num_threads_var_name(unique_name('t')),
-          may_merge_allocs_of_different_type(device_api != DeviceAPI::OpenGLCompute &&
-                                             device_api != DeviceAPI::D3D12Compute &&
+          may_merge_allocs_of_different_type(device_api != DeviceAPI::D3D12Compute &&
                                              device_api != DeviceAPI::Vulkan &&
                                              device_api != DeviceAPI::WebGPU) {
     }
