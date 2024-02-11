@@ -476,7 +476,6 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vminu", "umin", UInt(32, 2), "min", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
     {nullptr, "smin", Int(64, 2), "min", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::Neon64Unavailable},
     {nullptr, "umin", UInt(64, 2), "min", {UInt(64, 2), UInt(64, 2)}, ArmIntrinsic::Neon64Unavailable},
-    {"vmins", "fmin", Float(32, 2), "min", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vmins", "fmin", Float(16, 4), "min", {Float(16, 4), Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
     {"vmins", "fmin", Float(32, 2), "min", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {nullptr, "fmin", Float(64, 2), "min", {Float(64, 2), Float(64, 2)}},
@@ -498,7 +497,6 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vmaxu", "umax", UInt(32, 2), "max", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
     {nullptr, "smax", Int(64, 2), "max", {Int(64, 2), Int(64, 2)}, ArmIntrinsic::Neon64Unavailable},
     {nullptr, "umax", UInt(64, 2), "max", {UInt(64, 2), UInt(64, 2)}, ArmIntrinsic::Neon64Unavailable},
-    {"vmaxs", "fmax", Float(32, 2), "max", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vmaxs", "fmax", Float(16, 4), "max", {Float(16, 4), Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
     {"vmaxs", "fmax", Float(32, 2), "max", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {nullptr, "fmax", Float(64, 2), "max", {Float(64, 2), Float(64, 2)}},
@@ -939,15 +937,15 @@ void CodeGen_ARM::init_module() {
     }
 
     enum class SIMDFlavors {
-        Neon64,
-        Neon128,
+        NeonWidthX1,
+        NeonWidthX2,
         SVE,
     };
 
     std::vector<SIMDFlavors> flavors;
     if (has_neon) {
-        flavors.push_back(SIMDFlavors::Neon64);
-        flavors.push_back(SIMDFlavors::Neon128);
+        flavors.push_back(SIMDFlavors::NeonWidthX1);
+        flavors.push_back(SIMDFlavors::NeonWidthX2);
     }
     if (has_sve) {
         flavors.push_back(SIMDFlavors::SVE);
@@ -994,13 +992,15 @@ void CodeGen_ARM::init_module() {
                     continue;
                 }
             }
-            if ((flavor == SIMDFlavors::Neon64) &&
-                (intrin.flags & ArmIntrinsic::Neon64Unavailable)) {
+            if ((target.bits == 64) &&
+                (intrin.flags & ArmIntrinsic::Neon64Unavailable) &&
+                !is_sve) {
                 continue;
             }
-            if ((flavor == SIMDFlavors::Neon128) &&
-                !(intrin.flags & ArmIntrinsic::Neon64Unavailable) &&
+            // Already declared in the x1 pass.
+            if ((flavor == SIMDFlavors::NeonWidthX2) &&
                 !(intrin.flags & ArmIntrinsic::HalfWidth)) {
+              //              debug(0) << intrin_name << "\n";
                 continue;
             }
 
@@ -1017,10 +1017,10 @@ void CodeGen_ARM::init_module() {
             int width_factor = 1;
             if (!((intrin.ret_type.lanes <= 1) && (intrin.flags & ArmIntrinsic::NoMangle))) {
                 switch (flavor) {
-                case SIMDFlavors::Neon64:
+                case SIMDFlavors::NeonWidthX1:
                     width_factor = 1;
                     break;
-                case SIMDFlavors::Neon128:
+                case SIMDFlavors::NeonWidthX2:
                     width_factor = 2;
                     break;
                 case SIMDFlavors::SVE:
