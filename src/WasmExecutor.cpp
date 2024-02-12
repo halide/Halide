@@ -101,11 +101,6 @@ struct debug_sink {
 // BDMalloc
 // ---------------------
 
-template<typename T>
-inline T align_up(T p, int alignment = 32) {
-    return (p + alignment - 1) & ~(alignment - 1);
-}
-
 // Debugging our Malloc is extremely noisy and usually undesired
 
 #define BDMALLOC_DEBUG_LEVEL 0
@@ -708,7 +703,7 @@ wasm32_ptr_t hostbuf_to_wasmbuf(WabtContext &wabt_context, const halide_buffer_t
     const size_t dims_size_in_bytes = sizeof(halide_dimension_t) * src->dimensions;
     const size_t dims_offset = sizeof(wasm_halide_buffer_t);
     const size_t mem_needed_base = sizeof(wasm_halide_buffer_t) + dims_size_in_bytes;
-    const size_t host_offset = align_up(mem_needed_base);
+    const size_t host_offset = align_up(mem_needed_base, 32);
     const size_t host_size_in_bytes = src->size_in_bytes();
     const size_t mem_needed = host_offset + host_size_in_bytes;
 
@@ -1613,7 +1608,7 @@ wasm32_ptr_t hostbuf_to_wasmbuf(const Local<Context> &context, const halide_buff
     const size_t dims_size_in_bytes = sizeof(halide_dimension_t) * src->dimensions;
     const size_t dims_offset = sizeof(wasm_halide_buffer_t);
     const size_t mem_needed_base = sizeof(wasm_halide_buffer_t) + dims_size_in_bytes;
-    const size_t host_offset = align_up(mem_needed_base);
+    const size_t host_offset = align_up(mem_needed_base, 32);
     const size_t host_size_in_bytes = src->size_in_bytes();
     const size_t mem_needed = host_offset + host_size_in_bytes;
 

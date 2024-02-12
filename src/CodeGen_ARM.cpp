@@ -117,11 +117,8 @@ protected:
                                           const Type &ret_type,
                                           const std::string &mangled_name,
                                           const std::vector<Type> &arg_types,
-                                          bool add_inactive_arg,  // for SVE
-                                          bool add_predicate,     // for SVE
-                                          bool split_arg0,
-                                          bool scalars_are_vectors,
-                                          bool force_fixed_vector_types);
+                                          int intrinsic_flags,
+                                          bool sve_intrinsic);
 
     void init_module() override;
     void compile_func(const LoweredFunc &f,
@@ -189,13 +186,6 @@ protected:
     }
     bool supports_call_as_float16(const Call *op) const override;
 
-    // TODO(zvookin): Surely there is a function to do this already.
-    template<typename T>
-    T align_up(T x, int n) const {
-        return (x + n - 1) / n * n;
-    }
-
-    // TODO(<issue needed>): See if we need wrapper stuff at call sites to make sure result has proper scalable setting.
     /** Make predicate vector which starts with consecutive true followed by consecutive false */
     Expr make_vector_predicate_1s_0s(int true_lanes, int false_lanes) {
         internal_assert((true_lanes + false_lanes) != 0) << "CodeGen_ARM::make_vector_predicate_1s_0s called with total of 0 lanes.\n";
@@ -368,47 +358,47 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vabs", "abs", UInt(8, 8), "abs", {Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
     {"vabs", "abs", UInt(16, 4), "abs", {Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
     {"vabs", "abs", UInt(32, 2), "abs", {Int(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
-    {"llvm.fabs", "llvm.fabs", Float(16, 4), "abs", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
-    {"llvm.fabs", "llvm.fabs", Float(32, 2), "abs", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.fabs", "llvm.fabs", Float(64, 2), "abs", {Float(64, 2)}},
-    {"llvm.fabs.f16", "llvm.fabs.f16", Float(16), "abs", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
-    {"llvm.fabs.f32", "llvm.fabs.f32", Float(32), "abs", {Float(32)}, ArmIntrinsic::NoMangle},
-    {"llvm.fabs.f64", "llvm.fabs.f64", Float(64), "abs", {Float(64)}, ArmIntrinsic::NoMangle},
+    {"llvm.fabs", "llvm.fabs", Float(16, 4), "abs", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs", "llvm.fabs", Float(32, 2), "abs", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs", "llvm.fabs", Float(64, 2), "abs", {Float(64, 2)},  ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs.f16", "llvm.fabs.f16", Float(16), "abs", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs.f32", "llvm.fabs.f32", Float(32), "abs", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.fabs.f64", "llvm.fabs.f64", Float(64), "abs", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
 
-    {"llvm.sqrt", "llvm.sqrt", Float(16, 4), "sqrt_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
-    {"llvm.sqrt", "llvm.sqrt", Float(32, 2), "sqrt_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.sqrt", "llvm.sqrt", Float(64, 2), "sqrt_f64", {Float(64, 2)}},
-    {"llvm.sqrt.f16", "llvm.sqrt.f16", Float(16), "sqrt_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
-    {"llvm.sqrt.f32", "llvm.sqrt.f32", Float(32), "sqrt_f32", {Float(32)}, ArmIntrinsic::NoMangle},
-    {"llvm.sqrt.f64", "llvm.sqrt.f64", Float(64), "sqrt_f64", {Float(64)}, ArmIntrinsic::NoMangle},
+    {"llvm.sqrt", "llvm.sqrt", Float(16, 4), "sqrt_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.sqrt", "llvm.sqrt", Float(32, 2), "sqrt_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.sqrt", "llvm.sqrt", Float(64, 2), "sqrt_f64", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.sqrt.f16", "llvm.sqrt.f16", Float(16), "sqrt_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.sqrt.f32", "llvm.sqrt.f32", Float(32), "sqrt_f32", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.sqrt.f64", "llvm.sqrt.f64", Float(64), "sqrt_f64", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
 
-    {"llvm.floor", "llvm.floor", Float(16, 4), "floor_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
-    {"llvm.floor", "llvm.floor", Float(32, 2), "floor_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.floor", "llvm.floor", Float(64, 2), "floor_f64", {Float(64, 2)}},
-    {"llvm.floor.f16", "llvm.floor.f16", Float(16), "floor_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
-    {"llvm.floor.f32", "llvm.floor.f32", Float(32), "floor_f32", {Float(32)}, ArmIntrinsic::NoMangle},
-    {"llvm.floor.f64", "llvm.floor.f64", Float(64), "floor_f64", {Float(64)}, ArmIntrinsic::NoMangle},
+    {"llvm.floor", "llvm.floor", Float(16, 4), "floor_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.floor", "llvm.floor", Float(32, 2), "floor_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.floor", "llvm.floor", Float(64, 2), "floor_f64", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.floor.f16", "llvm.floor.f16", Float(16), "floor_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.floor.f32", "llvm.floor.f32", Float(32), "floor_f32", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.floor.f64", "llvm.floor.f64", Float(64), "floor_f64", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
 
-    {"llvm.ceil", "llvm.ceil", Float(16, 4), "ceil_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
-    {"llvm.ceil", "llvm.ceil", Float(32, 2), "ceil_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.ceil", "llvm.ceil", Float(64, 2), "ceil_f64", {Float(64, 2)}},
-    {"llvm.ceil.f16", "llvm.ceil.f16", Float(16), "ceil_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
-    {"llvm.ceil.f32", "llvm.ceil.f32", Float(32), "ceil_f32", {Float(32)}, ArmIntrinsic::NoMangle},
-    {"llvm.ceil.f64", "llvm.ceil.f64", Float(64), "ceil_f64", {Float(64)}, ArmIntrinsic::NoMangle},
+    {"llvm.ceil", "llvm.ceil", Float(16, 4), "ceil_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.ceil", "llvm.ceil", Float(32, 2), "ceil_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.ceil", "llvm.ceil", Float(64, 2), "ceil_f64", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.ceil.f16", "llvm.ceil.f16", Float(16), "ceil_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.ceil.f32", "llvm.ceil.f32", Float(32), "ceil_f32", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.ceil.f64", "llvm.ceil.f64", Float(64), "ceil_f64", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
 
-    {"llvm.trunc", "llvm.trunc", Float(16, 4), "trunc_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
-    {"llvm.trunc", "llvm.trunc", Float(32, 2), "trunc_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.trunc", "llvm.trunc", Float(64, 2), "trunc_f64", {Float(64, 2)}},
-    {"llvm.trunc.f16", "llvm.trunc.f16", Float(16), "trunc_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
-    {"llvm.trunc.f32", "llvm.trunc.f32", Float(32), "trunc_f32", {Float(32)}, ArmIntrinsic::NoMangle},
-    {"llvm.trunc.f64", "llvm.trunc.f64", Float(64), "trunc_f64", {Float(64)}, ArmIntrinsic::NoMangle},
+    {"llvm.trunc", "llvm.trunc", Float(16, 4), "trunc_f16", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.trunc", "llvm.trunc", Float(32, 2), "trunc_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.trunc", "llvm.trunc", Float(64, 2), "trunc_f64", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.trunc.f16", "llvm.trunc.f16", Float(16), "trunc_f16", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.trunc.f32", "llvm.trunc.f32", Float(32), "trunc_f32", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.trunc.f64", "llvm.trunc.f64", Float(64), "trunc_f64", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
 
-    {"llvm.roundeven", "llvm.roundeven", Float(16, 4), "round", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
-    {"llvm.roundeven", "llvm.roundeven", Float(32, 2), "round", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.roundeven", "llvm.roundeven", Float(64, 2), "round", {Float(64, 2)}},
-    {"llvm.roundeven.f16", "llvm.roundeven.f16", Float(16), "round", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
-    {"llvm.roundeven.f32", "llvm.roundeven.f32", Float(32), "round", {Float(32)}, ArmIntrinsic::NoMangle},
-    {"llvm.roundeven.f64", "llvm.roundeven.f64", Float(64), "round", {Float(64)}, ArmIntrinsic::NoMangle},
+    {"llvm.roundeven", "llvm.roundeven", Float(16, 4), "round", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16 | ArmIntrinsic::SveNoPredicate},
+    {"llvm.roundeven", "llvm.roundeven", Float(32, 2), "round", {Float(32, 2)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveNoPredicate},
+    {"llvm.roundeven", "llvm.roundeven", Float(64, 2), "round", {Float(64, 2)}, ArmIntrinsic::SveNoPredicate},
+    {"llvm.roundeven.f16", "llvm.roundeven.f16", Float(16), "round", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.roundeven.f32", "llvm.roundeven.f32", Float(32), "round", {Float(32)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
+    {"llvm.roundeven.f64", "llvm.roundeven.f64", Float(64), "round", {Float(64)}, ArmIntrinsic::NoMangle | ArmIntrinsic::SveNoPredicate},
 
     // SABD, UABD - Absolute difference
     {"vabds", "sabd", UInt(8, 8), "absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -839,20 +829,21 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
                                                    const Type &ret_type,
                                                    const std::string &mangled_name,
                                                    const std::vector<Type> &arg_types,
-                                                   bool add_inactive_arg,
-                                                   bool add_predicate,
-                                                   bool split_arg0,
-                                                   bool scalars_are_vectors,
-                                                   bool force_fixed_vector_types) {
+                                                   int intrinsic_flags,
+                                                   bool sve_intrinsic) {
 
     auto to_llvm_type = [&](const Type &t) {
-        return llvm_type_with_constraint(t, scalars_are_vectors,
-                                         force_fixed_vector_types ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
+      return llvm_type_with_constraint(t, (intrinsic_flags & ArmIntrinsic::ScalarsAreVectors),
+                                         !sve_intrinsic ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
     };
 
     llvm::Type *llvm_ret_type = to_llvm_type(ret_type);
     std::vector<llvm::Type *> llvm_arg_types;
     std::transform(arg_types.begin(), arg_types.end(), std::back_inserter(llvm_arg_types), to_llvm_type);
+
+    const bool add_predicate = sve_intrinsic && !(intrinsic_flags & ArmIntrinsic::SveNoPredicate);
+    bool add_inactive_arg = sve_intrinsic && (intrinsic_flags & ArmIntrinsic::SveInactiveArg);
+    bool split_arg0 = intrinsic_flags & ArmIntrinsic::SplitArg0;
 
     if (!(add_inactive_arg || add_predicate || split_arg0)) {
         // No need to wrap
@@ -1073,16 +1064,9 @@ void CodeGen_ARM::init_module() {
             }
             string mangled_name = mangled_name_builder.str();
 
-            const bool require_predicate = is_sve && !is_vanilla_intrinsic && !(intrin.flags & ArmIntrinsic::SveNoPredicate);
-
             llvm::Function *intrin_impl = define_intrin_wrapper(
-                intrin.name,
-                ret_type, mangled_name, arg_types,
-                is_sve && intrin.flags & ArmIntrinsic::SveInactiveArg,
-                require_predicate,
-                intrin.flags & ArmIntrinsic::SplitArg0,
-                intrin.flags & ArmIntrinsic::ScalarsAreVectors,
-                !is_sve);
+                intrin.name, ret_type, mangled_name, arg_types,
+                intrin.flags, is_sve);
 
             function_does_not_access_memory(intrin_impl);
             intrin_impl->addFnAttr(llvm::Attribute::NoUnwind);
