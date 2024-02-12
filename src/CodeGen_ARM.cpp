@@ -202,8 +202,10 @@ protected:
 CodeGen_ARM::CodeGen_ARM(const Target &target)
     : CodeGen_Posix(target) {
 
-    // TODO(issue needed): See if use_llvm_vector_intrinsics can replace some special
-    // handling in this file, specifically in Load and Store visitors.
+    // TODO(https://github.com/halide/Halide/issues/8088): See if
+    // use_llvm_vp_intrinsics can replace architecture specific code in this
+    // file, specifically in Load and Store visitors.  Depends on quality of
+    // LLVM aarch64 backend lowering for these intrinsics on SVE2.
 
     // RADDHN - Add and narrow with rounding
     // These must come before other narrowing rounding shift patterns
