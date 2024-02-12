@@ -833,7 +833,7 @@ llvm::Function *CodeGen_ARM::define_intrin_wrapper(const std::string &inner_name
                                                    bool sve_intrinsic) {
 
     auto to_llvm_type = [&](const Type &t) {
-      return llvm_type_with_constraint(t, (intrinsic_flags & ArmIntrinsic::ScalarsAreVectors),
+        return llvm_type_with_constraint(t, (intrinsic_flags & ArmIntrinsic::ScalarsAreVectors),
                                          !sve_intrinsic ? VectorTypeConstraint::Fixed : VectorTypeConstraint::VScale);
     };
 
