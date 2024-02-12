@@ -1478,8 +1478,8 @@ void solve_test() {
     check_solve(min(x + y, x - z), x + min(y, 0 - z));
     check_solve(max(x + y, x - z), x + max(y, 0 - z));
 
-    check_solve((Broadcast::make(x, 4) + 10) / 5,
-                (Broadcast::make(x, 4)) / 5 + 2);
+    check_solve((5 * Broadcast::make(x, 4) + y) / 5,
+                Broadcast::make(x, 4) + (Broadcast::make(y, 4) / 5));
 
     debug(0) << "Solve test passed\n";
 }
