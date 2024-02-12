@@ -313,7 +313,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
         stack_size += cg->get_requested_alloca_total();
     }
 
-    stack_size = align_up(stack_size);
+    stack_size = align_up(stack_size, 32);
     wdebug(1) << "Requesting stack size of " << stack_size << "\n";
 
     std::unique_ptr<llvm::Module> llvm_module =
