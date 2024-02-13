@@ -1099,10 +1099,11 @@ void CodeGen_ARM::begin_func(LinkageType linkage, const std::string &simple_name
                              const std::string &extern_name, const std::vector<LoweredArgument> &args) {
     CodeGen_Posix::begin_func(linkage, simple_name, extern_name, args);
 
-    // TODO(issue neeed): There is likely a better way to ensure this is only
-    // generated for the outermost function that is being compiled. Avoiding the
-    // assert on inner functions is both an efficiency and a correctness issue
-    // as the assertion code may not compile in all contexts.
+    // TODO(https://github.com/halide/Halide/issues/8092): There is likely a
+    // better way to ensure this is only generated for the outermost function
+    // that is being compiled. Avoiding the assert on inner functions is both an
+    // efficiency and a correctness issue as the assertion code may not compile
+    // in all contexts.
     if (linkage != LinkageType::Internal) {
         int effective_vscale = target_vscale();
         if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
