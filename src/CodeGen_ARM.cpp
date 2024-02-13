@@ -350,12 +350,11 @@ struct ArmIntrinsic {
 
 // clang-format off
 const ArmIntrinsic intrinsic_defs[] = {
-    // NOTE about SVE2 intrinsics:
+    // TODO(https://github.com/halide/Halide/issues/8093):
     // Some of the Arm intrinsic have the same name between Neon and SVE2 but with different behavior. For example,
     // widening, narrowing and pair-wise operations which are performed in even (top) and odd (bottom) lanes basis in SVE,
     // while in high and low lanes in Neon. Therefore, peep-hole code-gen with those SVE2 intrinsic is not enabled for now,
     // because additional interleaving/deinterleaveing would be required to restore the element order in a vector.
-    // TODO(zvookin): Add issue for this.
 
     {"vabs", "abs", UInt(8, 8), "abs", {Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
     {"vabs", "abs", UInt(16, 4), "abs", {Int(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::SveInactiveArg},
