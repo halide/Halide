@@ -971,12 +971,6 @@ void CodeGen_ARM::init_module() {
         for (const auto flavor : flavors) {
             const bool is_sve = (flavor == SIMDFlavors::SVE);
 
-            // TODO(<issue needed>): This is unecessarily confusing. The flags
-            // logic on the intrinsics needs to be rewritten. Specifically they
-            // should likely all be declared witha consistent width. Not doing
-            // so now to make changes more incremental for reliabilty while
-            // adding SVE.
-
             // Skip intrinsics that are NEON or SVE only depending on whether compiling for SVE.
             if (is_sve) {
                 if (intrin.flags & ArmIntrinsic::SveUnavailable) {
@@ -2517,7 +2511,6 @@ bool CodeGen_ARM::use_soft_float_abi() const {
 
 int CodeGen_ARM::native_vector_bits() const {
     if (target.has_feature(Target::SVE) || target.has_feature(Target::SVE2)) {
-        // TODO(<issue needed>): Minimum of 128 bits. Probably should limit at 2048 as well.
         return std::max(target.vector_bits, 128);
     } else {
         return 128;
