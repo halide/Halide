@@ -3,10 +3,58 @@
 
 #include "Halide.h"
 #include "halide_test_dirs.h"
+#include "halide_thread_pool.h"
 #include "test_sharding.h"
 
 #include <fstream>
 #include <iostream>
+
+namespace {
+
+using namespace Halide;
+
+// Some exprs of each type to use in checked expressions. These will turn
+// into loads to thread-local image params.
+Expr input(const Type &t, const Expr &arg) {
+    return Internal::Call::make(t, "input", {arg}, Internal::Call::Extern);
+}
+Expr in_f16(const Expr &arg) {
+    return input(Float(16), arg);
+}
+Expr in_bf16(const Expr &arg) {
+    return input(BFloat(16), arg);
+}
+Expr in_f32(const Expr &arg) {
+    return input(Float(32), arg);
+}
+Expr in_f64(const Expr &arg) {
+    return input(Float(64), arg);
+}
+Expr in_i8(const Expr &arg) {
+    return input(Int(8), arg);
+}
+Expr in_i16(const Expr &arg) {
+    return input(Int(16), arg);
+}
+Expr in_i32(const Expr &arg) {
+    return input(Int(32), arg);
+}
+Expr in_i64(const Expr &arg) {
+    return input(Int(64), arg);
+}
+Expr in_u8(const Expr &arg) {
+    return input(UInt(8), arg);
+}
+Expr in_u16(const Expr &arg) {
+    return input(UInt(16), arg);
+}
+Expr in_u32(const Expr &arg) {
+    return input(UInt(32), arg);
+}
+Expr in_u64(const Expr &arg) {
+    return input(UInt(64), arg);
+}
+}  // namespace
 
 namespace Halide {
 struct TestResult {
@@ -33,32 +81,18 @@ public:
     std::string filter{"*"};
     std::string output_directory{Internal::get_test_tmp_dir()};
     std::vector<Task> tasks;
-    std::mt19937 rng;
 
     Target target;
 
-    ImageParam in_f32{Float(32), 1, "in_f32"};
-    ImageParam in_f64{Float(64), 1, "in_f64"};
-    ImageParam in_f16{Float(16), 1, "in_f16"};
-    ImageParam in_bf16{BFloat(16), 1, "in_bf16"};
-    ImageParam in_i8{Int(8), 1, "in_i8"};
-    ImageParam in_u8{UInt(8), 1, "in_u8"};
-    ImageParam in_i16{Int(16), 1, "in_i16"};
-    ImageParam in_u16{UInt(16), 1, "in_u16"};
-    ImageParam in_i32{Int(32), 1, "in_i32"};
-    ImageParam in_u32{UInt(32), 1, "in_u32"};
-    ImageParam in_i64{Int(64), 1, "in_i64"};
-    ImageParam in_u64{UInt(64), 1, "in_u64"};
-
-    const std::vector<ImageParam> image_params{in_f32, in_f64, in_f16, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
-    const std::vector<Argument> arg_types{in_f32, in_f64, in_f16, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
     int W;
     int H;
+
+    int rng_seed;
 
     using Sharder = Halide::Internal::Test::Sharder;
 
     SimdOpCheckTest(const Target t, int w, int h)
-        : target(t), W(w), H(h) {
+        : target(t), W(w), H(h), rng_seed(0) {
         target = target
                      .with_feature(Target::NoBoundsQuery)
                      .with_feature(Target::NoAsserts)
@@ -67,7 +101,7 @@ public:
     virtual ~SimdOpCheckTest() = default;
 
     void set_seed(int seed) {
-        rng.seed(seed);
+        rng_seed = seed;
     }
 
     virtual bool can_run_code() const {
@@ -112,7 +146,12 @@ public:
         return can_run_the_code;
     }
 
-    virtual void compile_and_check(Func error, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) {
+    virtual void compile_and_check(Func error,
+                                   const std::string &op,
+                                   const std::string &name,
+                                   int vector_width,
+                                   const std::vector<Argument> &arg_types,
+                                   std::ostringstream &error_msg) {
         std::string fn_name = "test_" + name;
         std::string file_name = output_directory + fn_name;
 
@@ -197,6 +236,56 @@ public:
     TestResult check_one(const std::string &op, const std::string &name, int vector_width, Expr e) {
         std::ostringstream error_msg;
 
+        // Map the input calls in the Expr to loads to local
+        // imageparams, so that we're not sharing state across threads.
+        std::vector<ImageParam> image_params{
+            ImageParam{Float(32), 1, "in_f32"},
+            ImageParam{Float(64), 1, "in_f64"},
+            ImageParam{Float(16), 1, "in_f16"},
+            ImageParam{BFloat(16), 1, "in_bf16"},
+            ImageParam{Int(8), 1, "in_i8"},
+            ImageParam{UInt(8), 1, "in_u8"},
+            ImageParam{Int(16), 1, "in_i16"},
+            ImageParam{UInt(16), 1, "in_u16"},
+            ImageParam{Int(32), 1, "in_i32"},
+            ImageParam{UInt(32), 1, "in_u32"},
+            ImageParam{Int(64), 1, "in_i64"},
+            ImageParam{UInt(64), 1, "in_u64"}};
+
+        for (auto &p : image_params) {
+            const int alignment_bytes = image_param_alignment();
+            p.set_host_alignment(alignment_bytes);
+            const int alignment = alignment_bytes / p.type().bytes();
+            p.dim(0).set_min((p.dim(0).min() / alignment) * alignment);
+        }
+
+        const std::vector<Argument> arg_types(image_params.begin(), image_params.end());
+
+        class HookUpImageParams : public Internal::IRMutator {
+            using Internal::IRMutator::visit;
+
+            Expr visit(const Internal::Call *op) override {
+                if (op->name == "input") {
+                    for (auto &p : image_params) {
+                        if (p.type() == op->type) {
+                            return p(mutate(op->args[0]));
+                        }
+                    }
+                } else if (op->call_type == Internal::Call::Halide && !op->func.weak) {
+                    Internal::Function f(op->func);
+                    f.mutate(this);
+                }
+                return Internal::IRMutator::visit(op);
+            }
+            const std::vector<ImageParam> &image_params;
+
+        public:
+            HookUpImageParams(const std::vector<ImageParam> &image_params)
+                : image_params(image_params) {
+            }
+        } hook_up_image_params(image_params);
+        e = hook_up_image_params.mutate(e);
+
         class HasInlineReduction : public Internal::IRVisitor {
             using Internal::IRVisitor::visit;
             void visit(const Internal::Call *op) override {
@@ -250,42 +339,70 @@ public:
         Halide::Func error("error_" + name);
         error() = Halide::cast<double>(maximum(absd(f(r_check.x, r_check.y), f_scalar(r_check.x, r_check.y))));
 
-        setup_images();
-        compile_and_check(error, op, name, vector_width, error_msg);
+        compile_and_check(error, op, name, vector_width, arg_types, error_msg);
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
             Target run_target = get_run_target();
 
-            error.infer_input_bounds({}, run_target);
-            // Fill the inputs with noise
-            for (auto p : image_params) {
-                Halide::Buffer<> buf = p.get();
-                if (!buf.defined()) continue;
-                assert(buf.data());
-                Type t = buf.type();
-                // For floats/doubles, we only use values that aren't
-                // subject to rounding error that may differ between
-                // vectorized and non-vectorized versions
-                if (t == Float(32)) {
-                    buf.as<float>().for_each_value([&](float &f) { f = (rng() & 0xfff) / 8.0f - 0xff; });
-                } else if (t == Float(64)) {
-                    buf.as<double>().for_each_value([&](double &f) { f = (rng() & 0xfff) / 8.0 - 0xff; });
-                } else if (t == Float(16)) {
-                    buf.as<float16_t>().for_each_value([&](float16_t &f) { f = float16_t((rng() & 0xff) / 8.0f - 0xf); });
-                } else {
-                    // Random bits is fine
-                    for (uint32_t *ptr = (uint32_t *)buf.data();
-                         ptr != (uint32_t *)buf.data() + buf.size_in_bytes() / 4;
-                         ptr++) {
-                        // Never use the top four bits, to avoid
-                        // signed integer overflow.
-                        *ptr = ((uint32_t)rng()) & 0x0fffffff;
+            // Make some unallocated input buffers
+            std::vector<Runtime::Buffer<>> inputs(image_params.size());
+
+            std::vector<Argument> args(image_params.size());
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = image_params[i];
+                inputs[i] = Runtime::Buffer<>(args[i].type, nullptr, 0);
+            }
+            auto callable = error.compile_to_callable(args, run_target);
+
+            Runtime::Buffer<double> output = Runtime::Buffer<double>::make_scalar();
+            output(0) = 1;  // To ensure we'll fail if it's never written to
+
+            // Do the bounds query call
+            assert(inputs.size() == 12);
+            (void)callable(inputs[0], inputs[1], inputs[2], inputs[3],
+                           inputs[4], inputs[5], inputs[6], inputs[7],
+                           inputs[8], inputs[9], inputs[10], inputs[11],
+                           output);
+
+            std::mt19937 rng;
+            rng.seed(rng_seed);
+
+            // Allocate the input buffers and fill them with noise
+            for (size_t i = 0; i < inputs.size(); i++) {
+                if (inputs[i].size_in_bytes()) {
+                    inputs[i].allocate();
+
+                    Type t = inputs[i].type();
+                    // For floats/doubles, we only use values that aren't
+                    // subject to rounding error that may differ between
+                    // vectorized and non-vectorized versions
+                    if (t == Float(32)) {
+                        inputs[i].as<float>().for_each_value([&](float &f) { f = (rng() & 0xfff) / 8.0f - 0xff; });
+                    } else if (t == Float(64)) {
+                        inputs[i].as<double>().for_each_value([&](double &f) { f = (rng() & 0xfff) / 8.0 - 0xff; });
+                    } else if (t == Float(16)) {
+                        inputs[i].as<float16_t>().for_each_value([&](float16_t &f) { f = float16_t((rng() & 0xff) / 8.0f - 0xf); });
+                    } else {
+                        // Random bits is fine
+                        for (uint32_t *ptr = (uint32_t *)inputs[i].data();
+                             ptr != (uint32_t *)inputs[i].data() + inputs[i].size_in_bytes() / 4;
+                             ptr++) {
+                            // Never use the top four bits, to avoid
+                            // signed integer overflow.
+                            *ptr = ((uint32_t)rng()) & 0x0fffffff;
+                        }
                     }
                 }
             }
-            Realization r = error.realize();
-            double e = Buffer<double>(r[0])();
+
+            // Do the real call
+            (void)callable(inputs[0], inputs[1], inputs[2], inputs[3],
+                           inputs[4], inputs[5], inputs[6], inputs[7],
+                           inputs[8], inputs[9], inputs[10], inputs[11],
+                           output);
+
+            double e = output(0);
             // Use a very loose tolerance for floating point tests. The
             // kinds of bugs we're looking for are codegen bugs that
             // return the wrong value entirely, not floating point
@@ -329,16 +446,10 @@ public:
         tasks.emplace_back(Task{op, name, vector_width, e});
     }
     virtual void add_tests() = 0;
-    virtual void setup_images() {
-        for (auto p : image_params) {
-            p.reset();
-
-            const int alignment_bytes = 16;
-            p.set_host_alignment(alignment_bytes);
-            const int alignment = alignment_bytes / p.type().bytes();
-            p.dim(0).set_min((p.dim(0).min() / alignment) * alignment);
-        }
+    virtual int image_param_alignment() {
+        return 16;
     }
+
     virtual bool test_all() {
         /* First add some tests based on the target */
         add_tests();
@@ -348,21 +459,33 @@ public:
         const std::string run_target_str = run_target.to_string();
 
         Sharder sharder;
-        bool success = true;
+
+        Halide::Tools::ThreadPool<TestResult> pool;
+        std::vector<std::future<TestResult>> futures;
+
         for (size_t t = 0; t < tasks.size(); t++) {
             if (!sharder.should_run(t)) continue;
             const auto &task = tasks.at(t);
-            auto result = check_one(task.op, task.name, task.vector_width, task.expr);
+            futures.push_back(pool.async([&]() {
+                return check_one(task.op, task.name, task.vector_width, task.expr);
+            }));
+        }
+
+        for (auto &f : futures) {
+            auto result = f.get();
             constexpr int tabstop = 32;
             const int spaces = std::max(1, tabstop - (int)result.op.size());
             std::cout << result.op << std::string(spaces, ' ') << "(" << run_target_str << ")\n";
             if (!result.error_msg.empty()) {
                 std::cerr << result.error_msg;
-                success = false;
+                // The thread-pool destructor will block until in-progress tasks
+                // are done, and then will discard any tasks that haven't been
+                // launched yet.
+                return false;
             }
         }
 
-        return success;
+        return true;
     }
 
     template<typename SIMDOpCheckT>
