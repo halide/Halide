@@ -12,7 +12,7 @@ extern "C" {
 
 // In Clang 15 and later, this function is passed a uint16... but in the xmm0 register on x86-64.
 // So we'll declare it as a float and just grab the upper 16 bits.
-__attribute__((weak)) float __extendhfsf2(float actually_a_float16) {
+__attribute__((weak, visibility("default"))) float __extendhfsf2(float actually_a_float16) {
     uint16_t data;
     memcpy(&data, &actually_a_float16, sizeof(data));
     return (float)Halide::float16_t::make_from_bits(data);
@@ -20,7 +20,7 @@ __attribute__((weak)) float __extendhfsf2(float actually_a_float16) {
 
 #else
 
-__attribute__((weak)) float __extendhfsf2(uint16_t data) {
+__attribute__((weak, visibility("default"))) float __extendhfsf2(uint16_t data) {
     return (float)Halide::float16_t::make_from_bits(data);
 }
 
