@@ -7,7 +7,6 @@
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeOpenCL.h"
-#include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeQurt.h"
 #include "HalideRuntimeVulkan.h"
 #include "HalideRuntimeWebGPU.h"
@@ -86,6 +85,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error_param_too_small_u64,
     (void *)&halide_error_requirement_failed,
     (void *)&halide_error_specialize_fail,
+    (void *)&halide_error_split_factor_not_positive,
     (void *)&halide_error_unaligned_host_ptr,
     (void *)&halide_error_storage_bound_too_small,
     (void *)&halide_error_device_crop_failed,
@@ -160,12 +160,6 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_opencl_set_device_type,
     (void *)&halide_opencl_set_platform_name,
     (void *)&halide_opencl_wrap_cl_mem,
-    (void *)&halide_opengl_create_context,
-    (void *)&halide_opengl_get_proc_address,
-    (void *)&halide_openglcompute_device_interface,
-    (void *)&halide_openglcompute_initialize_kernels,
-    (void *)&halide_openglcompute_finalize_kernels,
-    (void *)&halide_openglcompute_run,
     (void *)&halide_pointer_to_string,
     (void *)&halide_print,
     (void *)&halide_profiler_get_pipeline_state,

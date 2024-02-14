@@ -23,16 +23,10 @@ public:
     SimdOpCheckHVX(Target t, int w = 768 /*256*3*/, int h = 128)
         : SimdOpCheckTest(t, w, h) {
     }
-    void setup_images() override {
-        for (auto p : image_params) {
-            p.reset();
-            // HVX needs 128 byte alignment
-            constexpr int kHostAlignmentBytes = 128;
-            p.set_host_alignment(kHostAlignmentBytes);
-            Expr min = p.dim(0).min();
-            p.dim(0).set_min((min / 128) * 128);
-        }
+    int image_param_alignment() override {
+        return 128;
     }
+
     void add_tests() override {
         Expr f32_1 = in_f32(x), f32_2 = in_f32(x + 16), f32_3 = in_f32(x + 32);
         Expr f64_1 = in_f64(x), f64_2 = in_f64(x + 16), f64_3 = in_f64(x + 32);

@@ -663,15 +663,15 @@ int main(int argc, char **argv) {
             // Always turn on f16c when using avx. Sandy Bridge had avx without
             // f16c, but f16c is orthogonal to everything else, so there's no
             // real reason to test avx without it.
-            Target("x86-64-linux-sse41-avx-f16c"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2"),
+            Target("x86-64-linux-sse41-avx-f16c-fma"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2"),
             // See above: don't test avx512 without extra features, the test
             // isn't yet set up to test it properly.
             // Target("x86-64-linux-sse41-avx-avx2-avx512"),
             // Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_knl"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
         });
 }

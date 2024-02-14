@@ -712,22 +712,6 @@ function(_Halide_add_targets_to_runtime TARGET)
 endfunction()
 
 function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
-    # TODO(https://github.com/halide/Halide/issues/5633): verify that this is correct & necessary for OpenGLCompute
-    if ("${ARGN}" MATCHES "openglcompute")
-        if ("${ARGN}" MATCHES "egl")
-            find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
-            target_link_libraries(${TARGET} ${VISIBILITY} OpenGL::OpenGL OpenGL::EGL)
-        else ()
-            if ("${ARGN}" MATCHES "linux" OR ("${ARGN}" MATCHES "host" AND Halide_HOST_TARGET MATCHES "linux"))
-                find_package(X11 REQUIRED)
-                target_link_libraries(${TARGET} ${VISIBILITY} X11::X11)
-            endif ()
-
-            find_package(OpenGL REQUIRED)
-            target_link_libraries(${TARGET} ${VISIBILITY} OpenGL::GL)
-        endif ()
-    endif ()
-
     if ("${ARGN}" MATCHES "vulkan")
         find_package(Vulkan REQUIRED)
         target_link_libraries(${TARGET} ${VISIBILITY} Vulkan::Vulkan)

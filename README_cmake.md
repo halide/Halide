@@ -500,23 +500,6 @@ If the CMake version is lower than 3.18, the deprecated [`FindCUDA`][findcuda]
 module will be used instead. It reads the variable `CUDA_TOOLKIT_ROOT_DIR`
 instead of `CUDAToolkit_ROOT` above.
 
-TODO(https://github.com/halide/Halide/issues/5633): update this section for OpenGLCompute, which needs some (but maybe not all) of this.
-
-When targeting OpenGL, the [`FindOpenGL`][findopengl] and [`FindX11`][findx11]
-modules will be used to link AOT generated binaries. These modules can be
-overridden by setting the following variables:
-
-| Variable                | Description                      |
-|-------------------------|----------------------------------|
-| `OPENGL_egl_LIBRARY`    | Path to the EGL library.         |
-| `OPENGL_glu_LIBRARY`    | Path to the GLU library.         |
-| `OPENGL_glx_LIBRARY`    | Path to the GLVND GLX library.   |
-| `OPENGL_opengl_LIBRARY` | Path to the GLVND OpenGL library |
-| `OPENGL_gl_LIBRARY`     | Path to the OpenGL library.      |
-
-The OpenGL paths will need to be set if you intend to use OpenGL with X11 on
-macOS.
-
 Halide also searches for `libpng` and `libjpeg-turbo` through the
 [`FindPNG`][findpng] and [`FindJPEG`][findjpeg] modules, respectively. They can
 be overridden by setting the following variables.
@@ -1395,7 +1378,6 @@ guidelines you should follow when writing a new app.
 [finddoxygen]: https://cmake.org/cmake/help/latest/module/FindDoxygen.html
 [findjpeg]: https://cmake.org/cmake/help/latest/module/FindJPEG.html
 [findopencl]: https://cmake.org/cmake/help/latest/module/FindOpenCL.html
-[findopengl]: https://cmake.org/cmake/help/latest/module/FindOpenGL.html
 [findpng]: https://cmake.org/cmake/help/latest/module/FindPNG.html
 [findpython3]: https://cmake.org/cmake/help/latest/module/FindPython3.html
 [findx11]: https://cmake.org/cmake/help/latest/module/FindX11.html

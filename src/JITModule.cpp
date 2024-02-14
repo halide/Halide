@@ -58,48 +58,6 @@ typedef struct CUctx_st *CUcontext;
 typedef struct cl_context_st *cl_context;
 typedef struct cl_command_queue_st *cl_command_queue;
 
-void load_opengl(bool needs_egl) {
-#if defined(__linux__)
-    if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
-        debug(1) << "OpenGL support code already linked in...\n";
-    } else {
-        debug(1) << "Looking for OpenGL support code...\n";
-        string error;
-        if (needs_egl) {
-            // NVIDIA EGL prefers users to load libOpenGL.so instead of libGL.so
-            // The way we're using it, it seems like libGL.so.1 is a valid fallback.
-            // See here for more details: https://developer.nvidia.com/blog/linking-opengl-server-side-rendering
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenGL.so.0", &error);
-            if (!error.empty()) {
-                debug(1) << "Could not find libOpenGL.so.0 when EGL requested. Falling back to libGL.so.1\n";
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-            }
-            user_assert(error.empty()) << "Could not find libOpenGL.so.0 or libGL.so.1\n";
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libEGL.so.1", &error);
-            user_assert(error.empty()) << "Could not find libEGL.so.1\n";
-        } else {
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-            user_assert(error.empty()) << "Could not find libGL.so\n";
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so.6", &error);
-            user_assert(error.empty()) << "Could not find libX11.so.6\n";
-        }
-    }
-#elif defined(__APPLE__)
-    if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
-        debug(1) << "OpenGL support code already linked in...\n";
-    } else {
-        debug(1) << "Looking for OpenGL support code...\n";
-        string error;
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/AGL.framework/AGL", &error);
-        user_assert(error.empty()) << "Could not find AGL.framework\n";
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenGL.framework/OpenGL", &error);
-        user_assert(error.empty()) << "Could not find OpenGL.framework\n";
-    }
-#else
-    internal_error << "JIT support for OpenGL on anything other than linux or OS X not yet implemented\n";
-#endif
-}
-
 void load_metal() {
 #if defined(__APPLE__)
     if (have_symbol("MTLCreateSystemDefaultDevice")) {
@@ -766,7 +724,6 @@ enum RuntimeKind {
     OpenCL,
     Metal,
     CUDA,
-    OpenGLCompute,  // NOTE: this feature is deprecated and will be removed in Halide 17
     Hexagon,
     D3D12Compute,
     Vulkan,
@@ -774,7 +731,6 @@ enum RuntimeKind {
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
-    OpenGLComputeDebug,  // NOTE: this feature is deprecated and will be removed in Halide 17
     HexagonDebug,
     D3D12ComputeDebug,
     VulkanDebug,
@@ -812,7 +768,6 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
         one_gpu.set_feature(Target::HVX, false);
-        one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
         one_gpu.set_feature(Target::Vulkan, false);
         one_gpu.set_feature(Target::WebGPU, false);
@@ -846,17 +801,6 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         case CUDA:
             one_gpu.set_feature(Target::CUDA);
             module_name += "cuda";
-            break;
-        case OpenGLComputeDebug:
-            one_gpu.set_feature(Target::Debug);
-            one_gpu.set_feature(Target::OpenGLCompute);
-            module_name = "debug_openglcompute";
-            load_opengl(one_gpu.has_feature(Target::EGL));
-            break;
-        case OpenGLCompute:
-            one_gpu.set_feature(Target::OpenGLCompute);
-            module_name += "openglcompute";
-            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
@@ -1065,13 +1009,6 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-    if (target.has_feature(Target::OpenGLCompute)) {
-        auto kind = target.has_feature(Target::Debug) ? OpenGLComputeDebug : OpenGLCompute;
-        JITModule m = make_module(for_module, target, kind, result, create);
-        if (m.compiled()) {
-            result.push_back(m);
-        }
-    }
     if (target.has_feature(Target::HVX)) {
         auto kind = target.has_feature(Target::Debug) ? HexagonDebug : Hexagon;
         JITModule m = make_module(for_module, target, kind, result, create);
@@ -1176,7 +1113,7 @@ Target JITCache::get_compiled_jit_target() const {
     return jit_target;
 }
 
-int JITCache::call_jit_code(const Target &target, const void *const *args) {
+int JITCache::call_jit_code(const void *const *args) {
 #if defined(__has_feature)
 #if __has_feature(memory_sanitizer)
     user_warning << "MSAN does not support JIT compilers of any sort, and will report "
@@ -1185,7 +1122,7 @@ int JITCache::call_jit_code(const Target &target, const void *const *args) {
                     "compilation for Halide code.";
 #endif
 #endif
-    if (target.arch == Target::WebAssembly) {
+    if (get_compiled_jit_target().arch == Target::WebAssembly) {
         internal_assert(wasm_module.contents.defined());
         return wasm_module.run(args);
     } else {

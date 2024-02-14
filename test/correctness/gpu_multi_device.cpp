@@ -39,14 +39,6 @@ struct MultiDevicePipeline {
                 .gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::Metal);
             current_stage++;
         }
-        if (jit_target.has_feature(Target::OpenGLCompute)) {
-            stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage]
-                .compute_root()
-                .reorder(c, x, y)
-                .gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::OpenGLCompute);
-            current_stage++;
-        }
     }
 
     void run(Buffer<float> &result) {

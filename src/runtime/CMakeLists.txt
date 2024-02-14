@@ -43,13 +43,9 @@ set(RUNTIME_CPP
     msan
     msan_stubs
     opencl
-    opengl_egl_context
-    opengl_glx_context
-    openglcompute
     osx_clock
     osx_get_symbol
     osx_host_cpu_count
-    osx_opengl_context
     osx_yield
     posix_aligned_alloc
     posix_allocator
@@ -135,7 +131,6 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeHexagonHost.h
     HalideRuntimeMetal.h
     HalideRuntimeOpenCL.h
-    HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
     HalideRuntimeVulkan.h
     HalideRuntimeWebGPU.h
