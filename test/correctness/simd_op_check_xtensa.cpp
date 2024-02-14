@@ -16,6 +16,10 @@ public:
         return 128;
     }
 
+    bool use_multiple_threads() const override {
+        return false;
+    }
+
     bool can_run_code() const override {
         return false;
     }
