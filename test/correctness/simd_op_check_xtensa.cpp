@@ -11,17 +11,21 @@ public:
     SimdOpCheckXtensa(Target t, int w = 768 /*256*3*/, int h = 128)
         : SimdOpCheckTest(t, w, h) {
     }
-    void setup_images() override {
-        for (auto p : image_params) {
-            p.reset();
-        }
+
+    int image_param_alignment() override {
+        return 128;
     }
 
     bool can_run_code() const override {
         return false;
     }
 
-    void compile_and_check(Func error, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) override {
+    void compile_and_check(Func error,
+                           const std::string &op,
+                           const std::string &name,
+                           int vector_width,
+                           const std::vector<Argument> &arg_types,
+                           std::ostringstream &error_msg) override {
         // Compile just the vector Func to assembly.
         std::string cpp_filename = output_directory + "check_";
         if (target.has_feature(Target::XtensaQ8)) {
