@@ -52,9 +52,9 @@ int main(int argc, char **argv) {
     // Full specification round-trip, crazy features
     t1 = Target(Target::Android, Target::ARM, 32,
                 {Target::JIT, Target::CUDA, Target::OpenCL,
-                 Target::OpenGLCompute, Target::Debug});
+                 Target::Debug});
     ts = t1.to_string();
-    if (ts != "arm-32-android-cuda-debug-jit-opencl-openglcompute") {
+    if (ts != "arm-32-android-cuda-debug-jit-opencl") {
         printf("to_string failure: %s\n", ts.c_str());
         return 1;
     }

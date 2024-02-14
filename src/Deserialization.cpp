@@ -244,8 +244,6 @@ DeviceAPI Deserializer::deserialize_device_api(Serialize::DeviceAPI device_api) 
         return DeviceAPI::CUDA;
     case Serialize::DeviceAPI::OpenCL:
         return DeviceAPI::OpenCL;
-    case Serialize::DeviceAPI::OpenGLCompute:
-        return DeviceAPI::OpenGLCompute;
     case Serialize::DeviceAPI::Metal:
         return DeviceAPI::Metal;
     case Serialize::DeviceAPI::Hexagon:

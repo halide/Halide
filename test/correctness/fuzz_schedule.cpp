@@ -202,6 +202,31 @@ int main(int argc, char **argv) {
         check_blur_output(buf, correct);
     }
 
+    // https://github.com/halide/Halide/issues/7890
+    {
+        Func input("input");
+        Func local_sum("local_sum");
+        Func blurry("blurry");
+        Var x("x"), y("y");
+        RVar yryf;
+        input(x, y) = 2 * x + 5 * y;
+        RDom r(-2, 5, -2, 5, "rdom_r");
+        local_sum(x, y) = 0;
+        local_sum(x, y) += input(x + r.x, y + r.y);
+        blurry(x, y) = cast<int32_t>(local_sum(x, y) / 25);
+
+        Var yo, yi, xo, xi, u;
+        blurry.split(y, yo, yi, 2, TailStrategy::Auto);
+        local_sum.split(x, xo, xi, 4, TailStrategy::Auto);
+        local_sum.update(0).split(x, xo, xi, 1, TailStrategy::Auto);
+        local_sum.update(0).rfactor(r.x, u);
+        blurry.store_root();
+        local_sum.compute_root();
+        Pipeline p({blurry});
+        auto buf = p.realize({32, 32});
+        check_blur_output(buf, correct);
+    }
+
     // https://github.com/halide/Halide/issues/8054
     {
         ImageParam input(Float(32), 2, "input");

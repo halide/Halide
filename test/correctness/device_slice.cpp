@@ -32,11 +32,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    if (target.has_feature(Target::OpenGLCompute)) {
-        printf("Skipping test for OpenGLCompute, as it does not support device crops, slices, or copies\n");
-        return 0;
-    }
-
     printf("Test in-place slicing.\n");
     {
         Halide::Runtime::Buffer<int32_t> gpu_buf = make_gpu_buffer(hexagon_rpc);

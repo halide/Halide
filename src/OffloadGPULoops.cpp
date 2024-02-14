@@ -5,7 +5,6 @@
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
-#include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_Vulkan_Dev.h"
 #include "CodeGen_WebGPU_Dev.h"
@@ -166,7 +165,7 @@ class InjectGpuOffload : public IRMutator {
                      return a.type.bits() > b.type.bits();
                  } else {
                      // Ensure that buffer arguments come first:
-                     // for many OpenGL/Compute systems, the
+                     // for some GPU systems, the
                      // legal indices for buffer args are much
                      // more restrictive than for scalar args,
                      // and scalar args can be 'grown' by
@@ -267,9 +266,6 @@ public:
         // host arch or os.
         device_target.os = Target::OSUnknown;
         device_target.arch = Target::ArchUnknown;
-        if (target.has_feature(Target::OpenGLCompute)) {
-            cgdev[DeviceAPI::OpenGLCompute] = new_CodeGen_OpenGLCompute_Dev(device_target);
-        }
         if (target.has_feature(Target::CUDA)) {
             cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(device_target);
         }

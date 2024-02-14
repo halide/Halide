@@ -126,7 +126,6 @@ WITH_WEBASSEMBLY ?= $(findstring webassembly, $(LLVM_COMPONENTS))
 WITH_AMDGPU ?= $(findstring amdgpu, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
-WITH_OPENGLCOMPUTE ?= not-empty
 WITH_D3D12 ?= not-empty
 WITH_VULKAN ?= not-empty
 WITH_SPIRV ?= not-empty
@@ -162,8 +161,6 @@ OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 
 METAL_CXX_FLAGS=$(if $(WITH_METAL), -DWITH_METAL, )
 METAL_LLVM_CONFIG_LIB=$(if $(WITH_METAL), , )
-
-OPENGLCOMPUTE_CXX_FLAGS=$(if $(WITH_OPENGLCOMPUTE), -DWITH_OPENGLCOMPUTE, )
 
 D3D12_CXX_FLAGS=$(if $(WITH_D3D12), -DWITH_D3D12, )
 D3D12_LLVM_CONFIG_LIB=$(if $(WITH_D3D12), , )
@@ -218,7 +215,6 @@ CXX_FLAGS += $(AARCH64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
-CXX_FLAGS += $(OPENGLCOMPUTE_CXX_FLAGS)
 CXX_FLAGS += $(D3D12_CXX_FLAGS)
 CXX_FLAGS += $(WEBGPU_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
@@ -345,7 +341,6 @@ endif
 ifneq ($(TEST_VULKAN), )
 VULKAN_LD_FLAGS ?= -lvulkan
 endif
-OPENGL_LD_FLAGS ?= -lGL
 HOST_OS=linux
 endif
 
@@ -364,7 +359,6 @@ endif
 ifneq ($(TEST_METAL), )
 METAL_LD_FLAGS ?= -framework Metal -framework Foundation
 endif
-OPENGL_LD_FLAGS ?= -framework OpenGL
 HOST_OS=os_x
 endif
 
@@ -448,6 +442,7 @@ SOURCE_FILES = \
   AddAtomicMutex.cpp \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
+  AddSplitFactorChecks.cpp \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
@@ -476,7 +471,6 @@ SOURCE_FILES = \
   CodeGen_Metal_Dev.cpp \
   CodeGen_OpenCL_Dev.cpp \
   CodeGen_Vulkan_Dev.cpp \
-  CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
   CodeGen_PTX_Dev.cpp \
@@ -611,6 +605,7 @@ SOURCE_FILES = \
   StorageFlattening.cpp \
   StorageFolding.cpp \
   StrictifyFloat.cpp \
+  StripAsserts.cpp \
   Substitute.cpp \
   Target.cpp \
   Tracing.cpp \
@@ -649,6 +644,7 @@ HEADER_FILES = \
   AddAtomicMutex.h \
   AddImageChecks.h \
   AddParameterChecks.h \
+  AddSplitFactorChecks.h \
   AlignLoads.h \
   AllocationBoundsInference.h \
   ApplySplit.h \
@@ -675,7 +671,6 @@ HEADER_FILES = \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenCL_Dev.h \
   CodeGen_Vulkan_Dev.h \
-  CodeGen_OpenGLCompute_Dev.h \
   CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
   CodeGen_PyTorch.h \
@@ -798,6 +793,7 @@ HEADER_FILES = \
   StorageFlattening.h \
   StorageFolding.h \
   StrictifyFloat.h \
+  StripAsserts.h \
   Substitute.h \
   Target.h \
   Tracing.h \
@@ -862,13 +858,9 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
-  opengl_egl_context \
-  opengl_glx_context \
-  openglcompute \
   osx_clock \
   osx_get_symbol \
   osx_host_cpu_count \
-  osx_opengl_context \
   osx_yield \
   posix_aligned_alloc \
   posix_allocator \
@@ -939,7 +931,6 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonDma.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonHost.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
-                            $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
                             $(INCLUDE_DIR)/HalideRuntimeVulkan.h \
