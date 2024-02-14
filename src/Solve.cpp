@@ -394,7 +394,7 @@ private:
         if (a_uses_var && !b_uses_var) {
             const int64_t *ib = as_const_int(b);
             auto is_multiple_of_b = [&](const Expr &e) {
-                if (ib) {
+                if (ib && op->type.is_scalar()) {
                     int64_t r = 0;
                     return reduce_expr_modulo(e, *ib, &r) && r == 0;
                 } else {
@@ -1477,6 +1477,9 @@ void solve_test() {
     check_solve(max(x - y, x + z), x + max(0 - y, z));
     check_solve(min(x + y, x - z), x + min(y, 0 - z));
     check_solve(max(x + y, x - z), x + max(y, 0 - z));
+
+    check_solve((5 * Broadcast::make(x, 4) + y) / 5,
+                Broadcast::make(x, 4) + (Broadcast::make(y, 4) / 5));
 
     debug(0) << "Solve test passed\n";
 }
