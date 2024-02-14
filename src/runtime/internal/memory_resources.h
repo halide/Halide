@@ -127,7 +127,7 @@ ALWAYS_INLINE bool is_power_of_two_alignment(size_t x) {
 // -- Alignment must be power of two!
 ALWAYS_INLINE size_t aligned_offset(size_t offset, size_t alignment) {
     halide_abort_if_false(nullptr, is_power_of_two_alignment(alignment));
-    return (offset + (alignment - 1)) & ~(alignment - 1);
+    return (alignment == 0) ? (offset) : (offset + (alignment - 1)) & ~(alignment - 1);
 }
 
 // Returns a suitable alignment such that requested alignment is a suitable

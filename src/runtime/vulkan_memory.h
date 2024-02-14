@@ -614,7 +614,8 @@ int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block
 #if defined(HL_VK_DEBUG_MEM)
     debug(nullptr) << "VulkanMemoryAllocator: Block allocated ("
                    << "size=" << (uint32_t)block->size << ", "
-                   << "alignment=" << (uint32_t)memory_requirements.alignment << ", "
+                   << "required_alignment=" << (uint32_t)memory_requirements.alignment << ", "
+                   << "required_size=" << (uint32_t)memory_requirements.size << ", "
                    << "uniform_buffer_offset_alignment=" << (uint32_t)instance->physical_device_limits.minUniformBufferOffsetAlignment << ", "
                    << "storage_buffer_offset_alignment=" << (uint32_t)instance->physical_device_limits.minStorageBufferOffsetAlignment << ", "
                    << "dedicated=" << (block->dedicated ? "true" : "false") << ")\n";
@@ -629,6 +630,9 @@ int VulkanMemoryAllocator::allocate_block(void *instance_ptr, MemoryBlock *block
     // Some drivers appear to report a buffer alignment constraint (regardless of usage) that can be larger than either of the above
     if (memory_requirements.alignment > block->properties.alignment) {
         block->properties.alignment = memory_requirements.alignment;
+    }
+    if (memory_requirements.alignment > block->properties.nearest_multiple) {
+        block->properties.nearest_multiple = memory_requirements.alignment;
     }
     block->handle = (void *)device_memory;
     instance->block_byte_count += block->size;
@@ -867,6 +871,36 @@ int VulkanMemoryAllocator::allocate_region(void *instance_ptr, MemoryRegion *reg
                             << "vkCreateBuffer returned: " << vk_get_error_name(result) << "\n";
         return halide_error_code_device_malloc_failed;
     }
+
+    // NOTE: Vulkan will only allow us to bind device memory to a buffer if the memory requirements are met.
+    // So now we have to check those (on every allocation) and potentially recreate the buffer if the requirements
+    // don't match the requested VkBuffer's properties. Note that this is the internal storage for the driver,
+    // whose size may be required to larger than our requested size (even though we will only ever touch the
+    // size of the region we're managing as within our block)
+    VkMemoryRequirements memory_requirements = {0};
+    vkGetBufferMemoryRequirements(instance->device, *buffer, &memory_requirements);
+
+#if defined(HL_VK_DEBUG_MEM)
+    debug(nullptr) << "VulkanMemoryAllocator: Buffer requirements ("
+                   << "requested_size=" << (uint32_t)region->size << ", "
+                   << "required_alignment=" << (uint32_t)memory_requirements.alignment << ", "
+                   << "required_size=" << (uint32_t)memory_requirements.size << ")\n";
+#endif
+
+    if (memory_requirements.size > region->size) {
+        vkDestroyBuffer(instance->device, *buffer, instance->alloc_callbacks);
+#ifdef DEBUG_RUNTIME
+        debug(nullptr) << "VulkanMemoryAllocator: Reallocating buffer to match required size (" << (uint64_t)memory_requirements.size << " bytes) ...\n";
+#endif
+        create_info.size = memory_requirements.size;
+        VkResult result = vkCreateBuffer(instance->device, &create_info, instance->alloc_callbacks, buffer);
+        if (result != VK_SUCCESS) {
+            error(user_context) << "VulkanRegionAllocator: Failed to recreate buffer!\n\t"
+                                << "vkCreateBuffer returned: " << vk_get_error_name(result) << "\n";
+            return halide_error_code_device_malloc_failed;
+        }
+    }
+
 #ifdef DEBUG_RUNTIME
     debug(nullptr) << "vkCreateBuffer: Created buffer for device region (" << (uint64_t)region->size << " bytes) ...\n";
 #endif
