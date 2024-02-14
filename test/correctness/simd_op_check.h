@@ -450,6 +450,10 @@ public:
         return 16;
     }
 
+    virtual bool use_multiple_threads() const {
+        return true;
+    }
+
     virtual bool test_all() {
         /* First add some tests based on the target */
         add_tests();
@@ -460,7 +464,10 @@ public:
 
         Sharder sharder;
 
-        Halide::Tools::ThreadPool<TestResult> pool;
+        Halide::Tools::ThreadPool<TestResult> pool(
+            use_multiple_threads() ?
+                Halide::Tools::ThreadPool<TestResult>::num_processors_online() :
+                1);
         std::vector<std::future<TestResult>> futures;
 
         for (size_t t = 0; t < tasks.size(); t++) {
