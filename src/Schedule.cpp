@@ -354,9 +354,9 @@ FuncSchedule FuncSchedule::deep_copy(
 
     internal_assert(contents.defined()) << "Cannot deep-copy undefined FuncSchedule\n";
     FuncSchedule copy;
-    copy.contents->store_level = contents->store_level;
-    copy.contents->compute_level = contents->compute_level;
-    copy.contents->hoist_storage_level = contents->hoist_storage_level;
+    copy.contents->store_level.set(contents->store_level);
+    copy.contents->compute_level.set(contents->compute_level);
+    copy.contents->hoist_storage_level.set(contents->hoist_storage_level);
     copy.contents->storage_dims = contents->storage_dims;
     copy.contents->bounds = contents->bounds;
     copy.contents->estimates = contents->estimates;

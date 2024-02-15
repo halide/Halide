@@ -1,6 +1,6 @@
 #include "Halide.h"
+#include "halide_thread_pool.h"
 #include "test_sharding.h"
-
 #include <stdio.h>
 
 using namespace Halide;
@@ -164,11 +164,17 @@ int main(int argc, char **argv) {
 
     using Sharder = Halide::Internal::Test::Sharder;
     Sharder sharder;
+    Halide::Tools::ThreadPool<bool> pool;
+    std::vector<std::future<bool>> futures;
     for (size_t t = 0; t < tasks.size(); t++) {
         if (!sharder.should_run(t)) continue;
         const auto &task = tasks.at(t);
-        if (!task.fn()) {
-            exit(1);
+        futures.push_back(pool.async(task.fn));
+    }
+
+    for (auto &f : futures) {
+        if (!f.get()) {
+            return 1;
         }
     }
 

@@ -91,7 +91,7 @@ extern "C" {
 // Ideally there would be a better way to detect if the type
 // is supported, even in a compiler independent fashion, but
 // coming up with one has proven elusive.
-#if defined(__clang__) && (__clang_major__ >= 16) && !defined(__EMSCRIPTEN__)
+#if defined(__clang__) && (__clang_major__ >= 16) && !defined(__EMSCRIPTEN__) && !defined(__i386__)
 #if defined(__is_identifier)
 #if !__is_identifier(_Float16)
 #define HALIDE_CPP_COMPILER_HAS_FLOAT16
