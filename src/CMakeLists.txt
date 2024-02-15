@@ -429,6 +429,8 @@ add_library(Halide
             $<TARGET_OBJECTS:Halide_initmod>
             $<TARGET_OBJECTS:Halide_c_templates>)
 
+target_precompile_headers(Halide PRIVATE "precompiled_header.hpp")
+
 ##
 # Flatbuffers and Serialization dependencies.
 ##
