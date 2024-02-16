@@ -42,7 +42,7 @@ Expr narrow(Expr a) {
 //     are useful.
 bool can_narrow(const Type &t) {
     return (t.is_float() && t.bits() >= 32) ||
-        t.bits() >= 8;
+           t.bits() >= 8;
 }
 
 Expr lossless_narrow(const Expr &x) {
