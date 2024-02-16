@@ -37,7 +37,7 @@ public:
         Expr u32_1 = in_u32(x), u32_2 = in_u32(x + 16), u32_3 = in_u32(x + 32);
         Expr i64_1 = in_i64(x), i64_2 = in_i64(x + 16), i64_3 = in_i64(x + 32);
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
-        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_2 < -0.3f), bool_3 = (f32_3 != -0.34f);
 
         check("f32.sqrt", 1, sqrt(f32_1));
         check("f32.min", 1, min(f32_1, f32_2));
@@ -533,6 +533,11 @@ private:
 }  // namespace
 
 int main(int argc, char **argv) {
+#ifdef HALIDE_INTERNAL_USING_ASAN
+    printf("[SKIP] This test causes an ASAN crash relating to ASAN's use of sigaltstack. It doesn't seem to be due to a bug in the test itself (see https://github.com/halide/Halide/pull/8078#issuecomment-1935407878)");
+    return 0;
+#endif
+
     return SimdOpCheckTest::main<SimdOpCheckWASM>(
         argc, argv,
         {

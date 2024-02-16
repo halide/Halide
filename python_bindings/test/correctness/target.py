@@ -52,12 +52,11 @@ def test_target():
             hl.TargetFeature.JIT,
             hl.TargetFeature.CUDA,
             hl.TargetFeature.OpenCL,
-            hl.TargetFeature.OpenGLCompute,
             hl.TargetFeature.Debug,
         ],
     )
     ts = t1.to_string()
-    assert ts == "arm-32-android-cuda-debug-jit-opencl-openglcompute"
+    assert ts == "arm-32-android-cuda-debug-jit-opencl"
     assert hl.Target.validate_target_string(ts)
 
     # Expected failures:

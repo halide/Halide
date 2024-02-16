@@ -57,7 +57,7 @@ public:
         Expr u32_1 = in_u32(x), u32_2 = in_u32(x + 16), u32_3 = in_u32(x + 32);
         Expr i64_1 = in_i64(x), i64_2 = in_i64(x + 16), i64_3 = in_i64(x + 32);
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
-        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+        Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_2 < -0.3f), bool_3 = (f32_3 != -0.34f);
 
         // MMX and SSE1 (in 64 and 128 bits)
         for (int w = 1; w <= 4; w++) {
@@ -658,23 +658,23 @@ int main(int argc, char **argv) {
     return SimdOpCheckTest::main<SimdOpCheckX86>(
         argc, argv,
         {
-#if 0
             Target("x86-32-linux"),
             Target("x86-32-linux-sse41"),
             // Always turn on f16c when using avx. Sandy Bridge had avx without
             // f16c, but f16c is orthogonal to everything else, so there's no
             // real reason to test avx without it.
-            Target("x86-64-linux-sse41-avx-f16c"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2"),
+            Target("x86-64-linux-sse41-avx-f16c-fma"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2"),
             // See above: don't test avx512 without extra features, the test
             // isn't yet set up to test it properly.
             // Target("x86-64-linux-sse41-avx-avx2-avx512"),
             // Target("x86-64-linux-sse41-avx-avx2-avx512-avx512_knl"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
-            Target("x86-64-linux-sse41-avx-f16c-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
-#else
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4"),
+            Target("x86-64-linux-sse41-avx-f16c-fma-avx2-avx512-avx512_skylake-avx512_cannonlake-avx512_zen4-avx512_sapphirerapids"),
+#define AVX10_IN_LLVM_IS_READY 0
+#if AVX10_IN_LLVM_IS_READY
             Target("x86-64-linux-avx10_1-vector_bits_256-x86apx"),
 #endif
         });

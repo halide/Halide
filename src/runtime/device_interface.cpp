@@ -473,10 +473,8 @@ WEAK int halide_default_buffer_copy(void *user_context, struct halide_buffer_t *
 
     // The right thing is that all devices have to support
     // device-to-device and device-to/from-arbitrarty-pointer.  This
-    // means there will always have to be a device specifc version of
-    // this function and the default can go away or fail. At present
-    // there are some devices, e.g. OpenGL and OpenGLCompute, for which
-    // this is not yet implemented.
+    // means there will always have to be a device specific version of
+    // this function and the default can go away or fail.
 
     return halide_error_code_device_buffer_copy_failed;
 }

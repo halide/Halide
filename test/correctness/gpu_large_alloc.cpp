@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     g(x, y) = clamp(f(x, y), 20, 100);
 
     Target target = get_jit_target_from_environment();
-    if (target.has_gpu_feature() || target.has_feature(Target::OpenGLCompute)) {
+    if (target.has_gpu_feature()) {
         Var xi, yi;
         f.compute_root().gpu_tile(x, y, xi, yi, 16, 16);
         g.compute_root().gpu_tile(x, y, xi, yi, 16, 16);

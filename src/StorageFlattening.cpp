@@ -422,8 +422,7 @@ private:
 
                 // Create image_load("name", name.buffer, x - x_min, x_extent,
                 // y - y_min, y_extent, ...).  Extents can be used by
-                // successive passes. OpenGL, for example, uses them
-                // for coordinate normalization.
+                // successive passes.
                 vector<Expr> args(2);
                 args[0] = op->name;
                 args[1] = buffer_var;
@@ -600,7 +599,6 @@ Stmt storage_flattening(Stmt s,
                         const vector<Function> &outputs,
                         const map<string, Function> &env,
                         const Target &target) {
-    // The OpenGL backend requires loop mins to be zero'd at this point.
     s = zero_gpu_loop_mins(s);
 
     // Make an environment that makes it easier to figure out which

@@ -332,7 +332,7 @@ struct ModuleContents {
     /** This is a copy of the code throughout the lowering process, which
      * reflects best the actual pipeline, without introducing device-specific
      * generated code from device-specific offloads (such as Cuda PTX,
-     * OpenGL Compute, etc...). In other words, we'd like to keep this
+     * etc...). In other words, we'd like to keep this
      * conceptually relevant and human-readable. */
     Stmt conceptual_code;
 };
@@ -559,10 +559,6 @@ const Internal::Stmt &Module::get_conceptual_stmt() const {
 
 void Module::compile(const std::map<OutputFileType, std::string> &output_files) const {
     validate_outputs(output_files);
-
-    if (target().has_feature(Target::OpenGLCompute)) {
-        user_warning << "WARNING: OpenGLCompute is deprecated in Halide 16 and will be removed in Halide 17.\n";
-    }
 
     // Minor but worthwhile optimization: if all of the output files are of types that won't
     // ever rely on submodules (e.g.: toplevel declarations in C/C++), don't bother resolving

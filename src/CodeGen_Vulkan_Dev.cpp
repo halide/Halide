@@ -291,8 +291,6 @@ protected:
 // have the same number of lanes. If this is indeed the case then the 'lanes'
 // member stores the number of lanes in those loads and stores.
 //
-// FIXME: Refactor this and the version in CodeGen_OpenGLCompute_Dev to a common place!
-//
 class CheckAlignedDenseVectorLoadStore : public IRVisitor {
 public:
     // True if all loads and stores from the buffer are dense, aligned, and all
@@ -548,6 +546,9 @@ void fill_bytes_with_value(uint8_t *bytes, int count, int value) {
 }
 
 SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type value_type, SpvId value_id) {
+    debug(2) << "CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(): casting from value type '"
+             << value_type << "' to target type '" << target_type << "' for value id '" << value_id << "' !\n";
+
     if (!value_type.is_bool()) {
         value_id = cast_type(Bool(), value_type, value_id);
     }
@@ -590,8 +591,8 @@ SpvId CodeGen_Vulkan_Dev::SPIRV_Emitter::convert_to_bool(Type target_type, Type 
 
     SpvId result_id = builder.reserve_id(SpvResultId);
     SpvId target_type_id = builder.declare_type(target_type);
-    SpvId true_value_id = builder.declare_constant(target_type, &true_data);
-    SpvId false_value_id = builder.declare_constant(target_type, &false_data);
+    SpvId true_value_id = builder.declare_constant(target_type, &true_data[0]);
+    SpvId false_value_id = builder.declare_constant(target_type, &false_data[0]);
     builder.append(SpvFactory::select(target_type_id, result_id, value_id, true_value_id, false_value_id));
     return result_id;
 }

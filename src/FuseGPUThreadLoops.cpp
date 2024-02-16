@@ -627,7 +627,6 @@ private:
 
                 if (!may_merge_allocs_of_different_type &&
                     mem_allocs[free_spaces[i]].group[0].type != alloc.type) {
-                    // Types must also match for OpenGLCompute
                     continue;
                 }
 
@@ -649,7 +648,6 @@ private:
 
                 if (!may_merge_allocs_of_different_type &&
                     mem_allocs[free_spaces[i]].group[0].type != alloc.type) {
-                    // Types must also match for OpenGLCompute
                     continue;
                 }
 
@@ -760,7 +758,7 @@ public:
         // lifetimes, and then cluster the groups according to which
         // ones can share a single allocation. For cuda, opencl, and
         // similar we get one big combined allocation per memory
-        // type. For vulkan, openglcompute and direct3d, we also separate by
+        // type. For vulkan and direct3d, we also separate by
         // element type.
         map<pair<MemoryType, Type>, vector<AllocGroup>> clustered_allocs;
 
@@ -1034,8 +1032,7 @@ public:
         : device_api(d),
           thread_id_var_name(unique_name('t')),
           num_threads_var_name(unique_name('t')),
-          may_merge_allocs_of_different_type(device_api != DeviceAPI::OpenGLCompute &&
-                                             device_api != DeviceAPI::D3D12Compute &&
+          may_merge_allocs_of_different_type(device_api != DeviceAPI::D3D12Compute &&
                                              device_api != DeviceAPI::Vulkan &&
                                              device_api != DeviceAPI::WebGPU) {
     }
@@ -1515,44 +1512,6 @@ public:
     ZeroGPULoopMins() = default;
 };
 
-class ValidateGPULoopNesting : public IRVisitor {
-    int gpu_block_depth = 0, gpu_thread_depth = 0;
-    string innermost_block_var, innermost_thread_var;
-
-    using IRVisitor::visit;
-
-    void visit(const For *op) override {
-        ScopedValue<string> old_innermost_block_var(innermost_block_var);
-        ScopedValue<string> old_innermost_thread_var(innermost_thread_var);
-        ScopedValue<int> old_gpu_block_depth(gpu_block_depth);
-        ScopedValue<int> old_gpu_thread_depth(gpu_thread_depth);
-
-        for (int i = 1; i <= 4; i++) {
-            if (ends_with(op->name, block_names[4 - i])) {
-                user_assert(i > gpu_block_depth)
-                    << "Invalid schedule: Loop over " << op->name
-                    << " cannot be inside of loop over " << innermost_block_var << "\n";
-                user_assert(gpu_thread_depth == 0)
-                    << "Invalid schedule: Loop over " << op->name
-                    << " cannot be inside of loop over " << innermost_thread_var << "\n";
-                innermost_block_var = op->name;
-                gpu_block_depth = i;
-            }
-            if (ends_with(op->name, thread_names[4 - i])) {
-                user_assert(i > gpu_thread_depth)
-                    << "Invalid schedule: Loop over " << op->name
-                    << " cannot be inside of loop over " << innermost_thread_var << "\n";
-                user_assert(gpu_block_depth > 0)
-                    << "Invalid schedule: Loop over " << op->name
-                    << " must be inside a loop over gpu blocks\n";
-                innermost_thread_var = op->name;
-                gpu_thread_depth = i;
-            }
-        }
-        IRVisitor::visit(op);
-    }
-};
-
 }  // namespace
 
 // Also used by InjectImageIntrinsics
@@ -1632,8 +1591,6 @@ class NormalizeIfStatements : public IRMutator {
 }  // namespace
 
 Stmt fuse_gpu_thread_loops(Stmt s) {
-    ValidateGPULoopNesting validate;
-    s.accept(&validate);
     // NormalizeIfStatements pushes the predicates between GPU blocks
     // into the innermost GPU block. FuseGPUThreadLoops would then
     // merge the predicate into the merged GPU thread.
